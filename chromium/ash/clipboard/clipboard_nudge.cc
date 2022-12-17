@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -51,8 +52,7 @@ constexpr char kClipboardNudgeName[] = "ClipboardContextualNudge";
 
 bool IsAssistantAvailable() {
   AssistantStateBase* state = AssistantState::Get();
-  return state->allowed_state() ==
-             chromeos::assistant::AssistantAllowedState::ALLOWED &&
+  return state->allowed_state() == assistant::AssistantAllowedState::ALLOWED &&
          state->settings_enabled().value_or(false);
 }
 
@@ -60,6 +60,7 @@ bool IsAssistantAvailable() {
 
 ClipboardNudge::ClipboardNudge(ClipboardNudgeType nudge_type)
     : SystemNudge(kClipboardNudgeName,
+                  NudgeCatalogName::kMultipaste,
                   kClipboardIconSize,
                   kIconLabelSpacing,
                   kNudgePadding),

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
 
 namespace ui {
@@ -50,6 +51,9 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
   void SetSystemModal(bool modal) override;
   bool SupportsScreenCoordinates() const override;
   void EnableScreenCoordinates() override;
+  void SetFloat() override;
+  void UnSetFloat() override;
+  void SetZOrder(ZOrderLevel z_order) override;
 
   XDGSurfaceWrapperImpl* xdg_surface_wrapper() const;
 
@@ -61,6 +65,13 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
                                 int32_t height,
                                 struct wl_array* states);
   static void CloseTopLevel(void* data, struct xdg_toplevel* xdg_toplevel);
+  static void ConfigureBounds(void* data,
+                              struct xdg_toplevel* xdg_toplevel,
+                              int32_t width,
+                              int32_t height);
+  static void WmCapabilities(void* data,
+                             struct xdg_toplevel* xdg_toplevel,
+                             struct wl_array* capabilities);
 
   // zxdg_decoration_listener
   static void ConfigureDecoration(
@@ -92,8 +103,8 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
   std::unique_ptr<XDGSurfaceWrapperImpl> xdg_surface_wrapper_;
 
   // Non-owing WaylandWindow that uses this toplevel wrapper.
-  WaylandWindow* const wayland_window_;
-  WaylandConnection* const connection_;
+  const raw_ptr<WaylandWindow> wayland_window_;
+  const raw_ptr<WaylandConnection> connection_;
 
   // XDG Shell Stable object.
   wl::Object<xdg_toplevel> xdg_toplevel_;

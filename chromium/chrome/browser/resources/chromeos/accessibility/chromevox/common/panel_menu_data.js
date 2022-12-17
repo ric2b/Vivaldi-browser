@@ -7,21 +7,17 @@
  * the background context to the panel context.
  */
 
-goog.provide('PanelNodeMenuData');
-goog.provide('PanelNodeMenuId');
-goog.provide('PanelNodeMenuItemData');
-goog.provide('PanelTabMenuItemData');
-goog.provide('ALL_NODE_MENU_DATA');
+import {AutomationPredicate} from '../../common/automation_predicate.js';
 
-goog.require('AutomationPredicate');
+import {BridgeCallbackId} from './bridge_callback_manager.js';
 
 /** @enum {number} */
-PanelNodeMenuId = {
+export const PanelNodeMenuId = {
   HEADING: 1,
   LANDMARK: 2,
   LINK: 3,
   FORM_CONTROL: 4,
-  TABLE: 5
+  TABLE: 5,
 };
 
 /**
@@ -31,46 +27,45 @@ PanelNodeMenuId = {
  *     predicate: !AutomationPredicate.Unary
  * }}
  */
-let PanelNodeMenuData;
+export let PanelNodeMenuData;
 
 /**
  * @typedef {{
  *     title: string,
- *     callbackNodeIndex: number,
+ *     callbackId: ?BridgeCallbackId,
  *     isActive: boolean,
  *     menuId: !PanelNodeMenuId
  * }}
  */
-let PanelNodeMenuItemData;
+export let PanelNodeMenuItemData;
 
 /** @typedef {{title: string, windowId: number, tabId: number}} */
-PanelTabMenuItemData;
+export let PanelTabMenuItemData;
 
-/** @const {!Array<!PanelNodeMenuData>} */
-ALL_NODE_MENU_DATA = [
+export const ALL_PANEL_MENU_NODE_DATA = [
   {
     menuId: PanelNodeMenuId.HEADING,
     titleId: 'role_heading',
-    predicate: AutomationPredicate.heading
+    predicate: AutomationPredicate.heading,
   },
   {
     menuId: PanelNodeMenuId.LANDMARK,
     titleId: 'role_landmark',
-    predicate: AutomationPredicate.landmark
+    predicate: AutomationPredicate.landmark,
   },
   {
     menuId: PanelNodeMenuId.LINK,
     titleId: 'role_link',
-    predicate: AutomationPredicate.link
+    predicate: AutomationPredicate.link,
   },
   {
     menuId: PanelNodeMenuId.FORM_CONTROL,
     titleId: 'panel_menu_form_controls',
-    predicate: AutomationPredicate.formField
+    predicate: AutomationPredicate.formField,
   },
   {
     menuId: PanelNodeMenuId.TABLE,
     titleId: 'role_table',
-    predicate: AutomationPredicate.table
+    predicate: AutomationPredicate.table,
   },
 ];

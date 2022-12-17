@@ -4,7 +4,7 @@
 
 import './manager.js';
 
-export {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
+export {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 export {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.js';
 export {IronIconElement} from 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 export {ActivityLogExtensionPlaceholder, ExtensionsActivityLogElement} from './activity_log/activity_log.js';
@@ -42,6 +42,7 @@ export {ExtensionsSitePermissionsBySiteElement} from './site_permissions_by_site
 export {SitePermissionsEditPermissionsDialogElement} from './site_permissions_edit_permissions_dialog.js';
 export {getSitePermissionsPatternFromSite, SitePermissionsEditUrlDialogElement} from './site_permissions_edit_url_dialog.js';
 export {ExtensionsSitePermissionsListElement} from './site_permissions_list.js';
+export {SitePermissionsSiteGroupElement} from './site_permissions_site_group.js';
 export {SiteSettingsMixin} from './site_settings_mixin.js';
 export {ExtensionsToggleRowElement} from './toggle_row.js';
 export {ExtensionsToolbarElement} from './toolbar.js';

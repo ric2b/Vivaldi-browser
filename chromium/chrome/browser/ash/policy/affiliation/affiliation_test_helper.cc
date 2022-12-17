@@ -9,9 +9,8 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "ash/components/login/auth/key.h"
-#include "ash/components/login/auth/user_context.h"
+#include "ash/components/login/auth/public/key.h"
+#include "ash/components/login/auth/public/user_context.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -27,11 +26,12 @@
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_paths.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/authpolicy/fake_authpolicy_client.h"
+#include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/dbus/constants/dbus_paths.h"
-#include "chromeos/dbus/session_manager/fake_session_manager_client.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
@@ -59,7 +59,7 @@ void SetUserKeys(const UserPolicyBuilder& user_policy) {
   ASSERT_TRUE(base::PathService::Get(chromeos::dbus_paths::DIR_USER_POLICY_KEYS,
                                      &user_keys_dir));
   const std::string sanitized_username =
-      chromeos::UserDataAuthClient::GetStubSanitizedUsername(
+      ash::UserDataAuthClient::GetStubSanitizedUsername(
           cryptohome::CreateAccountIdentifierFromAccountId(account_id));
   const base::FilePath user_key_file =
       user_keys_dir.AppendASCII(sanitized_username).AppendASCII("policy.pub");
@@ -81,7 +81,7 @@ constexpr char AffiliationTestHelper::kEnterpriseUserGaiaId[] = "01234567890";
 
 // static
 AffiliationTestHelper AffiliationTestHelper::CreateForCloud(
-    chromeos::FakeSessionManagerClient* fake_session_manager_client) {
+    ash::FakeSessionManagerClient* fake_session_manager_client) {
   return AffiliationTestHelper(ManagementType::kCloud,
                                fake_session_manager_client,
                                nullptr /* fake_authpolicy_client */);
@@ -89,7 +89,7 @@ AffiliationTestHelper AffiliationTestHelper::CreateForCloud(
 
 // static
 AffiliationTestHelper AffiliationTestHelper::CreateForActiveDirectory(
-    chromeos::FakeSessionManagerClient* fake_session_manager_client,
+    ash::FakeSessionManagerClient* fake_session_manager_client,
     ash::FakeAuthPolicyClient* fake_authpolicy_client) {
   return AffiliationTestHelper(ManagementType::kActiveDirectory,
                                fake_session_manager_client,
@@ -101,7 +101,7 @@ AffiliationTestHelper::AffiliationTestHelper(AffiliationTestHelper&& other) =
 
 AffiliationTestHelper::AffiliationTestHelper(
     ManagementType management_type,
-    chromeos::FakeSessionManagerClient* fake_session_manager_client,
+    ash::FakeSessionManagerClient* fake_session_manager_client,
     ash::FakeAuthPolicyClient* fake_authpolicy_client)
     : management_type_(management_type),
       fake_session_manager_client_(fake_session_manager_client),

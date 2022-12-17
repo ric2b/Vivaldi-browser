@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/debug/crash_logging.h"
 #include "base/logging.h"
+#include "components/web_package/web_bundle_url_loader_factory.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
@@ -28,7 +30,6 @@
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
 #include "services/network/url_loader.h"
 #include "services/network/url_loader_factory.h"
-#include "services/network/web_bundle/web_bundle_url_loader_factory.h"
 #include "url/origin.h"
 
 namespace network {
@@ -45,10 +46,10 @@ namespace {
 // where these operations are permitted (as specified by
 // URLLoaderFactoryParams::trust_token_redemption_policy).
 bool VerifyTrustTokenParamsIntegrityIfPresent(
-    const ResourceRequest& url_request,
+    const ResourceRequest& resource_request,
     const NetworkContext* context,
     mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy) {
-  if (!url_request.trust_token_params)
+  if (!resource_request.trust_token_params)
     return true;
 
   if (!context->trust_token_store()) {
@@ -69,7 +70,7 @@ bool VerifyTrustTokenParamsIntegrityIfPresent(
   if (trust_token_redemption_policy ==
           mojom::TrustTokenRedemptionPolicy::kForbid &&
       DoesTrustTokenOperationRequirePermissionsPolicy(
-          url_request.trust_token_params->type)) {
+          resource_request.trust_token_params->type)) {
     // Got a request configured for Trust Tokens redemption or signing from
     // a context in which this operation is prohibited.
     mojo::ReportBadMessage(
@@ -250,6 +251,9 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   debug::ScopedResourceRequestCrashKeys request_crash_keys(resource_request);
+  SCOPED_CRASH_KEY_NUMBER("net", "traffic_annotation_hash",
+                          traffic_annotation.unique_id_hash_code);
+  SCOPED_CRASH_KEY_STRING64("network", "factory_debug_tag", debug_tag_);
 
   if (!IsValidRequest(resource_request, options)) {
     mojo::Remote<mojom::URLLoaderClient>(std::move(client))
@@ -266,12 +270,13 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
       devtools_observer = GetDevToolsObserver(resource_request);
     }
 
-    base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
-        context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
-            resource_request.url, *resource_request.web_bundle_token_params,
-            process_id_, std::move(devtools_observer),
-            resource_request.devtools_request_id, cross_origin_embedder_policy_,
-            coep_reporter());
+    base::WeakPtr<web_package::WebBundleURLLoaderFactory>
+        web_bundle_url_loader_factory =
+            context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
+                resource_request.url, *resource_request.web_bundle_token_params,
+                process_id_, std::move(devtools_observer),
+                resource_request.devtools_request_id,
+                cross_origin_embedder_policy_, coep_reporter());
     client = web_bundle_url_loader_factory->MaybeWrapURLLoaderClient(
         std::move(client));
     if (!client)
@@ -295,11 +300,10 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
             factory_override_->ShouldSkipCorsEnabledSchemeCheck(),
         std::move(client), traffic_annotation, inner_url_loader_factory,
         factory_override_ ? nullptr : network_loader_factory_.get(),
-        origin_access_list_, context_->cors_preflight_controller(),
-        context_->cors_exempt_header_list(),
-        GetAllowAnyCorsExemptHeaderForBrowser(),
-        context_->cors_non_wildcard_request_headers_support(), isolation_info_,
-        std::move(devtools_observer), client_security_state_.get());
+        origin_access_list_, GetAllowAnyCorsExemptHeaderForBrowser(),
+        HasFactoryOverride(!!factory_override_), isolation_info_,
+        std::move(devtools_observer), client_security_state_.get(),
+        cross_origin_embedder_policy_, context_);
     auto* raw_loader = loader.get();
     OnCorsURLLoaderCreated(std::move(loader));
     raw_loader->Start();
@@ -363,15 +367,6 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
     return false;
   }
 
-  if (request.obey_origin_policy &&
-      (!request.trusted_params ||
-       request.trusted_params->isolation_info.IsEmpty())) {
-    mojo::ReportBadMessage(
-        "Origin policy only allowed on trusted requests with IsolationInfo");
-    return false;
-  }
-
-  // Reject request if the restricted prefetch load flag is set but the
   // request's NetworkIsolationKey is not present. This is because the
   // restricted prefetch flag is only used when the browser sets the request's
   // NetworkIsolationKey to correctly cache-partition the resource.

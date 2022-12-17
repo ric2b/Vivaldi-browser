@@ -5,8 +5,6 @@
 #include <memory>
 #include <ostream>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "ash/components/tpm/install_attributes.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -21,10 +19,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/authpolicy/fake_authpolicy_client.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/user_manager/user.h"
@@ -139,8 +139,7 @@ class UserAffiliationBrowserTest
                                       cryptohome_id.account_id());
       command_line->AppendSwitchASCII(
           ash::switches::kLoginProfile,
-          chromeos::UserDataAuthClient::GetStubSanitizedUsername(
-              cryptohome_id));
+          ash::UserDataAuthClient::GetStubSanitizedUsername(cryptohome_id));
     }
   }
 
@@ -149,7 +148,7 @@ class UserAffiliationBrowserTest
 
     // Initialize clients here so they are available during setup. They will be
     // shutdown in ChromeBrowserMain.
-    chromeos::SessionManagerClient::InitializeFakeInMemory();
+    ash::SessionManagerClient::InitializeFakeInMemory();
     ash::UpstartClient::InitializeFake();
     if (GetParam().active_directory) {
       ash::AuthPolicyClient::InitializeFake();

@@ -24,14 +24,9 @@
 #include "ui/android/view_android.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-namespace cc {
-class RenderFrameMetadata;
-}
-
 namespace content {
 
 class BrowserContext;
-class DevToolsFrameTraceRecorder;
 class FencedFrame;
 class FrameTreeNode;
 class FrameAutoAttacher;
@@ -65,9 +60,9 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   // This method is called when new frame is created for an emebedded page
   // (portal or fenced frame) or local root navigation.
-  static scoped_refptr<DevToolsAgentHost>
+  static scoped_refptr<RenderFrameDevToolsAgentHost>
   CreateForLocalRootOrEmbeddedPageNavigation(NavigationRequest* request);
-  static scoped_refptr<DevToolsAgentHost> FindForDangling(
+  static scoped_refptr<RenderFrameDevToolsAgentHost> FindForDangling(
       FrameTreeNode* frame_tree_node);
 
   RenderFrameDevToolsAgentHost(const RenderFrameDevToolsAgentHost&) = delete;
@@ -75,12 +70,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
       delete;
 
   static void AttachToWebContents(WebContents* web_contents);
-
-#if BUILDFLAG(IS_ANDROID)
-  static void SignalSynchronousSwapCompositorFrame(
-      RenderFrameHost* frame_host,
-      const cc::RenderFrameMetadata& frame_metadata);
-#endif
 
   FrameTreeNode* frame_tree_node() { return frame_tree_node_; }
 
@@ -118,6 +107,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
  private:
   friend class DevToolsAgentHost;
+  friend class RenderFrameDevToolsAgentHostFencedFrameBrowserTest;
 
   static void UpdateRawHeadersAccess(RenderFrameHostImpl* rfh);
 
@@ -157,14 +147,11 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
 #if BUILDFLAG(IS_ANDROID)
   device::mojom::WakeLock* GetWakeLock();
-  void SynchronousSwapCompositorFrame(
-      const cc::RenderFrameMetadata& frame_metadata);
 #endif
 
   void UpdateResourceLoaderFactories();
 
 #if BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<DevToolsFrameTraceRecorder> frame_trace_recorder_;
   mojo::Remote<device::mojom::WakeLock> wake_lock_;
 #endif
 

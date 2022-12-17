@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/side_search/side_search_tab_contents_helper.h"
 
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/profiles/profile.h"
@@ -12,7 +13,10 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "chrome/browser/ui/side_search/side_search_config.h"
+#include "chrome/browser/ui/side_search/side_search_metrics.h"
 #include "chrome/browser/ui/side_search/side_search_utils.h"
+#include "chrome/browser/ui/side_search/unified_side_search_helper.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
@@ -30,7 +34,13 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-SideSearchTabContentsHelper::~SideSearchTabContentsHelper() = default;
+SideSearchTabContentsHelper::~SideSearchTabContentsHelper() {
+  // Record the number of times we navigated back to a previous SRP before
+  // closing the tab. Only record this value if we actually navigated to a
+  // search page URL at some point during the life of the tab.
+  if (last_search_url_)
+    RecordSideSearchNumTimesReturnedBackToSRP(returned_to_previous_srp_count_);
+}
 
 void SideSearchTabContentsHelper::NavigateInTabContents(
     const content::OpenURLParams& params) {
@@ -53,6 +63,10 @@ bool SideSearchTabContentsHelper::HandleKeyboardEvent(
     content::WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
   return delegate_ ? delegate_->HandleKeyboardEvent(source, event) : false;
+}
+
+content::WebContents* SideSearchTabContentsHelper::GetTabWebContents() {
+  return web_contents();
 }
 
 content::WebContents* SideSearchTabContentsHelper::OpenURLFromTab(
@@ -90,8 +104,23 @@ void SideSearchTabContentsHelper::DidFinishNavigation(
   auto* config = GetConfig();
 
   if (config->ShouldNavigateInSidePanel(url)) {
-    returned_to_previous_srp_ = navigation_handle->GetPageTransition() &
-                                ui::PAGE_TRANSITION_FORWARD_BACK;
+    // Keep track of how many times a user returned to the `last_search_url_`
+    // via back-navigation. Reset the count if navigating to a new SRP or
+    // forward through history to an existing SRP.
+    if (navigation_handle->GetNavigationEntryOffset() < 0 &&
+        url == last_search_url_) {
+      ++returned_to_previous_srp_count_;
+    } else {
+      // Record the number of times the user navigated to the previous SRP
+      // before resetting the value. Do not do so if this is the first
+      // navigation to a SRP in this tab.
+      if (last_search_url_.has_value()) {
+        RecordSideSearchNumTimesReturnedBackToSRP(
+            returned_to_previous_srp_count_);
+      }
+
+      returned_to_previous_srp_count_ = 0;
+    }
 
     // Capture the URL here in case the side contents is closed before the
     // navigation completes.
@@ -148,6 +177,12 @@ content::WebContents* SideSearchTabContentsHelper::GetSidePanelContents() {
   return side_panel_contents_.get();
 }
 
+void SideSearchTabContentsHelper::SetAutoTriggered(bool auto_triggered) {
+  if (!side_panel_contents_)
+    return;
+  GetSideContentsHelper()->set_auto_triggered(auto_triggered);
+}
+
 void SideSearchTabContentsHelper::ClearSidePanelContents() {
   // It is safe to reset this here as any views::WebViews hosting this
   // WebContents will clear their reference to this away during its destruction.
@@ -198,6 +233,9 @@ SideSearchTabContentsHelper::SideSearchTabContentsHelper(
     : content::WebContentsObserver(web_contents),
       content::WebContentsUserData<SideSearchTabContentsHelper>(*web_contents) {
   config_observation_.Observe(GetConfig());
+  if (base::FeatureList::IsEnabled(features::kUnifiedSidePanel)) {
+    CreateUnifiedSideSearchController(this, web_contents);
+  }
 }
 
 SideSearchSideContentsHelper*
@@ -250,7 +288,7 @@ void SideSearchTabContentsHelper::ClearHelperState() {
   toggled_open_ = false;
   simple_loader_.reset();
   last_search_url_.reset();
-  returned_to_previous_srp_ = false;
+  returned_to_previous_srp_count_ = 0;
   toggled_open_ = false;
 
   // Notify the side panel after resetting the above state but before clearing

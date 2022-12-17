@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
@@ -22,8 +23,7 @@
 namespace base {
 class Time;
 class TimeDelta;
-struct Feature;
-}
+}  // namespace base
 
 // The set of parameters customizing the HUP scoring.
 struct HUPScoringParams {
@@ -355,6 +355,10 @@ int KeywordScoreForSufficientlyCompleteMatch();
 
 // Returns true if the fuzzy URL suggestions feature is enabled.
 bool IsFuzzyUrlSuggestionsEnabled();
+// Indicates whether fuzzy match behavior is counterfactual.
+extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsCounterfactual;
+// Indicates whether to bypass fuzzy processing when `IsLowEndDevice` is true.
+extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsLowEndBypass;
 
 // Simply a convenient wrapper for testing a flag. Used downstream for an
 // assortment of keyword mode experiments.
@@ -370,10 +374,6 @@ std::string OnDeviceHeadModelLocaleConstraint(bool is_incognito);
 // Returns true if CGI parameter names should not be considered when scoring
 // suggestions.
 bool ShouldDisableCGIParamMatching();
-
-// If true, enables a third category on the manage search engines page for
-// active search engines.
-bool IsActiveSearchEnginesEnabled();
 
 // If true, enables a "starter pack" of @history, @bookmarks, and @settings
 // scopes for Site Search.
@@ -473,46 +473,66 @@ extern const char kOmniboxUIUnelideURLOnHoverThresholdMsParam[];
 
 // `FeatureParam`s
 
-// Rich autocompletion.
-bool IsRichAutocompletionEnabled();
-bool RichAutocompletionShowAdditionalText();
-extern const base::FeatureParam<bool> kRichAutocompletionAutocompleteTitles;
+// Autocomplete stability.
+// When providers update their matches, the aggregated matches for the current
+// input are sorted, then merged with the matches from the previous input
+// (`TransferOldMatches()`), then resorted. If enabled, both sorts preserve the
+// default suggestion. Otherwise, only the first sort of the pre-merged matches
+// preserves the default.
 extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteTitlesShortcutProvider;
-extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteTitlesNoInputsWithSpaces;
+    kAutocompleteStabilityPreserveDefaultAfterTransfer;
+// The minimum input length for which to preserve the default suggestion during
+// sync updates. If 0, all sync updates preserve the default suggestion,
+// regardless of input length. If <0, no sync updates preserve the default
+// suggestion; i.e. control behavior.
 extern const base::FeatureParam<int>
-    kRichAutocompletionAutocompleteTitlesMinChar;
+    kAutocompleteStabilityPreserveDefaultForSyncUpdatesMinInputLength;
+// Whether to preserve the default suggestion during async updates. It doesn't
+// make too much sense to enable preservation for sync but not async
+// updates. True by default.
 extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteNonPrefixAll;
+    kAutocompleteStabilityPreserveDefaultForAsyncUpdates;
+// Matches from the previous input are temporarily copied to carry over the
+// suggestions until the new input's suggestions are ready. If enabled, only
+// providers whose suggestions are pending have their old matches copied over.
 extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteNonPrefixShortcutProvider;
+    kAutocompleteStabilityDontCopyDoneProviders;
+// Begin async providers before sync providers so their async requests can
+// happen in parallel. This effects only the search, history_url, document, and
+// on device head providers.
+extern const base::FeatureParam<bool> kAutocompleteStabilityAsyncProvidersFirst;
+// Limit how frequently `AutocompleteController::UpdateResult()` will be
+// invoked. See the comments at `AutocompleteController::update_debouncer_`.
 extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteNonPrefixNoInputsWithSpaces;
+    kAutocompleteStabilityUpdateResultDebounceFromLastRun;
+// See `kAutocompleteStabilityUpdateResultDebounceFromLastRun`. No debouncing
+// if set to 0.
 extern const base::FeatureParam<int>
-    kRichAutocompletionAutocompleteNonPrefixMinChar;
-extern const base::FeatureParam<bool> kRichAutocompletionShowAdditionalText;
-extern const base::FeatureParam<bool> kRichAutocompletionSplitTitleCompletion;
-extern const base::FeatureParam<bool> kRichAutocompletionSplitUrlCompletion;
-extern const base::FeatureParam<int> kRichAutocompletionSplitCompletionMinChar;
-extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteShortcutText;
-extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteShortcutTextNoInputsWithSpaces;
-extern const base::FeatureParam<int>
-    kRichAutocompletionAutocompleteShortcutTextMinChar;
-extern const base::FeatureParam<bool> kRichAutocompletionCounterfactual;
-extern const base::FeatureParam<bool>
-    kRichAutocompletionAutocompletePreferUrlsOverPrefixes;
+    kAutocompleteStabilityUpdateResultDebounceDelay;
 
-// Bookmark paths.
-// Parameter names used for bookmark path variations that determine whether
-// bookmark suggestion texts will contain the title, URL, and/or path.
-extern const base::FeatureParam<std::string> kBookmarkPathsCounterfactual;
-extern const base::FeatureParam<bool> kBookmarkPathsUiReplaceTitle;
-extern const base::FeatureParam<bool> kBookmarkPathsUiReplaceUrl;
-extern const base::FeatureParam<bool> kBookmarkPathsUiAppendAfterTitle;
-extern const base::FeatureParam<bool> kBookmarkPathsUiDynamicReplaceUrl;
+// Local history zero-prefix (aka zero-suggest) and prefix suggestions.
+
+// Determines the relevance score for the local history zero-prefix suggestions.
+extern const base::FeatureParam<int> kLocalHistoryZeroSuggestRelevanceScore;
+
+// Whether the same AutocompleteController instance used by the omnibox should
+// be used to prefetch zero-prefix suggestions. For this to be true,
+// omnibox::kZeroSuggestPrefetching must also be true.
+// This is only checked on Android which uses ZeroSuggestPrefetcher by default,
+// which spins off a new throw-away AutocompleteController instance.
+bool UseSharedInstanceForZeroSuggestPrefetching();
+
+// Returns true if any of the zero-suggest prefetching features are enabled.
+bool IsZeroSuggestPrefetchingEnabled();
+
+// Whether duplicative visits should be ignored for local history zero-suggest.
+// A duplicative visit is a visit to the same search term in an interval smaller
+// than kAutocompleteDuplicateVisitIntervalThreshold.
+extern const base::FeatureParam<bool> kZeroSuggestIgnoreDuplicateVisits;
+// Whether duplicative visits should be ignored for local history
+// prefix-suggest. A duplicative visit is a visit to the same search term in an
+// interval smaller than kAutocompleteDuplicateVisitIntervalThreshold.
+extern const base::FeatureParam<bool> kPrefixSuggestIgnoreDuplicateVisits;
 
 // Short bookmarks.
 // Determine whether bookmarks should look for exact matches only or prefix
@@ -528,41 +548,49 @@ extern const base::FeatureParam<bool>
 extern const base::FeatureParam<int>
     kShortBookmarkSuggestionsByTotalInputLengthThreshold;
 
-// Local history zero-prefix (aka zero-suggest) and prefix suggestions.
-// Indicates whether the user is in the counterfactual group in the experiment
-// for prefetching zero prefix suggestions on the NTP. Users in the
-// counterfactual group issue a follow-up non-cacheable request if the response
-// is loaded from the HTTP cache in order to determine HTTP cache validity.
-// This param is tied to omnibox::kZeroSuggestPrefetching and is to be used when
-// a valid HTTP cache duration is provided via kZeroSuggestCacheDurationSec.
-extern const base::FeatureParam<bool> kZeroSuggestCacheCounterfactual;
-// Specifies the HTTP cache duration for the zero prefix suggest responses. If
-// the provided value is a positive number, the cache duration will be sent as a
-// query string parameter in the zero suggest requests and relayed back in the
-// response cache control headers.
-// This param is tied to omnibox::kZeroSuggestPrefetching which controls
-// prefetching and theoretically works with any caching mechanism. If no valid
-// HTTP cache duration is provided the existing caching mechanism is used.
-extern const base::FeatureParam<int> kZeroSuggestCacheDurationSec;
-// Indicates whether the zero suggest prefetch requests should bypass the HTTP
-// cache, i.e., not get loaded from the HTTP cache. This helps ensure the HTTP
-// cache duration clock is reset and the subsequent non-prefetch zero suggest
-// requests, depending on the cache duration, are loaded from the HTTP cache.
-extern const base::FeatureParam<bool> kZeroSuggestPrefetchBypassCache;
-// Whether duplicative visits should be ignored for local history zero-suggest.
-// A duplicative visit is a visit to the same search term in an interval smaller
-// than kAutocompleteDuplicateVisitIntervalThreshold.
-extern const base::FeatureParam<bool> kZeroSuggestIgnoreDuplicateVisits;
-// Whether duplicative visits should be ignored for local history
-// prefix-suggest. A duplicative visit is a visit to the same search term in an
-// interval smaller than kAutocompleteDuplicateVisitIntervalThreshold.
-extern const base::FeatureParam<bool> kPrefixSuggestIgnoreDuplicateVisits;
+// Bookmark paths.
+// Parameter names used for bookmark path variations that determine whether
+// bookmark suggestion texts will contain the title, URL, and/or path.
+extern const base::FeatureParam<std::string> kBookmarkPathsCounterfactual;
+extern const base::FeatureParam<bool> kBookmarkPathsUiReplaceTitle;
+extern const base::FeatureParam<bool> kBookmarkPathsUiReplaceUrl;
+extern const base::FeatureParam<bool> kBookmarkPathsUiAppendAfterTitle;
+extern const base::FeatureParam<bool> kBookmarkPathsUiDynamicReplaceUrl;
+
+// Shortcut Expanding.
+bool IsShortcutExpandingEnabled();
+
+// Rich autocompletion.
+bool IsRichAutocompletionEnabled();
+bool RichAutocompletionShowAdditionalText();
+extern const base::FeatureParam<bool> kRichAutocompletionAutocompleteTitles;
+extern const base::FeatureParam<bool>
+    kRichAutocompletionAutocompleteTitlesShortcutProvider;
+extern const base::FeatureParam<int>
+    kRichAutocompletionAutocompleteTitlesMinChar;
+extern const base::FeatureParam<bool>
+    kRichAutocompletionAutocompleteNonPrefixAll;
+extern const base::FeatureParam<bool>
+    kRichAutocompletionAutocompleteNonPrefixShortcutProvider;
+extern const base::FeatureParam<int>
+    kRichAutocompletionAutocompleteNonPrefixMinChar;
+extern const base::FeatureParam<bool> kRichAutocompletionShowAdditionalText;
+extern const base::FeatureParam<bool>
+    kRichAutocompletionAdditionalTextWithParenthesis;
+extern const base::FeatureParam<bool>
+    kRichAutocompletionAutocompleteShortcutText;
+extern const base::FeatureParam<int>
+    kRichAutocompletionAutocompleteShortcutTextMinChar;
+extern const base::FeatureParam<bool> kRichAutocompletionCounterfactual;
+extern const base::FeatureParam<bool>
+    kRichAutocompletionAutocompletePreferUrlsOverPrefixes;
 
 // Specifies the relevance scores for the Site Search Starter Pack ACMatches
 // (e.g. @bookmarks, @history) provided by the Builtin Provider.
 extern const base::FeatureParam<int> kSiteSearchStarterPackRelevanceScore;
 
-// New params should be inserted above this comment and formatted as:
+// New params should be inserted above this comment. They should be ordered
+// consistently with `omnibox_features.h`. They should be formatted as:
 // - Short comment categorizing the relevant features & params.
 // - Optional: `bool Is[FeatureName]Enabled();` helpers that check if the
 //   related features in `omnibox_features.h` are enabled.

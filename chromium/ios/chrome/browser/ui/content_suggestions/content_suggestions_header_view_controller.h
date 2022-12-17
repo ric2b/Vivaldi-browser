@@ -8,7 +8,6 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_controlling.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_consumer.h"
 #import "ios/chrome/browser/ui/ntp/logo_animation_controller.h"
 
@@ -28,10 +27,9 @@ class ReadingListModel;
 // the interactions between the header and the collection, and the rest of the
 // application.
 @interface ContentSuggestionsHeaderViewController
-    : UIViewController<ContentSuggestionsHeaderControlling,
-                       ContentSuggestionsHeaderProvider,
-                       NTPHomeConsumer,
-                       LogoAnimationControllerOwnerOwner>
+    : UIViewController <ContentSuggestionsHeaderControlling,
+                        NTPHomeConsumer,
+                        LogoAnimationControllerOwnerOwner>
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
@@ -50,12 +48,15 @@ class ReadingListModel;
 // Whether the Google logo or doodle is being shown.
 @property(nonatomic, assign) BOOL logoIsShowing;
 
-// |YES| if a what's new promo can be displayed.
+// `YES` if a what's new promo can be displayed.
 @property(nonatomic, assign) BOOL promoCanShow;
 
-// |YES| if the omnibox should be focused on when the view appears for voice
+// `YES` if the omnibox should be focused on when the view appears for voice
 // over.
 @property(nonatomic, assign) BOOL focusOmniboxWhenViewAppears;
+
+// `YES` if the Start Surface is currently being shown.
+@property(nonatomic, assign) BOOL isStartShowing;
 
 // The base view controller from which to present UI.
 @property(nonatomic, weak) UIViewController* baseViewController;

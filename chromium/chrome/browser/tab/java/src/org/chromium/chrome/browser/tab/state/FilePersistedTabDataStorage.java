@@ -19,11 +19,12 @@ import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.SequencedTaskRunner;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.io.File;
@@ -65,11 +66,19 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
             }
         }
     }
+    private static final String DELAY_SAVES_UNTIL_DEFERRED_STARTUP =
+            "delay_saves_until_deferred_startup";
+    public static final BooleanCachedFieldTrialParameter DELAY_SAVES_UNTIL_DEFERRED_STARTUP_PARAM =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA,
+                    DELAY_SAVES_UNTIL_DEFERRED_STARTUP, false);
+
     private SequencedTaskRunner mSequencedTaskRunner;
     private boolean mFirstOperationRecorded;
+    private boolean mDeferredStartupComplete;
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     protected LinkedList<StorageRequest> mQueue = new LinkedList<>();
+    private LinkedList<FileSaveRequest> mDelayedSaveRequests = new LinkedList<>();
 
     protected FilePersistedTabDataStorage() {
         mSequencedTaskRunner =
@@ -78,17 +87,22 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
 
     @MainThread
     @Override
-    public void save(int tabId, String dataId, Supplier<ByteBuffer> dataSupplier) {
-        save(tabId, dataId, dataSupplier, NO_OP_CALLBACK);
+    public void save(int tabId, String dataId, Serializer<ByteBuffer> serializer) {
+        save(tabId, dataId, serializer, NO_OP_CALLBACK);
     }
 
     // Callback used for test synchronization between save, restore and delete operations
     @MainThread
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    protected void save(int tabId, String dataId, Supplier<ByteBuffer> dataSupplier,
+    @Override
+    public void save(int tabId, String dataId, Serializer<ByteBuffer> serializer,
             Callback<Integer> callback) {
         // TODO(crbug.com/1059637) we should introduce a retry mechanisms
-        addSaveRequest(new FileSaveRequest(tabId, dataId, dataSupplier, callback));
+        if (isDelaySavesUntilDeferredStartup() && !mDeferredStartupComplete) {
+            addSaveRequestToDelayedSaveQueue(
+                    new FileSaveRequest(tabId, dataId, serializer, callback));
+            return;
+        }
+        addSaveRequest(new FileSaveRequest(tabId, dataId, serializer, callback));
         processNextItemOnQueue();
     }
 
@@ -98,6 +112,13 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
         // by new FileSaveRequest so remove if it exists in the queue.
         mQueue.remove(fileSaveRequest);
         mQueue.add(fileSaveRequest);
+    }
+
+    private void addSaveRequestToDelayedSaveQueue(FileSaveRequest fileSaveRequest) {
+        // FileSaveRequest for the same tabid/data id will get overwritten
+        // by new FileSaveRequest so remove if it exists in the queue.
+        mDelayedSaveRequests.remove(fileSaveRequest);
+        mDelayedSaveRequests.add(fileSaveRequest);
     }
 
     @MainThread
@@ -224,18 +245,18 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
      * Request to save {@link PersistedTabData}
      */
     protected class FileSaveRequest extends StorageRequest<Void> {
-        protected Supplier<ByteBuffer> mDataSupplier;
+        protected Serializer<ByteBuffer> mSerializer;
         protected Callback<Integer> mCallback;
 
         /**
          * @param tabId identifier for the {@link Tab}
          * @param dataId identifier for the {@link PersistedTabData}
-         * @param dataSupplier {@link Supplier} containing data to be saved
+         * @param serializer {@link Serializer} containing data to be saved
          */
-        FileSaveRequest(int tabId, String dataId, Supplier<ByteBuffer> dataSupplier,
+        FileSaveRequest(int tabId, String dataId, Serializer<ByteBuffer> serializer,
                 Callback<Integer> callback) {
             super(tabId, dataId);
-            mDataSupplier = dataSupplier;
+            mSerializer = serializer;
             mCallback = callback;
         }
 
@@ -243,14 +264,14 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
         public Void executeSyncTask() {
             ByteBuffer data = null;
             try {
-                data = mDataSupplier.get();
+                data = mSerializer.get();
             } catch (OutOfMemoryError e) {
                 // Log and exit FileSaveRequest early on OutOfMemoryError.
                 // Not saving a Tab is better than crashing the app.
                 Log.e(TAG, "OutOfMemoryError. Details: " + e.getMessage());
             }
             if (data == null) {
-                mDataSupplier = null;
+                mSerializer = null;
                 return null;
             }
             FileOutputStream outputStream = null;
@@ -297,6 +318,11 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
         @Override
         public AsyncTask getAsyncTask() {
             return new AsyncTask<Void>() {
+                @Override
+                protected void onPreExecute() {
+                    mSerializer.preSerialize();
+                }
+
                 @Override
                 protected Void doInBackground() {
                     return executeSyncTask();
@@ -612,5 +638,28 @@ public class FilePersistedTabDataStorage implements PersistedTabDataStorage {
             File file = FilePersistedTabDataStorage.getFile(tabId, dataId);
             return file != null && file.exists();
         }
+    }
+
+    private static boolean isDelaySavesUntilDeferredStartup() {
+        return ChromeFeatureList.sCriticalPersistedTabData.isEnabled()
+                && DELAY_SAVES_UNTIL_DEFERRED_STARTUP_PARAM.getValue();
+    }
+
+    /**
+     * Signal to {@link FilePersistedTabDataStorage} that deferred startup
+     * is complete.
+     */
+    protected void onDeferredStartup() {
+        mDeferredStartupComplete = true;
+        for (FileSaveRequest saveRequest : mDelayedSaveRequests) {
+            addSaveRequest(saveRequest);
+            processNextItemOnQueue();
+        }
+        mDelayedSaveRequests.clear();
+    }
+
+    @VisibleForTesting
+    public LinkedList<FileSaveRequest> getDelayedSaveRequestsForTesting() {
+        return mDelayedSaveRequests;
     }
 }

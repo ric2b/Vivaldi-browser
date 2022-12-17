@@ -291,7 +291,7 @@ class NET_EXPORT_PRIVATE EntryImpl
   // responsible for deleting the block (or file) from the backing store at some
   // point; there is no need to report any storage-size change, only to do the
   // actual cleanup.
-  void GetData(int index, char** buffer, Addr* address);
+  void GetData(int index, std::unique_ptr<char[]>* buffer, Addr* address);
 
   // |net_log_| should be early since some field destructors (at least
   // ~SparseControl) can touch it.
@@ -304,7 +304,8 @@ class NET_EXPORT_PRIVATE EntryImpl
   // Files to store external user data and key.
   scoped_refptr<File> files_[kNumStreams + 1];
   mutable std::string key_;           // Copy of the key.
-  int unreported_size_[kNumStreams];  // Bytes not reported yet to the backend.
+  // Bytes not reported yet to the backend.
+  int unreported_size_[kNumStreams] = {};
   bool doomed_ = false;       // True if this entry was removed from the cache.
   bool read_only_;            // True if not yet writing.
   bool dirty_ = false;        // True if we detected that this is a dirty entry.

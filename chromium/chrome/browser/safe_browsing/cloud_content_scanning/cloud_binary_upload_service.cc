@@ -3,16 +3,16 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/safe_browsing/cloud_content_scanning/cloud_binary_upload_service.h"
+
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/rand_util.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
-
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -43,31 +43,6 @@ bool IsConsumerScanRequest(const CloudBinaryUploadService::Request& request) {
       return false;
   }
   return request.device_token().empty();
-}
-
-std::string ResultToString(CloudBinaryUploadService::Result result) {
-  switch (result) {
-    case CloudBinaryUploadService::Result::UNKNOWN:
-      return "UNKNOWN";
-    case CloudBinaryUploadService::Result::SUCCESS:
-      return "SUCCESS";
-    case CloudBinaryUploadService::Result::UPLOAD_FAILURE:
-      return "UPLOAD_FAILURE";
-    case CloudBinaryUploadService::Result::TIMEOUT:
-      return "TIMEOUT";
-    case CloudBinaryUploadService::Result::FILE_TOO_LARGE:
-      return "FILE_TOO_LARGE";
-    case CloudBinaryUploadService::Result::FAILED_TO_GET_TOKEN:
-      return "FAILED_TO_GET_TOKEN";
-    case CloudBinaryUploadService::Result::UNAUTHORIZED:
-      return "UNAUTHORIZED";
-    case CloudBinaryUploadService::Result::FILE_ENCRYPTED:
-      return "FILE_ENCRYPTED";
-    case CloudBinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE:
-      return "DLP_SCAN_UNSUPPORTED_FILE_TYPE";
-    case CloudBinaryUploadService::Result::TOO_MANY_REQUESTS:
-      return "TOO_MANY_REQUESTS";
-  }
 }
 
 net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(bool is_app) {
@@ -138,6 +113,22 @@ net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(bool is_app) {
         }
         )");
   }
+}
+
+bool CanUseAccessToken(const BinaryUploadService::Request& request,
+                       Profile* profile) {
+  DCHECK(profile);
+  // Consumer requests never need to use the access token.
+  if (IsConsumerScanRequest(request))
+    return false;
+
+    // Allow the access token to be used on unmanaged devices, but not on
+    // managed devices that aren't affiliated.
+#if !BUILDFLAG(IS_CHROMEOS)
+  if (!policy::BrowserDMTokenStorage::Get()->RetrieveDMToken().is_valid())
+    return true;
+#endif
+  return chrome::enterprise_util::IsProfileAffiliated(profile);
 }
 
 }  // namespace
@@ -225,6 +216,10 @@ void CloudBinaryUploadService::MaybeUploadForDeepScanning(
       std::move(request), can_upload_enterprise_data_[token_and_connector]);
 }
 
+void CloudBinaryUploadService::MaybeAcknowledge(std::unique_ptr<Ack> ack) {
+  // Nothing to do for cloud upload service.
+}
+
 void CloudBinaryUploadService::MaybeUploadForDeepScanningCallback(
     std::unique_ptr<CloudBinaryUploadService::Request> request,
     bool authorized) {
@@ -256,10 +251,8 @@ void CloudBinaryUploadService::UploadForDeepScanning(
   active_requests_[raw_request] = std::move(request);
   start_times_[raw_request] = base::TimeTicks::Now();
 
-  std::string token = base::RandBytesAsString(128);
-  token = base::HexEncode(token.data(), token.size());
+  std::string token = raw_request->SetRandomRequestToken();
   active_tokens_[raw_request] = token;
-  raw_request->set_request_token(token);
 
   if ((!binary_fcm_service_ || !binary_fcm_service_->Connected()) &&
       !is_auth_request) {
@@ -313,7 +306,7 @@ void CloudBinaryUploadService::OnGetInstanceID(Request* request,
   request->set_fcm_token(instance_id);
 
   if (base::FeatureList::IsEnabled(kConnectorsScanningAccessToken) &&
-      chrome::enterprise_util::IsProfileAffiliated(profile_)) {
+      CanUseAccessToken(*request, profile_)) {
     if (!token_fetcher_) {
       token_fetcher_ = std::make_unique<SafeBrowsingPrimaryAccountTokenFetcher>(
           IdentityManagerFactory::GetForProfile(profile_));
@@ -332,6 +325,9 @@ void CloudBinaryUploadService::OnGetInstanceID(Request* request,
 void CloudBinaryUploadService::OnGetAccessToken(
     Request* request,
     const std::string& access_token) {
+  if (!IsActive(request))
+    return;
+
   request->set_access_token(access_token);
   request->GetRequestData(
       base::BindOnce(&CloudBinaryUploadService::OnGetRequestData,
@@ -594,8 +590,11 @@ class ValidateDataUploadRequest : public CloudBinaryUploadService::Request {
  public:
   ValidateDataUploadRequest(
       CloudBinaryUploadService::ContentAnalysisCallback callback,
-      GURL url)
-      : CloudBinaryUploadService::Request(std::move(callback), url) {}
+      enterprise_connectors::CloudAnalysisSettings settings)
+      : CloudBinaryUploadService::Request(
+            std::move(callback),
+            enterprise_connectors::CloudOrLocalAnalysisSettings(
+                std::move(settings))) {}
   ValidateDataUploadRequest(const ValidateDataUploadRequest&) = delete;
   ValidateDataUploadRequest& operator=(const ValidateDataUploadRequest&) =
       delete;
@@ -639,11 +638,14 @@ void CloudBinaryUploadService::IsAuthorized(
         std::move(callback));
     if (!pending_validate_data_upload_request_.contains(token_and_connector)) {
       pending_validate_data_upload_request_.insert(token_and_connector);
+      enterprise_connectors::CloudAnalysisSettings settings;
+      settings.analysis_url = url;
+      settings.dm_token = dm_token;
       auto request = std::make_unique<ValidateDataUploadRequest>(
           base::BindOnce(&CloudBinaryUploadService::
                              ValidateDataUploadRequestConnectorCallback,
                          weakptr_factory_.GetWeakPtr(), dm_token, connector),
-          url);
+          std::move(settings));
       request->set_device_token(dm_token);
       request->set_analysis_connector(connector);
       request->set_per_profile_request(per_profile_request);
@@ -703,13 +705,17 @@ void CloudBinaryUploadService::Shutdown() {
 
 void CloudBinaryUploadService::SetAuthForTesting(const std::string& dm_token,
                                                  bool authorized) {
-  for (enterprise_connectors::AnalysisConnector connector :
-       {enterprise_connectors::AnalysisConnector::
-            ANALYSIS_CONNECTOR_UNSPECIFIED,
-        enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED,
-        enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
-        enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY,
-        enterprise_connectors::AnalysisConnector::PRINT}) {
+  for (enterprise_connectors::AnalysisConnector connector : {
+         enterprise_connectors::AnalysisConnector::
+             ANALYSIS_CONNECTOR_UNSPECIFIED,
+             enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED,
+             enterprise_connectors::AnalysisConnector::FILE_ATTACHED,
+             enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY,
+             enterprise_connectors::AnalysisConnector::PRINT,
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+             enterprise_connectors::AnalysisConnector::FILE_TRANSFER,
+#endif
+       }) {
     TokenAndConnector token_and_connector = {dm_token, connector};
     can_upload_enterprise_data_[token_and_connector] = authorized;
   }

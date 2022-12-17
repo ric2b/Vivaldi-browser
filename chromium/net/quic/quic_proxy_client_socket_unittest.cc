@@ -68,8 +68,7 @@ using testing::_;
 using testing::AnyNumber;
 using testing::Return;
 
-namespace net {
-namespace test {
+namespace net::test {
 
 namespace {
 
@@ -133,13 +132,13 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
       quic::QuicConnectionIdLength connection_id_length,
       quic::QuicPacketNumberLength packet_number_length,
       quic::QuicStreamOffset offset) {
-    quic::QuicVariableLengthIntegerLength retry_token_length_length =
-        quic::VARIABLE_LENGTH_INTEGER_LENGTH_0;
-    quic::QuicVariableLengthIntegerLength length_length =
+    quiche::QuicheVariableLengthIntegerLength retry_token_length_length =
+        quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0;
+    quiche::QuicheVariableLengthIntegerLength length_length =
         quic::QuicVersionHasLongHeaderLengths(version.transport_version) &&
                 include_version
-            ? quic::VARIABLE_LENGTH_INTEGER_LENGTH_2
-            : quic::VARIABLE_LENGTH_INTEGER_LENGTH_0;
+            ? quiche::VARIABLE_LENGTH_INTEGER_LENGTH_2
+            : quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0;
     size_t min_data_length = 1;
     size_t min_packet_length =
         quic::NullEncrypter(quic::Perspective::IS_CLIENT)
@@ -189,7 +188,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         destination_endpoint_(url::kHttpsScheme, kOriginHost, kOriginPort),
         http_auth_cache_(
             false /* key_server_entries_by_network_isolation_key */),
-        host_resolver_(new MockCachingHostResolver()),
+        host_resolver_(std::make_unique<MockCachingHostResolver>()),
         http_auth_handler_factory_(HttpAuthHandlerFactory::CreateDefault()) {
     FLAGS_quic_enable_http3_grease_randomness = false;
     IPAddress ip(192, 0, 2, 33);
@@ -211,10 +210,10 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
   }
 
   void Initialize() {
-    std::unique_ptr<MockUDPClientSocket> socket(new MockUDPClientSocket(
-        mock_quic_data_.InitializeAndGetSequencedSocketData(), NetLog::Get()));
+    auto socket = std::make_unique<MockUDPClientSocket>(
+        mock_quic_data_.InitializeAndGetSequencedSocketData(), NetLog::Get());
     socket->Connect(peer_addr_);
-    runner_ = new TestTaskRunner(&clock_);
+    runner_ = base::MakeRefCounted<TestTaskRunner>(&clock_);
     send_algorithm_ = new quic::test::MockSendAlgorithm();
     EXPECT_CALL(*send_algorithm_, InRecovery()).WillRepeatedly(Return(false));
     EXPECT_CALL(*send_algorithm_, InSlowStart()).WillRepeatedly(Return(false));
@@ -271,7 +270,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         /*require_confirmation=*/false,
         /*migrate_session_early_v2=*/false,
         /*migrate_session_on_network_change_v2=*/false,
-        /*default_network=*/NetworkChangeNotifier::kInvalidNetworkHandle,
+        /*default_network=*/handles::kInvalidNetworkHandle,
         quic::QuicTime::Delta::FromMilliseconds(
             kDefaultRetransmittableOnWireTimeout.InMilliseconds()),
         /*migrate_idle_session=*/true, /*allow_port_migration=*/false,
@@ -324,10 +323,10 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         // `proxy_endpoint_` once it supports `url::SchemeHostPort`.
         HostPortPair::FromSchemeHostPort(destination_endpoint_),
         NetLogWithSource::Make(NetLogSourceType::NONE),
-        new HttpAuthController(HttpAuth::AUTH_PROXY, proxy_endpoint_.GetURL(),
-                               NetworkIsolationKey(), &http_auth_cache_,
-                               http_auth_handler_factory_.get(),
-                               host_resolver_.get()),
+        base::MakeRefCounted<HttpAuthController>(
+            HttpAuth::AUTH_PROXY, proxy_endpoint_.GetURL(),
+            NetworkIsolationKey(), &http_auth_cache_,
+            http_auth_handler_factory_.get(), host_resolver_.get()),
         proxy_delegate_.get());
 
     session_->StartReading();
@@ -355,7 +354,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
     return client_maker_.MakeAckAndRstPacket(
         packet_number, !kIncludeVersion, client_data_stream_id1_, error_code,
         largest_received, smallest_received,
-        /*include_stop_sending=*/false);
+        /*include_stop_sending_if_v99=*/false);
   }
 
   std::unique_ptr<quic::QuicReceivedPacket> ConstructAckAndRstPacket(
@@ -2006,7 +2005,7 @@ class DeleteSockCallback : public TestCompletionCallbackBase {
   DeleteSockCallback(const DeleteSockCallback&) = delete;
   DeleteSockCallback& operator=(const DeleteSockCallback&) = delete;
 
-  ~DeleteSockCallback() override {}
+  ~DeleteSockCallback() override = default;
 
   CompletionOnceCallback callback() {
     return base::BindOnce(&DeleteSockCallback::OnComplete,
@@ -2089,5 +2088,4 @@ INSTANTIATE_TEST_SUITE_P(VersionIncludeStreamDependencySequence,
                          ::testing::ValuesIn(GetTestParams()),
                          ::testing::PrintToStringParamName());
 
-}  // namespace test
-}  // namespace net
+}  // namespace net::test

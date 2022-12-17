@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/cr_elements/mwb_shared_icons.html.js';
 import 'chrome://resources/cr_elements/mwb_shared_vars.css.js';
@@ -166,7 +166,7 @@ export class TabSearchItem extends TabSearchItemBase {
     }
   }
 
-  ariaLabelForText_(tabData: TabData): string {
+  private ariaLabelForText_(tabData: TabData): string {
     return ariaLabel(tabData);
   }
 

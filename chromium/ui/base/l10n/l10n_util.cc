@@ -43,6 +43,10 @@
 #include "ui/base/l10n/l10n_util_android.h"
 #endif
 
+#if BUILDFLAG(IS_IOS)
+#include "ui/base/l10n/l10n_util_ios.h"
+#endif
+
 #if defined(USE_GLIB)
 #include <glib.h>
 #endif
@@ -201,6 +205,9 @@ static const char* const kAcceptLanguageList[] = {
     "so",      // Somali
     "sq",      // Albanian
     "sr",      // Serbian
+#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+    "sr-Latn", // Serbian (Latin)
+#endif
     "st",      // Sesotho
     "su",      // Sundanese
     "sv",      // Swedish
@@ -667,7 +674,7 @@ std::u16string GetDisplayNameForLocale(const std::string& locale,
     UErrorCode error = U_ZERO_ERROR;
     const int kBufferSize = 1024;
 
-    int actual_size;
+    int32_t actual_size;
     // For Country code in ICU64 we need to call uloc_getDisplayCountry
     if (locale_code[0] == '-' || locale_code[0] == '_') {
       actual_size = uloc_getDisplayCountry(
@@ -681,7 +688,7 @@ std::u16string GetDisplayNameForLocale(const std::string& locale,
     if (disallow_default && U_USING_DEFAULT_WARNING == error)
       return std::u16string();
     DCHECK(U_SUCCESS(error));
-    display_name.resize(actual_size);
+    display_name.resize(base::checked_cast<size_t>(actual_size));
   }
 #endif  // BUILDFLAG(IS_IOS)
 
@@ -810,10 +817,10 @@ std::u16string FormatString(const std::u16string& format_string,
   if (!offsets) {
     // $9 is the highest allowed placeholder.
     for (size_t i = 0; i < 9; ++i) {
-      bool placeholder_should_exist = replacements.size() > i;
+      bool placeholder_should_exist = i < replacements.size();
 
       std::u16string placeholder = u"$";
-      placeholder += (L'1' + i);
+      placeholder += static_cast<char16_t>('1' + static_cast<char>(i));
       size_t pos = format_string.find(placeholder);
       if (placeholder_should_exist) {
         DCHECK_NE(std::string::npos, pos) << " Didn't find a " << placeholder

@@ -16,7 +16,6 @@ import org.chromium.chrome.browser.compositor.layouts.components.TintedComposito
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutTab;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripScrim;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
@@ -43,11 +42,13 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     private boolean mShouldHideOverlay;
     private boolean mIsStackStrip;
     private float mMainYOffset;
+    private Context mContext;
 
     public TabStripSceneLayer(Context context) {
         mDpToPx = context.getResources().getDisplayMetrics().density;
         // Vivaldi
         mShouldHideOverlay = false;
+        mContext = context;
     }
 
     @Override
@@ -136,8 +137,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         // that happens but by adding the offset it fixes it. See ref. VAB-4399.
         height += VivaldiUtils.isTopToolbarOn() ? 0 : 1;
         TabStripSceneLayerJni.get().updateTabStripLayer(mNativePtr, TabStripSceneLayer.this, width,
-                height, yOffset * mDpToPx, layoutHelper.getBackgroundTabBrightness(),
-                layoutHelper.getBrightness(), shouldReaddBackground(layoutHelper.getOrientation()));
+                height, yOffset * mDpToPx, shouldReaddBackground(layoutHelper.getOrientation()));
 
         updateStripScrim(layoutHelper.getStripScrim());
 
@@ -159,19 +159,15 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 modelSelectorButton.getHeight() * mDpToPx, modelSelectorButton.isIncognito(),
                 modelSelectorButtonVisible, resourceManager);
 
-        boolean tabStripImprovementsEnabled =
-                CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS);
+        boolean tabStripImprovementsEnabled = ChromeFeatureList.sTabStripImprovements.isEnabled();
         boolean showLeftTabStripFade =
                 !tabStripImprovementsEnabled || LocalizationUtils.isLayoutRtl();
         boolean showRightTabStripFade =
                 !tabStripImprovementsEnabled || !LocalizationUtils.isLayoutRtl();
 
-        int tab_strip_fade_short =
-                CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS)
-                ? R.drawable.tab_strip_fade_short
-                : R.drawable.tab_strip_fade;
-        int tab_strip_fade_long =
-                CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS)
+        int tab_strip_fade_short = tabStripImprovementsEnabled ? R.drawable.tab_strip_fade_short
+                                                               : R.drawable.tab_strip_fade;
+        int tab_strip_fade_long = tabStripImprovementsEnabled
                 ? R.drawable.tab_strip_fade_long
                 : R.drawable.tab_strip_fade_for_model_selector;
 
@@ -208,7 +204,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                     st.getDrawX() * mDpToPx, st.getDrawY() * mDpToPx, st.getWidth() * mDpToPx,
                     st.getHeight() * mDpToPx, st.getContentOffsetX() * mDpToPx,
                     st.getCloseButton().getOpacity(), st.isLoading(),
-                    st.getLoadingSpinnerRotation(), layerTitleCache, resourceManager,
+                    st.getLoadingSpinnerRotation(), st.getBrightness(), layerTitleCache,
+                    resourceManager,
                     // Note(david@vivaldi.com): From here we pass the Vivaldi parameters.
                     st.getAlpha(), layoutHelper.getActiveStripLayoutHelper().showTabsAsFavIcon(),
                     st.getTitleOffset() * mDpToPx);
@@ -250,8 +247,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             ResourceManager resourceManager, StripLayoutHelperManager layoutHelper, int color) {
         boolean useDark = ColorUtils.shouldUseLightForegroundOnBackground(color);
         TabStripSceneLayerJni.get().updateLoadingState(mNativePtr, TabStripSceneLayer.this,
-                VivaldiUtils.getLoadingTabsResource(useDark, resourceManager), resourceManager,
-                layoutHelper.getActiveStripLayoutHelper().shouldShowLoading());
+                VivaldiUtils.getLoadingTabsResource(mContext, useDark, resourceManager),
+                resourceManager, layoutHelper.getActiveStripLayoutHelper().shouldShowLoading());
     }
 
     @NativeMethods
@@ -261,8 +258,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 long nativeTabStripSceneLayer, TabStripSceneLayer caller, boolean visible);
         void finishBuildingFrame(long nativeTabStripSceneLayer, TabStripSceneLayer caller);
         void updateTabStripLayer(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
-                float width, float height, float yOffset, float backgroundTabBrightness,
-                float brightness, boolean shouldReadBackground);
+                float width, float height, float yOffset, boolean shouldReadBackground);
         void updateStripScrim(long nativeTabStripSceneLayer, TabStripSceneLayer caller, float x,
                 float y, float width, float height, int color, float alpha);
         void updateNewTabButton(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
@@ -281,7 +277,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 int closeTint, int handleTint, int handleOutlineTint, boolean foreground,
                 boolean closePressed, float toolbarWidth, float x, float y, float width,
                 float height, float contentOffsetX, float closeButtonAlpha, boolean isLoading,
-                float spinnerRotation, LayerTitleCache layerTitleCache,
+                float spinnerRotation, float brightness, LayerTitleCache layerTitleCache,
                 ResourceManager resourceManager,
                 float tabAlpha, boolean isShownAsFavicon, float titleOffset); // Vivaldi
         void setContentTree(

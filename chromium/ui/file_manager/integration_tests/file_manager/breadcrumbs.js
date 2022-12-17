@@ -10,9 +10,15 @@ import {testcase} from '../testcase.js';
 
 import {expandTreeItem, navigateWithDirectoryTree, remoteCall, setupAndWaitUntilReady} from './background.js';
 
+async function getBreadcrumbTagName() {
+  return 'xf-breadcrumb';
+}
+
 testcase.breadcrumbsNavigate = async () => {
   const files = [ENTRIES.hello, ENTRIES.photos];
   const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS, files, []);
+
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to Downloads/photos.
   await remoteCall.navigateWithDirectoryTree(
@@ -20,7 +26,7 @@ testcase.breadcrumbsNavigate = async () => {
 
   // Use the breadcrumbs to navigate back to Downloads.
   await remoteCall.waitAndClickElement(
-      appId, ['bread-crumb', 'button:nth-last-of-type(2)']);
+      appId, [breadcrumbsTag, 'button:nth-last-of-type(2)']);
 
   // Wait for the contents of Downloads to load again.
   await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows(files));
@@ -118,6 +124,7 @@ testcase.breadcrumbsRenderShortPath = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -126,12 +133,12 @@ testcase.breadcrumbsRenderShortPath = async () => {
 
   // Check: the breadcrumb element should have a |path| attribute.
   const breadcrumbElement =
-      await remoteCall.waitForElement(appId, ['bread-crumb']);
+      await remoteCall.waitForElement(appId, [breadcrumbsTag]);
   const path = breadcrumb.slice(1);  // remove leading "/" char
   chrome.test.assertEq(path, breadcrumbElement.attributes.path);
 
   // Check: some of the main breadcrumb buttons should be visible.
-  const buttons = ['bread-crumb', 'button:not([hidden])'];
+  const buttons = [breadcrumbsTag, 'button:not([hidden])'];
   const elements = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId, [buttons]);
   chrome.test.assertEq(3, elements.length);
@@ -147,7 +154,7 @@ testcase.breadcrumbsRenderShortPath = async () => {
   chrome.test.assertEq('', elements[2].attributes.disabled);
 
   // Check: the breadcrumb elider button should be hidden.
-  const eliderButtonHidden = ['bread-crumb', '[elider][hidden]'];
+  const eliderButtonHidden = [breadcrumbsTag, '[elider][hidden]'];
   await remoteCall.waitForElement(appId, eliderButtonHidden);
 };
 
@@ -162,6 +169,7 @@ testcase.breadcrumbsEliderButtonHidden = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -170,12 +178,12 @@ testcase.breadcrumbsEliderButtonHidden = async () => {
 
   // Check: the breadcrumb element should have a |path| attribute.
   const breadcrumbElement =
-      await remoteCall.waitForElement(appId, ['bread-crumb']);
+      await remoteCall.waitForElement(appId, [breadcrumbsTag]);
   const path = breadcrumb.slice(1);  // remove leading "/" char
   chrome.test.assertEq(path, breadcrumbElement.attributes.path);
 
   // Check: all of the main breadcrumb buttons should be visible.
-  const buttons = ['bread-crumb', 'button:not([hidden])'];
+  const buttons = [breadcrumbsTag, 'button:not([hidden])'];
   const elements = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId, [buttons]);
   chrome.test.assertEq(4, elements.length);
@@ -193,7 +201,7 @@ testcase.breadcrumbsEliderButtonHidden = async () => {
   chrome.test.assertEq('', elements[3].attributes.disabled);
 
   // Check: the breadcrumb elider button should be hidden.
-  const eliderButtonHidden = ['bread-crumb', '[elider][hidden]'];
+  const eliderButtonHidden = [breadcrumbsTag, '[elider][hidden]'];
   await remoteCall.waitForElement(appId, eliderButtonHidden);
 };
 
@@ -207,6 +215,7 @@ testcase.breadcrumbsRenderLongPath = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -215,12 +224,12 @@ testcase.breadcrumbsRenderLongPath = async () => {
 
   // Check: the breadcrumb element should have a |path| attribute.
   const breadcrumbElement =
-      await remoteCall.waitForElement(appId, ['bread-crumb']);
+      await remoteCall.waitForElement(appId, [breadcrumbsTag]);
   const path = breadcrumb.slice(1);  // remove leading "/" char
   chrome.test.assertEq(path, breadcrumbElement.attributes.path);
 
   // Check: some of the main breadcrumb buttons should be visible.
-  const buttons = ['bread-crumb', 'button[id]:not([hidden])'];
+  const buttons = [breadcrumbsTag, 'button[id]:not([hidden])'];
   const elements = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId, [buttons]);
   chrome.test.assertEq(3, elements.length);
@@ -236,7 +245,7 @@ testcase.breadcrumbsRenderLongPath = async () => {
   chrome.test.assertEq('', elements[2].attributes.disabled);
 
   // Check: the breadcrumb elider button should be shown.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitForElement(appId, eliderButton);
 };
 
@@ -251,6 +260,7 @@ testcase.breadcrumbsMainButtonClick = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -259,17 +269,17 @@ testcase.breadcrumbsMainButtonClick = async () => {
 
   // Check: the breadcrumb path attribute should be |breadcrumb|.
   const breadcrumbElement =
-      await remoteCall.waitForElement(appId, ['bread-crumb']);
+      await remoteCall.waitForElement(appId, [breadcrumbsTag]);
   const path = breadcrumb.slice(1);  // remove leading "/" char
   chrome.test.assertEq(path, breadcrumbElement.attributes.path);
 
   // Click the "second" main breadcrumb button (2nd path component).
   await remoteCall.waitAndClickElement(
-      appId, ['bread-crumb', 'button[id="second"]']);
+      appId, [breadcrumbsTag, 'button[id="second"]']);
 
   // Check: the breadcrumb path should be updated due to navigation.
   await remoteCall.waitForElement(
-      appId, ['bread-crumb[path="My files/Downloads"']);
+      appId, [`${breadcrumbsTag}[path="My files/Downloads"]`]);
 };
 
 /**
@@ -283,6 +293,7 @@ testcase.breadcrumbsMainButtonEnterKey = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -291,19 +302,19 @@ testcase.breadcrumbsMainButtonEnterKey = async () => {
 
   // Check: the breadcrumb path attribute should be |breadcrumb|.
   const breadcrumbElement =
-      await remoteCall.waitForElement(appId, ['bread-crumb']);
+      await remoteCall.waitForElement(appId, [breadcrumbsTag]);
   const path = breadcrumb.slice(1);  // remove leading "/" char
   chrome.test.assertEq(path, breadcrumbElement.attributes.path);
 
   // Send an Enter key to the "second" main breadcrumb button.
-  const secondButton = ['bread-crumb', 'button[id="second"]'];
+  const secondButton = [breadcrumbsTag, 'button[id="second"]'];
   const enterKey = [secondButton, 'Enter', false, false, false];
   chrome.test.assertTrue(
       await remoteCall.callRemoteTestUtil('fakeKeyDown', appId, enterKey));
 
   // Check: the breadcrumb path should be updated due to navigation.
   await remoteCall.waitForElement(
-      appId, ['bread-crumb[path="My files/Downloads"']);
+      appId, [`${breadcrumbsTag}[path="My files/Downloads"]`]);
 };
 
 /**
@@ -317,6 +328,7 @@ testcase.breadcrumbsEliderButtonClick = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -324,15 +336,15 @@ testcase.breadcrumbsEliderButtonClick = async () => {
   await navigateWithDirectoryTree(appId, breadcrumb);
 
   // Click the breadcrumb elider button when it appears.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitAndClickElement(appId, eliderButton);
 
   // Check: the elider button drop-down menu should open.
-  const menu = ['bread-crumb', '#elider-menu', 'dialog[open]'];
+  const menu = [breadcrumbsTag, '#elider-menu', 'dialog[open]'];
   await remoteCall.waitForElement(appId, menu);
 
   // Check: the drop-down menu should contain 2 elided items.
-  const menuItems = ['bread-crumb', '#elider-menu .dropdown-item'];
+  const menuItems = [breadcrumbsTag, '#elider-menu .dropdown-item'];
   const elements = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId, [menuItems]);
   chrome.test.assertEq(2, elements.length);
@@ -342,7 +354,7 @@ testcase.breadcrumbsEliderButtonClick = async () => {
   chrome.test.assertEq('nested-folder0', elements[1].text);
 
   // Check: the elider button should not have the focus.
-  const eliderFocus = ['bread-crumb', '[elider]:not([hidden]):focus'];
+  const eliderFocus = [breadcrumbsTag, '[elider]:not([hidden]):focus'];
   await remoteCall.waitForElementLost(appId, eliderFocus);
 
   // Click the elider button.
@@ -366,6 +378,7 @@ testcase.breadcrumbsEliderButtonKeyboard = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -373,7 +386,7 @@ testcase.breadcrumbsEliderButtonKeyboard = async () => {
   await navigateWithDirectoryTree(appId, breadcrumb);
 
   // Wait for the breadcrumb elider button to appear.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitForElement(appId, eliderButton);
 
   // Send an Enter key to the breadcrumb elider button.
@@ -382,11 +395,11 @@ testcase.breadcrumbsEliderButtonKeyboard = async () => {
       await remoteCall.callRemoteTestUtil('fakeKeyDown', appId, enterKey));
 
   // Check: the elider button drop-down menu should open.
-  const menu = ['bread-crumb', '#elider-menu', 'dialog[open]'];
+  const menu = [breadcrumbsTag, '#elider-menu', 'dialog[open]'];
   await remoteCall.waitForElement(appId, menu);
 
   // Check: the drop-down menu should contain 3 elided items.
-  const menuItems = ['bread-crumb', '#elider-menu .dropdown-item'];
+  const menuItems = [breadcrumbsTag, '#elider-menu .dropdown-item'];
   const elements = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId, [menuItems]);
   chrome.test.assertEq(3, elements.length);
@@ -397,7 +410,7 @@ testcase.breadcrumbsEliderButtonKeyboard = async () => {
   chrome.test.assertEq('nested-folder1', elements[2].text);
 
   // Check: the elider button should not have the focus.
-  const eliderFocus = ['bread-crumb', '[elider]:not([hidden]):focus'];
+  const eliderFocus = [breadcrumbsTag, '[elider]:not([hidden]):focus'];
   await remoteCall.waitForElementLost(appId, eliderFocus);
 
   // Send an Escape key to the drop-down menu.
@@ -423,6 +436,7 @@ testcase.breadcrumbsEliderMenuClickOutside = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -430,11 +444,11 @@ testcase.breadcrumbsEliderMenuClickOutside = async () => {
   await navigateWithDirectoryTree(appId, breadcrumb);
 
   // Click the breadcrumb elider button when it appears.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitAndClickElement(appId, eliderButton);
 
   // Check: the elider button drop-down menu should open.
-  const menu = ['bread-crumb', '#elider-menu', 'dialog[open]'];
+  const menu = [breadcrumbsTag, '#elider-menu', 'dialog[open]'];
   await remoteCall.waitForElement(appId, menu);
 
   // Click somewhere outside the drop down menu.
@@ -455,6 +469,7 @@ testcase.breadcrumbsEliderMenuItemClick = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -463,20 +478,20 @@ testcase.breadcrumbsEliderMenuItemClick = async () => {
 
   // Check: the breadcrumb path attribute should be |breadcrumb|.
   const breadcrumbElement =
-      await remoteCall.waitForElement(appId, ['bread-crumb']);
+      await remoteCall.waitForElement(appId, [breadcrumbsTag]);
   const path = breadcrumb.slice(1);  // remove leading "/" char
   chrome.test.assertEq(path, breadcrumbElement.attributes.path);
 
   // Click the breadcrumb elider button when it appears.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitAndClickElement(appId, eliderButton);
 
   // Check: the elider button drop-down menu should open.
-  const menu = ['bread-crumb', '#elider-menu', 'dialog[open]'];
+  const menu = [breadcrumbsTag, '#elider-menu', 'dialog[open]'];
   await remoteCall.waitForElement(appId, menu);
 
   // Check: the drop-down menu should contain 2 elided items.
-  const menuItems = ['bread-crumb', '#elider-menu .dropdown-item'];
+  const menuItems = [breadcrumbsTag, '#elider-menu .dropdown-item'];
   const elements = await remoteCall.callRemoteTestUtil(
       'deepQueryAllElements', appId, [menuItems]);
   chrome.test.assertEq(2, elements.length);
@@ -486,7 +501,7 @@ testcase.breadcrumbsEliderMenuItemClick = async () => {
   chrome.test.assertEq('nested-folder0', elements[1].text);
 
   // Click the first drop-down menu item.
-  const item = ['bread-crumb', '#elider-menu button:first-child'];
+  const item = [breadcrumbsTag, '#elider-menu button:first-child'];
   await remoteCall.waitAndClickElement(appId, item);
 
   // Check: the elider button drop-down menu should close.
@@ -494,7 +509,7 @@ testcase.breadcrumbsEliderMenuItemClick = async () => {
 
   // Check: the breadcrumb path should be updated due to navigation.
   await remoteCall.waitForElement(
-      appId, ['bread-crumb[path="My files/Downloads"']);
+      appId, [`${breadcrumbsTag}[path="My files/Downloads"]`]);
 };
 
 /**
@@ -508,6 +523,7 @@ testcase.breadcrumbsEliderMenuItemTabLeft = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -515,11 +531,11 @@ testcase.breadcrumbsEliderMenuItemTabLeft = async () => {
   await navigateWithDirectoryTree(appId, breadcrumb);
 
   // Click the breadcrumb elider button when it appears.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitAndClickElement(appId, eliderButton);
 
   // Check: the elider button drop-down menu should open.
-  const menu = ['bread-crumb', '#elider-menu', 'dialog[open]'];
+  const menu = [breadcrumbsTag, '#elider-menu', 'dialog[open]'];
   await remoteCall.waitForElement(appId, menu);
 
   // Dispatch a <shift>-Tab key to the drop-down menu.
@@ -533,7 +549,7 @@ testcase.breadcrumbsEliderMenuItemTabLeft = async () => {
 
   // Check: the "first" main button should be focused.
   await remoteCall.waitForElement(
-      appId, ['bread-crumb', 'button[id="first"]:focus']);
+      appId, [breadcrumbsTag, 'button[id="first"]:focus']);
 };
 
 /**
@@ -547,6 +563,7 @@ testcase.breadcrumbsEliderMenuItemTabRight = async () => {
   // Open FilesApp on Downloads containing the test entries.
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, nestedFolderTestEntries, []);
+  const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to deepest folder.
   const breadcrumb = '/My files/Downloads/' +
@@ -554,11 +571,11 @@ testcase.breadcrumbsEliderMenuItemTabRight = async () => {
   await navigateWithDirectoryTree(appId, breadcrumb);
 
   // Click the breadcrumb elider button when it appears.
-  const eliderButton = ['bread-crumb', '[elider]:not([hidden])'];
+  const eliderButton = [breadcrumbsTag, '[elider]:not([hidden])'];
   await remoteCall.waitAndClickElement(appId, eliderButton);
 
   // Check: the elider button drop-down menu should open.
-  const menu = ['bread-crumb', '#elider-menu', 'dialog[open]'];
+  const menu = [breadcrumbsTag, '#elider-menu', 'dialog[open]'];
   await remoteCall.waitForElement(appId, menu);
 
   // Dispatch a Tab key to the drop-down menu.
@@ -571,7 +588,7 @@ testcase.breadcrumbsEliderMenuItemTabRight = async () => {
 
   // Check: the "third" main button should be focused.
   await remoteCall.waitForElement(
-      appId, ['bread-crumb', 'button[id="third"]:focus']);
+      appId, [breadcrumbsTag, 'button[id="third"]:focus']);
 };
 
 /**
@@ -630,4 +647,39 @@ testcase.breadcrumbsDontExceedAvailableViewport = async () => {
           actualDialogHeaderWidth.renderedWidth);
     }
   });
+};
+
+/**
+ * Test that navigating back from a sub-folder in Google Drive> Shared With Me
+ * using the breadcrumbs.
+ * Internally Shared With Me uses some of the Drive Search code, this confused
+ * the DirectoryModel clearing the search state in the Store.
+ */
+testcase.breadcrumbNavigateBackToSharedWithMe = async () => {
+  // Open Files app on Drive containing "Shared with me" file entries.
+  const sharedSubFolderName = ENTRIES.sharedWithMeDirectory.nameText;
+  const appId = await setupAndWaitUntilReady(
+      RootPath.DRIVE, [], [ENTRIES.sharedWithMeDirectory, ENTRIES.hello]);
+
+  // Navigate to Shared with me.
+  await remoteCall.waitAndClickElement(
+      appId, '#directory-tree [entry-label="Shared with me"]');
+
+  // Wait until the breadcrumb path is updated.
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/Shared with me');
+
+  // Navigate to the directory within Shared with me.
+  await remoteCall.waitUntilSelected(appId, sharedSubFolderName);
+  await remoteCall.fakeKeyDown(
+      appId, '#file-list', 'Enter', false, false, false);
+
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(
+      appId, `/Shared with me/${sharedSubFolderName}`);
+
+  // Navigate back using breadcrumb.
+  await remoteCall.waitAndClickElement(
+      appId, ['xf-breadcrumb', 'button[id="first"]']);
+
+  // Wait until the breadcrumb path is updated.
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/Shared with me');
 };

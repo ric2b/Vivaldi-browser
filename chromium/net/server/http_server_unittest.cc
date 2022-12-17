@@ -181,8 +181,8 @@ class HttpServerTest : public TestWithTaskEnvironment,
   HttpServerTest() = default;
 
   void SetUp() override {
-    std::unique_ptr<ServerSocket> server_socket(
-        new TCPServerSocket(nullptr, NetLogSource()));
+    auto server_socket =
+        std::make_unique<TCPServerSocket>(nullptr, NetLogSource());
     server_socket->ListenWithAddressAndPort("127.0.0.1", 0, 1);
     server_ = std::make_unique<HttpServer>(std::move(server_socket), this);
     ASSERT_THAT(server_->GetLocalAddress(&server_address_), IsOk());
@@ -948,6 +948,8 @@ class MockStreamSocket : public StreamSocket {
   MockStreamSocket(const MockStreamSocket&) = delete;
   MockStreamSocket& operator=(const MockStreamSocket&) = delete;
 
+  ~MockStreamSocket() override = default;
+
   // StreamSocket
   int Connect(CompletionOnceCallback callback) override {
     return ERR_NOT_IMPLEMENTED;
@@ -1025,8 +1027,6 @@ class MockStreamSocket : public StreamSocket {
   }
 
  private:
-  ~MockStreamSocket() override = default;
-
   bool connected_ = true;
   scoped_refptr<IOBuffer> read_buf_;
   int read_buf_len_ = 0;
@@ -1036,17 +1036,18 @@ class MockStreamSocket : public StreamSocket {
 };
 
 TEST_F(HttpServerTest, RequestWithBodySplitAcrossPackets) {
-  MockStreamSocket* socket = new MockStreamSocket();
-  HandleAcceptResult(base::WrapUnique<StreamSocket>(socket));
+  auto socket = std::make_unique<MockStreamSocket>();
+  auto* socket_ptr = socket.get();
+  HandleAcceptResult(std::move(socket));
   std::string body("body");
   std::string request_text = base::StringPrintf(
       "GET /test HTTP/1.1\r\n"
       "SomeHeader: 1\r\n"
       "Content-Length: %" PRIuS "\r\n\r\n%s",
       body.length(), body.c_str());
-  socket->DidRead(request_text.c_str(), request_text.length() - 2);
+  socket_ptr->DidRead(request_text.c_str(), request_text.length() - 2);
   ASSERT_FALSE(HasRequest());
-  socket->DidRead(request_text.c_str() + request_text.length() - 2, 2);
+  socket_ptr->DidRead(request_text.c_str() + request_text.length() - 2, 2);
   ASSERT_TRUE(HasRequest());
   ASSERT_EQ(body, WaitForRequest().info.data);
 }

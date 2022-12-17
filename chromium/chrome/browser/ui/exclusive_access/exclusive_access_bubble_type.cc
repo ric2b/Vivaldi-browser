@@ -112,7 +112,18 @@ std::u16string GetAllowButtonTextForType(ExclusiveAccessBubbleType type,
 }
 
 std::u16string GetInstructionTextForType(ExclusiveAccessBubbleType type,
-                                         const std::u16string& accelerator) {
+                                         const std::u16string& accelerator,
+                                         bool notify_download,
+                                         bool notify_overridden) {
+  if (notify_download) {
+    return notify_overridden
+               ? l10n_util::GetStringFUTF16(
+                     IDS_FULLSCREEN_PRESS_TO_SEE_DOWNLOADS_AND_EXIT,
+                     accelerator)
+               : l10n_util::GetStringFUTF16(
+                     IDS_FULLSCREEN_PRESS_TO_SEE_DOWNLOADS, accelerator);
+  }
+
   switch (type) {
     case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION:
     case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_MOUSELOCK_EXIT_INSTRUCTION:
@@ -135,6 +146,24 @@ std::u16string GetInstructionTextForType(ExclusiveAccessBubbleType type,
   }
   NOTREACHED();
   return std::u16string();
+}
+
+bool IsExclusiveAccessModeBrowserFullscreen(ExclusiveAccessBubbleType type) {
+  switch (type) {
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_EXTENSION_FULLSCREEN_EXIT_INSTRUCTION:
+      return true;
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_KEYBOARD_LOCK_EXIT_INSTRUCTION:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_MOUSELOCK_EXIT_INSTRUCTION:
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_MOUSELOCK_EXIT_INSTRUCTION:
+      return false;
+    case EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE:
+      NOTREACHED();
+      return false;
+  }
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace exclusive_access_bubble

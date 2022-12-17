@@ -72,7 +72,19 @@
   </template>
 </div>
 <template is="dom-if"
+    if="[[isFastPairSavedDevicesRowVisible_(isFastPairSupportedByDevice_)]]">
+  <cr-link-row
+      class="hr two-line"
+      id="savedDevicesRowLink"
+      label="$i18n{savedDevicesLabel}"
+      sub-label="[[savedDevicesSublabel_]]"
+      on-click="onClicked_">
+  </cr-link-row>
+</template>
+
+<template is="dom-if"
     if="[[isFastPairToggleVisible_(isFastPairSupportedByDevice_)]]">
+  <div class="device-lists-separator"></div>
   <settings-fast-pair-toggle prefs="{{prefs}}"
       id="enableFastPairToggle"
       deep-link-focus-id$="[[Setting.kFastPairOnOff]]">

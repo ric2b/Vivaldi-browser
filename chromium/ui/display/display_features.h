@@ -13,6 +13,10 @@ namespace display {
 namespace features {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+DISPLAY_EXPORT extern const base::Feature kRoundedDisplay;
+
+DISPLAY_EXPORT bool IsRoundedDisplayEnabled();
+
 DISPLAY_EXPORT extern const base::Feature kUseHDRTransferFunction;
 #endif
 
@@ -26,11 +30,6 @@ DISPLAY_EXPORT bool IsHardwareMirrorModeEnabled();
 
 DISPLAY_EXPORT extern const base::Feature kRequireHdcpKeyProvisioning;
 DISPLAY_EXPORT bool IsHdcpKeyProvisioningRequired();
-
-#if BUILDFLAG(IS_MAC)
-// If enabled, vsync of 120 is forced to 60.
-DISPLAY_EXPORT extern const base::Feature kForce60Hz;
-#endif
 
 }  // namespace features
 }  // namespace display

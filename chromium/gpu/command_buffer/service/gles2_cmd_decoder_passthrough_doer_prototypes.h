@@ -546,11 +546,6 @@ error::Error DoTexImage2D(GLenum target,
                           GLenum type,
                           GLsizei image_size,
                           const void* pixels);
-error::Error DoTexStorage2DImageCHROMIUM(GLenum target,
-                                         GLenum internalformat,
-                                         GLenum bufferusage,
-                                         GLsizei width,
-                                         GLsizei height);
 error::Error DoTexImage3D(GLenum target,
                           GLint level,
                           GLint internalformat,
@@ -891,8 +886,7 @@ error::Error DoWaitSyncTokenCHROMIUM(CommandBufferNamespace namespace_id,
                                      GLuint64 release_count);
 error::Error DoDrawBuffersEXT(GLsizei count, const volatile GLenum* bufs);
 error::Error DoDiscardBackbufferCHROMIUM();
-error::Error DoSetColorSpaceMetadataCHROMIUM(GLuint texture_id,
-                                             gfx::ColorSpace color_space);
+
 error::Error DoFlushDriverCachesCHROMIUM();
 error::Error DoMatrixLoadfCHROMIUM(GLenum matrixMode,
                                    const volatile GLfloat* m);
@@ -1034,8 +1028,6 @@ error::Error DoCreateAndTexStorage2DSharedImageINTERNAL(
 error::Error DoBeginSharedImageAccessDirectCHROMIUM(GLuint client_id,
                                                     GLenum mode);
 error::Error DoEndSharedImageAccessDirectCHROMIUM(GLuint client_id);
-error::Error DoBeginBatchReadAccessSharedImageCHROMIUM(void);
-error::Error DoEndBatchReadAccessSharedImageCHROMIUM(void);
 error::Error DoEnableiOES(GLenum target, GLuint index);
 error::Error DoDisableiOES(GLenum target, GLuint index);
 error::Error DoBlendEquationiOES(GLuint buf, GLenum mode);

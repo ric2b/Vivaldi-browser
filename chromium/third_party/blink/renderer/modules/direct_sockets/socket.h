@@ -7,6 +7,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/modules/direct_sockets/direct_sockets_service_mojo_remote.h"
@@ -19,7 +20,6 @@
 
 namespace blink {
 
-class SocketCloseOptions;
 class ScriptPromise;
 class ExceptionState;
 
@@ -27,15 +27,18 @@ class ExceptionState;
 class MODULES_EXPORT Socket : public ExecutionContextLifecycleStateObserver {
  public:
   // IDL definitions
-  virtual ScriptPromise connection(ScriptState*) const;
+  virtual ScriptPromise opened(ScriptState*) const;
   virtual ScriptPromise closed(ScriptState*) const;
-  virtual ScriptPromise close(ScriptState*,
-                              const SocketCloseOptions*,
-                              ExceptionState&);
+  // Calls readable.cancel() and writable.abort() given that they're not locked
+  // or rejects otherwise.
+  virtual ScriptPromise close(ScriptState*, ExceptionState&);
 
  public:
   explicit Socket(ScriptState*);
   ~Socket() override;
+
+  Socket(const Socket&) = delete;
+  Socket& operator=(const Socket&) = delete;
 
   static bool CheckContextAndPermissions(ScriptState*, ExceptionState&);
   static DOMException* CreateDOMExceptionFromNetErrorCode(int32_t net_error);
@@ -47,14 +50,15 @@ class MODULES_EXPORT Socket : public ExecutionContextLifecycleStateObserver {
   // Connects DirectSocketsServiceMojoRemote.
   void ConnectService();
 
-  virtual void Close(const SocketCloseOptions*, ExceptionState&) = 0;
-
   bool Closed() const;
   bool Initialized() const;
   bool HasPendingActivity() const;
 
-  // Resolves or rejects |closed| promise.
-  void ResolveOrRejectClosed(bool error);
+  // Resolves |closed| promise.
+  void ResolveClosed();
+
+  // Rejects |closed| promise with the given |exception|.
+  void RejectClosed(ScriptValue exception);
 
   // Closes |service_| and resets |feature_handle_for_scheduler_|.
   void CloseServiceAndResetFeatureHandle();
@@ -62,6 +66,7 @@ class MODULES_EXPORT Socket : public ExecutionContextLifecycleStateObserver {
   void Trace(Visitor*) const override;
 
  protected:
+  // Handler for |service_| errors.
   virtual void OnServiceConnectionError() = 0;
 
   const Member<ScriptState> script_state_;
@@ -71,8 +76,8 @@ class MODULES_EXPORT Socket : public ExecutionContextLifecycleStateObserver {
   FrameOrWorkerScheduler::SchedulingAffectingFeatureHandle
       feature_handle_for_scheduler_;
 
-  Member<ScriptPromiseResolver> connection_resolver_;
-  const TraceWrapperV8Reference<v8::Promise> connection_;
+  Member<ScriptPromiseResolver> opened_resolver_;
+  const TraceWrapperV8Reference<v8::Promise> opened_;
 
   Member<ScriptPromiseResolver> closed_resolver_;
   const TraceWrapperV8Reference<v8::Promise> closed_;

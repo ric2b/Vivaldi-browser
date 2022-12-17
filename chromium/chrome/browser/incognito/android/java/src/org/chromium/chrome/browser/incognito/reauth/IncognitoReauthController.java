@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.incognito.reauth;
 
+import android.os.Bundle;
+
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -14,6 +17,7 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.SaveInstanceStateObserver;
 import org.chromium.chrome.browser.lifecycle.StartStopWithNativeObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -31,7 +35,11 @@ import org.chromium.ui.modaldialog.DialogDismissalCause;
  */
 public class IncognitoReauthController
         implements IncognitoTabModelObserver.IncognitoReauthDialogDelegate,
-                   StartStopWithNativeObserver {
+                   StartStopWithNativeObserver, SaveInstanceStateObserver {
+    // A key that would be persisted in saved instance that would be true if there were
+    // incognito tabs present before Chrome went to background.
+    public static final String KEY_IS_INCOGNITO_REAUTH_PENDING = "incognitoReauthPending";
+
     // This callback is fired when the user clicks on "Unlock Incognito" option.
     // This contains the logic to not require further re-authentication if the last one was a
     // success. Please note, a re-authentication would be required again when Chrome is brought to
@@ -94,6 +102,29 @@ public class IncognitoReauthController
     private final @NonNull TabModelSelector mTabModelSelector;
     private final @NonNull ObservableSupplier<Profile> mProfileObservableSupplier;
     private final @NonNull IncognitoReauthCoordinatorFactory mIncognitoReauthCoordinatorFactory;
+    private final boolean mIsTabbedActivity;
+
+    /**
+     * {@link OnBackPressedCallback} which would be added to the "fullscreen" dialog, to handle
+     * back-presses. The back press handling for re-auth view shown inside tab switcher is
+     * controlled elsewhere.
+     *
+     * Note that {@link BackPressManager} doesn't support handling back presses done
+     * when a dialog is being shown. The integration of back press for app modal dialog is done
+     * via {@link ModalDialogProperties#APP_MODAL_DIALOG_BACK_PRESS_HANDLER}.
+     */
+    private final @NonNull OnBackPressedCallback mOnBackPressedInFullScreenReauthCallback =
+            new OnBackPressedCallback(false) {
+                @Override
+                public void handleOnBackPressed() {
+                    mBackPressInReauthFullScreenRunnable.run();
+                }
+            };
+    /**
+     * {@link Runnable} which would be called when back press is triggered when we are showing the
+     * fullscreen re-auth. Back presses done from tab switcher re-auth screen, is handled elsewhere.
+     */
+    private final @NonNull Runnable mBackPressInReauthFullScreenRunnable;
 
     // No strong reference to this should be made outside of this class because
     // we set this to null in hideDialogIfShowing for it to be garbage collected.
@@ -123,6 +154,9 @@ public class IncognitoReauthController
         mProfileObservableSupplier = profileSupplier;
         mProfileObservableSupplier.addObserver(mProfileSupplierCallback);
         mIncognitoReauthCoordinatorFactory = incognitoReauthCoordinatorFactory;
+        mIsTabbedActivity = mIncognitoReauthCoordinatorFactory.getIsTabbedActivity();
+        mBackPressInReauthFullScreenRunnable =
+                incognitoReauthCoordinatorFactory.getBackPressRunnable();
 
         layoutStateProviderOneshotSupplier.onAvailable(
                 mLayoutStateProviderCallbackController.makeCancelable(layoutStateProvider -> {
@@ -155,6 +189,7 @@ public class IncognitoReauthController
         mProfileObservableSupplier.removeObserver(mProfileSupplierCallback);
         mLayoutStateProviderCallbackController.destroy();
         mIncognitoReauthCoordinatorFactory.destroy();
+        mOnBackPressedInFullScreenReauthCallback.setEnabled(false);
         hideDialogIfShowing(DialogDismissalCause.ACTIVITY_DESTROYED);
     }
 
@@ -185,6 +220,18 @@ public class IncognitoReauthController
     }
 
     /**
+     * Override from {@link SaveInstanceStateObserver}. This is called just before activity begins
+     * to stop.
+     */
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        mIncognitoReauthPending = (mTabModelSelector.getModel(/*incognito=*/true).getCount() > 0);
+        if (mIncognitoReauthPending) {
+            outState.putBoolean(KEY_IS_INCOGNITO_REAUTH_PENDING, mIncognitoReauthPending);
+        }
+    }
+
+    /**
      * Override from {@link StartStopWithNativeObserver}.
      */
     @Override
@@ -199,17 +246,19 @@ public class IncognitoReauthController
     }
 
     /**
-     * Override from {@link IncognitoReauthDialogDelegate}. This relays the signal that the TabModal
-     * has changed. This is fired when all other observers of {@link onTabModelChanged} have been
-     * notified to bring determinism in the re-auth dialog.
+     * Override from {@link IncognitoReauthDialogDelegate}.
      */
     @Override
-    public void onAfterTabModelSelected(TabModel newModel, TabModel oldModel) {
-        if ((newModel.isIncognito())) {
-            showDialogIfRequired();
-        } else {
-            hideDialogIfShowing(DialogDismissalCause.DIALOG_INTERACTION_DEFERRED);
-        }
+    public void onAfterRegularTabModelChanged() {
+        hideDialogIfShowing(DialogDismissalCause.DIALOG_INTERACTION_DEFERRED);
+    }
+
+    /**
+     * Override from {@link IncognitoReauthDialogDelegate}.
+     */
+    @Override
+    public void onBeforeIncognitoTabModelSelected() {
+        showDialogIfRequired();
     }
 
     /**
@@ -220,22 +269,26 @@ public class IncognitoReauthController
      */
     private void showDialogIfRequired() {
         if (mIncognitoReauthCoordinator != null) return;
-        if (mLayoutStateProvider == null) return;
+        if (mLayoutStateProvider == null && mIsTabbedActivity) return;
         if (!mIncognitoReauthPending) return;
         if (!mTabModelSelector.isIncognitoSelected()) return;
         if (mProfile == null) return;
         if (!IncognitoReauthManager.isIncognitoReauthEnabled(mProfile)) return;
 
-        boolean showFullScreen = !mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER);
+        boolean showFullScreen = !mIsTabbedActivity
+                || !mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER);
         mIncognitoReauthCoordinator =
                 mIncognitoReauthCoordinatorFactory.createIncognitoReauthCoordinator(
-                        mIncognitoReauthCallback, showFullScreen);
-        mIncognitoReauthCoordinator.showDialog();
+                        mIncognitoReauthCallback, showFullScreen,
+                        mOnBackPressedInFullScreenReauthCallback);
+        mIncognitoReauthCoordinator.show();
+        mOnBackPressedInFullScreenReauthCallback.setEnabled(showFullScreen);
     }
 
     private void hideDialogIfShowing(@DialogDismissalCause int dismissalCause) {
         if (mIncognitoReauthCoordinator != null) {
-            mIncognitoReauthCoordinator.hideDialogAndDestroy(dismissalCause);
+            mOnBackPressedInFullScreenReauthCallback.setEnabled(false);
+            mIncognitoReauthCoordinator.hide(dismissalCause);
             mIncognitoReauthCoordinator = null;
         }
     }

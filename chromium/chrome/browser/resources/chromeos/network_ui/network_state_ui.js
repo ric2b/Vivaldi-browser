@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_components/chromeos/network/network_icon.m.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_components/chromeos/network/network_icon.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
@@ -34,10 +34,18 @@ Polymer({
    * @const
    */
   NETWORK_STATE_FIELDS: [
-    'guid', 'name', 'type', 'connectionState', 'connectable', 'errorState',
-    'wifi.security', ['cellular.networkTechnology', 'EAP.EAP'],
-    'cellular.activationState', 'cellular.roaming', 'wifi.frequency',
-    'wifi.signalStrength'
+    'guid',
+    'name',
+    'type',
+    'connectionState',
+    'connectable',
+    'errorState',
+    'wifi.security',
+    ['cellular.networkTechnology', 'EAP.EAP'],
+    'cellular.activationState',
+    'cellular.roaming',
+    'wifi.frequency',
+    'wifi.signalStrength',
   ],
 
   /** @const */

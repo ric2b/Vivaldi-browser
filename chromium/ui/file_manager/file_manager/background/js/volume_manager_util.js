@@ -106,7 +106,7 @@ volumeManagerUtil.createVolumeInfo = async volumeMetadata => {
             chrome.fileManagerPrivate.getVolumeRoot(
                 {
                   volumeId: volumeMetadata.volumeId,
-                  writable: !volumeMetadata.isReadOnly
+                  writable: !volumeMetadata.isReadOnly,
                 },
                 rootDirectoryEntry => {
                   if (chrome.runtime.lastError) {
@@ -134,7 +134,8 @@ volumeManagerUtil.createVolumeInfo = async volumeMetadata => {
             (volumeMetadata.source),
             /** @type {VolumeManagerCommon.FileSystemType} */
             (volumeMetadata.diskFileSystemType), volumeMetadata.iconSet,
-            volumeMetadata.driveLabel, volumeMetadata.remoteMountPath);
+            volumeMetadata.driveLabel, volumeMetadata.remoteMountPath,
+            volumeMetadata.vmType);
       })
       .catch(
           /** @param {*} error */
@@ -158,7 +159,8 @@ volumeManagerUtil.createVolumeInfo = async volumeMetadata => {
                 (volumeMetadata.source),
                 /** @type {VolumeManagerCommon.FileSystemType} */
                 (volumeMetadata.diskFileSystemType), volumeMetadata.iconSet,
-                volumeMetadata.driveLabel, volumeMetadata.remoteMountPath);
+                volumeMetadata.driveLabel, volumeMetadata.remoteMountPath,
+                volumeMetadata.vmType);
           });
 };
 

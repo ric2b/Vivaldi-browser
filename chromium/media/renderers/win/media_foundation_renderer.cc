@@ -30,6 +30,7 @@
 #include "media/base/media_switches.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/win/dxgi_device_manager.h"
+#include "media/base/win/hresults.h"
 #include "media/base/win/mf_helpers.h"
 #include "media/base/win/mf_initializer.h"
 
@@ -114,9 +115,11 @@ bool MediaFoundationRenderer::IsSupported() {
 MediaFoundationRenderer::MediaFoundationRenderer(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     std::unique_ptr<MediaLog> media_log,
+    LUID gpu_process_adapter_luid,
     bool force_dcomp_mode_for_testing)
     : task_runner_(std::move(task_runner)),
       media_log_(std::move(media_log)),
+      gpu_process_adapter_luid_(gpu_process_adapter_luid),
       force_dcomp_mode_for_testing_(force_dcomp_mode_for_testing) {
   DVLOG_FUNC(1);
 }
@@ -198,7 +201,7 @@ HRESULT MediaFoundationRenderer::CreateMediaEngine(
   DVLOG_FUNC(1);
 
   if (!InitializeMediaFoundation())
-    return E_FAIL;
+    return kErrorInitializeMediaFoundation;
 
   // Set `cdm_proxy_` early on so errors can be reported via the CDM for better
   // error aggregation. See `CdmDocumentServiceImpl::OnCdmEvent()`.
@@ -368,10 +371,29 @@ HRESULT MediaFoundationRenderer::InitializeDXGIDeviceManager() {
       D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
       D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3,  D3D_FEATURE_LEVEL_9_2,
       D3D_FEATURE_LEVEL_9_1};
-  RETURN_IF_FAILED(
-      D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, creation_flags,
-                        feature_levels, std::size(feature_levels),
-                        D3D11_SDK_VERSION, &d3d11_device, nullptr, nullptr));
+
+  Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
+  RETURN_IF_FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));
+
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter_to_use;
+  if (gpu_process_adapter_luid_.LowPart || gpu_process_adapter_luid_.HighPart) {
+    Microsoft::WRL::ComPtr<IDXGIAdapter> temp_adapter;
+    for (UINT i = 0; SUCCEEDED(factory->EnumAdapters(i, &temp_adapter)); i++) {
+      DXGI_ADAPTER_DESC desc;
+      RETURN_IF_FAILED(temp_adapter->GetDesc(&desc));
+      if (desc.AdapterLuid.LowPart == gpu_process_adapter_luid_.LowPart &&
+          desc.AdapterLuid.HighPart == gpu_process_adapter_luid_.HighPart) {
+        adapter_to_use = std::move(temp_adapter);
+        break;
+      }
+    }
+  }
+
+  RETURN_IF_FAILED(D3D11CreateDevice(
+      adapter_to_use.Get(),
+      adapter_to_use ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE, 0,
+      creation_flags, feature_levels, std::size(feature_levels),
+      D3D11_SDK_VERSION, &d3d11_device, nullptr, nullptr));
   RETURN_IF_FAILED(media::SetDebugName(d3d11_device.Get(), "Media_MFRenderer"));
 
   ComPtr<ID3D10Multithread> multithreaded_device;
@@ -384,7 +406,7 @@ HRESULT MediaFoundationRenderer::InitializeDXGIDeviceManager() {
 
 HRESULT MediaFoundationRenderer::InitializeVirtualVideoWindow() {
   if (!InitializeVideoWindowClass())
-    return E_FAIL;
+    return kErrorInitializeVideoWindowClass;
 
   virtual_video_window_ =
       CreateWindowEx(WS_EX_NOPARENTNOTIFY | WS_EX_LAYERED | WS_EX_TRANSPARENT |
@@ -439,7 +461,8 @@ void MediaFoundationRenderer::OnCdmProxyReceived() {
 
   if (!waiting_for_mf_cdm_ || !content_protection_manager_) {
     OnError(PIPELINE_ERROR_INVALID_STATE,
-            ErrorReason::kCdmProxyReceivedInInvalidState);
+            ErrorReason::kCdmProxyReceivedInInvalidState,
+            kErrorCdmProxyReceivedInInvalidState);
     return;
   }
 
@@ -752,6 +775,14 @@ void MediaFoundationRenderer::SetFrameReturnCallbacks(
   initialized_frame_pool_cb_ = std::move(initialized_frame_pool_cb);
 }
 
+void MediaFoundationRenderer::SetGpuProcessAdapterLuid(
+    LUID gpu_process_adapter_luid) {
+  // TODO(wicarr, crbug.com/1342621): When the GPU adapter changes or the GPU
+  // process is restarted we need to recover our Frame Server or DComp
+  // textures, otherwise we'll fail to present any video frames to the user.
+  gpu_process_adapter_luid_ = gpu_process_adapter_luid;
+}
+
 base::TimeDelta MediaFoundationRenderer::GetMediaTime() {
 // GetCurrentTime is expanded as GetTickCount in base/win/windows_types.h
 #undef GetCurrentTime
@@ -899,11 +930,11 @@ void MediaFoundationRenderer::OnVideoNaturalSizeChange() {
 
 void MediaFoundationRenderer::OnError(PipelineStatus status,
                                       ErrorReason reason,
-                                      absl::optional<HRESULT> hresult,
+                                      HRESULT hresult,
                                       PipelineStatusCallback status_cb) {
   const std::string error =
-      "MediaFoundationRenderer error: " + GetErrorReasonString(reason) +
-      (hresult.has_value() ? (" (" + PrintHr(hresult.value()) + ")") : "");
+      "MediaFoundationRenderer error: " + GetErrorReasonString(reason) + " (" +
+      PrintHr(hresult) + ")";
 
   DLOG(ERROR) << error;
 
@@ -918,17 +949,16 @@ void MediaFoundationRenderer::OnError(PipelineStatus status,
   // during OS sleep/resume, or moving video to different graphics adapters.
   // This is not an error, so special case it here.
   PipelineStatus new_status = status;
-  if (hresult.has_value() && hresult == static_cast<HRESULT>(0x8004CD12)) {
+  if (hresult == static_cast<HRESULT>(0x8004CD12)) {
     new_status = PIPELINE_ERROR_HARDWARE_CONTEXT_RESET;
     if (cdm_proxy_)
       cdm_proxy_->OnHardwareContextReset();
   } else if (cdm_proxy_) {
-    cdm_proxy_->OnPlaybackError();
+    cdm_proxy_->OnPlaybackError(hresult);
   }
 
   // Attach hresult to `new_status` for logging and metrics reporting.
-  if (hresult.has_value())
-    new_status.WithData("hresult", static_cast<uint32_t>(hresult.value()));
+  new_status.WithData("hresult", static_cast<uint32_t>(hresult));
 
   if (status_cb)
     std::move(status_cb).Run(new_status);

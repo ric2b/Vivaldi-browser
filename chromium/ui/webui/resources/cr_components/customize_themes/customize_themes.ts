@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 import '../managed_dialog/managed_dialog.js';
-import '../../cr_elements/cr_button/cr_button.m.js';
-import '../../cr_elements/cr_icon_button/cr_icon_button.m.js';
+import '../../cr_elements/cr_button/cr_button.js';
+import '../../cr_elements/cr_icon_button/cr_icon_button.js';
 import '../../cr_elements/cr_icons_css.m.js';
 import '../../cr_elements/cr_grid/cr_grid.js';
 import '../../cr_elements/shared_vars_css.m.js';
@@ -76,13 +76,13 @@ export class CustomizeThemesElement extends CustomizeThemesElementBase {
       showManagedThemeDialog_: {
         type: Boolean,
         value: false,
-      }
+      },
     };
   }
 
   selectedTheme: Theme|null;
   autoConfirmThemeChanges: boolean;
-  private chromeThemes_: Array<ChromeTheme>;
+  private chromeThemes_: ChromeTheme[];
   private showManagedThemeDialog_: boolean;
 
   private handler_: CustomizeThemesHandlerInterface =

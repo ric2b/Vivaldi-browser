@@ -47,7 +47,7 @@ try_.builder(
     name = "fuchsia-binary-size",
     branch_selector = branches.FUCHSIA_LTS_MILESTONE,
     builderless = not settings.is_main,
-    cores = 16,
+    cores = 16 if settings.is_main else 8,
     executable = "recipe:binary_size_fuchsia_trybot",
     goma_jobs = goma.jobs.J150,
     properties = {
@@ -60,15 +60,7 @@ try_.builder(
             ],
         },
     },
-    tryjob = try_.job(
-        experiment_percentage = 20,
-    ),
-)
-
-try_.builder(
-    name = "fuchsia-clang-tidy-rel",
-    executable = "recipe:tricium_clang_tidy_wrapper",
-    goma_jobs = goma.jobs.J150,
+    tryjob = try_.job(),
 )
 
 try_.builder(
@@ -113,6 +105,9 @@ try_.builder(
     mirrors = [
         "ci/fuchsia-x64-cast",
     ],
+    experiments = {
+        "enable_weetbix_queries": 100,
+    },
 )
 
 try_.builder(
@@ -124,6 +119,9 @@ try_.builder(
     mirrors = [
         "ci/Fuchsia ARM64",
     ],
+    experiments = {
+        "enable_weetbix_queries": 100,
+    },
 )
 
 try_.builder(
@@ -135,4 +133,7 @@ try_.builder(
     mirrors = [
         "ci/Fuchsia x64",
     ],
+    experiments = {
+        "enable_weetbix_queries": 100,
+    },
 )

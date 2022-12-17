@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.browserservices;
 
-import android.content.ComponentName;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.RemoteException;
@@ -73,16 +72,11 @@ public class TrustedWebActivityClientLocationDelegationTest {
     public void testCheckLocationPermission() throws TimeoutException {
         CallbackHelper locationPermission = new CallbackHelper();
 
-        TrustedWebActivityClient.PermissionCheckCallback callback =
-                new TrustedWebActivityClient.PermissionCheckCallback() {
-                    @Override
-                    public void onPermissionCheck(ComponentName answeringApp, boolean enabled) {
-                        locationPermission.notifyCalled();
-                    }
-                };
+        TrustedWebActivityClient.PermissionCallback callback =
+                (app, settingValue) -> locationPermission.notifyCalled();
 
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
-                () -> mClient.checkLocationPermission(ORIGIN, callback));
+                () -> mClient.checkLocationPermission(SCOPE.toString(), callback));
         locationPermission.waitForFirst();
     }
 
@@ -108,8 +102,8 @@ public class TrustedWebActivityClientLocationDelegationTest {
         };
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
                 ()
-                        -> mClient.startListeningLocationUpdates(
-                                ORIGIN, false /* highAccuracy */, locationUpdateCallback));
+                        -> mClient.startListeningLocationUpdates(SCOPE.toString(),
+                                false /* highAccuracy */, locationUpdateCallback));
         locationUpdate.waitForFirst();
     }
 
@@ -134,8 +128,8 @@ public class TrustedWebActivityClientLocationDelegationTest {
         };
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
                 ()
-                        -> mClient.startListeningLocationUpdates(
-                                otherOrigin, false /* highAccuracy */, locationUpdateCallback));
+                        -> mClient.startListeningLocationUpdates(otherOrigin.toString(),
+                                false /* highAccuracy */, locationUpdateCallback));
         locationError.waitForFirst();
     }
 }

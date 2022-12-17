@@ -17,7 +17,6 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_data.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/public/renderer/render_view.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -101,12 +100,13 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
       const FormFieldData& field,
       const std::u16string& old_value) override {}
 
-  void AskForValuesToFill(int32_t query_id,
-                          const FormData& form,
+  void AskForValuesToFill(const FormData& form,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box,
+                          int32_t query_id,
                           bool autoselect_first_field,
-                          TouchToFillEligible touch_to_fill_eliible) override {}
+                          TouchToFillEligible touch_to_fill_eligible) override {
+  }
 
   void HidePopup() override {}
 

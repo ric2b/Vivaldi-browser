@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "media/audio/clockless_audio_sink.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/demuxer.h"
@@ -261,7 +262,7 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   MOCK_METHOD1(OnVideoPipelineInfoChange, void(const VideoPipelineInfo&));
   MOCK_METHOD1(OnRemotePlayStateChange, void(MediaStatus::State state));
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   virtual Demuxer* VivaldiCreatePlatformDemuxer(
       std::unique_ptr<DataSource>& data_source,
       base::test::TaskEnvironment& task_environment,

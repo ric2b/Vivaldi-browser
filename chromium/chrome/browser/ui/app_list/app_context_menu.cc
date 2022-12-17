@@ -103,7 +103,6 @@ const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(int command_id,
     case ash::UNINSTALL:
       return views::kUninstallIcon;
     case ash::APP_CONTEXT_MENU_NEW_WINDOW:
-    case ash::MENU_OPEN_NEW:
       return views::kNewWindowIcon;
     case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW:
       return views::kNewIncognitoWindowIcon;
@@ -124,8 +123,6 @@ const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(int command_id,
       return ash::kSortAlphabeticalIcon;
     case ash::REORDER_BY_COLOR:
       return ash::kSortColorIcon;
-    case ash::HIDE_CONTINUE_SECTION:
-      return ash::kLauncherHideContinueSectionIcon;
     case ash::NOTIFICATION_CONTAINER:
       NOTREACHED() << "NOTIFICATION_CONTAINER does not have an icon, and it is "
                       "added to the model by NotificationMenuController.";

@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Пераход у актыўны рэжым</translation>
 <translation id="119944043368869598">Выдаліць усё</translation>
 <translation id="1221825588892235038">Толькі абраныя</translation>
+<translation id="1234736487471201993">Стварыць QR-код для гэтай выявы</translation>
 <translation id="1244303850296295656">Памылка пашырэння</translation>
 <translation id="125220115284141797">Прадвызначана</translation>
 <translation id="1297175357211070620">Прынтар</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Трансляцыя змесціва ўкладкі</translation>
 <translation id="2150139952286079145">Пошук прынтараў</translation>
 <translation id="215753907730220065">Выйсці з поўнаэкраннага рэжыму</translation>
+<translation id="2158475082070321257">Скапіяваць спасылку на абраны тэкст</translation>
 <translation id="2177950615300672361">Укладка ў рэжыме інкогніта: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модуль натыўнага кліента: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Уставіць як звычайны тэкст</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Магчыма, сайтам таксама трэба будзе распазнаць вашу прыладу з дапамогай ідэнтыфікатара</translation>
 <translation id="2445081178310039857">Патрабуецца каранёвы каталог пашырэння.</translation>
 <translation id="2470702053775288986">Пашырэнні, якія не падтрымліваюцца, адключаныя</translation>
-<translation id="2476578072172137802">Налады сайта</translation>
+<translation id="2485422356828889247">Выдаліць</translation>
 <translation id="2498539833203011245">Згарнуць</translation>
 <translation id="2509495747794740764">Значэнне мусіць быць ад 10 да 200.</translation>
 <translation id="253557089021624350">Колькасць сігналаў захавання актыўнасці</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Паведаміць пра парушэнне</translation>
 <translation id="2941112035454246133">Нізкі</translation>
 <translation id="2972581237482394796">&amp;Паўтарыць</translation>
+<translation id="2993517869960930405">Звесткі пра праграму</translation>
 <translation id="3003623123441819449">Кэш CSS</translation>
 <translation id="3008272652534848354">Скінуць правы</translation>
 <translation id="3012631534724231212">(iфрэйм)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Адкрыць спасылку як</translation>
 <translation id="3222066309010235055">Папярэдняя адмалёўка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Абярыце каранёвы каталог пашырэння, якое запакоўваецца. Каб абнавіць пашырэнне, абярыце яшчэ і прыватны ключ.</translation>
+<translation id="3275778913554317645">Адкрываць як акно</translation>
 <translation id="3280237271814976245">Захаваць &amp;як...</translation>
 <translation id="3285322247471302225">Новая &amp;ўкладка</translation>
 <translation id="3288047731229977326">Пашырэнні, запушчаныя ў рэжыме распрацоўніка, могуць нашкодзіць вашаму камп'ютару. Калі вы не распрацоўнік, то іх трэба адключыць, каб даныя былі ў бяспецы.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Адкрыць PDF</translation>
 <translation id="3308134619352333507">Схаваць кнопку</translation>
 <translation id="3317459757438853210">Двухбаковы друк</translation>
+<translation id="3331974543021145906">Звесткі пра праграму</translation>
 <translation id="3341703758641437857">Дазволіць для лакальных файлаў</translation>
 <translation id="3347086966102161372">С&amp;капіяваць адрас выявы</translation>
 <translation id="3360297538363969800">Не атрымалася надрукаваць. Калі ласка, праверце прынтар і паспрабуйце зноў.</translation>
 <translation id="3378572629723696641">Гэтае пашырэнне можа быць пашкоджана.</translation>
 <translation id="3387614642886316601">Палепшаная праверка правапісу</translation>
+<translation id="3390013585654699824">Звесткі пра праграму</translation>
 <translation id="3393582007140394275">Немагчыма трансляваць экран.</translation>
 <translation id="3432227430032737297">Выдаліць ўсе бачныя</translation>
 <translation id="345693547134384690">Адкрыць &amp;выяву ў новай укладцы</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Знайсці выяву у <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Дазволіць сайтам прайграваць абароненае змесціва (рэкамендуецца)</translation>
 <translation id="3979395879372752341">Дададзена новае пашырэнне (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Скапіяваць спасылку на абраны тэкст</translation>
 <translation id="4021279097213088397">-</translation>
 <translation id="4022426551683927403">&amp;Дадаць у слоўнік</translation>
 <translation id="407520071244661467">Маштаб</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Закрыйце браўзер перад імпартам</translation>
 <translation id="4130207949184424187">Пашырэнне змяніла сістэму пошуку.</translation>
 <translation id="4131410914670010031">Чорна-белы друк</translation>
+<translation id="4165986682804962316">Налады сайта</translation>
 <translation id="4176463684765177261">Адключана</translation>
 <translation id="4200983522494130825">Новая &amp;ўкладка</translation>
 <translation id="4225397296022057997">На ўсіх сайтах</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Аднавіць налады</translation>
 <translation id="4726710629007580002">Падчас усталёўкі былі наступныя папярэджанні:</translation>
 <translation id="479536056609751218">Вэб-старонка, толькі HTML</translation>
+<translation id="4827904420700932487">Стварыць QR-код для гэтай выявы</translation>
 <translation id="4839303808932127586">Захаваць відэа як...</translation>
 <translation id="4840096453115567876">Выйсці з рэжыму інкогніта?</translation>
 <translation id="488785315393301722">Паказаць падрабязнасці</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Пытацца дазволу на доступ (рэкамендуецца)</translation>
 <translation id="5677928146339483299">Заблакавана</translation>
 <translation id="5707185214361380026">Не атрымалася загрузіць пашырэнне з:</translation>
+<translation id="5713171467967533494">Адкрываць у браўзеры Vivaldi</translation>
 <translation id="5715711091495208045">Пасярэднік: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Захаваць як PDF</translation>
 <translation id="5747809636523347288">Ус&amp;тавіць і перайсці да <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Параметры</translation>
 <translation id="6579369886355986318">Паказаць усе элементы &amp;кіравання</translation>
 <translation id="6639554308659482635">Памяць SQLite</translation>
+<translation id="666731172850799929">Адкрываць у <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Захаваць пароль</translation>
 <translation id="6691936601825168937">&amp;НаПерад</translation>
 <translation id="6798954102094737107">Убудова: <ph name="PLUGIN_NAME" /></translation>
@@ -430,6 +441,7 @@
 <translation id="9003647077635673607">Дазволіць для ўсіх сайтаў</translation>
 <translation id="9027459031423301635">Адкрыць спасылку ў новай &amp;ўкладцы</translation>
 <translation id="9056810968620647706">Нічога не знойдзена.</translation>
+<translation id="9084064520949870008">Адкрыць як акно</translation>
 <translation id="9137916601698928395">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="91568222606626347">Стварыць цэтлік...</translation>
 <translation id="916607977885256133">Рэжым плавальных акон</translation>

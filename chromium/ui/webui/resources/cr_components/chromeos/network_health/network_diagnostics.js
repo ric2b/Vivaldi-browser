@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../../../cr_elements/cr_button/cr_button.m.js';
+import '../../../cr_elements/cr_button/cr_button.js';
 import './routine_group.js';
 
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
@@ -53,7 +53,7 @@ Polymer({
       type: Boolean,
       value() {
         return loadTimeData.getBoolean('enableArcNetworkDiagnostics');
-      }
+      },
     },
 
     /**
@@ -72,7 +72,7 @@ Polymer({
                 type: RoutineType.kLanConnectivity,
                 func: () => getNetworkDiagnosticsService().runLanConnectivity(),
               },
-            ]
+            ],
           },
           {
             group: RoutineGroup.WIFI,
@@ -88,7 +88,7 @@ Polymer({
                 func: () =>
                     getNetworkDiagnosticsService().runHasSecureWiFiConnection(),
               },
-            ]
+            ],
           },
           {
             group: RoutineGroup.PORTAL,
@@ -98,7 +98,7 @@ Polymer({
                 type: RoutineType.kCaptivePortal,
                 func: () => getNetworkDiagnosticsService().runCaptivePortal(),
               },
-            ]
+            ],
           },
           {
             group: RoutineGroup.GATEWAY,
@@ -109,7 +109,7 @@ Polymer({
                 func: () =>
                     getNetworkDiagnosticsService().runGatewayCanBePinged(),
               },
-            ]
+            ],
           },
           {
             group: RoutineGroup.FIREWALL,
@@ -130,7 +130,7 @@ Polymer({
                 type: RoutineType.kHttpsLatency,
                 func: () => getNetworkDiagnosticsService().runHttpsLatency(),
               },
-            ]
+            ],
           },
           {
             group: RoutineGroup.DNS,
@@ -151,7 +151,7 @@ Polymer({
                 type: RoutineType.kDnsResolution,
                 func: () => getNetworkDiagnosticsService().runDnsResolution(),
               },
-            ]
+            ],
           },
           {
             group: RoutineGroup.GOOGLE_SERVICES,
@@ -164,8 +164,8 @@ Polymer({
                 func: () => getNetworkDiagnosticsService().runVideoConferencing(
                     /*stun_server_hostname=*/ null),
               },
-            ]
-          }
+            ],
+          },
         ];
         if (this.areArcNetworkingRoutinesEnabled_) {
           routineGroups.push({
@@ -187,7 +187,7 @@ Polymer({
                 func: () =>
                     getNetworkDiagnosticsService().runArcDnsResolution(),
               },
-            ]
+            ],
           });
         }
         const routines = [];
@@ -200,7 +200,7 @@ Polymer({
         }
 
         return routines;
-      }
+      },
     },
 
     /**
@@ -210,7 +210,7 @@ Polymer({
     RoutineGroup_: {
       type: Object,
       value: RoutineGroup,
-    }
+    },
   },
 
   /**

@@ -41,10 +41,10 @@
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/shared_image_backing.h"
-#include "gpu/command_buffer/service/shared_image_backing_d3d.h"
-#include "gpu/command_buffer/service/shared_image_backing_gl_image.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image/d3d_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/gl_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/service/shared_image_stub.h"
@@ -65,10 +65,11 @@
 #include "third_party/angle/include/EGL/eglext.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/color_space_win.h"
-#include "ui/gl/direct_composition_surface_win.h"
+#include "ui/gl/direct_composition_support.h"
 #include "ui/gl/gl_angle_util_win.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_display.h"
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_image_dxgi.h"
 #include "ui/gl/gl_surface_egl.h"
@@ -792,8 +793,9 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
   RETURN_ON_FAILURE(make_context_current_cb_.Run(),
                     "Failed to make context current", false);
 
+  gl::GLDisplayEGL* display = gl::GLDisplayEGL::GetDisplayForCurrentContext();
   RETURN_ON_FAILURE(
-      gl::g_driver_egl.ext.b_EGL_ANGLE_surface_d3d_texture_2d_share_handle,
+      display && display->ext->b_EGL_ANGLE_surface_d3d_texture_2d_share_handle,
       "EGL_ANGLE_surface_d3d_texture_2d_share_handle unavailable", false);
 
   RETURN_ON_FAILURE(gl::GLFence::IsSupported(), "GL fences are unsupported",
@@ -1552,11 +1554,11 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
     RETURN_ON_HR_FAILURE(hr, "Failed to pass D3D manager to decoder", false);
   }
 
-  if (!gl::GLSurfaceEGL::GetGLDisplayEGL()->IsPixelFormatFloatSupported())
+  gl::GLDisplayEGL* display = gl::GLSurfaceEGL::GetGLDisplayEGL();
+  if (!display->ext->b_EGL_EXT_pixel_format_float)
     use_fp16_ = false;
 
-  EGLDisplay egl_display =
-      gl::GLSurfaceEGL::GetGLDisplayEGL()->GetHardwareDisplay();
+  EGLDisplay egl_display = display->GetDisplay();
 
   while (true) {
     std::vector<EGLint> config_attribs = {EGL_BUFFER_SIZE,  32,
@@ -1661,15 +1663,16 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
     use_dx11_ = !!dx11_aware;
   }
 
-  use_keyed_mutex_ =
-      use_dx11_ && gl::GLSurfaceEGL::GetGLDisplayEGL()->HasEGLExtension(
-                       "EGL_ANGLE_keyed_mutex");
+  gl::GLDisplayEGL* display = gl_context->GetGLDisplayEGL();
 
-  if (!use_dx11_ ||
-      !gl::g_driver_egl.ext.b_EGL_ANGLE_stream_producer_d3d_texture ||
-      !gl::g_driver_egl.ext.b_EGL_KHR_stream ||
-      !gl::g_driver_egl.ext.b_EGL_KHR_stream_consumer_gltexture ||
-      !gl::g_driver_egl.ext.b_EGL_NV_stream_consumer_gltexture_yuv) {
+  use_keyed_mutex_ =
+      use_dx11_ && display && display->ext->b_EGL_ANGLE_keyed_mutex;
+
+  if (!use_dx11_ || !display ||
+      !display->ext->b_EGL_ANGLE_stream_producer_d3d_texture ||
+      !display->ext->b_EGL_KHR_stream ||
+      !display->ext->b_EGL_KHR_stream_consumer_gltexture ||
+      !display->ext->b_EGL_NV_stream_consumer_gltexture_yuv) {
     DisableSharedTextureSupport();
     support_copy_nv12_textures_ = false;
   }
@@ -1741,7 +1744,7 @@ bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
     out_attributes->SetUINT32(MF_SA_D3D11_BINDFLAGS,
                               D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_DECODER);
     // TODO(sunnyps): Find if we can always set resource sharing to disabled
-    if (gl::DirectCompositionSurfaceWin::IsDecodeSwapChainSupported()) {
+    if (gl::DirectCompositionDecodeSwapChainSupported()) {
       // Decode swap chains do not support shared resources.
       out_attributes->SetUINT32(MF_SA_D3D11_SHARED, FALSE);
       out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, FALSE);
@@ -3251,14 +3254,14 @@ DXVAVideoDecodeAccelerator::GetSharedImagesFromPictureBuffer(
     gl::GLImageDXGI* gl_image_dxgi =
         gl::GLImageDXGI::FromGLImage(picture_buffer->gl_image().get());
     if (gl_image_dxgi) {
-      shared_image = gpu::SharedImageBackingD3D::CreateFromGLTexture(
+      shared_image = gpu::D3DImageBacking::CreateFromGLTexture(
           mailbox, viz_formats[texture_idx],
           picture_buffer->texture_size(texture_idx),
           picture_buffer->color_space(), kTopLeft_GrSurfaceOrigin,
           kPremul_SkAlphaType, shared_image_usage, gl_image_dxgi->texture(),
           std::move(gl_texture));
     } else {
-      shared_image = gpu::SharedImageBackingGLImage::CreateFromGLTexture(
+      shared_image = gpu::GLImageBacking::CreateFromGLTexture(
           picture_buffer->gl_image(), mailbox, viz_formats[texture_idx],
           picture_buffer->size(), picture_buffer->color_space(),
           kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, shared_image_usage,

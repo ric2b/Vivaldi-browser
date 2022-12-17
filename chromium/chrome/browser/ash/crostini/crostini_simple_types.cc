@@ -72,6 +72,14 @@ const char* CrostiniResultString(const CrostiniResult res) {
     ENTRY(WAYLAND_SERVER_CREATION_FAILED);
     ENTRY(CONFIGURE_CONTAINER_TIMED_OUT);
     ENTRY(RESTART_REQUEST_CANCELLED);
+    ENTRY(CREATE_DISK_IMAGE_NO_RESPONSE);
+    ENTRY(CREATE_DISK_IMAGE_ALREADY_EXISTS);
+    ENTRY(UNINSTALL_TERMINA_FAILED);
+    ENTRY(START_LXD_FAILED_SIGNAL);
+    ENTRY(CONTAINER_CREATE_FAILED_SIGNAL);
+    ENTRY(STOP_VM_NO_RESPONSE);
+    ENTRY(SIGNAL_NOT_CONNECTED);
+    ENTRY(INSTALL_TERMINA_CANCELLED);
   }
 #undef ENTRY
   return "unknown code";
@@ -88,11 +96,13 @@ LinuxPackageInfo::~LinuxPackageInfo() = default;
 ContainerInfo::ContainerInfo(std::string container_name,
                              std::string container_username,
                              std::string container_homedir,
-                             std::string ipv4_address)
+                             std::string ipv4_address,
+                             uint32_t sftp_vsock_port)
     : name(std::move(container_name)),
       username(std::move(container_username)),
       homedir(std::move(container_homedir)),
-      ipv4_address(std::move(ipv4_address)) {}
+      ipv4_address(std::move(ipv4_address)),
+      sftp_vsock_port(sftp_vsock_port) {}
 ContainerInfo::~ContainerInfo() = default;
 ContainerInfo::ContainerInfo(ContainerInfo&&) = default;
 ContainerInfo::ContainerInfo(const ContainerInfo&) = default;

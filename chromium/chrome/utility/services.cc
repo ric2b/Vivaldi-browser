@@ -13,6 +13,9 @@
 #include "chrome/services/qrcode_generator/qrcode_generator_service_impl.h"
 #include "chrome/services/speech/buildflags/buildflags.h"
 #include "components/paint_preview/buildflags/buildflags.h"
+#include "components/password_manager/core/common/password_manager_features.h"
+#include "components/password_manager/services/csv_password/csv_password_parser_impl.h"
+#include "components/password_manager/services/csv_password/public/mojom/csv_password_parser.mojom.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/services/language_detection/language_detection_service_impl.h"
 #include "components/services/language_detection/public/mojom/language_detection.mojom.h"
@@ -50,12 +53,19 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/services/mac_notifications/mac_notification_provider_impl.h"
+#include "chrome/services/system_signals/mac/mac_system_signals_service.h"
 #endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/services/system_signals/linux/linux_system_signals_service.h"
+#endif  // BUILDFLAG(IS_LINUX)
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/common/importer/profile_import.mojom.h"
 #include "chrome/utility/importer/profile_import_impl.h"
 #include "components/mirroring/service/mirroring_service.h"
+#include "components/password_manager/services/password_strength/password_strength_calculator_impl.h"
+#include "components/password_manager/services/password_strength/public/mojom/password_strength_calculator.mojom.h"
 #include "services/proxy_resolver/proxy_resolver_factory_impl.h"  // nogncheck
 #include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -115,8 +125,10 @@
 #include "ash/services/recording/recording_service.h"
 #include "chrome/services/sharing/sharing_impl.h"
 #include "chromeos/ash/components/assistant/buildflags.h"  // nogncheck
-#include "chromeos/components/local_search_service/local_search_service.h"
-#include "chromeos/components/local_search_service/public/mojom/local_search_service.mojom.h"
+#include "chromeos/ash/components/local_search_service/local_search_service.h"
+#include "chromeos/ash/components/local_search_service/public/mojom/local_search_service.mojom.h"
+#include "chromeos/ash/components/trash_service/public/mojom/trash_service.mojom.h"
+#include "chromeos/ash/components/trash_service/trash_service_impl.h"
 #include "chromeos/services/tts/public/mojom/tts_service.mojom.h"
 #include "chromeos/services/tts/tts_service.h"
 
@@ -162,6 +174,13 @@ auto RunWebAppOriginAssociationParser(
       std::move(receiver));
 }
 
+auto RunCSVPasswordParser(
+    mojo::PendingReceiver<password_manager::mojom::CSVPasswordParser>
+        receiver) {
+  return std::make_unique<password_manager::CSVPasswordParserImpl>(
+      std::move(receiver));
+}
+
 #if BUILDFLAG(IS_WIN)
 auto RunProcessorMetrics(
     mojo::PendingReceiver<chrome::mojom::ProcessorMetrics> receiver) {
@@ -175,13 +194,6 @@ auto RunQuarantineService(
 
 auto RunWindowsUtility(mojo::PendingReceiver<chrome::mojom::UtilWin> receiver) {
   return std::make_unique<UtilWinImpl>(std::move(receiver));
-}
-
-auto RunSystemSignalsService(
-    mojo::PendingReceiver<device_signals::mojom::SystemSignalsService>
-        receiver) {
-  return std::make_unique<system_signals::WinSystemSignalsService>(
-      std::move(receiver));
 }
 
 auto RunWindowsIconReader(
@@ -206,6 +218,23 @@ auto RunMacNotificationService(
 }
 #endif  // BUILDFLAG(IS_MAC)
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+auto RunSystemSignalsService(
+    mojo::PendingReceiver<device_signals::mojom::SystemSignalsService>
+        receiver) {
+#if BUILDFLAG(IS_WIN)
+  return std::make_unique<system_signals::WinSystemSignalsService>(
+      std::move(receiver));
+#elif BUILDFLAG(IS_MAC)
+  return std::make_unique<system_signals::MacSystemSignalsService>(
+      std::move(receiver));
+#else
+  return std::make_unique<system_signals::LinuxSystemSignalsService>(
+      std::move(receiver));
+#endif  // BUILDFLAG(IS_WIN)
+}
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
 #if !BUILDFLAG(IS_ANDROID)
 auto RunProxyResolver(
     mojo::PendingReceiver<proxy_resolver::mojom::ProxyResolverFactory>
@@ -223,6 +252,15 @@ auto RunMirroringService(
     mojo::PendingReceiver<mirroring::mojom::MirroringService> receiver) {
   return std::make_unique<mirroring::MirroringService>(
       std::move(receiver), content::UtilityThread::Get()->GetIOTaskRunner());
+}
+
+auto RunPasswordStrengthCalculator(
+    mojo::PendingReceiver<password_manager::mojom::PasswordStrengthCalculator>
+        receiver) {
+  DCHECK(base::FeatureList::IsEnabled(
+      password_manager::features::kPasswordStrengthIndicator));
+  return std::make_unique<password_manager::PasswordStrengthCalculatorImpl>(
+      std::move(receiver));
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -337,6 +375,13 @@ auto RunSharing(mojo::PendingReceiver<sharing::mojom::Sharing> receiver) {
       std::move(receiver), content::UtilityThread::Get()->GetIOTaskRunner());
 }
 
+auto RunTrashService(
+    mojo::PendingReceiver<chromeos::trash_service::mojom::TrashService>
+        receiver) {
+  return std::make_unique<chromeos::trash_service::TrashServiceImpl>(
+      std::move(receiver));
+}
+
 auto RunTtsService(
     mojo::PendingReceiver<chromeos::tts::mojom::TtsService> receiver) {
   return std::make_unique<chromeos::tts::TtsService>(std::move(receiver));
@@ -357,9 +402,9 @@ auto RunQuickPairService(
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 auto RunAssistantAudioDecoder(
-    mojo::PendingReceiver<
-        chromeos::assistant::mojom::AssistantAudioDecoderFactory> receiver) {
-  return std::make_unique<chromeos::assistant::AssistantAudioDecoderFactory>(
+    mojo::PendingReceiver<ash::assistant::mojom::AssistantAudioDecoderFactory>
+        receiver) {
+  return std::make_unique<ash::assistant::AssistantAudioDecoderFactory>(
       std::move(receiver));
 }
 
@@ -398,9 +443,16 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunQRCodeGeneratorService);
   services.Add(RunWebAppOriginAssociationParser);
 
+  if (base::FeatureList::IsEnabled(password_manager::features::kPasswordImport))
+    services.Add(RunCSVPasswordParser);
+
 #if !BUILDFLAG(IS_ANDROID)
   services.Add(RunProfileImporter);
   services.Add(RunMirroringService);
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordStrengthIndicator)) {
+    services.Add(RunPasswordStrengthCalculator);
+  }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_BROWSER_SPEECH_SERVICE)
@@ -416,9 +468,12 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunProcessorMetrics);
   services.Add(RunQuarantineService);
   services.Add(RunWindowsUtility);
-  services.Add(RunSystemSignalsService);
   services.Add(RunWindowsIconReader);
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  services.Add(RunSystemSignalsService);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(IS_CHROMEOS_ASH)
   services.Add(RunCupsIppParser);
@@ -467,6 +522,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunImeService);
   services.Add(RunRecordingService);
   services.Add(RunSharing);
+  services.Add(RunTrashService);
   services.Add(RunTtsService);
   services.Add(RunLocalSearchService);
   services.Add(RunQuickPairService);

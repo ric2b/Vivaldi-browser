@@ -54,7 +54,7 @@
 #endif
 
 #if BUILDFLAG(IS_LINUX)
-#include "ui/views/linux_ui/linux_ui.h"
+#include "ui/linux/linux_ui.h"
 #endif
 
 namespace {
@@ -118,8 +118,10 @@ void BrowserFrame::InitBrowserFrame() {
                                                &params.show_state);
 
       params.workspace = browser->initial_workspace();
-      params.visible_on_all_workspaces =
-          browser->initial_visible_on_all_workspaces_state();
+      if (native_browser_frame_->ShouldUseInitialVisibleOnAllWorkspaces()) {
+        params.visible_on_all_workspaces =
+            browser->initial_visible_on_all_workspaces_state();
+      }
       const base::CommandLine& parsed_command_line =
           *base::CommandLine::ForCurrentProcess();
 
@@ -361,9 +363,11 @@ void BrowserFrame::SetTabDragKind(TabDragKind tab_drag_kind) {
 
 ui::ColorProviderManager::Key BrowserFrame::GetColorProviderKey() const {
   auto key = Widget::GetColorProviderKey();
+  key.frame_type = UseCustomFrame()
+                       ? ui::ColorProviderManager::FrameType::kChromium
+                       : ui::ColorProviderManager::FrameType::kNative;
   auto* app_controller = browser_view_->browser()->app_controller();
-  key.app_controller =
-      app_controller ? app_controller->get_weak_ref() : nullptr;
+  key.app_controller = app_controller;
   return key;
 }
 
@@ -399,7 +403,7 @@ void BrowserFrame::SelectNativeTheme() {
   }
 
 #if BUILDFLAG(IS_LINUX)
-  const views::LinuxUI* linux_ui = views::LinuxUI::instance();
+  const ui::LinuxUi* linux_ui = ui::LinuxUi::instance();
   // Ignore GTK+ for web apps with window-controls-overlay as the
   // display_override so the web contents can blend with the overlay by using
   // the developer-provided theme color for a better experience. Context:

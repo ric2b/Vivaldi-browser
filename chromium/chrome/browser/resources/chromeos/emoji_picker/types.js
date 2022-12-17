@@ -8,7 +8,7 @@
 export let CategoryData;
 
 /**
- * @typedef {{string: string, name: string, keywords: !Array<!string>}} Emoji
+ * @typedef {{string: string, name: string, keywords: ?Array<!string>}} Emoji
  */
 export let Emoji;
 
@@ -18,7 +18,8 @@ export let Emoji;
 export let EmojiVariants;
 
 /**
- * @typedef {{group: string, emoji: !Array<EmojiVariants>}} EmojiGroup
+ * @typedef {{category: CategoryEnum, group: string,
+ *            emoji: !Array<EmojiVariants>}} EmojiGroup
  */
 export let EmojiGroup;
 
@@ -40,9 +41,18 @@ export let StoredItem;
 export let SubcategoryData;
 
 /**
+ * @typedef {{name: string, category: string, emoji: Array<EmojiVariants>,
+ *            groupId: string, activate: boolean, disabled: boolean,
+ *            pagination: ?number, preferences: Object<string,string>,
+ *            isHistory: boolean}} EmojiGroupElement
+ */
+export let EmojiGroupElement;
+
+/**
  * @enum {string}
  */
 export const CategoryEnum = {
   EMOJI: 'emoji',
-  EMOTICON: 'emoticon'
+  EMOTICON: 'emoticon',
+  SYMBOL: 'symbol',
 };

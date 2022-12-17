@@ -15,7 +15,7 @@
 #include "chrome/browser/ash/assistant/assistant_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -32,7 +32,7 @@ AssistantStateClient::~AssistantStateClient() {
 
 void AssistantStateClient::NotifyFeatureAllowed() {
   DCHECK(profile_);
-  chromeos::assistant::AssistantAllowedState state =
+  ash::assistant::AssistantAllowedState state =
       assistant::IsAssistantAllowedForProfile(profile_);
   ash::AssistantState::Get()->NotifyFeatureAllowed(state);
 }
@@ -88,7 +88,7 @@ void AssistantStateClient::SetProfile(Profile* profile) {
                           base::Unretained(this)));
 
   pref_change_registrar_->Add(
-      chromeos::assistant::prefs::kAssistantDisabledByPolicy,
+      ash::assistant::prefs::kAssistantDisabledByPolicy,
       base::BindRepeating(&AssistantStateClient::NotifyFeatureAllowed,
                           base::Unretained(this)));
 

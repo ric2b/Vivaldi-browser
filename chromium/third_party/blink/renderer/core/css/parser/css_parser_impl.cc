@@ -290,7 +290,8 @@ ParseSheetResult CSSParserImpl::ParseStyleSheet(
     const CSSParserContext* context,
     StyleSheetContents* style_sheet,
     CSSDeferPropertyParsing defer_property_parsing,
-    bool allow_import_rules) {
+    bool allow_import_rules,
+    std::unique_ptr<CachedCSSTokenizer> cached_tokenizer) {
   absl::optional<LocalFrameUkmAggregator::ScopedUkmHierarchicalTimer> timer;
   if (context->GetDocument() && context->GetDocument()->View()) {
     timer.emplace(
@@ -303,8 +304,15 @@ ParseSheetResult CSSParserImpl::ParseStyleSheet(
 
   TRACE_EVENT_BEGIN0("blink,blink_style",
                      "CSSParserImpl::parseStyleSheet.parse");
-  CSSTokenizer tokenizer(string);
-  CSSParserTokenStream stream(tokenizer);
+  absl::optional<CSSTokenizerWrapper> tokenizer;
+  absl::optional<CSSTokenizer> uncached_tokenizer;
+  if (cached_tokenizer) {
+    tokenizer.emplace(*cached_tokenizer);
+  } else {
+    uncached_tokenizer.emplace(string);
+    tokenizer.emplace(*uncached_tokenizer);
+  }
+  CSSParserTokenStream stream(*tokenizer);
   CSSParserImpl parser(context, style_sheet);
   if (defer_property_parsing == CSSDeferPropertyParsing::kYes) {
     parser.lazy_state_ = MakeGarbageCollected<CSSLazyParsingState>(
@@ -329,14 +337,16 @@ ParseSheetResult CSSParserImpl::ParseStyleSheet(
   TRACE_EVENT_END0("blink,blink_style", "CSSParserImpl::parseStyleSheet.parse");
 
   TRACE_EVENT_END2("blink,blink_style", "CSSParserImpl::parseStyleSheet",
-                   "tokenCount", tokenizer.TokenCount(), "length",
+                   "tokenCount", tokenizer->TokenCount(), "length",
                    string.length());
   return result;
 }
 
+// static
 CSSSelectorList CSSParserImpl::ParsePageSelector(
     CSSParserTokenRange range,
-    StyleSheetContents* style_sheet) {
+    StyleSheetContents* style_sheet,
+    const CSSParserContext& context) {
   // We only support a small subset of the css-page spec.
   range.ConsumeWhitespace();
   AtomicString type_selector;
@@ -363,7 +373,7 @@ CSSSelectorList CSSParserImpl::ParsePageSelector(
     selector = std::make_unique<CSSParserSelector>();
     if (!pseudo.IsNull()) {
       selector->SetMatch(CSSSelector::kPagePseudoClass);
-      selector->UpdatePseudoPage(pseudo.LowerASCII());
+      selector->UpdatePseudoPage(pseudo.LowerASCII(), context.GetDocument());
       if (selector->GetPseudoType() == CSSSelector::kPseudoUnknown)
         return CSSSelectorList();
     }
@@ -819,8 +829,13 @@ StyleRuleMedia* CSSParserImpl::ConsumeMediaRule(CSSParserTokenStream& stream) {
   if (style_sheet_)
     style_sheet_->SetHasMediaQueries();
 
-  MediaQuerySet* media = MediaQueryParser::ParseMediaQuerySet(
-      prelude, context_->GetExecutionContext());
+  String prelude_string =
+      stream
+          .StringRangeAt(prelude_offset_start,
+                         prelude_offset_end - prelude_offset_start)
+          .ToString();
+  const MediaQuerySet* media = CachedMediaQuerySet(prelude_string, prelude);
+  DCHECK(media);
 
   ConsumeRuleList(stream, kRegularRuleList,
                   [&rules](StyleRuleBase* rule) { rules.push_back(rule); });
@@ -986,7 +1001,8 @@ StyleRulePage* CSSParserImpl::ConsumePageRule(CSSParserTokenStream& stream) {
     return nullptr;
   CSSParserTokenStream::BlockGuard guard(stream);
 
-  CSSSelectorList selector_list = ParsePageSelector(prelude, style_sheet_);
+  CSSSelectorList selector_list =
+      ParsePageSelector(prelude, style_sheet_, *context_);
   if (!selector_list.IsValid())
     return nullptr;  // Parse error, invalid @page selector
 
@@ -1129,37 +1145,8 @@ StyleRuleBase* CSSParserImpl::ConsumeScopeRule(CSSParserTokenStream& stream) {
     observer_->EndRuleHeader(prelude_offset_end);
   }
 
-  absl::optional<CSSSelectorList> from;
-  absl::optional<CSSSelectorList> to;
-
-  prelude.ConsumeWhitespace();
-  if (prelude.Peek().GetType() != kLeftParenthesisToken)
-    return nullptr;
-
-  // <scope-start>
-  {
-    auto block = prelude.ConsumeBlock();
-    from = CSSSelectorParser::ParseScopeBoundary(block, context_, style_sheet_);
-    if (!from)
-      return nullptr;
-  }
-
-  prelude.ConsumeWhitespace();
-
-  // to (<scope-end>)
-  if (css_parsing_utils::ConsumeIfIdent(prelude, "to")) {
-    if (prelude.Peek().GetType() != kLeftParenthesisToken)
-      return nullptr;
-
-    auto block = prelude.ConsumeBlock();
-    to = CSSSelectorParser::ParseScopeBoundary(block, context_, style_sheet_);
-    if (!to)
-      return nullptr;
-  }
-
-  prelude.ConsumeWhitespace();
-
-  if (!prelude.AtEnd())
+  auto* style_scope = StyleScope::Parse(prelude, context_, style_sheet_);
+  if (!style_scope)
     return nullptr;
 
   if (observer_)
@@ -1172,8 +1159,6 @@ StyleRuleBase* CSSParserImpl::ConsumeScopeRule(CSSParserTokenStream& stream) {
   if (observer_)
     observer_->EndRuleBody(stream.Offset());
 
-  auto* style_scope =
-      MakeGarbageCollected<StyleScope>(std::move(*from), std::move(to));
   return MakeGarbageCollected<StyleRuleScope>(*style_scope, rules);
 }
 
@@ -1198,12 +1183,11 @@ StyleRuleContainer* CSSParserImpl::ConsumeContainerRule(
   if (prelude.Peek().GetType() == kIdentToken) {
     auto* ident = DynamicTo<CSSCustomIdentValue>(
         css_parsing_utils::ConsumeSingleContainerName(prelude, *context_));
-    if (!ident)
-      return nullptr;
-    name = ident->Value();
+    if (ident)
+      name = ident->Value();
   }
 
-  const MediaQueryExpNode* query = query_parser.ParseQuery(prelude);
+  const MediaQueryExpNode* query = query_parser.ParseCondition(prelude);
   if (!query)
     return nullptr;
   ContainerQuery* container_query = MakeGarbageCollected<ContainerQuery>(
@@ -1378,10 +1362,10 @@ StyleRule* CSSParserImpl::ConsumeStyleRule(CSSParserTokenStream& stream) {
     observer_->StartRuleHeader(StyleRule::kStyle, stream.LookAheadOffset());
 
   // Parse the prelude of the style rule
-  CSSSelectorList selector_list = CSSSelectorParser::ConsumeSelector(
+  CSSSelectorVector selector_vector = CSSSelectorParser::ConsumeSelector(
       stream, context_, style_sheet_, observer_);
 
-  if (!selector_list.IsValid()) {
+  if (selector_vector.IsEmpty()) {
     // Read the rest of the prelude if there was an error
     stream.EnsureLookAhead();
     while (!stream.UncheckedAtEnd() &&
@@ -1398,21 +1382,20 @@ StyleRule* CSSParserImpl::ConsumeStyleRule(CSSParserTokenStream& stream) {
   DCHECK_EQ(stream.Peek().GetType(), kLeftBraceToken);
   CSSParserTokenStream::BlockGuard guard(stream);
 
-  if (!selector_list.IsValid())
+  if (selector_vector.IsEmpty())
     return nullptr;  // Parse error, invalid selector list
 
   // TODO(csharrison): How should we lazily parse css that needs the observer?
   if (!observer_ && lazy_state_) {
     DCHECK(style_sheet_);
-    return MakeGarbageCollected<StyleRule>(
-        std::move(selector_list),
-        MakeGarbageCollected<CSSLazyPropertyParserImpl>(stream.Offset() - 1,
-                                                        lazy_state_));
+    return StyleRule::Create(selector_vector,
+                             MakeGarbageCollected<CSSLazyPropertyParserImpl>(
+                                 stream.Offset() - 1, lazy_state_));
   }
   ConsumeDeclarationList(stream, StyleRule::kStyle);
 
-  return MakeGarbageCollected<StyleRule>(
-      std::move(selector_list),
+  return StyleRule::Create(
+      selector_vector,
       CreateCSSPropertyValueSet(parsed_properties_, context_->Mode()));
 }
 
@@ -1526,10 +1509,8 @@ void CSSParserImpl::ConsumeDeclaration(CSSParserTokenStream& stream,
   }
 
   if (unresolved_property == CSSPropertyID::kVariable) {
-    if (rule_type != StyleRule::kStyle && rule_type != StyleRule::kKeyframe &&
-        rule_type != StyleRule::kTry) {
+    if (rule_type != StyleRule::kStyle && rule_type != StyleRule::kKeyframe)
       return;
-    }
     AtomicString variable_name = lhs.Value().ToAtomicString();
     bool is_animation_tainted = rule_type == StyleRule::kKeyframe;
     ConsumeVariableValue(tokenized_value, variable_name, important,
@@ -1599,13 +1580,14 @@ bool CSSParserImpl::RemoveImportantAnnotationIfPresent(
       tokenized_value.range = tokenized_value.range.MakeSubRange(first, last);
 
       // Truncate the text to remove the delimiter and everything after it.
-      DCHECK_NE(tokenized_value.text.ToString().find('!'), kNotFound);
-      unsigned truncated_length = tokenized_value.text.length() - 1;
-      while (tokenized_value.text[truncated_length] != '!')
-        --truncated_length;
-      tokenized_value.text =
-          StringView(tokenized_value.text, 0, truncated_length);
-
+      if (!tokenized_value.text.IsEmpty()) {
+        DCHECK_NE(tokenized_value.text.ToString().find('!'), kNotFound);
+        unsigned truncated_length = tokenized_value.text.length() - 1;
+        while (tokenized_value.text[truncated_length] != '!')
+          --truncated_length;
+        tokenized_value.text =
+            StringView(tokenized_value.text, 0, truncated_length);
+      }
       return true;
     }
   }
@@ -1635,6 +1617,19 @@ std::unique_ptr<Vector<double>> CSSParserImpl::ConsumeKeyframeKeyList(
     if (range.Consume().GetType() != kCommaToken)
       return nullptr;  // Parser error
   }
+}
+
+const MediaQuerySet* CSSParserImpl::CachedMediaQuerySet(
+    String prelude_string,
+    CSSParserTokenRange prelude) {
+  Member<const MediaQuerySet>& media =
+      media_query_cache_.insert(prelude_string, nullptr).stored_value->value;
+  if (!media) {
+    media = MediaQueryParser::ParseMediaQuerySet(
+        prelude, context_->GetExecutionContext());
+  }
+  DCHECK(media);
+  return media.Get();
 }
 
 }  // namespace blink

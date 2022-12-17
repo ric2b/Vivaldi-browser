@@ -368,7 +368,9 @@ void ProgressWnd::OnDownloading(const std::u16string& app_id,
 
   // TODO(sorin): should use base::TimeDelta, https://crbug.com/1016921
   int time_remaining_sec = CeilingDivide(time_remaining_ms, kMsPerSec);
-  if (time_remaining_ms < 0) {
+  if (is_canceled_) {
+    s = GetLocalizedString(IDS_CANCELING_BASE);
+  } else if (time_remaining_ms < 0) {
     s = GetLocalizedString(IDS_DOWNLOADING_BASE);
   } else if (time_remaining_ms == 0) {
     s = GetLocalizedString(IDS_DOWNLOADING_COMPLETED_BASE);
@@ -515,6 +517,9 @@ void ProgressWnd::OnComplete(const ObserverCompletionInfo& observer_info) {
   CloseInstallStoppedWindow();
 
   bool launch_commands_succeeded = LaunchCmdLines(observer_info);
+
+  // TODO(crbug.com/1353148): Figure out how to display app-specific
+  // installation result in addition to `observer_info.completion_text`.
 
   CompletionCodes overall_completion_code =
       GetBundleOverallCompletionCode(observer_info);

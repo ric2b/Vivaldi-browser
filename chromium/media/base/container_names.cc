@@ -1096,7 +1096,7 @@ static bool ValidMpegAudioFrameHeader(const uint8_t* header,
   if (layer == LAYER_1)
     *framesize = ((12000 * bitrate) / sampling_rate + padding) * 4;
   // TODO(patricia@vivaldi.com) No idea why this is done - I would perfer to drop it
-#if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if !defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   else
     *framesize = (144000 * bitrate) / sampling_rate + padding;
 #endif
@@ -1681,7 +1681,7 @@ MediaContainerName DetermineContainer(const uint8_t* buffer, int buffer_size) {
   return CONTAINER_UNKNOWN;
 }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 static bool CheckMP4(const uint8_t* buffer, int buffer_size) {
   // Reference: Media Type Sniffing draft-ietf-websec-mime-sniff-03
   // https://tools.ietf.org/html/draft-ietf-websec-mime-sniff-03#page-16
@@ -1721,7 +1721,7 @@ MediaContainerName OperaDetermineContainer(const uint8_t* buffer,
 
   return CONTAINER_UNKNOWN;
 }
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 
 }  // namespace container_names
 

@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/adapters.h"
 #include "base/cxx17_backports.h"
 #include "base/location.h"
 #include "base/numerics/safe_conversions.h"
@@ -412,7 +413,7 @@ void MultiBufferDataSource::Read(int64_t position,
     // muxing as soon as possible. This works because TryReadAt is
     // thread-safe.
     if (reader_) {
-      int bytes_read = reader_->TryReadAt(position, data, size);
+      int64_t bytes_read = reader_->TryReadAt(position, data, size);
       if (bytes_read > 0) {
         bytes_read_ += bytes_read;
         seek_positions_.push_back(position + bytes_read);
@@ -424,7 +425,7 @@ void MultiBufferDataSource::Read(int64_t position,
               kSeekDelay);
         }
 
-        std::move(read_cb).Run(bytes_read);
+        std::move(read_cb).Run(static_cast<int>(bytes_read));
         return;
       }
     }
@@ -457,7 +458,6 @@ void MultiBufferDataSource::ReadTask() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
-  int bytes_read = 0;
   if (stop_signal_received_ || !read_op_)
     return;
   DCHECK(read_op_->size());
@@ -472,8 +472,7 @@ void MultiBufferDataSource::ReadTask() {
     return;
   }
   if (available) {
-    bytes_read =
-        static_cast<int>(std::min<int64_t>(available, read_op_->size()));
+    int64_t bytes_read = std::min<int64_t>(available, read_op_->size());
     bytes_read =
         reader_->TryReadAt(read_op_->position(), read_op_->data(), bytes_read);
 
@@ -489,7 +488,7 @@ void MultiBufferDataSource::ReadTask() {
         host_->SetTotalBytes(total_bytes_);
     }
 
-    ReadOperation::Run(std::move(read_op_), bytes_read);
+    ReadOperation::Run(std::move(read_op_), static_cast<int>(bytes_read));
 
     SeekTask_Locked();
   } else {
@@ -533,8 +532,7 @@ void MultiBufferDataSource::SeekTask_Locked() {
     // Iterate backwards, because if two positions have the same
     // amount of buffered data, we probably want to prefer the latest
     // one in the array.
-    for (auto i = seek_positions_.rbegin(); i != seek_positions_.rend(); ++i) {
-      int64_t new_pos = *i;
+    for (const auto& new_pos : base::Reversed(seek_positions_)) {
       int64_t available_at_new_pos = reader_->AvailableAt(new_pos);
 
       if (total_bytes_ != kPositionNotSpecified) {

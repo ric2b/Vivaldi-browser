@@ -14,13 +14,17 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
+#include "third_party/blink/renderer/core/html/parser/background_html_scanner.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_options.h"
 #include "third_party/blink/renderer/core/html/parser/html_resource_preloader.h"
+#include "third_party/blink/renderer/core/html/parser/html_tokenizer.h"
 #include "third_party/blink/renderer/core/html/parser/preload_request.h"
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
+#include "third_party/blink/renderer/platform/loader/attribution_header_constants.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
+#include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -93,8 +97,23 @@ struct LazyLoadImageTestCase {
   bool lazy_load_image_enabled;
 };
 
+struct AttributionSrcTestCase {
+  bool use_secure_document_url;
+  const char* base_url;
+  const char* input_html;
+  const char* expected_header;
+};
+
 class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
  public:
+  explicit HTMLMockHTMLResourcePreloader(const KURL& document_url)
+      : document_url_(document_url) {}
+
+  void TakePreloadData(std::unique_ptr<PendingPreloadData> preload_data) {
+    preload_data_ = std::move(preload_data);
+    TakeAndPreload(preload_data_->requests);
+  }
+
   void PreloadRequestVerification(ResourceType type,
                                   const char* url,
                                   const char* base_url,
@@ -111,31 +130,38 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
       EXPECT_EQ(url, preload_request_->ResourceURL());
       EXPECT_EQ(base_url, preload_request_->BaseURL().GetString());
       EXPECT_EQ(width, preload_request_->ResourceWidth());
+
+      ClientHintsPreferences preload_preferences;
+      for (const auto& value : preload_data_->meta_ch_values) {
+        preload_preferences.UpdateFromMetaCH(value.value, document_url_,
+                                             nullptr, value.type,
+                                             value.is_doc_preloader);
+      }
       EXPECT_EQ(preferences.ShouldSend(
                     network::mojom::WebClientHintsType::kDpr_DEPRECATED),
-                preload_request_->Preferences().ShouldSend(
+                preload_preferences.ShouldSend(
                     network::mojom::WebClientHintsType::kDpr_DEPRECATED));
       EXPECT_EQ(
           preferences.ShouldSend(network::mojom::WebClientHintsType::kDpr),
-          preload_request_->Preferences().ShouldSend(
+          preload_preferences.ShouldSend(
               network::mojom::WebClientHintsType::kDpr));
       EXPECT_EQ(
           preferences.ShouldSend(
               network::mojom::WebClientHintsType::kResourceWidth_DEPRECATED),
-          preload_request_->Preferences().ShouldSend(
+          preload_preferences.ShouldSend(
               network::mojom::WebClientHintsType::kResourceWidth_DEPRECATED));
       EXPECT_EQ(preferences.ShouldSend(
                     network::mojom::WebClientHintsType::kResourceWidth),
-                preload_request_->Preferences().ShouldSend(
+                preload_preferences.ShouldSend(
                     network::mojom::WebClientHintsType::kResourceWidth));
       EXPECT_EQ(
           preferences.ShouldSend(
               network::mojom::WebClientHintsType::kViewportWidth_DEPRECATED),
-          preload_request_->Preferences().ShouldSend(
+          preload_preferences.ShouldSend(
               network::mojom::WebClientHintsType::kViewportWidth_DEPRECATED));
       EXPECT_EQ(preferences.ShouldSend(
                     network::mojom::WebClientHintsType::kViewportWidth),
-                preload_request_->Preferences().ShouldSend(
+                preload_preferences.ShouldSend(
                     network::mojom::WebClientHintsType::kViewportWidth));
     }
   }
@@ -216,6 +242,16 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
     }
   }
 
+  void AttributionSrcRequestVerification(Document* document,
+                                         const char* expected_header) {
+    ASSERT_TRUE(preload_request_.get());
+    Resource* resource = preload_request_->Start(document);
+    ASSERT_TRUE(resource);
+
+    EXPECT_EQ(expected_header, resource->GetResourceRequest().HttpHeaderField(
+                                   http_names::kAttributionReportingEligible));
+  }
+
  protected:
   void Preload(std::unique_ptr<PreloadRequest> preload_request) override {
     preload_request_ = std::move(preload_request);
@@ -223,6 +259,8 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
 
  private:
   std::unique_ptr<PreloadRequest> preload_request_;
+  std::unique_ptr<PendingPreloadData> preload_data_;
+  KURL document_url_;
 };
 
 class HTMLPreloadScannerTest : public PageTestBase {
@@ -272,10 +310,10 @@ class HTMLPreloadScannerTest : public PageTestBase {
                                                           kPreloadEnabled);
     GetFrame().DomWindow()->SetReferrerPolicy(document_referrer_policy);
     scanner_ = std::make_unique<HTMLPreloadScanner>(
-        options, document_url,
+        std::make_unique<HTMLTokenizer>(options), false, document_url,
         std::make_unique<CachedDocumentParameters>(&GetDocument()),
         CreateMediaValuesData(),
-        TokenPreloadScanner::ScannerType::kMainDocument);
+        TokenPreloadScanner::ScannerType::kMainDocument, nullptr);
   }
 
   void SetUp() override {
@@ -285,12 +323,11 @@ class HTMLPreloadScannerTest : public PageTestBase {
 
   void Test(PreloadScannerTestCase test_case) {
     SCOPED_TRACE(test_case.input_html);
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
 
     preloader.PreloadRequestVerification(
         test_case.type, test_case.preloaded_url, test_case.output_base_url,
@@ -298,23 +335,21 @@ class HTMLPreloadScannerTest : public PageTestBase {
   }
 
   void Test(HTMLPreconnectTestCase test_case) {
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
     preloader.PreconnectRequestVerification(test_case.preconnected_host,
                                             test_case.cross_origin);
   }
 
   void Test(ReferrerPolicyTestCase test_case) {
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
 
     if (test_case.expected_referrer) {
       preloader.PreloadRequestVerification(
@@ -329,54 +364,49 @@ class HTMLPreloadScannerTest : public PageTestBase {
   }
 
   void Test(CorsTestCase test_case) {
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
     preloader.CorsRequestVerification(&GetDocument(), test_case.request_mode,
                                       test_case.credentials_mode);
   }
 
   void Test(CSPTestCase test_case) {
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
-    seen_csp_meta_tag_ = false;
     scanner_->AppendToEnd(String(test_case.input_html));
-    scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    EXPECT_EQ(test_case.should_see_csp_tag, seen_csp_meta_tag_);
+    auto data = scanner_->Scan(base_url);
+    EXPECT_EQ(test_case.should_see_csp_tag, data->has_csp_meta_tag);
   }
 
   void Test(NonceTestCase test_case) {
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
     preloader.NonceRequestVerification(test_case.nonce);
   }
 
   void Test(ContextTestCase test_case) {
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
 
     preloader.ContextVerification(test_case.is_image_set);
   }
 
   void Test(IntegrityTestCase test_case) {
     SCOPED_TRACE(test_case.input_html);
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url("http://example.test/");
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
 
     preloader.CheckNumberOfIntegrityConstraints(
         test_case.number_of_integrity_metadata_found);
@@ -384,19 +414,28 @@ class HTMLPreloadScannerTest : public PageTestBase {
 
   void Test(LazyLoadImageTestCase test_case) {
     SCOPED_TRACE(test_case.input_html);
-    HTMLMockHTMLResourcePreloader preloader;
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
     KURL base_url("http://example.test/");
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests =
-        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
-    preloader.TakeAndPreload(requests);
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
     preloader.LazyLoadImageEnabledVerification(
         test_case.lazy_load_image_enabled);
   }
 
+  void Test(AttributionSrcTestCase test_case) {
+    SCOPED_TRACE(test_case.input_html);
+    HTMLMockHTMLResourcePreloader preloader(GetDocument().Url());
+    KURL base_url(test_case.base_url);
+    scanner_->AppendToEnd(String(test_case.input_html));
+    std::unique_ptr<PendingPreloadData> preload_data = scanner_->Scan(base_url);
+    preloader.TakePreloadData(std::move(preload_data));
+    preloader.AttributionSrcRequestVerification(&GetDocument(),
+                                                test_case.expected_header);
+  }
+
  private:
   std::unique_ptr<HTMLPreloadScanner> scanner_;
-  bool seen_csp_meta_tag_ = false;
 };
 
 TEST_F(HTMLPreloadScannerTest, testImages) {
@@ -1044,6 +1083,48 @@ TEST_F(HTMLPreloadScannerTest, testNonce) {
 
   for (const auto& test_case : test_cases) {
     SCOPED_TRACE(test_case.input_html);
+    Test(test_case);
+  }
+}
+
+TEST_F(HTMLPreloadScannerTest, testAttributionSrc) {
+  static constexpr bool kSecureDocumentUrl = true;
+  static constexpr bool kInsecureDocumentUrl = false;
+
+  static constexpr char kSecureBaseURL[] = "https://example.test";
+  static constexpr char kInsecureBaseURL[] = "http://example.test";
+
+  AttributionSrcTestCase test_cases[] = {
+      // Insecure context
+      {kInsecureDocumentUrl, kSecureBaseURL,
+       "<img src='/image' attributionsrc>", nullptr},
+      {kInsecureDocumentUrl, kSecureBaseURL,
+       "<script src='/script' attributionsrc></script>", nullptr},
+      // No attributionsrc attribute
+      {kSecureDocumentUrl, kSecureBaseURL, "<img src='/image'>", nullptr},
+      {kSecureDocumentUrl, kSecureBaseURL, "<script src='/script'></script>",
+       nullptr},
+      // Irrelevant element type
+      {kSecureDocumentUrl, kSecureBaseURL,
+       "<video poster='/image' attributionsrc>", nullptr},
+      // Not potentially trustworthy reporting origin
+      {kSecureDocumentUrl, kInsecureBaseURL,
+       "<img src='/image' attributionsrc>", nullptr},
+      {kSecureDocumentUrl, kInsecureBaseURL,
+       "<script src='/script' attributionsrc></script>", nullptr},
+      // Secure context, potentially trustworthy reporting origin,
+      // attributionsrc attribute
+      {kSecureDocumentUrl, kSecureBaseURL, "<img src='/image' attributionsrc>",
+       kAttributionEligibleEventSourceAndTrigger},
+      {kSecureDocumentUrl, kSecureBaseURL,
+       "<script src='/script' attributionsrc></script>",
+       kAttributionEligibleEventSourceAndTrigger},
+  };
+
+  for (const auto& test_case : test_cases) {
+    RunSetUp(kViewportDisabled, kPreloadEnabled,
+             network::mojom::ReferrerPolicy::kDefault,
+             /*use_secure_document_url=*/test_case.use_secure_document_url);
     Test(test_case);
   }
 }

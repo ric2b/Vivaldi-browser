@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 import './accelerator_subsection.js';
-import './shortcut_customization_shared_css.js';
+import './shortcut_customization_shared.css.js';
 import './shortcut_input.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
+import {getTemplate} from './shortcuts_page.html.js';
 
 /**
  * @fileoverview
@@ -21,10 +22,6 @@ import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 export class ShortcutsPageElement extends PolymerElement {
   static get is() {
     return 'shortcuts-page';
-  }
-
-  static get template() {
-    return html`{__html_template__}`;
   }
 
   static get properties() {
@@ -83,6 +80,10 @@ export class ShortcutsPageElement extends PolymerElement {
     for (const subsection of subsections) {
       subsection.updateSubsection();
     }
+  }
+
+  static get template() {
+    return getTemplate();
   }
 }
 

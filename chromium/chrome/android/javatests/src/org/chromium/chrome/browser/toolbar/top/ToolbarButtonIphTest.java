@@ -10,7 +10,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,13 +30,17 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.Callback;
+import org.chromium.base.FeatureList;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features;
@@ -52,7 +55,7 @@ import org.chromium.ui.test.util.UiRestriction;
 /** Integration tests for showing IPH bubbles on the toolbar. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Features.EnableFeatures({ChromeFeatureList.TOOLBAR_IPH_ANDROID, ChromeFeatureList.ENABLE_IPH})
+@Features.EnableFeatures({ChromeFeatureList.ENABLE_IPH})
 public class ToolbarButtonIphTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -107,22 +110,34 @@ public class ToolbarButtonIphTest {
     @Test
     @MediumTest
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
-    public void testTabSwitcherEventEnabled() {
+    public void testPriceDropIph() throws InterruptedException {
+        setPriceTrackingFeatures();
+        when(mTracker.shouldTriggerHelpUI(FeatureConstants.PRICE_DROP_NTP_FEATURE))
+                .thenReturn(true);
+        when(mTracker.shouldTriggerHelpUIWithSnooze(FeatureConstants.PRICE_DROP_NTP_FEATURE))
+                .thenReturn(new TriggerDetails(true, false));
+
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mActivityTestRule.getActivity().findViewById(R.id.tab_switcher_button).performClick();
+            ChromeActivity activity = mActivityTestRule.getActivity();
+            ToolbarManager toolbarManager = activity.getToolbarManager();
+            toolbarManager.showPriceDropIPH();
         });
-        verify(mTracker, times(1)).notifyEvent(EventConstants.TAB_SWITCHER_BUTTON_CLICKED);
+
+        ViewInteraction toolbarTabButtonInteraction = onView(withId(R.id.tab_switcher_button));
+        toolbarTabButtonInteraction.check(ViewAssertions.matches(withHighlight(true)));
+
+        toolbarTabButtonInteraction.perform(ViewActions.click());
+        toolbarTabButtonInteraction.check(ViewAssertions.matches(withHighlight(false)));
     }
 
     @Test
     @MediumTest
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
-    @Features.DisableFeatures(ChromeFeatureList.TOOLBAR_IPH_ANDROID)
-    public void testTabSwitcherEventDisabled() {
+    public void testTabSwitcherEventEnabled() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mActivityTestRule.getActivity().findViewById(R.id.tab_switcher_button).performClick();
         });
-        verify(mTracker, never()).notifyEvent(EventConstants.TAB_SWITCHER_BUTTON_CLICKED);
+        verify(mTracker, times(1)).notifyEvent(EventConstants.TAB_SWITCHER_BUTTON_CLICKED);
     }
 
     @Test
@@ -144,5 +159,20 @@ public class ToolbarButtonIphTest {
 
         onView(withId(R.id.tab_switcher_mode_tab_switcher_button)).perform(ViewActions.click());
         toolbarTabButtonInteraction.check(ViewAssertions.matches(withHighlight(false)));
+    }
+
+    private void setPriceTrackingFeatures() {
+        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
+        FeatureList.TestValues testValues = new FeatureList.TestValues();
+
+        // Enables price tracking.
+        testValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
+        testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
+                PriceTrackingFeatures.PRICE_TRACKING_PARAM, String.valueOf(true));
+
+        // Enables the price tracking IPH.
+        testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
+                PriceTrackingFeatures.PRICE_DROP_IPH_ENABLED_PARAM, String.valueOf(true));
+        FeatureList.setTestValues(testValues);
     }
 }

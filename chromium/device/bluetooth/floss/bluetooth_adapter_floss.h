@@ -28,6 +28,8 @@
 
 namespace floss {
 
+class BluetoothDeviceFloss;
+
 // The BluetoothAdapterFloss class implements BluetoothAdapter for platforms
 // that use Floss, a dbus front-end for the Fluoride Bluetooth stack.
 //
@@ -141,8 +143,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
   // Handle responses to most method calls
   void OnMethodResponse(base::OnceClosure callback,
                         ErrorCallback error_callback,
-                        const absl::optional<Void>& ret,
-                        const absl::optional<Error>& error);
+                        DBusResult<Void> ret);
 
   // Handle when discovery is automatically repeated based on active sessions.
   void OnRepeatedDiscoverySessionResult(
@@ -152,24 +153,21 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterFloss final
 
   // Called on completion of start discovery and stop discovery
   void OnStartDiscovery(DiscoverySessionResultCallback callback,
-                        const absl::optional<Void>& ret,
-                        const absl::optional<Error>& error);
+                        DBusResult<Void> ret);
   void OnStopDiscovery(DiscoverySessionResultCallback callback,
-                       const absl::optional<Void>& ret,
-                       const absl::optional<Error>& error);
-  void OnGetBondedDevices(const absl::optional<std::vector<FlossDeviceId>>& ret,
-                          const absl::optional<Error>& error);
+                       DBusResult<Void> ret);
   void OnGetConnectionState(const FlossDeviceId& device_id,
-                            const absl::optional<uint32_t>& ret,
-                            const absl::optional<Error>& error);
-  void OnGetBondState(const FlossDeviceId& device_id,
-                      const absl::optional<uint32_t>& ret,
-                      const absl::optional<Error>& error);
+                            DBusResult<uint32_t> ret);
+  void OnGetBondState(const FlossDeviceId& device_id, DBusResult<uint32_t> ret);
 
   // Announce to observers a change in the adapter state.
   void DiscoveringChanged(bool discovering);
   void PresentChanged(bool present);
   void NotifyAdapterPoweredChanged(bool powered);
+
+  // Announce to observers that |device| has changed its connected state.
+  void NotifyDeviceConnectedStateChanged(BluetoothDeviceFloss* device,
+                                         bool is_now_connected);
 
   // Observers
   // floss::FlossManagerClient::Observer override.

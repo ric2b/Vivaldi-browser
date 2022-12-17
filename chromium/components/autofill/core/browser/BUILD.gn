@@ -4,7 +4,7 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
-import("//build/util/version.gni")
+import("//chrome/version.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//tools/grit/grit_rule.gni")
 if (is_android) {
@@ -104,10 +104,6 @@ static_library("browser") {
     "autofill_profile_sync_util.h",
     "autofill_profile_update_strike_database.cc",
     "autofill_profile_update_strike_database.h",
-    "autofill_regex_constants.cc",
-    "autofill_regex_constants.h",
-    "autofill_regexes.cc",
-    "autofill_regexes.h",
     "autofill_subject.cc",
     "autofill_subject.h",
     "autofill_suggestion_generator.cc",
@@ -159,6 +155,8 @@ static_library("browser") {
     "data_model/data_model_utils.h",
     "data_model/form_group.cc",
     "data_model/form_group.h",
+    "data_model/iban.cc",
+    "data_model/iban.h",
     "data_model/phone_number.cc",
     "data_model/phone_number.h",
     "data_model/test_data_creator.cc",
@@ -169,11 +167,15 @@ static_library("browser") {
     "field_types.h",
     "form_data_importer.cc",
     "form_data_importer.h",
+    "form_data_importer_utils.cc",
+    "form_data_importer_utils.h",
     "form_parsing/address_field.cc",
     "form_parsing/address_field.h",
     "form_parsing/autofill_parsing_utils.h",
     "form_parsing/autofill_scanner.cc",
     "form_parsing/autofill_scanner.h",
+    "form_parsing/birthdate_field.cc",
+    "form_parsing/birthdate_field.h",
     "form_parsing/credit_card_field.cc",
     "form_parsing/credit_card_field.h",
     "form_parsing/email_field.cc",
@@ -182,6 +184,8 @@ static_library("browser") {
     "form_parsing/field_candidates.h",
     "form_parsing/form_field.cc",
     "form_parsing/form_field.h",
+    "form_parsing/iban_field.cc",
+    "form_parsing/iban_field.h",
     "form_parsing/merchant_promo_code_field.cc",
     "form_parsing/merchant_promo_code_field.h",
     "form_parsing/name_field.cc",
@@ -227,6 +231,8 @@ static_library("browser") {
     "geo/state_names.h",
     "geo/subkey_requester.cc",
     "geo/subkey_requester.h",
+    "iban_manager.cc",
+    "iban_manager.h",
     "logging/log_buffer_submitter.cc",
     "logging/log_buffer_submitter.h",
     "logging/log_manager.cc",
@@ -248,6 +254,8 @@ static_library("browser") {
     "metrics/form_events/form_events.h",
     "metrics/form_interactions_counter.cc",
     "metrics/form_interactions_counter.h",
+    "metrics/payments/local_card_migration_metrics.cc",
+    "metrics/payments/local_card_migration_metrics.h",
     "metrics/payments/manage_cards_prompt_metrics.cc",
     "metrics/payments/manage_cards_prompt_metrics.h",
     "metrics/payments/offers_metrics.cc",
@@ -344,8 +352,8 @@ static_library("browser") {
     "suggestions_context.cc",
     "suggestions_context.h",
     "sync_utils.h",
-    "touch_to_fill_delegate.cc",
-    "touch_to_fill_delegate.h",
+    "touch_to_fill_delegate_impl.cc",
+    "touch_to_fill_delegate_impl.h",
     "ui/accessory_sheet_data.cc",
     "ui/accessory_sheet_data.h",
     "ui/accessory_sheet_enums.h",
@@ -384,6 +392,7 @@ static_library("browser") {
     "ui/suggestion.h",
     "ui/suggestion_selection.cc",
     "ui/suggestion_selection.h",
+    "ui/touch_to_fill_delegate.h",
     "validation.cc",
     "validation.h",
     "webdata/autocomplete_sync_bridge.cc",
@@ -422,13 +431,6 @@ static_library("browser") {
   ]
 
   sources += get_target_outputs(":regex_patterns_inl_h")
-
-  if (is_win) {
-    sources += [
-      "autofill_ie_toolbar_import_win.cc",
-      "autofill_ie_toolbar_import_win.h",
-    ]
-  }
 
   if (is_ios) {
     sources += [
@@ -507,6 +509,7 @@ static_library("browser") {
     "//base:i18n",
     "//build:branding_buildflags",
     "//build:chromeos_buildflags",
+    "//components/autofill_assistant/core/public:public",
     "//components/feature_engagement",
     "//components/google/core/common",
     "//components/history/core/browser",
@@ -600,6 +603,7 @@ static_library("test_support") {
     "autofill_test_utils.h",
     "data_model/test_autofill_data_model.cc",
     "data_model/test_autofill_data_model.h",
+    "form_structure_test_api.cc",
     "form_structure_test_api.h",
     "geo/alternative_state_name_map_test_utils.cc",
     "geo/alternative_state_name_map_test_utils.h",
@@ -613,6 +617,8 @@ static_library("test_support") {
     "metrics/autofill_metrics_test_base.h",
     "mock_autocomplete_history_manager.cc",
     "mock_autocomplete_history_manager.h",
+    "mock_iban_manager.cc",
+    "mock_iban_manager.h",
     "mock_merchant_promo_code_manager.cc",
     "mock_merchant_promo_code_manager.h",
     "mock_single_field_form_fill_router.cc",
@@ -646,6 +652,8 @@ static_library("test_support") {
     "test_autofill_driver.h",
     "test_autofill_external_delegate.cc",
     "test_autofill_external_delegate.h",
+    "test_autofill_manager_waiter.cc",
+    "test_autofill_manager_waiter.h",
     "test_autofill_tick_clock.cc",
     "test_autofill_tick_clock.h",
     "test_browser_autofill_manager.cc",
@@ -653,8 +661,6 @@ static_library("test_support") {
     "test_event_waiter.h",
     "test_form_data_importer.cc",
     "test_form_data_importer.h",
-    "test_form_structure.cc",
-    "test_form_structure.h",
     "test_inmemory_strike_database.cc",
     "test_inmemory_strike_database.h",
     "test_personal_data_manager.cc",
@@ -784,7 +790,6 @@ source_set("unit_tests") {
     "autofill_profile_save_strike_database_unittest.cc",
     "autofill_profile_sync_util_unittest.cc",
     "autofill_profile_update_strike_database_unittest.cc",
-    "autofill_regexes_unittest.cc",
     "autofill_subject_unittest.cc",
     "autofill_suggestion_generator_unittest.cc",
     "autofill_type_unittest.cc",
@@ -804,14 +809,18 @@ source_set("unit_tests") {
     "data_model/borrowed_transliterator_unittest.cc",
     "data_model/contact_info_unittest.cc",
     "data_model/credit_card_unittest.cc",
+    "data_model/iban_unittest.cc",
     "data_model/phone_number_unittest.cc",
     "field_filler_unittest.cc",
     "field_types_unittest.cc",
     "form_data_importer_unittest.cc",
+    "form_data_importer_utils_unittest.cc",
     "form_parsing/address_field_unittest.cc",
+    "form_parsing/birthdate_field_unittest.cc",
     "form_parsing/credit_card_field_unittest.cc",
     "form_parsing/field_candidates_unittest.cc",
     "form_parsing/form_field_unittest.cc",
+    "form_parsing/iban_field_unittest.cc",
     "form_parsing/merchant_promo_code_field_unittest.cc",
     "form_parsing/name_field_unittest.cc",
     "form_parsing/parsing_test_utils.cc",
@@ -831,6 +840,7 @@ source_set("unit_tests") {
     "geo/country_names_unittest.cc",
     "geo/phone_number_i18n_unittest.cc",
     "geo/subkey_requester_unittest.cc",
+    "iban_manager_unittest.cc",
     "logging/log_buffer_submitter_unittest.cc",
     "logging/log_manager_unittest.cc",
     "logging/log_router_unittest.cc",
@@ -853,6 +863,9 @@ source_set("unit_tests") {
     "payments/virtual_card_enrollment_manager_unittest.cc",
     "payments/virtual_card_enrollment_strike_database_unittest.cc",
     "payments/wait_for_signal_or_timeout_unittest.cc",
+    "personal_data_manager_cleaner_unittest.cc",
+    "personal_data_manager_test_base.cc",
+    "personal_data_manager_test_base.h",
     "personal_data_manager_unittest.cc",
     "randomized_encoder_unittest.cc",
     "rationalization_util_unittest.cc",
@@ -861,6 +874,7 @@ source_set("unit_tests") {
     "strike_database_unittest.cc",
     "test_utils/test_profiles.cc",
     "test_utils/test_profiles.h",
+    "touch_to_fill_delegate_impl_unittest.cc",
     "ui/address_combobox_model_unittest.cc",
     "ui/autofill_image_fetcher_unittest.cc",
     "ui/country_combobox_model_unittest.cc",
@@ -878,10 +892,6 @@ source_set("unit_tests") {
     "webdata/autofill_wallet_sync_bridge_unittest.cc",
     "webdata/web_data_service_unittest.cc",
   ]
-
-  if (is_win) {
-    sources += [ "autofill_ie_toolbar_import_win_unittest.cc" ]
-  }
 
   if (is_ios) {
     sources +=
@@ -929,6 +939,7 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//build:chromeos_buildflags",
     "//components/autofill/core/common",
+    "//components/autofill_assistant/core/public:public",
     "//components/feature_engagement",
     "//components/image_fetcher/core:core",
     "//components/image_fetcher/core:test_support",
@@ -942,8 +953,7 @@ source_set("unit_tests") {
     "//components/signin/public/identity_manager:test_support",
     "//components/strings",
     "//components/sync",
-    "//components/sync:test_support_model",
-    "//components/sync/driver:test_support",
+    "//components/sync:test_support",
     "//components/translate/core/browser",
     "//components/translate/core/common",
     "//components/ukm",

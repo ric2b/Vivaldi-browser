@@ -34,6 +34,10 @@ config("headless_defines_config") {
   if (headless_use_policy) {
     defines += [ "HEADLESS_USE_POLICY" ]
   }
+
+  if (headless_mode_policy_supported) {
+    defines += [ "HEADLESS_MODE_POLICY_SUPPORTED" ]
+  }
 }
 
 # For code inside the build component "headless".
@@ -373,6 +377,10 @@ component("headless_non_renderer") {
     "lib/browser/headless_quota_permission_context.h",
     "lib/browser/headless_request_context_manager.cc",
     "lib/browser/headless_request_context_manager.h",
+    "lib/browser/headless_select_file_dialog_factory.cc",
+    "lib/browser/headless_select_file_dialog_factory.h",
+    "lib/browser/headless_web_contents_impl.cc",
+    "lib/browser/headless_web_contents_impl.h",
     "lib/browser/headless_window_tree_host.h",
     "lib/browser/protocol/browser_handler.cc",
     "lib/browser/protocol/browser_handler.h",
@@ -456,6 +464,7 @@ component("headless_non_renderer") {
     "//components/cookie_config",
     "//components/embedder_support",
     "//components/keyed_service/content",
+    "//components/os_crypt:os_crypt",
     "//components/policy:generated",
     "//components/policy/core/browser",
     "//components/policy/core/common:common_constants",
@@ -477,13 +486,15 @@ component("headless_non_renderer") {
     "//ui/display",
     "//ui/events/devices",
     "//ui/gfx",
+    "//ui/shell_dialogs",
     "//url",
   ]
 
   if (enable_basic_printing) {
     deps += [
       "//components/printing/browser",
-      "//components/printing/browser/print_to_pdf",
+      "//components/printing/browser/headless",
+      "//components/printing/browser/print_to_pdf:print_to_pdf",
       "//components/printing/common:mojo_interfaces",
       "//printing",
       "//printing/mojom",
@@ -494,8 +505,6 @@ component("headless_non_renderer") {
     sources += [
       "lib/browser/headless_content_browser_client.cc",
       "lib/browser/headless_content_browser_client.h",
-      "lib/browser/headless_web_contents_impl.cc",
-      "lib/browser/headless_web_contents_impl.h",
       "lib/headless_content_main_delegate.cc",
       "lib/headless_content_main_delegate.h",
       "lib/renderer/headless_content_renderer_client.cc",
@@ -660,6 +669,7 @@ if (!is_component_build) {
     }
     if (enable_basic_printing) {
       deps += [
+        "//components/printing/browser/headless:headless",
         "//components/printing/renderer",
         "//components/services/print_compositor",
         "//components/services/print_compositor/public/mojom",
@@ -740,7 +750,7 @@ test("headless_unittests") {
   if (enable_basic_printing) {
     deps += [
       "//components/printing/browser",
-      "//components/printing/browser/print_to_pdf",
+      "//components/printing/browser/headless",
       "//printing",
       "//printing/buildflags",
       "//third_party/blink/public:blink",
@@ -779,6 +789,10 @@ test("headless_browsertests") {
     "test/test_network_interceptor.cc",
     "test/test_network_interceptor.h",
   ]
+
+  if (enable_basic_printing && enable_pdf) {
+    sources += [ "test/headless_printtopdf_browsertest.cc" ]
+  }
 
   if (headless_use_policy) {
     sources += [
@@ -846,6 +860,7 @@ test("headless_browsertests") {
     "//testing/gmock",
     "//testing/gtest",
     "//ui/base/clipboard",
+    "//ui/shell_dialogs",
   ]
 
   if (is_mac) {
@@ -889,6 +904,7 @@ if (is_win) {
     deps = [
       ":headless_non_renderer",
       "//build:branding_buildflags",
+      "//components/crash/core/app:app",
       "//components/crash/core/app:run_as_crashpad_handler",
       "//components/embedder_support",
       "//content:sandbox_helper_win",
@@ -901,6 +917,9 @@ if (is_win) {
     ]
     if (headless_use_policy) {
       deps += [ "//components/policy/content" ]
+    }
+    if (enable_basic_printing) {
+      deps += [ "//components/printing/browser/headless:headless" ]
     }
     configs += [ ":headless_defines_config" ]
   }
@@ -956,6 +975,7 @@ static_library("headless_shell_lib") {
   if (enable_basic_printing) {
     deps += [
       "//components/printing/browser",
+      "//components/printing/browser/headless:headless",
       "//components/printing/renderer",
       "//components/services/print_compositor",
       "//components/services/print_compositor/public/mojom",

@@ -11,7 +11,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "chromeos/network/firewall_hole.h"
+#include "chromeos/ash/components/network/firewall_hole.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 
 namespace content {
@@ -27,7 +27,7 @@ class AppFirewallHoleManager;
 // closed on destruction.
 class AppFirewallHole {
  public:
-  using PortType = chromeos::FirewallHole::PortType;
+  using PortType = ::ash::FirewallHole::PortType;
 
   ~AppFirewallHole();
 
@@ -44,8 +44,7 @@ class AppFirewallHole {
                   const std::string& extension_id);
 
   void SetVisible(bool app_visible);
-  void OnFirewallHoleOpened(
-      std::unique_ptr<chromeos::FirewallHole> firewall_hole);
+  void OnFirewallHoleOpened(std::unique_ptr<ash::FirewallHole> firewall_hole);
 
   PortType type_;
   uint16_t port_;
@@ -55,7 +54,7 @@ class AppFirewallHole {
   base::WeakPtr<AppFirewallHoleManager> manager_;
 
   // This will hold the FirewallHole object if one is opened.
-  std::unique_ptr<chromeos::FirewallHole> firewall_hole_;
+  std::unique_ptr<ash::FirewallHole> firewall_hole_;
 
   base::WeakPtrFactory<AppFirewallHole> weak_factory_{this};
 };

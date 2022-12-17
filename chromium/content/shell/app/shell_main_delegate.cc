@@ -35,6 +35,7 @@
 #include "content/shell/utility/shell_content_utility_client.h"
 #include "ipc/ipc_buildflags.h"
 #include "net/cookies/cookie_monster.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
@@ -133,11 +134,7 @@ ShellMainDelegate::ShellMainDelegate(bool is_content_browsertests)
 ShellMainDelegate::~ShellMainDelegate() {
 }
 
-bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
-  int dummy;
-  if (!exit_code)
-    exit_code = &dummy;
-
+absl::optional<int> ShellMainDelegate::BasicStartupComplete() {
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch("run-layout-test")) {
     std::cerr << std::string(79, '*') << "\n"
@@ -183,11 +180,11 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
 
   RegisterShellPathProvider();
 
-  return false;
+  return absl::nullopt;
 }
 
 bool ShellMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
-  return invoked_in == InvokedIn::kChildProcess;
+  return absl::holds_alternative<InvokedInChildProcess>(invoked_in);
 }
 
 void ShellMainDelegate::PreSandboxStartup() {
@@ -329,17 +326,25 @@ void ShellMainDelegate::InitializeResourceBundle() {
 #endif
 }
 
-void ShellMainDelegate::PreBrowserMain() {
+absl::optional<int> ShellMainDelegate::PreBrowserMain() {
+  absl::optional<int> exit_code =
+      content::ContentMainDelegate::PreBrowserMain();
+  if (exit_code.has_value())
+    return exit_code;
+
 #if BUILDFLAG(IS_MAC)
   RegisterShellCrApp();
 #endif
+  return absl::nullopt;
 }
 
-void ShellMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
+absl::optional<int> ShellMainDelegate::PostEarlyInitialization(
+    InvokedIn invoked_in) {
   if (!ShouldCreateFeatureList(invoked_in)) {
     // Apply field trial testing configuration since content did not.
     browser_client_->CreateFeatureListAndFieldTrials();
   }
+  return absl::nullopt;
 }
 
 ContentClient* ShellMainDelegate::CreateContentClient() {

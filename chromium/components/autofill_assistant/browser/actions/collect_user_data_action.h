@@ -16,9 +16,9 @@
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/metrics.h"
+#include "components/autofill_assistant/browser/public/password_change/website_login_manager.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_model.h"
-#include "components/autofill_assistant/browser/website_login_manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace autofill_assistant {
@@ -88,12 +88,14 @@ class CollectUserDataAction : public Action,
   void ShowToUser();
   void OnShowToUser(UserData* user_data, UserDataFieldChange* field_change);
   void UpdateUserData(UserData* user_data);
-  void UseChromeData(UserData* user_data);
+  void UseChromeData(UserData* user_data,
+                     Metrics::UserDataSource user_data_source);
   void OnRequestUserData(bool is_initial_request,
                          UserData* user_data,
                          bool success,
                          const GetUserDataResponseProto& response);
-  void FallbackToChromeData(UserData* user_data);
+  void FallbackToChromeData(UserData* user_data,
+                            Metrics::UserDataSource user_data_source);
   void UpdateMetrics(UserData* user_data,
                      Metrics::UserDataSource user_data_source);
   void UpdateUi();

@@ -129,7 +129,7 @@ void PrefsAsh::BindReceiver(mojo::PendingReceiver<mojom::Prefs> receiver) {
 void PrefsAsh::GetPref(mojom::PrefPath path, GetPrefCallback callback) {
   auto state = GetState(path);
   const base::Value* value =
-      state ? state->pref_service->Get(state->path) : nullptr;
+      state ? &state->pref_service->GetValue(state->path) : nullptr;
   std::move(callback).Run(value ? absl::optional<base::Value>(value->Clone())
                                 : absl::nullopt);
 }
@@ -146,12 +146,12 @@ void PrefsAsh::GetExtensionPrefWithControl(
     return;
   }
 
-  const base::Value* value = state->pref_service->Get(state->path);
+  const base::Value& value = state->pref_service->GetValue(state->path);
 
   if (!state->is_extension_controlled_pref) {
     // Not extension controlled
     std::move(callback).Run(
-        absl::optional<base::Value>(value->Clone()),
+        absl::optional<base::Value>(value.Clone()),
         mojom::PrefControlState::kNotExtensionControlledPrefPath);
     return;
   }
@@ -171,7 +171,7 @@ void PrefsAsh::GetExtensionPrefWithControl(
     // Lacros could control this.
     pref_control_state = mojom::PrefControlState::kLacrosExtensionControllable;
   }
-  std::move(callback).Run(absl::optional<base::Value>(value->Clone()),
+  std::move(callback).Run(absl::optional<base::Value>(value.Clone()),
                           pref_control_state);
 }
 
@@ -206,7 +206,7 @@ void PrefsAsh::AddObserver(mojom::PrefPath path,
                            mojo::PendingRemote<mojom::PrefObserver> observer) {
   auto state = GetState(path);
   const base::Value* value =
-      state ? state->pref_service->Get(state->path) : nullptr;
+      state ? &state->pref_service->GetValue(state->path) : nullptr;
   if (!value) {
     return;
   }
@@ -311,7 +311,7 @@ void PrefsAsh::OnProfileWillBeDestroyed(Profile* profile) {
 void PrefsAsh::OnPrefChanged(mojom::PrefPath path) {
   auto state = GetState(path);
   const base::Value* value =
-      state ? state->pref_service->Get(state->path) : nullptr;
+      state ? &state->pref_service->GetValue(state->path) : nullptr;
   if (value) {
     for (auto& observer : observers_[path]) {
       observer->OnPrefChanged(value->Clone());

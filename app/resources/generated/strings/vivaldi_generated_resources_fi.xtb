@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Joutotilasta palautumiset</translation>
 <translation id="119944043368869598">Tyhjennä kaikki</translation>
 <translation id="1221825588892235038">Vain valinta</translation>
+<translation id="1234736487471201993">Luo kuvalle QR-koodi</translation>
 <translation id="1244303850296295656">Laajennusvirhe</translation>
 <translation id="125220115284141797">Oletus</translation>
 <translation id="1297175357211070620">Kohde</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Suoratoista välilehti</translation>
 <translation id="2150139952286079145">Etsi kohteita</translation>
 <translation id="215753907730220065">Poistu koko näytön tilasta</translation>
+<translation id="2158475082070321257">Kopioi linkki korostukseen</translation>
 <translation id="2177950615300672361">Incognito-välilehti: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Asiakasmoduuli: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Liitä muotoilemattomana tekstinä</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Sivustojen on ehkä voitava tunnistaa laite tunnisteella</translation>
 <translation id="2445081178310039857">Laajennuksen juurihakemisto tarvitaan.</translation>
 <translation id="2470702053775288986">Ei-tuetut laajennukset poistettu käytöstä</translation>
-<translation id="2476578072172137802">Sivuston asetukset</translation>
+<translation id="2485422356828889247">Poista asennus</translation>
 <translation id="2498539833203011245">Pienennä</translation>
 <translation id="2509495747794740764">Asteikon on oltava numero väliltä 10–200.</translation>
 <translation id="253557089021624350">Keepalive-määrä</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Ilmoita väärinkäytöstä</translation>
 <translation id="2941112035454246133">Matala</translation>
 <translation id="2972581237482394796">&amp;Tee uudelleen</translation>
+<translation id="2993517869960930405">Sovelluksen tiedot</translation>
 <translation id="3003623123441819449">CSS-välimuisti</translation>
 <translation id="3008272652534848354">Nollaa käyttöoikeudet</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Avaa linkki eri käyttäjänä</translation>
 <translation id="3222066309010235055">Esihahmonna: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Voit pakata laajennuksen valitsemalla sen juurihakemiston. Jos haluat päivittää laajennuksen, valitse myös yksityinen avaintiedosto, jotta laajennusta voidaan käyttää uudelleen.</translation>
+<translation id="3275778913554317645">Avaa ikkunaan</translation>
 <translation id="3280237271814976245">Tallenna &amp;nimellä…</translation>
 <translation id="3285322247471302225">Uusi &amp;välilehti</translation>
 <translation id="3288047731229977326">Kehittäjätilassa olevat laajennukset voivat vahingoittaa tietokonettasi. Jos et ole kehittäjä, poista kehittäjätilassa olevat laajennukset käytöstä varmuuden vuoksi.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Avaa PDF:ää esikatseluun</translation>
 <translation id="3308134619352333507">Piilota painike</translation>
 <translation id="3317459757438853210">Kaksipuolinen</translation>
+<translation id="3331974543021145906">Sovelluksen tiedot</translation>
 <translation id="3341703758641437857">Salli pääsy tiedosto-osoitteisiin</translation>
 <translation id="3347086966102161372">K&amp;opioi kuvan osoite</translation>
 <translation id="3360297538363969800">Tulostus epäonnistui. Tarkista tulostin ja yritä uudelleen.</translation>
 <translation id="3378572629723696641">Tämä laajennus on ehkä vioittunut.</translation>
 <translation id="3387614642886316601">Käytä parannettua oikolukua</translation>
+<translation id="3390013585654699824">Sovelluksen tiedot</translation>
 <translation id="3393582007140394275">Näyttöä ei voi suoratoistaa.</translation>
 <translation id="3432227430032737297">Poista kaikki näytetyt</translation>
 <translation id="345693547134384690">Avaa &amp;kuva uuteen välilehteen</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Etsi kuvaa: <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Salli sivustojen toistaa suojattua sisältöä (suositus)</translation>
 <translation id="3979395879372752341">Uusi laajennus lisätty (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kopioi linkki korostukseen</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">L&amp;isää sanakirjaan</translation>
 <translation id="407520071244661467">Mittakaava</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Sulje selain ennen tuontia</translation>
 <translation id="4130207949184424187">Tämä laajennus on vaihtanut Omnibox-hakujen aloitussivun.</translation>
 <translation id="4131410914670010031">Mustavalkoinen</translation>
+<translation id="4165986682804962316">Sivustoasetukset</translation>
 <translation id="4176463684765177261">Pois käytöstä</translation>
 <translation id="4200983522494130825">Uusi &amp;välilehti</translation>
 <translation id="4225397296022057997">Kaikilla sivustoilla</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Palauta asetukset</translation>
 <translation id="4726710629007580002">Yritettäessä asentaa laajennusta tuli varoituksia:</translation>
 <translation id="479536056609751218">Verkkosivu, vain HTML</translation>
+<translation id="4827904420700932487">Luo kuvalle QR-koodi</translation>
 <translation id="4839303808932127586">Tallenna &amp;video nimellä…</translation>
 <translation id="4840096453115567876">Haluatko silti poistua yksityistilasta?</translation>
 <translation id="488785315393301722">Näytä tiedot</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Kysy ennen käyttöä (suositus)</translation>
 <translation id="5677928146339483299">Estetty</translation>
 <translation id="5707185214361380026">Laajennuksen lataus epäonnistui kohteesta:</translation>
+<translation id="5713171467967533494">Avaa Vivaldi-selaimeen</translation>
 <translation id="5715711091495208045">Laajennuksen välittäjä: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Tallenna PDF:ksi</translation>
 <translation id="5747809636523347288">&amp;Liitä ja siirry osoitteeseen <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Asetukset</translation>
 <translation id="6579369886355986318">Näytä kaikki &amp;säätimet</translation>
 <translation id="6639554308659482635">SQLite-muisti</translation>
+<translation id="666731172850799929">Avaa sovellukseen <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Tallenna salasanasi</translation>
 <translation id="6691936601825168937">S&amp;euraava</translation>
 <translation id="6798954102094737107">Laajennus: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@ Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusve
 <translation id="9003647077635673607">Salli kaikilla verkkosivuilla</translation>
 <translation id="9027459031423301635">Avaa linkki uuteen &amp;välilehteen</translation>
 <translation id="9056810968620647706">Osumia ei löytynyt.</translation>
+<translation id="9084064520949870008">Avaa ikkunaan</translation>
 <translation id="9137916601698928395">Avaa linkki käyttäjänä <ph name="USER" /></translation>
 <translation id="91568222606626347">Luo pikakuvake…</translation>
 <translation id="916607977885256133">Kuva kuvassa</translation>

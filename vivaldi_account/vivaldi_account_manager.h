@@ -6,18 +6,17 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/driver/sync_token_status.h"
-
 #include "vivaldi_account/vivaldi_account_password_handler.h"
-
-class Profile;
 
 namespace network {
 class SimpleURLLoader;
-}
+class SharedURLLoaderFactory;
+}  // namespace network
 
 namespace vivaldi {
 
@@ -78,7 +77,11 @@ class VivaldiAccountManager : public KeyedService,
     std::string picture_url;
   };
 
-  explicit VivaldiAccountManager(Profile* profile);
+  explicit VivaldiAccountManager(
+      PrefService* prefs,
+      PrefService* local_state,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      scoped_refptr<password_manager::PasswordStoreInterface> password_store);
   ~VivaldiAccountManager() override;
   VivaldiAccountManager(const VivaldiAccountManager&) = delete;
   VivaldiAccountManager& operator=(const VivaldiAccountManager&) = delete;
@@ -159,7 +162,9 @@ class VivaldiAccountManager : public KeyedService,
   void ClearTokens();
   void Reset();
 
-  Profile* profile_;
+  PrefService* prefs_;
+  PrefService* local_state_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   base::ObserverList<Observer> observers_;
 
@@ -182,6 +187,8 @@ class VivaldiAccountManager : public KeyedService,
 
   FetchError last_token_fetch_error_;
   FetchError last_account_info_fetch_error_;
+
+  base::WeakPtrFactory<VivaldiAccountManager> weak_factory_{this};
 };
 
 }  // namespace vivaldi

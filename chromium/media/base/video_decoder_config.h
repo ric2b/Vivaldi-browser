@@ -191,7 +191,7 @@ class MEDIA_EXPORT VideoDecoderConfig {
   absl::optional<gfx::HDRMetadata> hdr_metadata_;
   bool is_rtc_ = false;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 public:
   bool platform_media_pass_through_ = false;
 #endif

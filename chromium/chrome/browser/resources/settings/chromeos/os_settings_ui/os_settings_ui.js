@@ -18,7 +18,7 @@ import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import '../os_settings_menu/os_settings_menu.js';
 import '../os_settings_main/os_settings_main.js';
 import '../os_toolbar/os_toolbar.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import '../../prefs/prefs.js';
 import '../../settings_vars.css.js';
 
@@ -26,15 +26,19 @@ import {CrContainerShadowBehavior, CrContainerShadowBehaviorInterface} from 'chr
 import {FindShortcutBehavior, FindShortcutBehaviorInterface} from 'chrome://resources/cr_elements/find_shortcut_behavior.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {listenOnce} from 'chrome://resources/js/util.m.js';
-import {Debouncer, html, microTask, mixinBehaviors, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {Debouncer, microTask, mixinBehaviors, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
+import {SettingChangeValue} from '../../mojom-webui/search/user_action_recorder.mojom-webui.js';
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {setGlobalScrollTarget} from '../global_scroll_target_behavior.js';
 import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSettingChange} from '../metrics_recorder.js';
 import {OSPageVisibility, osPageVisibility} from '../os_page_visibility.js';
 import {PrefToSettingMetricConverter} from '../pref_to_setting_metric_converter.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
+
+import {getTemplate} from './os_settings_ui.html.js';
 
 /** Global defined when the main Settings script runs. */
 let defaultResourceLoaded = true;  // eslint-disable-line prefer-const
@@ -51,10 +55,11 @@ assert(
  */
 const OsSettingsUiElementBase = mixinBehaviors(
     [
-      CrContainerShadowBehavior, FindShortcutBehavior,
+      CrContainerShadowBehavior,
+      FindShortcutBehavior,
       // Calls currentRouteChanged() in attached(),so ensure other behaviors
       // run their attached() first.
-      RouteObserverBehavior
+      RouteObserverBehavior,
     ],
     PolymerElement);
 
@@ -65,7 +70,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -393,11 +398,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
       return;
     }
 
-    const setting =
-        /** @type {!chromeos.settings.mojom.Setting} */ (settingMetric.setting);
-    const value = /** @type {!chromeos.settings.mojom.SettingChangeValue} */ (
-        settingMetric.value);
-    recordSettingChange(setting, value);
+    recordSettingChange(settingMetric.setting, settingMetric.value);
   }
 
   /**

@@ -241,6 +241,10 @@ namespace autotestPrivate {
     DOMString? text;
     // HTML response returned from server.
     DOMString? htmlResponse;
+    // Open URL response returned from server.
+    DOMString? openUrl;
+    // Open Android app response returned from server.
+    DOMString? openAppResponse;
   };
   dictionary AssistantQueryStatus {
     // Indicates whether this might be a voice interaction.
@@ -261,14 +265,37 @@ namespace autotestPrivate {
 
   callback IsLacrosPrimaryBrowserCallback = void (boolean primary);
 
+  // A mapping of crosapi::BrowserManager::State
+  enum LacrosState {
+    NotInitialized,
+    Mounting,
+    Unavailable,
+    Stopped,
+    CreatingLogFile,
+    Starting,
+    Running,
+    Terminating
+  };
+
+  // A mapping of crosapi::browser_util::LacrosMode
+  enum LacrosMode {
+    Disabled,
+    SideBySide,
+    Primary,
+    Only
+  };
+
   dictionary LacrosInfo {
-    // True iff lacros is running currently.
-    boolean isRunning;
+    // The state of lacros.
+    LacrosState state;
     // True iff keepalive is enabled for lacros.
     boolean isKeepAlive;
     // Path to lacros-chrome directory. Note that this may change over time if
     // omaha is used. This also may be empty if lacros is not running.
     DOMString lacrosPath;
+    // Specifies the mode Lacros is currently running.
+    // For a full list of supported mode, see LacrosMode enum definition.
+    LacrosMode mode;
   };
 
   callback GetLacrosInfoCallback = void (LacrosInfo info);
@@ -290,6 +317,17 @@ namespace autotestPrivate {
     boolean launchable;
   };
   callback GetArcAppCallback = void (ArcAppDict package);
+
+  dictionary ArcAppKillsDict {
+    double oom;
+    double lmkdForeground;
+    double lmkdPerceptible;
+    double lmkdCached;
+    double pressureForeground;
+    double pressurePerceptible;
+    double pressureCached;
+  };
+  callback GetArcAppKillsCallback = void (ArcAppKillsDict counts);
 
   dictionary ArcPackageDict {
     DOMString packageName;
@@ -334,6 +372,17 @@ namespace autotestPrivate {
   callback SetShelfIconPinCallback = void(DOMString[] results);
 
   callback SetOverviewModeStateCallback = void(boolean finished);
+
+  enum ThemeStyle {
+    TonalSpot,
+    Vibrant,
+    Expressive,
+    Spritz,
+    Rainbow,
+    FruitSalad
+  };
+
+  callback SendArcOverlayColorCallback = void (boolean result);
 
   callback ArcAppTracingCallback = void(ArcAppTracingInfo info);
 
@@ -574,6 +623,8 @@ namespace autotestPrivate {
 
   callback DesksCallback = void (boolean success);
 
+  callback GetDeskCountCallback = void (long count);
+
   callback GetScrollableShelfInfoForStateCallback = void (
       ScrollableShelfInfo info);
 
@@ -662,6 +713,34 @@ namespace autotestPrivate {
   // after getLoginEventRecorderLoginEvents is called.
   callback GetLoginEventRecorderLoginEventsCallback = void
       (LoginEventRecorderData[] data);
+
+  // Request parameters for <code>getAccessToken</code>.
+  dictionary GetAccessTokenParams {
+     // An email associated with the account to get a token for.
+     DOMString email;
+     // A list of OAuth scopes to request.
+     DOMString[] scopes;
+     // An optional timeout in milliseconds for the request.
+     // Default: 90 seconds
+     long? timeoutMs;
+  };
+
+  // Response data for <code>getAccessToken</code>.
+  dictionary GetAccessTokenData {
+    // The access token
+    DOMString accessToken;
+    // The time the access token will expire as a unix timestamp in
+    // milliseconds.
+    DOMString expirationTimeUnixMs;
+  };
+
+  // Reponse callback for <code>getAccessToken</code>.
+  callback GetAccessTokenCallback = void(GetAccessTokenData data);
+
+  // Callback invoked to report whether the current input method is ready to
+  // accept key events from the test.
+  callback IsInputMethodReadyForTestingCallback = void
+      (boolean isReady);
 
   interface Functions {
     // Must be called to allow autotestPrivateAPI events to be fired.
@@ -781,6 +860,10 @@ namespace autotestPrivate {
     [supportsPromises] static void getArcApp(DOMString appId,
                                              GetArcAppCallback callback);
 
+    // Gets counts of how many ARC apps have been killed, by priority.
+    [supportsPromises] static void getArcAppKills(
+        GetArcAppKillsCallback callback);
+
     // Gets information about requested ARC package.
     [supportsPromises] static void getArcPackage(
         DOMString packageName,
@@ -823,6 +906,14 @@ namespace autotestPrivate {
     [supportsPromises] static void launchSystemWebApp(DOMString appName,
                                                       DOMString url,
                                                       VoidCallback callback);
+
+    // Launches Files app directly to absolutePath, if the path does not
+    // exist, it will launch to the default opening location (i.e. My files).
+    // If the supplied path is a file (and it exists) it will open Files app
+    // to the parent folder instead.
+    [supportsPromises] static void launchFilesAppToPath(
+        DOMString absolutePath,
+        VoidCallback callback);
 
     // Closes an application the given appId in case it was running.
     [supportsPromises] static void closeApp(DOMString appId,
@@ -985,6 +1076,12 @@ namespace autotestPrivate {
         IsArcPackageListInitialRefreshedCallback callback);
 
     // Set value for the specified user pref in the pref tree.
+    [supportsPromises] static void setAllowedPref(DOMString pref_name,
+                                                  any value,
+                                                  VoidCallback callback);
+
+    // DEPRECATED: use SetAllowedPref instead, see crbug/1262034
+    // Set value for the specified user pref in the pref tree.
     [supportsPromises] static void setWhitelistedPref(DOMString pref_name,
                                                       any value,
                                                       VoidCallback callback);
@@ -1079,6 +1176,13 @@ namespace autotestPrivate {
 
     // Show virtual keyboard of the current input method if it's available.
     static void showVirtualKeyboardIfEnabled();
+
+    // Sends the overlay color and theme to Android and changes the Android system color and theme to these values.
+    // |color|: the int color of the system ui.
+    // |theme|: the theme of the system ui.
+    // |callback|: callback to deliver sendArcOverlayColor result.
+    [supportsPromises] static void sendArcOverlayColor(
+      long color, ThemeStyle theme, SendArcOverlayColorCallback callback);
 
     // Start ARC performance tracing for the active ARC app window.
     // |callback|: Called when the operation has completed.
@@ -1198,6 +1302,13 @@ namespace autotestPrivate {
     [supportsPromises] static void activateAdjacentDesksToTargetIndex(
         long index,
         DesksCallback callback);
+
+    // Fetches the number of open desks in the `DesksController` at the time of
+    // call.
+    // `callback`: callback that is passed the number of open desks.
+    [supportsPromises] static void getDeskCount(
+        GetDeskCountCallback callback
+    );
 
     // Create mouse events to cause a mouse click.
     // |button|: the mouse button for the click event.
@@ -1335,6 +1446,15 @@ namespace autotestPrivate {
 
     // Force auto theme mode in dark mode or light mode for testing.
     [supportsPromises] static void forceAutoThemeMode(boolean darkModeEnabled, VoidCallback callback);
+
+    // Fetches an access token from Chrome.
+    [supportsPromises] static void getAccessToken(
+        GetAccessTokenParams accessTokenParams,
+        GetAccessTokenCallback callback);
+
+    // Returns whether the current input method is ready to accept key events.
+    [supportsPromises] static void isInputMethodReadyForTesting(
+        IsInputMethodReadyForTestingCallback callback);
   };
 
   interface Events {

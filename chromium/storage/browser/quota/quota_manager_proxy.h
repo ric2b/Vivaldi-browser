@@ -101,7 +101,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
   // quota_manager_impl_task_runner. Additionally, the asychonrous version of
   // this method `GetOrCreateBucket` is preferred; only use this synchronous
   // version where asynchronous bucket retrieval is not possible.
-  QuotaErrorOr<BucketInfo> GetOrCreateBucketSync(
+  virtual QuotaErrorOr<BucketInfo> GetOrCreateBucketSync(
       const BucketInitParams& params);
 
   // Same as GetOrCreateBucket but takes in StorageType. This should only be
@@ -145,6 +145,16 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
       base::OnceCallback<void(QuotaErrorOr<BucketInfo>)> callback);
 
+  // Retrieves all buckets for `storage_key` and `type` that are in the buckets
+  // table. If `delete_expired` is true, expired buckets will be filtered out of
+  // the reply and also deleted from disk.
+  virtual void GetBucketsForStorageKey(
+      const blink::StorageKey& storage_key,
+      blink::mojom::StorageType type,
+      bool delete_expired,
+      scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
+      base::OnceCallback<void(QuotaErrorOr<std::set<BucketInfo>>)> callback);
+
   // Deletes bucket with `bucket_name` for `storage_key` for
   // StorageType::kTemporary for all registered QuotaClients if a bucket exists.
   // Will return QuotaStatusCode to the callback. Called by Storage Buckets API
@@ -183,8 +193,8 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
   // updated.  If a `callback` is provided then `callback_task_runner` must
   // also be provided.  If the quota manager runs on `callback_task_runner`,
   // then the `callback` may be invoked synchronously.
-  // TODO(crbug.com/1208141): Remove when all usages have updated to use
-  // NotifyBucketModified.
+  // TODO(https://crbug.com/1202167): Remove when all usages have updated to use
+  // `NotifyBucketModified()`.
   virtual void NotifyStorageModified(
       QuotaClientType client_id,
       const blink::StorageKey& storage_key,

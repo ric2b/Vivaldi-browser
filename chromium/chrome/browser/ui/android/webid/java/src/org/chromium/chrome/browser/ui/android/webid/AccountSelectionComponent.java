@@ -4,12 +4,10 @@
 
 package org.chromium.chrome.browser.ui.android.webid;
 
-import android.content.Context;
-
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
-import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.content.webid.IdentityRequestDialogDismissReason;
 
 import java.util.List;
 
@@ -33,21 +31,13 @@ public interface AccountSelectionComponent {
          * Called when the user dismisses the AccountSelectionComponent. Not called if a suggestion
          * was selected.
          */
-        void onDismissed(boolean shouldEmbargo);
+        void onDismissed(@IdentityRequestDialogDismissReason int dismissReason);
 
         /**
          * Called when the user cancels auto sign in.
          */
         void onAutoSignInCancelled();
     }
-
-    /**
-     * Initializes the component.
-     * @param context A {@link Context} to create views and retrieve resources.
-     * @param sheetController A {@link BottomSheetController} used to show/hide the sheet.
-     * @param delegate A {@link Delegate} that handles dismiss events.
-     */
-    void initialize(Context context, BottomSheetController sheetController, Delegate delegate);
 
     /**
      * Displays the given accounts in a new bottom sheet.
@@ -63,7 +53,7 @@ public interface AccountSelectionComponent {
             boolean isAutoSignIn);
 
     /**
-     * Hides the outstanding bottom sheet.
+     * Closes the outstanding bottom sheet.
      */
-    void hideBottomSheet();
+    void close();
 }

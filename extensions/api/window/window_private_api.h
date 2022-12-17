@@ -5,6 +5,7 @@
 
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/window_private.h"
+#include "ui/base/ui_base_types.h"
 
 class Browser;
 class Profile;
@@ -12,6 +13,9 @@ class Profile;
 class VivaldiBrowserWindow;
 
 namespace extensions {
+
+using vivaldi::window_private::WindowState;
+WindowState ConvertToJSWindowState(ui::WindowShowState state);
 
 class VivaldiWindowsAPI {
  public:
@@ -62,6 +66,21 @@ class WindowPrivateSetStateFunction : public ExtensionFunction {
 
  protected:
   ~WindowPrivateSetStateFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
+
+class WindowPrivateUpdateMaximizeButtonPositionFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.updateMaximizeButtonPosition",
+                             WINDOW_PRIVATE_UPDATE_MAXIMIZE_BUTTON_POSITION)
+
+  WindowPrivateUpdateMaximizeButtonPositionFunction() = default;
+
+ protected:
+  ~WindowPrivateUpdateMaximizeButtonPositionFunction() override = default;
 
  private:
   ResponseAction Run() override;

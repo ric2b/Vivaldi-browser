@@ -24,7 +24,6 @@
 #include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
@@ -46,7 +45,7 @@
 #include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/driver/sync_token_status.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
-#include "components/sync/test/engine/fake_sync_engine.h"
+#include "components/sync/test/fake_sync_engine.h"
 #include "components/version_info/version_info_values.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -258,10 +257,6 @@ class SyncServiceImplTest : public ::testing::Test {
   raw_ptr<SyncClientMock> sync_client_;  // Owned by |service_|.
   // The controllers are owned by |service_|.
   std::map<ModelType, FakeDataTypeController*> controller_map_;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  base::test::ScopedFeatureList scoped_feature_list{
-      switches::kLacrosNonSyncingProfiles};
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 };
 
 class SyncServiceImplTestWithSyncInvalidationsServiceCreated

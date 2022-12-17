@@ -12,13 +12,12 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/values.h"
 #include "chrome/browser/certificate_provider/certificate_provider_service.h"
-#include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/common/extensions/api/certificate_provider.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "extensions/browser/event_listener_map.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/event_router_factory.h"
@@ -76,9 +75,9 @@ class DefaultDelegate : public CertificateProviderService::Delegate,
   base::flat_set<std::string> GetSubscribedExtensions(
       const std::string& event_name);
 
-  CertificateProviderService* const service_;
-  extensions::ExtensionRegistry* const registry_;
-  extensions::EventRouter* const event_router_;
+  const raw_ptr<CertificateProviderService> service_;
+  const raw_ptr<extensions::ExtensionRegistry> registry_;
+  const raw_ptr<extensions::EventRouter> event_router_;
 };
 
 // Constructs the "onCertificatesUpdateRequested" event.
@@ -86,8 +85,8 @@ std::unique_ptr<extensions::Event> BuildOnCertificatesUpdateRequestedEvent(
     int request_id) {
   api_cp::CertificatesUpdateRequest certificates_update_request;
   certificates_update_request.certificates_request_id = request_id;
-  std::vector<base::Value> event_args;
-  event_args.push_back(
+  base::Value::List event_args;
+  event_args.Append(
       base::Value::FromUniquePtrValue(certificates_update_request.ToValue()));
   return std::make_unique<extensions::Event>(
       extensions::events::CERTIFICATEPROVIDER_ON_CERTIFICATES_UPDATE_REQUESTED,
@@ -97,8 +96,8 @@ std::unique_ptr<extensions::Event> BuildOnCertificatesUpdateRequestedEvent(
 // Constructs the legacy "onCertificatesRequested" event.
 std::unique_ptr<extensions::Event> BuildOnCertificatesRequestedEvent(
     int request_id) {
-  std::vector<base::Value> event_args;
-  event_args.push_back(base::Value(request_id));
+  base::Value::List event_args;
+  event_args.Append(request_id);
   return std::make_unique<extensions::Event>(
       extensions::events::CERTIFICATEPROVIDER_ON_CERTIFICATES_REQUESTED,
       api_cp::OnCertificatesRequested::kEventName, std::move(event_args));
@@ -146,8 +145,8 @@ std::unique_ptr<extensions::Event> BuildOnSignatureRequestedEvent(
       net::x509_util::CryptoBufferAsStringPiece(certificate.cert_buffer());
   request.certificate.assign(cert_der.begin(), cert_der.end());
 
-  std::vector<base::Value> event_args;
-  event_args.push_back(base::Value::FromUniquePtrValue(request.ToValue()));
+  base::Value::List event_args;
+  event_args.Append(base::Value::FromUniquePtrValue(request.ToValue()));
 
   return std::make_unique<extensions::Event>(
       extensions::events::CERTIFICATEPROVIDER_ON_SIGNATURE_REQUESTED,
@@ -197,9 +196,9 @@ std::unique_ptr<extensions::Event> BuildOnSignDigestRequestedEvent(
   }
   request.digest.resize(digest_len);
 
-  std::vector<base::Value> event_args;
-  event_args.push_back(base::Value(request_id));
-  event_args.push_back(base::Value::FromUniquePtrValue(request.ToValue()));
+  base::Value::List event_args;
+  event_args.Append(request_id);
+  event_args.Append(base::Value::FromUniquePtrValue(request.ToValue()));
 
   return std::make_unique<extensions::Event>(
       extensions::events::CERTIFICATEPROVIDER_ON_SIGN_DIGEST_REQUESTED,
@@ -322,17 +321,11 @@ CertificateProviderServiceFactory::GetInstance() {
 }
 
 CertificateProviderServiceFactory::CertificateProviderServiceFactory()
-    : BrowserContextKeyedServiceFactory(
+    : ProfileKeyedServiceFactory(
           "CertificateProviderService",
-          BrowserContextDependencyManager::GetInstance()) {
+          ProfileSelections::BuildRedirectedInIncognito()) {
   DependsOn(extensions::EventRouterFactory::GetInstance());
   DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
-}
-
-content::BrowserContext*
-CertificateProviderServiceFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
 }
 
 bool CertificateProviderServiceFactory::ServiceIsNULLWhileTesting() const {

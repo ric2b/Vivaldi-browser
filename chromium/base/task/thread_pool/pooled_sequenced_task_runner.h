@@ -30,10 +30,6 @@ class BASE_EXPORT PooledSequencedTaskRunner
   PooledSequencedTaskRunner& operator=(const PooledSequencedTaskRunner&) =
       delete;
 
-  // Initializes the state of all the sequence manager features. Must be invoked
-  // after FeatureList initialization.
-  static void InitializeFeatures();
-
   // UpdateableSequencedTaskRunner:
   bool PostDelayedTask(const Location& from_here,
                        OnceClosure closure,
@@ -56,7 +52,9 @@ class BASE_EXPORT PooledSequencedTaskRunner
  private:
   ~PooledSequencedTaskRunner() override;
 
-  const raw_ptr<PooledTaskRunnerDelegate> pooled_task_runner_delegate_;
+  // TODO(crbug.com/1298696): Breaks base_unittests.
+  const raw_ptr<PooledTaskRunnerDelegate, DegradeToNoOpWhenMTE>
+      pooled_task_runner_delegate_;
 
   // Sequence for all Tasks posted through this TaskRunner.
   const scoped_refptr<Sequence> sequence_;

@@ -63,9 +63,9 @@ MediaRouterContextualMenu::CreateMenuModel() {
   if (shown_by_policy_) {
     menu_model->AddItemWithStringId(IDC_MEDIA_ROUTER_SHOWN_BY_POLICY,
                                     IDS_MEDIA_ROUTER_SHOWN_BY_POLICY);
-    // TODO (kylixrd): Review the use of the hard-coded color constant.
     menu_model->SetIcon(
-        menu_model->GetIndexOfCommandId(IDC_MEDIA_ROUTER_SHOWN_BY_POLICY),
+        menu_model->GetIndexOfCommandId(IDC_MEDIA_ROUTER_SHOWN_BY_POLICY)
+            .value(),
         ui::ImageModel::FromVectorIcon(vector_icons::kBusinessIcon,
                                        ui::kColorIcon, 16));
   } else {
@@ -77,12 +77,12 @@ MediaRouterContextualMenu::CreateMenuModel() {
   menu_model->AddCheckItemWithStringId(IDC_MEDIA_ROUTER_TOGGLE_MEDIA_REMOTING,
                                        IDS_MEDIA_ROUTER_TOGGLE_MEDIA_REMOTING);
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  if (!browser_->profile()->IsOffTheRecord() &&
-      browser_->profile()->GetPrefs()->GetBoolean(
+  if (browser_->profile()->GetPrefs()->GetBoolean(
           prefs::kUserFeedbackAllowed)) {
     menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-    menu_model->AddItemWithStringId(IDC_MEDIA_ROUTER_REPORT_ISSUE,
-                                    IDS_MEDIA_ROUTER_REPORT_ISSUE);
+    menu_model->AddItemWithStringId(
+        IDC_MEDIA_TOOLBAR_CONTEXT_REPORT_CAST_ISSUE,
+        IDS_MEDIA_TOOLBAR_CONTEXT_REPORT_CAST_ISSUE);
   }
 #endif
 
@@ -145,7 +145,7 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
       ShowSingletonTab(browser_, GURL(kCastLearnMorePageUrl));
       break;
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    case IDC_MEDIA_ROUTER_REPORT_ISSUE:
+    case IDC_MEDIA_TOOLBAR_CONTEXT_REPORT_CAST_ISSUE:
       ReportIssue();
       break;
 #endif

@@ -30,7 +30,7 @@
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
-#include "gpu/command_buffer/service/shared_image_backing_factory_gl_texture.h"
+#include "gpu/command_buffer/service/shared_image/gl_texture_image_backing_factory.h"
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/command_buffer/service/vertex_attrib_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -73,8 +73,9 @@ RasterDecoderTestBase::~RasterDecoderTestBase() = default;
 
 void RasterDecoderTestBase::OnConsoleMessage(int32_t id,
                                              const std::string& message) {}
-void RasterDecoderTestBase::CacheShader(const std::string& key,
-                                        const std::string& shader) {}
+void RasterDecoderTestBase::CacheBlob(gpu::GpuDiskCacheType type,
+                                      const std::string& key,
+                                      const std::string& blob) {}
 void RasterDecoderTestBase::OnFenceSyncRelease(uint64_t release) {}
 void RasterDecoderTestBase::OnDescheduleUntilFinished() {}
 void RasterDecoderTestBase::OnRescheduleAfterFinished() {}

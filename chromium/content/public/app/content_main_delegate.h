@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/main_function_params.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace variations {
@@ -29,32 +30,33 @@ class ZygoteForkDelegate;
 
 class CONTENT_EXPORT ContentMainDelegate {
  public:
+  // Indicates the delegate is being invoked in the browser process. The
+  // `kProcessType` switch will be empty.
+  struct InvokedInBrowserProcess {
+    // True if running in a test harness.
+    bool is_running_test = false;
+  };
+
+  // Indicates the delegate is being invoked in a child process. The
+  // `kProcessType` switch will hold the precise child process type.
+  struct InvokedInChildProcess {};
+
   // The context in which a delegate method is invoked, including the process
   // type and whether it is in a test harness. Can distinguish between
   // the browser process and child processes; for more fine-grained process
   // types check the `switches::kProcessType` command-line switch.
-  enum class InvokedIn {
-    // Delegate is being invoked in the browser process. The `kProcessType`
-    // switch will be empty.
-    kBrowserProcess,
-
-    // Delegate is being invoked in the browser process, from a test harness.
-    // The `kProcessType` switch will be empty.
-    kBrowserProcessUnderTest,
-
-    // Delegate is being invoked in a child process. The `kProcessType` switch
-    // will hold the precise child process type.
-    kChildProcess,
-  };
+  using InvokedIn =
+      absl::variant<InvokedInBrowserProcess, InvokedInChildProcess>;
 
   virtual ~ContentMainDelegate() = default;
 
   // Tells the embedder that the absolute basic startup has been done, i.e.
-  // it's now safe to create singletons and check the command line. Return true
-  // if the process should exit afterwards, and if so, |exit_code| should be
-  // set. This is the place for embedder to do the things that must happen at
-  // the start. Most of its startup code should be in the methods below.
-  virtual bool BasicStartupComplete(int* exit_code);
+  // it's now safe to create singletons and check the command line. Return an
+  // error code if the process should exit afterwards. This is the place for
+  // embedder to do the things that must happen at the start. Most of its
+  // startup code should be in the methods below, handling of early exit
+  // command-line switches can wait until PreBrowserMain at the latest.
+  virtual absl::optional<int> BasicStartupComplete();
 
   // This is where the embedder puts all of its startup code that needs to run
   // before the sandbox is engaged.
@@ -107,8 +109,10 @@ class CONTENT_EXPORT ContentMainDelegate {
 
   // Allows the embedder to perform platform-specific initialization before
   // BrowserMain() is invoked (i.e. before BrowserMainRunner, BrowserMainLoop,
-  // BrowserMainParts, etc. are created).
-  virtual void PreBrowserMain() {}
+  // BrowserMainParts, etc. are created). Return an error code if the process
+  // should exit afterwards. This is the place for embedder to do the things
+  // that can shortcut browser execution (i.e. command-line switches).
+  virtual absl::optional<int> PreBrowserMain();
 
   // Returns true if content should create field trials and initialize the
   // FeatureList instance for this process. Default implementation returns true.
@@ -135,8 +139,9 @@ class CONTENT_EXPORT ContentMainDelegate {
   // If ShouldCreateFeatureList() returns true for `invoked_in`, the
   // field trials and FeatureList have been initialized. Otherwise, the
   // implementation must initialize the field trials and FeatureList before
-  // returning from PostEarlyInitialization.
-  virtual void PostEarlyInitialization(InvokedIn invoked_in) {}
+  // returning from PostEarlyInitialization. Return an error code if the process
+  // should exit afterwards.
+  virtual absl::optional<int> PostEarlyInitialization(InvokedIn invoked_in);
 
 #if BUILDFLAG(IS_WIN)
   // Allows the embedder to indicate that console control events (e.g., Ctrl-C,

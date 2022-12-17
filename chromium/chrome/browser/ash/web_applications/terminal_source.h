@@ -41,11 +41,13 @@ class TerminalSource : public content::URLDataSource {
       const GURL& url,
       const content::WebContents::Getter& wc_getter,
       content::URLDataSource::GotDataCallback callback) override;
-  std::string GetMimeType(const std::string& path) override;
+  std::string GetMimeType(const GURL& url) override;
   bool ShouldServeMimeTypeAsContentTypeHeader() override;
   const ui::TemplateReplacements* GetReplacements() override;
   std::string GetContentSecurityPolicy(
       network::mojom::CSPDirectiveName directive) override;
+  std::string GetCrossOriginOpenerPolicy() override;
+  std::string GetCrossOriginEmbedderPolicy() override;
 
   Profile* profile_;
   std::string source_;

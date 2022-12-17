@@ -80,8 +80,14 @@ void UnacceleratedStaticBitmapImage::Draw(
     const gfx::RectF& src_rect,
     const ImageDrawOptions& draw_options) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto image = PaintImageForCurrentFrame();
+  if (image.may_be_lcp_candidate() != draw_options.may_be_lcp_candidate) {
+    image = PaintImageBuilder::WithCopy(std::move(image))
+                .set_may_be_lcp_candidate(draw_options.may_be_lcp_candidate)
+                .TakePaintImage();
+  }
   StaticBitmapImage::DrawHelper(canvas, flags, dst_rect, src_rect, draw_options,
-                                PaintImageForCurrentFrame());
+                                image);
 }
 
 PaintImage UnacceleratedStaticBitmapImage::PaintImageForCurrentFrame() {
@@ -92,7 +98,8 @@ void UnacceleratedStaticBitmapImage::Transfer() {
   DETACH_FROM_THREAD(thread_checker_);
 
   original_skia_image_ = paint_image_.GetSwSkImage();
-  original_skia_image_task_runner_ = Thread::Current()->GetTaskRunner();
+  original_skia_image_task_runner_ =
+      Thread::Current()->GetDeprecatedTaskRunner();
 }
 
 scoped_refptr<StaticBitmapImage>

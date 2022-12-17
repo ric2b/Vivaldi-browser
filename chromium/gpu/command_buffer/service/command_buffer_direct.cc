@@ -63,6 +63,11 @@ void CommandBufferDirect::DestroyTransferBuffer(int32_t id) {
   service_.DestroyTransferBuffer(id);
 }
 
+void CommandBufferDirect::ForceLostContext(error::ContextLostReason reason) {
+  service_.SetContextLostReason(reason);
+  service_.SetParseError(error::kLostContext);
+}
+
 CommandBufferServiceClient::CommandBatchProcessedResult
 CommandBufferDirect::OnCommandBatchProcessed() {
   return kContinueExecution;
@@ -73,8 +78,9 @@ void CommandBufferDirect::OnParseError() {}
 void CommandBufferDirect::OnConsoleMessage(int32_t id,
                                            const std::string& message) {}
 
-void CommandBufferDirect::CacheShader(const std::string& key,
-                                      const std::string& shader) {}
+void CommandBufferDirect::CacheBlob(gpu::GpuDiskCacheType type,
+                                    const std::string& key,
+                                    const std::string& blob) {}
 
 void CommandBufferDirect::OnFenceSyncRelease(uint64_t release) {
   NOTIMPLEMENTED();

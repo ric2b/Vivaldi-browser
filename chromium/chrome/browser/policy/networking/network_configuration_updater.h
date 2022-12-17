@@ -10,11 +10,12 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "chromeos/ash/components/network/policy_certificate_provider.h"
 #include "chromeos/components/onc/certificate_scope.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
-#include "chromeos/network/policy_certificate_provider.h"
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/common/policy_service.h"
 
@@ -33,7 +34,7 @@ class PolicyMap;
 // (that will be propagated to the network service). Provides entry points for
 // handling client certificates and network configurations in subclasses.
 // Does not handle proxy settings.
-class NetworkConfigurationUpdater : public chromeos::PolicyCertificateProvider,
+class NetworkConfigurationUpdater : public ash::PolicyCertificateProvider,
                                     public PolicyService::Observer {
  public:
   NetworkConfigurationUpdater(const NetworkConfigurationUpdater&) = delete;
@@ -50,11 +51,11 @@ class NetworkConfigurationUpdater : public chromeos::PolicyCertificateProvider,
 
   // The observer interface sends notifications about changes in server and
   // authority certificates.
-  // chromeos::PolicyCertificateProvider:
+  // ash::PolicyCertificateProvider:
   void AddPolicyProvidedCertsObserver(
-      chromeos::PolicyCertificateProvider::Observer* observer) override;
+      ash::PolicyCertificateProvider::Observer* observer) override;
   void RemovePolicyProvidedCertsObserver(
-      chromeos::PolicyCertificateProvider::Observer* observer) override;
+      ash::PolicyCertificateProvider::Observer* observer) override;
   net::CertificateList GetAllServerAndAuthorityCertificates(
       const chromeos::onc::CertificateScope& scope) const override;
   net::CertificateList GetAllAuthorityCertificates(
@@ -140,7 +141,7 @@ class NetworkConfigurationUpdater : public chromeos::PolicyCertificateProvider,
   PolicyChangeRegistrar policy_change_registrar_;
 
   // Used to retrieve the policies.
-  PolicyService* policy_service_;
+  raw_ptr<PolicyService> policy_service_;
 
   // Holds certificates from the last parsed ONC policy.
   std::unique_ptr<chromeos::onc::OncParsedCertificates> certs_;
@@ -148,8 +149,8 @@ class NetworkConfigurationUpdater : public chromeos::PolicyCertificateProvider,
 
   // Observer list for notifying about ONC-provided server and CA certificate
   // changes.
-  base::ObserverList<chromeos::PolicyCertificateProvider::Observer,
-                     true>::Unchecked observer_list_;
+  base::ObserverList<ash::PolicyCertificateProvider::Observer, true>::Unchecked
+      observer_list_;
 };
 
 }  // namespace policy

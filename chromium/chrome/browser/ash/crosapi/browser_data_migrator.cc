@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/callback_helpers.h"
@@ -25,7 +24,8 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/common/chrome_paths.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -82,10 +82,10 @@ bool BrowserDataMigratorImpl::MaybeForceResumeMoveMigration(
     const AccountId& account_id,
     const std::string& user_id_hash,
     crosapi::browser_util::PolicyInitState policy_init_state) {
-  LOG(WARNING) << "MaybeForceResumeMoveMigration() is called.";
   if (!MoveMigrator::ResumeRequired(local_state, user_id_hash))
     return false;
 
+  LOG(WARNING) << "Calling RestartToMigrate() to resume move migration.";
   return RestartToMigrate(account_id, user_id_hash, local_state,
                           policy_init_state);
 }
@@ -166,10 +166,6 @@ bool BrowserDataMigratorImpl::MaybeRestartToMigrateInternal(
     const AccountId& account_id,
     const std::string& user_id_hash,
     crosapi::browser_util::PolicyInitState policy_init_state) {
-  // TODO(crbug.com/1277848): Once `BrowserDataMigrator` stabilises, remove this
-  // log message.
-  LOG(WARNING) << "MaybeRestartToMigrateInternal() is called.";
-
   auto* user_manager = user_manager::UserManager::Get();
   auto* local_state = user_manager->GetLocalState();
 
@@ -287,7 +283,7 @@ bool BrowserDataMigratorImpl::MaybeRestartToMigrateInternal(
   int attempts = GetMigrationAttemptCountForUser(local_state, user_id_hash);
   // TODO(crbug.com/1178702): Once BrowserDataMigrator stabilises, reduce the
   // log level to VLOG(1).
-  LOG(WARNING) << "Attempt #" << attempts;
+  LOG_IF(WARNING, attempts > 0) << "Attempt #" << attempts;
   if (attempts >= kMaxMigrationAttemptCount) {
     // TODO(crbug.com/1277848): Once `BrowserDataMigrator` stabilises, remove
     // this log message.
@@ -504,8 +500,8 @@ void BrowserDataMigratorImpl::UpdateMigrationAttemptCountForUser(
 int BrowserDataMigratorImpl::GetMigrationAttemptCountForUser(
     PrefService* local_state,
     const std::string& user_id_hash) {
-  return local_state->GetDictionary(kMigrationAttemptCountPref)
-      ->FindIntPath(user_id_hash)
+  return local_state->GetValueDict(kMigrationAttemptCountPref)
+      .FindInt(user_id_hash)
       .value_or(0);
 }
 

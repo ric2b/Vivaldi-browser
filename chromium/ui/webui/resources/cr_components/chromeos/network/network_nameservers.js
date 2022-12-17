@@ -13,7 +13,7 @@
 const NameserversType = {
   AUTOMATIC: 'automatic',
   CUSTOM: 'custom',
-  GOOGLE: 'google'
+  GOOGLE: 'google',
 };
 
 Polymer({
@@ -69,14 +69,14 @@ Polymer({
       value() {
         return this.i18nAdvanced(
             'networkNameserversGoogle', {substitutions: [], tags: ['a']});
-      }
+      },
     },
 
     /** @private */
     canChangeConfigType_: {
       type: Boolean,
       computed: 'computeCanChangeConfigType_(managedProperties)',
-    }
+    },
   },
 
   /** @const */
@@ -107,10 +107,10 @@ Polymer({
 
   /*
    * Returns the nameserver type CrRadioGroupElement.
-   * @return {?CrRadioGroupElement}
+   * @return {?HTMLElement}
    */
   getNameserverRadioButtons() {
-    return /** @type {?CrRadioGroupElement} */ (this.$$('#nameserverType'));
+    return /** @type {?HTMLElement} */ (this.$$('#nameserverType'));
   },
 
   /**

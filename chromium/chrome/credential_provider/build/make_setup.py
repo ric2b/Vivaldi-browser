@@ -58,8 +58,12 @@ def GetLZMAExec(src_path):
   Returns:
     The executable command to run the 7zip compressor.
   """
-  return (os.path.join(src_path, r'third_party\lzma_sdk\7zr.exe')
-          if sys.platform == 'win32' else '7zr')
+  executable = '7zr'
+  if sys.platform == 'win32':
+    executable += '.exe'
+
+  return os.path.join(src_path,  'third_party', 'lzma_sdk', 'bin',
+                      'host_platform', executable)
 
 def GetCmdLine(command, sz_fn, gcp_7z_fn):
   """Builds the command line for the given archive.

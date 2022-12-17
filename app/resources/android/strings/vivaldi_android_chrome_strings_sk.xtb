@@ -21,9 +21,11 @@
 <translation id="3377025655491224618">Súkromný list</translation>
 <translation id="3504699618187058974">Zoskupené listy</translation>
 <translation id="3518985090088779359">Prijať a pokračovať</translation>
+<translation id="3571177741182643350">Neprečítané články - dostupné offline:</translation>
 <translation id="3700829948786686853">Vitajte v prehliadači Vivaldi</translation>
 <translation id="3719826155360621982">Domovská stránka</translation>
 <translation id="385051799172605136">Späť</translation>
+<translation id="399014816462153200">Prečítané články:</translation>
 <translation id="4121750346708795461">Používaním tejto aplikácie vyjadrujete súhlas so <ph name="BEGIN_LINK1" />zmluvnými podmienkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />oznámením o ochrane súkromia<ph name="END_LINK2" /> prehliadača Vivaldi.</translation>
 <translation id="4137746084635924146">Aktuálny jazyk zariadenia</translation>
 <translation id="4167670741834902166">Nový súkromný list</translation>
@@ -33,23 +35,21 @@
 <translation id="4883379392681899581">Opustiť súkromný režim</translation>
 <translation id="4943872375798546930">Žiadne výsledky</translation>
 <translation id="49576331685473090">Blokovanie obsahu</translation>
+<translation id="5079259810715830221">Keď Google požiada o súkromné prednačítanie odkazov na ich stránke, Vivaldi zašifruje a prednačíta stránky pomocou Google serverov bez cookies. Tým je vaša identita skrytá pred prednačítanou stránkou.</translation>
 <translation id="5118676864324397542">Úložisko aplikácie <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Súkromné</translation>
 <translation id="5233638681132016545">Nový list</translation>
 <translation id="572328651809341494">Nedávne listy</translation>
-<translation id="5840488417521835756">Získajte informácie o témach na weboch bez toho, aby ste museli opustiť stránku. Vyhľadávanie klepnutím odošle slovo a súvisiaci kontext do Vyhľadávania Vivaldi, ktoré vráti definície, obrázky, výsledky vyhľadávania a ďalšie podrobnosti.
-
-Ak chcete upraviť hľadaný výraz, vyberte ho dlhým stlačením. Ak chcete vyhľadávanie spresniť, posuňte panel úplne hore a klepnite na vyhľadávacie pole.</translation>
 <translation id="6150320133806434356">Záložka uložená</translation>
 <translation id="6336451774241870485">Nový súkromný list</translation>
 <translation id="6585139692466700358">Ponúka možnosť prekladu stránok do iných jazykov s použitím prekladateľskej služby Vivaldi</translation>
 <translation id="6593061639179217415">Stránka pre počítače</translation>
 <translation id="6610147964972079463">Zatvoriť súkromné listy</translation>
+<translation id="7029995644714925509">Keď web požiada o súkromné prednačítanie odkazov na ich stránke, Vivaldi zašifruje a prednačíta stránky pomocou Google serverov bez cookies. Tým je vaša identita skrytá pred prednačítanou stránkou.</translation>
 <translation id="706339621163631076">Zaobchádzanie so súkromím</translation>
 <translation id="732145680195464316">Záložka uložená v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O aplikácií Vivaldi</translation>
 <translation id="7465104139234185284">Zatvoriť všetky súkromné listy</translation>
-<translation id="7519434535192513364">Vyhľadávanie klepnutím odošle vybraté slovo a súčasnú stránku ako kontext do Vyhľadávania Vivaldi. Môžete ho vypnúť v <ph name="BEGIN_LINK" />Nastaveniach<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Zmluvné podmienky prehliadača Vivaldi</translation>
 <translation id="85991616550051997">Prejsť na domovskú stránku</translation>
 <translation id="8820817407110198400">Záložky</translation>

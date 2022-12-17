@@ -17,7 +17,6 @@ namespace ash {
 
 namespace {
 
-constexpr int kButtonMargin = 2;
 constexpr int kButtonSpacing = 4;
 constexpr int kCornerRadius = 20;
 
@@ -34,12 +33,10 @@ DeskActionView::DeskActionView(
           std::make_unique<CloseButton>(std::move(close_all_callback),
                                         CloseButton::Type::kMediumFloating))) {
   SetOrientation(views::BoxLayout::Orientation::kHorizontal);
-  SetInsideBorderInsets(gfx::Insets(kButtonMargin));
   SetBetweenChildSpacing(kButtonSpacing);
-  SetBackground(views::CreateRoundedRectBackground(
-      AshColorProvider::Get()->GetBaseLayerColor(
-          AshColorProvider::BaseLayerType::kTransparent80),
-      kCornerRadius));
+  SetBackground(
+      views::CreateSolidBackground(AshColorProvider::Get()->GetBaseLayerColor(
+          AshColorProvider::BaseLayerType::kTransparent80)));
 
   close_all_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_DESKS_CLOSE_ALL_DESCRIPTION));
@@ -48,6 +45,9 @@ DeskActionView::DeskActionView(
 
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
+  layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
+  layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(kCornerRadius));
+  layer()->SetMasksToBounds(true);
 }
 
 void DeskActionView::UpdateCombineDesksTooltip(
@@ -57,6 +57,9 @@ void DeskActionView::UpdateCombineDesksTooltip(
 }
 
 void DeskActionView::SetCombineDesksButtonVisibility(bool visible) {
+  if (combine_desks_button_->GetVisible() == visible)
+    return;
+
   combine_desks_button_->SetVisible(visible);
 
   // When `combine_desks_button_` is invisible, we want to make sure that there
@@ -64,6 +67,13 @@ void DeskActionView::SetCombineDesksButtonVisibility(bool visible) {
   // `close_all_button_`. Otherwise, the desk action view will appear lopsided
   // when the `combine_desks_button_` isn't visible.
   SetBetweenChildSpacing(visible ? kButtonSpacing : 0);
+}
+
+void DeskActionView::OnThemeChanged() {
+  views::BoxLayoutView::OnThemeChanged();
+  background()->SetNativeControlColor(
+      AshColorProvider::Get()->GetBaseLayerColor(
+          AshColorProvider::BaseLayerType::kTransparent80));
 }
 
 BEGIN_METADATA(DeskActionView, views::BoxLayoutView)

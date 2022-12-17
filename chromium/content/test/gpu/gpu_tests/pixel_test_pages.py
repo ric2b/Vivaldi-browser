@@ -9,7 +9,9 @@ from __future__ import print_function
 
 import datetime
 import os
-import typing
+from typing import Dict, List, Optional
+
+from datetime import date
 
 from enum import Enum
 
@@ -39,7 +41,14 @@ VERY_PERMISSIVE_SOBEL_ALGO = algo.SobelMatchingAlgorithm(
     edge_threshold=0,
     ignored_border_thickness=1)
 
-BrowserArgType = typing.List[str]
+# The optimizer script spat out pretty similar values for most MP4 tests, so
+# combine into a single set of parameters.
+GENERAL_MP4_ALGO = algo.SobelMatchingAlgorithm(max_different_pixels=56300,
+                                               pixel_delta_threshold=35,
+                                               edge_threshold=80,
+                                               ignored_border_thickness=1)
+
+BrowserArgType = List[str]
 
 
 class PixelTestPage():
@@ -51,17 +60,16 @@ class PixelTestPage():
       self,
       url: str,
       name: str,
-      test_rect: typing.List[int],
-      browser_args: typing.Optional[BrowserArgType] = None,
+      test_rect: List[int],
+      browser_args: Optional[BrowserArgType] = None,
       gpu_process_disabled: bool = False,
-      optional_action: typing.Optional[str] = None,
+      optional_action: Optional[str] = None,
       restart_browser_after_test: bool = False,
-      other_args: typing.Optional[dict] = None,
-      grace_period_end: typing.Optional[datetime.date] = None,
-      expected_per_process_crashes: typing.Optional[
-          typing.Dict[str, int]] = None,
-      matching_algorithm: typing.Optional[algo.SkiaGoldMatchingAlgorithm] = None
-  ):
+      other_args: Optional[dict] = None,
+      grace_period_end: Optional[datetime.date] = None,
+      expected_per_process_crashes: Optional[Dict[str, int]] = None,
+      matching_algorithm: Optional[algo.SkiaGoldMatchingAlgorithm] = None,
+      timeout: int = 300):
     super().__init__()
     self.url = url
     self.name = name
@@ -101,6 +109,8 @@ class PixelTestPage():
     # which matching algorithm Skia Gold should use for the test.
     self.matching_algorithm = (matching_algorithm
                                or algo.ExactMatchingAlgorithm())
+    # Test timeout
+    self.timeout = timeout
 
   # Strings used for the return type since at this point PixelTestPage is
   # technically a forward reference. Python type hinting specifically supports
@@ -118,26 +128,24 @@ class PixelTestPage():
                          self.test_rect, browser_args)
 
 
-def CopyPagesWithNewBrowserArgsAndSuffix(pages: typing.List[PixelTestPage],
+def CopyPagesWithNewBrowserArgsAndSuffix(pages: List[PixelTestPage],
                                          browser_args: BrowserArgType,
-                                         suffix: str
-                                         ) -> typing.List[PixelTestPage]:
+                                         suffix: str) -> List[PixelTestPage]:
   return [
       p.CopyWithNewBrowserArgsAndSuffix(browser_args, suffix) for p in pages
   ]
 
 
-def CopyPagesWithNewBrowserArgsAndPrefix(pages: typing.List[PixelTestPage],
+def CopyPagesWithNewBrowserArgsAndPrefix(pages: List[PixelTestPage],
                                          browser_args: BrowserArgType,
-                                         prefix: str
-                                         ) -> typing.List[PixelTestPage]:
+                                         prefix: str) -> List[PixelTestPage]:
   return [
       p.CopyWithNewBrowserArgsAndPrefix(browser_args, prefix) for p in pages
   ]
 
 
 def GetMediaStreamTestBrowserArgs(media_stream_source_relpath: str
-                                  ) -> typing.List[str]:
+                                  ) -> List[str]:
   return [
       '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
       '--use-file-for-fake-video-capture=' +
@@ -147,16 +155,9 @@ def GetMediaStreamTestBrowserArgs(media_stream_source_relpath: str
 
 class PixelTestPages():
   @staticmethod
-  def DefaultPages(base_name: str) -> typing.List[PixelTestPage]:
+  def DefaultPages(base_name: str) -> List[PixelTestPage]:
     sw_compositing_args = [cba.DISABLE_GPU_COMPOSITING]
     browser_args_DXVA = [cba.DISABLE_FEATURES_D3D11_VIDEO_DECODER]
-
-    # The optimizer script spat out pretty similar values for most MP4 tests, so
-    # combine into a single set of parameters.
-    general_mp4_algo = algo.SobelMatchingAlgorithm(max_different_pixels=56300,
-                                                   pixel_delta_threshold=35,
-                                                   edge_threshold=80,
-                                                   ignored_border_thickness=1)
 
     return [
         PixelTestPage('pixel_background_image.html',
@@ -196,10 +197,15 @@ class PixelTestPages():
                       base_name +
                       '_WebGLTransparentGreenTriangle_NoAlpha_ImplicitClear',
                       test_rect=[0, 0, 300, 300]),
-        PixelTestPage('pixel_webgl_sad_canvas.html',
-                      base_name + '_WebGLSadCanvas',
+        PixelTestPage('pixel_webgl_context_restored.html',
+                      base_name + '_WebGLContextRestored',
                       test_rect=[0, 0, 300, 300],
                       optional_action='CrashGpuProcess'),
+        PixelTestPage(
+            'pixel_webgl_sad_canvas.html',
+            base_name + '_WebGLSadCanvas',
+            test_rect=[0, 0, 300, 300],
+            optional_action='CrashGpuProcessTwiceWaitForContextRestored'),
         PixelTestPage('pixel_scissor.html',
                       base_name + '_ScissorTestWithPreserveDrawingBuffer',
                       test_rect=[0, 0, 300, 300]),
@@ -216,7 +222,7 @@ class PixelTestPages():
             # Most images are actually very similar, but Pixel 2
             # tends to produce images with all colors shifted by a
             # small amount.
-            matching_algorithm=general_mp4_algo),
+            matching_algorithm=GENERAL_MP4_ALGO),
         # Surprisingly stable, does not appear to require inexact matching.
         PixelTestPage('pixel_video_mp4.html?width=240&height=135&use_timer=1',
                       base_name + '_Video_MP4_DXVA',
@@ -237,19 +243,19 @@ class PixelTestPages():
             '?width=270&height=240&use_timer=1',
             base_name + '_Video_MP4_FourColors_Rot_90',
             test_rect=[0, 0, 270, 240],
-            matching_algorithm=general_mp4_algo),
+            matching_algorithm=GENERAL_MP4_ALGO),
         PixelTestPage(
             'pixel_video_mp4_four_colors_rot_180.html'
             '?width=240&height=135&use_timer=1',
             base_name + '_Video_MP4_FourColors_Rot_180',
             test_rect=[0, 0, 240, 135],
-            matching_algorithm=general_mp4_algo),
+            matching_algorithm=GENERAL_MP4_ALGO),
         PixelTestPage(
             'pixel_video_mp4_four_colors_rot_270.htm'
             'l?width=270&height=240&use_timer=1',
             base_name + '_Video_MP4_FourColors_Rot_270',
             test_rect=[0, 0, 270, 240],
-            matching_algorithm=general_mp4_algo),
+            matching_algorithm=GENERAL_MP4_ALGO),
         PixelTestPage(
             'pixel_video_mp4_rounded_corner.html'
             '?width=240&height=135&use_timer=1',
@@ -372,6 +378,11 @@ class PixelTestPages():
                       base_name + '_WebGLPreservedAfterTabSwitch',
                       test_rect=[0, 0, 300, 300],
                       optional_action='SwitchTabsAndCopyImage'),
+        PixelTestPage('pixel_svg_huge.html',
+                      base_name + '_SVGHuge',
+                      test_rect=[0, 0, 400, 400],
+                      optional_action='ScrollOutAndBack',
+                      grace_period_end=date(2022, 8, 29)),
     ]
 
   @staticmethod
@@ -489,10 +500,63 @@ class PixelTestPages():
             webgpu_pages_helper(base_name, mode=Mode.WEBGPU_SWIFTSHADER) +
             webgpu_pages_helper(base_name, mode=Mode.VULKAN_SWIFTSHADER))
 
+  @staticmethod
+  def WebGPUCanvasCapturePages(base_name):
+    webgpu_args = [
+        cba.ENABLE_UNSAFE_WEBGPU, cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES
+    ]
+
+    browser_args_canvas_one_copy_capture = webgpu_args + [
+        '--enable-features=OneCopyCanvasCapture'
+    ]
+    other_args_canvas_one_copy_capture = {'one_copy': True}
+
+    browser_args_canvas_disable_one_copy_capture = webgpu_args + [
+        '--disable-features=OneCopyCanvasCapture'
+    ]
+    other_args_canvas_accelerated_two_copy = {
+        'one_copy': False,
+        'accelerated_two_copy': True
+    }
+    other_args_canvas_cpu_two_copy = {
+        'one_copy': False,
+        'accelerated_two_copy': False
+    }
+
+    # Setting grace_period_end to monitor the affects on bots for 2 weeks
+    # without making the bots red unexpectedly.
+    return [
+        # Enabled OneCopyCapture
+        PixelTestPage('pixel_webgpu_canvas_capture_to_video.html',
+                      base_name + '_WebGPUCanvasOneCopyCapture',
+                      test_rect=[0, 0, 400, 200],
+                      matching_algorithm=GENERAL_MP4_ALGO,
+                      browser_args=browser_args_canvas_one_copy_capture,
+                      other_args=other_args_canvas_one_copy_capture),
+        # Disabled OneCopyCapture + canvas is opaque
+        PixelTestPage(
+            'pixel_webgpu_canvas_capture_to_video.html?has_alpha=false',
+            base_name + '_WebGPUCanvasDisableOneCopyCapture_Accelerated',
+            test_rect=[0, 0, 400, 200],
+            matching_algorithm=GENERAL_MP4_ALGO,
+            browser_args=browser_args_canvas_disable_one_copy_capture,
+            other_args=other_args_canvas_accelerated_two_copy,
+            grace_period_end=date(2022, 8, 30)),
+        # Disabled OneCopyCapture + canvas has alpha
+        PixelTestPage(
+            'pixel_webgpu_canvas_capture_to_video.html?has_alpha=true',
+            base_name + '_WebGPUCanvasDisableOneCopyCapture_CpuReadback',
+            test_rect=[0, 0, 400, 200],
+            matching_algorithm=GENERAL_MP4_ALGO,
+            browser_args=browser_args_canvas_disable_one_copy_capture,
+            other_args=other_args_canvas_cpu_two_copy,
+            grace_period_end=date(2022, 8, 30)),
+    ]
+
 
   # Pages that should be run with GPU rasterization enabled.
   @staticmethod
-  def GpuRasterizationPages(base_name: str) -> typing.List[PixelTestPage]:
+  def GpuRasterizationPages(base_name: str) -> List[PixelTestPage]:
     browser_args = [
         cba.ENABLE_GPU_RASTERIZATION,
         cba.DISABLE_SOFTWARE_COMPOSITING_FALLBACK,
@@ -518,7 +582,7 @@ class PixelTestPages():
 
   # Pages that should be run with off-thread paint worklet flags.
   @staticmethod
-  def PaintWorkletPages(base_name: str) -> typing.List[PixelTestPage]:
+  def PaintWorkletPages(base_name: str) -> List[PixelTestPage]:
     browser_args = [
         '--enable-blink-features=OffMainThreadCSSPaint',
         '--enable-gpu-rasterization'
@@ -534,8 +598,7 @@ class PixelTestPages():
 
   # Pages that should be run with experimental canvas features.
   @staticmethod
-  def ExperimentalCanvasFeaturesPages(base_name: str
-                                      ) -> typing.List[PixelTestPage]:
+  def ExperimentalCanvasFeaturesPages(base_name: str) -> List[PixelTestPage]:
     browser_args = [
         cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
     ]
@@ -640,7 +703,7 @@ class PixelTestPages():
     ]
 
   @staticmethod
-  def LowLatencyPages(base_name: str) -> typing.List[PixelTestPage]:
+  def LowLatencyPages(base_name: str) -> List[PixelTestPage]:
     unaccelerated_args = [
         cba.DISABLE_ACCELERATED_2D_CANVAS,
         cba.DISABLE_GPU_COMPOSITING,
@@ -680,7 +743,7 @@ class PixelTestPages():
   # Only add these tests on platforms where SwiftShader is enabled.
   # Currently this is Windows and Linux.
   @staticmethod
-  def SwiftShaderPages(base_name: str) -> typing.List[PixelTestPage]:
+  def SwiftShaderPages(base_name: str) -> List[PixelTestPage]:
     browser_args = [cba.DISABLE_GPU]
     suffix = '_SwiftShader'
     return [
@@ -704,7 +767,7 @@ class PixelTestPages():
 
   # Test rendering where GPU process is blocked.
   @staticmethod
-  def NoGpuProcessPages(base_name: str) -> typing.List[PixelTestPage]:
+  def NoGpuProcessPages(base_name: str) -> List[PixelTestPage]:
     browser_args = [cba.DISABLE_GPU, cba.DISABLE_SOFTWARE_RASTERIZER]
     suffix = '_NoGpuProcess'
     return [
@@ -725,7 +788,7 @@ class PixelTestPages():
   # Pages that should be run with various macOS specific command line
   # arguments.
   @staticmethod
-  def MacSpecificPages(base_name: str) -> typing.List[PixelTestPage]:
+  def MacSpecificPages(base_name: str) -> List[PixelTestPage]:
     unaccelerated_2d_canvas_args = [cba.DISABLE_ACCELERATED_2D_CANVAS]
 
     non_chromium_image_args = ['--disable-webgl-image-chromium']
@@ -851,7 +914,7 @@ class PixelTestPages():
   # Pages that should be run only on dual-GPU MacBook Pros (at the
   # present time, anyway).
   @staticmethod
-  def DualGPUMacSpecificPages(base_name: str) -> typing.List[PixelTestPage]:
+  def DualGPUMacSpecificPages(base_name: str) -> List[PixelTestPage]:
     return [
         PixelTestPage('pixel_webgl_high_to_low_power.html',
                       base_name + '_WebGLHighToLowPower',
@@ -878,7 +941,7 @@ class PixelTestPages():
     ]
 
   @staticmethod
-  def DirectCompositionPages(base_name: str) -> typing.List[PixelTestPage]:
+  def DirectCompositionPages(base_name: str) -> List[PixelTestPage]:
     browser_args = [
         cba.ENABLE_DIRECT_COMPOSITION_VIDEO_OVERLAYS,
         # All bots are connected with a power source, however, we want to to
@@ -1088,7 +1151,110 @@ class PixelTestPages():
     ]
 
   @staticmethod
-  def HdrTestPages(base_name: str) -> typing.List[PixelTestPage]:
+  def MediaRecorderFromCanvasPages(base_name: str) -> List[PixelTestPage]:
+    # Full cycle capture-encode-decode test for MediaRecorder capturing canvas.
+    # This test has its own basic logic for validating MediaRecorder's output,
+    # it prevents false negatives, but also makes sure that color channels
+    # are not switched and frames are not black.
+    return [
+        PixelTestPage('pixel_media_recorder_from_canvas_2d.html',
+                      base_name + '_MediaRecorderFrom2DCanvas',
+                      test_rect=[0, 0, 256, 256],
+                      browser_args=[],
+                      matching_algorithm=VERY_PERMISSIVE_SOBEL_ALGO,
+                      grace_period_end=date(2022, 10, 20))
+    ]
+
+  @staticmethod
+  def VideoFromCanvasPages(base_name: str) -> List[PixelTestPage]:
+    # Tests for <video> element rendering results of <canvas> capture.
+    # It's important for video conference software.
+
+    # All these tests contain 4 or 8 solid colored rectangles
+    # around 50x100 pixels, this should account for possible antialiasing and
+    # color cenversion during RGB<->YUV conversions.
+    match_algo = algo.SobelMatchingAlgorithm(max_different_pixels=11000,
+                                             pixel_delta_threshold=50,
+                                             edge_threshold=30,
+                                             ignored_border_thickness=1)
+
+    # Use shorter timeout since the tests are not supposed to be long.
+    timeout = 150
+
+    return [
+        PixelTestPage('pixel_video_from_canvas_2d.html',
+                      base_name + '_VideoStreamFrom2DCanvas',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=[],
+                      matching_algorithm=match_algo,
+                      timeout=timeout),
+        PixelTestPage('pixel_video_from_canvas_2d_alpha.html',
+                      base_name + '_VideoStreamFrom2DAlphaCanvas',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=[],
+                      matching_algorithm=match_algo,
+                      timeout=timeout),
+        PixelTestPage('pixel_video_from_canvas_webgl2_alpha.html',
+                      base_name + '_VideoStreamFromWebGLAlphaCanvas',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=[],
+                      matching_algorithm=match_algo,
+                      timeout=timeout),
+        PixelTestPage('pixel_video_from_canvas_webgl2.html',
+                      base_name + '_VideoStreamFromWebGLCanvas',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=[],
+                      matching_algorithm=match_algo,
+                      timeout=timeout),
+
+        # Safeguard against repeating crbug.com/1337101
+        PixelTestPage(
+            'pixel_video_from_canvas_2d_alpha.html',
+            base_name + '_VideoStreamFrom2DAlphaCanvas_DisableOOPRaster',
+            test_rect=[0, 0, 200, 200],
+            browser_args=['--disable-features=CanvasOopRasterization'],
+            matching_algorithm=match_algo,
+            timeout=timeout),
+
+        # Test OneCopyCanvasCapture
+        PixelTestPage('pixel_video_from_canvas_webgl2.html',
+                      base_name + '_VideoStreamFromWebGLCanvas_OneCopy',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=['--enable-features=OneCopyCanvasCapture'],
+                      other_args={'one_copy': True},
+                      matching_algorithm=match_algo,
+                      grace_period_end=date(2022, 8, 30),
+                      timeout=timeout),
+        # TwoCopyCanvasCapture
+        PixelTestPage('pixel_video_from_canvas_webgl2.html',
+                      base_name +
+                      '_VideoStreamFromWebGLCanvas_TwoCopy_Accelerated',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=['--disable-features=OneCopyCanvasCapture'],
+                      other_args={
+                          'one_copy': False,
+                          'accelerated_two_copy': True
+                      },
+                      matching_algorithm=match_algo,
+                      grace_period_end=date(2022, 8, 30),
+                      timeout=timeout),
+        # Having alpha channel would disable TwoCopy's accelerated path
+        PixelTestPage('pixel_video_from_canvas_webgl2_alpha.html',
+                      base_name +
+                      '_VideoStreamFromWebGLAlphaCanvas_TwoCopy_CpuReadback',
+                      test_rect=[0, 0, 200, 200],
+                      browser_args=['--disable-features=OneCopyCanvasCapture'],
+                      other_args={
+                          'one_copy': False,
+                          'accelerated_two_copy': False
+                      },
+                      matching_algorithm=match_algo,
+                      grace_period_end=date(2022, 8, 30),
+                      timeout=timeout),
+    ]
+
+  @staticmethod
+  def HdrTestPages(base_name: str) -> List[PixelTestPage]:
     return [
         PixelTestPage(
             'pixel_canvas2d.html',
@@ -1103,18 +1269,33 @@ class PixelTestPages():
     ]
 
   @staticmethod
-  def ForceFullDamagePages(base_name: str) -> typing.List[PixelTestPage]:
+  def RootSwapChainPages(base_name: str) -> List[PixelTestPage]:
     return [
         PixelTestPage(
             'wait_for_compositing.html',
             base_name + '_ForceFullDamage',
             test_rect=[0, 0, 0, 0],
-            other_args={'full_damage': True},
+            other_args={
+                'has_alpha': False,
+                'full_damage': True
+            },
             browser_args=[cba.ENABLE_DIRECT_COMPOSITION_FORCE_FULL_DAMAGE]),
         PixelTestPage(
             'wait_for_compositing.html',
             base_name + '_ForcePartialDamage',
             test_rect=[0, 0, 0, 0],
-            other_args={'full_damage': False},
+            other_args={
+                'has_alpha': False,
+                'full_damage': False
+            },
             browser_args=[cba.DISABLE_DIRECT_COMPOSITION_FORCE_FULL_DAMAGE]),
+    ]
+
+  # This should only be used with the cast_streaming suite.
+  @staticmethod
+  def CastStreamingReceiverPages(base_name):
+    return [
+        PixelTestPage('receiver.html',
+                      base_name + '_VP8_1Frame',
+                      test_rect=[0, 0, 0, 0]),
     ]

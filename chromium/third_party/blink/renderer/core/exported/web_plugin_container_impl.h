@@ -137,7 +137,9 @@ class CORE_EXPORT WebPluginContainerImpl final
   void ReportFindInPageMatchCount(int identifier,
                                   int total,
                                   bool final_update) override;
-  void ReportFindInPageSelection(int identifier, int index) override;
+  void ReportFindInPageSelection(int identifier,
+                                 int index,
+                                 bool final_update) override;
   float PageScaleFactor() override;
   float PageZoomFactor() override;
   void SetCcLayer(cc::Layer*) override;
@@ -231,9 +233,9 @@ class CORE_EXPORT WebPluginContainerImpl final
   Member<HTMLPlugInElement> element_;
   Member<MouseLockLostListener> mouse_lock_lost_listener_;
   WebPlugin* web_plugin_;
-  cc::Layer* layer_;
-  TouchEventRequestType touch_event_request_type_;
-  bool wants_wheel_events_;
+  cc::Layer* layer_ = nullptr;
+  TouchEventRequestType touch_event_request_type_ = kTouchEventRequestTypeNone;
+  bool wants_wheel_events_ = false;
 };
 
 template <>

@@ -13,6 +13,12 @@
 // Style screens.
 @interface PromoStyleViewController : UIViewController <UITextViewDelegate>
 
+- (instancetype)initWithNibName:(NSString*)nibNameOrNil
+                         bundle:(NSBundle*)nibBundleOrNil
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
+
 // The name of the banner image. Must be set before the view is loaded.
 @property(nonatomic, strong) NSString* bannerName;
 
@@ -20,12 +26,27 @@
 // NO, the banner will be of normal height (25% of view height). Defaults to NO.
 @property(nonatomic, assign) BOOL isTallBanner;
 
+// When set to NO, the top of the banner will be constrained to the top of the
+// view and its height will be 25% or 35% of the view height depending on the
+// value of `isTallBanner`. When set to YES, the banner will be constrained so
+// as to fill the top space (horizontally and vertically) while preserving
+// aspect ratio and constraining the bottom of the image so as to ensure 25% or
+// 35% of the top space of the view is covered. Defaults to NO.
+@property(nonatomic, assign) BOOL shouldBannerFillTopSpace;
+
+// When set to YES, the banner is hidden. Defaults to NO.
+@property(nonatomic, assign) BOOL shouldHideBanner;
+
 // The label of the headline below the image. Must be set before the view is
 // loaded. This is declared public so the accessibility can be enabled.
 @property(nonatomic, strong) UILabel* titleLabel;
 
 // The headline below the image. Must be set before the view is loaded.
 @property(nonatomic, copy) NSString* titleText;
+
+// The margin on leading and trailing ends of the title label.
+// Must be set before the view is loaded. Defaults to `kTitleHorizontalMargin`.
+@property(nonatomic, assign) CGFloat titleHorizontalMargin;
 
 // The subtitle below the title. Must be set before the view is loaded.
 @property(nonatomic, copy) NSString* subtitleText;

@@ -1,5 +1,5 @@
 import("//vivaldi/gn/config/version.gni")
-import("//build/util/version.gni")
+import("//chrome/version.gni")
 import("//extensions/buildflags/buildflags.gni")
 
 static_library("browser") {
@@ -80,6 +80,8 @@ static_library("browser") {
     "stats_reporter.h",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
+    "../components/ping_block/ping_block.cc",
+    "../components/ping_block/ping_block.h",
     "translate/vivaldi_translate_language_list.cc",
     "translate/vivaldi_translate_language_list.h",
     "translate/vivaldi_translate_server_request.cc",

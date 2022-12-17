@@ -22,7 +22,7 @@ class NewTabPageBrowserTest extends PolymerTest {
 var NewTabPageAppTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/app_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/app_test.js';
   }
 };
 
@@ -54,10 +54,14 @@ TEST_F('NewTabPageAppTest', 'CustomizeUrl', function() {
   runMochaSuite('NewTabPageAppTest customize URL');
 });
 
+TEST_F('NewTabPageAppTest', 'CustomizeChromeSidePanel', function() {
+  runMochaSuite('NewTabPageAppTest customize chrome side panel');
+});
+
 var NewTabPageCustomizeDialogTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_dialog_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_dialog_test.js';
   }
 };
 
@@ -68,7 +72,7 @@ TEST_F('NewTabPageCustomizeDialogTest', 'All', function() {
 var NewTabPageUtilsTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/utils_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/utils_test.js';
   }
 };
 
@@ -79,7 +83,7 @@ TEST_F('NewTabPageUtilsTest', 'All', function() {
 var NewTabPageMetricsUtilsTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/metrics_utils_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/metrics_utils_test.js';
   }
 };
 
@@ -90,7 +94,7 @@ TEST_F('NewTabPageMetricsUtilsTest', 'All', function() {
 var NewTabPageCustomizeShortcutsTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_shortcuts_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_shortcuts_test.js';
   }
 };
 
@@ -101,7 +105,7 @@ TEST_F('NewTabPageCustomizeShortcutsTest', 'All', function() {
 var NewTabPageCustomizeModulesTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_modules_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_modules_test.js';
   }
 };
 
@@ -112,7 +116,7 @@ TEST_F('NewTabPageCustomizeModulesTest', 'All', function() {
 var NewTabPageCustomizeBackgroundsTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_backgrounds_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/customize_backgrounds_test.js';
   }
 };
 
@@ -123,7 +127,7 @@ TEST_F('NewTabPageCustomizeBackgroundsTest', 'All', function() {
 var NewTabPageVoiceSearchOverlayTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/voice_search_overlay_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/voice_search_overlay_test.js';
   }
 };
 
@@ -134,7 +138,7 @@ TEST_F('NewTabPageVoiceSearchOverlayTest', 'All', function() {
 var NewTabPageRealboxTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/realbox/realbox_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/realbox/realbox_test.js';
   }
 };
 
@@ -145,7 +149,7 @@ TEST_F('NewTabPageRealboxTest', 'All', function() {
 var NewTabPageLogoTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/logo_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/logo_test.js';
   }
 };
 
@@ -156,7 +160,7 @@ TEST_F('NewTabPageLogoTest', 'All', function() {
 var NewTabPageDoodleShareDialogTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/doodle_share_dialog_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/doodle_share_dialog_test.js';
   }
 };
 
@@ -167,7 +171,7 @@ TEST_F('NewTabPageDoodleShareDialogTest', 'All', function() {
 var NewTabPageBackgroundManagerTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/background_manager_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/background_manager_test.js';
   }
 };
 
@@ -178,7 +182,7 @@ TEST_F('NewTabPageBackgroundManagerTest', 'All', function() {
 var NewTabPageModulesModuleWrapperTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_wrapper_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_wrapper_test.js';
   }
 };
 
@@ -189,7 +193,7 @@ TEST_F('NewTabPageModulesModuleWrapperTest', 'All', function() {
 var NewTabPageModulesModulesTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/modules_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/modules_test.js';
   }
 };
 
@@ -201,7 +205,7 @@ var NewTabPageModulesModuleDescriptorTest =
     class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_descriptor_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_descriptor_test.js';
   }
 };
 
@@ -212,7 +216,7 @@ TEST_F('NewTabPageModulesModuleDescriptorTest', 'All', function() {
 var NewTabPageModulesModuleRegistryTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_registry_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_registry_test.js';
   }
 };
 
@@ -223,7 +227,7 @@ TEST_F('NewTabPageModulesModuleRegistryTest', 'All', function() {
 var NewTabPageModulesModuleHeaderTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_header_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_header_test.js';
   }
 };
 
@@ -234,7 +238,7 @@ TEST_F('NewTabPageModulesModuleHeaderTest', 'All', function() {
 var NewTabPageModulesInfoDialogTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/info_dialog_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/info_dialog_test.js';
   }
 };
 
@@ -248,7 +252,7 @@ GEN('#if !defined(OFFICIAL_BUILD)');
 var NewTabPageModulesDummyModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/dummy_v2/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/dummy_v2/module_test.js';
   }
 };
 
@@ -261,7 +265,7 @@ GEN('#endif  // !defined(OFFICIAL_BUILD)');
 var NewTabPageMiddleSlotPromoTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/middle_slot_promo_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/middle_slot_promo_test.js';
   }
 };
 
@@ -272,7 +276,7 @@ TEST_F('NewTabPageMiddleSlotPromoTest', 'All', function() {
 var NewTabPageModulesDriveModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/drive/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/drive/module_test.js';
   }
 };
 
@@ -283,7 +287,7 @@ TEST_F('NewTabPageModulesDriveModuleTest', 'All', function() {
 var NewTabPageModulesDriveV2ModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/drive_v2/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/drive_v2/module_test.js';
   }
 };
 
@@ -291,21 +295,21 @@ TEST_F('NewTabPageModulesDriveV2ModuleTest', 'All', function() {
   mocha.run();
 });
 
-var NewTabPageModulesTaskModuleTest = class extends NewTabPageBrowserTest {
+var NewTabPageModulesRecipesTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/task_module/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/recipes/module_test.js';
   }
 };
 
-TEST_F('NewTabPageModulesTaskModuleTest', 'All', function() {
+TEST_F('NewTabPageModulesRecipesTest', 'All', function() {
   mocha.run();
 });
 
 var NewTabPageModulesRecipesV2ModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/recipes_v2/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/recipes_v2/module_test.js';
   }
 };
 
@@ -317,7 +321,7 @@ var NewTabPageModulesChromeCartModuleTest =
     class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart/module_test.js';
   }
 };
 
@@ -329,9 +333,20 @@ var NewTabPageModulesChromeCartV2ModuleTest =
     class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart_v2/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart_v2/module_test.js';
   }
 };
+
+var NewTabPageModulesFeedModuleTest = class extends NewTabPageBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/feed/module_test.js';
+  }
+};
+
+TEST_F('NewTabPageModulesFeedModuleTest', 'All', function() {
+  mocha.run();
+});
 
 // https://crbug.com/1227564: Flaky on Chrome OS.
 GEN('#if BUILDFLAG(IS_CHROMEOS)');
@@ -350,7 +365,7 @@ GEN('#if !defined(OFFICIAL_BUILD)');
 var NewTabPageModulesPhotosModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/photos/module_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/photos/module_test.js';
   }
 };
 
@@ -363,7 +378,7 @@ GEN('#endif  // !defined(OFFICIAL_BUILD)');
 var NewTabPageDiscountConsentDialogTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart/discount_consent_dialog_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart/discount_consent_dialog_test.js';
   }
 };
 
@@ -374,7 +389,7 @@ TEST_F('NewTabPageDiscountConsentDialogTest', 'All', function() {
 var NewTabPageDiscountConsentCartTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart/discount_consent_card_test.js&host=webui-test';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart/discount_consent_card_test.js';
   }
 };
 

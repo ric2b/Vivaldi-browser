@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/i18n/break_iterator.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -16,8 +17,8 @@
 #include "ui/base/ime/text_input_type.h"
 #include "ui/events/event.h"
 #include "ui/gfx/range/range.h"
+#include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_input_method_context.h"
-#include "ui/ozone/platform/wayland/host/wayland_input_method_context_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
 #include "ui/ozone/platform/wayland/test/mock_zcr_extended_text_input.h"
@@ -27,6 +28,7 @@
 
 using ::testing::_;
 using ::testing::DoAll;
+using ::testing::InSequence;
 using ::testing::Mock;
 using ::testing::SaveArg;
 using ::testing::Values;
@@ -58,8 +60,20 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
   void OnCommit(const std::u16string& text) override {
     was_on_commit_called_ = true;
   }
+  void OnConfirmCompositionText(bool keep_selection) override {
+    was_on_confirm_composition_text_called_ = true;
+  }
   void OnPreeditChanged(const ui::CompositionText& composition_text) override {
     was_on_preedit_changed_called_ = true;
+  }
+  void OnClearGrammarFragments(const gfx::Range& range) override {
+    was_on_clear_grammar_fragments_called_ = true;
+  }
+  void OnAddGrammarFragment(const ui::GrammarFragment& fragment) override {
+    was_on_add_grammar_fragment_called_ = true;
+  }
+  void OnSetAutocorrectRange(const gfx::Range& range) override {
+    was_on_set_autocorrect_range_called_ = true;
   }
   void OnPreeditEnd() override {}
   void OnPreeditStart() override {}
@@ -72,7 +86,16 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
     was_on_set_preedit_region_called_ = true;
   }
 
+  void OnSetVirtualKeyboardOccludedBounds(
+      const gfx::Rect& screen_bounds) override {
+    virtual_keyboard_bounds_ = screen_bounds;
+  }
+
   bool was_on_commit_called() const { return was_on_commit_called_; }
+
+  bool was_on_confirm_composition_text_called() const {
+    return was_on_confirm_composition_text_called_;
+  }
 
   bool was_on_preedit_changed_called() const {
     return was_on_preedit_changed_called_;
@@ -82,17 +105,38 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
     return was_on_set_preedit_region_called_;
   }
 
+  bool was_on_clear_grammar_fragments_called() const {
+    return was_on_clear_grammar_fragments_called_;
+  }
+
+  bool was_on_add_grammar_fragment_called() const {
+    return was_on_add_grammar_fragment_called_;
+  }
+
+  bool was_on_set_autocorrect_range_called() const {
+    return was_on_set_autocorrect_range_called_;
+  }
+
   const absl::optional<std::pair<size_t, size_t>>&
   last_on_delete_surrounding_text_args() const {
     return last_on_delete_surrounding_text_args_;
   }
 
+  const absl::optional<gfx::Rect>& virtual_keyboard_bounds() const {
+    return virtual_keyboard_bounds_;
+  }
+
  private:
   bool was_on_commit_called_ = false;
+  bool was_on_confirm_composition_text_called_ = false;
   bool was_on_preedit_changed_called_ = false;
   bool was_on_set_preedit_region_called_ = false;
+  bool was_on_clear_grammar_fragments_called_ = false;
+  bool was_on_add_grammar_fragment_called_ = false;
+  bool was_on_set_autocorrect_range_called_ = false;
   absl::optional<std::pair<size_t, size_t>>
       last_on_delete_surrounding_text_args_;
+  absl::optional<gfx::Rect> virtual_keyboard_bounds_;
 };
 
 class WaylandInputMethodContextTest : public WaylandTest {
@@ -121,11 +165,11 @@ class WaylandInputMethodContextTest : public WaylandTest {
     input_method_context_delegate_ =
         std::make_unique<TestInputMethodContextDelegate>();
 
-    WaylandInputMethodContextFactory factory(connection_.get());
-    LinuxInputMethodContextFactory::SetInstance(&factory);
-
-    input_method_context_ = factory.CreateWaylandInputMethodContext(
-        input_method_context_delegate_.get(), false);
+    auto input_method_context = std::make_unique<WaylandInputMethodContext>(
+        connection_.get(), connection_->event_source(),
+        input_method_context_delegate_.get());
+    input_method_context_.reset(static_cast<WaylandInputMethodContext*>(
+        input_method_context.release()));
     input_method_context_->Init(true);
     connection_->ScheduleFlush();
 
@@ -146,8 +190,8 @@ class WaylandInputMethodContextTest : public WaylandTest {
   std::unique_ptr<TestInputMethodContextDelegate>
       input_method_context_delegate_;
   std::unique_ptr<WaylandInputMethodContext> input_method_context_;
-  wl::MockZwpTextInput* zwp_text_input_ = nullptr;
-  wl::MockZcrExtendedTextInput* zcr_extended_text_input_ = nullptr;
+  raw_ptr<wl::MockZwpTextInput> zwp_text_input_ = nullptr;
+  raw_ptr<wl::MockZcrExtendedTextInput> zcr_extended_text_input_ = nullptr;
 };
 
 TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
@@ -157,6 +201,7 @@ TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
   // Scenario 1: InputMethod focus is set, then Keyboard focus is set.
   // Unset them in the reversed order.
 
+  InSequence s;
   EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource())).Times(0);
   EXPECT_CALL(*zwp_text_input_, ShowInputPanel()).Times(0);
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
@@ -173,15 +218,15 @@ TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
-  EXPECT_CALL(*zwp_text_input_, Deactivate());
   EXPECT_CALL(*zwp_text_input_, HideInputPanel());
+  EXPECT_CALL(*zwp_text_input_, Deactivate());
   connection_->wayland_window_manager()->SetKeyboardFocusedWindow(nullptr);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
-  EXPECT_CALL(*zwp_text_input_, Deactivate()).Times(0);
   EXPECT_CALL(*zwp_text_input_, HideInputPanel()).Times(0);
+  EXPECT_CALL(*zwp_text_input_, Deactivate()).Times(0);
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_TEXT,
                                      ui::TEXT_INPUT_TYPE_NONE);
   connection_->ScheduleFlush();
@@ -206,16 +251,16 @@ TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
-  EXPECT_CALL(*zwp_text_input_, Deactivate());
   EXPECT_CALL(*zwp_text_input_, HideInputPanel());
+  EXPECT_CALL(*zwp_text_input_, Deactivate());
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_TEXT,
                                      ui::TEXT_INPUT_TYPE_NONE);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
-  EXPECT_CALL(*zwp_text_input_, Deactivate()).Times(0);
   EXPECT_CALL(*zwp_text_input_, HideInputPanel()).Times(0);
+  EXPECT_CALL(*zwp_text_input_, Deactivate()).Times(0);
   connection_->wayland_window_manager()->SetKeyboardFocusedWindow(nullptr);
   connection_->ScheduleFlush();
   Sync();
@@ -427,6 +472,35 @@ TEST_P(WaylandInputMethodContextTest, OnCommit) {
   EXPECT_TRUE(input_method_context_delegate_->was_on_commit_called());
 }
 
+// TODO(1353668): WaylandInputMethodContext::OnCursorPosition sets
+// |pending_keep_selection| only on lacros. That's the reason why this test
+// doesn't pass on Linux. We need to clarify that.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE(x) x
+#else
+#define MAYBE(x) DISABLED_##x
+#endif
+
+TEST_P(WaylandInputMethodContextTest, MAYBE(OnConfirmCompositionText)) {
+  constexpr char16_t text[] = u"ab😀cあdef";
+  const gfx::Range range(5, 6);  // あ is selected.
+
+  // SetSurroundingText should be called in UTF-8.
+  EXPECT_CALL(*zwp_text_input_,
+              SetSurroundingText("ab😀cあdef", gfx::Range(7, 10)));
+  input_method_context_->SetSurroundingText(text, range);
+  connection_->ScheduleFlush();
+  Sync();
+  Mock::VerifyAndClearExpectations(zwp_text_input_);
+
+  zwp_text_input_v1_send_cursor_position(zwp_text_input_->resource(), 7, 10);
+  zwp_text_input_v1_send_commit_string(zwp_text_input_->resource(), 0,
+                                       "ab😀cあdef");
+  Sync();
+  EXPECT_TRUE(
+      input_method_context_delegate_->was_on_confirm_composition_text_called());
+}
+
 TEST_P(WaylandInputMethodContextTest, OnSetPreeditRegion_Success) {
   constexpr char16_t text[] = u"abcあdef";
   const gfx::Range range(3, 4);  // あ is selected.
@@ -514,6 +588,35 @@ TEST_P(WaylandInputMethodContextTest,
       input_method_context_delegate_->was_on_set_preedit_region_called());
 }
 
+TEST_P(WaylandInputMethodContextTest, OnClearGrammarFragments) {
+  input_method_context_->OnClearGrammarFragments(gfx::Range(1, 5));
+  Sync();
+  EXPECT_TRUE(
+      input_method_context_delegate_->was_on_clear_grammar_fragments_called());
+}
+
+TEST_P(WaylandInputMethodContextTest, OnAddGrammarFragments) {
+  input_method_context_->OnAddGrammarFragment(
+      ui::GrammarFragment(gfx::Range(1, 5), "test"));
+  Sync();
+  EXPECT_TRUE(
+      input_method_context_delegate_->was_on_add_grammar_fragment_called());
+}
+
+TEST_P(WaylandInputMethodContextTest, OnSetAutocorrectRange) {
+  input_method_context_->OnSetAutocorrectRange(gfx::Range(1, 5));
+  Sync();
+  EXPECT_TRUE(
+      input_method_context_delegate_->was_on_set_autocorrect_range_called());
+}
+
+TEST_P(WaylandInputMethodContextTest, OnSetVirtualKeyboardOccludedBounds) {
+  const gfx::Rect bounds(10, 20, 300, 400);
+  input_method_context_->OnSetVirtualKeyboardOccludedBounds(bounds);
+  Sync();
+  EXPECT_EQ(input_method_context_delegate_->virtual_keyboard_bounds(), bounds);
+}
+
 TEST_P(WaylandInputMethodContextTest, DisplayVirtualKeyboard) {
   EXPECT_CALL(*zwp_text_input_, ShowInputPanel());
   EXPECT_TRUE(input_method_context_->DisplayVirtualKeyboard());
@@ -560,6 +663,7 @@ TEST_P(WaylandInputMethodContextNoKeyboardTest, ActivateDeactivate) {
   // Because there is no keyboard, Activate is called as soon as InputMethod's
   // TextInputClient focus is met.
 
+  InSequence s;
   EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource()));
   EXPECT_CALL(*zwp_text_input_, ShowInputPanel());
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
@@ -568,10 +672,35 @@ TEST_P(WaylandInputMethodContextNoKeyboardTest, ActivateDeactivate) {
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
-  EXPECT_CALL(*zwp_text_input_, Deactivate());
   EXPECT_CALL(*zwp_text_input_, HideInputPanel());
+  EXPECT_CALL(*zwp_text_input_, Deactivate());
   input_method_context_->UpdateFocus(false, ui::TEXT_INPUT_TYPE_TEXT,
                                      ui::TEXT_INPUT_TYPE_NONE);
+  connection_->ScheduleFlush();
+  Sync();
+  Mock::VerifyAndClearExpectations(zwp_text_input_);
+}
+
+TEST_P(WaylandInputMethodContextNoKeyboardTest, UpdateFocusBetweenTextFields) {
+  // Because there is no keyboard, Activate is called as soon as InputMethod's
+  // TextInputClient focus is met.
+
+  InSequence s;
+  EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource()));
+  EXPECT_CALL(*zwp_text_input_, ShowInputPanel());
+  input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TEXT_INPUT_TYPE_TEXT);
+  connection_->ScheduleFlush();
+  Sync();
+  Mock::VerifyAndClearExpectations(zwp_text_input_);
+
+  // Make sure virtual keyboard is not unnecessarily hidden.
+  EXPECT_CALL(*zwp_text_input_, HideInputPanel()).Times(0);
+  EXPECT_CALL(*zwp_text_input_, Deactivate());
+  EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource()));
+  EXPECT_CALL(*zwp_text_input_, ShowInputPanel()).Times(0);
+  input_method_context_->UpdateFocus(false, ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TEXT_INPUT_TYPE_TEXT);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);

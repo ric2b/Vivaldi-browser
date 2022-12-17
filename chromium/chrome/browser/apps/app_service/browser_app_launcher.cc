@@ -26,7 +26,9 @@
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_save_handler.h"
 #include "components/app_restore/full_restore_utils.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "components/sessions/core/session_id.h"
 #endif
 
@@ -45,8 +47,8 @@ content::WebContents* LaunchAppWithParamsImpl(
         params.launch_source, params.display_id, params.launch_files,
         params.intent);
     std::string app_id = params.app_id;
-    apps::mojom::LaunchSource launch_source = params.launch_source;
-    apps::mojom::LaunchContainer container = params.container;
+    apps::LaunchSource launch_source = params.launch_source;
+    apps::LaunchContainer container = params.container;
     int restore_id = params.restore_id;
 
     // Create the FullRestoreSaveHandler instance before launching the app to
@@ -63,8 +65,7 @@ content::WebContents* LaunchAppWithParamsImpl(
     }
 
     RecordAppLaunchMetrics(profile, apps::AppType::kWeb, app_id,
-                           apps::mojom::LaunchSource::kFromFullRestore,
-                           container);
+                           apps::LaunchSource::kFromFullRestore, container);
 
     int session_id = apps::GetSessionIdForRestoreFromWebContents(web_contents);
     if (!SessionID::IsValidValue(session_id)) {
@@ -91,7 +92,7 @@ content::WebContents* LaunchAppWithParamsImpl(
   // restore file.
   if (SessionID::IsValidValue(params.restore_id)) {
     RecordAppLaunchMetrics(profile, apps::AppType::kChromeApp, params.app_id,
-                           apps::mojom::LaunchSource::kFromFullRestore,
+                           apps::LaunchSource::kFromFullRestore,
                            params.container);
 
     apps::AppLaunchParams params_for_restore(
@@ -146,7 +147,7 @@ void BrowserAppLauncher::LaunchPlayStoreWithExtensions() {
   LaunchAppWithParamsImpl(
       CreateAppLaunchParamsUserContainer(
           profile_, extension, WindowOpenDisposition::NEW_WINDOW,
-          apps::mojom::LaunchSource::kFromChromeInternal),
+          apps::LaunchSource::kFromChromeInternal),
       profile_, &web_app_launch_manager_);
 }
 #endif

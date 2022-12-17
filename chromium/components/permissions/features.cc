@@ -87,6 +87,12 @@ const base::Feature kBlockNotificationPromptsIfDisabledOnAppLevel{
 const base::Feature kPermissionsPostPromptSurvey{
     "PermissionsPostPromptSurvey", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// When enabled, permissions grants with a durable session model will have
+// an expiration date set. The interpretation of the expiration date
+// is not handled by this component, but left to the embedding browser.
+const base::Feature kRecordPermissionExpirationTimestamps{
+    "RecordPermissionExpirationTimestamps", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace features
@@ -101,15 +107,11 @@ const base::FeatureParam<std::string> kPermissionPredictionServiceUrlOverride{
     &permissions::features::kPermissionPredictionServiceUseUrlOverride,
     "service_url", ""};
 
-const base::FeatureParam<bool> kPermissionPredictionServiceUseJson{
-    &permissions::features::kPermissionPredictionServiceUseUrlOverride,
-    "service_use_json", false};
-
 const base::FeatureParam<double>
     kPermissionOnDeviceNotificationPredictionsHoldbackChance(
         &features::kPermissionOnDeviceNotificationPredictions,
         "holdback_chance",
-        0.0);
+        0.3);
 
 #if !BUILDFLAG(IS_ANDROID)
 // Specifies the `trigger_id` of the HaTS survey to trigger immediately after

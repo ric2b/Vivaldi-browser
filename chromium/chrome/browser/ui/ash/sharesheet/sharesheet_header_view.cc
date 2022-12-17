@@ -14,6 +14,7 @@
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/strings/strcat.h"
@@ -101,9 +102,11 @@ class SharesheetHeaderView::SharesheetImagePreview : public views::View {
   explicit SharesheetImagePreview(size_t file_count) {
     ScopedLightModeAsDefault scoped_light_mode_as_default;
     auto* color_provider = AshColorProvider::Get();
+    const bool is_dark_mode_enabled =
+        DarkLightModeControllerImpl::Get()->IsDarkModeEnabled();
     SetBackground(views::CreateRoundedRectBackground(
         cros_styles::ResolveColor(cros_styles::ColorName::kHighlightColor,
-                                  color_provider->IsDarkModeEnabled(),
+                                  is_dark_mode_enabled,
                                   /*use_debug_colors=*/false),
         views::LayoutProvider::Get()->GetCornerRadiusMetric(
             views::Emphasis::kMedium),
@@ -142,8 +145,7 @@ class SharesheetHeaderView::SharesheetImagePreview : public views::View {
                 CONTEXT_SHARESHEET_BUBBLE_SMALL, STYLE_SHARESHEET));
         label->SetLineHeight(kImagePreviewFileEnumerationLineHeight);
         label->SetEnabledColor(cros_styles::ResolveColor(
-            cros_styles::ColorName::kTextColorProminent,
-            color_provider->IsDarkModeEnabled(),
+            cros_styles::ColorName::kTextColorProminent, is_dark_mode_enabled,
             /*use_debug_colors=*/false));
         label->SetHorizontalAlignment(gfx::ALIGN_CENTER);
         auto second_tone_icon_color_prominent =
@@ -255,7 +257,7 @@ END_METADATA
 
 // SharesheetHeaderView --------------------------------------------------------
 
-SharesheetHeaderView::SharesheetHeaderView(apps::mojom::IntentPtr intent,
+SharesheetHeaderView::SharesheetHeaderView(apps::IntentPtr intent,
                                            Profile* profile,
                                            bool show_content_previews)
     : profile_(profile),
@@ -274,11 +276,10 @@ SharesheetHeaderView::SharesheetHeaderView(apps::mojom::IntentPtr intent,
       views::BoxLayout::CrossAxisAlignment::kCenter);
   SetFocusBehavior(View::FocusBehavior::ACCESSIBLE_ONLY);
 
-  const bool has_files =
-      (intent_->files.has_value() && !intent_->files.value().empty());
+  const bool has_files = !intent_->files.empty();
   // The image view is initialised first to ensure its left most placement.
   if (show_content_previews) {
-    auto file_count = (has_files) ? intent_->files.value().size() : 0;
+    auto file_count = intent_->files.size();
     image_preview_ =
         AddChildView(std::make_unique<SharesheetImagePreview>(file_count));
   }
@@ -325,9 +326,9 @@ void SharesheetHeaderView::ShowTextPreview() {
   std::vector<std::unique_ptr<views::Label>> preview_labels =
       ExtractShareText();
 
-  if (intent_->files.has_value() && !intent_->files.value().empty()) {
+  if (!intent_->files.empty()) {
     std::vector<std::u16string> file_names;
-    for (const auto& file : intent_->files.value()) {
+    for (const auto& file : intent_->files) {
       auto file_path =
           apps::GetFileSystemURL(profile_, file->url).path();
       file_names.push_back(file_path.BaseName().LossyDisplayName());
@@ -339,7 +340,7 @@ void SharesheetHeaderView::ShowTextPreview() {
     } else {
       // If there is more than 1 file, show an enumeration of the number of
       // files.
-      auto size = intent_->files.value().size();
+      auto size = intent_->files.size();
       DCHECK_NE(size, 0u);
       file_text =
           l10n_util::GetPluralStringFUTF16(IDS_SHARESHEET_FILES_LABEL, size);
@@ -458,10 +459,9 @@ void SharesheetHeaderView::ResolveImages() {
 
 void SharesheetHeaderView::ResolveImage(size_t index) {
   auto file_path =
-      apps::GetFileSystemURL(profile_, intent_->files.value()[index]->url)
-          .path();
+      apps::GetFileSystemURL(profile_, intent_->files[index]->url).path();
 
-  auto size = GetImagePreviewSize(index, intent_->files.value().size());
+  auto size = GetImagePreviewSize(index, intent_->files.size());
   auto image = std::make_unique<HoldingSpaceImage>(
       size, file_path,
       base::BindRepeating(&SharesheetHeaderView::LoadImage,
@@ -470,11 +470,13 @@ void SharesheetHeaderView::ResolveImage(size_t index) {
           /*use_light_mode_as_default=*/true));
   DCHECK_GT(image_preview_->GetImageViewCount(), index);
   ScopedLightModeAsDefault scoped_light_mode_as_default;
+  const bool is_dark_mode_enabled =
+      DarkLightModeControllerImpl::Get()->IsDarkModeEnabled();
   image_preview_->GetImageViewAt(index)->SetImage(
-      image->GetImageSkia(size, AshColorProvider::Get()->IsDarkModeEnabled()));
+      image->GetImageSkia(size, is_dark_mode_enabled));
 
-  const auto icon_color = chromeos::GetIconColorForPath(
-      file_path, AshColorProvider::Get()->IsDarkModeEnabled());
+  const auto icon_color =
+      chromeos::GetIconColorForPath(file_path, is_dark_mode_enabled);
   image_preview_->SetBackgroundColorForIndex(index, icon_color);
   image_subscription_.push_back(image->AddImageSkiaChangedCallback(
       base::BindRepeating(&SharesheetHeaderView::OnImageLoaded,
@@ -497,7 +499,7 @@ void SharesheetHeaderView::OnImageLoaded(const gfx::Size& size, size_t index) {
   DCHECK_GT(image_preview_->GetImageViewCount(), index);
   ScopedLightModeAsDefault scoped_light_mode_as_default;
   image_preview_->GetImageViewAt(index)->SetImage(images_[index]->GetImageSkia(
-      size, AshColorProvider::Get()->IsDarkModeEnabled()));
+      size, DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()));
   // TODO(crbug.com/1293668): Investigate why this SchedulePaint is needed.
   image_preview_->GetImageViewAt(index)->SchedulePaint();
 }

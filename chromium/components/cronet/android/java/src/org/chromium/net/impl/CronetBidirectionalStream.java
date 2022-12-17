@@ -4,10 +4,7 @@
 
 package org.chromium.net.impl;
 
-import android.net.Network;
-
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
@@ -48,12 +45,6 @@ import javax.annotation.concurrent.GuardedBy;
 @JNINamespace("cronet")
 @VisibleForTesting
 public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
-    /*
-     * Network handle representing the default network. To be used when a network has not been
-     * explicitly set.
-     */
-    private static final long DEFAULT_NETWORK_HANDLE = -1;
-
     /**
      * States of BidirectionalStream are tracked in mReadState and mWriteState.
      * The write state is separated out as it changes independently of the read state.
@@ -251,7 +242,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
             String httpMethod, List<Map.Entry<String, String>> requestHeaders,
             boolean delayRequestHeadersUntilNextFlush, Collection<Object> requestAnnotations,
             boolean trafficStatsTagSet, int trafficStatsTag, boolean trafficStatsUidSet,
-            int trafficStatsUid, @Nullable Network network) {
+            int trafficStatsUid, long networkHandle) {
         mRequestContext = requestContext;
         mInitialUrl = url;
         mInitialPriority = convertStreamPriority(priority);
@@ -267,7 +258,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
         mTrafficStatsTag = trafficStatsTag;
         mTrafficStatsUidSet = trafficStatsUidSet;
         mTrafficStatsUid = trafficStatsUid;
-        mNetworkHandle = network != null ? network.getNetworkHandle() : DEFAULT_NETWORK_HANDLE;
+        mNetworkHandle = networkHandle;
     }
 
     @Override
@@ -280,9 +271,8 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
                 mNativeStream = CronetBidirectionalStreamJni.get().createBidirectionalStream(
                         CronetBidirectionalStream.this,
                         mRequestContext.getUrlRequestContextAdapter(),
-                        !mDelayRequestHeadersUntilFirstFlush,
-                        mRequestContext.hasRequestFinishedListener(), mTrafficStatsTagSet,
-                        mTrafficStatsTag, mTrafficStatsUidSet, mTrafficStatsUid, mNetworkHandle);
+                        !mDelayRequestHeadersUntilFirstFlush, mTrafficStatsTagSet, mTrafficStatsTag,
+                        mTrafficStatsUidSet, mTrafficStatsUid, mNetworkHandle);
                 mRequestContext.onRequestStarted();
                 // Non-zero startResult means an argument error.
                 int startResult = CronetBidirectionalStreamJni.get().start(mNativeStream,
@@ -837,8 +827,8 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
         // Native methods are implemented in cronet_bidirectional_stream_adapter.cc.
         long createBidirectionalStream(CronetBidirectionalStream caller,
                 long urlRequestContextAdapter, boolean sendRequestHeadersAutomatically,
-                boolean enableMetricsCollection, boolean trafficStatsTagSet, int trafficStatsTag,
-                boolean trafficStatsUidSet, int trafficStatsUid, long networkHandle);
+                boolean trafficStatsTagSet, int trafficStatsTag, boolean trafficStatsUidSet,
+                int trafficStatsUid, long networkHandle);
 
         @NativeClassQualifiedName("CronetBidirectionalStreamAdapter")
         int start(long nativePtr, CronetBidirectionalStream caller, String url, int priority,

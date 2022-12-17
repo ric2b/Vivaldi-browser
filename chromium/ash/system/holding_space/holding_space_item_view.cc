@@ -9,9 +9,11 @@
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_progress.h"
+#include "ash/public/cpp/holding_space/holding_space_util.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/holding_space/holding_space_util.h"
 #include "ash/system/holding_space/holding_space_view_delegate.h"
 #include "base/bind.h"
@@ -132,9 +134,16 @@ HoldingSpaceItemView::HoldingSpaceItemView(HoldingSpaceViewDelegate* delegate,
   SetNotifyEnterExitOnChild(true);
 
   // Accessibility.
-  GetViewAccessibility().OverrideName(item->GetAccessibleName());
-  GetViewAccessibility().OverrideDescription(base::EmptyString16());
   GetViewAccessibility().OverrideRole(ax::mojom::Role::kListItem);
+  GetViewAccessibility().OverrideName(item->GetAccessibleName());
+
+  // When the description is not specified, tooltip text will be used.
+  // That text is redundant to the name, but different enough that it is
+  // still exposed to assistive technologies which may then present both.
+  // To avoid that redundant presentation, set the description explicitly
+  // to the empty string. See crrev.com/c/3218112.
+  GetViewAccessibility().OverrideDescription(
+      std::u16string(), ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty);
 
   // Layer.
   SetPaintToLayer();
@@ -267,8 +276,9 @@ void HoldingSpaceItemView::OnThemeChanged() {
       kCheckmarkBackgroundSize));
   checkmark_->SetImage(gfx::CreateVectorIcon(
       kCheckIcon, kHoldingSpaceIconSize,
-      ash_color_provider->IsDarkModeEnabled() ? gfx::kGoogleGrey900
-                                              : SK_ColorWHITE));
+      DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
+          ? gfx::kGoogleGrey900
+          : SK_ColorWHITE));
 
   // Focused/selected layers.
   InvalidateLayer(focused_layer_owner_->layer());
@@ -452,7 +462,10 @@ void HoldingSpaceItemView::OnPrimaryActionPressed() {
 
   // Cancel.
   if (primary_action_cancel_->GetVisible()) {
-    HoldingSpaceController::Get()->client()->CancelItems({item()});
+    if (!holding_space_util::ExecuteInProgressCommand(
+            item(), HoldingSpaceCommandId::kCancelItem)) {
+      NOTREACHED();
+    }
     return;
   }
 
@@ -485,10 +498,11 @@ void HoldingSpaceItemView::UpdatePrimaryAction() {
   }
 
   // Cancel.
-  // NOTE: Only download type items currently support cancellation.
+  // NOTE: Only in-progress items currently support cancellation.
   const bool is_item_in_progress = !item()->progress().IsComplete();
   primary_action_cancel_->SetVisible(
-      is_item_in_progress && HoldingSpaceItem::IsDownload(item()->type()));
+      is_item_in_progress && holding_space_util::SupportsInProgressCommand(
+                                 item(), HoldingSpaceCommandId::kCancelItem));
 
   // Pin.
   const bool is_item_pinned =

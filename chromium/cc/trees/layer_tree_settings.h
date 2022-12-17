@@ -55,7 +55,7 @@ class CC_EXPORT LayerTreeSettings {
   base::TimeDelta scrollbar_fade_duration;
   base::TimeDelta scrollbar_thinning_duration;
   bool scrollbar_flash_after_any_scroll_update = false;
-  SkColor solid_color_scrollbar_color = SK_ColorWHITE;
+  SkColor4f solid_color_scrollbar_color = SkColors::kWhite;
   base::TimeDelta scroll_animation_duration_for_testing;
   bool timeout_and_draw_when_animation_checkerboards = true;
   bool layers_always_allowed_lcd_text = false;
@@ -212,6 +212,9 @@ class CC_EXPORT LayerTreeSettings {
   // Whether Fluent scrollbar is enabled. Please check https://crbug.com/1292117
   // to find the link to the Fluent Scrollbar spec and related CLs.
   bool enable_fluent_scrollbar = false;
+
+  // This corresponds to the ScrollUpdateOptimizations feature.
+  bool enable_scroll_update_optimizations = false;
 };
 
 class CC_EXPORT LayerListSettings : public LayerTreeSettings {

@@ -166,7 +166,7 @@ class RemoteFrameData : public base::LinkNode<RemoteFrameData> {
  private:
   const raw_ptr<ProcessData> process_data_;
   const blink::RemoteFrameToken token_;
-  const raw_ptr<ExecutionContextData> execution_context_data_;
+  raw_ptr<ExecutionContextData> execution_context_data_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

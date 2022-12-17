@@ -37,6 +37,9 @@
 namespace display {
 namespace {
 
+// TODO(crbug/1262970): Delete when we can read radius from command line.
+const float kRoundedDisplayRadius = 16.0;
+
 // The DPI threshold to determine the device scale factor.
 // DPI higher than |dpi| will use |device_scale_factor|.
 struct DeviceScaleFactorDPIThreshold {
@@ -342,6 +345,7 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
   new_info.set_display_color_spaces(
       CreateDisplayColorSpaces(snapshot->color_space(), allow_high_bit_depth,
                                snapshot->hdr_static_metadata()));
+  new_info.SetSnapshotColorSpace(snapshot->color_space());
   constexpr int32_t kNormalBitDepth = 8;
   new_info.set_bits_per_channel(
       allow_high_bit_depth ? snapshot->bits_per_channel() : kNormalBitDepth);
@@ -357,6 +361,12 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
   new_info.SetManagedDisplayModes(display_modes);
 
   new_info.set_maximum_cursor_size(snapshot->maximum_cursor_size());
+  // Temporary adding rounded corners to the internal display info.
+  if (display::features::IsRoundedDisplayEnabled() &&
+      snapshot->type() == DISPLAY_CONNECTION_TYPE_INTERNAL) {
+    new_info.set_rounded_corners_radii(
+        gfx::RoundedCornersF(kRoundedDisplayRadius));
+  }
   return new_info;
 }
 

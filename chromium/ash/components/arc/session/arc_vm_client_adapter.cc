@@ -25,7 +25,6 @@
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/connection_holder.h"
 #include "ash/components/arc/session/file_system_status.h"
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
@@ -55,16 +54,18 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
+#include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/components/sensors/buildflags.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/system/core_scheduling.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/version_info/version_info.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace arc {
 namespace {
@@ -112,8 +113,8 @@ ash::ConciergeClient* GetConciergeClient() {
   return ash::ConciergeClient::Get();
 }
 
-chromeos::DebugDaemonClient* GetDebugDaemonClient() {
-  return chromeos::DBusThreadManager::Get()->GetDebugDaemonClient();
+ash::DebugDaemonClient* GetDebugDaemonClient() {
+  return ash::DebugDaemonClient::Get();
 }
 
 ArcBinaryTranslationType IdentifyBinaryTranslationType(
@@ -160,6 +161,8 @@ std::vector<std::string> GenerateUpgradeProps(
           static_cast<int>(upgrade_params.management_transition)),
       base::StringPrintf("%s.serialno=%s", prefix.c_str(),
                          serial_number.c_str()),
+      base::StringPrintf("%s.skip_tts_cache=%d", prefix.c_str(),
+                         upgrade_params.skip_tts_cache),
   };
   // Conditionally sets more properties based on |upgrade_params|.
   if (!upgrade_params.locale.empty()) {
@@ -210,15 +213,10 @@ std::vector<std::string> GenerateKernelCmdline(
       base::StringPrintf(
           "androidboot.keyboard_shortcut_helper_integration=%d",
           start_params.enable_keyboard_shortcut_helper_integration),
-      base::StringPrintf("androidboot.iioservice_present=%d",
-                         BUILDFLAG(USE_IIOSERVICE)),
       base::StringPrintf("androidboot.enable_notifications_refresh=%d",
                          start_params.enable_notifications_refresh),
       base::StringPrintf("androidboot.zram_size=%d", guest_zram_size),
   };
-
-  if (ShouldMountVmDebugFs())
-    result.push_back("androidboot.arcvm_mount_debugfs=1");
 
   const ArcVmUreadaheadMode mode =
       GetArcVmUreadaheadMode(base::BindRepeating(&base::GetSystemMemoryInfo));
@@ -342,7 +340,7 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     const std::string& user_id_hash,
     uint32_t cpus,
     const base::FilePath& demo_session_apps_path,
-    const absl::optional<base::FilePath>& data_image_path,
+    const absl::optional<base::FilePath>& data_disk_path,
     const FileSystemStatus& file_system_status,
     bool use_per_vm_core_scheduling,
     std::vector<std::string> kernel_cmdline,
@@ -414,13 +412,12 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     disk_image->set_path(kEmptyDiskPath);
   }
 
-  // Add /home/root/<hash>/crosvm/YXJjdm0=.img as /dev/block/vde for mounting
-  // Android /data if kEnableVirtioBlkForData is enabled.
+  // Add |data_disk_path| path as /dev/block/vde for mounting Android /data.
   disk_image = request.add_disks();
   disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
   disk_image->set_do_mount(true);
-  if (data_image_path) {
-    disk_image->set_path(data_image_path->value());
+  if (data_disk_path) {
+    disk_image->set_path(data_disk_path->value());
     disk_image->set_writable(true);
     if (should_set_blocksize)
       disk_image->set_block_size(kBlockSize);
@@ -444,6 +441,9 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
 
   // Add hugepages.
   request.set_use_hugepages(IsArcVmUseHugePages());
+
+  // Request guest memory locking, if configured.
+  request.set_lock_guest_memory(base::FeatureList::IsEnabled(kLockGuestMemory));
 
   // Specify VM Memory.
   if (base::FeatureList::IsEnabled(kVmMemorySize)) {
@@ -492,6 +492,11 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     balloon_policy->set_moderate_target_cache(moderate_kib * 1024);
     balloon_policy->set_critical_target_cache(critical_kib * 1024);
     balloon_policy->set_reclaim_target_cache(reclaim_kib * 1024);
+    balloon_policy->set_responsive(kVmBalloonPolicyResponsive.Get());
+    balloon_policy->set_responsive_timeout_ms(
+        kVmBalloonPolicyResponsiveTimeoutMs.Get());
+    balloon_policy->set_responsive_max_deflate_bytes(
+        kVmBalloonPolicyResponsiveMaxDeflateBytes.Get());
     VLOG(1) << "Use LimitCacheBalloonPolicy. ModerateKiB=" << moderate_kib
             << ", CriticalKiB=" << critical_kib
             << ", ReclaimKiB=" << reclaim_kib;
@@ -499,8 +504,30 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     VLOG(1) << "Use BalanceAvailableBalloonPolicy";
   }
 
+  if (base::FeatureList::IsEnabled(kGuestZram))
+    request.set_guest_swappiness(kGuestZramSwappiness.Get());
+
   request.set_enable_consumer_auto_update_toggle(base::FeatureList::IsEnabled(
       ash::features::kConsumerAutoUpdateToggleAllowed));
+
+  auto orientation = display::Display::ROTATE_0;
+  if (auto* screen = display::Screen::GetScreen())
+    orientation = screen->GetPrimaryDisplay().panel_rotation();
+  switch (orientation) {
+    using StartArcVmRequest = vm_tools::concierge::StartArcVmRequest;
+    case display::Display::ROTATE_0:
+      request.set_panel_orientation(StartArcVmRequest::ORIENTATION_0);
+      break;
+    case display::Display::ROTATE_90:
+      request.set_panel_orientation(StartArcVmRequest::ORIENTATION_90);
+      break;
+    case display::Display::ROTATE_180:
+      request.set_panel_orientation(StartArcVmRequest::ORIENTATION_180);
+      break;
+    case display::Display::ROTATE_270:
+      request.set_panel_orientation(StartArcVmRequest::ORIENTATION_270);
+      break;
+  }
 
   return request;
 }
@@ -687,6 +714,8 @@ class ArcVmClientAdapter : public ArcClientAdapter,
         // exist.
         JobDesc{kArcVmPerBoardFeaturesJobName, UpstartOperation::JOB_START, {}},
         JobDesc{
+            kArcVmMediaSharingServicesJobName, UpstartOperation::JOB_STOP, {}},
+        JobDesc{
             kArcVmPostVmStartServicesJobName, UpstartOperation::JOB_STOP, {}},
         JobDesc{kArcVmPostLoginServicesJobName, UpstartOperation::JOB_STOP, {}},
         JobDesc{kArcVmPreLoginServicesJobName,
@@ -710,7 +739,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     }
 
     VLOG(1) << "Checking adb sideload status";
-    chromeos::SessionManagerClient::Get()->QueryAdbSideload(base::BindOnce(
+    ash::SessionManagerClient::Get()->QueryAdbSideload(base::BindOnce(
         &ArcVmClientAdapter::OnQueryAdbSideload, weak_factory_.GetWeakPtr(),
         std::move(params), std::move(callback)));
   }
@@ -943,13 +972,27 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   void OnDemoResourcesLoaded(chromeos::VoidDBusMethodCallback callback,
                              FileSystemStatus file_system_status) {
     if (!base::FeatureList::IsEnabled(kEnableVirtioBlkForData)) {
-      // Use virtio-fs for /data.
+      VLOG(1) << "Using virtio-fs for /data";
       StartArcVm(std::move(callback), std::move(file_system_status),
-                 /*data_image_path=*/absl::nullopt);
+                 /*data_disk_path=*/absl::nullopt);
       return;
     }
 
-    // Use virtio-blk for /data.
+    if (kEnableVirtioBlkForDataUseLvm.Get()) {
+      VLOG(1) << "Using virtio-blk with the LVM-provided disk for /data";
+
+      // LVM disk name is generated by cryptohome::DmcryptVolumePrefix in
+      // src/platform2/cryptohome.
+      const std::string lvm_disk_path =
+          base::StringPrintf("/dev/mapper/vm/dmcrypt-%s-arcvm",
+                             user_id_hash_.substr(0, 8).c_str());
+      StartArcVm(std::move(callback), std::move(file_system_status),
+                 base::FilePath(lvm_disk_path));
+      return;
+    }
+
+    VLOG(1) << "Using virtio-blk with the concierge-provided disk for /data";
+
     // If request.disk_size is not set, concierge calculates the desired size
     // (90% of the available space) and creates a sparse disk image.
     vm_tools::concierge::CreateDiskImageRequest request;
@@ -997,7 +1040,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
   void StartArcVm(chromeos::VoidDBusMethodCallback callback,
                   FileSystemStatus file_system_status,
-                  absl::optional<base::FilePath> data_image_path) {
+                  absl::optional<base::FilePath> data_disk_path) {
     const base::FilePath demo_session_apps_path =
         demo_mode_delegate_->GetDemoAppsPath();
     const bool use_per_vm_core_scheduling =
@@ -1021,7 +1064,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     std::vector<std::string> kernel_cmdline = GenerateKernelCmdline(
         start_params_, file_system_status, is_host_on_vm_);
     auto start_request = CreateStartArcVmRequest(
-        user_id_hash_, cpus, demo_session_apps_path, data_image_path,
+        user_id_hash_, cpus, demo_session_apps_path, data_disk_path,
         file_system_status, use_per_vm_core_scheduling,
         std::move(kernel_cmdline), delegate_.get());
 
@@ -1056,22 +1099,21 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   void OnQueryAdbSideload(
       UpgradeParams params,
       chromeos::VoidDBusMethodCallback callback,
-      chromeos::SessionManagerClient::AdbSideloadResponseCode response_code,
+      ash::SessionManagerClient::AdbSideloadResponseCode response_code,
       bool enabled) {
     VLOG(1) << "IsAdbSideloadAllowed, response_code="
             << static_cast<int>(response_code) << ", enabled=" << enabled;
 
     switch (response_code) {
-      case chromeos::SessionManagerClient::AdbSideloadResponseCode::FAILED:
+      case ash::SessionManagerClient::AdbSideloadResponseCode::FAILED:
         LOG(ERROR) << "Failed response from QueryAdbSideload";
         StopArcInstanceInternal();
         std::move(callback).Run(false);
         return;
-      case chromeos::SessionManagerClient::AdbSideloadResponseCode::
-          NEED_POWERWASH:
+      case ash::SessionManagerClient::AdbSideloadResponseCode::NEED_POWERWASH:
         params.is_adb_sideloading_enabled = false;
         break;
-      case chromeos::SessionManagerClient::AdbSideloadResponseCode::SUCCESS:
+      case ash::SessionManagerClient::AdbSideloadResponseCode::SUCCESS:
         params.is_adb_sideloading_enabled = enabled;
         break;
     }
@@ -1079,10 +1121,8 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     VLOG(1) << "Starting upstart jobs for UpgradeArc()";
     std::vector<std::string> environment{
         "CHROMEOS_USER=" +
-            cryptohome::CreateAccountIdentifierFromIdentification(
-                cryptohome_id_)
-                .account_id(),
-        "CHROMEOS_USER_ID_HASH=" + user_id_hash_};
+        cryptohome::CreateAccountIdentifierFromIdentification(cryptohome_id_)
+            .account_id()};
     std::deque<JobDesc> jobs{
         JobDesc{kArcVmPostLoginServicesJobName, UpstartOperation::JOB_START,
                 std::move(environment)},

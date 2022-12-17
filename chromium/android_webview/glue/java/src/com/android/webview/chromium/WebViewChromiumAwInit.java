@@ -5,6 +5,7 @@
 package com.android.webview.chromium;
 
 import android.Manifest;
+import android.app.compat.CompatChanges;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
@@ -15,10 +16,9 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebViewDatabase;
-
-import androidx.annotation.IntDef;
 
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
@@ -101,17 +101,6 @@ public class WebViewChromiumAwInit {
 
     private final WebViewChromiumFactoryProvider mFactory;
 
-    // These values are persisted to logs. Entries should not be renumbered and
-    // numeric values should never be reused.
-    @IntDef({WebViewInitType.SYNC, WebViewInitType.ASYNC, WebViewInitType.BOTH})
-    private @interface WebViewInitType {
-        int SYNC = 0;
-        int ASYNC = 1;
-        int BOTH = 2;
-        int COUNT = 3;
-    }
-
-    private boolean mIsInitializedFromUIThread;
     private boolean mIsPostedFromBackgroundThread;
 
     WebViewChromiumAwInit(WebViewChromiumFactoryProvider factory) {
@@ -159,17 +148,6 @@ public class WebViewChromiumAwInit {
             if (mInitState == INIT_FINISHED) {
                 return;
             }
-
-            @WebViewInitType
-            int type;
-            if (mIsPostedFromBackgroundThread) {
-                type = mIsInitializedFromUIThread ? WebViewInitType.BOTH : WebViewInitType.ASYNC;
-            } else {
-                type = WebViewInitType.SYNC;
-            }
-
-            RecordHistogram.recordEnumeratedHistogram(
-                    "Android.WebView.Startup.InitType", type, WebViewInitType.COUNT);
 
             final Context context = ContextUtils.getApplicationContext();
 
@@ -258,8 +236,9 @@ public class WebViewChromiumAwInit {
 
             mFactory.getRunQueue().drainQueue();
 
-            if (BuildInfo.isAtLeastT() ? mFactory.shouldEnableSimplifiedDarkMode()
-                                       : BuildInfo.targetsAtLeastT()) {
+            if (BuildInfo.isAtLeastT()
+                            ? CompatChanges.isChangeEnabled(WebSettings.ENABLE_SIMPLIFIED_DARK_MODE)
+                            : BuildInfo.targetsAtLeastT()) {
                 AwDarkMode.enableSimplifiedDarkMode();
             }
 
@@ -343,7 +322,6 @@ public class WebViewChromiumAwInit {
             // If we are currently running on the UI thread then we must do init now. If there was
             // already a task posted to the UI thread from another thread to do it, it will just
             // no-op when it runs.
-            mIsInitializedFromUIThread = true;
             startChromiumLocked();
             return;
         }

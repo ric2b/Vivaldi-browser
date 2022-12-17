@@ -17,8 +17,8 @@
 #include "media/gpu/macros.h"
 #include "media/gpu/vaapi/vaapi_common.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
+#include "media/gpu/video_rate_control.h"
 #include "media/gpu/vp9_svc_layers.h"
-#include "media/gpu/vpx_rate_control.h"
 #include "third_party/libvpx/source/libvpx/vp9/ratectrl_rtc.h"
 
 namespace media {
@@ -182,6 +182,11 @@ bool VP9VaapiVideoEncoderDelegate::Initialize(
 
   if (config.input_visible_size.IsEmpty()) {
     DVLOGF(1) << "Input visible size could not be empty";
+    return false;
+  }
+
+  if (config.bitrate.mode() == Bitrate::Mode::kVariable) {
+    DVLOGF(1) << "Invalid configuraiton. VBR is not supported for VP9.";
     return false;
   }
 
@@ -386,6 +391,11 @@ bool VP9VaapiVideoEncoderDelegate::UpdateRates(
     const VideoBitrateAllocation& bitrate_allocation,
     uint32_t framerate) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (bitrate_allocation.GetMode() != Bitrate::Mode::kConstant) {
+    DLOG(ERROR) << "VBR is not supported for VP9 but was requested.";
+    return false;
+  }
 
   if (bitrate_allocation.GetSumBps() == 0u || framerate == 0)
     return false;

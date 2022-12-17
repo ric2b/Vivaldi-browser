@@ -41,7 +41,7 @@ void DeviceMenuController::Populate(Browser* browser,
         IDC_SEND_TAB_TO_SELF,
         l10n_util::GetStringUTF16(
             IDS_CONTEXT_MENU_SEND_TAB_TO_SELF),
-          ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));
+        ui::ImageModel::FromVectorIcon(kLaptopAndSmartphoneIcon));
 #endif
   } else if (mode_ == kLink) {
     /*
@@ -55,7 +55,7 @@ void DeviceMenuController::Populate(Browser* browser,
         IDC_CONTENT_LINK_SEND_TAB_TO_SELF,
         l10n_util::GetStringFUTF16(
             IDS_LINK_MENU_SEND_TAB_TO_SELF),
-        ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));
+        ui::ImageModel::FromVectorIcon(kLaptopAndSmartphoneIcon));
 #endif
    */
   }

@@ -21,7 +21,6 @@
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/layout.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
@@ -44,25 +43,22 @@ const int kTestIdpBrandIconIdealSize = 32;
 
 const char kTestIdpUrl[] = "https://idp.test";
 const char kTestRpUrl[] = "https://rp.test";
-const char kTestManifestListUrl[] = "https://idp.test/.well-known/fedcm.json";
+const char kTestManifestListUrl[] = "https://idp.test/.well-known/web-identity";
 const char kTestManifestUrl[] = "https://idp.test/fedcm.json";
 const char kTestAccountsEndpoint[] = "https://idp.test/accounts_endpoint";
 const char kTestTokenEndpoint[] = "https://idp.test/token_endpoint";
 const char kTestClientMetadataEndpoint[] =
     "https://idp.test/client_metadata_endpoint";
-const char kTestRevocationEndpoint[] = "https://idp.test/revocation_endpoint";
 
 class IdpNetworkRequestManagerTest : public ::testing::Test {
  public:
-  void SetUp() override {
-    manager_ = std::make_unique<IdpNetworkRequestManager>(
+  std::unique_ptr<IdpNetworkRequestManager> CreateTestManager() {
+    return std::make_unique<IdpNetworkRequestManager>(
         GURL(kTestIdpUrl), url::Origin::Create(GURL(kTestRpUrl)),
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_),
         network::mojom::ClientSecurityState::New());
   }
-
-  void TearDown() override { manager_.reset(); }
 
   std::tuple<FetchStatus, std::set<GURL>>
   SendManifestListRequestAndWaitForResponse(const char* test_data) {
@@ -78,7 +74,9 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
           parsed_urls = urls;
           run_loop.Quit();
         });
-    manager().FetchManifestList(std::move(callback));
+
+    std::unique_ptr<IdpNetworkRequestManager> manager = CreateTestManager();
+    manager->FetchManifestList(std::move(callback));
     run_loop.Run();
 
     return {parsed_fetch_status, parsed_urls};
@@ -99,8 +97,10 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
           parsed_idp_metadata = std::move(idp_metadata);
           run_loop.Quit();
         });
-    manager().FetchManifest(kTestIdpBrandIconIdealSize,
-                            kTestIdpBrandIconMinimumSize, std::move(callback));
+
+    std::unique_ptr<IdpNetworkRequestManager> manager = CreateTestManager();
+    manager->FetchManifest(kTestIdpBrandIconIdealSize,
+                           kTestIdpBrandIconMinimumSize, std::move(callback));
     run_loop.Run();
 
     return {parsed_fetch_status, parsed_idp_metadata};
@@ -123,8 +123,10 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
           parsed_accounts = accounts;
           run_loop.Quit();
         });
-    manager().SendAccountsRequest(accounts_endpoint, client_id,
-                                  std::move(callback));
+
+    std::unique_ptr<IdpNetworkRequestManager> manager = CreateTestManager();
+    manager->SendAccountsRequest(accounts_endpoint, client_id,
+                                 std::move(callback));
     run_loop.Run();
 
     return {parsed_accounts_response, parsed_accounts};
@@ -134,7 +136,7 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
       const char* account,
       const char* request,
       net::HttpStatusCode http_status = net::HTTP_OK) {
-    const char response[] = R"({"id_token": "token"})";
+    const char response[] = R"({"token": "token"})";
     GURL token_endpoint(kTestTokenEndpoint);
     test_url_loader_factory().AddResponse(token_endpoint.spec(), response,
                                           http_status);
@@ -146,8 +148,10 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
           token = token_response;
           run_loop.Quit();
         });
-    manager().SendTokenRequest(token_endpoint, account, request,
-                               std::move(callback));
+
+    std::unique_ptr<IdpNetworkRequestManager> manager = CreateTestManager();
+    manager->SendTokenRequest(token_endpoint, account, request,
+                              std::move(callback));
     run_loop.Run();
     return token;
   }
@@ -168,33 +172,13 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
           data = metadata;
           run_loop.Quit();
         });
-    manager().FetchClientMetadata(client_id_endpoint, client_id,
-                                  std::move(callback));
+
+    std::unique_ptr<IdpNetworkRequestManager> manager = CreateTestManager();
+    manager->FetchClientMetadata(client_id_endpoint, client_id,
+                                 std::move(callback));
     run_loop.Run();
     return data;
   }
-
-  RevokeResponse SendRevokeRequestAndWaitForResponse(
-      const char* client_id,
-      const char* hint,
-      net::HttpStatusCode http_status = net::HTTP_NO_CONTENT) {
-    GURL revocation_endpoint(kTestRevocationEndpoint);
-    test_url_loader_factory().AddResponse(revocation_endpoint.spec(), "",
-                                          http_status);
-
-    RevokeResponse status;
-    base::RunLoop run_loop;
-    auto callback =
-        base::BindLambdaForTesting([&](RevokeResponse revoke_status) {
-          status = revoke_status;
-          run_loop.Quit();
-        });
-    manager().SendRevokeRequest(revocation_endpoint, client_id, hint,
-                                std::move(callback));
-    run_loop.Run();
-    return status;
-  }
-  IdpNetworkRequestManager& manager() { return *manager_; }
 
   network::TestURLLoaderFactory& test_url_loader_factory() {
     return test_url_loader_factory_;
@@ -203,7 +187,6 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
  private:
   base::test::SingleThreadTaskEnvironment task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
-  std::unique_ptr<IdpNetworkRequestManager> manager_;
   data_decoder::test::InProcessDataDecoder in_process_data_decoder;
 };
 
@@ -422,12 +405,12 @@ TEST_F(IdpNetworkRequestManagerTest, ParseAccountMalformed) {
 }
 
 TEST_F(IdpNetworkRequestManagerTest, ComputeManifestListUrl) {
-  EXPECT_EQ("https://localhost:8000/.well-known/fedcm.json",
+  EXPECT_EQ("https://localhost:8000/.well-known/web-identity",
             IdpNetworkRequestManager::ComputeManifestListUrl(
                 GURL("https://localhost:8000/test/"))
                 ->spec());
 
-  EXPECT_EQ("https://google.com/.well-known/fedcm.json",
+  EXPECT_EQ("https://google.com/.well-known/web-identity",
             IdpNetworkRequestManager::ComputeManifestListUrl(
                 GURL("https://www.google.com:8000/test/"))
                 ->spec());
@@ -469,32 +452,32 @@ TEST_F(IdpNetworkRequestManagerTest, ParseManifestList) {
   std::set<GURL> urls;
 
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "provider_urls": ["https://idp.test/"]
+  "provider_urls": ["https://idp.test/fedcm.json"]
   })");
   EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
-  EXPECT_EQ(std::set<GURL>{GURL("https://idp.test/")}, urls);
+  EXPECT_EQ(std::set<GURL>{GURL("https://idp.test/fedcm.json")}, urls);
 
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "provider_urls": ["https://idp.test/path"]
+  "provider_urls": ["https://idp.test/path/fedcm.json"]
   })");
   EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
-  EXPECT_EQ(std::set<GURL>{GURL("https://idp.test/path/")}, urls);
+  EXPECT_EQ(std::set<GURL>{GURL("https://idp.test/path/fedcm.json")}, urls);
 
   // Value not a list
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "provider_urls": "https://idp.test/"
+  "provider_urls": "https://idp.test/fedcm.json"
   })");
   EXPECT_EQ(FetchStatus::kInvalidResponseError, fetch_status);
 
   // Toplevel not a dictionary
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"(
-  ["https://idp.test/"]
+  ["https://idp.test/fedcm.json"]
   )");
   EXPECT_EQ(FetchStatus::kInvalidResponseError, fetch_status);
 
   // Incorrect key
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "providers": ["https://idp.test/"]
+  "providers": ["https://idp.test/fedcm.json"]
   })");
   EXPECT_EQ(FetchStatus::kInvalidResponseError, fetch_status);
 
@@ -577,10 +560,6 @@ TEST_F(IdpNetworkRequestManagerTest,
 }
 
 TEST_F(IdpNetworkRequestManagerTest, ParseManifestBrandingSelectBestSize) {
-  // Selected icon depends on OS supported scale factors.
-  ui::test::ScopedSetSupportedResourceScaleFactors
-      scoped_supported_scale_factors({ui::k100Percent});
-
   const char test_json[] = R"({
   "branding" : {
     "icons": [
@@ -593,23 +572,22 @@ TEST_F(IdpNetworkRequestManagerTest, ParseManifestBrandingSelectBestSize) {
         "size": 16
       },
       {
-        "url": "https://example.com/39.png",
-        "size": 39
+        "url": "https://example.com/31.png",
+        "size": 31
       },
       {
-        "url": "https://example.com/40.png",
-        "size": 40
+        "url": "https://example.com/32.png",
+        "size": 32
       },
       {
-        "url": "https://example.com/41.png",
-        "size": 41
+        "url": "https://example.com/33.png",
+        "size": 33
       }
     ]
   }
   })";
 
   ASSERT_EQ(32, kTestIdpBrandIconIdealSize);
-  // 32 / kMaskableWebIconSafeZoneRatio = 40
 
   FetchStatus fetch_status;
   IdentityProviderMetadata idp_metadata;
@@ -617,7 +595,56 @@ TEST_F(IdpNetworkRequestManagerTest, ParseManifestBrandingSelectBestSize) {
       SendManifestRequestAndWaitForResponse(test_json);
 
   EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
-  EXPECT_EQ("https://example.com/40.png", idp_metadata.brand_icon_url.spec());
+  EXPECT_EQ("https://example.com/32.png", idp_metadata.brand_icon_url.spec());
+}
+
+// Test that the icon is rejected if there is an explicit brand icon size in the
+// manifest and it is smaller than the `idp_brand_icon_minimum_size` parameter
+// passed to IdpNetworkRequestManager::FetchManifest().
+TEST_F(IdpNetworkRequestManagerTest, ParseManifestBrandingMinSize) {
+  ASSERT_EQ(16, kTestIdpBrandIconMinimumSize);
+
+  {
+    const char test_json[] = R"({
+    "branding" : {
+      "icons": [
+        {
+          "url": "https://example.com/15.png",
+          "size": 15
+        }
+      ]
+    }
+    })";
+
+    FetchStatus fetch_status;
+    IdentityProviderMetadata idp_metadata;
+    std::tie(fetch_status, idp_metadata) =
+        SendManifestRequestAndWaitForResponse(test_json);
+
+    EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
+    EXPECT_EQ(GURL(), idp_metadata.brand_icon_url);
+  }
+
+  {
+    const char test_json[] = R"({
+    "branding" : {
+      "icons": [
+        {
+          "url": "https://example.com/16.png",
+          "size": 16
+        }
+      ]
+    }
+    })";
+
+    FetchStatus fetch_status;
+    IdentityProviderMetadata idp_metadata;
+    std::tie(fetch_status, idp_metadata) =
+        SendManifestRequestAndWaitForResponse(test_json);
+
+    EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
+    EXPECT_EQ("https://example.com/16.png", idp_metadata.brand_icon_url.spec());
+  }
 }
 
 // Tests that we send the correct referrer for account requests.
@@ -760,35 +787,6 @@ TEST_F(IdpNetworkRequestManagerTest, ClientMetadata) {
   ASSERT_EQ("", data.terms_of_service_url);
 }
 
-// Tests the revoke implementation.
-TEST_F(IdpNetworkRequestManagerTest, Revoke) {
-  bool called = false;
-  auto interceptor =
-      base::BindLambdaForTesting([&](const network::ResourceRequest& request) {
-        called = true;
-        EXPECT_EQ(GURL(kTestRpUrl), request.referrer);
-        // Check that the request body is correct
-        ASSERT_NE(request.request_body, nullptr);
-        ASSERT_EQ(1ul, request.request_body->elements()->size());
-        const network::DataElement& elem =
-            request.request_body->elements()->at(0);
-        ASSERT_EQ(network::DataElement::Tag::kBytes, elem.type());
-        const network::DataElementBytes& byte_elem =
-            elem.As<network::DataElementBytes>();
-        EXPECT_EQ("client_id=xxx&hint=yyy", byte_elem.AsStringPiece());
-      });
-  test_url_loader_factory().SetInterceptor(interceptor);
-  RevokeResponse status = SendRevokeRequestAndWaitForResponse("xxx", "yyy");
-  ASSERT_TRUE(called);
-  ASSERT_EQ(RevokeResponse::kSuccess, status);
-}
-
-TEST_F(IdpNetworkRequestManagerTest, RevokeError) {
-  RevokeResponse status =
-      SendRevokeRequestAndWaitForResponse("xxx", "yyy", net::HTTP_FORBIDDEN);
-  ASSERT_EQ(RevokeResponse::kError, status);
-}
-
 // Tests that we correctly records metrics regarding approved_clients.
 TEST_F(IdpNetworkRequestManagerTest, RecordApprovedClientsMetrics) {
   base::HistogramTester histogram_tester;
@@ -849,6 +847,41 @@ TEST_F(IdpNetworkRequestManagerTest, RecordApprovedClientsMetrics) {
   histogram_tester.ExpectBucketCount("Blink.FedCm.ApprovedClientsSize", 0, 1);
   histogram_tester.ExpectBucketCount("Blink.FedCm.ApprovedClientsSize", 1, 1);
   histogram_tester.ExpectBucketCount("Blink.FedCm.ApprovedClientsSize", 2, 1);
+}
+
+// Test that the callback is not called after IdpNetworkRequestManager is
+// destroyed.
+TEST_F(IdpNetworkRequestManagerTest, DontCallCallbackAfterManagerDeletion) {
+  const char test_accounts_json[] = R"({
+  "accounts" : [
+    {
+      "id" : "1",
+      "email": "ken@idp.test",
+      "name": "Ken R. Example",
+      "approved_clients": []
+    }
+   ]
+  })";
+
+  GURL accounts_endpoint(kTestAccountsEndpoint);
+  test_url_loader_factory().AddResponse(accounts_endpoint.spec(),
+                                        test_accounts_json);
+
+  bool callback_called = false;
+  auto callback = base::BindLambdaForTesting(
+      [&callback_called](FetchStatus response, AccountList accounts) {
+        callback_called = true;
+      });
+
+  {
+    std::unique_ptr<IdpNetworkRequestManager> manager = CreateTestManager();
+    manager->SendAccountsRequest(accounts_endpoint, /*client_id=*/"",
+                                 std::move(callback));
+    // Destroy `manager`.
+  }
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(callback_called);
 }
 
 }  // namespace

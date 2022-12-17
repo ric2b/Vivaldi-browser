@@ -83,7 +83,7 @@ class TestDriveFsEventRouter : public DriveFsEventRouter {
 
   void BroadcastEvent(extensions::events::HistogramValue histogram_value,
                       const std::string& event_name,
-                      std::vector<base::Value> event_args) override {
+                      base::Value::List event_args) override {
     BroadcastEventImpl(event_name, base::Value(std::move(event_args)));
   }
 
@@ -740,6 +740,23 @@ TEST_F(DriveFsEventRouterTest, OnError_CantUploadStorageFull) {
 
   observer().OnError({drivefs::mojom::DriveError::Type::kCantUploadStorageFull,
                       base::FilePath("/a")});
+}
+
+TEST_F(DriveFsEventRouterTest, OnError_CantUploadStorageFullOrganization) {
+  DriveSyncErrorEvent event;
+  event.type =
+      file_manager_private::DRIVE_SYNC_ERROR_TYPE_NO_SERVER_SPACE_ORGANIZATION;
+  event.file_url = "ext:/a";
+  EXPECT_CALL(
+      mock(),
+      BroadcastEventImpl(
+          file_manager_private::OnDriveSyncError::kEventName,
+          testing::MakeMatcher(new ValueMatcher(base::Value(
+              file_manager_private::OnDriveSyncError::Create(event))))));
+
+  observer().OnError(
+      {drivefs::mojom::DriveError::Type::kCantUploadStorageFullOrganization,
+       base::FilePath("/a")});
 }
 
 TEST_F(DriveFsEventRouterTest, OnError_CantPinDiskFull) {

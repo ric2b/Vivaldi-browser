@@ -139,7 +139,6 @@ class VivaldiPrivateTabObserver
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);
-  void SetEnablePlugins(bool enable_plugins);
   void SetContentsMimeType(std::string mimetype) {
     contents_mime_type_ = mimetype;
   }
@@ -151,7 +150,6 @@ class VivaldiPrivateTabObserver
 
   bool show_images() { return show_images_; }
   bool load_from_cache_only() { return load_from_cache_only_; }
-  bool enable_plugins() { return enable_plugins_; }
   std::string contents_mime_type() { return contents_mime_type_; }
   bool mute() { return mute_; }
 
@@ -205,9 +203,6 @@ class VivaldiPrivateTabObserver
 
   // Only load the page from cache. Default is false.
   bool load_from_cache_only_ = false;
-
-  // Enable plugins on this tab. Default is true.
-  bool enable_plugins_ = true;
 
   // Vivaldi tab zoom level
   double tab_zoom_level_ = -1;

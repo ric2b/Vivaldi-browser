@@ -254,9 +254,11 @@ void FrameHandler::InjectJS(const std::string& content, int world_id) {
       1, blink::WebScriptSource(blink::WebString::FromUTF8(content), GURL()));
 
   render_frame()->GetWebFrame()->RequestExecuteScript(
-      world_id, sources, false, blink::WebLocalFrame::kSynchronous, nullptr,
+      world_id, sources, blink::mojom::UserActivationOption::kDoNotActivate,
+      blink::mojom::EvaluationTiming::kSynchronous,
+      blink::mojom::LoadEventBlockingOption::kBlock, {},
       blink::BackForwardCacheAware::kPossiblyDisallow,
-      blink::WebLocalFrame::PromiseBehavior::kDontWait);
+      blink::mojom::PromiseResultOption::kDoNotWait);
 }
 
 void FrameHandler::InjectPendingScripts() {

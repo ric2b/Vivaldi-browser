@@ -8,7 +8,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/trace_event/typed_macros.h"
-#include "content/browser/prerender/prerender_host_registry.h"
+#include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -228,13 +228,26 @@ bool PrerenderHostObserver::was_activated() const {
   return impl_->was_activated();
 }
 
-PrerenderTestHelper::PrerenderTestHelper(const WebContents::Getter& fn)
-    : get_web_contents_fn_(fn) {
-  feature_list_.InitWithFeatures({blink::features::kPrerender2},
+ScopedPrerenderFeatureList::ScopedPrerenderFeatureList() {
+  std::vector<base::Feature> enabled_features;
+#if !BUILDFLAG(IS_ANDROID)
+  // Prerender2 for Speculation Rules should be enabled by default on Android.
+  // To test the default behavior on Android, explicitly enable the feature only
+  // on non-Android.
+  //
+  // This is useful for preventing breakages by future changes on the complex
+  // flag structure. See review comments on https://crrev.com/c/3670822 for
+  // details.
+  enabled_features.push_back(blink::features::kPrerender2);
+#endif
+  feature_list_.InitWithFeatures(enabled_features,
                                  // Disable the memory requirement of Prerender2
                                  // so the test can run on any bot.
                                  {blink::features::kPrerender2MemoryControls});
 }
+
+PrerenderTestHelper::PrerenderTestHelper(const WebContents::Getter& fn)
+    : get_web_contents_fn_(fn) {}
 
 PrerenderTestHelper::~PrerenderTestHelper() = default;
 
@@ -307,7 +320,7 @@ void PrerenderTestHelper::AddPrerenderAsync(const GURL& prerendering_url) {
   // Have to use ExecuteJavaScriptForTests instead of ExecJs/EvalJs here,
   // because some test pages have ContentSecurityPolicy and EvalJs cannot work
   // with it. See the quick migration guide for EvalJs for more information.
-  GetWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+  GetWebContents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
       base::UTF8ToUTF16(script), base::NullCallback());
 }
 
@@ -327,7 +340,7 @@ PrerenderTestHelper::AddEmbedderTriggeredPrerenderAsync(
   WebContents* web_contents = GetWebContents();
   return web_contents->StartPrerendering(prerendering_url, trigger_type,
                                          embedder_histogram_suffix,
-                                         page_transition);
+                                         page_transition, nullptr);
 }
 
 void PrerenderTestHelper::NavigatePrerenderedPage(int host_id,
@@ -383,8 +396,8 @@ void PrerenderTestHelper::NavigatePrimaryPage(WebContents& web_contents,
   // approach just to ignore it instead of fixing the timing issue. When
   // ExecJs() actually fails, the remaining test steps should fail, so it
   // should be safe to ignore it.
-  std::ignore =
-      ExecJs(web_contents.GetMainFrame(), JsReplace("location = $1", gurl));
+  std::ignore = ExecJs(web_contents.GetPrimaryMainFrame(),
+                       JsReplace("location = $1", gurl));
   observer.Wait();
 }
 
@@ -480,6 +493,22 @@ std::string PrerenderTestHelper::GenerateHistogramName(
       return std::string(histogram_base_name) + ".Embedder_" + embedder_suffix;
   }
   NOTREACHED();
+}
+
+ScopedPrerenderWebContentsDelegate::ScopedPrerenderWebContentsDelegate(
+    WebContents& web_contents)
+    : web_contents_(web_contents.GetWeakPtr()) {
+  web_contents_->SetDelegate(this);
+}
+
+ScopedPrerenderWebContentsDelegate::~ScopedPrerenderWebContentsDelegate() {
+  if (web_contents_)
+    web_contents_.get()->SetDelegate(nullptr);
+}
+
+bool ScopedPrerenderWebContentsDelegate::IsPrerender2Supported(
+    WebContents& web_contents) {
+  return true;
 }
 
 }  // namespace test

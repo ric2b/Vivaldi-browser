@@ -218,15 +218,15 @@ void OnSafeJSONParse(
     uint8_t parse_flags,
     FileBackedRulesetSource::IndexAndPersistJSONRulesetCallback callback,
     data_decoder::DataDecoder::ValueOrError result) {
-  if (!result.value) {
+  if (!result.has_value()) {
     std::move(callback).Run(IndexAndPersistJSONRulesetResult::CreateErrorResult(
-        GetErrorWithFilename(json_path, *result.error)));
+        GetErrorWithFilename(json_path, result.error())));
     return;
   }
 
   base::ElapsedTimer timer;
   ReadJSONRulesResult read_result = ParseRulesFromJSON(
-      source.id(), json_path, *result.value, source.rule_count_limit(),
+      source.id(), json_path, *result, source.rule_count_limit(),
       source.is_dynamic_ruleset());
 
   std::move(callback).Run(IndexAndPersistRuleset(source, std::move(read_result),
@@ -412,15 +412,14 @@ ReadJSONRulesResult FileBackedRulesetSource::ReadJSONRulesUnsafe() const {
                                                   kFileReadError);
   }
 
-  base::JSONReader::ValueWithError value_with_error =
-      base::JSONReader::ReadAndReturnValueWithError(
-          json_contents, base::JSON_PARSE_RFC /* options */);
-  if (!value_with_error.value) {
+  auto value_with_error = base::JSONReader::ReadAndReturnValueWithError(
+      json_contents, base::JSON_PARSE_RFC /* options */);
+  if (!value_with_error.has_value()) {
     return ReadJSONRulesResult::CreateErrorResult(
-        Status::kJSONParseError, std::move(value_with_error.error_message));
+        Status::kJSONParseError, std::move(value_with_error.error().message));
   }
 
-  return ParseRulesFromJSON(id(), json_path(), *value_with_error.value,
+  return ParseRulesFromJSON(id(), json_path(), *value_with_error,
                             rule_count_limit(), is_dynamic_ruleset());
 }
 

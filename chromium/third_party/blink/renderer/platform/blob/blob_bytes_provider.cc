@@ -101,7 +101,8 @@ class BlobBytesStreamer {
 // This keeps the process alive while blobs are being transferred.
 void IncreaseChildProcessRefCount() {
   if (!WTF::IsMainThread()) {
-    PostCrossThreadTask(*Thread::MainThread()->GetTaskRunner(), FROM_HERE,
+    PostCrossThreadTask(*Thread::MainThread()->GetDeprecatedTaskRunner(),
+                        FROM_HERE,
                         CrossThreadBindOnce(&IncreaseChildProcessRefCount));
     return;
   }
@@ -110,7 +111,8 @@ void IncreaseChildProcessRefCount() {
 
 void DecreaseChildProcessRefCount() {
   if (!WTF::IsMainThread()) {
-    PostCrossThreadTask(*Thread::MainThread()->GetTaskRunner(), FROM_HERE,
+    PostCrossThreadTask(*Thread::MainThread()->GetDeprecatedTaskRunner(),
+                        FROM_HERE,
                         CrossThreadBindOnce(&DecreaseChildProcessRefCount));
     return;
   }
@@ -204,8 +206,8 @@ void BlobBytesProvider::RequestAsFile(uint64_t source_offset,
     return;
   }
 
-  int64_t seek_distance =
-      file.Seek(base::File::FROM_BEGIN, SafeCast<int64_t>(file_offset));
+  int64_t seek_distance = file.Seek(base::File::FROM_BEGIN,
+                                    base::checked_cast<int64_t>(file_offset));
   bool seek_failed = seek_distance < 0;
   if (seek_failed) {
     std::move(callback).Run(absl::nullopt);

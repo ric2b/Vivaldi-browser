@@ -8,21 +8,23 @@
  * only be called when a device exist.
  */
 
-import '../../settings_shared_css.js';
-import '//resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import '//resources/cr_elements/policy/cr_tooltip_icon.m.js';
+import '../../settings_shared.css.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.m.js';
 import './os_bluetooth_change_device_name_dialog.js';
 import './os_bluetooth_true_wireless_images.js';
 import 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_device_battery_info.js';
 
-import {BluetoothUiSurface, recordBluetoothUiSurfaceMetrics} from '//resources/cr_components/chromeos/bluetooth/bluetooth_metrics_utils.js';
-import {assertNotReached} from '//resources/js/assert.m.js';
-import {I18nBehavior, I18nBehaviorInterface} from '//resources/js/i18n_behavior.m.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {BluetoothUiSurface, recordBluetoothUiSurfaceMetrics} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_metrics_utils.js';
 import {BatteryType} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_types.js';
 import {getBatteryPercentage, getDeviceName, hasAnyDetailedBatteryInfo, hasDefaultImage, hasTrueWirelessImages} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_utils.js';
 import {getBluetoothConfig} from 'chrome://resources/cr_components/chromeos/bluetooth/cros_bluetooth_config.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {AudioOutputCapability, BluetoothSystemProperties, DeviceConnectionState, DeviceType, PairedBluetoothDeviceProperties} from 'chrome://resources/mojo/chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom-webui.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, Router} from '../../router.js';
 import {routes} from '../os_route.js';
@@ -44,9 +46,16 @@ const PageState = {
  * @implements {RouteObserverBehaviorInterface}
  * @implements {RouteOriginBehaviorInterface}
  * @implements {I18nBehaviorInterface}
+ * @implements {WebUIListenerBehaviorInterface}
  */
 const SettingsBluetoothDeviceDetailSubpageElementBase = mixinBehaviors(
-    [RouteObserverBehavior, RouteOriginBehavior, I18nBehavior], PolymerElement);
+    [
+      RouteObserverBehavior,
+      RouteOriginBehavior,
+      I18nBehavior,
+      WebUIListenerBehavior,
+    ],
+    PolymerElement);
 
 /** @polymer */
 class SettingsBluetoothDeviceDetailSubpageElement extends
@@ -103,7 +112,13 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
       pageState_: {
         type: Object,
         value: PageState.DISCONNECTED,
-      }
+      },
+
+      /** @protected */
+      shouldShowForgetDeviceDialog_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -123,6 +138,9 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
   /** @override */
   ready() {
     super.ready();
+
+    this.addEventListener(
+        'forget-bluetooth-device', this.forgetDeviceConfirmed_);
 
     this.addFocusConfig(routes.POINTERS, '#changeMouseSettings');
     this.addFocusConfig(routes.KEYBOARD, '#changeKeyboardSettings');
@@ -166,13 +184,15 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
             (device) => device.deviceProperties.id === this.deviceId_) ||
         null;
 
-    // Special case where the device was turned off or becomes unavailable
-    // while user is vewing the page, return back to previous page.
-    if (!this.device_) {
-      this.deviceId_ = '';
-      Router.getInstance().navigateToPreviousRoute();
+    if (this.device_ ||
+        Router.getInstance().currentRoute !== routes.BLUETOOTH_DEVICE_DETAIL) {
       return;
     }
+
+    // Special case where the device was turned off or becomes unavailable
+    // while user is vewing the page, return back to previous page.
+    this.deviceId_ = '';
+    Router.getInstance().navigateToPreviousRoute();
   }
 
   /**
@@ -567,15 +587,6 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
   }
 
   /**
-   * @param {!Event} event
-   * @private
-   */
-  onForgetBtnClick_(event) {
-    event.stopPropagation();
-    getBluetoothConfig().forget(this.deviceId_);
-  }
-
-  /**
    * @return {boolean}
    * @private
    */
@@ -628,6 +639,25 @@ class SettingsBluetoothDeviceDetailSubpageElement extends
   getForgetA11yLabel_() {
     return this.i18n(
         'bluetoothDeviceDetailForgetA11yLabel', this.getDeviceName_());
+  }
+
+  /** @private */
+  onForgetButtonClicked_() {
+    if (loadTimeData.getBoolean('enableFastPairFlag')) {
+      this.shouldShowForgetDeviceDialog_ = true;
+    } else {
+      getBluetoothConfig().forget(this.deviceId_);
+    }
+  }
+
+  /** @private */
+  onCloseForgetDeviceDialog_() {
+    this.shouldShowForgetDeviceDialog_ = false;
+  }
+
+  /** @private */
+  forgetDeviceConfirmed_() {
+    getBluetoothConfig().forget(this.deviceId_);
   }
 }
 

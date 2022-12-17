@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
+
 #import <Cocoa/Cocoa.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
@@ -51,6 +53,7 @@
 #include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/search/ntp_test_utils.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
@@ -303,7 +306,7 @@ class AppControllerPlatformAppBrowserTest
                                     "1234");
   }
 
-  const BrowserList* active_browser_list_;
+  raw_ptr<const BrowserList> active_browser_list_;
 };
 
 // Test that if only a platform app window is open and no browser windows are
@@ -367,7 +370,7 @@ class AppControllerWebAppBrowserTest : public InProcessBrowserTest {
     return "http://example.com/";
   }
 
-  const BrowserList* active_browser_list_;
+  raw_ptr<const BrowserList> active_browser_list_;
 };
 
 // Test that in web app mode a reopen event opens the app URL.
@@ -409,7 +412,7 @@ class AppControllerProfilePickerBrowserTest : public InProcessBrowserTest {
   }
 
  private:
-  const BrowserList* active_browser_list_;
+  raw_ptr<const BrowserList> active_browser_list_;
 };
 
 // Test that for a guest last profile, commandDispatch should open UserManager
@@ -1098,7 +1101,7 @@ class AppControllerHandoffBrowserTest : public InProcessBrowserTest {
     content::WebContentsDestroyedWatcher destroyed_watcher(
         browser->tab_strip_model()->GetWebContentsAt(index));
     browser->tab_strip_model()->CloseWebContentsAt(
-        index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
+        index, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
     destroyed_watcher.Wait();
   }
 
@@ -1129,7 +1132,8 @@ IN_PROC_BROWSER_TEST_F(AppControllerHandoffBrowserTest, TestHandoffURLs) {
 
   // Test that switching tabs updates the handoff URL.
   browser()->tab_strip_model()->ActivateTabAt(
-      0, {TabStripModel::GestureType::kOther});
+      0, TabStripUserGestureDetails(
+             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(g_handoff_url, test_url1);
   EXPECT_TRUE(base::EndsWith(g_handoff_title, u"title1.html"));
 
@@ -1234,7 +1238,7 @@ IN_PROC_BROWSER_TEST_F(AppControllerHandoffPrerenderBrowserTest,
   content::TestActivationManager navigation_manager(GetActiveWebContents(),
                                                     prerender_url);
   ASSERT_TRUE(
-      content::ExecJs(GetActiveWebContents()->GetMainFrame(),
+      content::ExecJs(GetActiveWebContents()->GetPrimaryMainFrame(),
                       content::JsReplace("location = $1", prerender_url)));
   navigation_manager.WaitForNavigationFinished();
   EXPECT_TRUE(navigation_manager.was_activated());

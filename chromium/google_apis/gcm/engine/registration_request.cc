@@ -195,7 +195,8 @@ void RegistrationRequest::Start() {
   url_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       base::BindOnce(&RegistrationRequest::OnURLLoadComplete,
-                     base::Unretained(this), url_loader_.get()));
+                     base::Unretained(this), std::move(body),
+                     url_loader_.get()));
 }
 
 void RegistrationRequest::BuildRequestHeaders(
@@ -240,6 +241,7 @@ void RegistrationRequest::RetryWithBackoff() {
 }
 
 RegistrationRequest::Status RegistrationRequest::ParseResponse(
+    const std::string& request_body,
     const network::SimpleURLLoader* source,
     std::unique_ptr<std::string> body,
     std::string* token) {
@@ -262,7 +264,8 @@ RegistrationRequest::Status RegistrationRequest::ParseResponse(
     std::string error =
         response.substr(error_pos + std::size(kErrorPrefix) - 1);
     LOG(ERROR) << "Registration response error message: " << error;
-    return GetStatusFromError(error);
+    RegistrationRequest::Status status = GetStatusFromError(error);
+    return status;
   }
 
   // Can't even get any header info.
@@ -290,10 +293,11 @@ RegistrationRequest::Status RegistrationRequest::ParseResponse(
 }
 
 void RegistrationRequest::OnURLLoadComplete(
+    const std::string& request_body,
     const network::SimpleURLLoader* source,
     std::unique_ptr<std::string> body) {
   std::string token;
-  Status status = ParseResponse(source, std::move(body), &token);
+  Status status = ParseResponse(request_body, source, std::move(body), &token);
   recorder_->RecordRegistrationResponse(request_info_.app_id(),
                                         source_to_record_, status);
 

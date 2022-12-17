@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.feed;
 import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 
 import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -53,7 +52,6 @@ import org.robolectric.shadows.ShadowLog;
 
 import org.chromium.base.Callback;
 import org.chromium.base.FeatureList;
-import org.chromium.base.metrics.test.ShadowRecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
@@ -90,8 +88,7 @@ import java.util.Map;
 
 /** Unit tests for {@link FeedStream}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(manifest = Config.NONE,
-        shadows = {ShadowPostTask.class, ShadowRecordHistogram.class, ShadowGURL.class})
+@Config(manifest = Config.NONE, shadows = {ShadowPostTask.class, ShadowGURL.class})
 // TODO(crbug.com/1210371): Rewrite using paused loop. See crbug for details.
 @LooperMode(LooperMode.Mode.LEGACY)
 public class FeedStreamTest {
@@ -166,7 +163,6 @@ public class FeedStreamTest {
     private void setFeatureOverrides(boolean feedLoadingPlaceholderOn, boolean onboardingOn) {
         Map<String, Boolean> overrides = new ArrayMap<>();
         overrides.put(ChromeFeatureList.FEED_LOADING_PLACEHOLDER, feedLoadingPlaceholderOn);
-        overrides.put(ChromeFeatureList.INTEREST_FEED_SPINNER_ALWAYS_ANIMATE, false);
         overrides.put(ChromeFeatureList.WEB_FEED_ONBOARDING, onboardingOn);
         FeatureList.setTestFeatures(overrides);
     }
@@ -470,7 +466,7 @@ public class FeedStreamTest {
         handler.navigateTab(TEST_URL, null);
         verify(mActionDelegate)
                 .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.CURRENT_TAB),
-                        any(), any(), any());
+                        any(), eq(false), any(), any());
     }
 
     @Test
@@ -525,7 +521,22 @@ public class FeedStreamTest {
         verify(mActionDelegate)
                 .openSuggestionUrl(
                         eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
-                        any(), any());
+                        eq(false), any(), any());
+    }
+
+    @Test
+    @SmallTest
+    public void testNavigateNewTabInGroup() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+
+        handler.navigateNewTabInGroup(TEST_URL, null);
+        verify(mActionDelegate)
+                .openSuggestionUrl(
+                        eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
+                        eq(true), any(), any());
     }
 
     @Test
@@ -538,7 +549,7 @@ public class FeedStreamTest {
         handler.navigateIncognitoTab(TEST_URL);
         verify(mActionDelegate)
                 .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.OFF_THE_RECORD),
-                        any(), any(), any());
+                        any(), eq(false), any(), any());
     }
 
     @Test
@@ -584,10 +595,15 @@ public class FeedStreamTest {
             public WebFeedFollowUpdate.Callback callback() {
                 return mWebFeedFollowUpdateCallback;
             }
+            @Override
+            public int webFeedChangeReason() {
+                return WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU;
+            }
         });
 
         verify(mWebFeedBridgeJni)
                 .followWebFeedById(eq("webFeed1".getBytes("UTF8")), eq(false),
+                        eq(WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU),
                         mFollowResultsCallbackCaptor.capture());
         mFollowResultsCallbackCaptor.getValue().onResult(
                 new FollowResults(WebFeedSubscriptionRequestStatus.SUCCESS, null));
@@ -610,7 +626,7 @@ public class FeedStreamTest {
         });
 
         verify(mWebFeedBridgeJni)
-                .followWebFeedById(any(), eq(false), mFollowResultsCallbackCaptor.capture());
+                .followWebFeedById(any(), eq(false), eq(0), mFollowResultsCallbackCaptor.capture());
         // Just make sure no exception is thrown because there is no callback to call.
         mFollowResultsCallbackCaptor.getValue().onResult(
                 new FollowResults(WebFeedSubscriptionRequestStatus.SUCCESS, null));
@@ -638,10 +654,15 @@ public class FeedStreamTest {
             public WebFeedFollowUpdate.Callback callback() {
                 return mWebFeedFollowUpdateCallback;
             }
+            @Override
+            public int webFeedChangeReason() {
+                return WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU;
+            }
         });
 
         verify(mWebFeedBridgeJni)
                 .followWebFeedById(eq("webFeed1".getBytes("UTF8")), eq(true),
+                        eq(WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU),
                         mFollowResultsCallbackCaptor.capture());
         mFollowResultsCallbackCaptor.getValue().onResult(
                 new FollowResults(WebFeedSubscriptionRequestStatus.FAILED_OFFLINE, null));
@@ -674,10 +695,15 @@ public class FeedStreamTest {
             public boolean isDurable() {
                 return true;
             }
+            @Override
+            public int webFeedChangeReason() {
+                return WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU;
+            }
         });
 
         verify(mWebFeedBridgeJni)
                 .unfollowWebFeed(eq("webFeed1".getBytes("UTF8")), eq(true),
+                        eq(WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU),
                         mUnfollowResultsCallbackCaptor.capture());
         mUnfollowResultsCallbackCaptor.getValue().onResult(
                 new UnfollowResults(WebFeedSubscriptionRequestStatus.SUCCESS));
@@ -702,10 +728,15 @@ public class FeedStreamTest {
             public boolean isFollow() {
                 return false;
             }
+            @Override
+            public int webFeedChangeReason() {
+                return WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU;
+            }
         });
 
         verify(mWebFeedBridgeJni)
-                .unfollowWebFeed(any(), eq(false), mUnfollowResultsCallbackCaptor.capture());
+                .unfollowWebFeed(any(), eq(false), eq(WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU),
+                        mUnfollowResultsCallbackCaptor.capture());
         mUnfollowResultsCallbackCaptor.getValue().onResult(
                 new UnfollowResults(WebFeedSubscriptionRequestStatus.SUCCESS));
     }
@@ -736,10 +767,15 @@ public class FeedStreamTest {
             public boolean isDurable() {
                 return true;
             }
+            @Override
+            public int webFeedChangeReason() {
+                return WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU;
+            }
         });
 
         verify(mWebFeedBridgeJni)
                 .unfollowWebFeed(eq("webFeed1".getBytes("UTF8")), eq(true),
+                        eq(WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU),
                         mUnfollowResultsCallbackCaptor.capture());
         mUnfollowResultsCallbackCaptor.getValue().onResult(
                 new UnfollowResults(WebFeedSubscriptionRequestStatus.FAILED_OFFLINE));
@@ -772,39 +808,6 @@ public class FeedStreamTest {
         handler.navigateCrow(TEST_URL);
 
         verify(mActionDelegate).openCrow(TEST_URL);
-    }
-
-    @Test
-    @SmallTest
-    public void testSendFeedback() {
-        final String testUrl = TEST_URL;
-        final String testTitle = "Chromium based browsers for the win!";
-        final String xSurfaceCardTitle = "Card Title";
-        final String cardTitle = "CardTitle";
-        final String cardUrl = "CardUrl";
-        // Arrange.
-        Map<String, String> productSpecificDataMap = new HashMap<>();
-        productSpecificDataMap.put(FeedStream.FeedActionsHandlerImpl.XSURFACE_CARD_URL, testUrl);
-        productSpecificDataMap.put(xSurfaceCardTitle, testTitle);
-
-        mFeedStream.setHelpAndFeedbackLauncherForTest(mHelpAndFeedbackLauncher);
-        bindToView();
-        FeedStream.FeedActionsHandlerImpl handler =
-                (FeedStream.FeedActionsHandlerImpl) mContentManager.getContextValues(0).get(
-                        FeedActionsHandler.KEY);
-
-        // Act.
-        handler.sendFeedback(productSpecificDataMap);
-
-        // Assert.
-        verify(mHelpAndFeedbackLauncher)
-                .showFeedback(any(), any(), eq(testUrl),
-                        eq(FeedStream.FeedActionsHandlerImpl.FEEDBACK_REPORT_TYPE),
-                        mMapCaptor.capture());
-
-        // Check that the map contents are as expected.
-        assertThat(mMapCaptor.getValue(), hasEntry(cardUrl, testUrl));
-        assertThat(mMapCaptor.getValue(), hasEntry(cardTitle, testTitle));
     }
 
     @Test

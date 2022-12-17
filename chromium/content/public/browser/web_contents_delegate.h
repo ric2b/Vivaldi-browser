@@ -43,7 +43,6 @@ namespace base {
 class FilePath;
 template <typename T>
 class WeakPtr;
-class ListValue;
 }
 
 namespace blink {
@@ -201,10 +200,10 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void UpdateTargetURL(WebContents* source,
                                const GURL& url) {}
 
-  virtual void CreateSearch(const base::ListValue & search) {}
+  virtual void CreateSearch(const base::Value::List& search) {}
 
   //Vivaldi PasteAndGo from the addressfield
-  virtual void PasteAndGo(const base::ListValue & search) {}
+  virtual void PasteAndGo(const base::Value::List& search) {}
 
   // Notification that there was a mouse event, along with the type of event.
   // If |motion| is true, this is a normal motion event. If |exited| is true,
@@ -479,7 +478,16 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Called when the renderer puts a tab out of fullscreen mode.
   virtual void ExitFullscreenModeForTab(WebContents*) {}
 
+  // Returns true if the given `web_contents` is, or is transitioning to
+  // tab-fullscreen.
   virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents);
+
+  // Overload of IsFullscreenForTabOrPending which also outputs the current or
+  // target display of the fullscreen tab. If the function returns true and
+  // `display_id` is not nullptr, the target display ID of the tab will be
+  // written to `display_id`.
+  virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents,
+                                           int64_t* display_id);
 
   // Returns the actual display mode of the top-level browsing context.
   // For example, it should return 'blink::mojom::DisplayModeFullscreen'
@@ -710,8 +718,8 @@ class CONTENT_EXPORT WebContentsDelegate {
   // indication that the cache will be used.
   virtual bool IsBackForwardCacheSupported();
 
-  // Returns true if Prerender2 (see content/browser/prerender/README.md for
-  // details) is supported.
+  // Returns true if Prerender2 (see
+  // content/browser/preloading/prerender/README.md for details) is supported.
   virtual bool IsPrerender2Supported(WebContents& web_contents);
 
   // Requests the delegate to replace |predecessor_contents| with

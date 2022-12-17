@@ -4,25 +4,29 @@
 
 #include "chrome/browser/chromeos/extensions/telemetry/api/diagnostics_api_converters.h"
 
-#include "ash/webui/telemetry_extension_ui/mojom/diagnostics_service.mojom.h"
 #include "base/notreached.h"
 #include "chrome/common/chromeos/extensions/api/diagnostics.h"
+#include "chromeos/crosapi/mojom/diagnostics_service.mojom.h"
 
 namespace chromeos {
 namespace converters {
 
 namespace {
 
-using MojoRoutineCommandType = ash::health::mojom::DiagnosticRoutineCommandEnum;
-using MojoRoutineStatus = ::ash::health::mojom::DiagnosticRoutineStatusEnum;
-using MojoRoutineType = ::ash::health::mojom::DiagnosticRoutineEnum;
+using MojoRoutineCommandType = crosapi::mojom::DiagnosticsRoutineCommandEnum;
+using MojoRoutineStatus = ::crosapi::mojom::DiagnosticsRoutineStatusEnum;
+using MojoRoutineType = ::crosapi::mojom::DiagnosticsRoutineEnum;
+using MojoAcPowerStatusType = crosapi::mojom::DiagnosticsAcPowerStatusEnum;
 using MojoRoutineUserMessageType =
-    ash::health::mojom::DiagnosticRoutineUserMessageEnum;
-using MojoDiskReadRoutineType = ash::health::mojom::DiskReadRoutineTypeEnum;
+    crosapi::mojom::DiagnosticsRoutineUserMessageEnum;
+using MojoDiskReadRoutineType =
+    crosapi::mojom::DiagnosticsDiskReadRoutineTypeEnum;
 
 using RoutineCommandType = ::chromeos::api::os_diagnostics::RoutineCommandType;
 using RoutineStatus = ::chromeos::api::os_diagnostics::RoutineStatus;
 using RoutineType = ::chromeos::api::os_diagnostics::RoutineType;
+using RoutineAcPowerStatusRoutineType =
+    ::chromeos::api::os_diagnostics::AcPowerStatus;
 using RoutineUserMessageType = ::chromeos::api::os_diagnostics::UserMessageType;
 using RoutineDiskReadRoutineType =
     ::chromeos::api::os_diagnostics::DiskReadRoutineType;
@@ -32,6 +36,9 @@ using RoutineDiskReadRoutineType =
 bool ConvertMojoRoutine(MojoRoutineType in, RoutineType* out) {
   DCHECK(out);
   switch (in) {
+    case MojoRoutineType::kAcPower:
+      *out = RoutineType::ROUTINE_TYPE_AC_POWER;
+      return true;
     case MojoRoutineType::kBatteryCapacity:
       *out = RoutineType::ROUTINE_TYPE_BATTERY_CAPACITY;
       return true;
@@ -124,6 +131,22 @@ MojoRoutineCommandType ConvertRoutineCommand(RoutineCommandType commandType) {
   NOTREACHED() << "Unknown command type: " << commandType;
   return static_cast<MojoRoutineCommandType>(
       static_cast<int>(MojoRoutineCommandType::kMaxValue) + 1);
+}
+
+MojoAcPowerStatusType ConvertAcPowerStatusRoutineType(
+    RoutineAcPowerStatusRoutineType routineType) {
+  switch (routineType) {
+    case RoutineAcPowerStatusRoutineType::AC_POWER_STATUS_CONNECTED:
+      return MojoAcPowerStatusType::kConnected;
+    case RoutineAcPowerStatusRoutineType::AC_POWER_STATUS_DISCONNECTED:
+      return MojoAcPowerStatusType::kDisconnected;
+    case RoutineAcPowerStatusRoutineType::AC_POWER_STATUS_NONE:
+      break;
+  }
+
+  NOTREACHED() << "Unknown ac power status routine type: " << routineType;
+  return static_cast<MojoAcPowerStatusType>(
+      static_cast<int>(MojoAcPowerStatusType::kMaxValue) + 1);
 }
 
 RoutineUserMessageType ConvertRoutineUserMessage(

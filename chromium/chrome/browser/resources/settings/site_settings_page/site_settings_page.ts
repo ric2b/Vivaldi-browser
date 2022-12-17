@@ -8,17 +8,18 @@
  * security site settings.
  */
 
-import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.m.js';
+import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import './recent_site_permissions.js';
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {FocusConfig} from '../focus_config.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
 import {Router} from '../router.js';
@@ -30,8 +31,6 @@ import {getTemplate} from './site_settings_page.html.js';
 const Id = ContentSettingsTypes;
 
 let categoryItemMap: Map<ContentSettingsTypes, CategoryListItem>|null = null;
-
-type FocusConfig = Map<string, (string|(() => void))>;
 
 function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
   if (categoryItemMap !== null) {
@@ -329,8 +328,8 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
   return categoryItemMap;
 }
 
-function buildItemListFromIds(orderedIdList: Array<ContentSettingsTypes>):
-    Array<CategoryListItem> {
+function buildItemListFromIds(orderedIdList: ContentSettingsTypes[]):
+    CategoryListItem[] {
   const map = getCategoryItemMap();
   const orderedList = [];
   for (const id of orderedIdList) {
@@ -408,7 +407,7 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
               Id.FEDERATED_IDENTITY_API,
             ]),
           };
-        }
+        },
       },
 
       focusConfig: {
@@ -429,11 +428,11 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
   private noRecentSitePermissions_: boolean;
 
   private lists_: {
-    all: Array<CategoryListItem>,
-    permissionsBasic: Array<CategoryListItem>,
-    permissionsAdvanced: Array<CategoryListItem>,
-    contentBasic: Array<CategoryListItem>,
-    contentAdvanced: Array<CategoryListItem>,
+    all: CategoryListItem[],
+    permissionsBasic: CategoryListItem[],
+    permissionsAdvanced: CategoryListItem[],
+    contentBasic: CategoryListItem[],
+    contentAdvanced: CategoryListItem[],
   };
 
   private focusConfigChanged_(_newConfig: FocusConfig, oldConfig: FocusConfig) {

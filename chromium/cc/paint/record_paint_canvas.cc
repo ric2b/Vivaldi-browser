@@ -95,7 +95,7 @@ int RecordPaintCanvas::saveLayer(const SkRect* bounds,
 }
 
 int RecordPaintCanvas::saveLayerAlpha(const SkRect* bounds, uint8_t alpha) {
-  push<SaveLayerAlphaOp>(bounds, alpha);
+  push<SaveLayerAlphaOp>(bounds, static_cast<float>(alpha / 255.0f));
   return GetCanvas()->saveLayerAlpha(bounds, alpha);
 }
 
@@ -227,12 +227,12 @@ bool RecordPaintCanvas::getDeviceClipBounds(SkIRect* bounds) const {
   return GetCanvas()->getDeviceClipBounds(bounds);
 }
 
-void RecordPaintCanvas::drawColor(SkColor color, SkBlendMode mode) {
-  push<DrawColorOp>(SkColor4f::FromColor(color), mode);
+void RecordPaintCanvas::drawColor(SkColor4f color, SkBlendMode mode) {
+  push<DrawColorOp>(color, mode);
 }
 
-void RecordPaintCanvas::clear(SkColor color) {
-  push<DrawColorOp>(SkColor4f::FromColor(color), SkBlendMode::kSrc);
+void RecordPaintCanvas::clear(SkColor4f color) {
+  push<DrawColorOp>(color, SkBlendMode::kSrc);
 }
 
 void RecordPaintCanvas::drawLine(SkScalar x0,

@@ -8,10 +8,12 @@
 #include <string.h>
 
 #include <memory>
+#include <type_traits>
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/synchronization/waitable_event.h"
 #include "build/branding_buildflags.h"
@@ -95,19 +97,19 @@ class ScopedPropertyList {
   ScopedPropertyList(const ScopedPropertyList&) = delete;
   ScopedPropertyList& operator=(const ScopedPropertyList&) = delete;
 
-  ~ScopedPropertyList() { pa_proplist_free(property_list_); }
-
-  pa_proplist* get() const { return property_list_; }
+  pa_proplist* get() const { return property_list_.get(); }
 
  private:
-  pa_proplist* property_list_;
+  using deleter =
+      std::integral_constant<decltype(pa_proplist_free)*, pa_proplist_free>;
+  std::unique_ptr<pa_proplist, deleter> property_list_;
 };
 
 struct InputBusData {
   InputBusData(pa_threaded_mainloop* loop, const std::string& name)
       : loop_(loop), name_(name), bus_() {}
 
-  pa_threaded_mainloop* const loop_;
+  const raw_ptr<pa_threaded_mainloop> loop_;
   const std::string& name_;
   std::string bus_;
 };
@@ -116,7 +118,7 @@ struct OutputBusData {
   OutputBusData(pa_threaded_mainloop* loop, const std::string& bus)
       : loop_(loop), name_(), bus_(bus) {}
 
-  pa_threaded_mainloop* const loop_;
+  const raw_ptr<pa_threaded_mainloop> loop_;
   std::string name_;
   const std::string& bus_;
 };
@@ -162,7 +164,7 @@ struct DefaultDevicesData {
   explicit DefaultDevicesData(pa_threaded_mainloop* loop) : loop_(loop) {}
   std::string input_;
   std::string output_;
-  pa_threaded_mainloop* const loop_;
+  const raw_ptr<pa_threaded_mainloop> loop_;
 };
 
 void GetDefaultDeviceIdCallback(pa_context* c,
@@ -177,8 +179,8 @@ void GetDefaultDeviceIdCallback(pa_context* c,
 }
 
 struct ContextStartupData {
-  base::WaitableEvent* context_wait;
-  pa_threaded_mainloop* pa_mainloop;
+  raw_ptr<base::WaitableEvent> context_wait;
+  raw_ptr<pa_threaded_mainloop> pa_mainloop;
 };
 
 void SignalReadyOrErrorStateCallback(pa_context* context, void* context_data) {
@@ -234,6 +236,7 @@ bool InitPulse(pa_threaded_mainloop** mainloop, pa_context** context) {
     VLOG(1) << "Failed to connect to the context.  Error: "
             << pa_strerror(pa_context_errno(pa_context));
     DestroyContext(pa_context);
+    data = {nullptr, nullptr};
     pa_threaded_mainloop_free(pa_mainloop);
     return false;
   }
@@ -246,6 +249,7 @@ bool InitPulse(pa_threaded_mainloop** mainloop, pa_context** context) {
   if (pa_threaded_mainloop_start(pa_mainloop)) {
     DestroyContext(pa_context);
     mainloop_lock.reset();
+    data = {nullptr, nullptr};
     DestroyMainloop(pa_mainloop);
     return false;
   }
@@ -275,6 +279,7 @@ bool InitPulse(pa_threaded_mainloop** mainloop, pa_context** context) {
       VLOG(1) << "Failed to connect to PulseAudio: " << context_state;
     DestroyContext(pa_context);
     mainloop_lock.reset();
+    data = {nullptr, nullptr};
     DestroyMainloop(pa_mainloop);
     return false;
   }

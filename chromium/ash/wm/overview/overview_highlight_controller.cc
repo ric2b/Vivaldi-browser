@@ -11,6 +11,7 @@
 #include "ash/shell.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_name_view.h"
+#include "ash/wm/desks/desk_preview_view.h"
 #include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_util.h"
@@ -84,6 +85,12 @@ void OverviewHighlightController::MoveHighlight(bool reverse) {
   }
 
   UpdateHighlight(traversable_views[index]);
+}
+
+void OverviewHighlightController::UpdateA11yFocusWindow(
+    OverviewHighlightableView* name_view) {
+  scoped_a11y_overrider_->MaybeUpdateA11yOverrideWindow(
+      name_view->GetView()->GetWidget()->GetNativeWindow());
 }
 
 void OverviewHighlightController::MoveHighlightToView(
@@ -239,6 +246,7 @@ OverviewHighlightController::GetTraversableViews() const {
             traversable_views.push_back(name_view);
         }
       }
+      traversable_views.push_back(desk_library_view->feedback_button());
     } else {
       for (auto& item : grid->window_list())
         traversable_views.push_back(item->overview_item_view());
@@ -259,7 +267,7 @@ OverviewHighlightController::GetTraversableViews() const {
         }
       } else {
         for (auto* mini_view : bar_view->mini_views()) {
-          traversable_views.push_back(mini_view);
+          traversable_views.push_back(mini_view->desk_preview());
           traversable_views.push_back(mini_view->desk_name_view());
         }
 

@@ -10,8 +10,10 @@
 #include "ui/gl/gl_context_glx.h"
 #include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_glx_api_implementation.h"
+#include "ui/gl/gl_image_glx_native_pixmap.h"
 #include "ui/gl/gl_surface_glx_x11.h"
 #include "ui/gl/gl_utils.h"
+#include "ui/ozone/platform/x11/native_pixmap_glx_binding.h"
 
 namespace ui {
 
@@ -87,6 +89,22 @@ void GLOzoneGLX::ShutdownGL(gl::GLDisplay* display) {
   gl::ClearBindingsGLX();
 }
 
+bool GLOzoneGLX::CanImportNativePixmap() {
+  return false;
+}
+
+std::unique_ptr<NativePixmapGLBinding> GLOzoneGLX::ImportNativePixmap(
+    scoped_refptr<gfx::NativePixmap> pixmap,
+    gfx::BufferFormat plane_format,
+    gfx::BufferPlane plane,
+    gfx::Size plane_size,
+    const gfx::ColorSpace& color_space,
+    GLenum target,
+    GLuint texture_id) {
+  return NativePixmapGLXBinding::Create(pixmap, plane_format, plane, plane_size,
+                                        target, texture_id);
+}
+
 bool GLOzoneGLX::GetGLWindowSystemBindingInfo(
     const gl::GLVersionInfo& gl_info,
     gl::GLWindowSystemBindingInfo* info) {
@@ -102,16 +120,19 @@ scoped_refptr<gl::GLContext> GLOzoneGLX::CreateGLContext(
 }
 
 scoped_refptr<gl::GLSurface> GLOzoneGLX::CreateViewGLSurface(
+    gl::GLDisplay* display,
     gfx::AcceleratedWidget window) {
   return gl::InitializeGLSurface(new gl::GLSurfaceGLXX11(window));
 }
 
 scoped_refptr<gl::GLSurface> GLOzoneGLX::CreateSurfacelessViewGLSurface(
+    gl::GLDisplay* display,
     gfx::AcceleratedWidget window) {
   return nullptr;
 }
 
 scoped_refptr<gl::GLSurface> GLOzoneGLX::CreateOffscreenGLSurface(
+    gl::GLDisplay* display,
     const gfx::Size& size) {
   return gl::InitializeGLSurface(new gl::UnmappedNativeViewGLSurfaceGLX(size));
 }

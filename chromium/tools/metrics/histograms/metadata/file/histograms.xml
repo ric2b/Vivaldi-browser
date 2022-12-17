@@ -169,7 +169,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.DirectoryListLoad.{RootType}.{NumFiles}"
-    units="ms" expires_after="2022-08-09">
+    units="ms" expires_after="2023-06-27">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -356,7 +356,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.Glitch" enum="FileManagerGlitch"
-    expires_after="M108">
+    expires_after="2022-12-25">
   <owner>majewski@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -371,7 +371,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="FileBrowser.HoldingSpace.TimeFromFirstWelcomeBannerShowToFirstPin"
-    units="ms" expires_after="2022-10-10">
+    units="ms" expires_after="2023-02-12">
   <owner>dmblack@google.com</owner>
   <owner>tbarzic@chromium.org</owner>
   <summary>
@@ -562,7 +562,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.Notification.UserAction"
-    enum="FileManagerNotificationUserAction" expires_after="M108">
+    enum="FileManagerNotificationUserAction" expires_after="2022-12-25">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -587,6 +587,17 @@ chromium-metrics-reviews@google.com.
     <variant name="Offline" summary="The user is offline"/>
     <variant name="Online" summary="The user is online"/>
   </token>
+</histogram>
+
+<histogram name="FileBrowser.OfficeFiles.UseOutsideDrive"
+    enum="OfficeFilesUseOutsideDriveHook" expires_after="2023-02-15">
+  <owner>cassycc@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    Chrome OS File Browser: When a user uses a MS Office file outside of Drive,
+    records which file system operation is used (File picker selection,
+    Copy/Move/Zip or Open from files app).
+  </summary>
 </histogram>
 
 <histogram name="FileBrowser.OfficeFiles.WebDriveOffice"
@@ -647,7 +658,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.Recent.FilterByType"
-    enum="FileManagerRecentFilterType" expires_after="2022-11-27">
+    enum="FileManagerRecentFilterType" expires_after="2023-02-12">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -745,6 +756,39 @@ chromium-metrics-reviews@google.com.
     Chrome OS Files App: Recorded when the Grid View/List View toggle menu icon
     is selected.
   </summary>
+</histogram>
+
+<histogram name="FileBrowser.TrashFiles.{RootType}" units="units"
+    expires_after="2023-02-28">
+  <owner>simmonsjosh@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    Recorded when the Trash directory is loaded and all files for the {RootType}
+    are entirely read.
+  </summary>
+  <token key="RootType">
+    <variant name="crostini"/>
+    <variant name="downloads"/>
+    <variant name="drive"/>
+  </token>
+</histogram>
+
+<histogram name="FileBrowser.UpdateAvailableApps.{NumApps}" units="ms"
+    expires_after="2023-06-27">
+  <owner>simmonsjosh@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    Tracks the user perceived load time for the available apps (aka file tasks)
+    after the user selecting the files in the file list. Measured from the
+    throttled event selection changed (when user changes what files are
+    selected) until all the available apps is populated in the DOM. {NumApps}
+    has a tolerance of 80% which leads to the following buckets: 2-18 apps and
+    20-180 apps. Any selection outside these ranges are simply not recorded.
+  </summary>
+  <token key="NumApps">
+    <variant name="10"/>
+    <variant name="100"/>
+  </token>
 </histogram>
 
 <histogram name="FileBrowser.ViewingFileType" enum="ViewFileType"

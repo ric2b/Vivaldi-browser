@@ -5,12 +5,14 @@
 #ifndef DEVICE_BLUETOOTH_TEST_BLUETOOTH_TEST_WIN_H_
 #define DEVICE_BLUETOOTH_TEST_BLUETOOTH_TEST_WIN_H_
 
-#include "base/memory/raw_ptr.h"
 #include "device/bluetooth/test/bluetooth_test.h"
+
+#include <Windows.Devices.Enumeration.h>
 
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_pending_task.h"
@@ -191,6 +193,12 @@ class BluetoothTestWinrt
   void SimulateDevicePaired(BluetoothDevice* device, bool is_paired) override;
   void SimulatePairingPinCode(BluetoothDevice* device,
                               std::string pin_code) override;
+  // Currently only Win derived class has this function for create ConfirmOnly /
+  // DisplayPin tests.  If in future we find that other platform need to test
+  // for pairing_kind we should promote this function as virtual
+  void SimulateConfirmOnly(BluetoothDevice* device);
+  void SimulateDisplayPin(BluetoothDevice* device,
+                          base::StringPiece display_pin);
   void SimulateAdvertisementStarted(
       BluetoothAdvertisement* advertisement) override;
   void SimulateAdvertisementStopped(

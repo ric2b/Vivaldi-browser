@@ -14,7 +14,7 @@ const ErrorType = {
   INCORRECT_PUK: 'incorrect-puk',
   MISMATCHED_PIN: 'mismatched-pin',
   INVALID_PIN: 'invalid-pin',
-  INVALID_PUK: 'invalid-puk'
+  INVALID_PUK: 'invalid-puk',
 };
 
 const DIGITS_ONLY_REGEX = /^[0-9]+$/;
@@ -33,6 +33,9 @@ Polymer({
       value: null,
       observer: 'deviceStateChanged_',
     },
+
+    /** @type {!chromeos.networkConfig.mojom.GlobalPolicy|undefined} */
+    globalPolicy: Object,
 
     /**
      * Set to true when there is an open dialog.
@@ -148,6 +151,23 @@ Polymer({
     puk_: {
       type: String,
       observer: 'pinOrPukChange_',
+    },
+
+    /** @private {boolean} */
+    isSimLockPolicyEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.valueExists('isSimLockPolicyEnabled') &&
+            loadTimeData.getBoolean('isSimLockPolicyEnabled');
+      },
+    },
+
+    /** @private {boolean} */
+    isSimPinLockRestricted_: {
+      type: Boolean,
+      value: false,
+      computed: 'computeIsSimPinLockRestricted_(isSimLockPolicyEnabled_,' +
+          'globalPolicy, globalPolicy.*)',
     },
   },
 
@@ -284,6 +304,15 @@ Polymer({
   },
 
   /**
+   * @return {boolean}
+   * @private
+   */
+  computeIsSimPinLockRestricted_() {
+    return this.isSimLockPolicyEnabled_ && !!this.globalPolicy &&
+        !this.globalPolicy.allowCellularSimLock;
+  },
+
+  /**
    * Clears error message on user interacion.
    * @private
    */
@@ -349,6 +378,12 @@ Polymer({
     if (!this.validatePuk_(puk)) {
       return;
     }
+
+    if (this.isSimPinLockRestricted_) {
+      this.unlockCellularSim_('', puk);
+      return;
+    }
+
     const pin = this.$.unlockPin1.value;
     if (!this.validatePin_(pin, this.$.unlockPin2.value)) {
       return;
@@ -444,8 +479,9 @@ Polymer({
     this.enterPinEnabled_ = !this.inProgress_ && !!this.pin_ && !hasError;
     this.changePinEnabled_ = !this.inProgress_ && !!this.pin_ &&
         !!this.pin_new1_ && !!this.pin_new2_ && !hasError;
-    this.enterPukEnabled_ = !this.inProgress_ && !!this.puk_ &&
-        !!this.pin_new1_ && !!this.pin_new2_ && !hasError;
+    this.enterPukEnabled_ = !this.inProgress_ && !!this.puk_ && !hasError &&
+        (this.isSimPinLockRestricted_ ||
+         (!!this.pin_new1_ && !!this.pin_new2_));
   },
 
   /**
@@ -536,6 +572,16 @@ Polymer({
       return false;
     }
     return true;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getEnterPinDescription_() {
+    return this.isSimPinLockRestricted_ ?
+        this.i18n('networkSimLockPolicyAdminSubtitle') :
+        this.i18n('networkSimEnterPinDescription');
   },
 
   /**
@@ -679,6 +725,26 @@ Polymer({
    * @private
    */
   getPukWarningMessage_() {
+    return this.isSimPinLockRestricted_ ?
+        this.getPukWarningSimPinRestrictedMessage_() :
+        this.getPukWarningSimPinUnrestrictedMessage_();
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getNetworkSimPukDialogString_() {
+    return this.isSimPinLockRestricted_ ?
+        this.i18n('networkSimPukDialogManagedSubtitle') :
+        this.i18n('networkSimPukDialogSubtitle');
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getPukWarningSimPinUnrestrictedMessage_() {
     if (this.isPukInvalid_()) {
       const retriesLeft = this.getNumRetriesLeft_();
       if (retriesLeft === 1) {
@@ -689,6 +755,25 @@ Polymer({
     }
 
     return this.i18n('networkSimPukDialogWarningNoFailures');
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getPukWarningSimPinRestrictedMessage_() {
+    if (this.isPukInvalid_()) {
+      const retriesLeft = this.getNumRetriesLeft_();
+      if (retriesLeft === 1) {
+        return this.i18n(
+            'networkSimPukDialogManagedWarningWithFailure', retriesLeft);
+      }
+
+      return this.i18n(
+          'networkSimPukDialogManagedWarningWithFailures', retriesLeft);
+    }
+
+    return this.i18n('networkSimPukDialogManagedWarningNoFailures');
   },
 });
 })();

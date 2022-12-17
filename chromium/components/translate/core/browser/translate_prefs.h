@@ -150,11 +150,11 @@ class TranslatePrefs {
   // the rest of the code.
   static std::string MapPreferenceName(const std::string& pref_name);
 
-  // Checks if the "offer translate" (i.e. automatic translate bubble) feature
-  // is enabled.
+  // Returns true if the "offer translate" pref is enabled (i.e. allowing for
+  // automatic Full Page Translate bubbles).
   bool IsOfferTranslateEnabled() const;
 
-  // Checks if translate is allowed by policy.
+  // Returns true if Translate is allowed by policy.
   bool IsTranslateAllowedByPolicy() const;
 
   // Sets the country that the application is run in. Determined by the
@@ -175,8 +175,8 @@ class TranslatePrefs {
   void BlockLanguage(base::StringPiece source_language);
   void UnblockLanguage(base::StringPiece source_language);
   // Returns the languages that should be blocked by default as a
-  // base::(List)Value.
-  static base::Value GetDefaultBlockedLanguages();
+  // base::Value::List.
+  static base::Value::List GetDefaultBlockedLanguages();
   void ResetBlockedLanguagesToDefault();
   // Prevent empty blocked languages by resetting them to the default value.
   // (crbug.com/902354)

@@ -8,6 +8,7 @@
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "media/base/limits.h"
+#include "media/base/video_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -112,6 +113,21 @@ class CanvasCaptureHandlerTest
       scoped_refptr<media::VideoFrame> video_frame,
       std::vector<scoped_refptr<media::VideoFrame>> scaled_video_frames,
       base::TimeTicks estimated_capture_time) {
+    if (video_frame->format() != media::PIXEL_FORMAT_I420 &&
+        video_frame->format() != media::PIXEL_FORMAT_I420A) {
+      auto size = video_frame->visible_rect().size();
+      auto converted_format =
+          opaque ? media::PIXEL_FORMAT_I420 : media::PIXEL_FORMAT_I420A;
+      auto i420_frame = media::VideoFrame::CreateFrame(
+          converted_format, size, gfx::Rect(size), size,
+          video_frame->timestamp());
+      std::vector<uint8_t> tmp_buf;
+      auto status =
+          media::ConvertAndScaleFrame(*video_frame, *i420_frame, tmp_buf);
+      EXPECT_TRUE(status.is_ok());
+      video_frame = i420_frame;
+    }
+
     if (opaque)
       EXPECT_EQ(media::PIXEL_FORMAT_I420, video_frame->format());
     else
@@ -199,6 +215,7 @@ TEST_P(CanvasCaptureHandlerTest, GetFormatsStartAndStop) {
       params,
       base::BindRepeating(&CanvasCaptureHandlerTest::OnDeliverFrame,
                           base::Unretained(this)),
+      /*crop_version_callback=*/base::DoNothing(),
       base::BindRepeating(&CanvasCaptureHandlerTest::OnRunning,
                           base::Unretained(this)));
   copier_->Convert(GenerateTestImage(testing::get<0>(GetParam()),
@@ -230,6 +247,7 @@ TEST_P(CanvasCaptureHandlerTest, VerifyFrame) {
       params,
       base::BindRepeating(&CanvasCaptureHandlerTest::OnVerifyDeliveredFrame,
                           base::Unretained(this), opaque_frame, width, height),
+      /*crop_version_callback=*/base::DoNothing(),
       base::BindRepeating(&CanvasCaptureHandlerTest::OnRunning,
                           base::Unretained(this)));
   copier_->Convert(GenerateTestImage(opaque_frame, width, height),
@@ -258,6 +276,7 @@ TEST_F(CanvasCaptureHandlerTest, DropAlphaDeliversOpaqueFrame) {
       base::BindRepeating(&CanvasCaptureHandlerTest::OnVerifyDeliveredFrame,
                           base::Unretained(this), /*opaque_frame=*/true, width,
                           height),
+      /*crop_version_callback=*/base::DoNothing(),
       base::BindRepeating(&CanvasCaptureHandlerTest::OnRunning,
                           base::Unretained(this)));
   copier_->Convert(GenerateTestImage(/*opaque=*/false, width, height),

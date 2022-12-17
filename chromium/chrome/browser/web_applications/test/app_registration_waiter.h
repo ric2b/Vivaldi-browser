@@ -8,15 +8,36 @@
 #include "base/run_loop.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
 
 class Profile;
 
 namespace web_app {
 
+class AppTypeInitializationWaiter : public apps::AppRegistryCache::Observer {
+ public:
+  AppTypeInitializationWaiter(Profile* profile, apps::AppType app_type);
+  ~AppTypeInitializationWaiter() override;
+
+  void Await();
+
+ private:
+  // apps::AppRegistryCache::Observer:
+  void OnAppUpdate(const apps::AppUpdate& update) override;
+  void OnAppTypeInitialized(apps::AppType app_type) override;
+  void OnAppRegistryCacheWillBeDestroyed(
+      apps::AppRegistryCache* cache) override;
+
+  const apps::AppType app_type_;
+  base::RunLoop run_loop_;
+};
+
 class AppRegistrationWaiter : public apps::AppRegistryCache::Observer {
  public:
-  AppRegistrationWaiter(Profile* profile, const AppId& app_id);
+  AppRegistrationWaiter(Profile* profile,
+                        const AppId& app_id,
+                        apps::Readiness readiness = apps::Readiness::kReady);
   ~AppRegistrationWaiter() override;
 
   void Await();
@@ -28,6 +49,7 @@ class AppRegistrationWaiter : public apps::AppRegistryCache::Observer {
       apps::AppRegistryCache* cache) override;
 
   const AppId app_id_;
+  const apps::Readiness readiness_;
   base::RunLoop run_loop_;
 };
 

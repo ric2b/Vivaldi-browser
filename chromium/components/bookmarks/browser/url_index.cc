@@ -85,7 +85,7 @@ std::unique_ptr<BookmarkNode> UrlIndex::Remove(BookmarkNode* node,
   base::AutoLock url_lock(url_lock_);
   RemoveImpl(node, removed_urls);
   BookmarkNode* parent = node->parent();
-  return parent->Remove(static_cast<size_t>(parent->GetIndexOf(node)));
+  return parent->Remove(parent->GetIndexOf(node).value());
 }
 
 void UrlIndex::SetUrl(BookmarkNode* node, const GURL& url) {
@@ -144,9 +144,12 @@ UrlLoadStats UrlIndex::ComputeStats() const {
       bookmarks_with_same_url.clear();
     }
 
+    stats.avg_num_days_since_added +=
+        (base::Time::Now() - (*i)->date_added()).InDays();
     bookmarks_with_same_url.push_back(*i);
   }
 
+  stats.avg_num_days_since_added /= nodes_ordered_by_url_set_.size();
   AddStatsForBookmarksWithSameUrl(&bookmarks_with_same_url, &stats);
   return stats;
 }

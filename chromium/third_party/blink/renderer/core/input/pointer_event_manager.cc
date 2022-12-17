@@ -8,6 +8,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
@@ -368,7 +369,8 @@ void PointerEventManager::AdjustTouchPointerEvent(
          WebPointerProperties::PointerType::kTouch);
 
   LayoutSize hit_rect_size = GetHitTestRectForAdjustment(
-      *frame_, LayoutSize(pointer_event.width, pointer_event.height));
+      *frame_, LayoutSize(LayoutUnit(pointer_event.width),
+                          LayoutUnit(pointer_event.height)));
 
   if (hit_rect_size.IsEmpty())
     return;
@@ -547,8 +549,7 @@ WebInputEventResult PointerEventManager::HandlePointerEvent(
     const Vector<WebPointerEvent>& coalesced_events,
     const Vector<WebPointerEvent>& predicted_events) {
   if (event.GetType() == WebInputEvent::Type::kPointerRawUpdate) {
-    if (!RuntimeEnabledFeatures::PointerRawUpdateEnabled() ||
-        !frame_->GetEventHandlerRegistry().HasEventHandlers(
+    if (!frame_->GetEventHandlerRegistry().HasEventHandlers(
             EventHandlerRegistry::kPointerRawUpdateEvent))
       return WebInputEventResult::kHandledSystem;
 
@@ -667,14 +668,39 @@ WebInputEventResult PointerEventManager::HandlePointerEvent(
         mojom::blink::UserActivationNotificationType::kInteraction);
   }
 
-  if (RuntimeEnabledFeatures::TouchActionEffectiveAtPointerDownEnabled() &&
-      event.GetType() == WebInputEvent::Type::kPointerDown) {
-    touch_event_manager_->UpdateTouchAttributeMapsForPointerDown(
-        event, pointer_event_target);
+  Node* pointerdown_node = nullptr;
+  if (event.GetType() == WebInputEvent::Type::kPointerDown) {
+    pointerdown_node =
+        touch_event_manager_->GetTouchPointerNode(event, pointer_event_target);
+  }
+
+  TouchAction touch_action = TouchAction::kAuto;
+
+  if (pointerdown_node) {
+    touch_action = touch_action_util::EffectiveTouchActionAtPointerDown(
+        event, pointerdown_node);
+    if (RuntimeEnabledFeatures::TouchActionEffectiveAtPointerDownEnabled()) {
+      touch_event_manager_->UpdateTouchAttributeMapsForPointerDown(
+          event, pointerdown_node, touch_action);
+    }
   }
 
   WebInputEventResult result = DispatchTouchPointerEvent(
       event, coalesced_events, predicted_events, pointer_event_target);
+
+  if (pointerdown_node) {
+    TouchAction new_touch_action =
+        touch_action_util::EffectiveTouchActionAtPointerDown(event,
+                                                             pointerdown_node);
+    if (!RuntimeEnabledFeatures::TouchActionEffectiveAtPointerDownEnabled()) {
+      touch_event_manager_->UpdateTouchAttributeMapsForPointerDown(
+          event, pointerdown_node, new_touch_action);
+    }
+    if (new_touch_action != touch_action) {
+      UseCounter::Count(frame_->GetDocument(),
+                        WebFeature::kTouchActionChangedAtPointerDown);
+    }
+  }
 
   touch_event_manager_->HandleTouchPoint(event, coalesced_events,
                                          pointer_event_target);
@@ -772,6 +798,38 @@ WebInputEventResult PointerEventManager::DirectDispatchMousePointerEvent(
   return WebInputEventResult::kHandledSuppressed;
 }
 
+void PointerEventManager::SendEffectivePanActionAtPointer(
+    const WebPointerEvent& event,
+    const Node* node_at_pointer) {
+  if (IsAnyTouchActive())
+    return;
+
+  TouchAction effective_touch_action = TouchAction::kAuto;
+  if (node_at_pointer) {
+    effective_touch_action = touch_action_util::EffectiveTouchActionAtPointer(
+        event, node_at_pointer);
+  }
+
+  mojom::blink::PanAction effective_pan_action;
+  if ((effective_touch_action & TouchAction::kPan) == TouchAction::kNone) {
+    // Stylus writing or move cursor are applicable only when touch action
+    // allows panning in at least one direction.
+    effective_pan_action = mojom::blink::PanAction::kNone;
+  } else if ((effective_touch_action & TouchAction::kInternalNotWritable) !=
+             TouchAction::kInternalNotWritable) {
+    // kInternalNotWritable bit is re-enabled, if tool type is not stylus.
+    // Hence, if this bit is not set, stylus writing is possible.
+    effective_pan_action = mojom::blink::PanAction::kStylusWritable;
+  } else if ((effective_touch_action & TouchAction::kInternalPanXScrolls) !=
+             TouchAction::kInternalPanXScrolls) {
+    effective_pan_action = mojom::blink::PanAction::kMoveCursorOrScroll;
+  } else {
+    effective_pan_action = mojom::blink::PanAction::kScroll;
+  }
+
+  frame_->GetChromeClient().SetPanAction(frame_, effective_pan_action);
+}
+
 WebInputEventResult PointerEventManager::SendMousePointerEvent(
     Element* target,
     const WebInputEvent::Type event_type,
@@ -835,7 +893,6 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
   if ((event_type == WebInputEvent::Type::kPointerDown ||
        event_type == WebInputEvent::Type::kPointerUp) &&
       pointer_event->type() == event_type_names::kPointermove &&
-      RuntimeEnabledFeatures::PointerRawUpdateEnabled() &&
       frame_->GetEventHandlerRegistry().HasEventHandlers(
           EventHandlerRegistry::kPointerRawUpdateEvent)) {
     // This is a chorded button move event. We need to also send a
@@ -1169,6 +1226,10 @@ void PointerEventManager::SetGestureManager(GestureManager* gesture_manager) {
 int PointerEventManager::GetPointerEventId(
     const WebPointerProperties& web_pointer_properties) const {
   return pointer_event_factory_.GetPointerEventId(web_pointer_properties);
+}
+
+Element* PointerEventManager::CurrentTouchDownElement() {
+  return touch_event_manager_->CurrentTouchDownElement();
 }
 
 }  // namespace blink

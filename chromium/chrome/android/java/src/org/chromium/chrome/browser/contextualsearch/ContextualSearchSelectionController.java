@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.contextualsearch;
 
 import android.app.Activity;
+import android.graphics.Point;
 import android.text.TextUtils;
 
 import androidx.annotation.IntDef;
@@ -121,7 +122,7 @@ public class ContextualSearchSelectionController {
 
     private class ContextualSearchGestureStateListener extends GestureStateListener {
         @Override
-        public void onScrollStarted(int scrollOffsetY, int scrollExtentY) {
+        public void onScrollStarted(int scrollOffsetY, int scrollExtentY, boolean isDirectionUp) {
             mHandler.handleScrollStart();
         }
 
@@ -132,7 +133,7 @@ public class ContextualSearchSelectionController {
         }
 
         @Override
-        public void onScrollUpdateGestureConsumed() {
+        public void onScrollUpdateGestureConsumed(Point rootScrollOffset) {
             // The onScrollEnded notification is unreliable, so mark time during scroll updates too.
             // See crbug.com/600863.
             mLastScrollTimeNs = System.nanoTime();
@@ -337,8 +338,7 @@ public class ContextualSearchSelectionController {
                 mAreSelectionHandlesShown = true;
                 mAreSelectionHandlesBeingDragged = false;
                 mWasTapGestureDetected = false;
-                mSelectionType = mPolicy.canResolveLongpress() ? SelectionType.RESOLVING_LONG_PRESS
-                                                               : SelectionType.LONG_PRESS;
+                mSelectionType = SelectionType.RESOLVING_LONG_PRESS;
                 shouldHandleSelection = true;
                 SelectionPopupController controller = getSelectionPopupController();
                 if (controller != null) mSelectedText = controller.getSelectedText();

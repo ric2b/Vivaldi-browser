@@ -27,6 +27,7 @@
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/notification/download_notification_manager.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
@@ -70,7 +71,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/startup/browser_init_params.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #endif
 
 using base::UserMetricsAction;
@@ -148,14 +149,6 @@ void RecordButtonClickAction(DownloadCommands::Command command) {
       base::RecordAction(
           UserMetricsAction("DownloadNotification.Button_OpenWhenComplete"));
       break;
-    case DownloadCommands::ALWAYS_OPEN_TYPE:
-      base::RecordAction(
-          UserMetricsAction("DownloadNotification.Button_AlwaysOpenType"));
-      break;
-    case DownloadCommands::PLATFORM_OPEN:
-      base::RecordAction(
-          UserMetricsAction("DownloadNotification.Button_PlatformOpen"));
-      break;
     case DownloadCommands::CANCEL:
       base::RecordAction(
           UserMetricsAction("DownloadNotification.Button_Cancel"));
@@ -170,10 +163,6 @@ void RecordButtonClickAction(DownloadCommands::Command command) {
     case DownloadCommands::LEARN_MORE_SCANNING:
       base::RecordAction(
           UserMetricsAction("DownloadNotification.Button_LearnScanning"));
-      break;
-    case DownloadCommands::LEARN_MORE_INTERRUPTED:
-      base::RecordAction(
-          UserMetricsAction("DownloadNotification.Button_LearnInterrupted"));
       break;
     case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
       base::RecordAction(
@@ -195,10 +184,16 @@ void RecordButtonClickAction(DownloadCommands::Command command) {
       base::RecordAction(
           UserMetricsAction("DownloadNotification.Button_DeepScan"));
       break;
-    case DownloadCommands::BYPASS_DEEP_SCANNING:
+    case DownloadCommands::REVIEW:
       base::RecordAction(
-          UserMetricsAction("DownloadNotification.Button_BypassDeepScanning"));
+          UserMetricsAction("DownloadNotification.Button_Review"));
       break;
+    // Not actually displayed in notification, so should never be reached.
+    case DownloadCommands::ALWAYS_OPEN_TYPE:
+    case DownloadCommands::PLATFORM_OPEN:
+    case DownloadCommands::LEARN_MORE_INTERRUPTED:
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
+    case DownloadCommands::RETRY:
     case DownloadCommands::MAX:
       NOTREACHED();
       break;
@@ -206,16 +201,16 @@ void RecordButtonClickAction(DownloadCommands::Command command) {
 }
 
 bool IsExtensionDownload(DownloadUIModel* item) {
-  return item->download() &&
-         download_crx_util::IsExtensionDownload(*item->download());
+  return item->GetDownloadItem() &&
+         download_crx_util::IsExtensionDownload(*item->GetDownloadItem());
 }
 
 bool IsHoldingSpaceIncognitoProfileIntegrationEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserInitParams::Get()
-      ->is_holding_space_incognito_profile_integration_enabled;
+  return chromeos::BrowserParamsProxy::Get()
+      ->IsHoldingSpaceIncognitoProfileIntegrationEnabled();
 #else
   return false;
 #endif
@@ -226,8 +221,8 @@ bool IsHoldingSpaceInProgressDownloadsNotificationSuppressionEnabled() {
   return ash::features::
       IsHoldingSpaceInProgressDownloadsNotificationSuppressionEnabled();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserInitParams::Get()
-      ->is_holding_space_in_progress_downloads_notification_suppression_enabled;
+  return chromeos::BrowserParamsProxy::Get()
+      ->IsHoldingSpaceInProgressDownloadsNotificationSuppressionEnabled();
 #else
   return false;
 #endif
@@ -252,7 +247,7 @@ DownloadItemNotification::DownloadItemNotification(
     Profile* profile,
     DownloadUIModel::DownloadUIModelPtr item)
     : profile_(profile), item_(std::move(item)) {
-  item_->AddObserver(this);
+  item_->SetDelegate(this);
   // Creates the notification instance. |title|, |body| and |icon| will be
   // overridden by UpdateNotificationData() below.
   message_center::RichNotificationData rich_notification_data;
@@ -286,8 +281,6 @@ DownloadItemNotification::DownloadItemNotification(
 }
 
 DownloadItemNotification::~DownloadItemNotification() {
-  ShutDown();
-
   if (image_decode_status_ == IN_PROGRESS)
     ImageDecoder::Cancel(this);
 }
@@ -304,16 +297,16 @@ void DownloadItemNotification::OnDownloadUpdated() {
   Update();
 }
 
-void DownloadItemNotification::OnDownloadDestroyed() {
+void DownloadItemNotification::OnDownloadDestroyed(const ContentId& id) {
+  item_.reset();
   NotificationDisplayServiceFactory::GetForProfile(profile())->Close(
-      NotificationHandler::Type::TRANSIENT, GetNotificationId());
+      NotificationHandler::Type::TRANSIENT, id.id);
   // |this| will be deleted before there's a chance for Close() to be called
   // through the delegate, so preemptively call it now.
   Close(false);
-  ShutDown();
 
   // This object may get deleted after this call.
-  observer_->OnDownloadDestroyed(item_->GetContentId());
+  observer_->OnDownloadDestroyed(id);
 }
 
 void DownloadItemNotification::DisablePopup() {
@@ -392,13 +385,21 @@ void DownloadItemNotification::Click(
 
     // ExecuteCommand() might cause |item_| to be destroyed.
     if (item_ && command != DownloadCommands::PAUSE &&
-        command != DownloadCommands::RESUME) {
+        command != DownloadCommands::RESUME &&
+        command != DownloadCommands::REVIEW) {
       CloseNotification();
     }
 
     // Shows the notification again after clicking "Keep" on dangerous download.
     if (command == DownloadCommands::KEEP) {
       show_next_ = true;
+      Update();
+    }
+
+    if (command == DownloadCommands::REVIEW) {
+      item_->ReviewScanningVerdict(
+          GetBrowser()->tab_strip_model()->GetActiveWebContents());
+      in_review_ = true;
       Update();
     }
 
@@ -451,11 +452,6 @@ void DownloadItemNotification::Click(
     case download::DownloadItem::MAX_DOWNLOAD_STATE:
       NOTREACHED();
   }
-}
-
-void DownloadItemNotification::ShutDown() {
-  if (item_)
-    item_->RemoveObserver(this);
 }
 
 std::string DownloadItemNotification::GetNotificationId() const {
@@ -535,7 +531,7 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
   notification_->set_progress_status(GetStatusString());
 
   if (item_->IsDangerous()) {
-    notification_->set_type(message_center::NOTIFICATION_TYPE_BASE_FORMAT);
+    notification_->set_type(message_center::NOTIFICATION_TYPE_SIMPLE);
     RecordDangerousDownloadWarningShown(
         item_->GetDangerType(), item_->GetTargetFilePath(),
         item_->GetURL().SchemeIs(url::kHttpsScheme), item_->HasUserGesture());
@@ -547,7 +543,7 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
       notification_->set_priority(message_center::DEFAULT_PRIORITY);
     }
   } else if (item_->IsMixedContent()) {
-    notification_->set_type(message_center::NOTIFICATION_TYPE_BASE_FORMAT);
+    notification_->set_type(message_center::NOTIFICATION_TYPE_SIMPLE);
     switch (item_->GetMixedContentStatus()) {
       case download::DownloadItem::MixedContentStatus::BLOCK:
         notification_->set_priority(message_center::HIGH_PRIORITY);
@@ -580,7 +576,7 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
       case download::DownloadItem::COMPLETE:
         DCHECK(item_->IsDone());
         notification_->set_priority(message_center::DEFAULT_PRIORITY);
-        notification_->set_type(message_center::NOTIFICATION_TYPE_BASE_FORMAT);
+        notification_->set_type(message_center::NOTIFICATION_TYPE_SIMPLE);
         notification_->set_progress(100);
         break;
       case download::DownloadItem::CANCELLED:
@@ -590,7 +586,7 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
       case download::DownloadItem::INTERRUPTED:
         // Shows a notifiation as progress type once so the visible content will
         // be updated. (same as the case of type = COMPLETE)
-        notification_->set_type(message_center::NOTIFICATION_TYPE_BASE_FORMAT);
+        notification_->set_type(message_center::NOTIFICATION_TYPE_SIMPLE);
         notification_->set_progress(0);
         notification_->set_priority(message_center::DEFAULT_PRIORITY);
         break;
@@ -742,7 +738,17 @@ DownloadItemNotification::GetExtraActions() const {
       actions->push_back(DownloadCommands::LEARN_MORE_SCANNING);
     } else {
       actions->push_back(DownloadCommands::DISCARD);
-      actions->push_back(DownloadCommands::KEEP);
+
+      // Only include a keep/review button if there isn't an extra review dialog
+      // opened already.
+      if (!in_review_) {
+        if (enterprise_connectors::ShouldPromptReviewForDownload(
+                profile(), item_->GetDangerType())) {
+          actions->push_back(DownloadCommands::REVIEW);
+        } else {
+          actions->push_back(DownloadCommands::KEEP);
+        }
+      }
     }
     return actions;
   }
@@ -898,10 +904,14 @@ std::u16string DownloadItemNotification::GetCommandLabel(
     case DownloadCommands::DEEP_SCAN:
       id = IDS_SCAN_DOWNLOAD;
       break;
+    case DownloadCommands::REVIEW:
+      id = IDS_REVIEW_DOWNLOAD;
+      break;
     case DownloadCommands::ALWAYS_OPEN_TYPE:
     case DownloadCommands::PLATFORM_OPEN:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
     case DownloadCommands::BYPASS_DEEP_SCANNING:
+    case DownloadCommands::RETRY:
     case DownloadCommands::MAX:
       // Only for menu.
       NOTREACHED();

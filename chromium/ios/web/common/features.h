@@ -43,25 +43,15 @@ extern const base::Feature kRecordSnapshotSize;
 // WKWebView is set as NSURLRequestAttributionUser on iOS 15.
 extern const base::Feature kSetRequestAttribution;
 
-// When enabled, the default context menu from WKWebView is used.
-extern const base::Feature kDefaultWebViewContextMenu;
-
 // Disables the screenshots of non-HTML pages on iOS15.
 extern const base::Feature kDisableNonHTMLScreenshotOnIOS15;
 
 // Feature flag that enable Shared Highlighting color change in iOS.
 extern const base::Feature kIOSSharedHighlightingColorChange;
 
-// Enable the new download API if available.
-extern const base::Feature kEnableNewDownloadAPI;
-
 // Feature flag that enables native session restoration with a synthesized
 // interaction state.
 extern const base::Feature kSynthesizedRestoreSession;
-
-// Enable support for unrealized WebState upon session restoration.
-// See //docs/ios/unrealized_web_state.md for more information.
-extern const base::Feature kEnableUnrealizedWebStates;
 
 // Enables user control for camera and/or microphone access for a specific site
 // through site settings during its lifespan. When enabled, each web state will
@@ -79,14 +69,11 @@ extern const base::Feature kEnableFullscreenAPI;
 // should be used instead of directly checking this feature.
 extern const base::Feature kUseLoadSimulatedRequestForOfflinePage;
 
-// When true, the native context menu for the web content are used.
-bool UseWebViewNativeContextMenuWeb();
+// Feature flag that enable web page detected intents annotations.
+extern const base::Feature kEnableWebPageAnnotations;
 
 // When true, screenshots of non-HTML (e.g. PDF) pages should be taken.
 bool ShouldTakeScreenshotOnNonHTMLContent();
-
-// When true, the new download API should be used.
-bool IsNewDownloadAPIEnabled();
 
 // When true, user control for camera and/or microphone access should be
 // enabled.

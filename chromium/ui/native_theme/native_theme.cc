@@ -51,7 +51,7 @@ ColorProviderManager::Key NativeTheme::GetColorProviderKey(
                               : ColorProviderManager::SystemTheme::kDefault,
       use_custom_frame ? ui::ColorProviderManager::FrameType::kChromium
                        : ui::ColorProviderManager::FrameType::kNative,
-      std::move(custom_theme));
+      user_color_, std::move(custom_theme));
 }
 
 SkColor NativeTheme::GetSystemButtonPressedColor(SkColor base_color) const {
@@ -143,6 +143,10 @@ NativeTheme::GetPlatformHighContrastColorScheme() const {
   return (GetPreferredColorScheme() == PreferredColorScheme::kDark)
              ? PlatformHighContrastColorScheme::kDark
              : PlatformHighContrastColorScheme::kLight;
+}
+
+NativeTheme::PageColors NativeTheme::GetPageColors() const {
+  return page_colors_;
 }
 
 NativeTheme::PreferredColorScheme NativeTheme::GetPreferredColorScheme() const {

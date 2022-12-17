@@ -8,7 +8,7 @@
 #include "ash/components/settings/cros_settings_provider.h"
 #include "base/bind.h"
 #include "base/logging.h"
-#include "chromeos/network/network_device_handler.h"
+#include "chromeos/ash/components/network/network_device_handler.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
@@ -18,7 +18,7 @@ namespace policy {
 
 DeviceDockMacAddressHandler::DeviceDockMacAddressHandler(
     ash::CrosSettings* cros_settings,
-    chromeos::NetworkDeviceHandler* network_device_handler)
+    ash::NetworkDeviceHandler* network_device_handler)
     : cros_settings_(cros_settings),
       network_device_handler_(network_device_handler) {
   dock_mac_address_source_policy_subscription_ =

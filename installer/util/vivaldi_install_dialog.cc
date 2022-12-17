@@ -381,14 +381,14 @@ void VivaldiInstallDialog::TranslateDialog() {
   base::Time::Now().LocalExplode(&time_exploded);
   auto copyright_year = std::to_wstring(time_exploded.year);
 
-  SetDlgItemText(
-      hdlg_, IDC_SYSLINK_PRIVACY_POLICY_SIMPLE,
-      GetLocalizedStringF(IDS_INSTALL_COPYRIGHT_AND_POLICY_BASE, copyright_year)
-          .c_str());
-  SetDlgItemText(
-      hdlg_, IDC_SYSLINK_PRIVACY_POLICY,
-      GetLocalizedStringF(IDS_INSTALL_COPYRIGHT_AND_POLICY_BASE, copyright_year)
-          .c_str());
+  SetDlgItemText(hdlg_, IDC_SYSLINK_PRIVACY_POLICY_SIMPLE,
+                 vivaldi_installer::GetLocalizedStringF(
+                     IDS_INSTALL_COPYRIGHT_AND_POLICY_BASE, copyright_year)
+                     .c_str());
+  SetDlgItemText(hdlg_, IDC_SYSLINK_PRIVACY_POLICY,
+                 vivaldi_installer::GetLocalizedStringF(
+                     IDS_INSTALL_COPYRIGHT_AND_POLICY_BASE, copyright_year)
+                     .c_str());
 
   ComboBox_ResetContent(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES));
   ComboBox_AddString(

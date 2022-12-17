@@ -27,6 +27,8 @@
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/navigation_handle.h"
@@ -54,8 +56,9 @@ bool ShouldAutoDisplayUi(
 
   const GURL& url = navigation_handle->GetURL();
 
-  // Disable Auto-display when the Intent Chip is enabled.
-  if (features::LinkCapturingUiUpdateEnabled())
+  // Disable Auto-display in the new Intent Picker UI unless it is specifically
+  // re-enabled.
+  if (!features::IntentPickerAutoDisplayEnabled())
     return false;
 
   if (apps_for_picker.empty())
@@ -222,13 +225,20 @@ void LaunchAppFromIntentPickerChromeOs(content::WebContents* web_contents,
     }
   } else {
     // TODO(crbug.com/853604): Distinguish the source from link and omnibox.
-    mojom::LaunchSource launch_source = mojom::LaunchSource::kFromLink;
-    proxy->LaunchAppWithUrl(
-        launch_name,
-        GetEventFlags(mojom::LaunchContainer::kLaunchContainerWindow,
-                      WindowOpenDisposition::NEW_WINDOW,
-                      /*prefer_container=*/true),
-        url, launch_source, apps::MakeWindowInfo(display::kDefaultDisplayId));
+    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+      proxy->LaunchAppWithUrl(
+          launch_name,
+          GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                        /*prefer_container=*/true),
+          url, LaunchSource::kFromLink,
+          std::make_unique<WindowInfo>(display::kDefaultDisplayId));
+    } else {
+      proxy->LaunchAppWithUrl(launch_name,
+                              GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                                            /*prefer_container=*/true),
+                              url, mojom::LaunchSource::kFromLink,
+                              apps::MakeWindowInfo(display::kDefaultDisplayId));
+    }
     CloseOrGoBack(web_contents);
   }
 }

@@ -334,7 +334,10 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // If no browser is created in BrowserMain(), then |browser_| will remain
   // nullptr unless SelectFirstBrowser() is called after the creation of the
   // first browser instance at a later time.
-  raw_ptr<Browser> browser_ = nullptr;
+  //
+  // TODO(crbug.com/1298696): browser_tests breaks with MTECheckedPtr
+  // enabled. Triage.
+  raw_ptr<Browser, DegradeToNoOpWhenMTE> browser_ = nullptr;
 
   // Used to run the process until the BrowserProcess signals the test to quit.
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -356,7 +359,7 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   base::test::ScopedFeatureList scoped_feature_list_;
 
 #if BUILDFLAG(IS_MAC)
-  base::mac::ScopedNSAutoreleasePool* autorelease_pool_ = nullptr;
+  raw_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool_ = nullptr;
   std::unique_ptr<ScopedBundleSwizzlerMac> bundle_swizzler_;
 
   // Enable fake full keyboard access by default, so that tests don't depend on

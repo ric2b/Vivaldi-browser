@@ -12,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/display/tablet_state.h"
@@ -39,21 +40,20 @@ namespace ui {
 class DeviceHotplugEventObserver;
 class OrgKdeKwinIdle;
 class SurfaceAugmenter;
+class WaylandBufferFactory;
 class WaylandBufferManagerHost;
 class WaylandCursor;
 class WaylandCursorBufferListener;
-class WaylandDrm;
 class WaylandEventSource;
 class WaylandOutputManager;
 class WaylandSeat;
-class WaylandShm;
 class WaylandZAuraShell;
+class WaylandZcrColorManager;
 class WaylandZcrCursorShapes;
 class WaylandZcrTouchpadHaptics;
 class WaylandZwpPointerConstraints;
 class WaylandZwpPointerGestures;
 class WaylandZwpRelativePointerManager;
-class WaylandZwpLinuxDmabuf;
 class WaylandDataDeviceManager;
 class WaylandCursorPosition;
 class WaylandWindowDragController;
@@ -61,6 +61,7 @@ class GtkPrimarySelectionDeviceManager;
 class GtkShell1;
 class ZwpIdleInhibitManager;
 class ZwpPrimarySelectionDeviceManager;
+class XdgActivation;
 class XdgForeignWrapper;
 class OverlayPrioritizer;
 
@@ -94,6 +95,9 @@ class WaylandConnection {
 
   // Schedules a flush of the Wayland connection.
   void ScheduleFlush();
+
+  // Immediately flushes. Public for testing.
+  void Flush();
 
   // Calls wl_display_roundtrip_queue. Might be required during initialization
   // of some objects that should block until they are initialized.
@@ -181,6 +185,10 @@ class WaylandConnection {
 
   WaylandZAuraShell* zaura_shell() const { return zaura_shell_.get(); }
 
+  WaylandZcrColorManager* zcr_color_manager() const {
+    return zcr_color_manager_.get();
+  }
+
   WaylandZcrCursorShapes* zcr_cursor_shapes() const {
     return zcr_cursor_shapes_.get();
   }
@@ -189,14 +197,12 @@ class WaylandConnection {
     return zcr_touchpad_haptics_.get();
   }
 
-  WaylandZwpLinuxDmabuf* zwp_dmabuf() const { return zwp_dmabuf_.get(); }
-
-  WaylandDrm* drm() const { return drm_.get(); }
-
-  WaylandShm* shm() const { return shm_.get(); }
-
   WaylandWindowManager* wayland_window_manager() {
     return &wayland_window_manager_;
+  }
+
+  WaylandBufferFactory* wayland_buffer_factory() const {
+    return wayland_buffer_factory_.get();
   }
 
   WaylandDataDeviceManager* data_device_manager() const {
@@ -237,6 +243,8 @@ class WaylandConnection {
       const {
     return wayland_zwp_relative_pointer_manager_.get();
   }
+
+  const XdgActivation* xdg_activation() const { return xdg_activation_.get(); }
 
   XdgForeignWrapper* xdg_foreign() const { return xdg_foreign_.get(); }
 
@@ -314,17 +322,16 @@ class WaylandConnection {
   friend class OverlayPrioritizer;
   friend class SurfaceAugmenter;
   friend class WaylandDataDeviceManager;
-  friend class WaylandDrm;
   friend class WaylandOutput;
   friend class WaylandSeat;
-  friend class WaylandShm;
   friend class WaylandZAuraShell;
   friend class WaylandZcrTouchpadHaptics;
-  friend class WaylandZwpLinuxDmabuf;
   friend class WaylandZwpPointerConstraints;
   friend class WaylandZwpPointerGestures;
   friend class WaylandZwpRelativePointerManager;
+  friend class WaylandZcrColorManager;
   friend class WaylandZcrCursorShapes;
+  friend class XdgActivation;
   friend class XdgForeignWrapper;
   friend class ZwpIdleInhibitManager;
   friend class ZwpPrimarySelectionDeviceManager;
@@ -332,7 +339,6 @@ class WaylandConnection {
   void RegisterGlobalObjectFactory(const char* interface_name,
                                    wl::GlobalObjectFactory factory);
 
-  void Flush();
   void UpdateInputDevices();
 
   // Initialize data-related objects if required protocol objects are already
@@ -391,11 +397,16 @@ class WaylandConnection {
   // outlives them so thus being able to properly handle their destruction.
   std::unique_ptr<WaylandEventSource> event_source_;
 
+  // Factory that wraps all the supported wayland objects that are provide
+  // capabilities to create wl_buffers.
+  std::unique_ptr<WaylandBufferFactory> wayland_buffer_factory_;
+
   std::unique_ptr<WaylandCursor> cursor_;
   std::unique_ptr<WaylandDataDeviceManager> data_device_manager_;
   std::unique_ptr<WaylandOutputManager> wayland_output_manager_;
   std::unique_ptr<WaylandCursorPosition> wayland_cursor_position_;
   std::unique_ptr<WaylandZAuraShell> zaura_shell_;
+  std::unique_ptr<WaylandZcrColorManager> zcr_color_manager_;
   std::unique_ptr<WaylandZcrCursorShapes> zcr_cursor_shapes_;
   std::unique_ptr<WaylandZcrTouchpadHaptics> zcr_touchpad_haptics_;
   std::unique_ptr<WaylandZwpPointerConstraints>
@@ -403,11 +414,9 @@ class WaylandConnection {
   std::unique_ptr<WaylandZwpRelativePointerManager>
       wayland_zwp_relative_pointer_manager_;
   std::unique_ptr<WaylandZwpPointerGestures> wayland_zwp_pointer_gestures_;
-  std::unique_ptr<WaylandZwpLinuxDmabuf> zwp_dmabuf_;
-  std::unique_ptr<WaylandDrm> drm_;
   std::unique_ptr<WaylandSeat> seat_;
-  std::unique_ptr<WaylandShm> shm_;
   std::unique_ptr<WaylandBufferManagerHost> buffer_manager_host_;
+  std::unique_ptr<XdgActivation> xdg_activation_;
   std::unique_ptr<XdgForeignWrapper> xdg_foreign_;
   std::unique_ptr<ZwpIdleInhibitManager> zwp_idle_inhibit_manager_;
   std::unique_ptr<OverlayPrioritizer> overlay_prioritizer_;
@@ -438,7 +447,7 @@ class WaylandConnection {
   // created when platform window test config is set.
   std::unique_ptr<wl::WaylandProxy> wayland_proxy_;
 
-  WaylandCursorBufferListener* listener_ = nullptr;
+  raw_ptr<WaylandCursorBufferListener> listener_ = nullptr;
 
   // The current window table mode layout state.
   display::TabletState tablet_layout_state_ =

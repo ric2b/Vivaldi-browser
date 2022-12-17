@@ -142,30 +142,35 @@ enum class RegistrationType {
 
 struct AttributionDataHostManagerImpl::FrozenContext {
   // Top-level origin the data host was created in.
-  const url::Origin context_origin;
+  // Logically const.
+  url::Origin context_origin;
 
   // Source type of this context. Note that data hosts which result in
   // triggers still have a source type of` kEvent` as they share the same web
   // API surface.
-  const AttributionSourceType source_type;
+  // Logically const.
+  AttributionSourceType source_type;
 
   // For receivers with `source_type` `AttributionSourceType::kNavigation`,
-  // the final committed origin of the navigation associated with the data
+  // the final committed site of the navigation associated with the data
   // host.
   //
   // For receivers with `source_type` `AttributionSourceType::kEvent`,
   // this is opaque by default.
-  url::Origin destination;
+  net::SchemefulSite destination;
 
   RegistrationType registration_type = RegistrationType::kNone;
 
   int num_data_registered = 0;
 
-  const base::TimeTicks register_time;
+  // Logically const.
+  base::TimeTicks register_time;
 };
 
 struct AttributionDataHostManagerImpl::DelayedTrigger {
-  const base::TimeTicks delay_until;
+  // Logically const.
+  base::TimeTicks delay_until;
+
   AttributionTrigger trigger;
 
   base::TimeDelta TimeUntil() const {
@@ -198,7 +203,7 @@ struct AttributionDataHostManagerImpl::NavigationRedirectSourceRegistrations {
 
   // The final, committed destination of the navigation associated with this.
   // This can be set before or after all `pending_source_data` is received.
-  url::Origin destination;
+  net::SchemefulSite destination;
 
   // The time the first registration header was received for the redirect chain.
   // Will not change over the course of the redirect chain.
@@ -302,7 +307,7 @@ void AttributionDataHostManagerImpl::NotifyNavigationForDataHost(
         this, std::move(it->second.data_host),
         FrozenContext{.context_origin = source_origin,
                       .source_type = AttributionSourceType::kNavigation,
-                      .destination = destination_origin,
+                      .destination = net::SchemefulSite(destination_origin),
                       .register_time = it->second.register_time});
 
     navigation_data_host_map_.erase(it);
@@ -318,14 +323,17 @@ void AttributionDataHostManagerImpl::NotifyNavigationForDataHost(
     return;
   }
   NavigationRedirectSourceRegistrations& registrations = redirect_it->second;
-  registrations.destination = destination_origin;
-  const net::SchemefulSite destination_site(destination_origin);
+  registrations.destination = net::SchemefulSite(destination_origin);
 
   for (StorableSource& source : registrations.sources) {
     // The reporting origin has mis-configured the destination, ignore the
     // source.
-    if (source.common_info().ConversionDestination() != destination_site)
+    // TODO(apaseltiner): Report a DevTools/internals issue if the destinations
+    // aren't matched.
+    if (source.common_info().ConversionDestination() !=
+        registrations.destination) {
       continue;
+    }
 
     // Process the registration if the destination matched.
     attribution_manager_->HandleSource(std::move(source));
@@ -377,12 +385,12 @@ void AttributionDataHostManagerImpl::SourceDataAvailable(
   FrozenContext& context = receivers_.current_context();
   DCHECK(network::IsOriginPotentiallyTrustworthy(context.context_origin));
 
-  if (context.source_type == AttributionSourceType::kNavigation) {
-    if (net::SchemefulSite(data->destination) !=
-        net::SchemefulSite(context.destination)) {
-      RecordSourceDataHandleStatus(DataHandleStatus::kContextError);
-      return;
-    }
+  // TODO(apaseltiner): Report a DevTools/internals issue if the destinations
+  // aren't matched.
+  if (context.source_type == AttributionSourceType::kNavigation &&
+      net::SchemefulSite(data->destination) != context.destination) {
+    RecordSourceDataHandleStatus(DataHandleStatus::kContextError);
+    return;
   }
 
   if (context.registration_type == RegistrationType::kTrigger) {
@@ -477,6 +485,16 @@ void AttributionDataHostManagerImpl::TriggerDataAvailable(
     return;
   }
 
+  absl::optional<AttributionFilterData> not_filters =
+      AttributionFilterData::FromTriggerFilterValues(
+          std::move(data->not_filters->filter_values));
+  if (!not_filters.has_value()) {
+    RecordTriggerDataHandleStatus(DataHandleStatus::kInvalidData);
+    mojo::ReportBadMessage(
+        "AttributionDataHost: Invalid top-level negated filters.");
+    return;
+  }
+
   if (data->event_triggers.size() > blink::kMaxAttributionEventTriggerData) {
     RecordTriggerDataHandleStatus(DataHandleStatus::kInvalidData);
     mojo::ReportBadMessage("AttributionDataHost: Too many event triggers.");
@@ -541,6 +559,7 @@ void AttributionDataHostManagerImpl::TriggerDataAvailable(
   AttributionTrigger trigger(
       /*destination_origin=*/context.context_origin,
       std::move(data->reporting_origin), std::move(*filters),
+      std::move(*not_filters),
       data->debug_key ? absl::make_optional(data->debug_key->value)
                       : absl::nullopt,
       std::move(event_triggers), std::move(*aggregatable_trigger_data),
@@ -685,9 +704,10 @@ void AttributionDataHostManagerImpl::OnRedirectSourceParsed(
   registrations.pending_source_data--;
 
   absl::optional<StorableSource> source;
-  if (result.value && result.value->is_dict()) {
+  if (result.has_value() && result->is_dict()) {
+    // TODO(apaseltiner): Report a DevTools/internals issue if parsing fails.
     source = ParseSourceRegistration(
-        std::move(result.value->GetDict()), /*source_time=*/base::Time::Now(),
+        std::move(result->GetDict()), /*source_time=*/base::Time::Now(),
         std::move(reporting_origin), registrations.source_origin,
         AttributionSourceType::kNavigation);
   }
@@ -702,8 +722,12 @@ void AttributionDataHostManagerImpl::OnRedirectSourceParsed(
   }
 
   // Process the registration if it was valid.
-  if (source)
+  // TODO(apaseltiner): Report a DevTools/internals issue if the destinations
+  // aren't matched.
+  if (source && source->common_info().ConversionDestination() ==
+                    registrations.destination) {
     attribution_manager_->HandleSource(std::move(*source));
+  }
 
   if (registrations.pending_source_data == 0u) {
     // We have finished processing all sources on this redirect chain, cleanup

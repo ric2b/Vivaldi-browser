@@ -7,8 +7,8 @@
  * delete browsing data that has been cached by Chromium.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_tabs/cr_tabs.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
@@ -18,10 +18,10 @@ import './passwords_deletion_dialog.js';
 import './installed_app_checkbox.js';
 import '../controls/settings_checkbox.js';
 import '../icons.html.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
@@ -129,7 +129,7 @@ export class SettingsClearBrowsingDataDialogElement extends
         // Will be filled as results are reported.
         value() {
           return {};
-        }
+        },
       },
 
       /**
@@ -277,8 +277,8 @@ export class SettingsClearBrowsingDataDialogElement extends
   private isSyncPaused_: boolean;
   private hasPassphraseError_: boolean;
   private hasOtherSyncError_: boolean;
-  private tabsNames_: Array<string>;
-  private installedApps_: Array<InstalledApp>;
+  private tabsNames_: string[];
+  private installedApps_: InstalledApp[];
   private installedAppsFlagEnabled_: boolean;
   private googleSearchHistoryString_: string;
   private isNonGoogleDse_: boolean;
@@ -407,9 +407,9 @@ export class SettingsClearBrowsingDataDialogElement extends
   /**
    * @return A list of selected data types.
    */
-  private getSelectedDataTypes_(tab: HTMLElement): Array<string> {
+  private getSelectedDataTypes_(tab: HTMLElement): string[] {
     const checkboxes = tab.querySelectorAll('settings-checkbox');
-    const dataTypes: Array<string> = [];
+    const dataTypes: string[] = [];
     checkboxes.forEach((checkbox) => {
       if (checkbox.checked && !checkbox.hidden) {
         dataTypes.push(checkbox.pref!.key);
@@ -437,7 +437,8 @@ export class SettingsClearBrowsingDataDialogElement extends
     }
     const haveInstalledApps = this.installedApps_.length > 0;
     chrome.send('metricsHandler:recordBooleanHistogram', [
-      'History.ClearBrowsingData.InstalledAppsDialogShown', haveInstalledApps
+      'History.ClearBrowsingData.InstalledAppsDialogShown',
+      haveInstalledApps,
     ]);
     return haveInstalledApps;
   }
@@ -592,7 +593,7 @@ export class SettingsClearBrowsingDataDialogElement extends
 
   private shouldShowFooter_(): boolean {
     let showFooter = false;
-    // <if expr="not chromeos_ash and not chromeos_lacros">
+    // <if expr="not is_chromeos">
     showFooter = !!this.syncStatus && !!this.syncStatus!.signedIn;
     // </if>
     return showFooter;

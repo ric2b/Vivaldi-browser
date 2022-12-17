@@ -135,7 +135,6 @@ const BookmarkNode* BookmarksFunction::GetBookmarkNodeFromId(
 const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     BookmarkModel* model,
     const CreateDetails& details,
-    const BookmarkNode::MetaInfoMap* meta_info,
     std::string* error) {
   int64_t parent_id;
 
@@ -188,9 +187,6 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
   }
 
   vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
-  if (meta_info) {
-    vivaldi_meta.SetMap(*meta_info);
-  }
   if (details.nickname) {
     if (!details.nickname->empty() && vivaldi_bookmark_kit::DoesNickExists(
                                           model, *details.nickname, nullptr)) {
@@ -220,14 +216,13 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     }
     vivaldi_meta.SetPartner(vivaldi_partner);
   }
-  meta_info = vivaldi_meta.map();
-
   // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
+
   const BookmarkNode* node;
   if (url_string.length()) {
-    node = model->AddURL(parent, index, title, url, meta_info);
+    node = model->AddNewURL(parent, index, title, url, vivaldi_meta.map());
   } else {
-    node = model->AddFolder(parent, index, title, meta_info);
+    node = model->AddFolder(parent, index, title, vivaldi_meta.map());
     model->SetDateFolderModified(parent, base::Time::Now());
   }
 
@@ -301,7 +296,7 @@ BookmarkEventRouter::~BookmarkEventRouter() {
 
 void BookmarkEventRouter::DispatchEvent(events::HistogramValue histogram_value,
                                         const std::string& event_name,
-                                        std::vector<base::Value> event_args) {
+                                        base::Value::List event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(std::make_unique<extensions::Event>(
@@ -698,7 +693,7 @@ ExtensionFunction::ResponseValue BookmarksCreateFunction::RunOnReady() {
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   const BookmarkNode* node =
-      CreateBookmarkNode(model, params->bookmark, nullptr, &error);
+      CreateBookmarkNode(model, params->bookmark, &error);
   if (!node)
     return Error(error);
 

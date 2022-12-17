@@ -5,10 +5,12 @@
 #ifndef CONTENT_RENDERER_NAVIGATION_CLIENT_H_
 #define CONTENT_RENDERER_NAVIGATION_CLIENT_H_
 
+#include "content/common/frame.mojom.h"
 #include "content/common/navigation_client.mojom.h"
 #include "content/public/common/alternative_error_page_override_info.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 
 namespace content {
 
@@ -35,6 +37,7 @@ class NavigationClient : mojom::NavigationClient {
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           prefetch_loader_factory,
       const base::UnguessableToken& devtools_navigation_token,
+      const blink::ParsedPermissionsPolicy& permissions_policy,
       blink::mojom::PolicyContainerPtr policy_container,
       mojo::PendingRemote<blink::mojom::CodeCacheHost> code_cache_host,
       mojom::CookieManagerInfoPtr cookie_manager_info,
@@ -56,23 +59,39 @@ class NavigationClient : mojom::NavigationClient {
   void Bind(mojo::PendingAssociatedReceiver<mojom::NavigationClient> receiver);
 
   // See NavigationState::was_initiated_in_this_frame for details.
-  void MarkWasInitiatedInThisFrame();
   bool was_initiated_in_this_frame() const {
     return was_initiated_in_this_frame_;
   }
 
+  // Sets up a NavigationClient for a renderer-initiated navigation initiated
+  // in this frame. This includes setting `was_initiated_in_this_frame_` to
+  // true and setting up a task to send a navigation-cancellation-window-ended
+  // notification to the browser.
+  void SetUpRendererInitiatedNavigation(
+      mojo::PendingRemote<mojom::NavigationRendererCancellationListener>
+          renderer_cancellation_listener_remote);
+
  private:
   // OnDroppedNavigation is bound from BeginNavigation till CommitNavigation.
   // During this period, it is called when the interface pipe is closed from the
-  // browser side, leading to the ongoing navigation cancelation.
+  // browser side, leading to the ongoing navigation cancellation.
   void OnDroppedNavigation();
   void SetDisconnectionHandler();
   void ResetDisconnectionHandler();
 
+  // The window of time in which the renderer can cancel this navigation had
+  // ended, so notify the browser about it.
+  void NotifyNavigationCancellationWindowEnded();
+
   mojo::AssociatedReceiver<mojom::NavigationClient> navigation_client_receiver_{
       this};
+  mojo::Remote<mojom::NavigationRendererCancellationListener>
+      renderer_cancellation_listener_remote_;
   RenderFrameImpl* render_frame_;
+  // See NavigationState::was_initiated_in_this_frame for details.
   bool was_initiated_in_this_frame_ = false;
+
+  base::WeakPtrFactory<NavigationClient> weak_ptr_factory_{this};
 };
 
 }  // namespace content

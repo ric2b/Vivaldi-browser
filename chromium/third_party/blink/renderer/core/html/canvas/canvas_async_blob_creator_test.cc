@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
 
+#include <list>
+
 #include "components/ukm/test_ukm_recorder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -68,8 +70,10 @@ void MockCanvasAsyncBlobCreator::PostDelayedTaskToCurrentThread(
     const base::Location& location,
     base::OnceClosure task,
     double delay_ms) {
-  DCHECK(IsMainThread());
-  Thread::Current()->GetTaskRunner()->PostTask(location, std::move(task));
+  // override delay to 0.
+  CanvasAsyncBlobCreator::PostDelayedTaskToCurrentThread(location,
+                                                         std::move(task),
+                                                         /*delay_ms=*/0);
 }
 
 //==============================================================================
@@ -104,10 +108,11 @@ class MockCanvasAsyncBlobCreatorWithoutComplete
 
  protected:
   void ScheduleInitiateEncoding(double quality) override {
-    Thread::Current()->GetTaskRunner()->PostTask(
+    PostDelayedTaskToCurrentThread(
         FROM_HERE,
         WTF::Bind(&MockCanvasAsyncBlobCreatorWithoutComplete::InitiateEncoding,
-                  WrapPersistent(this), quality, base::TimeTicks::Max()));
+                  WrapPersistent(this), quality, base::TimeTicks::Max()),
+        /*delay_ms=*/0);
   }
 
   void IdleEncodeRows(base::TimeTicks deadline) override {

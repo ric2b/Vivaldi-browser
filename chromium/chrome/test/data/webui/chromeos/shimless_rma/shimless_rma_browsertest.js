@@ -27,7 +27,7 @@ this.ShimlessRMABrowserTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     return 'chrome://shimless-rma/test_loader.html?module=chromeos/' +
-        'shimless_rma/shimless_rma_unified_test.js';
+        'shimless_rma/shimless_rma_unified_test.js&host=test';
   }
 
   /** @override */
@@ -36,8 +36,8 @@ this.ShimlessRMABrowserTest = class extends PolymerTest {
       enabled: [
         'chromeos::features::kShimlessRMAFlow',
         'chromeos::features::kShimlessRMAEnableStandalone',
-        'chromeos::features::kShimlessRMAOsUpdate'
-      ]
+        'chromeos::features::kShimlessRMAOsUpdate',
+      ],
     };
   }
 };
@@ -49,6 +49,7 @@ const debug_suites_list = [
   'AllInputsDisabledTest',
   'CriticalErrorPageTest',
   'FakeShimlessRmaServiceTestSuite',
+  'HardwareErrorPageTest',
   'OnboardingChooseDestinationPageTest',
   'OnboardingChooseWipeDevicePageTest',
   'OnboardingChooseWpDisableMethodPageTest',
@@ -59,6 +60,7 @@ const debug_suites_list = [
   'OnboardingUpdatePageTest',
   'OnboardingWaitForManualWpDisablePageTest',
   'OnboardingWpDisableCompletePageTest',
+  'RebootPageTest',
   'ReimagingCalibrationFailedPageTest',
   'ReimagingCalibrationRunPageTest',
   'ReimagingCalibrationSetupPageTest',

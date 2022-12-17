@@ -5,6 +5,7 @@
 module blink.mojom;
 
 import "mojo/public/mojom/base/time.mojom";
+import "services/network/public/mojom/url_request.mojom";
 import "url/mojom/url.mojom";
 
 // The HTTP methods that pending beacons can use.
@@ -15,7 +16,7 @@ enum BeaconMethod {
 
 // Interface for creating browser-side pending beacon objects.
 // API explainer here:
-// https://github.com/darrenw/docs/blob/main/explainers/beacon_api.md
+// https://github.com/WICG/unload-beacon/blob/main/README.md
 interface PendingBeaconHost {
 
   // Creates a new pending beacon object in the browser side.
@@ -23,13 +24,9 @@ interface PendingBeaconHost {
   // side `PendingBeacon` object.
   // `url` is the target url for the beacon.
   // `method` is the method used to send the beacon.
-  // `timeout` is the timeout after running the page hide event on the current
-  // document after which the beacon will be sent (or zero to not send after
-  // page hide, instead only send on document discard).
   CreateBeacon(pending_receiver<blink.mojom.PendingBeacon> receiver,
                url.mojom.Url url,
-               BeaconMethod method,
-               mojo_base.mojom.TimeDelta timeout);
+               BeaconMethod method);
 
 };
 
@@ -41,8 +38,19 @@ interface PendingBeacon {
   // further calls can be made.
   Deactivate();
 
-  // Sets data for the pending beacon.
-  SetData(string data);
+  // Sets request data for the pending beacon.
+  // It is only allowed when the receiving pending beacon's `BeaconMethod` is
+  // kPost.
+  // `request_body` must
+  //    - Contain only single data element. Complex body is not allowed.
+  //    - Contain NO `kChunkedDataPipe` data element.
+  SetRequestData(network.mojom.URLRequestBody request_body,
+                 string content_type);
+
+  // Sets request url for the pending beacon.
+  // The spec only allows GET beacons to update its own URL. So the receiving
+  // pending beacon's `BeaconMethod` must be kGet.
+  SetRequestURL(url.mojom.Url url);
 
   // Sends the pending beacon immediately.
   // Calling this will close the message pipe for the interface as well, so no

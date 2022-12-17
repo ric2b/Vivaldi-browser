@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,8 +34,6 @@ class DeviceTrustNavigationThrottle : public content::NavigationThrottle {
 
   using AttestationCallback = base::OnceCallback<void(const std::string&)>;
 
-  explicit DeviceTrustNavigationThrottle(
-      content::NavigationHandle* navigation_handle);
   DeviceTrustNavigationThrottle(DeviceTrustService* device_trust_service,
                                 content::NavigationHandle* navigation_handle);
 

@@ -106,14 +106,11 @@ void Menubar::PopulateBookmarks() {
       browser_->window()->GetNativeWindow());
   bookmark_menu_delegate_.reset(new BookmarkMenuDelegate(
       browser_,
-      base::BindRepeating(
-          [](content::PageNavigator* navigator) { return navigator; },
-          browser_),
       parent));
   bookmark_menu_delegate_->Init(this, bookmark_menu_,
                                 model->bookmark_bar_node(), 0,
                                 BookmarkMenuDelegate::HIDE_PERMANENT_FOLDERS,
-                                BOOKMARK_LAUNCH_LOCATION_NONE);
+                                BookmarkLaunchLocation::kNone);
 }
 
 void Menubar::PopulateMenu(views::MenuItemView* parent, ui::MenuModel* model) {

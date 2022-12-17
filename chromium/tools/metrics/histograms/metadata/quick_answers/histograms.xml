@@ -64,7 +64,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="QuickAnswers.Click" enum="QuickAnswersResultType"
-    expires_after="2023-03-21">
+    expires_after="2023-01-22">
   <owner>updowndota@chromium.org</owner>
   <owner>llin@google.com</owner>
   <owner>croissant-eng@chromium.org</owner>
@@ -116,8 +116,28 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="QuickAnswers.DictionaryIntent.Language" enum="LanguageName"
+    expires_after="2023-07-01">
+  <owner>updowndota@chromium.org</owner>
+  <owner>croissant-eng@chromium.org</owner>
+  <summary>
+    For Quick answers fetch, records the query text language of dictionary
+    intent generated on device. ChromeOS only.
+  </summary>
+</histogram>
+
+<histogram name="QuickAnswers.DictionaryIntent.Source"
+    enum="QuickAnswersDictionaryIntentSource" expires_after="2023-07-01">
+  <owner>updowndota@chromium.org</owner>
+  <owner>croissant-eng@chromium.org</owner>
+  <summary>
+    For Quick answers fetch, records the source type of dictionary intent
+    generated on device. ChromeOS only.
+  </summary>
+</histogram>
+
 <histogram name="QuickAnswers.ExitPoint" enum="QuickAnswersExitPoint"
-    expires_after="2022-09-01">
+    expires_after="2023-08-15">
   <owner>updowndota@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -168,8 +188,23 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="QuickAnswers.NetworkError.ResponseCode.{IntentType}"
+    enum="HttpResponseCode" expires_after="2023-03-21">
+  <owner>updowndota@chromium.org</owner>
+  <owner>croissant-eng@chromium.org</owner>
+  <summary>
+    Records the Http response codes when network error occurs when fetching
+    {IntentType} results. ChromeOS only.
+  </summary>
+  <token key="IntentType">
+    <variant name="Definition" summary="definition"/>
+    <variant name="Translation" summary="translation"/>
+    <variant name="UnitConversion" summary="unit conversion"/>
+  </token>
+</histogram>
+
 <histogram name="QuickAnswers.RequestTextLength.{IntentType}"
-    units="characters" expires_after="2022-09-01">
+    units="characters" expires_after="2023-08-15">
   <owner>updowndota@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -244,7 +279,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="QuickAnswers.V2.Consent.Duration{QuickAnswersV2ConsentResultType}"
-    units="ms" expires_after="2022-09-01">
+    units="ms" expires_after="2023-08-15">
   <owner>updowndota@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -257,7 +292,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="QuickAnswers.V2.Consent.Impression{QuickAnswersV2ConsentResultType}"
-    units="impressions" expires_after="2022-09-01">
+    units="impressions" expires_after="2023-08-15">
   <owner>updowndota@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>

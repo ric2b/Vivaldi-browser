@@ -5,7 +5,15 @@
 /**
  * @fileoverview Handles auto scrolling on navigation.
  */
-import {ChromeVoxState} from '/chromevox/background/chromevox_state.js';
+import {AutomationPredicate} from '../../common/automation_predicate.js';
+import {AutomationUtil} from '../../common/automation_util.js';
+import {constants} from '../../common/constants.js';
+import {CursorUnit} from '../../common/cursors/cursor.js';
+import {CursorRange} from '../../common/cursors/range.js';
+import {TtsSpeechProperties} from '../common/tts_interface.js';
+
+import {ChromeVoxState} from './chromevox_state.js';
+import {CommandHandlerInterface} from './command_handler_interface.js';
 
 // setTimeout and its clean-up are referencing each other. So, we need to set
 // "ignoreReadBeforeAssign" in this file. ESLint doesn't support per-line rule
@@ -26,7 +34,7 @@ export class AutoScrollHandler {
     /** @private {AutomationNode} */
     this.scrollingNode_ = null;
 
-    /** @private {cursors.Range} */
+    /** @private {CursorRange} */
     this.rangeBeforeScroll_ = null;
 
     /** @private {!Date} */
@@ -47,13 +55,13 @@ export class AutoScrollHandler {
   /**
    * This should be called before any command triggers ChromeVox navigation.
    *
-   * @param {!cursors.Range} target The range that is going to be navigated
+   * @param {!CursorRange} target The range that is going to be navigated
    *     before scrolling.
    * @param {constants.Dir} dir The direction to navigate.
    * @param {?AutomationPredicate.Unary} pred The predicate to match.
-   * @param {?cursors.Unit} unit The unit to navigate by.
-   * @param {?Object} speechProps The optional speech properties given to
-   *     |navigateToRange| to provide feedback of the current command.
+   * @param {?CursorUnit} unit The unit to navigate by.
+   * @param {?TtsSpeechProperties} speechProps The optional speech properties
+   *     given to |navigateToRange| to provide feedback of the current command.
    * @param {AutomationPredicate.Unary} rootPred The predicate that expresses
    *     the current navigation root.
    * @param {Function} retryCommandFunc The callback used to retry the command
@@ -80,7 +88,7 @@ export class AutoScrollHandler {
     // At the beginning or the end of the document, there is a case where the
     // range stays there. It's worth trying scrolling the containing scrollable.
     if (!scrollable && target.equals(rangeBeforeScroll) &&
-        (unit === cursors.Unit.WORD || unit === cursors.Unit.CHARACTER)) {
+        (unit === CursorUnit.WORD || unit === CursorUnit.CHARACTER)) {
       scrollable =
           this.tryFindingContainingScrollableIfAtEdge_(target, dir, scrollable);
     }
@@ -101,7 +109,7 @@ export class AutoScrollHandler {
   }
 
   /**
-   * @param {!cursors.Range} target The range that is going to be navigated
+   * @param {!CursorRange} target The range that is going to be navigated
    *     before scrolling.
    * @return {?AutomationNode}
    */
@@ -119,7 +127,7 @@ export class AutoScrollHandler {
   }
 
   /**
-   * @param {!cursors.Range} target
+   * @param {!CursorRange} target
    * @param {constants.Dir} dir
    * @param {AutomationNode} scrollable
    * @return {AutomationNode}
@@ -144,13 +152,13 @@ export class AutoScrollHandler {
   }
 
   /**
-   * @param {!cursors.Range} target The range that is going to be navigated
+   * @param {!CursorRange} target The range that is going to be navigated
    *     before scrolling.
    * @param {constants.Dir} dir The direction to navigate.
    * @param {?AutomationPredicate.Unary} pred The predicate to match.
-   * @param {?cursors.Unit} unit The unit to navigate by.
-   * @param {?Object} speechProps The optional speech properties given to
-   *     |navigateToRange| to provide feedback of the current command.
+   * @param {?CursorUnit} unit The unit to navigate by.
+   * @param {?TtsSpeechProperties} speechProps The optional speech properties
+   *     given to |navigateToRange| to provide feedback of the current command.
    * @param {AutomationPredicate.Unary} rootPred The predicate that expresses
    *     the current navigation root.
    * @param {Function} retryCommandFunc The callback used to retry the command
@@ -199,7 +207,8 @@ export class AutoScrollHandler {
 
     // If the focus has been changed for some reason, do nothing to
     // prevent disturbing the latest navigation.
-    if (!this.rangeBeforeScroll_.equals(ChromeVoxState.instance.currentRange)) {
+    if (!ChromeVoxState.instance.currentRange ||
+        !this.rangeBeforeScroll_.equals(ChromeVoxState.instance.currentRange)) {
       return;
     }
 
@@ -271,19 +280,19 @@ export class AutoScrollHandler {
    * range in the scrollable.
    *
    * @param {?AutomationPredicate.Unary} pred The predicate to match.
-   * @param {?cursors.Unit} unit The unit to navigate by.
+   * @param {?CursorUnit} unit The unit to navigate by.
    * @param {constants.Dir} dir The direction to navigate.
    * @param {AutomationPredicate.Unary} rootPred The predicate that expresses
    *     the current navigation root.
    * @param {!AutomationNode} scrollable
-   * @return {?cursors.Range}
+   * @return {?CursorRange}
    * @private
    */
   handleScrollingInAndroidRecyclerView_(pred, unit, dir, rootPred, scrollable) {
     let nextRange = null;
     if (!pred && unit) {
-      nextRange = cursors.Range.fromNode(scrollable).sync(unit, dir);
-      if (unit === cursors.Unit.NODE) {
+      nextRange = CursorRange.fromNode(scrollable).sync(unit, dir);
+      if (unit === CursorUnit.NODE) {
         nextRange = CommandHandlerInterface.instance.skipLabelOrDescriptionFor(
             nextRange, dir);
       }
@@ -296,7 +305,7 @@ export class AutoScrollHandler {
         node = AutomationUtil.findNodePost(this.scrollingNode_, dir, pred);
       }
       if (node) {
-        nextRange = cursors.Range.fromNode(node);
+        nextRange = CursorRange.fromNode(node);
       }
     }
     return nextRange;
@@ -347,7 +356,7 @@ AutoScrollHandler.RELATED_SCROLL_EVENT_TYPES = [
   EventType.SCROLL_POSITION_CHANGED,
   // These two events are sent by Web and Views via AXEventGenerator.
   EventType.SCROLL_HORIZONTAL_POSITION_CHANGED,
-  EventType.SCROLL_VERTICAL_POSITION_CHANGED
+  EventType.SCROLL_VERTICAL_POSITION_CHANGED,
 ];
 
 /**

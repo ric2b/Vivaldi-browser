@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 
+#include "ash/components/hid_detection/bluetooth_hid_detector.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash::hid_detection {
@@ -44,6 +45,14 @@ class HidDetectionManager {
 
   // Represents the status of inputs on the device.
   struct HidDetectionStatus {
+    HidDetectionStatus(InputMetadata pointer_metadata,
+                       InputMetadata keyboard_metadata,
+                       bool touchscreen_detected,
+                       absl::optional<BluetoothHidPairingState> pairing_state);
+    HidDetectionStatus(HidDetectionStatus&& other);
+    HidDetectionStatus& operator=(HidDetectionStatus&& other);
+    ~HidDetectionStatus();
+
     // Pointer input info of the device.
     InputMetadata pointer_metadata;
 
@@ -51,7 +60,11 @@ class HidDetectionManager {
     InputMetadata keyboard_metadata;
 
     // Indicates the device has a touchscreen connected.
-    bool touchscreen_detected;
+    bool touchscreen_detected = false;
+
+    // Set if the current pairing requires a code that should be displayed to
+    // the user to enter.
+    absl::optional<BluetoothHidPairingState> pairing_state;
   };
 
   class Delegate {

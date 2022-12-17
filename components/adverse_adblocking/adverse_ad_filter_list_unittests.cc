@@ -103,8 +103,8 @@ TEST_F(VivaldiSubresourceFilterTest, SimpleAllowedLoad_WithObserver) {
       content::RenderFrameHostTester::For(main_rfh())->AppendChild("subframe");
   SimulateNavigateAndCommit(GURL(allowed_url), subframe);
   EXPECT_EQ(subresource_filter::LoadPolicy::ALLOW,
-            *observer.GetSubframeLoadPolicy(allowed_url));
-  EXPECT_FALSE(observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
+            observer.GetChildFrameLoadPolicy(allowed_url).value());
+  EXPECT_FALSE(observer.GetIsAdFrame(subframe->GetFrameTreeNodeId()));
 }
 
 TEST_F(VivaldiSubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
@@ -129,6 +129,6 @@ TEST_F(VivaldiSubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
   navigation_observer.WaitForNavigationFinished();
 
   EXPECT_EQ(subresource_filter::LoadPolicy::DISALLOW,
-            *observer.GetSubframeLoadPolicy(disallowed_url));
-  EXPECT_TRUE(observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
+            observer.GetChildFrameLoadPolicy(disallowed_url).value());
+  EXPECT_TRUE(observer.GetIsAdFrame(subframe->GetFrameTreeNodeId()));
 }

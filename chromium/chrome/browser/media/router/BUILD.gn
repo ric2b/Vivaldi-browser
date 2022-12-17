@@ -2,10 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//chrome/browser/media/router/features.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
+
+declare_args() {
+  # Set to true to build code that supports the Open Screen Protocol.
+  # OSP is experimental and not yet feature-complete.
+  enable_openscreen_protocol = false
+}
 
 source_set("data_decoder_util") {
   deps = [
@@ -25,7 +30,7 @@ static_library("media_router_feature") {
   ]
   public_deps = [ "//base" ]
   deps = [
-    "//chrome/browser/profiles:profile",
+    "//chrome/browser/profiles",
     "//chrome/common:constants",
     "//components/media_router/common:common",
     "//components/prefs:prefs",
@@ -34,7 +39,6 @@ static_library("media_router_feature") {
     "//content/public/common",
     "//crypto",
     "//media",
-    "//ui/base:buildflags",
   ]
 }
 
@@ -64,7 +68,6 @@ static_library("router") {
     "//components/media_router/browser",
     "//components/media_router/common",
     "//components/media_router/common/mojom:media_router",
-    "//components/sessions:sessions",
   ]
   sources = [
     "chrome_media_router_factory.cc",
@@ -75,27 +78,22 @@ static_library("router") {
 
   if (!is_android) {
     deps += [
-      "discovery",
-      "//build:chromeos_buildflags",
+      # We can't depend on //chrome/browser/ui due to introducing a cyclic
+      # dependency. Remove this target from the `allow_circular_includes_from`
+      # list in chrome/browser/ui/BUILD.gn once the issues is resolved.
+      # TODO(crbug.com/1030821): Resolve circular dependencies.
+
+      "discovery:discovery",
       "//chrome/browser:browser_process",
       "//chrome/browser/profiles:profile",
       "//components/embedder_support:browser_util",
       "//components/mirroring/mojom:host",
       "//components/mirroring/mojom:service",
-
-      # We can't depend on //chrome/browser/ui due to introducing a cyclic
-      # dependency, so we have to depend on this directly to fix include
-      # resolution for browser.h, which is used in media_router_mojo_impl.cc.
-      # TODO(crbug.com/1030821): Resolve circular dependencies
-      "//components/paint_preview/buildflags",
-      "//components/signin/public/base:signin_buildflags",
-      "//components/translate/content/common",
       "//components/ukm/content:content",
       "//components/version_info:version_info",
       "//mojo/public/cpp/bindings",
       "//services/metrics/public/cpp:ukm_builders",
       "//third_party/openscreen/src/cast/common/channel/proto:channel_proto",
-      "//ui/base:buildflags",
     ]
 
     public_deps += [ "//components/media_router/common/mojom:logger" ]
@@ -165,7 +163,7 @@ static_library("router") {
       deps += [ "//chrome/installer/util:with_no_strings" ]
     }
 
-    if (enable_openscreen) {
+    if (enable_openscreen_protocol) {
       sources += [
         "providers/openscreen/discovery/open_screen_listener.cc",
         "providers/openscreen/discovery/open_screen_listener.h",
@@ -178,7 +176,6 @@ static_library("router") {
       deps += [
         "//third_party/openscreen/src/osp/public",
         "//third_party/openscreen/src/platform",
-        "//third_party/openscreen/src/util",
       ]
     }
   }
@@ -195,7 +192,8 @@ if (!is_android) {
   static_library("test_support") {
     testonly = true
     deps = [
-      "discovery",
+      "discovery:discovery",
+      "//chrome/browser/media/router/discovery/access_code:access_code_sink_service",
       "//chrome/browser/media/router/discovery/access_code:discovery_resources_proto",
       "//chrome/test:test_support",
       "//components/cast_channel:cast_channel",
@@ -261,6 +259,7 @@ source_set("unittests") {
       "discovery/access_code/access_code_cast_discovery_interface_unittest.cc",
       "discovery/access_code/access_code_cast_feature_unittest.cc",
       "discovery/access_code/access_code_cast_pref_updater_unittest.cc",
+      "discovery/access_code/access_code_cast_sink_service_factory_unittest.cc",
       "discovery/access_code/access_code_cast_sink_service_unittest.cc",
       "discovery/access_code/access_code_media_sink_util_unittest.cc",
       "discovery/dial/device_description_fetcher_unittest.cc",
@@ -319,9 +318,8 @@ source_set("unittests") {
     ]
   }
 
-  if (enable_openscreen) {
+  if (enable_openscreen_protocol) {
     include_dirs = [ "//third_party/openscreen/src" ]
-
     sources += [
       "providers/openscreen/discovery/open_screen_listener_unittest.cc",
       "providers/openscreen/network_service_quic_packet_writer_unittest.cc",
@@ -329,7 +327,10 @@ source_set("unittests") {
   }
 }
 
-if (enable_openscreen) {
+# TODO(crbug.com/1290541): Fails to link on Fuchsia builds.
+# TODO(https://issuetracker.google.com/236160471): CDDL compiler doesn't build
+# on Windows.
+if (!is_fuchsia && !is_win) {
   test("openscreen_unittests") {
     deps = [
       "//base/test:run_all_unittests",

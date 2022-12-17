@@ -112,8 +112,8 @@ class BASE_EXPORT TimerBase {
   // TaskEnvironment::TimeSource::MOCK_TIME.
   virtual void SetTaskRunner(scoped_refptr<SequencedTaskRunner> task_runner);
 
-  // Call this method to stop and cancel the timer. It is a no-op if the timer
-  // is not running.
+  // Call this method to stop the timer and cancel all previously scheduled
+  // tasks. It is a no-op if the timer is not running.
   virtual void Stop();
 
  protected:
@@ -149,6 +149,11 @@ class BASE_EXPORT TimerBase {
 
   // The handle to the posted delayed task.
   DelayedTaskHandle delayed_task_handle_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  // Callback invoked when the timer is ready. This is saved as a member to
+  // avoid rebinding every time the Timer fires. Lazy initialized the first time
+  // the Timer is started.
+  RepeatingClosure timer_callback_;
 };
 
 //-----------------------------------------------------------------------------

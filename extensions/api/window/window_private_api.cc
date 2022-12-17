@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -29,19 +30,72 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
-#include "extensions/api/tabs/tabs_private_api.h"
-#include "extensions/api/zoom/zoom_api.h"
+#include "content/public/common/color_parser.h"
+#include "extensions/common/image_util.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "ui/base/ui_base_types.h"
 
 #include "browser/vivaldi_browser_finder.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/api/zoom/zoom_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace extensions {
+
+namespace vivaldi {
+using vivaldi::window_private::WindowType;
+WindowType ConvertToJSWindowType(VivaldiBrowserWindow::WindowType type) {
+  switch (type) {
+    case VivaldiBrowserWindow::WindowType::NORMAL:
+      return WindowType::WINDOW_TYPE_NORMAL;
+    case VivaldiBrowserWindow::WindowType::POPUP:
+      return WindowType::WINDOW_TYPE_POPUP;
+    case VivaldiBrowserWindow::WindowType::SETTINGS:
+      return WindowType::WINDOW_TYPE_SETTINGS;
+  }
+  NOTREACHED();
+  return WindowType::WINDOW_TYPE_NONE;
+}
+
+using vivaldi::window_private::WindowState;
+WindowState ConvertToJSWindowState(ui::WindowShowState state) {
+  switch (state) {
+    case ui::SHOW_STATE_FULLSCREEN:
+      return WindowState::WINDOW_STATE_FULLSCREEN;
+    case ui::SHOW_STATE_MAXIMIZED:
+      return WindowState::WINDOW_STATE_MAXIMIZED;
+    case ui::SHOW_STATE_MINIMIZED:
+      return WindowState::WINDOW_STATE_MINIMIZED;
+    default:
+      return WindowState::WINDOW_STATE_NORMAL;
+  }
+  NOTREACHED();
+  return WindowState::WINDOW_STATE_NORMAL;
+}
+
+ui::WindowShowState ConvertToWindowShowState(
+    vivaldi::window_private::WindowState state) {
+  using vivaldi::window_private::WindowState;
+  switch (state) {
+    case WindowState::WINDOW_STATE_NORMAL:
+      return ui::SHOW_STATE_NORMAL;
+    case WindowState::WINDOW_STATE_MINIMIZED:
+      return ui::SHOW_STATE_MINIMIZED;
+    case WindowState::WINDOW_STATE_MAXIMIZED:
+      return ui::SHOW_STATE_MAXIMIZED;
+    case WindowState::WINDOW_STATE_FULLSCREEN:
+      return ui::SHOW_STATE_FULLSCREEN;
+    case WindowState::WINDOW_STATE_NONE:
+      return ui::SHOW_STATE_DEFAULT;
+  }
+  NOTREACHED();
+  return ui::SHOW_STATE_DEFAULT;
+}
+}  // namespace vivaldi
 
 namespace {
 
@@ -118,12 +172,6 @@ void VivaldiBrowserObserver::OnBrowserAdded(Browser* browser) {
   if (browser->is_vivaldi()) {
     ZoomAPI::AddZoomObserver(browser);
   }
-  int id = browser->session_id().id();
-
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::window_private::OnWindowCreated::kEventName,
-      extensions::vivaldi::window_private::OnWindowCreated::Create(id),
-      browser->profile());
 }
 
 void VivaldiBrowserObserver::OnBrowserRemoved(Browser* browser) {
@@ -193,10 +241,10 @@ void VivaldiBrowserObserver::OnTabStripModelChanged(
 
     if (old_fill_client) {
       old_fill_client->OnWebContentsLostFocus(
-          selection.old_contents->GetMainFrame()->GetRenderWidgetHost());
+          selection.old_contents->GetPrimaryMainFrame()->GetRenderWidgetHost());
     }
     new_fill_client->OnWebContentsFocused(
-        selection.new_contents->GetMainFrame()->GetRenderWidgetHost());
+        selection.new_contents->GetPrimaryMainFrame()->GetRenderWidgetHost());
   }
 
   TabsPrivateAPI::FromBrowserContext(
@@ -231,29 +279,6 @@ bool VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(Browser* browser) {
   return i != SIZE_MAX;
 }
 
-namespace {
-
-ui::WindowShowState ConvertToWindowShowState(
-    vivaldi::window_private::WindowState state) {
-  using vivaldi::window_private::WindowState;
-  switch (state) {
-    case WindowState::WINDOW_STATE_NORMAL:
-      return ui::SHOW_STATE_NORMAL;
-    case WindowState::WINDOW_STATE_MINIMIZED:
-      return ui::SHOW_STATE_MINIMIZED;
-    case WindowState::WINDOW_STATE_MAXIMIZED:
-      return ui::SHOW_STATE_MAXIMIZED;
-    case WindowState::WINDOW_STATE_FULLSCREEN:
-      return ui::SHOW_STATE_FULLSCREEN;
-    case WindowState::WINDOW_STATE_NONE:
-      return ui::SHOW_STATE_DEFAULT;
-  }
-  NOTREACHED();
-  return ui::SHOW_STATE_DEFAULT;
-}
-
-}  // namespace
-
 ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   using vivaldi::window_private::Create::Params;
   namespace Results = vivaldi::window_private::Create::Results;
@@ -261,23 +286,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  int top = 0;
-  int left = 0;
   int min_width = 0;
   int min_height = 0;
-
-  if (params->options.bounds.top.get()) {
-    top = *params->options.bounds.top.get();
-  }
-  if (params->options.bounds.left.get()) {
-    left = *params->options.bounds.left.get();
-  }
-  if (params->options.bounds.min_width.get()) {
-    min_width = *params->options.bounds.min_width.get();
-  }
-  if (params->options.bounds.min_height.get()) {
-    min_height = *params->options.bounds.min_height.get();
-  }
   bool incognito = false;
   bool focused = true;
   std::string tab_url;
@@ -302,8 +312,34 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   } else {
     profile = profile->GetOriginalProfile();
   }
-  gfx::Rect bounds(left, top, params->options.bounds.width,
-                   params->options.bounds.height);
+
+  gfx::Rect window_bounds;
+
+  ui::WindowShowState ignored_show_state = ui::SHOW_STATE_DEFAULT;
+  WindowSizer::GetBrowserWindowBoundsAndShowState(
+      gfx::Rect(), nullptr, &window_bounds, &ignored_show_state);
+
+  if (params->options.bounds) {
+    if (params->options.bounds->top) {
+      window_bounds.set_y(*params->options.bounds->top);
+    }
+    if (params->options.bounds->left) {
+      window_bounds.set_x(*params->options.bounds->left);
+    }
+    if (params->options.bounds->width) {
+      window_bounds.set_width(params->options.bounds->width);
+    }
+    if (params->options.bounds->height) {
+      window_bounds.set_height(params->options.bounds->height);
+    }
+
+    if (params->options.bounds->min_width.get()) {
+      min_width = *params->options.bounds->min_width.get();
+    }
+    if (params->options.bounds->min_height.get()) {
+      min_height = *params->options.bounds->min_height.get();
+    }
+  }
 
   // App window specific parameters
   VivaldiBrowserWindowParams window_params;
@@ -319,7 +355,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
     window_params.native_decorations = profile->GetPrefs()->GetBoolean(
         vivaldiprefs::kWindowsUseNativeDecoration);
   }
-  window_params.content_bounds = bounds;
+
   window_params.minimum_size = gfx::Size(min_width, min_height);
   window_params.state = ui::SHOW_STATE_DEFAULT;
   window_params.resource_relative_url = std::move(params->url);
@@ -339,8 +375,15 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   window->SetDidFinishNavigationCallback(
       base::BindOnce(&WindowPrivateCreateFunction::OnAppUILoaded, this));
 
-  Browser::CreateParams create_params(Browser::TYPE_POPUP, profile, false);
-  create_params.initial_bounds = bounds;
+  Browser::Type window_type = Browser::TYPE_NORMAL;
+  // Popup and settingswindow should open as popup and not stored in session.
+  if (params->type != vivaldi::window_private::WindowType::WINDOW_TYPE_NORMAL) {
+    window_type = Browser::TYPE_POPUP;
+  }
+  Browser::CreateParams create_params(window_type, profile, false);
+
+  create_params.initial_bounds = window_bounds;
+
   create_params.creation_source = Browser::CreationSource::kStartupCreator;
   create_params.is_vivaldi = true;
   create_params.window = window;
@@ -400,7 +443,8 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
           &browser, &error)) {
     return RespondNow(Error(error));
   }
-  ui::WindowShowState show_state = ConvertToWindowShowState(params->state);
+  ui::WindowShowState show_state =
+      vivaldi::ConvertToWindowShowState(params->state);
 
   // Don't trigger onStateChanged event for changes coming from JS. The
   // assumption is that JS updates its state as needed after each
@@ -457,6 +501,31 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
+WindowPrivateUpdateMaximizeButtonPositionFunction::Run() {
+  using vivaldi::window_private::UpdateMaximizeButtonPosition::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  Browser* browser;
+  std::string error;
+  if (!windows_util::GetBrowserFromWindowID(
+          this, params->window_id, WindowController::GetAllWindowFilter(),
+          &browser, &error)) {
+    return RespondNow(Error(error));
+  }
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  if (window) {
+    gfx::RectF rect(params->left, params->top, params->width, params->height);
+    ::vivaldi::FromUICoordinates(window->web_contents(), &rect);
+    gfx::Rect int_rect(std::round(rect.x()), std::round(rect.y()),
+                       std::round(rect.width()), std::round(rect.height()));
+    window->UpdateMaximizeButtonPosition(int_rect);
+  }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
 WindowPrivateGetFocusedElementInfoFunction::Run() {
   using vivaldi::window_private::GetFocusedElementInfo::Params;
 
@@ -472,9 +541,9 @@ WindowPrivateGetFocusedElementInfoFunction::Run() {
   content::WebContentsImpl* web_contents =
       static_cast<content::WebContentsImpl*>(window->web_contents());
   content::RenderFrameHostImpl* render_frame_host =
-      web_contents->GetFocusedFrameIncludingInnerWebContents();
+      web_contents->GetFocusedFrame();
   if (!render_frame_host) {
-    render_frame_host = web_contents->GetMainFrame();
+    render_frame_host = web_contents->GetPrimaryMainFrame();
   }
   render_frame_host->GetVivaldiFrameService()->GetFocusedElementInfo(
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(

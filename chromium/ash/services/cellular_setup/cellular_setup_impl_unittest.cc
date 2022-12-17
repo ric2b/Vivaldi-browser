@@ -9,13 +9,12 @@
 #include <vector>
 
 #include "ash/services/cellular_setup/cellular_setup_base.h"
-#include "ash/services/cellular_setup/cellular_setup_impl.h"
 #include "ash/services/cellular_setup/fake_ota_activator.h"
 #include "ash/services/cellular_setup/ota_activator_impl.h"
 #include "ash/services/cellular_setup/public/cpp/fake_activation_delegate.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
-#include "chromeos/network/network_handler_test_helper.h"
+#include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
 

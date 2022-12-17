@@ -35,7 +35,6 @@
 #include "ui/accessibility/ax_text_attributes.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/ax_tree_manager.h"
-#include "ui/accessibility/ax_tree_manager_map.h"
 #include "ui/gfx/utf16_indexing.h"
 
 namespace ui {
@@ -165,8 +164,6 @@ enum class AXEmbeddedObjectBehavior {
 // TODO(crbug.com/1204592) Don't export this so tests can't change it.
 extern AX_EXPORT AXEmbeddedObjectBehavior g_ax_embedded_object_behavior;
 
-namespace testing {
-
 class AX_EXPORT ScopedAXEmbeddedObjectBehaviorSetter {
  public:
   explicit ScopedAXEmbeddedObjectBehaviorSetter(
@@ -176,8 +173,6 @@ class AX_EXPORT ScopedAXEmbeddedObjectBehaviorSetter {
  private:
   AXEmbeddedObjectBehavior prev_behavior_;
 };
-
-}  // namespace testing
 
 // Forward declarations.
 template <class AXPositionType, class AXNodeType>
@@ -406,7 +401,7 @@ class AXPosition {
     DCHECK(GetManager());
     std::ostringstream str;
     str << "* Position: " << ToString()
-        << "\n* Manager: " << GetManager()->ToString()
+        << "\n* Manager: " << GetManager()->ax_tree()->data().ToString()
         << "\n* Anchor node: " << *GetAnchor();
     return str.str();
   }
@@ -415,9 +410,7 @@ class AXPosition {
   AXTreeID tree_id() const { return tree_id_; }
   AXNodeID anchor_id() const { return anchor_id_; }
 
-  AXTreeManager* GetManager() const {
-    return AXTreeManagerMap::GetInstance().GetManager(tree_id());
-  }
+  AXTreeManager* GetManager() const { return AXTreeManager::FromID(tree_id()); }
 
   AXNode* GetAnchor() const {
     if (tree_id_ == AXTreeIDUnknown() || anchor_id_ == kInvalidAXNodeID)

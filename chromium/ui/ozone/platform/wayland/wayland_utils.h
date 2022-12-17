@@ -5,9 +5,13 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_WAYLAND_UTILS_H_
 #define UI_OZONE_PLATFORM_WAYLAND_WAYLAND_UTILS_H_
 
+#include "base/memory/raw_ptr.h"
 #include "ui/ozone/public/platform_utils.h"
 
 namespace ui {
+
+#define PARAM_TO_FLOAT(x) (x / 10000.f)
+#define FLOAT_TO_PARAM(x) static_cast<uint32_t>(x * 10000)
 
 class WaylandConnection;
 
@@ -25,7 +29,7 @@ class WaylandUtils : public PlatformUtils {
   void OnUnhandledKeyEvent(const KeyEvent& key_event) override;
 
  private:
-  WaylandConnection* const connection_;
+  const raw_ptr<WaylandConnection> connection_;
 };
 
 }  // namespace ui

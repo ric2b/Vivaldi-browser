@@ -24,6 +24,7 @@ class ScriptParameters {
   ~ScriptParameters();
   ScriptParameters(const ScriptParameters&) = delete;
   ScriptParameters& operator=(const ScriptParameters&) = delete;
+  ScriptParameters& operator=(ScriptParameters&&);
 
   // Merges |another| into this. Does not overwrite existing values.
   void MergeWith(const ScriptParameters& another);
@@ -52,7 +53,6 @@ class ScriptParameters {
   // Getters for specific parameters.
   absl::optional<std::string> GetOverlayColors() const;
   absl::optional<std::string> GetPasswordChangeUsername() const;
-  absl::optional<std::string> GetBase64TriggerScriptsResponseProto() const;
   absl::optional<bool> GetRequestsTriggerScript() const;
   absl::optional<bool> GetStartImmediately() const;
   absl::optional<bool> GetEnabled() const;
@@ -67,6 +67,9 @@ class ScriptParameters {
   std::vector<std::string> GetExperiments() const;
   absl::optional<bool> GetDisableRpcSigning() const;
   absl::optional<bool> GetSendAnnotateDomModelVersion() const;
+  absl::optional<bool> GetRunHeadless() const;
+  absl::optional<std::string> GetFieldTrialGroup(
+      const int field_trial_slot) const;
 
   // Details parameters.
   absl::optional<bool> GetDetailsShowInitial() const;

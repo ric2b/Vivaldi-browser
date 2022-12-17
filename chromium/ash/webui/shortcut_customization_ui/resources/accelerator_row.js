@@ -3,14 +3,13 @@
 // found in the LICENSE file.
 
 import './accelerator_view.js';
-import './icons.js';
-import './shortcut_customization_shared_css.js';
-
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import './shortcut_customization_shared.css.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {getTemplate} from './accelerator_row.html.js';
 import {getShortcutProvider} from './mojo_interface_provider.js';
 import {AcceleratorInfo, AcceleratorSource, ShortcutProviderInterface} from './shortcut_types.js';
 
@@ -24,10 +23,6 @@ import {AcceleratorInfo, AcceleratorSource, ShortcutProviderInterface} from './s
 export class AcceleratorRowElement extends PolymerElement {
   static get is() {
     return 'accelerator-row';
-  }
-
-  static get template() {
-    return html`{__html_template__}`;
   }
 
   static get properties() {
@@ -104,10 +99,14 @@ export class AcceleratorRowElement extends PolymerElement {
             description: this.description,
             accelerators: this.acceleratorInfos,
             action: this.action,
-            source: this.source
-          }
+            source: this.source,
+          },
         },
         ));
+  }
+
+  static get template() {
+    return getTemplate();
   }
 }
 

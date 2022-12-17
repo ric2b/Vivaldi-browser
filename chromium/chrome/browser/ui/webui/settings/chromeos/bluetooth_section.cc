@@ -10,12 +10,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_shared_load_time_data_provider.h"
+#include "chrome/browser/ui/webui/settings/ash/search/search.mojom.h"
+#include "chrome/browser/ui/webui/settings/ash/search/search_result_icon.mojom.h"
+#include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/bluetooth_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/setting.mojom.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search.mojom.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search_result_icon.mojom.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
+#include "chrome/browser/ui/webui/settings/chromeos/fast_pair_saved_devices_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -152,6 +153,18 @@ const std::vector<SearchConcept>& GetFastPairOnSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetFastPairSavedDevicesSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_FAST_PAIR_SAVED_DEVICES,
+       mojom::kBluetoothSavedDevicesSubpagePath,
+       mojom::SearchResultIcon::kBluetooth,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kFastPairSavedDevices}},
+  });
+  return *tags;
+}
+
 }  // namespace
 
 BluetoothSection::BluetoothSection(Profile* profile,
@@ -161,7 +174,7 @@ BluetoothSection::BluetoothSection(Profile* profile,
       pref_service_(pref_service),
       pref_change_registrar_(std::make_unique<PrefChangeRegistrar>()) {
   bool is_initialized = false;
-  if (base::FeatureList::IsEnabled(floss::features::kFlossEnabled)) {
+  if (floss::features::IsFlossEnabled()) {
     is_initialized = floss::FlossDBusManager::IsInitialized();
   } else {
     is_initialized = bluez::BluezDBusManager::IsInitialized();
@@ -316,6 +329,22 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"bluetoothManaged", IDS_SETTINGS_BLUETOOTH_MANAGED},
       {"enableFastPairLabel", IDS_BLUETOOTH_ENABLE_FAST_PAIR_LABEL},
       {"enableFastPairSubtitle", IDS_BLUETOOTH_ENABLE_FAST_PAIR_SUBTITLE},
+      {"savedDevicesLabel", IDS_BLUETOOTH_SAVED_DEVICES_LABEL},
+      {"savedDevicesSubtitle", IDS_BLUETOOTH_SAVED_DEVICES_SUBTITLE},
+      {"savedDevicesPageName", IDS_SETTINGS_BLUETOOTH_SAVED_DEVICES},
+      {"savedDevicesRemove", IDS_BLUETOOTH_SAVED_DEVICES_REMOVE},
+      {"savedDevicesDialogRemove",
+       IDS_SETTINGS_REMOVE_SAVED_DEVICE_DIALOG_REMOVE},
+      {"savedDevicesDialogCancel",
+       IDS_SETTINGS_REMOVE_SAVED_DEVICE_DIALOG_CANCEL},
+      {"savedDevicesDialogLabel",
+       IDS_SETTINGS_REMOVE_SAVED_DEVICE_DIALOG_LABEL},
+      {"bluetoothDevicesDialogForget",
+       IDS_SETTINGS_FORGET_DEVICE_DIALOG_FORGET},
+      {"bluetoothDevicesDialogCancel",
+       IDS_SETTINGS_FORGET_DEVICE_DIALOG_CANCEL},
+      {"bluetoothDevicesDialogLabel", IDS_SETTINGS_FORGET_DEVICE_DIALOG_LABEL},
+      {"bluetoothDevicesDialogTitle", IDS_SETTINGS_FORGET_DEVICE_DIALOG_TITLE},
       {"bluetoothPrimaryUserControlled",
        IDS_SETTINGS_BLUETOOTH_PRIMARY_USER_CONTROLLED},
       {"bluetoothDeviceWithConnectionStatus",
@@ -355,16 +384,29 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"bluetoothDeviceListNoConnectedDevices",
        IDS_BLUETOOTH_DEVICE_LIST_NO_CONNECTED_DEVICES},
       {"bluetoothEnabledA11YLabel", IDS_SETTINGS_BLUETOOTH_ENABLED_A11Y_LABEL},
-      {"bluetoothDisabledA11YLabel", IDS_SETTINGS_BLUETOOTH_DISABLED_A11Y_LABEL}
+      {"bluetoothDisabledA11YLabel",
+       IDS_SETTINGS_BLUETOOTH_DISABLED_A11Y_LABEL},
+
+      {"savedDeviceItemA11yLabel", IDS_SAVED_DEVICE_ITEM_A11Y_LABEL},
+
+      {"savedDeviceItemButtonA11yLabel",
+       IDS_SAVED_DEVICE_LIST_ITEM_BUTTON_A11Y_LABEL}
 
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
   html_source->AddBoolean("enableFastPairFlag", features::IsFastPairEnabled());
+  html_source->AddBoolean("enableSavedDevicesFlag",
+                          features::IsFastPairSavedDevicesEnabled());
   chromeos::bluetooth::AddLoadTimeData(html_source);
 }
 
 void BluetoothSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(std::make_unique<BluetoothHandler>());
+
+  if (ash::features::IsFastPairEnabled() &&
+      features::IsFastPairSavedDevicesEnabled()) {
+    web_ui->AddMessageHandler(std::make_unique<FastPairSavedDevicesHandler>());
+  }
 }
 
 int BluetoothSection::GetSectionNameMessageId() const {
@@ -404,11 +446,13 @@ void BluetoothSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                                      mojom::kBluetoothDevicesSubpagePath);
   static constexpr mojom::Setting kBluetoothDevicesSettings[] = {
       mojom::Setting::kBluetoothOnOff, mojom::Setting::kBluetoothPairDevice,
-      mojom::Setting::kBluetoothUnpairDevice, mojom::Setting::kFastPairOnOff};
+      mojom::Setting::kBluetoothUnpairDevice, mojom::Setting::kFastPairOnOff,
+      mojom::Setting::kFastPairSavedDevices};
   static constexpr mojom::Setting kBluetoothDevicesSettingsLegacy[] = {
       mojom::Setting::kBluetoothConnectToDevice,
       mojom::Setting::kBluetoothDisconnectFromDevice,
   };
+
   RegisterNestedSettingBulk(mojom::Subpage::kBluetoothDevices,
                             kBluetoothDevicesSettings, generator);
   generator->RegisterTopLevelAltSetting(mojom::Setting::kBluetoothOnOff);
@@ -422,6 +466,13 @@ void BluetoothSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                                 ? mojom::Subpage::kBluetoothDeviceDetail
                                 : mojom::Subpage::kBluetoothDevices,
                             kBluetoothDevicesSettingsLegacy, generator);
+
+  generator->RegisterNestedSubpage(IDS_SETTINGS_BLUETOOTH_SAVED_DEVICES,
+                                   mojom::Subpage::kBluetoothSavedDevices,
+                                   mojom::Subpage::kBluetoothDevices,
+                                   mojom::SearchResultIcon::kBluetooth,
+                                   mojom::SearchResultDefaultRank::kMedium,
+                                   mojom::kBluetoothSavedDevicesSubpagePath);
 }
 
 void BluetoothSection::AdapterPresentChanged(device::BluetoothAdapter* adapter,
@@ -469,6 +520,7 @@ void BluetoothSection::UpdateSearchTags() {
   updater.RemoveSearchTags(GetBluetoothOffSearchConcepts());
   updater.RemoveSearchTags(GetFastPairOnSearchConcepts());
   updater.RemoveSearchTags(GetFastPairOffSearchConcepts());
+  updater.RemoveSearchTags(GetFastPairSavedDevicesSearchConcepts());
   updater.RemoveSearchTags(GetBluetoothConnectableSearchConcepts());
   updater.RemoveSearchTags(GetBluetoothConnectedSearchConcepts());
   updater.RemoveSearchTags(GetBluetoothPairableSearchConcepts());
@@ -485,6 +537,10 @@ void BluetoothSection::UpdateSearchTags() {
       updater.AddSearchTags(GetFastPairOnSearchConcepts());
     } else {
       updater.AddSearchTags(GetFastPairOffSearchConcepts());
+    }
+
+    if (features::IsFastPairSavedDevicesEnabled()) {
+      updater.AddSearchTags(GetFastPairSavedDevicesSearchConcepts());
     }
   }
 

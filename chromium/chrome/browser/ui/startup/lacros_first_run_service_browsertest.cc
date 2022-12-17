@@ -11,7 +11,6 @@
 #include "base/feature_list.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lacros/device_settings_lacros.h"
 #include "chrome/browser/lacros/lacros_prefs.h"
@@ -29,7 +28,6 @@
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
@@ -74,9 +72,6 @@ class LacrosFirstRunServiceBrowserTest : public InProcessBrowserTest {
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_{
-      switches::kLacrosNonSyncingProfiles};
-
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_adaptor_;
   base::CallbackListSubscription create_services_subscription_;
@@ -190,7 +185,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // The `DeviceEphemeralUsersEnabled` is read through DeviceSettings provided
   // on startup.
-  auto init_params = chromeos::BrowserInitParams::Get()->Clone();
+  auto init_params = chromeos::BrowserInitParams::GetForTests()->Clone();
   init_params->device_settings->device_ephemeral_users_enabled =
       crosapi::mojom::DeviceSettings::OptionalBool::kTrue;
   auto device_settings = init_params->device_settings.Clone();
@@ -199,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(
   // TODO(crbug.com/1330310): Ideally this should be done as part of
   // `SetInitParamsForTests()`.
   g_browser_process->browser_policy_connector()
-      ->device_settings_for_test()
+      ->device_settings_lacros()
       ->UpdateDeviceSettings(std::move(device_settings));
 
   base::RunLoop run_loop;

@@ -154,7 +154,7 @@ EventResult GetEventResult(download::DownloadDangerType danger_type,
   if (download_core_service) {
     ChromeDownloadManagerDelegate* delegate =
         download_core_service->GetDownloadManagerDelegate();
-    if (delegate && delegate->ShouldBlockFile(danger_type)) {
+    if (delegate && delegate->ShouldBlockFile(item, danger_type)) {
       return EventResult::BLOCKED;
     }
   }
@@ -265,6 +265,28 @@ bool ResultIsRetriable(BinaryUploadService::Result result) {
     case BinaryUploadService::Result::TOO_MANY_REQUESTS:
       return true;
   }
+}
+
+enterprise_connectors::ContentAnalysisAcknowledgement::FinalAction
+GetFinalAction(EventResult event_result) {
+  auto final_action =
+      enterprise_connectors::ContentAnalysisAcknowledgement::ALLOW;
+  switch (event_result) {
+    case EventResult::UNKNOWN:
+    case EventResult::ALLOWED:
+    case EventResult::BYPASSED:
+      break;
+    case EventResult::WARNED:
+      final_action =
+          enterprise_connectors::ContentAnalysisAcknowledgement::WARN;
+      break;
+    case EventResult::BLOCKED:
+      final_action =
+          enterprise_connectors::ContentAnalysisAcknowledgement::BLOCK;
+      break;
+  }
+
+  return final_action;
 }
 
 }  // namespace
@@ -445,7 +467,10 @@ void DeepScanningRequest::PopulateRequest(FileAnalysisRequest* request,
                                           Profile* profile,
                                           const base::FilePath& path) {
   if (trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
-    request->set_device_token(analysis_settings_.dm_token);
+    if (analysis_settings_.cloud_or_local_settings.is_cloud_analysis()) {
+      request->set_device_token(
+          analysis_settings_.cloud_or_local_settings.dm_token());
+    }
     request->set_per_profile_request(analysis_settings_.per_profile);
     if (analysis_settings_.client_metadata)
       request->set_client_metadata(*analysis_settings_.client_metadata);
@@ -515,7 +540,7 @@ void DeepScanningRequest::OnDownloadRequestReady(
   Profile* profile = Profile::FromBrowserContext(
       content::DownloadItemUtils::GetBrowserContext(item_));
   BinaryUploadService* binary_upload_service =
-      download_service_->GetBinaryUploadService(profile);
+      download_service_->GetBinaryUploadService(profile, analysis_settings_);
   if (binary_upload_service) {
     binary_upload_service->MaybeUploadForDeepScanning(
         std::move(deep_scan_request));
@@ -536,6 +561,7 @@ void DeepScanningRequest::OnScanComplete(
       /*response=*/response);
   DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
   if (result == BinaryUploadService::Result::SUCCESS) {
+    request_tokens_.push_back(response.request_token());
     ResponseToDownloadCheckResult(response, &download_result);
     base::UmaHistogramEnumeration(
         "SBClientDownload.MalwareDeepScanResult." + GetTriggerName(trigger_),
@@ -634,10 +660,11 @@ void DeepScanningRequest::MaybeFinishRequest(DownloadCheckResult result) {
 }
 
 void DeepScanningRequest::FinishRequest(DownloadCheckResult result) {
+  EventResult event_result = EventResult::UNKNOWN;
+
   if (!report_callbacks_.empty()) {
     DCHECK_EQ(trigger_, DeepScanTrigger::TRIGGER_POLICY);
 
-    EventResult event_result;
     if (ReportOnlyScan()) {
       // The event result in report-only will always match whatever danger type
       // known before deep scanning since the UI will never be updated based on
@@ -666,6 +693,8 @@ void DeepScanningRequest::FinishRequest(DownloadCheckResult result) {
 
   for (auto& observer : observers_)
     observer.OnFinish(this);
+
+  AcknowledgeRequest(event_result);
 
   if (!callback_.is_null())
     callback_.Run(result);
@@ -707,7 +736,29 @@ bool DeepScanningRequest::ReportOnlyScan() {
 
   return base::FeatureList::IsEnabled(kConnectorsScanningReportOnlyUI) &&
          analysis_settings_.block_until_verdict ==
-             enterprise_connectors::BlockUntilVerdict::NO_BLOCK;
+             enterprise_connectors::BlockUntilVerdict::kNoBlock;
+}
+
+void DeepScanningRequest::AcknowledgeRequest(EventResult event_result) {
+  Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(item_));
+  BinaryUploadService* binary_upload_service =
+      download_service_->GetBinaryUploadService(profile, analysis_settings_);
+  if (!binary_upload_service)
+    return;
+
+  // Calculate final action applied to all requests.
+  auto final_action = GetFinalAction(event_result);
+
+  for (auto& token : request_tokens_) {
+    auto ack = std::make_unique<BinaryUploadService::Ack>(
+        analysis_settings_.cloud_or_local_settings);
+    ack->set_request_token(token);
+    ack->set_status(
+        enterprise_connectors::ContentAnalysisAcknowledgement::SUCCESS);
+    ack->set_final_action(final_action);
+    binary_upload_service->MaybeAcknowledge(std::move(ack));
+  }
 }
 
 }  // namespace safe_browsing

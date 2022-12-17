@@ -7,8 +7,8 @@
  * settings.
  */
 import '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import '//resources/cr_elements/cr_button/cr_button.m.js';
-import '//resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import '//resources/cr_elements/cr_button/cr_button.js';
+import '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import '//resources/cr_elements/icons.m.js';
 import '//resources/cr_elements/shared_style_css.m.js';
 import '//resources/cr_elements/shared_vars_css.m.js';
@@ -16,9 +16,9 @@ import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './profile_info_browser_proxy.js';
 import '../icons.html.js';
 import '../prefs/prefs.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 
-import {CrButtonElement} from '//resources/cr_elements/cr_button/cr_button.m.js';
+import {CrButtonElement} from '//resources/cr_elements/cr_button/cr_button.js';
 import {assert} from '//resources/js/assert_ts.js';
 import {WebUIListenerMixin} from '//resources/js/web_ui_listener_mixin.js';
 import {DomRepeatEvent, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -146,8 +146,8 @@ export class SettingsSyncAccountControlElement extends
   promoLabelWithNoAccount: string;
   promoSecondaryLabelWithAccount: string;
   promoSecondaryLabelWithNoAccount: string;
-  signedIn_: boolean;
-  storedAccounts_: Array<StoredAccount>;
+  private signedIn_: boolean;
+  private storedAccounts_: StoredAccount[];
   private shownAccount_: StoredAccount|null;
   showingPromo: boolean;
   embeddedInSubpage: boolean;
@@ -170,7 +170,7 @@ export class SettingsSyncAccountControlElement extends
   /**
    * Records Signin_Impression_FromSettings user action.
    */
-  recordImpressionUserActions_() {
+  private recordImpressionUserActions_() {
     assert(!this.syncStatus.signedIn);
 
     chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
@@ -299,16 +299,6 @@ export class SettingsSyncAccountControlElement extends
         !this.getPref('signin.allowed_on_next_startup').value;
   }
 
-  private isNonSyncingProfilesSupported_(): boolean {
-    // <if expr="chromeos_lacros">
-    return loadTimeData.getBoolean('nonSyncingProfilesEnabled');
-    // </if>
-
-    // <if expr="not chromeos_lacros">
-    return true;
-    // </if>
-  }
-
   private shouldShowTurnOffButton_(): boolean {
     // <if expr="chromeos_ash">
     if (this.syncStatus.domain) {
@@ -318,10 +308,6 @@ export class SettingsSyncAccountControlElement extends
       return false;
     }
     // </if>
-
-    if (!this.isNonSyncingProfilesSupported_()) {
-      return false;
-    }
 
     return !this.hideButtons && !this.showSetupButtons_ &&
         !!this.syncStatus.signedIn;
@@ -349,7 +335,7 @@ export class SettingsSyncAccountControlElement extends
     return !this.syncStatus.signedIn;
   }
 
-  private handleStoredAccounts_(accounts: Array<StoredAccount>) {
+  private handleStoredAccounts_(accounts: StoredAccount[]) {
     this.storedAccounts_ = accounts;
   }
 

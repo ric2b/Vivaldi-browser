@@ -6,6 +6,7 @@
 #define COMPONENTS_COMMERCE_CORE_COMMERCE_HEURISTICS_DATA_H_
 
 #include <string>
+#include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -57,6 +58,11 @@ class CommerceHeuristicsData {
   // for coupon discount.
   const re2::RE2* GetCouponDiscountPartnerMerchantPattern();
 
+  // Try to get the pattern regex to decide if a merchant is one the merchants
+  // that currently have no discounts. This pattern is determined on the server
+  // side.
+  const re2::RE2* GetNoDiscountMerchantPattern();
+
   // Try to get the pattern regex to decide if a URL is cart page URL.
   const re2::RE2* GetCartPageURLPattern();
 
@@ -88,6 +94,9 @@ class CommerceHeuristicsData {
   // Get the cart extraction script.
   std::string GetCartProductExtractionScript();
 
+  // Get the time delay between discount fetches.
+  absl::optional<base::TimeDelta> GetDiscountFetchDelay();
+
  private:
   friend class CommerceHeuristicsDataTest;
 
@@ -112,6 +121,7 @@ class CommerceHeuristicsData {
   std::unique_ptr<re2::RE2> product_skip_pattern_;
   std::unique_ptr<re2::RE2> rule_discount_partner_merchant_pattern_;
   std::unique_ptr<re2::RE2> coupon_discount_partner_merchant_pattern_;
+  std::unique_ptr<re2::RE2> no_discount_merchant_pattern_;
   std::unique_ptr<re2::RE2> cart_url_pattern_;
   std::unique_ptr<re2::RE2> checkout_url_pattern_;
   std::unique_ptr<re2::RE2> purchase_button_pattern_;

@@ -7,7 +7,15 @@
  *     ChromeVox state, to avoid direct dependencies on the Background
  *     object and to facilitate mocking for tests.
  */
-import {UserActionMonitor} from '/chromevox/background/user_action_monitor.js';
+import {CursorRange} from '../../common/cursors/range.js';
+import {BrailleKeyEvent} from '../common/braille/braille_key_types.js';
+import {NavBraille} from '../common/braille/nav_braille.js';
+import {BridgeConstants} from '../common/bridge_constants.js';
+import {BridgeHelper} from '../common/bridge_helper.js';
+import {TtsSpeechProperties} from '../common/tts_interface.js';
+
+import {TtsBackground} from './tts_background.js';
+import {UserActionMonitor} from './user_action_monitor.js';
 
 /**
  * An interface implemented by objects to observe ChromeVox state changes.
@@ -15,7 +23,7 @@ import {UserActionMonitor} from '/chromevox/background/user_action_monitor.js';
  */
 export class ChromeVoxStateObserver {
   /**
-   * @param {cursors.Range} range The new range.
+   * @param {CursorRange} range The new range.
    * @param {boolean=} opt_fromEditing
    */
   onCurrentRangeChanged(range, opt_fromEditing) {}
@@ -35,13 +43,13 @@ export class ChromeVoxState {
     }
   }
 
-  /** @return {cursors.Range} */
+  /** @return {CursorRange} */
   get currentRange() {
     return this.getCurrentRange();
   }
 
   /**
-   * @return {cursors.Range} The current range.
+   * @return {CursorRange} The current range.
    * @protected
    */
   getCurrentRange() {
@@ -58,7 +66,7 @@ export class ChromeVoxState {
     return false;
   }
 
-  /** @return {cursors.Range} */
+  /** @return {CursorRange} */
   get pageSel() {
     return null;
   }
@@ -70,33 +78,28 @@ export class ChromeVoxState {
 
   /**
    * Return the current range, but focus recovery is not applied to it.
-   * @return {cursors.Range} The current range.
-   * @abstract
+   * @return {CursorRange} The current range.
    */
   getCurrentRangeWithoutRecovery() {}
 
   /**
-   * @param {cursors.Range} newRange The new range.
+   * @param {CursorRange} newRange The new range.
    * @param {boolean=} opt_fromEditing
-   * @abstract
    */
   setCurrentRange(newRange, opt_fromEditing) {}
 
   /**
-   * @param {TtsBackground}
-   * @abstract
+   * @param {TtsBackground} newBackgroundTts
    */
   set backgroundTts(newBackgroundTts) {}
 
   /**
    * @param {boolean} newValue
-   * @abstract
    */
   set isReadingContinuously(newValue) {}
 
   /**
-   * @param {cursors.Range}
-   * @abstract
+   * @param {CursorRange} newPageSel
    */
   set pageSel(newPageSel) {}
 
@@ -108,19 +111,17 @@ export class ChromeVoxState {
 
   /**
    * Navigate to the given range - it both sets the range and outputs it.
-   * @param {!cursors.Range} range The new range.
+   * @param {!CursorRange} range The new range.
    * @param {boolean=} opt_focus Focus the range; defaults to true.
-   * @param {Object=} opt_speechProps Speech properties.
+   * @param {TtsSpeechProperties=} opt_speechProps Speech properties.
    * @param {boolean=} opt_skipSettingSelection If true, does not set
    *     the selection, otherwise it does by default.
-   * @abstract
    */
   navigateToRange(range, opt_focus, opt_speechProps, opt_skipSettingSelection) {
   }
 
   /**
    * Restores the last valid ChromeVox range.
-   * @abstract
    */
   restoreLastValidRangeIfNeeded() {}
 
@@ -129,13 +130,11 @@ export class ChromeVoxState {
    * @param {!BrailleKeyEvent} evt
    * @param {!NavBraille} content
    * @return {boolean} True if evt was processed.
-   * @abstract
    */
   onBrailleKeyEvent(evt, content) {}
 
   /**
    * Forces the reading of the next change to the clipboard.
-   * @abstract
    */
   readNextClipboardDataChange() {}
 }

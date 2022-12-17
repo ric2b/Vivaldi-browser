@@ -9,6 +9,7 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/site_isolation_policy.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_type.h"
@@ -401,7 +402,8 @@ TEST_F(IsolatedAppThrottleTest, AllowHistoryNavigationFromErrorPage) {
             GetWebExposedIsolationLevel(main_frame_id()));
 
   auto* error_rfh = NavigationSimulator::NavigateAndFailFromDocument(
-      GURL(kAppUrl2), net::ERR_TIMED_OUT, web_contents()->GetMainFrame());
+      GURL(kAppUrl2), net::ERR_TIMED_OUT,
+      web_contents()->GetPrimaryMainFrame());
   EXPECT_NE(nullptr, error_rfh);
   EXPECT_EQ(GURL(kAppUrl2), error_rfh->GetLastCommittedURL());
   EXPECT_EQ(PAGE_TYPE_ERROR, GetPageType(error_rfh));

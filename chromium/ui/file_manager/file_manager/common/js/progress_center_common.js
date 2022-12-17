@@ -10,7 +10,7 @@ export const ProgressItemState = {
   PROGRESSING: 'progressing',
   COMPLETED: 'completed',
   ERROR: 'error',
-  CANCELED: 'canceled'
+  CANCELED: 'canceled',
 };
 Object.freeze(ProgressItemState);
 
@@ -23,6 +23,8 @@ export const ProgressItemType = {
   COPY: 'copy',
   // The item is file delete operation.
   DELETE: 'delete',
+  // The item is emptying the trash operation.
+  EMPTY_TRASH: 'empty-trash',
   // The item is file extract operation.
   EXTRACT: 'extract',
   // The item is file move operation.
@@ -31,15 +33,19 @@ export const ProgressItemType = {
   ZIP: 'zip',
   // The item is drive sync operation.
   SYNC: 'sync',
+  // The item is restoring the trash.
+  RESTORE: 'restore',
   // The item is general file transfer operation.
   // This is used for the mixed operation of summarized item.
   TRANSFER: 'transfer',
+  // The item is being trashed.
+  TRASH: 'trash',
   // The item is external drive format operation.
   FORMAT: 'format',
   // The item is archive operation.
   MOUNT_ARCHIVE: 'mount_archive',
   // The item is external drive partitioning operation.
-  PARTITION: 'partition'
+  PARTITION: 'partition',
 };
 Object.freeze(ProgressItemType);
 
@@ -126,6 +132,13 @@ export class ProgressCenterItem {
      * @type {number}
      */
     this.remainingTime;
+
+    /**
+     * Link to be opened when users click the "Learn more" button.
+     * The "Learn more" button won't be displayed if this is falsy.
+     * @type {?string}
+     */
+    this.learnMoreLink;
   }
 
   /**

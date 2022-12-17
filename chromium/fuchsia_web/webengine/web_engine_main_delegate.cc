@@ -15,7 +15,7 @@
 #include "base/strings/string_split.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "fuchsia/base/init_logging.h"
+#include "fuchsia_web/common/init_logging.h"
 #include "fuchsia_web/webengine/browser/web_engine_browser_main.h"
 #include "fuchsia_web/webengine/browser/web_engine_content_browser_client.h"
 #include "fuchsia_web/webengine/common/cors_exempt_headers.h"
@@ -72,12 +72,11 @@ WebEngineMainDelegate::WebEngineMainDelegate() {
 
 WebEngineMainDelegate::~WebEngineMainDelegate() = default;
 
-bool WebEngineMainDelegate::BasicStartupComplete(int* exit_code) {
+absl::optional<int> WebEngineMainDelegate::BasicStartupComplete() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-  if (!cr_fuchsia::InitLoggingFromCommandLine(*command_line)) {
-    *exit_code = 1;
-    return true;
+  if (!InitLoggingFromCommandLine(*command_line)) {
+    return 1;
   }
 
   if (command_line->HasSwitch(switches::kGoogleApiKey)) {
@@ -90,7 +89,7 @@ bool WebEngineMainDelegate::BasicStartupComplete(int* exit_code) {
           switches::kCorsExemptHeaders),
       ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
 
-  return false;
+  return absl::nullopt;
 }
 
 void WebEngineMainDelegate::PreSandboxStartup() {

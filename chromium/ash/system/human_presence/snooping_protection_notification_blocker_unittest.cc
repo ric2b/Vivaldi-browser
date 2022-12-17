@@ -29,9 +29,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
-#include "chromeos/dbus/hps/hps_service.pb.h"
-#include "chromeos/dbus/human_presence/fake_human_presence_dbus_client.h"
-#include "chromeos/dbus/human_presence/human_presence_dbus_client.h"
+#include "chromeos/ash/components/dbus/hps/hps_service.pb.h"
+#include "chromeos/ash/components/dbus/human_presence/fake_human_presence_dbus_client.h"
+#include "chromeos/ash/components/dbus/human_presence/human_presence_dbus_client.h"
 #include "components/account_id/account_id.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
@@ -74,7 +74,7 @@ void AddNotification(const std::string& notification_id,
 
   message_center::MessageCenter::Get()->AddNotification(
       std::make_unique<message_center::Notification>(
-          message_center::NOTIFICATION_TYPE_BASE_FORMAT, notification_id,
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           u"test-title", u"test-message", /*icon=*/ui::ImageModel(),
           /*display_source=*/std::u16string(), /*origin_url=*/GURL(),
           notifier_id, message_center::RichNotificationData(),
@@ -155,7 +155,7 @@ class FakeAppRegistryCache {
   FakeAppRegistryCache* GetAppRegistryCache(const AccountId&) { return this; }
 
   template <typename FunctionType>
-  bool ForApp(const std::string& app_id, FunctionType f) {
+  bool ForOneApp(const std::string& app_id, FunctionType f) {
     for (const std::unique_ptr<apps::AppUpdate>& app : apps_) {
       if (app_id == app->AppId()) {
         f(*app);
@@ -198,8 +198,8 @@ class SnoopingProtectionNotificationBlockerTest : public AshTestBase {
   // AshTestBase overrides:
   void SetUp() override {
     // Simulate a working DBus client.
-    chromeos::HumanPresenceDBusClient::InitializeFake();
-    auto* dbus_client = chromeos::FakeHumanPresenceDBusClient::Get();
+    HumanPresenceDBusClient::InitializeFake();
+    auto* dbus_client = FakeHumanPresenceDBusClient::Get();
     dbus_client->set_hps_service_is_available(true);
     hps::HpsResultProto state;
     state.set_value(hps::HpsResult::NEGATIVE);

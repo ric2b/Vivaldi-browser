@@ -61,7 +61,8 @@ class PLATFORM_EXPORT GraphicsContextState final {
   // cc::PaintFlags objects that reflect the current state. If the length of the
   // path to be stroked is known, pass it in for correct dash or dot placement.
   const cc::PaintFlags& StrokeFlags(const int stroked_path_length = 0,
-                                    const int dash_thickness = 0) const;
+                                    const int dash_thickness = 0,
+                                    const bool closed_path = false) const;
   const cc::PaintFlags& FillFlags() const { return fill_flags_; }
 
   uint16_t SaveCount() const { return save_count_; }
@@ -69,7 +70,11 @@ class PLATFORM_EXPORT GraphicsContextState final {
   void DecrementSaveCount() { --save_count_; }
 
   // Stroke data
-  Color StrokeColor() const { return stroke_flags_.getColor(); }
+  Color StrokeColor() const {
+    // This conversion from SkColor4f to Color will lose information about the
+    // original Color.
+    return Color::FromSkColor4f(stroke_flags_.getColor4f());
+  }
   void SetStrokeColor(const Color&);
 
   const StrokeData& GetStrokeData() const { return stroke_data_; }
@@ -81,7 +86,11 @@ class PLATFORM_EXPORT GraphicsContextState final {
   void SetLineDash(const DashArray&, float);
 
   // Fill data
-  Color FillColor() const { return fill_flags_.getColor(); }
+  Color FillColor() const {
+    // This conversion from SkColor4f to Color will lose information about the
+    // original Color.
+    return Color::FromSkColor4f(fill_flags_.getColor4f());
+  }
   void SetFillColor(const Color&);
 
   // Shadow. (This will need tweaking if we use draw loopers for other things.)

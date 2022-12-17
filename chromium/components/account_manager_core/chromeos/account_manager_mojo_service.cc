@@ -10,8 +10,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "chromeos/crosapi/mojom/account_manager.mojom.h"
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/account_addition_result.h"
@@ -48,6 +50,21 @@ void ReportErrorStatusFromHasDummyGaiaToken(
   }
   std::move(callback).Run(account_manager::ToMojoGoogleServiceAuthError(error));
 }
+
+#if DCHECK_IS_ON()
+void VerifyThatAccountExists(
+    const account_manager::AccountKey& account_key,
+    const std::vector<account_manager::Account>& known_accounts) {
+  bool account_exists = false;
+  for (const account_manager::Account& known_account : known_accounts) {
+    if (known_account.key == account_key) {
+      account_exists = true;
+      break;
+    }
+  }
+  DCHECK(account_exists);
+}
+#endif  // DCHECK_IS_ON()
 
 }  // namespace
 
@@ -161,6 +178,24 @@ void AccountManagerMojoService::CreateAccessTokenFetcher(
       /*receiver=*/pending_remote.InitWithNewPipeAndPassReceiver());
   pending_access_token_requests_.emplace_back(std::move(access_token_fetcher));
   std::move(callback).Run(std::move(pending_remote));
+}
+
+void AccountManagerMojoService::ReportAuthError(
+    mojom::AccountKeyPtr mojo_account_key,
+    mojom::GoogleServiceAuthErrorPtr error) {
+  absl::optional<account_manager::AccountKey> maybe_account_key =
+      account_manager::FromMojoAccountKey(mojo_account_key);
+  DCHECK(maybe_account_key)
+      << "Can't unmarshal account of type: " << mojo_account_key->account_type;
+
+#if DCHECK_IS_ON()
+  // Verify that `maybe_account_key` is known to Account Manager.
+  account_manager_->GetAccounts(
+      base::BindOnce(&VerifyThatAccountExists, maybe_account_key.value()));
+#endif  // DCHECK_IS_ON()
+
+  for (auto& observer : observers_)
+    observer->OnAuthErrorChanged(mojo_account_key.Clone(), error.Clone());
 }
 
 void AccountManagerMojoService::OnTokenUpserted(

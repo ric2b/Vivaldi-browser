@@ -26,7 +26,6 @@
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
-#include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/permission_utils.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -34,21 +33,19 @@
 namespace {
 
 struct PermissionInfo {
-  apps::mojom::PermissionType permission;
+  apps::PermissionType permission;
   const char* pref_name;
 };
 
 // TODO(crbug.com/1198390): Update to use a switch to map between two enum.
 constexpr PermissionInfo permission_infos[] = {
-    {apps::mojom::PermissionType::kPrinting,
+    {apps::PermissionType::kPrinting,
      plugin_vm::prefs::kPluginVmPrintersAllowed},
-    {apps::mojom::PermissionType::kCamera,
-     plugin_vm::prefs::kPluginVmCameraAllowed},
-    {apps::mojom::PermissionType::kMicrophone,
-     plugin_vm::prefs::kPluginVmMicAllowed},
+    {apps::PermissionType::kCamera, plugin_vm::prefs::kPluginVmCameraAllowed},
+    {apps::PermissionType::kMicrophone, plugin_vm::prefs::kPluginVmMicAllowed},
 };
 
-const char* PermissionToPrefName(apps::mojom::PermissionType permission) {
+const char* PermissionToPrefName(apps::PermissionType permission) {
   for (const PermissionInfo& info : permission_infos) {
     if (info.permission == permission) {
       return info.pref_name;
@@ -95,7 +92,8 @@ void SetShowInAppManagement(apps::mojom::App* app, bool installed) {
 void PopulatePermissions(apps::mojom::App* app, Profile* profile) {
   for (const PermissionInfo& info : permission_infos) {
     auto permission = apps::mojom::Permission::New();
-    permission->permission_type = info.permission;
+    permission->permission_type =
+        apps::ConvertPermissionTypeToMojomPermissionType(info.permission);
     permission->value = apps::mojom::PermissionValue::NewBoolValue(
         profile->GetPrefs()->GetBoolean(info.pref_name));
     permission->is_managed = false;
@@ -107,7 +105,7 @@ apps::Permissions CreatePermissions(Profile* profile) {
   apps::Permissions permissions;
   for (const PermissionInfo& info : permission_infos) {
     permissions.push_back(std::make_unique<apps::Permission>(
-        apps::ConvertMojomPermissionTypeToPermissionType(info.permission),
+        info.permission,
         std::make_unique<apps::PermissionValue>(
             profile->GetPrefs()->GetBoolean(info.pref_name)),
         /*is_managed=*/false));
@@ -164,7 +162,7 @@ apps::mojom::AppPtr GetPluginVmApp(Profile* profile, bool allowed) {
 namespace apps {
 
 PluginVmApps::PluginVmApps(AppServiceProxy* proxy)
-    : AppPublisher(proxy), profile_(proxy->profile()), registry_(nullptr) {
+    : AppPublisher(proxy), profile_(proxy->profile()) {
   // Don't show anything for non-primary profiles. We can't use
   // `PluginVmFeatures::Get()->IsAllowed()` here because we still let the user
   // uninstall Plugin VM when it isn't allowed for some other reasons (e.g.
@@ -213,8 +211,7 @@ void PluginVmApps::Connect(
   apps.push_back(GetPluginVmApp(profile_, is_allowed_));
 
   for (const auto& pair :
-       registry_->GetRegisteredApps(guest_os::GuestOsRegistryService::VmType::
-                                        ApplicationList_VmType_PLUGIN_VM)) {
+       registry_->GetRegisteredApps(guest_os::VmType::PLUGIN_VM)) {
     const guest_os::GuestOsRegistryService::Registration& registration =
         pair.second;
     apps.push_back(Convert(registration, /*new_icon_key=*/true));
@@ -240,8 +237,7 @@ void PluginVmApps::Initialize() {
   std::vector<AppPtr> apps;
   apps.push_back(CreatePluginVmApp(profile_, is_allowed_));
   for (const auto& pair :
-       registry_->GetRegisteredApps(guest_os::GuestOsRegistryService::VmType::
-                                        ApplicationList_VmType_PLUGIN_VM)) {
+       registry_->GetRegisteredApps(guest_os::VmType::PLUGIN_VM)) {
     const guest_os::GuestOsRegistryService::Registration& registration =
         pair.second;
     apps.push_back(CreateApp(registration, /*generate_new_icon_key=*/true));
@@ -261,23 +257,17 @@ void PluginVmApps::LoadIcon(const std::string& app_id,
                       std::move(callback));
 }
 
-void PluginVmApps::LoadIcon(const std::string& app_id,
-                            apps::mojom::IconKeyPtr icon_key,
-                            apps::mojom::IconType icon_type,
-                            int32_t size_hint_in_dip,
-                            bool allow_placeholder_icon,
-                            LoadIconCallback callback) {
-  if (!icon_key) {
-    // On failure, we still run the callback, with an empty IconValue.
-    std::move(callback).Run(apps::mojom::IconValue::New());
-    return;
+void PluginVmApps::Launch(const std::string& app_id,
+                          int32_t event_flags,
+                          LaunchSource launch_source,
+                          WindowInfoPtr window_info) {
+  DCHECK_EQ(plugin_vm::kPluginVmShelfAppId, app_id);
+  if (plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile_)) {
+    plugin_vm::PluginVmManagerFactory::GetForProfile(profile_)->LaunchPluginVm(
+        base::DoNothing());
+  } else {
+    plugin_vm::ShowPluginVmInstallerView(profile_);
   }
-
-  std::unique_ptr<IconKey> key = ConvertMojomIconKeyToIconKey(icon_key);
-  registry_->LoadIcon(app_id, *key, ConvertMojomIconTypeToIconType(icon_type),
-                      size_hint_in_dip, allow_placeholder_icon,
-                      apps::mojom::IconKey::kInvalidResourceId,
-                      IconValueToMojomIconValueCallback(std::move(callback)));
 }
 
 void PluginVmApps::LaunchAppWithParams(AppLaunchParams&& params,
@@ -286,6 +276,29 @@ void PluginVmApps::LaunchAppWithParams(AppLaunchParams&& params,
          nullptr);
   // TODO(crbug.com/1244506): Add launch return value.
   std::move(callback).Run(LaunchResult());
+}
+
+void PluginVmApps::SetPermission(const std::string& app_id,
+                                 PermissionPtr permission_ptr) {
+  auto permission = permission_ptr->permission_type;
+  const char* pref_name = PermissionToPrefName(permission);
+  if (!pref_name) {
+    return;
+  }
+
+  profile_->GetPrefs()->SetBoolean(pref_name,
+                                   permission_ptr->IsPermissionEnabled());
+}
+
+void PluginVmApps::Uninstall(const std::string& app_id,
+                             UninstallSource uninstall_source,
+                             bool clear_site_data,
+                             bool report_abuse) {
+  guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile_)
+      ->ClearApplicationList(guest_os::VmType::PLUGIN_VM,
+                             plugin_vm::kPluginVmName, "");
+  plugin_vm::PluginVmManagerFactory::GetForProfile(profile_)
+      ->UninstallPluginVm();
 }
 
 void PluginVmApps::Launch(const std::string& app_id,
@@ -303,14 +316,7 @@ void PluginVmApps::Launch(const std::string& app_id,
 
 void PluginVmApps::SetPermission(const std::string& app_id,
                                  apps::mojom::PermissionPtr permission_ptr) {
-  auto permission = permission_ptr->permission_type;
-  const char* pref_name = PermissionToPrefName(permission);
-  if (!pref_name) {
-    return;
-  }
-
-  profile_->GetPrefs()->SetBoolean(
-      pref_name, apps_util::IsPermissionEnabled(permission_ptr->value));
+  SetPermission(app_id, ConvertMojomPermissionToPermission(permission_ptr));
 }
 
 void PluginVmApps::Uninstall(const std::string& app_id,
@@ -318,8 +324,7 @@ void PluginVmApps::Uninstall(const std::string& app_id,
                              bool clear_site_data,
                              bool report_abuse) {
   guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile_)
-      ->ClearApplicationList(guest_os::GuestOsRegistryService::VmType::
-                                 ApplicationList_VmType_PLUGIN_VM,
+      ->ClearApplicationList(guest_os::VmType::PLUGIN_VM,
                              plugin_vm::kPluginVmName, "");
   plugin_vm::PluginVmManagerFactory::GetForProfile(profile_)
       ->UninstallPluginVm();
@@ -332,7 +337,7 @@ void PluginVmApps::GetMenuModel(const std::string& app_id,
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
 
   if (ShouldAddOpenItem(app_id, menu_type, profile_)) {
-    AddCommandItem(ash::MENU_OPEN_NEW, IDS_APP_CONTEXT_MENU_ACTIVATE_ARC,
+    AddCommandItem(ash::LAUNCH_NEW, IDS_APP_CONTEXT_MENU_ACTIVATE_ARC,
                    &menu_items);
   }
 
@@ -351,12 +356,11 @@ void PluginVmApps::GetMenuModel(const std::string& app_id,
 
 void PluginVmApps::OnRegistryUpdated(
     guest_os::GuestOsRegistryService* registry_service,
-    guest_os::GuestOsRegistryService::VmType vm_type,
+    guest_os::VmType vm_type,
     const std::vector<std::string>& updated_apps,
     const std::vector<std::string>& removed_apps,
     const std::vector<std::string>& inserted_apps) {
-  if (vm_type != guest_os::GuestOsRegistryService::VmType::
-                     ApplicationList_VmType_PLUGIN_VM) {
+  if (vm_type != guest_os::VmType::PLUGIN_VM) {
     return;
   }
 
@@ -392,8 +396,7 @@ void PluginVmApps::OnRegistryUpdated(
 AppPtr PluginVmApps::CreateApp(
     const guest_os::GuestOsRegistryService::Registration& registration,
     bool generate_new_icon_key) {
-  DCHECK_EQ(registration.VmType(), guest_os::GuestOsRegistryService::VmType::
-                                       ApplicationList_VmType_PLUGIN_VM);
+  DCHECK_EQ(registration.VmType(), guest_os::VmType::PLUGIN_VM);
 
   auto app = AppPublisher::MakeApp(
       AppType::kPluginVm, registration.app_id(), Readiness::kReady,
@@ -420,8 +423,7 @@ AppPtr PluginVmApps::CreateApp(
 apps::mojom::AppPtr PluginVmApps::Convert(
     const guest_os::GuestOsRegistryService::Registration& registration,
     bool new_icon_key) {
-  DCHECK_EQ(registration.VmType(), guest_os::GuestOsRegistryService::VmType::
-                                       ApplicationList_VmType_PLUGIN_VM);
+  DCHECK_EQ(registration.VmType(), guest_os::VmType::PLUGIN_VM);
 
   apps::mojom::AppPtr app = PublisherBase::MakeApp(
       apps::mojom::AppType::kPluginVm, registration.app_id(),

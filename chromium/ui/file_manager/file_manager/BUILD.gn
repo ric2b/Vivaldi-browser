@@ -4,17 +4,6 @@
 
 import("//ui/webui/resources/tools/generate_grd.gni")
 
-# TODO: Remove this file copy when breadcrumb.js supports only JS modules.
-copy("fix_broken_images") {
-  sources = [
-    "foreground/images/files/ui/arrow_right.svg",
-    "foreground/images/files/ui/menu_ng.svg",
-    "foreground/images/files/ui/state_banner_icon.svg",
-    "foreground/images/files/ui/warning_banner_icon.svg",
-  ]
-  outputs = [ "$target_gen_dir/images/files/ui/{{source_file_part}}" ]
-}
-
 generated_static_grdp = "$target_gen_dir/static_resources.grdp"
 
 generate_grd("build_static_grdp") {
@@ -38,6 +27,7 @@ generate_grd("build_static_grdp") {
     "common/js/file_type.js",
     "common/js/files_app_entry_types.js",
     "common/js/files_app_state.js",
+    "common/js/icon_util.js",
     "common/js/mock_chrome.js",
     "common/js/power.js",
     "common/js/storage_adapter.js",
@@ -72,12 +62,14 @@ generate_grd("build_static_grdp") {
     "foreground/images/files/ui/back.svg",
     "foreground/images/files/ui/state_banner_icon.svg",
     "foreground/images/files/ui/warning_banner_icon.svg",
+    "foreground/images/files/ui/error_banner_icon.svg",
     "foreground/images/files/ui/cloud_import_syncing.svg",
     "foreground/images/files/ui/delete.svg",
     "foreground/images/files/ui/delete_ng.svg",
     "foreground/images/files/ui/drive_logo.svg",
     "foreground/images/files/ui/drive_offline_icon.svg",
     "foreground/images/files/ui/photos_logo.svg",
+    "foreground/images/files/ui/empty_folder.svg",
     "foreground/images/files/ui/external_link.svg",
     "foreground/images/files/ui/filetype_placeholder_generic.svg",
     "foreground/images/files/ui/holding_space_welcome_image.svg",

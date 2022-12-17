@@ -23,7 +23,6 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_commands.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_view.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_context_menu_provider.h"
@@ -192,15 +191,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       forCellWithReuseIdentifier:kCellIdentifier];
   [collectionView registerClass:[PlusSignCell class]
       forCellWithReuseIdentifier:kPlusSignCellIdentifier];
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled()) {
-    [collectionView registerClass:[SuggestedActionsGridCell class]
-        forCellWithReuseIdentifier:kSuggestedActionsCellIdentifier];
-  }
-  if (IsTabsSearchEnabled()) {
-    [collectionView registerClass:[GridHeader class]
-        forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
-               withReuseIdentifier:UICollectionElementKindSectionHeader];
-  }
+  [collectionView registerClass:[SuggestedActionsGridCell class]
+      forCellWithReuseIdentifier:kSuggestedActionsCellIdentifier];
+  [collectionView registerClass:[GridHeader class]
+      forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
+             withReuseIdentifier:UICollectionElementKindSectionHeader];
+
   // During deletion (in horizontal layout) the backgroundView can resize,
   // revealing temporarily the collectionView background. This makes sure
   // both are the same color.
@@ -313,15 +309,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   self.collectionView.dragInteractionEnabled = (_mode != TabGridModeSearch);
   self.emptyStateView.tabGridMode = _mode;
 
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled()) {
-    if (mode == TabGridModeSearch && self.suggestedActionsDelegate) {
-      if (!self.suggestedActionsViewController) {
-        self.suggestedActionsViewController =
-            [[SuggestedActionsViewController alloc] initWithDelegate:self];
-      }
+  if (mode == TabGridModeSearch && self.suggestedActionsDelegate) {
+    if (!self.suggestedActionsViewController) {
+      self.suggestedActionsViewController =
+          [[SuggestedActionsViewController alloc] initWithDelegate:self];
     }
-    [self updateSuggestedActionsSection];
   }
+  [self updateSuggestedActionsSection];
 
   // Reloading specific sections in a `performBatchUpdates` fades the changes in
   // rather than reloads the collection view with a harsh flash.
@@ -367,8 +361,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                  scrollPosition:UICollectionViewScrollPositionNone];
       [self updateFractionVisibleOfLastItem];
     }
-    if (IsTabsSearchEnabled())
-      self.searchText = nil;
+    self.searchText = nil;
   }
 }
 
@@ -465,8 +458,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (NSInteger)numberOfSectionsInCollectionView:
     (UICollectionView*)collectionView {
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled() &&
-      self.showingSuggestedActions) {
+  if (self.showingSuggestedActions) {
     return kSuggestedActionsSectionIndex + 1;
   }
   return 1;
@@ -474,8 +466,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (NSInteger)collectionView:(UICollectionView*)collectionView
      numberOfItemsInSection:(NSInteger)section {
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled() &&
-      section == kSuggestedActionsSectionIndex) {
+  if (section == kSuggestedActionsSectionIndex) {
     // In the search mode there there is only one item in the suggested actions
     // section which contains the table for the suggested actions.
     if (self.showingSuggestedActions)
@@ -525,8 +516,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   NSUInteger itemIndex = base::checked_cast<NSUInteger>(indexPath.item);
   UICollectionViewCell* cell;
 
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled() &&
-      indexPath.section == kSuggestedActionsSectionIndex) {
+  if (indexPath.section == kSuggestedActionsSectionIndex) {
     DCHECK(self.suggestedActionsViewController);
     cell = [collectionView
         dequeueReusableCellWithReuseIdentifier:kSuggestedActionsCellIdentifier
@@ -594,8 +584,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   // `prepareLayout` of the layout class. For that specific cell calculate the
   // anticipated size from the layout section insets and the content view insets
   // and return it.
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled() &&
-      indexPath.section == kSuggestedActionsSectionIndex) {
+  if (indexPath.section == kSuggestedActionsSectionIndex) {
     UIEdgeInsets sectionInset = layout.sectionInset;
     UIEdgeInsets contentInset = layout.collectionView.adjustedContentInset;
     CGFloat width = layout.collectionView.frame.size.width - sectionInset.left -
@@ -610,8 +599,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                              layout:
                                  (UICollectionViewLayout*)collectionViewLayout
     referenceSizeForHeaderInSection:(NSInteger)section {
-  if (!IsTabsSearchEnabled() || _mode != TabGridModeSearch ||
-      !_searchText.length) {
+  if (_mode != TabGridModeSearch || !_searchText.length) {
     return CGSizeZero;
   }
   CGFloat height = UIContentSizeCategoryIsAccessibilityCategory(
@@ -739,6 +727,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (NSArray<UIDragItem*>*)collectionView:(UICollectionView*)collectionView
            itemsForBeginningDragSession:(id<UIDragSession>)session
                             atIndexPath:(NSIndexPath*)indexPath {
+  if (self.thumbStripEnabled && self.items.count <= 1) {
+    // If only one item, don't drag it or this will leave the BVC or the grid
+    // empty.
+    // TODO(crbug.com/1334474) try to fix better by opening an NTP.
+    return @[];
+  }
   if (_mode == TabGridModeSearch) {
     // TODO(crbug.com/1300369): Enable dragging items from search results.
     return @[];
@@ -845,7 +839,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       // the plus sign cell in this point in code depends on
       // `item.sourceIndexPath`.
       // I.e., in this point in code, `collectionView.numberOfItemsInSection` is
-      // equal to `self.items.count + 1|.
+      // equal to `self.items.count + 1`.
       if (destinationIndex == plusSignCellIndex) {
         // Prevent the cell from being dropped where the plus sign cell is.
         destinationIndex = plusSignCellIndex - 1;
@@ -1018,7 +1012,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   // Whether the view is visible or not, the delegate must be updated.
   [self.delegate gridViewController:self didChangeItemCount:self.items.count];
   [self updateFractionVisibleOfLastItem];
-  if (IsTabsSearchEnabled() && _mode == TabGridModeSearch) {
+  if (_mode == TabGridModeSearch) {
     if (_searchText.length)
       [self updateSearchResultsHeader];
     [self.collectionView
@@ -1082,6 +1076,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (void)removeItemWithID:(NSString*)removedItemID
           selectedItemID:(NSString*)selectedItemID {
   NSUInteger index = [self indexOfItemWithID:removedItemID];
+  if (index == NSNotFound) {
+    // Do not remove if not showing the item (i.e. showing search results).
+    return;
+  }
   auto modelUpdates = ^{
     [self.items removeObjectAtIndex:index];
     self.selectedItemID = selectedItemID;
@@ -1113,7 +1111,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self updateVisibleCellZIndex];
   [self updateVisibleCellIdentifiers];
 
-  if (IsTabsSearchEnabled() && _searchText.length)
+  if (_searchText.length)
     [self updateSearchResultsHeader];
 }
 
@@ -1436,16 +1434,20 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 // Tells the delegate that the user tapped the item with identifier
 // corresponding to `indexPath`.
+// TODO(crbug.com/1350453): Use the "Primary Action" APIs for collection views
+// when running under iOS16 instead of overloading selection changes to handle
+// cell taps.
 - (void)tappedItemAtIndexPath:(NSIndexPath*)indexPath {
+  // Speculative fix for crbug.com/1134663, where this method is called while
+  // updates from a tab insertion are processing.
+  // *** Do not add any code before this check. ***
+  if (self.updating)
+    return;
+
   if ([self isIndexPathForPlusSignCell:indexPath]) {
     [self.delegate didTapPlusSignInGridViewController:self];
     return;
   }
-
-  // Speculative fix for crbug.com/1134663, where this method is called while
-  // updates from a tab insertion are processing.
-  if (self.updating)
-    return;
 
   NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
   DCHECK_LT(index, self.items.count);
@@ -1580,8 +1582,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (BOOL)shouldShowEmptyState {
-  if (IsTabsSearchRegularResultsSuggestedActionsEnabled() &&
-      self.showingSuggestedActions) {
+  if (self.showingSuggestedActions) {
     return NO;
   }
   return self.items.count == 0;

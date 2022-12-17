@@ -47,7 +47,7 @@ class PolicyUIHandler : public web::WebUIIOSMessageHandler,
 
  private:
   // Returns a dictionary containing the policies supported by Chrome.
-  base::Value GetPolicyNames() const;
+  base::Value::Dict GetPolicyNames() const;
 
   // Returns an array containing the current values of the policies
   // supported by Chrome.
@@ -69,9 +69,9 @@ class PolicyUIHandler : public web::WebUIIOSMessageHandler,
 
   // Get a value dictionary of cloud policies' status information for each scope
   // that has cloud policy enabled (device and/or user). If
-  // |include_box_legend_key| is true, legend values needed for each status
+  // `include_box_legend_key` is true, legend values needed for each status
   // boxes will be added to the Value.
-  base::Value GetStatusValue(bool include_box_legend_key) const;
+  base::Value::Dict GetStatusValue(bool include_box_legend_key) const;
 
   void SendStatus();
 

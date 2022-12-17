@@ -5,7 +5,9 @@
 /**
  * @fileoverview Rewrites a braille key event.
  */
-import {Output} from '/chromevox/background/output/output.js';
+import {BrailleKeyCommand, BrailleKeyEvent} from '../../common/braille/braille_key_types.js';
+import {QueueMode} from '../../common/tts_interface.js';
+import {Output} from '../output/output.js';
 
 /**
  * A class that transforms a sequence of braille key events into a standard key

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ash/login/saml/in_session_password_change_manager.h"
 
-#include "ash/components/login/auth/saml_password_attributes.h"
+#include "ash/components/login/auth/public/saml_password_attributes.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "ash/public/cpp/session/session_controller.h"
 #include "base/strings/utf_string_conversions.h"
@@ -113,14 +113,7 @@ TEST_F(InSessionPasswordChangeManagerTest, MaybeShow_PolicyDisabled) {
   EXPECT_FALSE(Notification().has_value());
 }
 
-// Timing out on ASan LSan: http://crbug.com/1306035.
-// Timing out on debug bot: http://crbug.com/1322461
-#if (defined(ADDRESS_SANITIZER) && defined(LEAK_SANITIZER)) || !defined(NDEBUG)
-#define MAYBE_MaybeShow_WillNotExpire DISABLED_MaybeShow_WillNotExpire
-#else
-#define MAYBE_MaybeShow_WillNotExpire MaybeShow_WillNotExpire
-#endif
-TEST_F(InSessionPasswordChangeManagerTest, MAYBE_MaybeShow_WillNotExpire) {
+TEST_F(InSessionPasswordChangeManagerTest, MaybeShow_WillNotExpire) {
   SamlPasswordAttributes::DeleteFromPrefs(profile_->GetPrefs());
   manager_->MaybeShowExpiryNotification();
 
@@ -161,16 +154,7 @@ TEST_F(InSessionPasswordChangeManagerTest, MaybeShow_WillEventuallyExpire) {
   EXPECT_EQ(utf16("Password expires in 14 days"), Notification()->title());
 }
 
-// Timing out on ASan LSan: http://crbug.com/1306035.
-// Timing out on debug bot: http://crbug.com/1322461
-#if (defined(ADDRESS_SANITIZER) && defined(LEAK_SANITIZER)) || !defined(NDEBUG)
-#define MAYBE_MaybeShow_DeleteExpirationTime \
-  DISABLED_MaybeShow_DeleteExpirationTime
-#else
-#define MAYBE_MaybeShow_DeleteExpirationTime MaybeShow_DeleteExpirationTime
-#endif
-TEST_F(InSessionPasswordChangeManagerTest,
-       MAYBE_MaybeShow_DeleteExpirationTime) {
+TEST_F(InSessionPasswordChangeManagerTest, MaybeShow_DeleteExpirationTime) {
   SetExpirationTime(base::Time::Now() + kOneYear);
   manager_->MaybeShowExpiryNotification();
 
@@ -183,14 +167,7 @@ TEST_F(InSessionPasswordChangeManagerTest,
   EXPECT_FALSE(Notification().has_value());
 }
 
-// Timing out on ASan LSan: http://crbug.com/1306035.
-// Timing out on debug bot: http://crbug.com/1322461
-#if (defined(ADDRESS_SANITIZER) && defined(LEAK_SANITIZER)) || !defined(NDEBUG)
-#define MAYBE_MaybeShow_PasswordChanged DISABLED_MaybeShow_PasswordChanged
-#else
-#define MAYBE_MaybeShow_PasswordChanged MaybeShow_PasswordChanged
-#endif
-TEST_F(InSessionPasswordChangeManagerTest, MAYBE_MaybeShow_PasswordChanged) {
+TEST_F(InSessionPasswordChangeManagerTest, MaybeShow_PasswordChanged) {
   SetExpirationTime(base::Time::Now() + (kAdvanceWarningTime / 2) - kOneHour);
   manager_->MaybeShowExpiryNotification();
 
@@ -260,10 +237,7 @@ TEST_F(InSessionPasswordChangeManagerTest, TimePasses_NoUserActionTaken) {
   EXPECT_EQ(utf16("Choose a new one now"), Notification()->message());
 }
 
-// Timing out on ASan LSan: http://crbug.com/1306035.
-// Disabling due to timeout in chromeos-dgb on Linux: http://crbug.com/1307706
-TEST_F(InSessionPasswordChangeManagerTest,
-       DISABLED_TimePasses_NotificationDismissed) {
+TEST_F(InSessionPasswordChangeManagerTest, TimePasses_NotificationDismissed) {
   SetExpirationTime(base::Time::Now() + kOneYear + kAdvanceWarningTime / 2);
   manager_->MaybeShowExpiryNotification();
 

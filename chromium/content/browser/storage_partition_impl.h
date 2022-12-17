@@ -63,7 +63,7 @@ class SharedStorageManager;
 
 namespace content {
 
-class AggregationServiceImpl;
+class AggregationService;
 class AttributionManager;
 class BackgroundFetchContext;
 class BlobRegistryWrapper;
@@ -71,7 +71,6 @@ class BluetoothAllowedDevicesMap;
 class BroadcastChannelService;
 class BucketManager;
 class CacheStorageControlWrapper;
-class ComputePressureManager;
 class CookieStoreManager;
 class DevToolsBackgroundServicesContextImpl;
 class FileSystemAccessEntryFactory;
@@ -88,6 +87,7 @@ class MediaLicenseManager;
 class NativeIOContextImpl;
 class PaymentAppContextImpl;
 class PrefetchURLLoaderService;
+class PrivateAggregationManager;
 class PushMessagingContext;
 class QuotaContext;
 class SharedStorageWorkletHostManager;
@@ -140,9 +140,11 @@ class CONTENT_EXPORT StoragePartitionImpl
       std::unique_ptr<SharedStorageWorkletHostManager>
           shared_storage_worklet_host_manager);
   void OverrideAggregationServiceForTesting(
-      std::unique_ptr<AggregationServiceImpl> aggregation_service);
+      std::unique_ptr<AggregationService> aggregation_service);
   void OverrideAttributionManagerForTesting(
       std::unique_ptr<AttributionManager> attribution_manager);
+  void OverridePrivateAggregationManagerForTesting(
+      std::unique_ptr<PrivateAggregationManager> private_aggregation_manager);
 
   // Returns the StoragePartitionConfig that represents this StoragePartition.
   const StoragePartitionConfig& GetConfig();
@@ -152,13 +154,11 @@ class CONTENT_EXPORT StoragePartitionImpl
   network::mojom::NetworkContext* GetNetworkContext() override;
   scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcess() override;
-  scoped_refptr<network::SharedURLLoaderFactory>
-  GetURLLoaderFactoryForBrowserProcessWithCORBEnabled() override;
   std::unique_ptr<network::PendingSharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcessIOThread() override;
   network::mojom::CookieManager* GetCookieManagerForBrowserProcess() override;
-  void CreateHasTrustTokensAnswerer(
-      mojo::PendingReceiver<network::mojom::HasTrustTokensAnswerer> receiver,
+  void CreateTrustTokenQueryAnswerer(
+      mojo::PendingReceiver<network::mojom::TrustTokenQueryAnswerer> receiver,
       const url::Origin& top_frame_origin) override;
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
   CreateURLLoaderNetworkObserverForFrame(int process_id,
@@ -207,13 +207,13 @@ class CONTENT_EXPORT StoragePartitionImpl
                           base::OnceClosure callback) override;
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
-                 const GURL& storage_origin,
+                 const blink::StorageKey& storage_key,
                  const base::Time begin,
                  const base::Time end,
                  base::OnceClosure callback) override;
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
-                 OriginMatcherFunction origin_matcher,
+                 StorageKeyPolicyMatcherFunction storage_key_matcher,
                  network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
                  bool perform_storage_cleanup,
                  const base::Time begin,
@@ -235,6 +235,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   void SetNetworkContextForTesting(
       mojo::PendingRemote<network::mojom::NetworkContext>
           network_context_remote) override;
+  void ResetAttributionManagerForTesting(
+      base::OnceCallback<void(bool)> callback) override;
 
   base::WeakPtr<StoragePartition> GetWeakPtr();
   BackgroundFetchContext* GetBackgroundFetchContext();
@@ -250,9 +252,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   AttributionManager* GetAttributionManager();
   void SetFontAccessManagerForTesting(
       std::unique_ptr<FontAccessManager> font_access_manager);
-  ComputePressureManager* GetComputePressureManager();
   std::string GetPartitionDomain();
-  AggregationServiceImpl* GetAggregationService();
+  AggregationService* GetAggregationService();
   FontAccessManager* GetFontAccessManager();
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   MediaLicenseManager* GetMediaLicenseManager();
@@ -261,6 +262,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Gets the SharedStorageManager for the StoragePartition, or nullptr if it
   // doesn't exist because the feature is disabled.
   storage::SharedStorageManager* GetSharedStorageManager();
+  PrivateAggregationManager* GetPrivateAggregationManager();
 
   // blink::mojom::DomStorage interface.
   void OpenLocalStorage(
@@ -281,12 +283,13 @@ class CONTENT_EXPORT StoragePartitionImpl
   void OnFileUploadRequested(int32_t process_id,
                              bool async,
                              const std::vector<base::FilePath>& file_paths,
+                             const GURL& destination_url,
                              OnFileUploadRequestedCallback callback) override;
   void OnCanSendReportingReports(
       const std::vector<url::Origin>& origins,
       OnCanSendReportingReportsCallback callback) override;
   void OnCanSendDomainReliabilityUpload(
-      const GURL& origin,
+      const url::Origin& origin,
       OnCanSendDomainReliabilityUploadCallback callback) override;
 #if BUILDFLAG(IS_ANDROID)
   void OnGenerateHttpNegotiateAuthToken(
@@ -382,10 +385,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   void set_is_guest() { is_guest_ = true; }
   bool is_guest() const { return is_guest_; }
 
-  // Use the network context to retrieve the origin policy manager.
-  network::mojom::OriginPolicyManager*
-  GetOriginPolicyManagerForBrowserProcess();
-
   // We have to plumb `is_service_worker`, `process_id` and `routing_id` because
   // they are plumbed to WebView via WillCreateRestrictedCookieManager, which
   // makes some decision based on that.
@@ -399,12 +398,6 @@ class CONTENT_EXPORT StoragePartitionImpl
       mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver,
       mojo::PendingRemote<network::mojom::CookieAccessObserver>
           cookie_observer);
-
-  // Override the origin policy manager for testing use only.
-  void SetOriginPolicyManagerForBrowserProcessForTesting(
-      mojo::PendingRemote<network::mojom::OriginPolicyManager>
-          test_origin_policy_manager);
-  void ResetOriginPolicyManagerForBrowserProcessForTesting();
 
   mojo::PendingRemote<network::mojom::CookieAccessObserver>
   CreateCookieAccessObserverForServiceWorker();
@@ -428,6 +421,8 @@ class CONTENT_EXPORT StoragePartitionImpl
       const blink::StorageKey& storage_key,
       const std::string& namespace_id,
       mojo::PendingReceiver<blink::mojom::StorageArea> receiver);
+
+  storage::QuotaManagerProxy* GetQuotaManagerProxy();
 
   class URLLoaderNetworkContext {
    public:
@@ -561,12 +556,13 @@ class CONTENT_EXPORT StoragePartitionImpl
   // state.
   void OnStorageServiceDisconnected();
 
-  // We will never have both remove_origin be populated and a cookie_matcher.
+  // Clears the data specified by the `storage_key` or `storage_key_matcher`.
+  // `storage_key` and `storage_key_matcher` will never both be populated.
   void ClearDataImpl(
       uint32_t remove_mask,
       uint32_t quota_storage_remove_mask,
-      const GURL& remove_origin,
-      OriginMatcherFunction origin_matcher,
+      const blink::StorageKey& storage_key,
+      StorageKeyPolicyMatcherFunction storage_key_matcher,
       network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
       bool perform_storage_cleanup,
       const base::Time begin,
@@ -586,7 +582,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   bool is_in_memory() { return config_.in_memory(); }
 
   network::mojom::URLLoaderFactory*
-  GetURLLoaderFactoryForBrowserProcessInternal(bool corb_enabled);
+  GetURLLoaderFactoryForBrowserProcessInternal();
 
   // If `local_trust_token_fulfiller_` is bound, returns immediately.
   //
@@ -623,8 +619,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<storage::DatabaseTracker> database_tracker_;
   scoped_refptr<DOMStorageContextWrapper> dom_storage_context_;
   std::unique_ptr<LockManager> lock_manager_;
-  std::unique_ptr<SharedStorageWorkletHostManager>
-      shared_storage_worklet_host_manager_;
   std::unique_ptr<IndexedDBControlWrapper> indexed_db_control_wrapper_;
   std::unique_ptr<CacheStorageControlWrapper> cache_storage_control_wrapper_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
@@ -657,7 +651,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::unique_ptr<InterestGroupManagerImpl> interest_group_manager_;
   std::unique_ptr<BrowsingTopicsSiteDataManager>
       browsing_topics_site_data_manager_;
-  std::unique_ptr<AggregationServiceImpl> aggregation_service_;
+  std::unique_ptr<AggregationService> aggregation_service_;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   std::unique_ptr<MediaLicenseManager> media_license_manager_;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -665,9 +659,14 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Owning pointer to the SharedStorageManager for this partition.
   std::unique_ptr<storage::SharedStorageManager> shared_storage_manager_;
 
-  // TODO(crbug.com/1205695): ComputePressureManager should live elsewher. The
-  //                          Compute Pressure API does not store data.
-  std::unique_ptr<ComputePressureManager> compute_pressure_manager_;
+  // This needs to be declared after `shared_storage_manager_` because
+  // `shared_storage_worklet_host` (managed by
+  // `shared_storage_worklet_host_manager_`) ultimately stores a raw pointer on
+  // it.
+  std::unique_ptr<SharedStorageWorkletHostManager>
+      shared_storage_worklet_host_manager_;
+
+  std::unique_ptr<PrivateAggregationManager> private_aggregation_manager_;
 
   // ReceiverSet for DomStorage, using the
   // ChildProcessSecurityPolicyImpl::Handle as the binding context type. The
@@ -695,8 +694,6 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   scoped_refptr<URLLoaderFactoryForBrowserProcess>
       shared_url_loader_factory_for_browser_process_;
-  scoped_refptr<URLLoaderFactoryForBrowserProcess>
-      shared_url_loader_factory_for_browser_process_with_corb_;
 
   // URLLoaderFactory/CookieManager for use in the browser process only.
   // See the method comment for
@@ -705,13 +702,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   mojo::Remote<network::mojom::URLLoaderFactory>
       url_loader_factory_for_browser_process_;
   bool is_test_url_loader_factory_for_browser_process_ = false;
-  mojo::Remote<network::mojom::URLLoaderFactory>
-      url_loader_factory_for_browser_process_with_corb_;
-  bool is_test_url_loader_factory_for_browser_process_with_corb_ = false;
   mojo::Remote<network::mojom::CookieManager>
       cookie_manager_for_browser_process_;
-  mojo::Remote<network::mojom::OriginPolicyManager>
-      origin_policy_manager_for_browser_process_;
 
   // The list of cors exempt headers that are set on `network_context_`.
   // Initialized in InitNetworkContext() and never updated after then.

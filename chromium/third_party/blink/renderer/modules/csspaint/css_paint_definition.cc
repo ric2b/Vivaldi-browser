@@ -146,11 +146,9 @@ void CSSPaintDefinition::ApplyAnimatedPropertyOverrides(
       }
       case CrossThreadStyleValue::StyleValueType::kColorType: {
         DCHECK(property_value.second.color_value);
-        SkColor sk_color = property_value.second.color_value.value();
-        Color color(MakeRGBA(SkColorGetR(sk_color), SkColorGetG(sk_color),
-                             SkColorGetB(sk_color), SkColorGetA(sk_color)));
         std::unique_ptr<CrossThreadColorValue> new_value =
-            std::make_unique<CrossThreadColorValue>(color);
+            std::make_unique<CrossThreadColorValue>(Color::FromSkColor4f(
+                property_value.second.color_value.value()));
         style_map->StyleMapData().Set(property_name, std::move(new_value));
         break;
       }

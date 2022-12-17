@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/borealis/borealis_disk_manager_dispatcher.h"
+#include "chrome/browser/ash/borealis/borealis_launch_options.h"
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_service_fake.h"
 #include "chrome/browser/ash/borealis/borealis_shutdown_monitor.h"
@@ -22,15 +23,13 @@
 #include "chrome/browser/ash/guest_os/dbus_test_helper.h"
 #include "chrome/browser/ash/guest_os/guest_os_stability_monitor.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/chunneld/fake_chunneld_client.h"
 #include "chromeos/ash/components/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/fake_seneschal_client.h"
-#include "chromeos/dbus/chunneld/fake_chunneld_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/exo/shell_surface_util.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/test/test_screen.h"
 
 namespace borealis {
 
@@ -40,7 +39,6 @@ class BorealisContextTest : public testing::Test,
   BorealisContextTest()
       : new_window_provider_(std::make_unique<ash::TestNewWindowDelegate>()) {
     profile_ = std::make_unique<TestingProfile>();
-    display::Screen::SetScreenInstance(&test_screen_);
     borealis_disk_manager_dispatcher_ =
         std::make_unique<BorealisDiskManagerDispatcher>();
     borealis_shutdown_monitor_ =
@@ -84,7 +82,6 @@ class BorealisContextTest : public testing::Test,
 
  protected:
   content::BrowserTaskEnvironment task_env_;
-  display::test::TestScreen test_screen_;
   std::unique_ptr<borealis::BorealisContext> borealis_context_;
   std::unique_ptr<TestingProfile> profile_;
   BorealisServiceFake* service_fake_;
@@ -139,8 +136,8 @@ TEST_F(BorealisContextTest, SeneschalFailure) {
 }
 
 TEST_F(BorealisContextTest, ChunneldFailure) {
-  auto* chunneld_client = static_cast<chromeos::FakeChunneldClient*>(
-      chromeos::DBusThreadManager::Get()->GetChunneldClient());
+  auto* chunneld_client =
+      static_cast<ash::FakeChunneldClient*>(ash::ChunneldClient::Get());
 
   chunneld_client->NotifyChunneldStopped();
   histogram_tester_.ExpectUniqueSample(
@@ -151,20 +148,6 @@ TEST_F(BorealisContextTest, ChunneldFailure) {
   histogram_tester_.ExpectUniqueSample(
       kBorealisStabilityHistogram, guest_os::FailureClasses::ChunneldStopped,
       1);
-}
-
-TEST_F(BorealisContextTest, MainAppHasSelfActivationPermission) {
-  CreateFakeMainApp(profile_.get());
-  std::unique_ptr<ScopedTestWindow> window = MakeAndTrackWindow(
-      "org.chromium.borealis.wmclass.Steam", borealis_window_manager_.get());
-  EXPECT_TRUE(exo::HasPermissionToActivate(window->window()));
-}
-
-TEST_F(BorealisContextTest, NormalAppDoesNotHaveSelfActivationPermission) {
-  CreateFakeApp(profile_.get(), "some_app", "borealis/123");
-  std::unique_ptr<ScopedTestWindow> window = MakeAndTrackWindow(
-      "org.chromium.borealis.wmclass.some_app", borealis_window_manager_.get());
-  EXPECT_FALSE(exo::HasPermissionToActivate(window->window()));
 }
 
 }  // namespace borealis

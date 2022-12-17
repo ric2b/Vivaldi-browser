@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {MenuManager} from '/switch_access/menu_manager.js';
-import {SAChildNode, SARootNode} from '/switch_access/nodes/switch_access_node.js';
-import {SwitchAccess} from '/switch_access/switch_access.js';
-import {SAConstants} from '/switch_access/switch_access_constants.js';
+import {RectUtil} from '../common/rect_util.js';
+
+import {MenuManager} from './menu_manager.js';
+import {SAChildNode, SARootNode} from './nodes/switch_access_node.js';
+import {SwitchAccess} from './switch_access.js';
+import {SAConstants} from './switch_access_constants.js';
 
 /**
  * Class to handle focus rings.
@@ -22,7 +24,8 @@ export class FocusRingManager {
 
     /** @private {!Map<SAConstants.Focus.ID, SAChildNode>} */
     this.ringNodesForTesting_ = new Map([
-      [SAConstants.Focus.ID.PRIMARY, null], [SAConstants.Focus.ID.PREVIEW, null]
+      [SAConstants.Focus.ID.PRIMARY, null],
+      [SAConstants.Focus.ID.PREVIEW, null],
     ]);
 
     /**
@@ -55,7 +58,7 @@ export class FocusRingManager {
               'a valid CSS color string.'));
       return;
     }
-    manager.rings_.forEach((ring) => ring.color = color);
+    manager.rings_.forEach(ring => ring.color = color);
   }
 
   /**
@@ -124,7 +127,7 @@ export class FocusRingManager {
   /** Clears all focus rings. */
   static clearAll() {
     const manager = FocusRingManager.instance;
-    manager.rings_.forEach((ring) => {
+    manager.rings_.forEach(ring => {
       ring.rects = [];
     });
     manager.updateFocusRings_(null, null);
@@ -153,7 +156,7 @@ export class FocusRingManager {
       rects: [],
       type: chrome.accessibilityPrivate.FocusType.SOLID,
       color: SAConstants.Focus.PRIMARY_COLOR,
-      secondaryColor: SAConstants.Focus.OUTER_COLOR
+      secondaryColor: SAConstants.Focus.OUTER_COLOR,
     };
 
     const previewRing = {
@@ -161,12 +164,12 @@ export class FocusRingManager {
       rects: [],
       type: chrome.accessibilityPrivate.FocusType.DASHED,
       color: SAConstants.Focus.PREVIEW_COLOR,
-      secondaryColor: SAConstants.Focus.OUTER_COLOR
+      secondaryColor: SAConstants.Focus.OUTER_COLOR,
     };
 
     return new Map([
       [SAConstants.Focus.ID.PRIMARY, primaryRing],
-      [SAConstants.Focus.ID.PREVIEW, previewRing]
+      [SAConstants.Focus.ID.PREVIEW, previewRing],
     ]);
   }
 
@@ -185,7 +188,7 @@ export class FocusRingManager {
     }
 
     const focusRings = [];
-    this.rings_.forEach((ring) => focusRings.push(ring));
+    this.rings_.forEach(ring => focusRings.push(ring));
     chrome.accessibilityPrivate.setFocusRings(focusRings);
 
     // Keep track of the nodes associated with each focus ring for testing

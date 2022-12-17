@@ -22,8 +22,8 @@
 #include "base/values.h"
 #include "pdf/document_attachment_info.h"
 #include "pdf/document_layout.h"
-#include "pdf/document_loader.h"
 #include "pdf/document_metadata.h"
+#include "pdf/loader/document_loader.h"
 #include "pdf/pdf_engine.h"
 #include "pdf/pdfium/pdfium_form_filler.h"
 #include "pdf/pdfium/pdfium_page.h"
@@ -114,7 +114,7 @@ class PDFiumEngine : public PDFEngine,
   void RotateCounterclockwise() override;
   bool IsReadOnly() const override;
   void SetReadOnly(bool enable) override;
-  void SetTwoUpView(bool enable) override;
+  void SetDocumentLayout(DocumentLayout::PageSpread page_spread) override;
   void DisplayAnnotations(bool display) override;
   gfx::Size ApplyDocumentLayout(
       const DocumentLayout::Options& options) override;
@@ -391,7 +391,7 @@ class PDFiumEngine : public PDFEngine,
   void UpdateTickMarks();
 
   // Called to continue searching so we don't block the main thread.
-  void ContinueFind(int32_t result);
+  void ContinueFind(bool case_sensitive);
 
   // Inserts a find result into `find_results_`, which is sorted.
   void AddFindResult(const PDFiumRange& result);

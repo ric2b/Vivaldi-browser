@@ -34,7 +34,6 @@ include_rules = [
   "+services/network/public/mojom",
   "+services/resource_coordinator/public",
   "+third_party/blink/public",
-  "+third_party/openscreen/src",
   "+third_party/skia/include/core",
   "+third_party/widevine/cdm",
   "+ui/accessibility",
@@ -58,4 +57,21 @@ specific_include_rules = {
   "explicit_sites_filter_browsertest.cc": [
     "+components/safe_search_api",
   ],
+
+  # Exceptions related to Cast Streaming.
+  "cast_streaming_browsertest\.cc" : [
+    "+components/cast/message_port",
+    "+components/cast_streaming/browser/test",
+  ],
+  "context_impl\.cc" : [
+    "+components/cast_streaming/browser/public"
+  ],
+  "receiver_session_client\.cc" : [
+    "+components/cast/message_port",
+    "+components/cast_streaming/browser/public",
+    "+components/cast_streaming/public",
+  ],
+  "receiver_session_client\.h" : [
+    "+components/cast_streaming/public/mojom"
+  ]
 }

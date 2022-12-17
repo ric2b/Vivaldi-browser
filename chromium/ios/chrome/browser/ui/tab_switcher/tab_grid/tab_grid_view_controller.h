@@ -115,6 +115,10 @@ enum class TabGridPageConfiguration {
     incognitoTabsConsumer;
 @property(nonatomic, readonly) id<RecentTabsConsumer> remoteTabsConsumer;
 
+// Vivaldi
+@property(nonatomic, readonly) id<RecentTabsConsumer> closedTabsConsumer;
+// End Vivaldi
+
 // Delegates send updates from the UI layer to the model layer.
 @property(nonatomic, weak) id<GridCommands> regularTabsDelegate;
 @property(nonatomic, weak) id<GridCommands> incognitoTabsDelegate;
@@ -151,6 +155,12 @@ enum class TabGridPageConfiguration {
 // model objects used in this view controller should be factored out.
 @property(nonatomic, strong)
     RecentTabsTableViewController* remoteTabsViewController;
+
+// Vivaldi
+// The view controller for recentyly closed tabs.
+@property(nonatomic, strong)
+    RecentTabsTableViewController* closedTabsViewController;
+// End Vivaldi
 
 // Provides the context menu for the tabs on the grid.
 @property(nonatomic, weak) id<GridContextMenuProvider>

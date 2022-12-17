@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/arc/test/fake_intent_helper_host.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -40,7 +39,14 @@ namespace {
 constexpr char kPackageName1[] = "fake.package.name1";
 constexpr char kPackageName2[] = "fake.package.name2";
 constexpr char kPackageName3[] = "fake.package.name3";
-}
+constexpr char kPackageName4[] = "fake.package.name4";
+
+constexpr char kWebAppInfoTitle4[] = "package4";
+constexpr char kWebAppInfoStartURL4[] = "https://example.com/app?start";
+constexpr char kWebAppInfoScope4[] = "https://example.com/app";
+constexpr char kWebAppInfoCertificateFingerprint4[] = "abc";
+
+}  // namespace
 
 // static
 std::string ArcAppTest::GetAppId(const arc::mojom::AppInfo& app_info) {
@@ -84,9 +90,8 @@ ash::FakeChromeUserManager* ArcAppTest::GetUserManager() {
 }
 
 void ArcAppTest::SetUp(Profile* profile) {
-  if (!chromeos::DBusThreadManager::IsInitialized()) {
-    chromeos::DBusThreadManager::Initialize();
-    dbus_thread_manager_initialized_ = true;
+  if (!ash::ConciergeClient::Get()) {
+    concierge_client_initialized_ = true;
     ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
   }
   arc::SetArcAvailableCommandLineForTesting(
@@ -230,6 +235,25 @@ void ArcAppTest::CreateFakeAppsAndPackages() {
       nullptr /* web_app_info */, absl::nullopt, std::move(permissions3),
       absl::nullopt /* version_name */));
 
+  base::flat_map<arc::mojom::AppPermission, arc::mojom::PermissionStatePtr>
+      permissions4;
+  fake_packages_.emplace_back(arc::mojom::ArcPackageInfo::New(
+      kPackageName4,
+      /*package_version=*/4,
+      /*last_backup_android_id=*/4,
+      /*last_backup_time=*/4,
+      /*sync=*/false,
+      /*system=*/false,
+      /*vpn_provider=*/false,
+      /*web_app_info=*/
+      arc::mojom::WebAppInfo::New(kWebAppInfoTitle4, kWebAppInfoStartURL4,
+                                  kWebAppInfoScope4,
+                                  /*theme_color=*/0, /*is_web_only_twa=*/true,
+                                  kWebAppInfoCertificateFingerprint4),
+      /*deprecated_permissions=*/absl::nullopt,
+      /*permission_states=*/std::move(permissions4),
+      /*version_name=*/absl::nullopt));
+
   for (int i = 0; i < 3; ++i) {
     arc::mojom::ShortcutInfo shortcut_info;
     shortcut_info.name = base::StringPrintf("Fake Shortcut %d", i);
@@ -255,13 +279,12 @@ void ArcAppTest::TearDown() {
   if (!persist_service_manager_)
     arc_service_manager_.reset();
   arc::ResetArcAllowedCheckForTesting(profile_);
-  // DBusThreadManager may be initialized from other testing utility, such as
+  // ConciergeClient may be initialized from other testing utility, such as
   // ash::AshTestHelper::SetUp(), so Shutdown() only when it is initialized in
   // ArcAppTest::SetUp().
-  if (dbus_thread_manager_initialized_) {
+  if (concierge_client_initialized_) {
     ash::ConciergeClient::Shutdown();
-    chromeos::DBusThreadManager::Shutdown();
-    dbus_thread_manager_initialized_ = false;
+    concierge_client_initialized_ = false;
   }
   profile_ = nullptr;
 }
@@ -302,6 +325,17 @@ void ArcAppTest::AddPackage(arc::mojom::ArcPackageInfoPtr package) {
   if (FindPackage(package->package_name))
     return;
   fake_packages_.push_back(std::move(package));
+}
+
+void ArcAppTest::UpdatePackage(arc::mojom::ArcPackageInfoPtr updated_package) {
+  auto it = std::find_if(fake_packages_.begin(), fake_packages_.end(),
+                         [&updated_package](const auto& package) {
+                           return package->package_name ==
+                                  updated_package->package_name;
+                         });
+  if (it != fake_packages_.end()) {
+    *it = std::move(updated_package);
+  }
 }
 
 void ArcAppTest::RemovePackage(const std::string& package_name) {

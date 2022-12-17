@@ -22,6 +22,7 @@
 #include "content/child/child_thread_impl.h"
 #include "content/common/android/cpu_time_metrics.h"
 #include "content/common/mojo_core_library_support.h"
+#include "content/common/process_visibility_tracker.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/public/cpp/system/dynamic_library_support.h"
 #include "sandbox/policy/sandbox_type.h"
@@ -57,7 +58,7 @@ class ChildIOThread : public base::Thread {
 };
 }
 
-ChildProcess::ChildProcess(base::ThreadPriority io_thread_priority,
+ChildProcess::ChildProcess(base::ThreadType io_thread_type,
                            std::unique_ptr<base::ThreadPoolInstance::InitParams>
                                thread_pool_init_params)
     : ref_count_(0),
@@ -125,20 +126,21 @@ ChildProcess::ChildProcess(base::ThreadPriority io_thread_priority,
   tracing::InitTracingPostThreadPoolStartAndFeatureList(
       /* enable_consumer */ false);
 
+  // Ensure the visibility tracker is created on the main thread.
+  ProcessVisibilityTracker::GetInstance();
+
 #if BUILDFLAG(IS_ANDROID)
   SetupCpuTimeMetrics();
 #endif
 
   // We can't recover from failing to start the IO thread.
   base::Thread::Options thread_options(base::MessagePumpType::IO, 0);
-  thread_options.priority = io_thread_priority;
+  thread_options.thread_type = io_thread_type;
+// TODO(1329208): Figure out whether IS_ANDROID can be lifted here.
 #if BUILDFLAG(IS_ANDROID)
   // TODO(reveman): Remove this in favor of setting it explicitly for each type
   // of process.
-  if (base::FeatureList::IsEnabled(
-          blink::features::kBlinkCompositorUseDisplayThreadPriority)) {
-    thread_options.priority = base::ThreadPriority::DISPLAY;
-  }
+  thread_options.thread_type = base::ThreadType::kCompositing;
 #endif
   CHECK(io_thread_->StartWithOptions(std::move(thread_options)));
 }

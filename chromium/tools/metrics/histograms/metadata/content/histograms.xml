@@ -171,7 +171,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.AllowStorageAccessSync" units="ms"
-    expires_after="2022-10-09">
+    expires_after="2023-02-12">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -191,14 +191,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.DefaultAutoplaySetting" enum="ContentSetting"
-    expires_after="2022-10-23">
+    expires_after="2022-12-25">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default autoplay setting at profile open.</summary>
 </histogram>
 
 <histogram name="ContentSettings.DefaultCookiesSetting" enum="ContentSetting"
-    expires_after="2022-10-23">
+    expires_after="2022-12-25">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default cookies setting at profile open.</summary>
@@ -221,21 +221,21 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.DefaultJavaScriptSetting"
-    enum="ContentSetting" expires_after="2022-10-23">
+    enum="ContentSetting" expires_after="2022-12-25">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default JavaScript setting at profile open.</summary>
 </histogram>
 
 <histogram name="ContentSettings.DefaultLocationSetting" enum="ContentSetting"
-    expires_after="2022-10-23">
+    expires_after="2022-12-25">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default location setting at profile open.</summary>
 </histogram>
 
 <histogram name="ContentSettings.DefaultMediaStreamCameraSetting"
-    enum="ContentSetting" expires_after="2022-10-23">
+    enum="ContentSetting" expires_after="2023-01-15">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default camera setting at profile open.</summary>
@@ -259,7 +259,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.DefaultNotificationsSetting"
-    enum="ContentSetting" expires_after="2022-10-23">
+    enum="ContentSetting" expires_after="2022-12-25">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default notification setting at profile open.</summary>
@@ -273,12 +273,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.DefaultRequestDesktopSiteSetting"
-    enum="ContentSetting" expires_after="2022-10-23">
+    enum="ContentSetting" expires_after="2022-12-25">
   <owner>shuyng@google.com</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
     The request desktop site content setting at profile open. Recorded for
-    Android only.
+    Android and iOS only.
   </summary>
 </histogram>
 
@@ -297,7 +297,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.DefaultUsbGuardSetting" enum="ContentSetting"
-    expires_after="2022-10-23">
+    expires_after="2023-02-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default permission setting for WebUSB at profile open.</summary>
@@ -508,7 +508,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.Popups" enum="ContentSettingPopupAction"
-    expires_after="2022-11-13">
+    expires_after="2023-01-15">
   <owner>charleszhao@chromium.org</owner>
   <owner>lazzzis@google.com</owner>
   <owner>src/components/blocked_content/OWNERS</owner>
@@ -519,7 +519,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.Popups.BlockerActions"
-    enum="PopupBlockerAction" expires_after="2022-11-20">
+    enum="PopupBlockerAction" expires_after="2023-01-22">
   <owner>csharrison@chromium.org</owner>
   <owner>lazzzis@google.com</owner>
   <owner>src/components/blocked_content/OWNERS</owner>
@@ -585,7 +585,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.Popups.StrongBlockerActions"
-    enum="StrongPopupBlockerAction" expires_after="2022-10-30">
+    enum="StrongPopupBlockerAction" expires_after="2023-01-01">
   <owner>csharrison@chromium.org</owner>
   <summary>
     Counts of various events related to the strong popup blocker (aka abusive
@@ -604,7 +604,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.BrokenNTPHierarchy"
-    enum="NTPBrokenViewHierarchyRelationship" expires_after="M102">
+    enum="NTPBrokenViewHierarchyRelationship" expires_after="M107">
   <owner>adamta@google.com</owner>
   <owner>sczs@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -612,6 +612,24 @@ chromium-metrics-reviews@google.com.
     When the NTP view hierarchy is fixed upon NTP creation, this hisotgram logs
     which part was broken. Temporary log used to gather info for
     crbug.com/1262536.
+  </summary>
+</histogram>
+
+<histogram name="ContentSuggestions.Feed.CanBeShown" enum="BooleanAllowed"
+    expires_after="2023-08-01">
+  <owner>harringtond@chromium.org</owner>
+  <owner>thegreenfrog@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>
+    Whether showing the Feed is permitted. The Feed can be shown if (A) profile
+    policies allow this, (B) the FeedAblationEnabled feature is disabled, and
+    (C) the user has not turned it off in Settings.
+
+    Note that this does not denote (A) whether the Feed is visible at the time
+    the metric is emitted or (B) whether the Feed was ever visible during the
+    browser process lifetime.
+
+    iOS only. Emitted when building a MetricsLog for the current session.
   </summary>
 </histogram>
 
@@ -1317,6 +1335,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="ContentSuggestions.Feed.WebFeed.FollowCount.Engaged"
+    units="follows" expires_after="2023-01-15">
+  <owner>harringtond@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>
+    Replaced with the ContentSuggestions.{FeedType}.FollowCount.Engaged2
+    histogram pattern because this one had a misleading name. It will be
+    effectively obsoleted in the future.
+
+    Android: The number of web feeds the user is following. Reported at most
+    once per feed visit, when the user engages (FeedEngagementType.Engaged) with
+    either the For-You or Following Feeds.
+  </summary>
+</histogram>
+
 <histogram name="ContentSuggestions.Feed.WebFeed.FollowCount.{Event}"
     units="follows" expires_after="2023-03-01">
   <owner>harringtond@chromium.org</owner>
@@ -1325,19 +1358,14 @@ chromium-metrics-reviews@google.com.
     Android: The number of web feeds the user is following. Reported {Event}.
   </summary>
   <token key="Event">
-    <variant name="AfterFollow" summary="after a successful follow action."/>
-    <variant name="AfterUnfollow"
-        summary="after a successful unfollow action."/>
+    <variant name="AfterFollow" summary="after a successful follow action"/>
+    <variant name="AfterUnfollow" summary="after a successful unfollow action"/>
     <variant name="ContentShown"
         summary="after the Following feed is shown, and some content is
-                 displayed."/>
-    <variant name="Engaged"
-        summary="after the user has been recorded as FeedEngagementType
-                 'Engaged', reported at most once per day when the user
-                 interacts with either the For-You or Following Feeds."/>
+                 displayed"/>
     <variant name="NoContentShown"
         summary="after the Following Feed is shown, and no content is
-                 available for display."/>
+                 available for display"/>
   </token>
 </histogram>
 
@@ -1493,6 +1521,25 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="ContentSuggestions.Feed.WebFeed.SortType" enum="FeedSortType"
+    expires_after="2023-08-15">
+  <owner>adamta@google.com</owner>
+  <owner>sczs@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>The sort type that was selected from the feed's sort menu.</summary>
+</histogram>
+
+<histogram name="ContentSuggestions.Feed.WebFeed.SortTypeWhenEngaged"
+    enum="FeedSortType" expires_after="2023-08-15">
+  <owner>adamta@google.com</owner>
+  <owner>sczs@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>
+    The currently selected sort type when the user has engaged with the
+    Following feed.
+  </summary>
+</histogram>
+
 <histogram name="ContentSuggestions.Feed.WebFeed.UnfollowResult"
     enum="WebFeedSubscriptionRequestStatus" expires_after="2023-03-01">
   <owner>harringtond@chromium.org</owner>
@@ -1578,6 +1625,23 @@ chromium-metrics-reviews@google.com.
     <variant name="Feed" summary="the For-You Feed"/>
     <variant name="Feed.AllFeeds" summary="all Feeds combined"/>
     <variant name="Feed.WebFeed" summary="the Web Feed"/>
+  </token>
+</histogram>
+
+<histogram name="ContentSuggestions.{FeedType}.FollowCount.Engaged2"
+    units="follows" expires_after="2023-03-01">
+  <owner>harringtond@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>
+    Android: The number of web feeds the user is following. Reported at most
+    once per feed visit, when the user engages (FeedEngagementType.Engaged,
+    non-Simple) with {FeedType}.
+  </summary>
+  <token key="FeedType">
+    <variant name="Feed" summary="the For-You feed"/>
+    <variant name="Feed.AllFeeds"
+        summary="either the For-You or Following/Web feed"/>
+    <variant name="Feed.WebFeed" summary="the Following/Web Feed"/>
   </token>
 </histogram>
 

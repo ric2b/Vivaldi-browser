@@ -226,7 +226,6 @@ by a child template that "extends" this file.
          Java heap limit (32Mb on Nexus S, 48Mb on Xoom). -->
       <application android:name="{% block application_name %}org.chromium.chrome.browser.base.SplitChromeApplication{% endblock %}"
         android:icon="@drawable/ic_launcher"
-        android:roundIcon="@drawable/ic_launcher_round"
         android:label="{% block application_label %}@string/app_name{% endblock %}"
         android:largeHeap="false"
         android:manageSpaceActivity="org.vivaldi.browser.preferences.VivaldiManageSpaceActivity"
@@ -534,7 +533,7 @@ by a child template that "extends" this file.
             {% endif %} {# Vivaldi/Automotive #}
             {% block chrome_activity_common %}
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density|navigation"
             android:hardwareAccelerated="false"
             {% endblock %}
         >
@@ -659,14 +658,18 @@ by a child template that "extends" this file.
             android:label="@string/storage_management_activity_label"
             android:exported="false">
         </activity>
-        <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkActivity"
+        < -->
+
+        <!-- Activities for bookmarks. -->
+        <!-- Not used by Vivaldi
+        <activity android:name="org.chromium.chrome.browser.app.bookmarks.BookmarkActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
             android:exported="false"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         < -->
-        <!-- <- Vivaldi -->
+        <!-- Vivaldi -->
         <activity android:name="org.vivaldi.browser.notes.NoteEditActivity"
             android:theme="@style/NoteEditActivityTheme"
             android:windowSoftInputMode="stateVisible|adjustResize"
@@ -768,34 +771,26 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
-
-        <!-- Vivaldi -> -->
-        <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddActivity"
-            android:theme="@style/Theme.BrowserUI.NoDisplay"
-            android:excludeFromRecents="true"
-            android:windowSoftInputMode="stateHidden"
+        <activity android:name="org.vivaldi.browser.preferences.AutomaticCloseTabsMainPreference"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="{{ manifest_package }}.ADDBOOKMARK" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
+            android:exported="false">
         </activity>
+        <!-- End Vivaldi -->
         <!-- Not used by vivaldi >
-        <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkEditActivity"
+        <activity android:name="org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity"
             android:theme="@style/Theme.Chromium.DialogWhenLarge"
             android:windowSoftInputMode="stateHidden"
             android:exported="false"
             android:label="@string/edit_bookmark"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
-        <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddEditFolderActivity"
+        <activity android:name="org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity"
             android:theme="@style/Theme.Chromium.DialogWhenLarge"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         < -->
-        <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkFolderSelectActivity"
+        <activity android:name="org.chromium.chrome.browser.app.bookmarks.BookmarkFolderSelectActivity"
             android:theme="@style/Theme.Chromium.DialogWhenLarge"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:label="@string/bookmark_choose_folder"
@@ -986,23 +981,6 @@ by a child template that "extends" this file.
             android:process=":browser_restart_process">
         </activity>
 
-        <activity
-            android:name="org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardShareActivity"
-            android:icon="@drawable/ic_devices_48dp"
-            android:label="@string/shared_clipboard_share_activity_title"
-            android:enabled="false"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:noHistory="true"
-            android:theme="@style/Theme.Chromium.Activity.TranslucentNoAnimations"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-        </activity>
-
         <!-- Activity for dispatching intents to Instant Apps. -->
         <activity
             android:name="org.chromium.chrome.browser.instantapps.AuthenticatedProxyActivity"
@@ -1026,7 +1004,7 @@ by a child template that "extends" this file.
         </activity>
 
         <!-- Components for Trusted Web Activities -->
-        <receiver android:name="org.chromium.chrome.browser.browserservices.ClientAppBroadcastReceiver"
+        <receiver android:name="org.chromium.chrome.browser.browserservices.InstalledWebappBroadcastReceiver"
             android:exported="true">
             <intent-filter>
                 <data android:scheme="package" />
@@ -1035,7 +1013,7 @@ by a child template that "extends" this file.
             </intent-filter>
             {% if channel in ['default'] %}
             <intent-filter>
-                <action android:name="org.chromium.chrome.browser.browserservices.ClientAppBroadcastReceiver.DEBUG" />
+                <action android:name="org.chromium.chrome.browser.browserservices.InstalledWebappBroadcastReceiver.DEBUG" />
             </intent-filter>
             {% endif %}
         </receiver>
@@ -1335,7 +1313,7 @@ by a child template that "extends" this file.
             android:noHistory="true"/>
 
         <activity
-            android:name="org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager$TrampolineActivity"
+            android:name="org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerImpl$TrampolineActivity"
             android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:exported="false"
             android:autoRemoveFromRecents="true"
@@ -1344,7 +1322,7 @@ by a child template that "extends" this file.
             android:noHistory="true"/>
 
         <activity
-            android:name="org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager$DismissNotificationChromeActivity"
+            android:name="org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerImpl$DismissNotificationChromeActivity"
             android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:exported="false"
             android:autoRemoveFromRecents="true"
@@ -1549,6 +1527,7 @@ by a child template that "extends" this file.
               <action android:name="android.media.browse.MediaBrowserService" />
           </intent-filter>
       </service>
+      <uses-library android:name="com.renault.car.res" />
       {% endif %}
 
       <!-- The Play Core library added support for Play Asset Delivery (PAD), which is primarily

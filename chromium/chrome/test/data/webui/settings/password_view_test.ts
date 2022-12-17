@@ -15,7 +15,7 @@ import {SettingsRoutes} from 'chrome://settings/settings_routes.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, isVisible} from 'chrome://webui-test/test_util.js';
 
-import {createMultiStorePasswordEntry, createPasswordEntry} from './passwords_and_autofill_fake_data.js';
+import {createPasswordEntry} from './passwords_and_autofill_fake_data.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
 
 // clang-format on
@@ -65,6 +65,28 @@ suite('PasswordViewTest', function() {
 
   let passwordManager: TestPasswordManagerProxy;
 
+  async function loadViewPage(
+      credential?: chrome.passwordsPrivate.PasswordUiEntry, id?: number) {
+    let requestedId;
+    if (id !== undefined) {
+      requestedId = id;
+    } else if (!!credential && credential.id !== undefined) {
+      requestedId = id;
+    } else {
+      requestedId = -1;
+    }
+    const params = new URLSearchParams({id: String(requestedId)});
+    Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
+    const page = document.createElement('password-view');
+    if (credential) {
+      page.credential = credential;
+    }
+    document.body.appendChild(page);
+
+    await flushTasks();
+    return page;
+  }
+
   setup(function() {
     loadTimeData.overrideValues(
         {enablePasswordViewPage: true, enablePasswordNotes: false});
@@ -76,38 +98,25 @@ suite('PasswordViewTest', function() {
     PasswordManagerImpl.setInstance(passwordManager);
   });
 
-  [{url: SITE, username: USERNAME, notesEnabled: false},
-   {url: SITE, username: '', notesEnabled: false},
-   {url: SITE, username: USERNAME, notesEnabled: true},
-   {url: SITE, username: '', notesEnabled: true}]
-      .forEach(
-          item => test(
-              `Valid site and username displays an entry ${item.notesEnabled}`,
+  [false, true].forEach(
+      notesEnabled =>
+          test(
+              `Textarea is shown when notes enabled: ${notesEnabled}`,
               async function() {
                 loadTimeData.overrideValues(
-                    {enablePasswordNotes: item.notesEnabled});
+                    {enablePasswordNotes: notesEnabled});
 
-                const passwordList = [
-                  createPasswordEntry({
-                    url: item.url,
-                    username: item.username,
-                    id: ID,
-                    note: NOTE,
-                  }),
-                ];
-
-                passwordManager.data.passwords = passwordList;
-                const page = document.createElement('password-view');
-                document.body.appendChild(page);
-                const params = new URLSearchParams({
-                  username: item.username,
-                  site: item.url,
+                const passwordEntry = createPasswordEntry({
+                  url: SITE,
+                  username: USERNAME,
+                  id: ID,
+                  note: NOTE,
                 });
-                Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
 
-                await flushTasks();
+                const page = await loadViewPage(passwordEntry);
+
                 assertVisibilityOfPageElements(page, /*visibility=*/ true);
-                if (item.notesEnabled) {
+                if (notesEnabled) {
                   assertEquals(
                       NOTE,
                       page.shadowRoot!.querySelector(
@@ -118,152 +127,106 @@ suite('PasswordViewTest', function() {
                 }
               }));
 
-  [{inAccount: false, onDevice: true, username: USERNAME},
-   {inAccount: true, onDevice: false, username: USERNAME},
-   {inAccount: true, onDevice: true, username: USERNAME2},
+  [{
+    requestedId: 1,
+    expectedStoredIn: chrome.passwordsPrivate.PasswordStoreSet.ACCOUNT,
+    expectedUsername: USERNAME,
+  },
+   {
+     requestedId: 2,
+     expectedStoredIn: chrome.passwordsPrivate.PasswordStoreSet.DEVICE,
+     expectedUsername: USERNAME,
+   },
+   {
+     requestedId: 3,
+     expectedStoredIn:
+         chrome.passwordsPrivate.PasswordStoreSet.DEVICE_AND_ACCOUNT,
+     expectedUsername: USERNAME2,
+   },
+   {
+     requestedId: 4,
+     expectedStoredIn: chrome.passwordsPrivate.PasswordStoreSet.ACCOUNT,
+     expectedUsername: USERNAME2,
+   },
   ]
       .forEach(
           item => test(
-              'inAccount and onDevice parameters are used for finding credentials',
+              `IDs match to correct credentials for id: ${item.requestedId}`,
               async function() {
                 const passwordList = [
                   // entry in the account store
                   createPasswordEntry({
                     url: SITE,
                     username: USERNAME,
-                    frontendId: 1,
                     id: 1,
-                    fromAccountStore: true
+                    inAccountStore: true,
                   }),
-                  // entry in the device store
+                  // entry in the profile store
                   createPasswordEntry({
                     url: SITE,
                     username: USERNAME,
-                    frontendId: 2,
                     id: 2,
-                    fromAccountStore: false
+                    inProfileStore: true,
                   }),
-                  // entry in both stores are the next two items
+                  // entry in the both stores
                   createPasswordEntry({
                     url: SITE,
                     username: USERNAME2,
-                    frontendId: 3,
                     id: 3,
-                    fromAccountStore: false
+                    inProfileStore: true,
+                    inAccountStore: true,
                   }),
                   createPasswordEntry({
                     url: SITE,
                     username: USERNAME2,
-                    frontendId: 3,
                     id: 4,
-                    fromAccountStore: true
+                    inAccountStore: true,
                   }),
                 ];
 
-                passwordManager.data.passwords = passwordList;
-                const page = document.createElement('password-view');
-                document.body.appendChild(page);
-                const params = new URLSearchParams({
-                  username: item.username,
-                  site: SITE,
-                });
-                if (item.inAccount) {
-                  params.set('inAccount', 'true');
-                  if (item.onDevice) {
-                    params.set('onDevice', 'true');
-                  }
-                }
-                Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
+                const requestedCredential = passwordList.find(
+                    passwordUiEntry => passwordUiEntry.id === item.requestedId);
+                const page = await loadViewPage(requestedCredential!);
 
-                await flushTasks();
                 assertVisibilityOfPageElements(page, /*visibility=*/ true);
-                assertEquals(
-                    item.inAccount, page.credential!.isPresentInAccount());
-                assertEquals(
-                    item.onDevice, page.credential!.isPresentOnDevice());
-                assertEquals(item.username, page.credential!.username);
+                assertEquals(item.requestedId, page.credential!.id);
+                assertEquals(item.expectedStoredIn, page.credential!.storedIn);
+                assertEquals(item.expectedUsername, page.credential!.username);
+                assertEquals(SITE, page.credential!.urls.shown);
               }));
 
   test('Empty note shows placeholder text', async function() {
     loadTimeData.overrideValues({enablePasswordNotes: true});
-    const passwordList = [
-      createPasswordEntry({url: SITE, username: USERNAME, id: ID}),
-    ];
+    const passwordEntry =
+        createPasswordEntry({url: SITE, username: USERNAME, id: ID});
 
-    passwordManager.data.passwords = passwordList;
-    const page = document.createElement('password-view');
-    document.body.appendChild(page);
-    const params = new URLSearchParams({
-      username: USERNAME,
-      site: SITE,
-    });
-    Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-
-    await flushTasks();
+    const page = await loadViewPage(passwordEntry);
     assertEquals(
         'No note added',
         page.shadowRoot!.querySelector('settings-textarea')!.value);
   });
 
-  test(
-      'Invalid site and username does not display an entry ' +
-          'and routes to passwords page',
-      async function() {
-        const passwordList = [
-          createPasswordEntry({url: SITE, username: 'user2', id: ID}),
-        ];
-
-        passwordManager.data.passwords = passwordList;
-        const page = document.createElement('password-view');
-        document.body.appendChild(page);
-        const params = new URLSearchParams({
-          username: USERNAME,
-          site: SITE,
-        });
-        Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-
-        await flushTasks();
-        assertVisibilityOfPageElements(page, /*visibility=*/ false);
-
-        assertEquals(routes.PASSWORDS, Router.getInstance().getCurrentRoute());
-      });
-
   test('Federated credential layout', async function() {
-    const passwordList = [
-      createPasswordEntry({
-        federationText: 'with chromium.org',
-        url: SITE,
-        username: USERNAME,
-      }),
-    ];
-    passwordManager.data.passwords = passwordList;
-    const page = document.createElement('password-view');
-    document.body.appendChild(page);
-    const params = new URLSearchParams({
+    const passwordEntry = createPasswordEntry({
+      federationText: 'with chromium.org',
+      url: SITE,
       username: USERNAME,
-      site: SITE,
+      id: ID,
     });
-    Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
 
-    await flushTasks();
+    const page = await loadViewPage(passwordEntry);
+
     assertVisibilityOfFederatedCredentialElements(page);
   });
 
   test('Clicking show password button shows / hides it', async function() {
-    const passwordList = [
-      createPasswordEntry({url: SITE, username: USERNAME, id: ID}),
-    ];
+    const passwordEntry =
+        createPasswordEntry({url: SITE, username: USERNAME, id: ID});
+    passwordEntry.password = PASSWORD;
 
-    passwordManager.data.passwords = passwordList;
-    const page = document.createElement('password-view');
-    document.body.appendChild(page);
-    const params = new URLSearchParams({
-      username: USERNAME,
-      site: SITE,
-    });
-    Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
 
-    await flushTasks();
+    const page = await loadViewPage(passwordEntry);
+
     const passwordInput =
         page.shadowRoot!.querySelector<HTMLInputElement>('#passwordInput');
     const showButton = page.shadowRoot!.querySelector<HTMLButtonElement>(
@@ -271,121 +234,41 @@ suite('PasswordViewTest', function() {
     assertTrue(!!passwordInput);
     assertTrue(!!showButton);
     assertEquals('password', passwordInput.type);
-    assertEquals(' '.repeat(10), passwordInput.value);
+    assertEquals(PASSWORD, passwordInput.value);
     assertTrue(showButton.classList.contains('icon-visibility'));
 
+    // hide the password
     showButton.click();
+    flush();
 
-    // this will fail because setPlaintextPassword is not called.
-    await passwordManager.whenCalled('requestPlaintextPassword');
-    await flushTasks();
-    assertEquals('password', passwordInput.type);
-    assertEquals(' '.repeat(10), passwordInput.value);
-    assertTrue(showButton.classList.contains('icon-visibility'));
-
-    passwordManager.setPlaintextPassword(PASSWORD);
-    // show the password
-    showButton.click();
-
-    const {id, reason} =
-        await passwordManager.whenCalled('requestPlaintextPassword');
-    await flushTasks();
-    assertEquals(ID, id);
-    assertEquals(chrome.passwordsPrivate.PlaintextReason.VIEW, reason);
     assertEquals('text', passwordInput.type);
     assertEquals(PASSWORD, passwordInput.value);
     assertTrue(showButton.classList.contains('icon-visibility-off'));
 
-    // hide the password by re-clicking
+    // hide the password
     showButton.click();
     flush();
+
     assertEquals('password', passwordInput.type);
-    assertEquals(' '.repeat(10), passwordInput.value);
+    assertEquals(PASSWORD, passwordInput.value);
     assertTrue(showButton.classList.contains('icon-visibility'));
   });
-
-  test(
-      'When saved passwords change credential is still shown',
-      async function() {
-        const passwordEntry =
-            createPasswordEntry({url: SITE, username: USERNAME, id: ID});
-
-        passwordManager.data.passwords = [passwordEntry];
-        const page = document.createElement('password-view');
-        document.body.appendChild(page);
-        const params = new URLSearchParams({
-          username: USERNAME,
-          site: SITE,
-        });
-        Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-        await flushTasks();
-        assertTrue(!!page.credential);
-        assertEquals(SITE, page.credential.urls.shown);
-        assertEquals(USERNAME, page.credential.username);
-
-        passwordManager.lastCallback.addSavedPasswordListChangedListener!
-            ([passwordEntry].concat([
-              createPasswordEntry({url: 'site2.com', username: 'user2', id: 1}),
-            ]));
-
-        await flushTasks();
-        assertTrue(!!page.credential);
-        assertEquals(SITE, page.credential.urls.shown);
-        assertEquals(USERNAME, page.credential.username);
-      });
-
-  test(
-      'When saved passwords change and credential is removed, page is empty',
-      async function() {
-        const passwordList = [
-          createPasswordEntry({url: SITE, username: USERNAME, id: ID}),
-        ];
-
-        passwordManager.setPlaintextPassword(PASSWORD);
-        passwordManager.data.passwords = passwordList;
-        const page = document.createElement('password-view');
-        document.body.appendChild(page);
-        const params = new URLSearchParams({
-          username: USERNAME,
-          site: SITE,
-        });
-        Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-
-        await flushTasks();
-        assertVisibilityOfPageElements(page, /*visibility=*/ true);
-
-        passwordManager.lastCallback.addSavedPasswordListChangedListener!([]);
-
-        await flushTasks();
-        assertVisibilityOfPageElements(page, /*visibility=*/ false);
-      });
 
   test(
       'When edit button is tapped, the edit dialog is open with credential. ' +
           'When the username is changed, view page gets updated',
       async function() {
         const NEW_USERNAME = 'user2';
+        const NEW_ID = ID + 1;
         const entry =
-            createPasswordEntry({url: SITE, username: USERNAME, id: 0});
+            createPasswordEntry({url: SITE, username: USERNAME, id: ID});
+        entry.password = PASSWORD;
 
-        passwordManager.setPlaintextPassword(PASSWORD);
-        passwordManager.data.passwords = [entry];
-        const page = document.createElement('password-view');
-        document.body.appendChild(page);
-        const params = new URLSearchParams({
-          username: USERNAME,
-          site: SITE,
-        });
-        Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-
-        await flushTasks();
+        const page = await loadViewPage(entry);
 
         page.shadowRoot!.querySelector<HTMLButtonElement>(
                             '#editButton')!.click();
         flush();
-
-        await passwordManager.whenCalled('requestPlaintextPassword');
-        await flushTasks();
 
         const editDialog =
             page.shadowRoot!.querySelector('password-edit-dialog');
@@ -395,21 +278,18 @@ suite('PasswordViewTest', function() {
         assertEquals(entry.username, editDialog.existingEntry.username);
         assertEquals(PASSWORD, editDialog.existingEntry.password);
 
+        passwordManager.setChangeSavedPasswordResponse(NEW_ID);
         // user edits the username
         editDialog.$.usernameInput.value = NEW_USERNAME;
         editDialog.$.actionButton.click();
-        entry.username = NEW_USERNAME;
-        passwordManager.lastCallback.addSavedPasswordListChangedListener!
-            ([entry]);
-
         await flushTasks();
+
         assertFalse(isVisible(editDialog));
 
         assertEquals(NEW_USERNAME, page.credential!.username);
 
         const urlParams = Router.getInstance().getQueryParameters();
-        assertEquals(urlParams.get('site'), SITE);
-        assertEquals(urlParams.get('username'), NEW_USERNAME);
+        assertEquals(urlParams.get('id'), String(NEW_ID));
         assertEquals(
             routes.PASSWORD_VIEW, Router.getInstance().getCurrentRoute());
       });
@@ -419,63 +299,39 @@ suite('PasswordViewTest', function() {
           'it is deleted and routed to passwords page',
       async function() {
         const entry = createPasswordEntry(
-            {url: SITE, username: USERNAME, id: ID, fromAccountStore: false});
+            {url: SITE, username: USERNAME, id: ID, inAccountStore: false});
 
-        passwordManager.setPlaintextPassword(PASSWORD);
-        passwordManager.data.passwords = [entry];
-        const page = document.createElement('password-view');
-        document.body.appendChild(page);
-        const params = new URLSearchParams({
-          username: USERNAME,
-          site: SITE,
-        });
-        Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-
-        await flushTasks();
+        const page = await loadViewPage(entry);
 
         page.shadowRoot!.querySelector<HTMLButtonElement>(
                             '#deleteButton')!.click();
-        const id = await passwordManager.whenCalled('removeSavedPassword');
+        const {id, fromStores} =
+            await passwordManager.whenCalled('removeSavedPassword');
         assertEquals(ID, id);
+        assertEquals(
+            chrome.passwordsPrivate.PasswordStoreSet.DEVICE, fromStores);
         await flushTasks();
 
         assertEquals(routes.PASSWORDS, Router.getInstance().getCurrentRoute());
         const newParams = Router.getInstance().getQueryParameters();
-        assertEquals('false', newParams.get('removedFromAccount'));
-        assertEquals('true', newParams.get('removedFromDevice'));
+        assertEquals(entry.storedIn, newParams.get('removedFromStores'));
       });
 
   test(
       'When delete button is clicked for a password on device and account, ' +
           'remove dialog is opened',
       async function() {
-        passwordManager.setPlaintextPassword(PASSWORD);
-        passwordManager.data.passwords = [
-          createPasswordEntry({
-            url: SITE,
-            username: USERNAME,
-            id: 0,
-            frontendId: ID,
-            fromAccountStore: false
-          }),
-          createPasswordEntry({
-            url: SITE,
-            username: USERNAME,
-            id: 1,
-            frontendId: ID,
-            fromAccountStore: true
-          })
-        ];
-        const page = document.createElement('password-view');
-        document.body.appendChild(page);
-        const params = new URLSearchParams({
+        const entry = createPasswordEntry({
+          url: SITE,
           username: USERNAME,
-          site: SITE,
-          inAccount: 'true',
-          onDevice: 'true',
+          id: ID,
+          inAccountStore: true,
+          inProfileStore: true,
         });
-        Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-        await flushTasks();
+        entry.password = PASSWORD;
+        entry.note = NOTE;
+
+        const page = await loadViewPage(entry);
 
         page.shadowRoot!.querySelector<HTMLButtonElement>(
                             '#deleteButton')!.click();
@@ -483,45 +339,65 @@ suite('PasswordViewTest', function() {
 
         const dialog = page.shadowRoot!.querySelector('password-remove-dialog');
         assertTrue(!!dialog);
-        assertDeepEquals(
-            createMultiStorePasswordEntry(
-                {url: SITE, username: USERNAME, deviceId: 0, accountId: 1}),
-            dialog.duplicatedPassword);
+        assertDeepEquals(entry, dialog.duplicatedPassword);
 
         // click delete on the dialog.
         dialog.$.removeButton.click();
-        await passwordManager.whenCalled('removeSavedPasswords');
+        const {id, fromStores} =
+            await passwordManager.whenCalled('removeSavedPassword');
+        assertEquals(ID, id);
+        assertEquals(
+            chrome.passwordsPrivate.PasswordStoreSet.DEVICE_AND_ACCOUNT,
+            fromStores);
         await flushTasks();
 
         assertEquals(
             routes.PASSWORDS.path, Router.getInstance().getCurrentRoute().path);
         const pageParams = Router.getInstance().getQueryParameters();
-        assertEquals('true', pageParams.get('removedFromAccount'));
-        assertEquals('true', pageParams.get('removedFromDevice'));
+        assertEquals(
+            chrome.passwordsPrivate.PasswordStoreSet.DEVICE_AND_ACCOUNT,
+            pageParams.get('removedFromStores'));
       });
 
   test('Copy password button shows the copy toast', async function() {
-    const passwordList = [
-      createPasswordEntry({url: SITE, username: USERNAME, id: ID}),
-    ];
+    const passwordEntry =
+        createPasswordEntry({url: SITE, username: USERNAME, id: ID});
 
-    passwordManager.setPlaintextPassword(PASSWORD);
-    passwordManager.data.passwords = passwordList;
-    const page = document.createElement('password-view');
-    document.body.appendChild(page);
-    const params = new URLSearchParams({
-      username: USERNAME,
-      site: SITE,
-    });
-    Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
-    await flushTasks();
+    const page = await loadViewPage(passwordEntry);
 
     const copyButton = page.shadowRoot!.querySelector<HTMLButtonElement>(
         '#copyPasswordButton')!;
     assertFalse(page.$.toast.open);
+
+    passwordManager.setPlaintextPassword(PASSWORD);
     copyButton.click();
     await passwordManager.whenCalled('requestPlaintextPassword');
     await flushTasks();
     assertTrue(page.$.toast.open);
   });
+
+  test(
+      'When visibility state is hidden on page load, ' +
+          'credential is not requested until the page becomes visible',
+      async function() {
+        let eventCount = 0;
+        const eventHandler = (_event: any) => {
+          eventCount += 1;
+        };
+        document.addEventListener('password-view-page-requested', eventHandler);
+        Object.defineProperty(
+            document, 'visibilityState', {value: 'hidden', writable: true});
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        const page = await loadViewPage();
+
+        assertEquals(0, eventCount);
+        assertFalse(!!page.credential);
+
+        Object.defineProperty(
+            document, 'visibilityState', {value: 'visible', writable: true});
+        document.dispatchEvent(new Event('visibilitychange'));
+        await flushTasks();
+        assertEquals(1, eventCount);
+      });
 });

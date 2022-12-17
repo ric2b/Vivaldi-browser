@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
+
 #import "ui/views/widget/native_widget_mac.h"
 
 #import <Cocoa/Cocoa.h>
@@ -56,10 +58,6 @@ const std::string kDummyWindowRestorationData = "e30=";
 
 @interface ConstrainedWindowAnimationBase (TestingAPI)
 - (void)setWindowStateForEnd;
-@end
-
-@interface NSWindow (PrivateAPI)
-- (BOOL)_isTitleHidden;
 @end
 
 // Test NSWindow that provides hooks via method overrides to verify behavior.
@@ -122,7 +120,7 @@ class BridgedNativeWidgetTestApi {
   }
 
  private:
-  remote_cocoa::NativeWidgetNSWindowBridge* bridge_;
+  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge> bridge_;
 };
 
 // Custom native_widget to create a NativeWidgetMacTestWindow.
@@ -247,7 +245,7 @@ class WidgetChangeObserver : public TestWidgetObserver {
   int lost_visible_count_ = 0;
   int target_gained_visible_count_ = 0;
   int target_lost_visible_count_ = 0;
-  base::RunLoop* run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> run_loop_ = nullptr;
 };
 
 // This class gives public access to the protected ctor of
@@ -276,12 +274,12 @@ class CustomTooltipView : public View {
   }
 
   View* GetTooltipHandlerForPoint(const gfx::Point& point) override {
-    return tooltip_handler_ ? tooltip_handler_ : this;
+    return tooltip_handler_ ? tooltip_handler_.get() : this;
   }
 
  private:
   std::u16string tooltip_;
-  View* tooltip_handler_;  // Weak
+  raw_ptr<View> tooltip_handler_;  // Weak
 };
 
 // A Widget subclass that exposes counts to calls made to OnMouseEvent().
@@ -419,7 +417,7 @@ class PaintCountView : public View {
  private:
   int paint_count_ = 0;
   int target_paint_count_ = 0;
-  base::RunLoop* run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> run_loop_ = nullptr;
 };
 
 
@@ -1091,7 +1089,7 @@ class ScopedSwizzleWaiter {
   static ScopedSwizzleWaiter* instance_;
 
   base::mac::ScopedObjCClassSwizzler swizzler_;
-  base::RunLoop* run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> run_loop_ = nullptr;
   bool method_called_ = false;
 };
 
@@ -1734,33 +1732,9 @@ TEST_F(NativeWidgetMacTest, NativeProperties) {
   regular_widget->CloseNow();
 }
 
-NSData* WindowContentsAsTIFF(NSWindow* window) {
-  NSView* frame_view = [[window contentView] superview];
-  EXPECT_TRUE(frame_view);
-
-  // Inset to mask off left and right edges which vary in HighDPI.
-  NSRect bounds = NSInsetRect([frame_view bounds], 4, 0);
-
-  // On 10.6, the grippy changes appearance slightly when painted the second
-  // time in a textured window. Since this test cares about the window title,
-  // cut off the bottom of the window.
-  bounds.size.height -= 40;
-  bounds.origin.y += 40;
-
-  NSBitmapImageRep* bitmap =
-      [frame_view bitmapImageRepForCachingDisplayInRect:bounds];
-  EXPECT_TRUE(bitmap);
-
-  [frame_view cacheDisplayInRect:bounds toBitmapImageRep:bitmap];
-  NSData* tiff = [bitmap TIFFRepresentation];
-  EXPECT_TRUE(tiff);
-  return tiff;
-}
-
 class CustomTitleWidgetDelegate : public WidgetDelegate {
  public:
-  CustomTitleWidgetDelegate(Widget* widget)
-      : widget_(widget), should_show_title_(true) {}
+  explicit CustomTitleWidgetDelegate(Widget* widget) : widget_(widget) {}
 
   CustomTitleWidgetDelegate(const CustomTitleWidgetDelegate&) = delete;
   CustomTitleWidgetDelegate& operator=(const CustomTitleWidgetDelegate&) =
@@ -1776,52 +1750,10 @@ class CustomTitleWidgetDelegate : public WidgetDelegate {
   const Widget* GetWidget() const override { return widget_; }
 
  private:
-  Widget* widget_;
+  raw_ptr<Widget> widget_;
   std::u16string title_;
-  bool should_show_title_;
+  bool should_show_title_ = true;
 };
-
-// Test that undocumented title-hiding API we're using does the job.
-TEST_F(NativeWidgetMacTest, DISABLED_DoesHideTitle) {
-  // Same as CreateTopLevelPlatformWidget but with a custom delegate.
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
-  Widget* widget = new Widget;
-  params.native_widget =
-      CreatePlatformNativeWidgetImpl(widget, kStubCapture, nullptr);
-  CustomTitleWidgetDelegate delegate(widget);
-  params.delegate = &delegate;
-  params.bounds = gfx::Rect(0, 0, 800, 600);
-  widget->Init(std::move(params));
-  widget->Show();
-
-  NSWindow* ns_window = widget->GetNativeWindow().GetNativeNSWindow();
-  // Disable color correction so we can read unmodified values from the bitmap.
-  [ns_window setColorSpace:[NSColorSpace sRGBColorSpace]];
-
-  EXPECT_EQ(std::u16string(), delegate.GetWindowTitle());
-  EXPECT_NSEQ(@"", [ns_window title]);
-  NSData* empty_title_data = WindowContentsAsTIFF(ns_window);
-
-  delegate.set_title(u"This is a title");
-  widget->UpdateWindowTitle();
-  NSData* this_title_data = WindowContentsAsTIFF(ns_window);
-
-  // The default window with a title should look different from the
-  // window with an empty title.
-  EXPECT_NSNE(empty_title_data, this_title_data);
-
-  delegate.set_should_show_title(false);
-  delegate.set_title(u"This is another title");
-  widget->UpdateWindowTitle();
-  NSData* hidden_title_data = WindowContentsAsTIFF(ns_window);
-
-  // With our magic setting, the window with a title should look the
-  // same as the window with an empty title.
-  EXPECT_TRUE([ns_window _isTitleHidden]);
-  EXPECT_NSEQ(empty_title_data, hidden_title_data);
-
-  widget->CloseNow();
-}
 
 // Test calls to invalidate the shadow when composited frames arrive.
 TEST_F(NativeWidgetMacTest, InvalidateShadow) {
@@ -2019,9 +1951,10 @@ class NativeWidgetMacFullKeyboardAccessTest : public NativeWidgetMacTest {
     NativeWidgetMacTest::TearDown();
   }
 
-  Widget* widget_ = nullptr;
-  remote_cocoa::NativeWidgetNSWindowBridge* bridge_ = nullptr;
-  ui::test::ScopedFakeFullKeyboardAccess* fake_full_keyboard_access_ = nullptr;
+  raw_ptr<Widget> widget_ = nullptr;
+  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge> bridge_ = nullptr;
+  raw_ptr<ui::test::ScopedFakeFullKeyboardAccess> fake_full_keyboard_access_ =
+      nullptr;
 };
 
 // Ensure that calling SetSize doesn't change the origin.
@@ -2077,6 +2010,31 @@ TEST_F(NativeWidgetMacTest, SetSizeDoesntChangeOrigin) {
   EXPECT_EQ(child_window->GetWindowBoundsInScreen(), child_window_rect);
 
   parent->CloseNow();
+}
+
+// Tests that tooltip widgets get the correct accessibilty role so that they're
+// not announced as windows by VoiceOver.
+TEST_F(NativeWidgetMacTest, AccessibilityRole) {
+  {
+    NativeWidgetMacTestWindow* window;
+
+    Widget::InitParams init_params =
+        CreateParams(Widget::InitParams::TYPE_WINDOW);
+    Widget* widget =
+        CreateWidgetWithTestWindow(std::move(init_params), &window);
+    ASSERT_EQ([window accessibilityRole], NSAccessibilityWindowRole);
+    widget->CloseNow();
+  }
+  {
+    NativeWidgetMacTestWindow* window;
+
+    Widget::InitParams init_params =
+        CreateParams(Widget::InitParams::TYPE_TOOLTIP);
+    Widget* widget =
+        CreateWidgetWithTestWindow(std::move(init_params), &window);
+    ASSERT_EQ([window accessibilityRole], NSAccessibilityHelpTagRole);
+    widget->CloseNow();
+  }
 }
 
 // Test that updateFullKeyboardAccess method on BridgedContentView correctly
@@ -2152,7 +2110,7 @@ class NativeWidgetMacViewsOrderTest : public WidgetTest {
     NativeHostHolder(NativeViewHost* host)
         : host_(host), view_([[NSView alloc] init]) {}
 
-    NativeViewHost* const host_;
+    const raw_ptr<NativeViewHost> host_;
     base::scoped_nsobject<NSView> view_;
   };
 
@@ -2166,7 +2124,7 @@ class NativeWidgetMacViewsOrderTest : public WidgetTest {
         [[widget_->GetNativeView().GetNativeNSView() subviews] copy]);
 
     native_host_parent_ = new View();
-    widget_->GetContentsView()->AddChildView(native_host_parent_);
+    widget_->GetContentsView()->AddChildView(native_host_parent_.get());
 
     const size_t kNativeViewCount = 3;
     for (size_t i = 0; i < kNativeViewCount; ++i) {
@@ -2192,8 +2150,8 @@ class NativeWidgetMacViewsOrderTest : public WidgetTest {
 
   NSArray<NSView*>* GetStartingSubviews() { return starting_subviews_; }
 
-  Widget* widget_ = nullptr;
-  View* native_host_parent_ = nullptr;
+  raw_ptr<Widget> widget_ = nullptr;
+  raw_ptr<View> native_host_parent_ = nullptr;
   std::vector<std::unique_ptr<NativeHostHolder>> hosts_;
   base::scoped_nsobject<NSArray<NSView*>> starting_subviews_;
 };

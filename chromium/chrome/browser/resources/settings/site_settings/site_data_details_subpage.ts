@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -31,7 +31,7 @@ const categoryLabels: {[key: string]: string} = {
   local_storage: loadTimeData.getString('cookieLocalStorage'),
   service_worker: loadTimeData.getString('cookieServiceWorker'),
   shared_worker: loadTimeData.getString('cookieSharedWorker'),
-  media_license: loadTimeData.getString('cookieMediaLicense'),
+  quota: loadTimeData.getString('cookieQuotaStorage'),
 };
 
 /**
@@ -106,15 +106,15 @@ export class SiteDataDetailsSubpageElement extends
     }
     this.browserProxy_.getCookieDetails(this.site_)
         .then(
-            (cookies: Array<CookieDetails>) => this.onCookiesLoaded_(cookies),
+            (cookies: CookieDetails[]) => this.onCookiesLoaded_(cookies),
             () => this.onCookiesLoadFailed_());
   }
 
-  private getCookieNodes_(node: CookieDetails): Array<CookieDataForDisplay> {
+  private getCookieNodes_(node: CookieDetails): CookieDataForDisplay[] {
     return getCookieData(node);
   }
 
-  private onCookiesLoaded_(cookies: Array<CookieDetails>) {
+  private onCookiesLoaded_(cookies: CookieDetails[]) {
     this.entries_ = cookies.map(c => {
       // Set up flag for expanding cookie details.
       (c as CookieDetails & {expanded_: boolean}).expanded_ = false;
@@ -139,9 +139,6 @@ export class SiteDataDetailsSubpageElement extends
     // cookie to differentiate them.
     if (item.type === 'cookie') {
       return item.title;
-    }
-    if (item.type === 'quota') {
-      return item.totalUsage;
     }
     return categoryLabels[item.type];
   }

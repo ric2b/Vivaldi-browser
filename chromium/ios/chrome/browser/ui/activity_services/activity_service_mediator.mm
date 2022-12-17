@@ -43,7 +43,9 @@
 
 @interface ActivityServiceMediator ()
 
-@property(nonatomic, weak) id<BrowserCommands, FindInPageCommands> handler;
+@property(nonatomic, weak)
+    id<BrowserCommands, BrowserCoordinatorCommands, FindInPageCommands>
+        handler;
 
 @property(nonatomic, weak) id<BookmarksCommands> bookmarksHandler;
 
@@ -64,7 +66,9 @@
 
 #pragma mark - Public
 
-- (instancetype)initWithHandler:(id<BrowserCommands, FindInPageCommands>)handler
+- (instancetype)initWithHandler:(id<BrowserCommands,
+                                    BrowserCoordinatorCommands,
+                                    FindInPageCommands>)handler
                bookmarksHandler:(id<BookmarksCommands>)bookmarksHandler
             qrGenerationHandler:(id<QRGenerationCommands>)qrGenerationHandler
                     prefService:(PrefService*)prefService
@@ -100,6 +104,7 @@
         [[ChromeActivityURLSource alloc] initWithShareURL:data.shareNSURL
                                                   subject:data.title];
     activityURLSource.thumbnailGenerator = data.thumbnailGenerator;
+    activityURLSource.linkMetadata = data.linkMetadata;
     [items addObject:activityURLSource];
   }
 
@@ -198,6 +203,14 @@
   RecordScenarioInitiated(scenario);
 }
 
+- (void)recordShareChromeFinishedInPrefs {
+  PrefService* prefs = self.prefService;
+  DCHECK(prefs);
+  int count = prefs->GetInteger(prefs::kIosShareChromeCount);
+  prefs->SetInteger(prefs::kIosShareChromeCount, count + 1);
+  prefs->SetTime(prefs::kIosShareChromeLastShare, base::Time::Now());
+}
+
 - (void)shareFinishedWithScenario:(ActivityScenario)scenario
                      activityType:(NSString*)activityType
                         completed:(BOOL)completed {
@@ -207,6 +220,9 @@
     activity_type_util::RecordMetricForActivity(type);
     RecordActivityForScenario(type, scenario);
     [self.promoScheduler logUserFinishedActivityFlow];
+    if (ActivityScenario::ShareChrome == scenario) {
+      [self recordShareChromeFinishedInPrefs];
+    }
   } else {
     // Share action was cancelled.
     base::RecordAction(base::UserMetricsAction("MobileShareMenuCancel"));

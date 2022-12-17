@@ -12,6 +12,7 @@ const USER_ACTION_LAUNCH_OOBE_GUEST = 'launch-oobe-guest';
 const USER_ACTION_LOCAL_STATE_POWERWASH = 'local-state-error-powerwash';
 const USER_ACTION_SHOW_CAPTIVE_PORTAL = 'show-captive-portal';
 const USER_ACTION_OPEN_INTERNET_DIALOG = 'open-internet-dialog';
+const USER_ACTION_OFFLINE_LOGIN = 'offline-login';
 
 /**
  * Possible UI states of the error screen.
@@ -194,16 +195,19 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
    * @suppress {checkTypes} isOneOf_ allows arbitrary number of arguments.
    */
   getDialogTitle_() {
-    if (this.isOneOf_(this.errorState_, 'portal', 'offline')) {
-      return this.i18n('captivePortalTitle');
+    if (this.isOneOf_(this.uiState_, 'ui-state-rollback-error')) {
+      return this.i18n('rollbackErrorTitle');
+    } else if (this.isOneOf_(this.uiState_, 'ui-state-auto-enrollment-error') &&
+        this.isOneOf_(this.errorState_, 'offline', 'portal', 'proxy')) {
+      return this.i18n('autoEnrollmentErrorMessageTitle');
     } else if (
         this.isOneOf_(this.uiState_, 'ui-state-local-state-error') ||
         this.isOneOf_(this.errorState_, 'proxy', 'auth-ext-timeout')) {
       return this.i18n('loginErrorTitle');
     } else if (this.isOneOf_(this.errorState_, 'kiosk-online')) {
       return this.i18n('kioskOnlineTitle');
-    } else if (this.isOneOf_(this.uiState_, 'ui-state-rollback-error')) {
-      return this.i18n('rollbackErrorTitle');
+    } else if (this.isOneOf_(this.errorState_, 'portal', 'offline')) {
+      return this.i18n('captivePortalTitle');
     } else {
       return '';
     }
@@ -258,7 +262,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
   }
 
   continueButtonClicked() {
-    chrome.send('continueAppLaunch');
+    this.userActed('continue-app-launch');
   }
 
   okButtonClicked() {
@@ -325,20 +329,6 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
    */
   updateLocalizedContent() {
     this.updateElementWithStringAndAnchorTag_(
-        'auto-enrollment-offline-message-text',
-        'autoEnrollmentOfflineMessageBody', {
-          substitutions: [
-            loadTimeData.getString('deviceType'),
-            '<b>' + this.currentNetworkName_ + '</b>'
-          ]
-        },
-        'auto-enrollment-learn-more');
-    this.shadowRoot.querySelector('#auto-enrollment-learn-more').onclick =
-        () => {
-          chrome.send('launchHelpApp', [HELP_TOPIC_AUTO_ENROLLMENT]);
-        };
-
-    this.updateElementWithStringAndAnchorTag_(
         'captive-portal-message-text', 'captivePortalMessage',
         {substitutions: ['<b>' + this.currentNetworkName_ + '</b>']},
         'captive-portal-fix-link');
@@ -387,7 +377,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
     this.updateElementWithStringAndAnchorTag_(
         'error-offline-login', 'offlineLogin', {}, 'error-offline-login-link');
     this.shadowRoot.querySelector('#error-offline-login-link').onclick = () => {
-      chrome.send('offlineLogin');
+      this.userActed(USER_ACTION_OFFLINE_LOGIN);
     };
   }
 

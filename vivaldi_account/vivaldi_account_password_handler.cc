@@ -3,7 +3,6 @@
 #include "vivaldi_account/vivaldi_account_password_handler.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store.h"
 
@@ -14,12 +13,10 @@ constexpr char kSyncOrigin[] = "vivaldi://settings/sync";
 
 namespace vivaldi {
 
-VivaldiAccountPasswordHandler::VivaldiAccountPasswordHandler(Profile* profile,
-                                                             Delegate* delegate)
-    : delegate_(delegate),
-      password_store_(PasswordStoreFactory::GetForProfile(
-          profile,
-          ServiceAccessType::IMPLICIT_ACCESS)) {
+VivaldiAccountPasswordHandler::VivaldiAccountPasswordHandler(
+    scoped_refptr<password_manager::PasswordStoreInterface> password_store,
+    Delegate* delegate)
+    : delegate_(delegate), password_store_(std::move(password_store)) {
   UpdatePassword();
   if (password_store_)
     password_store_->AddObserver(this);

@@ -72,6 +72,12 @@ class FontDataCache final {
   USING_FAST_MALLOC(FontDataCache);
 
  public:
+#if defined(USE_PARALLEL_TEXT_SHAPING)
+  static FontDataCache& SharedInstance();
+#endif
+
+  static std::unique_ptr<FontDataCache> Create();
+
   FontDataCache() = default;
   FontDataCache(const FontDataCache&) = delete;
   FontDataCache& operator=(const FontDataCache&) = delete;
@@ -99,6 +105,7 @@ class FontDataCache final {
   Cache cache_ GUARDED_BY(lock_);
   LinkedHashSet<scoped_refptr<SimpleFontData>> inactive_font_data_
       GUARDED_BY(lock_);
+  bool is_purging_ = false;
 };
 
 }  // namespace blink

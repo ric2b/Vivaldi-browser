@@ -86,12 +86,16 @@ class CONTENT_EXPORT HidDelegate {
   // object.
   virtual void AddObserver(BrowserContext* browser_context,
                            Observer* observer) = 0;
-  virtual void RemoveObserver(Observer* observer) = 0;
+  virtual void RemoveObserver(BrowserContext* browser_context,
+                              Observer* observer) = 0;
 
   // Returns true if |origin| is allowed to bypass the HID blocklist and
   // access reports contained in FIDO collections.
   virtual bool IsFidoAllowedForOrigin(BrowserContext* browser_context,
                                       const url::Origin& origin) = 0;
+
+  // Returns true if |origin| is allowed to access HID from service workers.
+  virtual bool IsServiceWorkerAllowedForOrigin(const url::Origin& origin) = 0;
 
   // Gets the device info for a particular device, identified by its guid.
   virtual const device::mojom::HidDeviceInfo* GetDeviceInfo(

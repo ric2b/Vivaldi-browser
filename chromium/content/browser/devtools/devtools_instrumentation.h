@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "content/browser/devtools/devtools_throttle_handle.h"
-#include "content/browser/prerender/prerender_host.h"
+#include "content/browser/preloading/prerender/prerender_host.h"
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/certificate_request_result_type.h"
@@ -80,14 +80,17 @@ namespace devtools_instrumentation {
 
 // If this function caused the User-Agent header to be overridden,
 // `devtools_user_agent_overridden` will be set to true; otherwise, it will be
-// set to false.
+// set to false. If this function caused the Accept-Language header to be
+// overridden, `devtools_accept_language_overridden` will be set to true;
+// otherwise, it will be set to false.
 void ApplyNetworkRequestOverrides(
     FrameTreeNode* frame_tree_node,
     blink::mojom::BeginNavigationParams* begin_params,
     bool* report_raw_headers,
     absl::optional<std::vector<net::SourceStream::SourceType>>*
         devtools_accepted_stream_types,
-    bool* devtools_user_agent_overridden);
+    bool* devtools_user_agent_overridden,
+    bool* devtools_accept_language_overridden);
 
 // Returns true if devtools want |*override_out| to be used.
 // (A true return and |*override_out| being nullopt means no user agent client
@@ -142,6 +145,23 @@ bool WillCreateURLLoaderFactoryInternal(
         target_factory_receiver,
     network::mojom::URLLoaderFactoryOverridePtr* factory_override);
 
+void OnPrefetchRequestWillBeSent(FrameTreeNode* frame_tree_node,
+                                 const std::string& request_id,
+                                 const GURL& initiator,
+                                 const network::ResourceRequest& request);
+void OnPrefetchResponseReceived(FrameTreeNode* frame_tree_node,
+                                const std::string& request_id,
+                                const GURL& url,
+                                const network::mojom::URLResponseHead& head);
+void OnPrefetchRequestComplete(
+    FrameTreeNode* frame_tree_node,
+    const std::string& request_id,
+    const network::URLLoaderCompletionStatus& status);
+void OnPrefetchBodyDataReceived(FrameTreeNode* frame_tree_node,
+                                const std::string& request_id,
+                                const std::string& body,
+                                bool is_base64_encoded);
+
 void OnResetNavigationRequest(NavigationRequest* navigation_request);
 void OnNavigationRequestWillBeSent(const NavigationRequest& navigation_request);
 void OnNavigationResponseReceived(
@@ -161,9 +181,15 @@ void BackForwardCacheNotUsed(
     const BackForwardCacheCanStoreTreeResult* tree_result);
 
 void DidActivatePrerender(const NavigationRequest& nav_request);
+
+// This function reports cancellation status to DevTools with the
+// `reason_details`, which is used to give users more information about the
+// cancellation details, and reason_details will be formatted for display in
+// the DevTools. See the DevTools implementation for the format.
 void DidCancelPrerender(const GURL& prerendering_url,
                         FrameTreeNode* ftn,
-                        PrerenderHost::FinalStatus status);
+                        PrerenderHost::FinalStatus status,
+                        const std::string& reason_details);
 
 void OnSignedExchangeReceived(
     FrameTreeNode* frame_tree_node,
@@ -244,6 +270,11 @@ void PortalActivated(RenderFrameHostImpl* render_frame_host_impl);
 void FencedFrameCreated(
     base::SafeRef<RenderFrameHostImpl> owner_render_frame_host,
     FencedFrame* fenced_frame);
+
+// Tells tracing that process `pid` is being used for an auction worklet
+// associated to `owner`.
+void DidCreateProcessForAuctionWorklet(RenderFrameHostImpl* owner,
+                                       base::ProcessId pid);
 
 void ReportCookieIssue(
     RenderFrameHostImpl* render_frame_host_impl,

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/feature_list.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -129,6 +130,21 @@ FeaturePromoSpecification FeaturePromoSpecification::CreateForTutorialPromo(
 }
 
 // static
+FeaturePromoSpecification FeaturePromoSpecification::CreateForCustomAction(
+    const base::Feature& feature,
+    ui::ElementIdentifier anchor_element_id,
+    int body_text_string_id,
+    int custom_action_string_id,
+    CustomActionCallback custom_action_callback) {
+  FeaturePromoSpecification spec(&feature, PromoType::kCustomAction,
+                                 anchor_element_id, body_text_string_id);
+  spec.custom_action_caption_ =
+      l10n_util::GetStringUTF16(custom_action_string_id);
+  spec.custom_action_callback_ = custom_action_callback;
+  return spec;
+}
+
+// static
 FeaturePromoSpecification FeaturePromoSpecification::CreateForLegacyPromo(
     const base::Feature* feature,
     ui::ElementIdentifier anchor_element_id,
@@ -163,20 +179,40 @@ FeaturePromoSpecification& FeaturePromoSpecification::SetAnchorElementFilter(
   return *this;
 }
 
+FeaturePromoSpecification& FeaturePromoSpecification::SetInAnyContext(
+    bool in_any_context) {
+  in_any_context_ = in_any_context;
+  return *this;
+}
+
 FeaturePromoSpecification& FeaturePromoSpecification::SetDemoPageInfo(
     DemoPageInfo demo_page_info) {
   demo_page_info_ = std::move(demo_page_info);
   return *this;
 }
 
+FeaturePromoSpecification& FeaturePromoSpecification::SetCustomActionIsDefault(
+    bool custom_action_is_default) {
+  DCHECK(!custom_action_callback_.is_null());
+  custom_action_is_default_ = custom_action_is_default;
+  return *this;
+}
+
 ui::TrackedElement* FeaturePromoSpecification::GetAnchorElement(
     ui::ElementContext context) const {
   auto* const element_tracker = ui::ElementTracker::GetElementTracker();
-  return anchor_element_filter_ ? anchor_element_filter_.Run(
-                                      element_tracker->GetAllMatchingElements(
-                                          anchor_element_id_, context))
-                                : element_tracker->GetFirstMatchingElement(
-                                      anchor_element_id_, context);
+  if (anchor_element_filter_) {
+    return anchor_element_filter_.Run(
+        in_any_context_ ? element_tracker->GetAllMatchingElementsInAnyContext(
+                              anchor_element_id_)
+                        : element_tracker->GetAllMatchingElements(
+                              anchor_element_id_, context));
+  } else {
+    return in_any_context_
+               ? element_tracker->GetElementInAnyContext(anchor_element_id_)
+               : element_tracker->GetFirstMatchingElement(anchor_element_id_,
+                                                          context);
+  }
 }
 
 }  // namespace user_education

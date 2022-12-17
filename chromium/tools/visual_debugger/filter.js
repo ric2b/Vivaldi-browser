@@ -27,10 +27,12 @@ class Source {
 //
 class DrawCall {
   constructor(json) {
-    // e.g. {"drawindex":"44","option":{"alpha":"1.000000","color":"#ffffff"}
-    // ,"pos":"0.000000,763.000000","size":"255x5","source_index":"0"}
+    // e.g. {"drawindex":"44", option":{"alpha":"1.000000","color":"#ffffff"}
+    // ,"pos":"0.000000,763.000000","size":"255x5","source_index":"0",
+    // "thread_id":"123456"}
     this.sourceIndex_ = parseInt(json.source_index);
     this.drawIndex_ = parseInt(json.drawindex);
+    this.threadId_ = parseInt(json.thread_id);
     this.size_ = {
       width: json.size[0],
       height: json.size[1],
@@ -43,6 +45,27 @@ class DrawCall {
     if (json.option) {
       this.color_ = json.option.color;
       this.alpha_ = DrawCall.alphaIntToHex(json.option.alpha)
+    }
+    this.buffer_id = json.buff_id;
+    if (json.uv_size && json.uv_pos) {
+      this.uv_size = {
+        width: json.uv_size[0],
+        height: json.uv_size[1],
+      };
+      this.uv_pos = {
+        x: json.uv_pos[0],
+        y: json.uv_pos[1],
+      };
+    }
+    else {
+      this.uv_size = {
+        width: 1.0,
+        height: 1.0,
+      };
+      this.uv_pos = {
+        x: 0.0,
+        y: 0.0,
+      };
     }
   }
 
@@ -60,7 +83,7 @@ class DrawCall {
     return value.toString(16).padStart(2, '0');
   }
 
-  draw(canvas, scale) {
+  draw(context, buffer_map, threadConfig) {
     let filter = undefined;
     const filters = Filter.enabledInstances();
     // TODO: multiple filters can match the same draw call. For now, let's just
@@ -72,22 +95,52 @@ class DrawCall {
       }
     }
 
-    // No filters match this draw. So skip.
-    if (!filter) return;
-    if (!filter.shouldDraw) return;
+    var color;
+    var alpha;
+    // If thread drawing is overriding filters.
+    if (threadConfig.overrideFilters) {
+      color = threadConfig.threadColor;
+      alpha = threadConfig.threadAlpha;
+    }
+    // Otherwise, follow filter draw options.
+    else {
+      // No filters match this draw. So skip.
+      if (!filter) return;
+      if (!filter.shouldDraw) return;
 
-    var color = (filter && filter.drawColor) ? filter.drawColor : this.color_
-    var alpha = (filter && filter.fillAlpha) ?
-    DrawCall.alphaFloatToHex(parseFloat(filter.fillAlpha) / 100) : this.alpha_;
-    if (color && alpha) {
-      canvas.fillStyle = color + alpha;
-      canvas.fillRect(this.pos_.x * scale, this.pos_.y * scale,
-         this.size_.width * scale, this.size_.height * scale);
+      color = (filter && filter.drawColor) ? filter.drawColor : this.color_
+      alpha = (filter && filter.fillAlpha) ?
+      DrawCall.alphaFloatToHex(parseFloat(filter.fillAlpha) / 100) :
+                                                              this.alpha_;
     }
 
-    canvas.strokeStyle = color;
-    canvas.strokeRect(this.pos_.x * scale, this.pos_.y * scale,
-      this.size_.width * scale, this.size_.height * scale);
+    if (color && alpha) {
+      context.fillStyle = color + alpha;
+      context.fillRect(this.pos_.x,
+                       this.pos_.y,
+                       this.size_.width,
+                       this.size_.height);
+    }
+
+    context.strokeStyle = color;
+    context.strokeRect(this.pos_.x,
+                       this.pos_.y,
+                       this.size_.width,
+                       this.size_.height);
+    var buff_id = this.buffer_id.toString();
+    if(buffer_map[buff_id]) {
+      var buff_width = buffer_map[buff_id].width;
+      var buff_height = buffer_map[buff_id].height;
+      context.drawImage(buffer_map[buff_id],
+                        this.uv_pos.x * buff_width,
+                        this.uv_pos.y * buff_height,
+                        this.uv_size.width * buff_width,
+                        this.uv_size.height * buff_height,
+                        this.pos_.x,
+                        this.pos_.y,
+                        this.size_.width,
+                        this.size_.height);
+    }
   }
 };
 

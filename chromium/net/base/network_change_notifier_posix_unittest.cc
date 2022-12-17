@@ -27,7 +27,7 @@ class NetworkChangeNotifierPosixTest : public testing::Test {
     // hold a TaskRunner handle to |task_environment_| and crash if any
     // subsequent tests use it.
     dns_config_notifier_ = std::make_unique<SystemDnsConfigChangeNotifier>();
-    notifier_.reset(new NetworkChangeNotifierPosix(
+    notifier_ = base::WrapUnique(new NetworkChangeNotifierPosix(
         NetworkChangeNotifier::CONNECTION_UNKNOWN,
         NetworkChangeNotifier::SUBTYPE_UNKNOWN, dns_config_notifier_.get()));
     auto dns_config_service = std::make_unique<TestDnsConfigService>();
@@ -131,13 +131,13 @@ TEST_F(NetworkChangeNotifierPosixTest, OnDNSChanged) {
   FastForwardUntilIdle();
   EXPECT_EQ(1, observer.dns_changes());
 
-  config.nameservers.push_back(IPEndPoint(IPAddress(2, 3, 4, 5), 234));
+  config.nameservers.emplace_back(IPAddress(2, 3, 4, 5), 234);
   dns_config_service()->SetConfigForRefresh(config);
   notifier()->OnDNSChanged();
   FastForwardUntilIdle();
   EXPECT_EQ(2, observer.dns_changes());
 
-  config.nameservers.push_back(IPEndPoint(IPAddress(3, 4, 5, 6), 235));
+  config.nameservers.emplace_back(IPAddress(3, 4, 5, 6), 235);
   dns_config_service()->SetConfigForRefresh(config);
   notifier()->OnDNSChanged();
   FastForwardUntilIdle();

@@ -7,44 +7,46 @@ import {Origin} from 'chrome://resources/mojo/url/mojom/origin.mojom-webui.js';
 
 import {QuotaInternalsHandler} from './quota_internals.mojom-webui.js';
 
-type BucketTableEntry = {
-  'bucketId': bigint,
-  'storageKey': string,
-  'host': string,
-  'type': string,
-  'name': string,
-  'useCount': bigint,
-  'lastAccessed': Time,
-  'lastModified': Time,
-};
+enum StorageType {
+  TEMPORARY,
+  PERSISTENT,
+  SYNCABLE,
+}
 
-type GetDiskAvailabilityAndTempPoolSizeResult = {
-  totalSpace: bigint,
-  availableSpace: bigint,
-  tempPoolSize: bigint,
-};
+interface BucketTableEntry {
+  'bucketId': bigint;
+  'storageKey': string;
+  'type': StorageType;
+  'name': string;
+  'usage': bigint;
+  'useCount': bigint;
+  'lastAccessed': Time;
+  'lastModified': Time;
+}
 
-type GetHostUsageForInternalsResult = {
-  'hostUsage': bigint,
-};
+interface GetDiskAvailabilityAndTempPoolSizeResult {
+  totalSpace: bigint;
+  availableSpace: bigint;
+  tempPoolSize: bigint;
+}
 
-type GetGlobalUsageResult = {
-  usage: bigint,
-  unlimitedUsage: bigint,
-};
+interface GetGlobalUsageResult {
+  usage: bigint;
+  unlimitedUsage: bigint;
+}
 
-type GetStatisticsResult = {
+interface GetStatisticsResult {
   evictionStatistics: {
     'errors-on-getting-usage-and-quota': string,
     'evicted-buckets': string,
     'eviction-rounds': string,
     'skipped-eviction-rounds': string,
-  },
-};
+  };
+}
 
-type RetrieveBucketsTableResult = {
-  entries: BucketTableEntry[],
-};
+interface RetrieveBucketsTableResult {
+  entries: BucketTableEntry[];
+}
 
 function urlPort(url: URL): number {
   if (url.port) {
@@ -103,13 +105,6 @@ export class QuotaInternalsBrowserProxy {
 
   retrieveBucketsTable(): Promise<RetrieveBucketsTableResult> {
     return this.handler.retrieveBucketsTable();
-  }
-
-  async getHostUsageForInternals(host: string, storageType: string):
-      Promise<GetHostUsageForInternalsResult> {
-    const totalUsage = await this.handler.getHostUsageForInternals(
-        host, enumerateStorageType(storageType));
-    return totalUsage;
   }
 
   static getInstance(): QuotaInternalsBrowserProxy {

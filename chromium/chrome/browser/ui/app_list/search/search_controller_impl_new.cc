@@ -33,7 +33,7 @@
 #include "chrome/browser/ui/app_list/search/search_features.h"
 #include "chrome/browser/ui/app_list/search/search_metrics_observer.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
-#include "components/metrics/structured/structured_mojo_events.h"
+#include "components/metrics/structured/structured_events.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -193,29 +193,12 @@ void SearchControllerImplNew::InvokeResultAction(
   if (!result)
     return;
 
-  // In the general case, actions are forwarded to the RemovedResultsRanker.
-  // Currently only "remove" actions are supported (and not e.g. "append"
-  // actions).
-  //
-  // In the special case, actions are delegated to the result itself. This is
-  // when, for example, supported actions can be handled by a provider backend,
-  // as is the case with some actions for some Omnibox results. At the moment we
-  // are temporarily handling Omnibox result removal requests in the general
-  // case, using RemovedResultsRanker, because the omnibox autocomplete
-  // controller supports removal of zero-state results but not of non-zero state
-  // results.
-  //
-  // TODO(crbug.com/1272361): Call result->InvokeAction(action) for all Omnibox
-  // action requests, once the autocomplete controller supports removal of
-  // non-zero state results.
   if (action == ash::SearchResultActionType::kRemove) {
     ranker_->Remove(result);
     // We need to update the currently published results to not include the
     // just-removed result. Manually set the result as filtered and re-publish.
     result->scoring().filter = true;
     Publish();
-  } else if (result->result_type() == ash::AppListSearchResultType::kOmnibox) {
-    result->InvokeAction(action);
   }
 }
 
@@ -361,20 +344,6 @@ ChromeSearchResult* SearchControllerImplNew::FindSearchResult(
   return nullptr;
 }
 
-void SearchControllerImplNew::OnSearchResultsImpressionMade(
-    const std::u16string& trimmed_query,
-    const ash::SearchResultIdWithPositionIndices& results,
-    int launched_index) {
-  if (trimmed_query.empty()) {
-    // Extract result types for logging.
-    std::vector<RankingItemType> result_types;
-    for (const auto& result : results) {
-      result_types.push_back(
-          RankingItemTypeFromSearchResult(*FindSearchResult(result.id)));
-    }
-  }
-}
-
 ChromeSearchResult* SearchControllerImplNew::GetResultByTitleForTest(
     const std::string& title) {
   std::u16string target_title = base::ASCIIToUTF16(title);
@@ -389,10 +358,6 @@ ChromeSearchResult* SearchControllerImplNew::GetResultByTitleForTest(
     }
   }
   return nullptr;
-}
-
-int SearchControllerImplNew::GetLastQueryLength() const {
-  return last_query_.size();
 }
 
 void SearchControllerImplNew::Train(LaunchData&& launch_data) {

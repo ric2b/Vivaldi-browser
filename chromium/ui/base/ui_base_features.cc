@@ -95,22 +95,27 @@ const base::Feature kLacrosResourcesFileSharing = {
     "LacrosResourcesFileSharing", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-// Enable or disable multitouch for virtual keyboard on ChromeOS.
-const base::Feature kVirtualKeyboardMultitouch{
-    "VirtualKeyboardMultitouch", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Update of the virtual keyboard settings UI as described in
 // https://crbug.com/876901.
 const base::Feature kInputMethodSettingsUiUpdate = {
     "InputMethodSettingsUiUpdate", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables percent-based scrolling for mousewheel and keyboard initiated
-// scrolls.
-const base::Feature kPercentBasedScrolling = {
-    "PercentBasedScrolling", base::FEATURE_DISABLED_BY_DEFAULT};
+// scrolls and impulse curve animations.
+const enum base::FeatureState kWindowsScrollingPersonalityDefaultStatus =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+static_assert(!BUILDFLAG(IS_MAC) ||
+                  (BUILDFLAG(IS_MAC) &&
+                   kWindowsScrollingPersonalityDefaultStatus ==
+                       base::FEATURE_DISABLED_BY_DEFAULT),
+              "Do not enable this on the Mac. The animation does not match the "
+              "system scroll animation curve to such an extent that it makes "
+              "Chromium stand out in a bad way.");
+const base::Feature kWindowsScrollingPersonality = {
+    "WindowsScrollingPersonality", kWindowsScrollingPersonalityDefaultStatus};
 
 bool IsPercentBasedScrollingEnabled() {
-  return base::FeatureList::IsEnabled(features::kPercentBasedScrolling);
+  return base::FeatureList::IsEnabled(features::kWindowsScrollingPersonality);
 }
 
 // Allows requesting unadjusted movement when entering pointerlock.
@@ -199,6 +204,8 @@ const base::Feature kElasticOverscroll = {"ElasticOverscroll",
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
+const base::Feature kAndroidPermissionsCache{"AndroidPermissionsCache",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 const char kElasticOverscrollType[] = "type";
 const char kElasticOverscrollTypeFilter[] = "filter";
 const char kElasticOverscrollTypeTransform[] = "transform";

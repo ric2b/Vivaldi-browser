@@ -66,7 +66,7 @@ public class IncognitoReauthManager {
             } else {
                 incognitoReauthCallback.onIncognitoReauthFailure();
             }
-        });
+        }, /*useLastValidAuth=*/false);
     }
     /**
      * @return A boolean indicating whether the platform version supports reauth and the
@@ -82,8 +82,7 @@ public class IncognitoReauthManager {
         // The implementation relies on {@link BiometricManager} which was introduced in API
         // level 29. Android Q is not supported due to a potential bug in BiometricPrompt.
         return (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                && ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.INCOGNITO_REAUTHENTICATION_FOR_ANDROID);
+                && ChromeFeatureList.sIncognitoReauthenticationForAndroid.isEnabled();
     }
 
     /**
@@ -93,17 +92,13 @@ public class IncognitoReauthManager {
      * @return A boolean indicating if Incognito re-authentication is possible or not.
      */
     public static boolean isIncognitoReauthEnabled(Profile profile) {
-        if (sIsIncognitoReauthFeatureAvailableForTesting != null) {
-            return sIsIncognitoReauthFeatureAvailableForTesting;
-        }
-
         return isIncognitoReauthFeatureAvailable()
                 && IncognitoReauthSettingUtils.isDeviceScreenLockEnabled()
                 && isIncognitoReauthSettingEnabled(profile);
     }
 
     @VisibleForTesting
-    public static void setIsIncognitoReauthFeatureAvailableForTesting(boolean isAvailable) {
+    public static void setIsIncognitoReauthFeatureAvailableForTesting(Boolean isAvailable) {
         sIsIncognitoReauthFeatureAvailableForTesting = isAvailable;
     }
 

@@ -6,6 +6,7 @@
 
 #include "base/big_endian.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/sys_byteorder.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -54,7 +55,7 @@ ScriptPromise FontMetadata::blob(ScriptState* script_state) {
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  Thread::Current()->GetTaskRunner()->PostTask(
+  Thread::Current()->GetDeprecatedTaskRunner()->PostTask(
       FROM_HERE, WTF::Bind(&FontMetadata::BlobImpl, WrapPersistent(resolver),
                            postscriptName_));
 
@@ -101,8 +102,6 @@ void FontMetadata::BlobImpl(ScriptPromiseResolver* resolver,
     // For reference, the UMA metric "Blink.Fonts.HarfBuzzFaceZeroCopyAccess"
     // indicates that the success rate is close to 100% on all platforms where
     // it applies, but failures do happen.
-    base::UmaHistogramBoolean("Blink.Fonts.DataAccess.StreamCreation", false);
-
     auto message = String::Format("Font data for %s could not be accessed.",
                                   postscriptName.Latin1().c_str());
     ScriptState::Scope scope(resolver->GetScriptState());
@@ -111,8 +110,8 @@ void FontMetadata::BlobImpl(ScriptPromiseResolver* resolver,
     return;
   }
 
-  base::UmaHistogramBoolean("Blink.Fonts.DataAccess.StreamCreation", true);
-  wtf_size_t font_byte_size = SafeCast<wtf_size_t>(stream->getLength());
+  wtf_size_t font_byte_size =
+      base::checked_cast<wtf_size_t>(stream->getLength());
 
   // TODO(https://crbug.com/1069900): This copies the font bytes. Lazy load and
   // stream the data instead.

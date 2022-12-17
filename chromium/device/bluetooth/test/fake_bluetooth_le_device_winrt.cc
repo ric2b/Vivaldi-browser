@@ -52,6 +52,10 @@ using ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
 using ABI::Windows::Devices::Enumeration::DeviceAccessStatus;
 using ABI::Windows::Devices::Enumeration::IDeviceAccessInformation;
 using ABI::Windows::Devices::Enumeration::IDeviceInformation;
+using ABI::Windows::Devices::Enumeration::DevicePairingKinds::
+    DevicePairingKinds_ConfirmOnly;
+using ABI::Windows::Devices::Enumeration::DevicePairingKinds::
+    DevicePairingKinds_ConfirmPinMatch;
 using ABI::Windows::Foundation::IAsyncOperation;
 using ABI::Windows::Foundation::ITypedEventHandler;
 using ABI::Windows::Foundation::Collections::IVectorView;
@@ -257,6 +261,18 @@ void FakeBluetoothLEDeviceWinrt::SimulateDevicePaired(bool is_paired) {
 void FakeBluetoothLEDeviceWinrt::SimulatePairingPinCode(std::string pin_code) {
   device_information_ = Make<FakeDeviceInformationWinrt>(
       Make<FakeDeviceInformationPairingWinrt>(std::move(pin_code)));
+}
+
+void FakeBluetoothLEDeviceWinrt::SimulateConfirmOnly() {
+  device_information_ = Make<FakeDeviceInformationWinrt>(
+      Make<FakeDeviceInformationPairingWinrt>(DevicePairingKinds_ConfirmOnly));
+}
+
+void FakeBluetoothLEDeviceWinrt::SimulateDisplayPin(
+    base::StringPiece display_pin) {
+  device_information_ =
+      Make<FakeDeviceInformationWinrt>(Make<FakeDeviceInformationPairingWinrt>(
+          DevicePairingKinds_ConfirmPinMatch, display_pin));
 }
 
 absl::optional<BluetoothUUID> FakeBluetoothLEDeviceWinrt::GetTargetGattService()

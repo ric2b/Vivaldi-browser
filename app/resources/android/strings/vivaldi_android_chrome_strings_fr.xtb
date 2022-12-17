@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
 <translation id="1397811292916898096">Rechercher avec <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Touch to Search est une fonctionnalité qui n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi. Elle envoie le mot sélectionné et la page actuelle en tant que contexte à Google Search. Vous pouvez la désactiver dans les <ph name="BEGIN_LINK" />paramètres<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Basculer entre les onglets privés et normaux</translation>
 <translation id="1644574205037202324">Historique</translation>
 <translation id="17513872634828108">Onglets ouverts</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nouvel onglet privé</translation>
 <translation id="4243710787042215766">Ouvrir dans un onglet privé</translation>
 <translation id="4526803704855831732">Onglets privés</translation>
+<translation id="4719086422742491124">Découvrez des sujets sur des sites Web sans quitter la page. Sélectionnez un ou plusieurs mots sur la page pour les rechercher.
+
+Touch to Search est une fonctionnalité qui n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi.</translation>
 <translation id="4759238208242260848">Téléchargements</translation>
 <translation id="4883379392681899581">Quitter le mode navigation privée</translation>
 <translation id="4943872375798546930">Aucun résultat</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542">Stockage <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Mode privé</translation>
 <translation id="5233638681132016545">Nouvel onglet</translation>
-<translation id="572328651809341494">Onglets récents</translation>
-<translation id="5840488417521835756">Découvrez les thèmes abordés sur les sites Web sans quitter la page. La fonctionnalité « Appuyer pour rechercher » n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi et transmet un mot et son contexte à la recherche Google, qui renvoie à son tour des définitions, des images, des résultats de recherche et d’autres informations.
+<translation id="5375131951310889874">Découvrez des sujets sur des sites Web sans quitter la page. Touch to Search est une fonctionnalité qui n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi. Elle envoie un mot et son contexte environnant à Google Search, renvoyant des définitions, des images, des résultats de recherche et d’autres détails.
 
-Pour modifier le terme de recherche, appuyez dessus de manière prolongée afin de le sélectionner. Pour affiner la recherche, faites glisser le panneau jusqu'en haut et appuyez sur le champ de recherche.</translation>
+Pour ajuster votre terme de recherche, appuyez longuement pour sélectionner. Pour affiner votre recherche, faites glisser le panneau tout le long et appuyez sur la zone de recherche.</translation>
+<translation id="572328651809341494">Onglets récents</translation>
 <translation id="6150320133806434356">Signet sauvegardé</translation>
 <translation id="6336451774241870485">Nouvel onglet privé</translation>
 <translation id="6585139692466700358">Proposer de traduire les pages dans d’autres langues en utilisant le service de traduction de Vivaldi</translation>
@@ -53,7 +57,6 @@ Pour modifier le terme de recherche, appuyez dessus de manière prolongée afin 
 <translation id="732145680195464316">Signet sauvegardé dans <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">À propos de Vivaldi</translation>
 <translation id="7465104139234185284">Fermer tous les onglets privés</translation>
-<translation id="7519434535192513364">La fonctionnalité « Appuyer pour rechercher » transmet le mot sélectionné et la page actuelle en tant que contexte à la recherche Google. Vous pouvez la désactiver dans les <ph name="BEGIN_LINK" />paramètres<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Conditions d’utilisation de Vivaldi</translation>
 <translation id="85991616550051997">Aller à la page d’accueil</translation>
 <translation id="8820817407110198400">Signets</translation>

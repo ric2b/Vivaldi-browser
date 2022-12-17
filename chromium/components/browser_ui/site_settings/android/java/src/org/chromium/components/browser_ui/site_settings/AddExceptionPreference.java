@@ -31,6 +31,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * A utility class for the UI recording exceptions to the blocked list for site
  * settings.
@@ -124,7 +127,7 @@ public class AddExceptionPreference
         final CheckBox thirdPartyExceptionsBox =
                 (CheckBox) view.findViewById(R.id.third_parties_exception_checkbox);
 
-        if (!mCategory.showSites(SiteSettingsCategory.Type.COOKIES)) {
+        if (mCategory.getType() != SiteSettingsCategory.Type.COOKIES) {
             // TODO(crbug.com/1077766): Change the string of the checkbox to something like
             // "including third-party cookies on this site".
             thirdPartyExceptionsBox.setVisibility(View.GONE);
@@ -190,6 +193,8 @@ public class AddExceptionPreference
                                 || !WebsitePreferenceBridgeJni.get().isContentSettingsPatternValid(
                                         hostname));
 
+                // Vivaldi
+                if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
                 // Vibrate when adding characters only, not when deleting them.
                 if (hasError && count != 0) {
                     if (Settings.System.getInt(getContext().getContentResolver(),
@@ -199,6 +204,7 @@ public class AddExceptionPreference
                                 .vibrate(50);
                     }
                 }
+                } // !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
 
                 okButton.setEnabled(!hasError && hostname.length() > 0);
                 input.setTextColor(hasError ? mErrorColor : mDefaultColor);

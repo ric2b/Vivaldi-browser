@@ -161,6 +161,8 @@ class HIDDetectionScreenTester extends ScreenElementApi {
 class WelcomeScreenTester extends ScreenElementApi {
   constructor() {
     super('connect');
+    this.demoModeConfirmationDialog =
+        new PolymerElementApi(this, '#demoModeConfirmationDialog');
   }
 
   /** @override */
@@ -172,6 +174,9 @@ class WelcomeScreenTester extends ScreenElementApi {
 
     assert(this.nextButton);
     this.nextButton.click();
+  }
+  getDemoModeOkButtonName() {
+    return loadTimeData.getString('enableDemoModeDialogConfirm');
   }
 }
 
@@ -238,7 +243,7 @@ class GaiaScreenTester extends ScreenElementApi {
     super('gaia-signin');
     this.signinFrame = new PolymerElementApi(this, '#signin-frame-dialog');
     this.gaiaDialog = new PolymerElementApi(this.signinFrame, '#gaiaDialog');
-    this.gaiaLoading = new PolymerElementApi(this, '#gaia-loading');
+    this.gaiaLoading = new PolymerElementApi(this, '#step-loading');
   }
 
   /**
@@ -314,6 +319,12 @@ class MarketingOptInScreenTester extends ScreenElementApi {
   /** @override */
   shouldSkip() {
     return !loadTimeData.getBoolean('testapi_isBrandedBuild');
+  }
+}
+
+class ThemeSelectionScreenTester extends ScreenElementApi {
+  constructor() {
+    super('theme-selection');
   }
 }
 
@@ -542,50 +553,29 @@ class ErrorScreenTester extends ScreenElementApi {
   }
 }
 
-class OobeApiProvider {
+class DemoPreferencesScreenTester extends ScreenElementApi {
   constructor() {
-    this.screens = {
-      HIDDetectionScreen: new HIDDetectionScreenTester(),
-      WelcomeScreen: new WelcomeScreenTester(),
-      NetworkScreen: new NetworkScreenTester(),
-      EulaScreen: new EulaScreenTester(),
-      UpdateScreen: new UpdateScreenTester(),
-      EnrollmentScreen: new EnrollmentScreenTester(),
-      UserCreationScreen: new UserCreationScreenTester(),
-      GaiaScreen: new GaiaScreenTester(),
-      SyncScreen: new SyncScreenTester(),
-      FingerprintScreen: new FingerprintScreenTester(),
-      AssistantScreen: new AssistantScreenTester(),
-      MarketingOptInScreen: new MarketingOptInScreenTester(),
-      ConfirmSamlPasswordScreen: new ConfirmSamlPasswordScreenTester(),
-      PinSetupScreen: new PinSetupScreenTester(),
-      EnterpriseEnrollmentScreen: new EnterpriseEnrollmentScreenTester(),
-      GuestTosScreen: new GuestTosScreenTester(),
-      ErrorScreen: new ErrorScreenTester(),
-      OfflineLoginScreen: new OfflineLoginScreenTester(),
-    };
+    super('demo-preferences');
+  }
 
-    this.loginWithPin = function(username, pin) {
-      chrome.send('OobeTestApi.loginWithPin', [username, pin]);
-    };
-
-    this.advanceToScreen = function(screen) {
-      chrome.send('OobeTestApi.advanceToScreen', [screen]);
-    };
-
-    this.skipToLoginForTesting = function() {
-      chrome.send('OobeTestApi.skipToLoginForTesting');
-    };
-
-    this.skipPostLoginScreens = function() {
-      chrome.send('OobeTestApi.skipPostLoginScreens');
-    };
-
-    this.loginAsGuest = function() {
-      chrome.send('OobeTestApi.loginAsGuest');
-    };
+  getDemoPreferencesNextButtonName() {
+    return loadTimeData.getString('demoPreferencesNextButtonLabel');
   }
 }
+
+class ArcTosScreenTester extends ScreenElementApi {
+  constructor() {
+    super('arc-tos');
+  }
+
+  // Note that the Accept Button text key is different depending on whether
+  // the device in Demo Mode setup. Key for non-demo setup is
+  // "arcTermsOfServiceAcceptButton"
+  getArcTosDemoModeAcceptButtonName() {
+    return loadTimeData.getString('arcTermsOfServiceAcceptAndContinueButton');
+  }
+}
+
 
 class GuestTosScreenTester extends ScreenElementApi {
   constructor() {
@@ -607,6 +597,106 @@ class GuestTosScreenTester extends ScreenElementApi {
   /** @return {string} */
   getNextButtonName() {
     return loadTimeData.getString('guestTosAccept');
+  }
+}
+
+
+class GestureNavigationScreenTester extends ScreenElementApi {
+  constructor() {
+    super('gesture-navigation');
+  }
+
+  /** @return {string} */
+  getNextButtonName() {
+    return loadTimeData.getString('gestureNavigationIntroNextButton');
+  }
+}
+
+class ConsolidatedConsentScreenTester extends ScreenElementApi {
+  constructor() {
+    super('consolidated-consent');
+    this.loadedStep = new PolymerElementApi(this, '#loadedDialog');
+    this.nextButton = new PolymerElementApi(this, '#acceptButton');
+    this.readMoreButton =
+        new PolymerElementApi(this.loadedStep, '#readMoreButton');
+  }
+
+  /** @override */
+  shouldSkip() {
+    return loadTimeData.getBoolean('testapi_shouldSkipConsolidatedConsent');
+  }
+
+  /** @return {boolean} */
+  isReadyForTesting() {
+    return this.isVisible() && this.loadedStep.isVisible();
+  }
+
+  /** @return {boolean} */
+  isReadMoreButtonShown() {
+    // The read more button is inside a <dom-if> element, if it's hidden, the
+    // element would be removed entirely from dom, so we need to check if the
+    // element exists before checking if it's visible.
+    return this.readMoreButton.element() != null &&
+        this.readMoreButton.isVisible();
+  }
+
+  /** @return {string} */
+  getNextButtonName() {
+    return loadTimeData.getString('consolidatedConsentAcceptAndContinue');
+  }
+}
+
+class OobeApiProvider {
+  constructor() {
+    this.screens = {
+      HIDDetectionScreen: new HIDDetectionScreenTester(),
+      WelcomeScreen: new WelcomeScreenTester(),
+      NetworkScreen: new NetworkScreenTester(),
+      EulaScreen: new EulaScreenTester(),
+      UpdateScreen: new UpdateScreenTester(),
+      EnrollmentScreen: new EnrollmentScreenTester(),
+      UserCreationScreen: new UserCreationScreenTester(),
+      GaiaScreen: new GaiaScreenTester(),
+      SyncScreen: new SyncScreenTester(),
+      FingerprintScreen: new FingerprintScreenTester(),
+      AssistantScreen: new AssistantScreenTester(),
+      MarketingOptInScreen: new MarketingOptInScreenTester(),
+      ConfirmSamlPasswordScreen: new ConfirmSamlPasswordScreenTester(),
+      PinSetupScreen: new PinSetupScreenTester(),
+      EnterpriseEnrollmentScreen: new EnterpriseEnrollmentScreenTester(),
+      GuestTosScreen: new GuestTosScreenTester(),
+      ErrorScreen: new ErrorScreenTester(),
+      OfflineLoginScreen: new OfflineLoginScreenTester(),
+      DemoPreferencesScreen: new DemoPreferencesScreenTester(),
+      ArcTosScreen: new ArcTosScreenTester(),
+      ThemeSelectionScreen: new ThemeSelectionScreenTester(),
+      GestureNavigation: new GestureNavigationScreenTester(),
+      ConsolidatedConsentScreen: new ConsolidatedConsentScreenTester(),
+    };
+
+    this.loginWithPin = function(username, pin) {
+      chrome.send('OobeTestApi.loginWithPin', [username, pin]);
+    };
+
+    this.advanceToScreen = function(screen) {
+      chrome.send('OobeTestApi.advanceToScreen', [screen]);
+    };
+
+    this.skipToLoginForTesting = function() {
+      chrome.send('OobeTestApi.skipToLoginForTesting');
+    };
+
+    this.skipPostLoginScreens = function() {
+      chrome.send('OobeTestApi.skipPostLoginScreens');
+    };
+
+    this.loginAsGuest = function() {
+      chrome.send('OobeTestApi.loginAsGuest');
+    };
+
+    this.showGaiaDialog = function() {
+      chrome.send('OobeTestApi.showGaiaDialog');
+    };
   }
 }
 

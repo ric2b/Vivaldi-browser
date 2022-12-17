@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/audio/sounds.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -36,6 +35,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/audio/sounds.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_manager.h"
@@ -64,7 +64,10 @@ using ::content::BrowserThread;
 }  // namespace
 
 ChangePictureHandler::ChangePictureHandler()
-    : previous_image_index_(user_manager::User::USER_IMAGE_INVALID) {
+    : previous_image_index_(user_manager::User::USER_IMAGE_INVALID),
+      camera_presence_notifier_(
+          base::BindRepeating(&ChangePictureHandler::SetCameraPresent,
+                              base::Unretained(this))) {
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   audio::SoundsManager* manager = audio::SoundsManager::Get();
   manager->Initialize(static_cast<int>(Sound::kObjectDelete),
@@ -109,7 +112,7 @@ void ChangePictureHandler::RegisterMessages() {
 
 void ChangePictureHandler::OnJavascriptAllowed() {
   user_manager_observation_.Observe(user_manager::UserManager::Get());
-  camera_observation_.Observe(CameraPresenceNotifier::GetInstance());
+  camera_presence_notifier_.Start();
 }
 
 void ChangePictureHandler::OnJavascriptDisallowed() {
@@ -117,20 +120,15 @@ void ChangePictureHandler::OnJavascriptDisallowed() {
       user_manager::UserManager::Get()));
   user_manager_observation_.Reset();
 
-  DCHECK(camera_observation_.IsObservingSource(
-      CameraPresenceNotifier::GetInstance()));
-  camera_observation_.Reset();
+  camera_presence_notifier_.Stop();
 
   user_image_file_selector_.reset();
 }
 
 void ChangePictureHandler::SendDefaultImages() {
-  base::DictionaryValue result;
-  std::unique_ptr<base::ListValue> current_default_images =
-      default_user_image::GetCurrentImageSetAsListValue();
-  result.SetKey(
-      "current_default_images",
-      base::Value::FromUniquePtrValue(std::move(current_default_images)));
+  base::Value::Dict result;
+  result.Set("current_default_images",
+             default_user_image::GetCurrentImageSetAsListValue());
   FireWebUIListener("default-images-changed", result);
 }
 
@@ -237,17 +235,16 @@ void ChangePictureHandler::SendSelectedImage() {
         previous_image_bytes_ = nullptr;
         previous_image_format_ = user_manager::UserImage::FORMAT_UNKNOWN;
 
-        base::DictionaryValue result;
-        result.SetStringPath(
-            "url", default_user_image::GetDefaultImageUrl(previous_image_index_)
+        base::Value::Dict result;
+        result.Set("url",
+                   default_user_image::GetDefaultImageUrl(previous_image_index_)
                        .spec());
-        auto source_info = default_user_image::GetDefaultImageSourceInfo(
-            previous_image_index_);
+        auto source_info =
+            default_user_image::GetDeprecatedDefaultImageSourceInfo(
+                previous_image_index_);
         if (source_info.has_value()) {
-          result.SetStringPath("author", l10n_util::GetStringUTF16(std::move(
-                                             source_info.value().author_id)));
-          result.SetStringPath("website", l10n_util::GetStringUTF16(std::move(
-                                              source_info.value().website_id)));
+          result.Set("author", std::move(source_info.value().author));
+          result.Set("website", source_info.value().website.spec());
         }
         FireWebUIListener("preview-deprecated-image", result);
       }
@@ -382,10 +379,6 @@ void ChangePictureHandler::SetImageFromCamera(
 
 void ChangePictureHandler::SetCameraPresent(bool present) {
   FireWebUIListener("camera-presence-changed", base::Value(present));
-}
-
-void ChangePictureHandler::OnCameraPresenceCheckDone(bool is_camera_present) {
-  SetCameraPresent(is_camera_present);
 }
 
 void ChangePictureHandler::OnUserImageChanged(const user_manager::User& user) {

@@ -66,7 +66,7 @@ class MediaGalleriesEventRouter : public extensions::BrowserContextKeyedAPI,
       const std::string& extension_id,
       extensions::events::HistogramValue histogram_value,
       const std::string& event_name,
-      std::vector<base::Value> event_args);
+      base::Value::List event_args);
 
   explicit MediaGalleriesEventRouter(content::BrowserContext* context);
   ~MediaGalleriesEventRouter() override;
@@ -184,7 +184,7 @@ class MediaGalleriesGetMetadataFunction : public ExtensionFunction {
       std::unique_ptr<std::vector<metadata::AttachedImage>> attached_images);
 
   void ConstructNextBlob(
-      std::unique_ptr<base::DictionaryValue> result_dictionary,
+      base::Value::Dict result_dictionary,
       std::unique_ptr<std::vector<metadata::AttachedImage>> attached_images,
       std::unique_ptr<std::vector<std::string>> blob_uuids,
       std::unique_ptr<content::BlobHandle> current_blob);

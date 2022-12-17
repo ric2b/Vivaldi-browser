@@ -29,6 +29,7 @@
 
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 
+#include "base/containers/adapters.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -77,6 +78,7 @@ void FullscreenElementChanged(Document& document,
 
     old_element->PseudoStateChanged(CSSSelector::kPseudoFullScreen);
     old_element->PseudoStateChanged(CSSSelector::kPseudoFullscreen);
+    old_element->PseudoStateChanged(CSSSelector::kPseudoModal);
 
     old_element->SetContainsFullScreenElement(false);
     old_element->SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
@@ -90,6 +92,7 @@ void FullscreenElementChanged(Document& document,
 
     new_element->PseudoStateChanged(CSSSelector::kPseudoFullScreen);
     new_element->PseudoStateChanged(CSSSelector::kPseudoFullscreen);
+    new_element->PseudoStateChanged(CSSSelector::kPseudoModal);
 
     // OOPIF: For RequestType::kForCrossProcessDescendant, |new_element|
     // is the iframe element for the out-of-process frame that contains the
@@ -200,10 +203,14 @@ void GoFullscreen(Element& element,
   else
     DCHECK(!HasFullscreenFlag(element));
 
-  // If there are any open popups, close them, unless this fullscreen
-  // element is a descendant of an open popup.
-  if (RuntimeEnabledFeatures::HTMLPopupAttributeEnabled())
-    document.HideAllPopupsUntil(&element, HidePopupFocusBehavior::kNone);
+  // If there are any open popups, close them immediately.
+  if (RuntimeEnabledFeatures::HTMLPopupAttributeEnabled(
+          document.GetExecutionContext())) {
+    Element::HideAllPopupsUntil(nullptr, document,
+                                HidePopupFocusBehavior::kNone,
+                                HidePopupForcingLevel::kHideImmediately,
+                                HidePopupIndependence::kHideUnrelated);
+  }
 
   // To fullscreen an |element| within a |document|, set the |element|'s
   // fullscreen flag and add it to |document|'s top layer.
@@ -593,8 +600,7 @@ Element* Fullscreen::FullscreenElementFrom(Document& document) {
   // whose fullscreen flag is set, if any, and null otherwise.
 
   const auto& elements = document.TopLayerElements();
-  for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
-    Element* element = (*it).Get();
+  for (const auto& element : base::Reversed(elements)) {
     if (HasFullscreenFlag(*element))
       return element;
   }

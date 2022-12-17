@@ -232,7 +232,7 @@ void DMFetch::PostRequest(const std::string& request_type,
     if (storage_->GetEnrollmentToken().empty()) {
       result = DMClient::RequestResult::kNotManaged;
     } else if (!storage_->GetDmToken().empty()) {
-      result = DMClient::RequestResult::kAleadyRegistered;
+      result = DMClient::RequestResult::kAlreadyRegistered;
     }
   } else if (storage_->GetDmToken().empty()) {
     result = DMClient::RequestResult::kNoDMToken;
@@ -280,9 +280,15 @@ void DMFetch::OnRequestComplete(std::unique_ptr<std::string> response_body,
     VLOG(1) << "DM request failed due to net error: " << net_error;
     result = DMClient::RequestResult::kNetworkError;
   } else if (http_status_code_ == kHTTPStatusGone) {
-    VLOG(1) << "Device is now de-registered.";
-    storage_->DeregisterDevice();
-    result = DMClient::RequestResult::kDeregistered;
+    if (ShouldDeleteDmToken(*response_body)) {
+      storage_->DeleteDMToken();
+      result = DMClient::RequestResult::kNoDMToken;
+      VLOG(1) << "Device is now de-registered by deleting the DM token.";
+    } else {
+      storage_->InvalidateDMToken();
+      result = DMClient::RequestResult::kDeregistered;
+      VLOG(1) << "Device is now de-registered by invalidating the DM token.";
+    }
   } else if (http_status_code_ != kHTTPStatusOK) {
     VLOG(1) << "DM request failed due to HTTP error: " << http_status_code_;
     result = DMClient::RequestResult::kHttpError;
@@ -367,6 +373,14 @@ void DMClient::RegisterDevice(std::unique_ptr<Configurator> config,
 void DMClient::FetchPolicy(std::unique_ptr<Configurator> config,
                            scoped_refptr<DMStorage> storage,
                            PolicyFetchCallback callback) {
+  if (!storage->CanPersistPolicies()) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback),
+                                  DMClient::RequestResult::kSerializationError,
+                                  std::vector<PolicyValidationResult>()));
+    return;
+  }
+
   auto dm_fetch = base::MakeRefCounted<DMFetch>(std::move(config), storage);
   std::unique_ptr<CachedPolicyInfo> cached_info =
       dm_fetch->storage()->GetCachedPolicyInfo();

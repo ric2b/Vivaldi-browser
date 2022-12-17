@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/components/login/auth/saml_password_attributes.h"
+#include "ash/components/login/auth/public/saml_password_attributes.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -180,8 +180,8 @@ UrgentPasswordExpiryNotificationUI::UrgentPasswordExpiryNotificationUI(
 
   source->UseStringsJs();
   source->SetDefaultResource(IDR_URGENT_PASSWORD_EXPIRY_NOTIFICATION_HTML);
-  source->AddResourcePath("urgent_password_expiry_notification.js",
-                          IDR_URGENT_PASSWORD_EXPIRY_NOTIFICATION_JS);
+  source->AddResourcePath("urgent_password_expiry_notification_app.js",
+                          IDR_URGENT_PASSWORD_EXPIRY_NOTIFICATION_APP_JS);
 
   web_ui->AddMessageHandler(
       std::make_unique<UrgentPasswordExpiryNotificationHandler>());

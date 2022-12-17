@@ -45,6 +45,7 @@
 #include "ash/shelf/shelf_window_targeter.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider_source.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/unified/unified_system_tray.h"
@@ -822,6 +823,24 @@ void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
         sort_apps_submenu_.get(),
         ui::ImageModel::FromVectorIcon(kReorderIcon,
                                        ui::kColorAshSystemUIMenuIcon));
+
+    // Append the "Show all suggestions" / "Hide all suggestions" item.
+    if (features::IsLauncherHideContinueSectionEnabled()) {
+      menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+      if (app_list_controller->ShouldHideContinueSection()) {
+        menu_model->AddItemWithIcon(
+            ShelfContextMenuModel::MENU_SHOW_CONTINUE_SECTION,
+            l10n_util::GetStringUTF16(IDS_ASH_LAUNCHER_SHOW_CONTINUE_SECTION),
+            ui::ImageModel::FromVectorIcon(kLauncherShowContinueSectionIcon,
+                                           ui::kColorAshSystemUIMenuIcon));
+      } else {
+        menu_model->AddItemWithIcon(
+            ShelfContextMenuModel::MENU_HIDE_CONTINUE_SECTION,
+            l10n_util::GetStringUTF16(IDS_ASH_LAUNCHER_HIDE_CONTINUE_SECTION),
+            ui::ImageModel::FromVectorIcon(kLauncherHideContinueSectionIcon,
+                                           ui::kColorAshSystemUIMenuIcon));
+      }
+    }
   }
 
   root_window_menu_model_adapter_->Run(
@@ -935,6 +954,7 @@ void RootWindowController::Init(RootWindowType root_window_type) {
   // `shelf_` was created in the constructor.
   shelf_->shelf_widget()->PostCreateShelf();
 
+  color_provider_source_ = std::make_unique<AshColorProviderSource>();
   if (Shell::GetPrimaryRootWindowController()
           ->GetSystemModalLayoutManager(nullptr)
           ->has_window_dimmer()) {
@@ -1067,6 +1087,15 @@ void RootWindowController::CreateContainers() {
   ::wm::SetChildWindowVisibilityChangesAnimated(wallpaper_container);
   wallpaper_container->SetLayoutManager(
       new FillLayoutManager(wallpaper_container));
+
+  if (features::AreGlanceablesEnabled()) {
+    aura::Window* glanceables_container =
+        CreateContainer(kShellWindowId_GlanceablesContainer,
+                        "GlanceablesContainer", magnified_container);
+    glanceables_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
+    glanceables_container->SetLayoutManager(
+        new FillLayoutManager(glanceables_container));  // Takes ownership.
+  }
 
   aura::Window* non_lock_screen_containers =
       CreateContainer(kShellWindowId_NonLockScreenContainersContainer,

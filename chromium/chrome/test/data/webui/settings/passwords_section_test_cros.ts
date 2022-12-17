@@ -10,14 +10,11 @@
  */
 
 // clang-format off
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {BlockingRequestManager} from 'chrome://settings/lazy_load.js';
 import {PasswordManagerImpl} from 'chrome://settings/settings.js';
-import {assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 import {createPasswordEntry, PasswordSectionElementFactory} from './passwords_and_autofill_fake_data.js';
-import {runCancelExportTest, runExportFlowErrorRetryTest, runExportFlowErrorTest, runExportFlowFastTest, runExportFlowSlowTest, runFireCloseEventAfterExportCompleteTest,runStartExportTest} from './passwords_export_test.js';
+import {runCancelExportTest, runExportFlowErrorRetryTest, runExportFlowErrorTest, runExportFlowFastTest, runExportFlowSlowTest, runFireCloseEventAfterExportCompleteTest,runStartExportTest} from './passwords_export_dialog_test.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
 
 // clang-format on
@@ -89,10 +86,8 @@ suite('PasswordsSection_Cros', function() {
       return super.createPasswordsSection(passwordManager, [], []);
     }
 
-    override createExportPasswordsDialog(
-        passwordManager: TestPasswordManagerProxy,
-        overrideRequestManager?: boolean) {
-      const dialog = super.createExportPasswordsDialog(passwordManager);
+    override createExportPasswordsDialog(overrideRequestManager?: boolean) {
+      const dialog = super.createExportPasswordsDialog();
       dialog.tokenRequestManager = new BlockingRequestManager();
       return overrideRequestManager ?
           Object.assign(
@@ -141,96 +136,53 @@ suite('PasswordsSection_Cros', function() {
   // https://www.crbug.com/1021474)
   test.skip('export passwords button requests auth token', function() {
     passwordPromise.then(fail);
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, true);
+    const exportDialog = elementFactory.createExportPasswordsDialog(true);
     exportDialog.shadowRoot!
         .querySelector<HTMLElement>('#exportPasswordsButton')!.click();
     return requestPromise;
   });
 
-  // TODO(crbug.com/1274569): add test for edit-dialog requesting token when
-  // switching from ADD to EDIT mode when other tests are fixed.
-
-
-  // Note (rbpotter): this passes locally, but may still be flaky (see
-  // https://www.crbug.com/1021474)
-  test.skip('password-prompt-dialog appears on auth token request', function() {
-    const passwordsSection =
-        elementFactory.createPasswordsSection(passwordManager, [], []);
-    assertTrue(!passwordsSection.shadowRoot!.querySelector(
-        'settings-password-prompt-dialog'));
-    passwordsSection.tokenRequestManager.request(fail);
-    flush();
-    assertTrue(!!passwordsSection.shadowRoot!.querySelector(
-        'settings-password-prompt-dialog'));
-  });
-
-  // Note (rbpotter): this fails locally, possibly out of date
-  test.skip(
-      'user is not prompted for password if they cannot enter it',
-      function(done) {
-        loadTimeData.overrideValues({userCannotManuallyEnterPassword: true});
-        const passwordsSection = document.createElement('passwords-section');
-        document.body.appendChild(passwordsSection);
-        flush();
-        assertTrue(!passwordsSection.shadowRoot!.querySelector(
-            'settings-password-prompt-dialog'));
-        passwordsSection.tokenRequestManager.request(() => {
-          flush();
-          assertTrue(!passwordsSection.shadowRoot!.querySelector(
-              'settings-password-prompt-dialog'));
-          done();
-        });
-      });
-
   // Test that tapping "Export passwords..." notifies the browser.
-  test('startExport', function(done) {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
-    runStartExportTest(exportDialog, passwordManager, done);
+  test('startExport', function() {
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
+    runStartExportTest(exportDialog, passwordManager);
   });
 
   // Test the export flow. If exporting is fast, we should skip the
   // in-progress view altogether.
-  test('exportFlowFast', function(done) {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
-    runExportFlowFastTest(exportDialog, passwordManager, done);
+  test('exportFlowFast', function() {
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
+    runExportFlowFastTest(exportDialog, passwordManager);
   });
 
   // The error view is shown when an error occurs.
-  test('exportFlowError', function(done) {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
-    runExportFlowErrorTest(exportDialog, passwordManager, done);
+  test('exportFlowError', function() {
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
+    runExportFlowErrorTest(exportDialog, passwordManager);
   });
 
   // The error view allows to retry.
-  test('exportFlowErrorRetry', function(done) {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
-    runExportFlowErrorRetryTest(exportDialog, passwordManager, done);
+  test('exportFlowErrorRetry', function() {
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
+    runExportFlowErrorRetryTest(exportDialog, passwordManager);
   });
 
   // Test the export flow. If exporting is slow, Chrome should show the
   // in-progress dialog for at least 1000ms.
-  test('exportFlowSlow', function(done) {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
-    runExportFlowSlowTest(exportDialog, passwordManager, done);
+  test('exportFlowSlow', function() {
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
+    runExportFlowSlowTest(exportDialog, passwordManager);
   });
 
   // Test that canceling the dialog while exporting will also cancel the
   // export on the browser.
-  test('cancelExport', function(done) {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
-    runCancelExportTest(exportDialog, passwordManager, done);
+  test('cancelExport', function() {
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
+    runCancelExportTest(exportDialog, passwordManager);
   });
 
   test('fires close event after export complete', () => {
-    const exportDialog =
-        elementFactory.createExportPasswordsDialog(passwordManager, false);
+    const exportDialog = elementFactory.createExportPasswordsDialog(false);
     return runFireCloseEventAfterExportCompleteTest(
         exportDialog, passwordManager);
   });

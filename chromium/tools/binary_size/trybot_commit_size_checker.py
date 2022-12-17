@@ -119,7 +119,9 @@ def _SymbolDiffHelper(title_fragment, symbols):
 
 
 def _CreateMutableConstantsDelta(symbols):
-  symbols = symbols.WhereInSection('d').WhereNameMatches(r'\bk[A-Z]|\b[A-Z_]+$')
+  symbols = (
+      symbols.WhereInSection('d').WhereNameMatches(r'\bk[A-Z]|\b[A-Z_]+$').
+      WhereFullNameMatches('abi:logically_const').Inverted())
   lines, net_added = _SymbolDiffHelper('Mutable Constants', symbols)
 
   return lines, _SizeDelta('Mutable Constants', 'symbols', 0, net_added)
@@ -192,7 +194,7 @@ def _ExtractForTestingSymbolsFromSingleMapping(mapping_path):
     proguard_mapping_lines = f.readlines()
     current_class_orig = None
     for line in proguard_mapping_lines:
-      if line.isspace():
+      if line.isspace() or '#' in line:
         continue
       if not line.startswith(' '):
         match = _PROGUARD_CLASS_MAPPING_RE.search(line)

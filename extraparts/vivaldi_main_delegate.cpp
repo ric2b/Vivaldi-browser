@@ -3,6 +3,7 @@
 #include "extraparts/vivaldi_main_delegate.h"
 
 #include "build/build_config.h"
+#include "components/version_info/version_info.h"
 
 #include "app/vivaldi_apptools.h"
 #include "extraparts/vivaldi_content_browser_client.h"
@@ -32,6 +33,19 @@ VivaldiMainDelegate::CreateContentBrowserClient() {
         std::make_unique<VivaldiContentBrowserClient>();
   }
   return chrome_content_browser_client_.get();
+}
+
+absl::optional<int> VivaldiMainDelegate::BasicStartupComplete() {
+  constexpr const char chromium_version_switch[] = "chromium-version";
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+
+  if (command_line.HasSwitch(chromium_version_switch)) {
+    printf("%s\n", version_info::GetVersionNumber().c_str());
+    return 0;
+  }
+
+  return ChromeMainDelegate::BasicStartupComplete();
 }
 
 #if BUILDFLAG(IS_WIN)

@@ -38,10 +38,12 @@
 #include "ash/public/cpp/child_accounts/parent_access_controller.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_types.h"
+#include "ash/public/cpp/reauth_reason.h"
 #include "ash/public/cpp/smartlock_state.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/login_shelf_view.h"
+#include "ash/shelf/login_shelf_widget.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
@@ -719,8 +721,10 @@ LockContentsView::~LockContentsView() {
   Shell::Get()->system_tray_notifier()->RemoveSystemTrayObserver(this);
 
   // Times a password was incorrectly entered until view is destroyed.
-  Shell::Get()->metrics()->login_metrics_recorder()->RecordNumLoginAttempts(
-      false /*success*/, &unlock_attempt_);
+  for (auto& unlock_attempt : unlock_attempt_by_user_) {
+    Shell::Get()->metrics()->login_metrics_recorder()->RecordNumLoginAttempts(
+        false /*success*/, &unlock_attempt.second);
+  }
 
   chromeos::PowerManagerClient::Get()->RemoveObserver(this);
 }
@@ -902,11 +906,11 @@ void LockContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ShelfWidget* shelf_widget = shelf->shelf_widget();
   GetViewAccessibility().OverrideNextFocus(shelf_widget);
   GetViewAccessibility().OverridePreviousFocus(shelf->GetStatusAreaWidget());
+  node_data->role = ax::mojom::Role::kWindow;
   node_data->SetName(
       l10n_util::GetStringUTF16(screen_type_ == LockScreen::ScreenType::kLogin
                                     ? IDS_ASH_LOGIN_SCREEN_ACCESSIBLE_NAME
                                     : IDS_ASH_LOCK_SCREEN_ACCESSIBLE_NAME));
-  node_data->role = ax::mojom::Role::kWindow;
 }
 
 bool LockContentsView::AcceleratorPressed(const ui::Accelerator& accelerator) {
@@ -1086,6 +1090,20 @@ void LockContentsView::OnFingerprintStateChanged(const AccountId& account_id,
     return;
 
   big_view->auth_user()->SetFingerprintState(user_state->fingerprint_state);
+  LayoutAuth(big_view, nullptr /*opt_to_hide*/, true /*animate*/);
+}
+
+void LockContentsView::OnResetFingerprintUIState(const AccountId& account_id) {
+  UserState* user_state = FindStateForUser(account_id);
+  if (!user_state)
+    return;
+
+  LoginBigUserView* big_view =
+      TryToFindBigUser(account_id, true /*require_auth_active*/);
+  if (!big_view || !big_view->auth_user())
+    return;
+
+  big_view->auth_user()->ResetFingerprintUIState();
   LayoutAuth(big_view, nullptr /*opt_to_hide*/, true /*animate*/);
 }
 
@@ -1576,7 +1594,11 @@ void LockContentsView::OnDeviceEnterpriseInfoChanged() {
 void LockContentsView::OnEnterpriseAccountDomainChanged() {}
 
 void LockContentsView::ShowAuthErrorMessageForDebug(int unlock_attempt) {
-  unlock_attempt_ = unlock_attempt;
+  if (!CurrentBigUserView())
+    return;
+  AccountId account_id =
+      CurrentBigUserView()->GetCurrentUser().basic_user_info.account_id;
+  unlock_attempt_by_user_[account_id] = unlock_attempt;
   ShowAuthErrorMessage();
 }
 
@@ -1670,6 +1692,9 @@ void LockContentsView::FocusNextWidget(bool reverse) {
         ->status_area_widget_delegate()
         ->set_default_last_focusable_child(reverse);
     Shell::Get()->focus_cycler()->FocusWidget(shelf->GetStatusAreaWidget());
+  } else if (features::IsUseLoginShelfWidgetEnabled()) {
+    shelf->login_shelf_widget()->SetDefaultLastFocusableChild(reverse);
+    Shell::Get()->focus_cycler()->FocusWidget(shelf->login_shelf_widget());
   } else {
     shelf->shelf_widget()->set_default_last_focusable_child(reverse);
     Shell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
@@ -2017,6 +2042,8 @@ void LockContentsView::SwapActiveAuthBetweenPrimaryAndSecondary(
 
 void LockContentsView::OnAuthenticate(bool auth_success,
                                       bool display_error_messages) {
+  AccountId account_id =
+      CurrentBigUserView()->GetCurrentUser().basic_user_info.account_id;
   if (auth_success) {
     HideAuthErrorMessage();
 
@@ -2036,9 +2063,9 @@ void LockContentsView::OnAuthenticate(bool auth_success,
 
     // Times a password was incorrectly entered until user succeeds.
     Shell::Get()->metrics()->login_metrics_recorder()->RecordNumLoginAttempts(
-        true /*success*/, &unlock_attempt_);
+        true /*success*/, &unlock_attempt_by_user_[account_id]);
   } else {
-    ++unlock_attempt_;
+    ++unlock_attempt_by_user_[account_id];
     if (display_error_messages)
       ShowAuthErrorMessage();
   }
@@ -2245,21 +2272,25 @@ void LockContentsView::ShowAuthErrorMessage() {
   if (!big_view->auth_user())
     return;
 
+  int unlock_attempt = unlock_attempt_by_user_[big_view->GetCurrentUser()
+                                                   .basic_user_info.account_id];
   // Show gaia signin if this is login and the user has failed too many times.
   // Do not show on secondary login screen – even though it has type kLogin – as
   // there is no OOBE there.
-  if (screen_type_ == LockScreen::ScreenType::kLogin &&
-      unlock_attempt_ >= kLoginAttemptsBeforeGaiaDialog &&
-      Shell::Get()->session_controller()->GetSessionState() !=
-          session_manager::SessionState::LOGIN_SECONDARY) {
-    Shell::Get()->login_screen_controller()->ShowGaiaSignin(
-        big_view->auth_user()->current_user().basic_user_info.account_id);
-    return;
+  if (!ash::features::IsCryptohomeRecoveryFlowUIEnabled()) {
+    if (screen_type_ == LockScreen::ScreenType::kLogin &&
+        unlock_attempt >= kLoginAttemptsBeforeGaiaDialog &&
+        Shell::Get()->session_controller()->GetSessionState() !=
+            session_manager::SessionState::LOGIN_SECONDARY) {
+      Shell::Get()->login_screen_controller()->ShowGaiaSignin(
+          big_view->auth_user()->current_user().basic_user_info.account_id);
+      return;
+    }
   }
 
   std::u16string error_text = l10n_util::GetStringUTF16(
-      unlock_attempt_ > 1 ? IDS_ASH_LOGIN_ERROR_AUTHENTICATING_2ND_TIME
-                          : IDS_ASH_LOGIN_ERROR_AUTHENTICATING);
+      unlock_attempt > 1 ? IDS_ASH_LOGIN_ERROR_AUTHENTICATING_2ND_TIME
+                         : IDS_ASH_LOGIN_ERROR_AUTHENTICATING);
   ImeControllerImpl* ime_controller = Shell::Get()->ime_controller();
   if (ime_controller->IsCapsLockEnabled()) {
     error_text +=
@@ -2304,9 +2335,25 @@ void LockContentsView::ShowAuthErrorMessage() {
   container->AddChildView(std::move(label));
   container->AddChildView(std::move(learn_more_button));
 
+  if (ash::features::IsCryptohomeRecoveryFlowUIEnabled()) {
+    // The forgot password flow is only accessible from the login screen but
+    // not from the lock screen.
+    if (screen_type_ == LockScreen::ScreenType::kLogin &&
+        Shell::Get()->session_controller()->GetSessionState() !=
+            session_manager::SessionState::LOGIN_SECONDARY) {
+      auto forgot_password_button = std::make_unique<SystemLabelButton>(
+          base::BindRepeating(&LockContentsView::ForgotPasswordButtonPressed,
+                              base::Unretained(this)),
+          l10n_util::GetStringUTF16(IDS_ASH_LOGIN_FORGOT_PASSWORD),
+          /*multiline=*/true);
+
+      container->AddChildView(std::move(forgot_password_button));
+    }
+  }
+
   auth_error_bubble_->SetAnchorView(
       big_view->auth_user()->GetActiveInputView());
-  auth_error_bubble_->SetContent(container.release());
+  auth_error_bubble_->SetContent(std::move(container));
   auth_error_bubble_->set_accessible_name(error_text);
   auth_error_bubble_->Show();
 }
@@ -2397,6 +2444,25 @@ void LockContentsView::OnPublicAccountTapped(bool is_primary) {
 void LockContentsView::LearnMoreButtonPressed() {
   Shell::Get()->login_screen_controller()->ShowAccountAccessHelpApp(
       GetWidget()->GetNativeWindow());
+  HideAuthErrorMessage();
+}
+
+void LockContentsView::ForgotPasswordButtonPressed() {
+  LoginBigUserView* big_view = CurrentBigUserView();
+  if (!big_view->auth_user()) {
+    LOG(ERROR) << "Forgot password button pressed without focused user";
+    return;
+  }
+
+  const AccountId account_id =
+      big_view->auth_user()->current_user().basic_user_info.account_id;
+  // TODO(b/240283185): check whether recovery key is configured.
+  if (ash::features::IsCryptohomeRecoveryFlowEnabled()) {
+    user_manager::KnownUser(Shell::Get()->local_state())
+        .UpdateReauthReason(account_id,
+                            static_cast<int>(ReauthReason::FORGOT_PASSWORD));
+  }
+  Shell::Get()->login_screen_controller()->ShowGaiaSignin(account_id);
   HideAuthErrorMessage();
 }
 
@@ -2610,15 +2676,11 @@ void LockContentsView::UpdateKioskDefaultMessageVisibility() {
     return;
 
   if (!kiosk_default_message_) {
-    // KioskAppDefaultMessage is owned by itself and would be destroyed when
-    // its widget got destroyed, which happened when the widget's window got
-    // destroyed.
-    kiosk_default_message_ = new KioskAppDefaultMessage();
+    kiosk_default_message_ =
+        AddChildView(std::make_unique<KioskAppDefaultMessage>());
   }
-  if (has_kiosk_apps_)
-    kiosk_default_message_->GetWidget()->Hide();
-  else
-    kiosk_default_message_->GetWidget()->Show();
+
+  kiosk_default_message_->SetVisible(!has_kiosk_apps_);
 }
 
 void LockContentsView::SetKioskLicenseModeForTesting(

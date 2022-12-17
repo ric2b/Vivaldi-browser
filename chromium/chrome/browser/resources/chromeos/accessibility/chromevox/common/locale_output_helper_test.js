@@ -30,16 +30,28 @@ ChromeVoxLocaleOutputHelperTest = class extends ChromeVoxNextE2ETest {
   }
 
   /** @override */
-  setUp() {
-    super.setUp();
+  async setUpDeferred() {
+    await super.setUpDeferred();
+
+    await importModule(
+        'LocaleOutputHelper', '/chromevox/common/locale_output_helper.js');
+
     // Mock this api to return a predefined set of voices.
     chrome.tts.getVoices = function(callback) {
       callback([
         // All properties of TtsVoice object are optional.
         // https://developer.chrome.com/apps/tts#type-TtsVoice.
-        {}, {voiceName: 'Android'}, {'lang': 'en-US'}, {'lang': 'fr-CA'},
-        {'lang': 'es-ES'}, {'lang': 'it-IT'}, {'lang': 'ja-JP'},
-        {'lang': 'ko-KR'}, {'lang': 'zh-TW'}, {'lang': 'ast'}, {'lang': 'pt'}
+        {},
+        {voiceName: 'Android'},
+        {'lang': 'en-US'},
+        {'lang': 'fr-CA'},
+        {'lang': 'es-ES'},
+        {'lang': 'it-IT'},
+        {'lang': 'ja-JP'},
+        {'lang': 'ko-KR'},
+        {'lang': 'zh-TW'},
+        {'lang': 'ast'},
+        {'lang': 'pt'},
       ]);
     };
   }
@@ -176,7 +188,7 @@ ChromeVoxLocaleOutputHelperTest = class extends ChromeVoxNextE2ETest {
   }
 };
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'MultipleLanguagesLabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -191,10 +203,10 @@ TEST_F(
           .expectSpeechWithLocale('fr', 'français: Salut.');
       mockFeedback.call(doCmd('nextLine'))
           .expectSpeechWithLocale('it', 'italiano: Ciao amico.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'NestedLanguagesLabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -218,10 +230,10 @@ TEST_F(
           .expectSpeechWithLocale('es', 'español: Hola.');
       mockFeedback.call(doCmd('nextLine'))
           .expectSpeechWithLocale('en', 'English: Goodbye.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'ButtonAndLinkDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -240,10 +252,10 @@ TEST_F(
           .call(doCmd('nextObject'))
           .expectSpeechWithLocale('es', 'Este es un enlace.')
           .expectSpeechWithLocale(undefined, 'Link');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'JapaneseAndEnglishUnlabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -263,10 +275,10 @@ TEST_F(
               'en-us',
               'Hello, my name is 太田あきひろ. It\'s a pleasure to meet' +
                   ' you. どうぞよろしくお願いします.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'EnglishAndKoreanUnlabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -279,10 +291,10 @@ TEST_F(
               'en-us',
               'This text is written in English. 차에 한하여 중임할 수.' +
                   ' This text is also written in English.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'EnglishAndFrenchUnlabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -297,10 +309,10 @@ TEST_F(
                   ' the following French passage: ' +
                   'salut mon ami! Ca va? Bien, et toi? It\'s hard to' +
                   ' differentiate between latin-based languages.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'JapaneseCharacterUnlabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -310,10 +322,10 @@ TEST_F(
       this.setAvailableVoices();
       mockFeedback.call(doCmd('jumpToTop'))
           .expectSpeechWithLocale('en-us', 'ど');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'JapaneseAndChineseUnlabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -325,10 +337,10 @@ TEST_F(
           .expectSpeechWithLocale(
               'en-us',
               '天気はいいですね. 右万諭全中結社原済権人点掲年難出面者会追');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'JapaneseAndChineseLabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -346,10 +358,10 @@ TEST_F(
           .expectSpeechWithLocale(
               'zh',
               '中文: 天気はいいですね. 右万諭全中結社原済権人点掲年難出面者会追');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'JapaneseAndKoreanUnlabeledDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -363,10 +375,10 @@ TEST_F(
               'ko',
               '한국어: 私は. 법률이 정하는 바에 의하여 대법관이 아닌 법관을 둘 수' +
                   ' 있다');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'AsturianAndJapaneseDocTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -380,11 +392,11 @@ TEST_F(
               'ast',
               'asturianu: Pretend that this text is Asturian. Testing' +
                   ' three-letter language code logic.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'LanguageSwitchingOffTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -401,10 +413,10 @@ TEST_F(
           .expectSpeechWithLocale(undefined, 'Salut.')
           .call(doCmd('nextObject'))
           .expectSpeechWithLocale(undefined, 'Ciao amico.');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'DefaultToUILocaleTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -418,10 +430,10 @@ TEST_F(
           .expectSpeechWithLocale('en-us', 'English (United States): Test')
           .call(doCmd('nextObject'))
           .expectSpeechWithLocale('en-us', 'Yikes');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'NoAvailableVoicesTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -435,10 +447,10 @@ TEST_F(
           .call(doCmd('nextObject'))
           .expectSpeechWithLocale(
               'en-us', 'No voice available for language: Urdu');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'WordNavigationTest', async function() {
       const mockFeedback = this.createMockFeedback();
       await this.runWithLoadedTree(this.nestedLanguagesLabeledDoc);
@@ -485,11 +497,11 @@ TEST_F(
           .call(doCmd('previousWord'))
           .expectSpeechWithLocale('en', `English: .`)
           .call(doCmd('previousWord'))
-          .expectSpeechWithLocale('en', `you`)
-          .replay();
+          .expectSpeechWithLocale('en', `you`);
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'CharacterNavigationTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -530,11 +542,11 @@ TEST_F(
           .call(doCmd('previousCharacter'))
           .expectSpeechWithLocale('fr', `e`)
           .call(doCmd('previousCharacter'))
-          .expectSpeechWithLocale('fr', `j`)
-          .replay();
+          .expectSpeechWithLocale('fr', `j`);
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'SwitchBetweenChineseDialectsTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -548,10 +560,10 @@ TEST_F(
           .call(doCmd('nextLine'))
           .expectSpeechWithLocale(
               'zh-hant', '中文（繁體）: Traditional Chinese');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'SwitchBetweenPortugueseDialectsTest',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -564,7 +576,7 @@ TEST_F(
           .expectSpeechWithLocale('pt-br', 'português (Brasil): Brazil')
           .call(doCmd('nextLine'))
           .expectSpeechWithLocale('pt-pt', 'português (Portugal): Portugal');
-      mockFeedback.replay();
+      await mockFeedback.replay();
     });
 
 // Tests logic in shouldAnnounceLocale_(). We only announce the locale once when
@@ -572,7 +584,7 @@ TEST_F(
 // less specific locales, e.g. 'en-us' -> 'en' should not be announced. Finally,
 // subsequent transitions to the same locale, e.g. 'en' -> 'en-us' should not be
 // announced.
-TEST_F(
+AX_TEST_F(
     'ChromeVoxLocaleOutputHelperTest', 'MaybeAnnounceLocale', async function() {
       const mockFeedback = this.createMockFeedback();
       await this.runWithLoadedTree(`
@@ -590,6 +602,6 @@ TEST_F(
           .call(doCmd('nextObject'))
           .expectSpeechWithLocale('en', 'Penultimate')
           .call(doCmd('nextObject'))
-          .expectSpeechWithLocale('en-ca', 'End')
-          .replay();
+          .expectSpeechWithLocale('en-ca', 'End');
+      await mockFeedback.replay();
     });

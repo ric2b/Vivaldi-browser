@@ -29,9 +29,8 @@
 #include "chrome/browser/ash/system/automatic_reboot_manager_observer.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/update_engine/fake_update_engine_client.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
-#include "chromeos/dbus/update_engine/fake_update_engine_client.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -344,10 +343,7 @@ void AutomaticRebootManagerBasicTest::SetUp() {
   TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
   AutomaticRebootManager::RegisterPrefs(local_state_.registry());
 
-  update_engine_client_ = new FakeUpdateEngineClient;
-  DBusThreadManager::Initialize();
-  DBusThreadManager::GetSetterForTesting()->SetUpdateEngineClient(
-      std::unique_ptr<UpdateEngineClient>(update_engine_client_));
+  update_engine_client_ = UpdateEngineClient::InitializeFakeForTest();
   PowerManagerClient::InitializeFake();
 
   EXPECT_CALL(*mock_user_manager_, IsUserLoggedIn())
@@ -372,7 +368,7 @@ void AutomaticRebootManagerBasicTest::TearDown() {
   }
 
   PowerManagerClient::Shutdown();
-  DBusThreadManager::Shutdown();
+  UpdateEngineClient::Shutdown();
   TestingBrowserProcess::GetGlobal()->SetLocalState(NULL);
 }
 

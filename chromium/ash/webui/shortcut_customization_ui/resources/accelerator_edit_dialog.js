@@ -3,13 +3,14 @@
 // found in the LICENSE file.
 
 import './accelerator_edit_view.js';
-import './shortcut_customization_shared_css.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import './shortcut_customization_shared.css.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 
-import {flush, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {flush, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {getTemplate} from './accelerator_edit_dialog.html.js';
 import {ViewState} from './accelerator_view.js';
 import {AcceleratorInfo, AcceleratorSource} from './shortcut_types.js';
 
@@ -22,10 +23,6 @@ import {AcceleratorInfo, AcceleratorSource} from './shortcut_types.js';
 export class AcceleratorEditDialogElement extends PolymerElement {
   static get is() {
     return 'accelerator-edit-dialog';
-  }
-
-  static get template() {
-    return html`{__html_template__}`;
   }
 
   static get properties() {
@@ -150,6 +147,10 @@ export class AcceleratorEditDialogElement extends PolymerElement {
   /** @protected */
   onRestoreDefaultButtonClicked_() {
     // TODO(jimmyxgong): Implement this function.
+  }
+
+  static get template() {
+    return getTemplate();
   }
 }
 

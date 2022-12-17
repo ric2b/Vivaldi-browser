@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_EXTENSIONS_SITE_PERMISSIONS_HELPER_H_
 
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+#include "extensions/browser/permissions_manager.h"
 
 class Profile;
 class GURL;
@@ -32,14 +34,13 @@ class SitePermissionsHelper {
   enum class SiteInteraction {
     // The extension cannot run on the site.
     kNone,
-    // The extension would like access to the site, but is pending user
-    // approval.
-    kPending,
+    // The extension has withheld site access by the user.
+    kWithheld,
     // The extension has activeTab permission to run on the site, but is pending
     // user action to run.
     kActiveTab,
     // The extension has permission to run on the site.
-    kActive,
+    kGranted,
   };
 
   explicit SitePermissionsHelper(Profile* profile);
@@ -64,6 +65,13 @@ class SitePermissionsHelper {
   void UpdateSiteAccess(const Extension& extension,
                         content::WebContents* web_contents,
                         SitePermissionsHelper::SiteAccess new_access);
+
+  // Updates the user site settings pointed to by `web_contents` to
+  // `site_setting` for `action_ids`.
+  void UpdateUserSiteSettings(
+      const base::flat_set<ToolbarActionsModel::ActionId>& action_ids,
+      content::WebContents* web_contents,
+      PermissionsManager::UserSiteSetting site_setting);
 
   // Returns whether `site_access` option can be selected for `extension` in
   // `url`.

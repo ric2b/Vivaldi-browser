@@ -51,6 +51,8 @@ extern const char kFocusModeOpened[];
 // All conditions for show Focus Mode IPH were met.
 extern const char kFocusModeConditionsMet[];
 
+// The side search panel was automatically triggered.
+extern const char kSideSearchAutoTriggered[];
 // The Side search panel was opened by the user.
 extern const char kSideSearchOpened[];
 
@@ -108,6 +110,10 @@ extern const char kPasswordSuggestionsShown[];
 
 // The user has selected an Autofill password suggestion.
 extern const char kPasswordSuggestionSelected[];
+
+// The user has exited the overflow menu without scrolling horizontally and
+// without taking an action.
+extern const char kOverflowMenuNoHorizontalScrollOrAction[];
 
 #endif  // BUILDFLAG(IS_IOS)
 

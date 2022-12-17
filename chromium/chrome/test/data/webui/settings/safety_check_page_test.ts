@@ -4,8 +4,9 @@
 
 // clang-format off
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {HatsBrowserProxyImpl, LifetimeBrowserProxyImpl, MetricsBrowserProxyImpl, OpenWindowProxyImpl, PasswordCheckReferrer, PasswordManagerImpl, Router, routes, SafetyCheckBrowserProxy, SafetyCheckBrowserProxyImpl, SafetyCheckCallbackConstants, SafetyCheckChromeCleanerStatus, SafetyCheckExtensionsStatus, SafetyCheckIconStatus, SafetyCheckInteractions, SafetyCheckParentStatus, SafetyCheckPasswordsStatus, SafetyCheckSafeBrowsingStatus, SafetyCheckUpdatesStatus, SettingsSafetyCheckChildElement, SettingsSafetyCheckExtensionsChildElement, SettingsSafetyCheckPageElement, SettingsSafetyCheckPasswordsChildElement, SettingsSafetyCheckSafeBrowsingChildElement, SettingsSafetyCheckUpdatesChildElement, TrustSafetyInteraction} from 'chrome://settings/settings.js';
+import {HatsBrowserProxyImpl, LifetimeBrowserProxyImpl, MetricsBrowserProxyImpl, OpenWindowProxyImpl, PasswordCheckReferrer, PasswordManagerImpl, Router, routes, SafetyCheckBrowserProxy, SafetyCheckBrowserProxyImpl, SafetyCheckCallbackConstants, SafetyCheckChromeCleanerStatus, SafetyCheckExtensionsStatus, SafetyCheckIconStatus, SafetyCheckInteractions, SafetyCheckParentStatus, SafetyCheckPasswordsStatus, SafetyCheckSafeBrowsingStatus, SafetyCheckUpdatesStatus, SettingsSafetyCheckChildElement, SettingsSafetyCheckExtensionsChildElement, SettingsSafetyCheckPageElement, SettingsSafetyCheckPasswordsChildElement, SettingsSafetyCheckSafeBrowsingChildElement ,SettingsSafetyCheckUpdatesChildElement, TrustSafetyInteraction} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
@@ -14,10 +15,15 @@ import {TestLifetimeBrowserProxy} from './test_lifetime_browser_proxy.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 import {TestOpenWindowProxy} from './test_open_window_proxy.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
+import {assertSafetyCheckChild} from './safety_check_test_utils.js';
 
 // clang-format on
 
 const testDisplayString = 'Test display string';
+const passwordsString =
+    loadTimeData.getBoolean('unifiedPasswordManagerEnabled') ?
+    'Password Manager' :
+    'Passwords';
 
 /**
  * Fire a safety check parent event.
@@ -88,45 +94,6 @@ function fireSafetyCheckChromeCleanerEvent(
   };
   webUIListenerCallback(
       SafetyCheckCallbackConstants.CHROME_CLEANER_CHANGED, event);
-}
-
-type SafetyCheckChildExpectation = {
-  page: HTMLElement,
-  iconStatus: SafetyCheckIconStatus,
-  label: string,
-  buttonLabel?: string,
-  buttonAriaLabel?: string,
-  buttonClass?: string,
-  managedIcon?: boolean,
-  rowClickable?: boolean,
-};
-
-/**
- * Verify that the safety check child inside the page has been configured as
- * specified.
- */
-function assertSafetyCheckChild({
-  page,
-  iconStatus,
-  label,
-  buttonLabel,
-  buttonAriaLabel,
-  buttonClass,
-  managedIcon,
-  rowClickable
-}: SafetyCheckChildExpectation) {
-  const safetyCheckChild =
-      page.shadowRoot!.querySelector<SettingsSafetyCheckChildElement>(
-          '#safetyCheckChild')!;
-  assertTrue(safetyCheckChild.iconStatus === iconStatus);
-  assertTrue(safetyCheckChild.label === label);
-  assertTrue(safetyCheckChild.subLabel === testDisplayString);
-  assertTrue(!buttonLabel || safetyCheckChild.buttonLabel === buttonLabel);
-  assertTrue(
-      !buttonAriaLabel || safetyCheckChild.buttonAriaLabel === buttonAriaLabel);
-  assertTrue(!buttonClass || safetyCheckChild.buttonClass === buttonClass);
-  assertTrue(!!managedIcon === !!safetyCheckChild.managedIcon);
-  assertTrue(!!rowClickable === !!safetyCheckChild.rowClickable);
 }
 
 class TestSafetyCheckBrowserProxy extends TestBrowserProxy implements
@@ -421,6 +388,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.RUNNING,
       label: 'Updates',
+      sublabel: testDisplayString,
     });
   });
 
@@ -431,6 +399,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Updates',
+      sublabel: testDisplayString,
     });
   });
 
@@ -441,6 +410,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.RUNNING,
       label: 'Updates',
+      sublabel: testDisplayString,
     });
   });
 
@@ -451,6 +421,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Updates',
+      sublabel: testDisplayString,
       buttonLabel: page.i18n('aboutRelaunch'),
       buttonAriaLabel: page.i18n('safetyCheckUpdatesButtonAriaLabel'),
       buttonClass: 'action-button',
@@ -479,6 +450,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Updates',
+      sublabel: testDisplayString,
       managedIcon: true,
     });
   });
@@ -490,6 +462,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Updates',
+      sublabel: testDisplayString,
     });
   });
 
@@ -500,6 +473,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.WARNING,
       label: 'Updates',
+      sublabel: testDisplayString,
     });
   });
 
@@ -510,6 +484,7 @@ suite('SafetyCheckUpdatesChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Updates',
+      sublabel: testDisplayString,
     });
   });
 });
@@ -539,7 +514,8 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
     assertSafetyCheckChild({
       page: page,
       iconStatus: SafetyCheckIconStatus.RUNNING,
-      label: 'Passwords',
+      label: passwordsString,
+      sublabel: testDisplayString,
     });
   });
 
@@ -549,7 +525,8 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
     assertSafetyCheckChild({
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
-      label: 'Passwords',
+      label: passwordsString,
+      sublabel: testDisplayString,
       rowClickable: true,
     });
 
@@ -576,7 +553,8 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
     assertSafetyCheckChild({
       page: page,
       iconStatus: SafetyCheckIconStatus.WARNING,
-      label: 'Passwords',
+      label: passwordsString,
+      sublabel: testDisplayString,
       buttonLabel: 'Review',
       buttonAriaLabel: 'Review passwords',
       buttonClass: 'action-button',
@@ -614,7 +592,8 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
     assertSafetyCheckChild({
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
-      label: 'Passwords',
+      label: passwordsString,
+      sublabel: testDisplayString,
       rowClickable: true,
     });
 
@@ -651,7 +630,8 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
           assertSafetyCheckChild({
             page: page,
             iconStatus: SafetyCheckIconStatus.INFO,
-            label: 'Passwords',
+            label: passwordsString,
+            sublabel: testDisplayString,
           });
           break;
         case SafetyCheckPasswordsStatus.QUOTA_LIMIT:
@@ -659,7 +639,8 @@ suite('SafetyCheckPasswordsChildUiTests', function() {
           assertSafetyCheckChild({
             page: page,
             iconStatus: SafetyCheckIconStatus.INFO,
-            label: 'Passwords',
+            label: passwordsString,
+            sublabel: testDisplayString,
             rowClickable: true,
           });
           break;
@@ -697,6 +678,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.RUNNING,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
     });
   });
 
@@ -708,6 +690,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
       rowClickable: true,
     });
 
@@ -735,6 +718,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
       rowClickable: true,
     });
   });
@@ -747,6 +731,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
       rowClickable: true,
     });
   });
@@ -758,6 +743,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
       buttonLabel: 'Manage',
       buttonAriaLabel: 'Manage Safe Browsing',
       buttonClass: 'action-button',
@@ -787,6 +773,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
       managedIcon: true,
       rowClickable: true,
     });
@@ -800,6 +787,7 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Safe Browsing',
+      sublabel: testDisplayString,
       managedIcon: true,
       rowClickable: true,
     });
@@ -853,6 +841,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.RUNNING,
       label: 'Extensions',
+      sublabel: testDisplayString,
     });
   });
 
@@ -863,6 +852,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Extensions',
+      sublabel: testDisplayString,
       rowClickable: true,
     });
   });
@@ -875,6 +865,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Extensions',
+      sublabel: testDisplayString,
       rowClickable: true,
     });
 
@@ -903,6 +894,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.SAFE,
       label: 'Extensions',
+      sublabel: testDisplayString,
       rowClickable: true,
     });
 
@@ -923,6 +915,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.WARNING,
       label: 'Extensions',
+      sublabel: testDisplayString,
       buttonLabel: 'Review',
       buttonAriaLabel: 'Review extensions',
       buttonClass: 'action-button',
@@ -938,6 +931,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.WARNING,
       label: 'Extensions',
+      sublabel: testDisplayString,
       buttonLabel: 'Review',
       buttonAriaLabel: 'Review extensions',
       buttonClass: 'action-button',
@@ -954,6 +948,7 @@ suite('SafetyCheckExtensionsChildUiTests', function() {
       page: page,
       iconStatus: SafetyCheckIconStatus.INFO,
       label: 'Extensions',
+      sublabel: testDisplayString,
       managedIcon: true,
       rowClickable: true,
     });

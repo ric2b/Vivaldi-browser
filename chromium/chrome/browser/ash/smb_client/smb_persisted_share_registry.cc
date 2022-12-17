@@ -116,11 +116,10 @@ void SmbPersistedShareRegistry::Delete(const SmbUrl& share_url) {
   ListPrefUpdate pref(profile_->GetPrefs(),
                       prefs::kNetworkFileSharesSavedShares);
 
-  base::Value::ListView share_list = pref->GetListDeprecated();
-  for (auto it = share_list.begin(); it != share_list.end(); ++it) {
+  base::Value::List& list_update = pref->GetList();
+  for (auto it = list_update.begin(); it != list_update.end(); ++it) {
     if (GetStringValue(*it, kShareUrlKey) == share_url.ToString()) {
-      bool result = pref->EraseListIter(it);
-      DCHECK(result);
+      list_update.erase(it);
       return;
     }
   }
@@ -128,13 +127,10 @@ void SmbPersistedShareRegistry::Delete(const SmbUrl& share_url) {
 
 absl::optional<SmbShareInfo> SmbPersistedShareRegistry::Get(
     const SmbUrl& share_url) const {
-  const base::Value* pref =
-      profile_->GetPrefs()->Get(prefs::kNetworkFileSharesSavedShares);
-  if (!pref) {
-    return {};
-  }
+  const base::Value& pref =
+      profile_->GetPrefs()->GetValue(prefs::kNetworkFileSharesSavedShares);
 
-  base::Value::ConstListView share_list = pref->GetListDeprecated();
+  base::Value::ConstListView share_list = pref.GetListDeprecated();
   for (auto it = share_list.begin(); it != share_list.end(); ++it) {
     if (GetStringValue(*it, kShareUrlKey) == share_url.ToString()) {
       return DictToShare(*it);
@@ -144,14 +140,11 @@ absl::optional<SmbShareInfo> SmbPersistedShareRegistry::Get(
 }
 
 std::vector<SmbShareInfo> SmbPersistedShareRegistry::GetAll() const {
-  const base::Value* pref =
-      profile_->GetPrefs()->Get(prefs::kNetworkFileSharesSavedShares);
-  if (!pref) {
-    return {};
-  }
+  const base::Value& pref =
+      profile_->GetPrefs()->GetValue(prefs::kNetworkFileSharesSavedShares);
 
   std::vector<SmbShareInfo> shares;
-  base::Value::ConstListView share_list = pref->GetListDeprecated();
+  base::Value::ConstListView share_list = pref.GetListDeprecated();
   for (auto it = share_list.begin(); it != share_list.end(); ++it) {
     absl::optional<SmbShareInfo> info = DictToShare(*it);
     if (!info) {

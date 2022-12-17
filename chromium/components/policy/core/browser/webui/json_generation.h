@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_POLICY_CORE_BROWSER_WEBUI_JSON_GENERATION_H_
 #define COMPONENTS_POLICY_CORE_BROWSER_WEBUI_JSON_GENERATION_H_
 
+#include <memory>
 #include <string>
 
 #include "base/values.h"
@@ -78,7 +79,7 @@ struct POLICY_EXPORT JsonGenerationParams {
 // is stored in |params| and also information that is statically available.
 POLICY_EXPORT std::string GenerateJson(
     std::unique_ptr<PolicyConversionsClient> client,
-    base::Value status,
+    base::Value::Dict status,
     const JsonGenerationParams& params);
 
 // Returns metadata about the current device/build, based both on what

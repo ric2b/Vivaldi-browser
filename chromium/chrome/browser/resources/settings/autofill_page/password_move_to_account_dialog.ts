@@ -7,18 +7,17 @@
  * moving a password stored on the user device to the account.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import './avatar_icon.js';
 import '../site_favicon.js';
 
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
 import {PasswordManagerImpl} from './password_manager_proxy.js';
 import {getTemplate} from './password_move_to_account_dialog.html.js';
 
@@ -58,7 +57,7 @@ export class PasswordMoveToAccountDialogElement extends PolymerElement {
     };
   }
 
-  passwordToMove: MultiStorePasswordUiEntry;
+  passwordToMove: chrome.passwordsPrivate.PasswordUiEntry;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -73,9 +72,11 @@ export class PasswordMoveToAccountDialogElement extends PolymerElement {
   }
 
   private onMoveButtonClick_() {
-    assert(this.passwordToMove.isPresentOnDevice());
+    assert(
+        this.passwordToMove.storedIn !==
+        chrome.passwordsPrivate.PasswordStoreSet.ACCOUNT);
     PasswordManagerImpl.getInstance().movePasswordsToAccount(
-        [this.passwordToMove.deviceId!]);
+        [this.passwordToMove.id]);
     this.$.dialog.close();
   }
 

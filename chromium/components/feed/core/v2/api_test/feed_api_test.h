@@ -304,6 +304,10 @@ class TestFeedNetwork : public FeedNetwork {
     auto iter = api_request_count_.find(request_type);
     return iter == api_request_count_.end() ? 0 : iter->second;
   }
+  std::map<NetworkRequestType, int> GetApiRequestCounts() const {
+    return api_request_count_;
+  }
+
   int GetActionRequestCount() const;
   int GetFollowRequestCount() const {
     return GetApiRequestCount<FollowWebFeedDiscoverApi>();
@@ -412,7 +416,7 @@ class TestMetricsReporter : public MetricsReporter {
                     bool loaded_new_content_from_network,
                     base::TimeDelta stored_content_age,
                     const ContentStats& content_stats,
-                    const RequestMetadata& request_metadata,
+                    ContentOrder content_order,
                     std::unique_ptr<LoadLatencyTimes> latencies) override;
   void OnLoadMoreBegin(const StreamType& stream_type,
                        SurfaceId surface_id) override;
@@ -461,6 +465,7 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   DisplayMetrics GetDisplayMetrics() override;
   std::string GetLanguageTag() override;
   bool IsAutoplayEnabled() override;
+  TabGroupEnabledState GetTabGroupEnabledState() override;
   void ClearAll() override;
   AccountInfo GetAccountInfo() override;
   void PrefetchImage(const GURL& url) override;
@@ -553,7 +558,8 @@ class FeedNetworkEndpointTest
       public ::testing::WithParamInterface<::testing::tuple<bool, bool>> {
  public:
   static bool GetDiscoFeedEnabled() { return ::testing::get<0>(GetParam()); }
-  static bool GetWebFeedUsesFeedQueryRequests() {
+  // Whether Feed-Query is used instead, as request in snippets-internals.
+  static bool GetUseFeedQueryRequests() {
     return ::testing::get<1>(GetParam());
   }
 };

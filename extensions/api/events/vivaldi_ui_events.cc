@@ -99,7 +99,7 @@ gfx::PointF TransformToWindowUICoordinates(VivaldiBrowserWindow* window,
 
 void SendEventToUI(VivaldiBrowserWindow* window,
                    const std::string& eventname,
-                   std::vector<base::Value> args) {
+                   base::Value::List args) {
   // TODO(igor@vivaldi.com): This broadcats the event to all windows and
   // extensions forcing our JS code to check in each window if it matches
   // the window id embedded into the event. Find a way to send this only to

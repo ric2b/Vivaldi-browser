@@ -17,6 +17,7 @@ component("smbfs") {
   deps = [
     "//ash/components/disks",
     "//base",
+    "//chromeos/ash/components/dbus/cros_disks",
     "//chromeos/components/mojo_bootstrap",
     "//mojo/public/cpp/bindings",
     "//net",

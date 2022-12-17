@@ -1100,14 +1100,6 @@ bool GLES2InterfaceStub::LockDiscardableTextureCHROMIUM(
     GLuint /* texture_id */) {
   return 0;
 }
-void GLES2InterfaceStub::TexStorage2DImageCHROMIUM(GLenum /* target */,
-                                                   GLenum /* internalFormat */,
-                                                   GLenum /* bufferUsage */,
-                                                   GLsizei /* width */,
-                                                   GLsizei /* height */) {}
-void GLES2InterfaceStub::SetColorSpaceMetadataCHROMIUM(
-    GLuint /* texture_id */,
-    GLcolorSpace /* color_space */) {}
 void GLES2InterfaceStub::WindowRectanglesEXT(GLenum /* mode */,
                                              GLsizei /* count */,
                                              const GLint* /* box */) {}
@@ -1145,8 +1137,6 @@ void GLES2InterfaceStub::BeginSharedImageAccessDirectCHROMIUM(
     GLenum /* mode */) {}
 void GLES2InterfaceStub::EndSharedImageAccessDirectCHROMIUM(
     GLuint /* texture */) {}
-void GLES2InterfaceStub::BeginBatchReadAccessSharedImageCHROMIUM() {}
-void GLES2InterfaceStub::EndBatchReadAccessSharedImageCHROMIUM() {}
 void GLES2InterfaceStub::EnableiOES(GLenum /* target */, GLuint /* index */) {}
 void GLES2InterfaceStub::DisableiOES(GLenum /* target */, GLuint /* index */) {}
 void GLES2InterfaceStub::BlendEquationiOES(GLuint /* buf */,

@@ -21,7 +21,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "net/base/net_export.h"
-#include "net/base/network_change_notifier.h"
+#include "net/base/network_handle.h"
 #include "net/base/request_priority.h"
 #include "net/log/net_log_source.h"
 #include "net/net_buildflags.h"
@@ -227,11 +227,9 @@ class NET_EXPORT URLRequestContext {
     return require_network_isolation_key_;
   }
 
-  // If != NetworkChangeNotifier::kInvalidNetworkHandle, the network which this
+  // If != handles::kInvalidNetworkHandle, the network which this
   // context has been bound to.
-  NetworkChangeNotifier::NetworkHandle bound_network() const {
-    return bound_network_;
-  }
+  handles::NetworkHandle bound_network() const { return bound_network_; }
 
   void AssertCalledOnValidThread() {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -319,34 +317,42 @@ class NET_EXPORT URLRequestContext {
   void set_require_network_isolation_key(bool require_network_isolation_key) {
     require_network_isolation_key_ = require_network_isolation_key;
   }
-  void set_bound_network(NetworkChangeNotifier::NetworkHandle network) {
+  void set_bound_network(handles::NetworkHandle network) {
     bound_network_ = network;
   }
 
   // Ownership for these members are not defined here. Clients should either
   // provide storage elsewhere or have a subclass take ownership.
   raw_ptr<NetLog> net_log_ = nullptr;
-  raw_ptr<HostResolver> host_resolver_ = nullptr;
-  raw_ptr<CertVerifier> cert_verifier_ = nullptr;
-  raw_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_ = nullptr;
-  raw_ptr<ProxyResolutionService> proxy_resolution_service_ = nullptr;
+  raw_ptr<HostResolver, DanglingUntriaged> host_resolver_ = nullptr;
+  raw_ptr<CertVerifier, DanglingUntriaged> cert_verifier_ = nullptr;
+  raw_ptr<HttpAuthHandlerFactory, DanglingUntriaged>
+      http_auth_handler_factory_ = nullptr;
+  raw_ptr<ProxyResolutionService, DanglingUntriaged> proxy_resolution_service_ =
+      nullptr;
   raw_ptr<ProxyDelegate> proxy_delegate_ = nullptr;
-  raw_ptr<SSLConfigService> ssl_config_service_ = nullptr;
-  raw_ptr<NetworkDelegate> network_delegate_ = nullptr;
-  raw_ptr<HttpServerProperties> http_server_properties_ = nullptr;
-  raw_ptr<const HttpUserAgentSettings> http_user_agent_settings_ = nullptr;
-  raw_ptr<CookieStore> cookie_store_ = nullptr;
-  raw_ptr<TransportSecurityState> transport_security_state_ = nullptr;
-  raw_ptr<CTPolicyEnforcer> ct_policy_enforcer_ = nullptr;
-  raw_ptr<SCTAuditingDelegate> sct_auditing_delegate_ = nullptr;
-  raw_ptr<HttpTransactionFactory> http_transaction_factory_ = nullptr;
-  raw_ptr<const URLRequestJobFactory> job_factory_ = nullptr;
+  raw_ptr<SSLConfigService, DanglingUntriaged> ssl_config_service_ = nullptr;
+  raw_ptr<NetworkDelegate, DanglingUntriaged> network_delegate_ = nullptr;
+  raw_ptr<HttpServerProperties, DanglingUntriaged> http_server_properties_ =
+      nullptr;
+  raw_ptr<const HttpUserAgentSettings, DanglingUntriaged>
+      http_user_agent_settings_ = nullptr;
+  raw_ptr<CookieStore, DanglingUntriaged> cookie_store_ = nullptr;
+  raw_ptr<TransportSecurityState, DanglingUntriaged> transport_security_state_ =
+      nullptr;
+  raw_ptr<CTPolicyEnforcer, DanglingUntriaged> ct_policy_enforcer_ = nullptr;
+  raw_ptr<SCTAuditingDelegate, DanglingUntriaged> sct_auditing_delegate_ =
+      nullptr;
+  raw_ptr<HttpTransactionFactory, DanglingUntriaged> http_transaction_factory_ =
+      nullptr;
+  raw_ptr<const URLRequestJobFactory, DanglingUntriaged> job_factory_ = nullptr;
   raw_ptr<URLRequestThrottlerManager> throttler_manager_ = nullptr;
-  raw_ptr<QuicContext> quic_context_ = nullptr;
+  raw_ptr<QuicContext, DanglingUntriaged> quic_context_ = nullptr;
   raw_ptr<NetworkQualityEstimator> network_quality_estimator_ = nullptr;
 #if BUILDFLAG(ENABLE_REPORTING)
-  raw_ptr<ReportingService> reporting_service_ = nullptr;
-  raw_ptr<NetworkErrorLoggingService> network_error_logging_service_ = nullptr;
+  raw_ptr<ReportingService, DanglingUntriaged> reporting_service_ = nullptr;
+  raw_ptr<NetworkErrorLoggingService, DanglingUntriaged>
+      network_error_logging_service_ = nullptr;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
   std::unique_ptr<std::set<const URLRequest*>> url_requests_;
@@ -361,7 +367,7 @@ class NET_EXPORT URLRequestContext {
   // a request when true.
   bool require_network_isolation_key_ = false;
 
-  NetworkChangeNotifier::NetworkHandle bound_network_;
+  handles::NetworkHandle bound_network_;
 
   THREAD_CHECKER(thread_checker_);
 };

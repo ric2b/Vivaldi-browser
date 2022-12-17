@@ -74,7 +74,7 @@ class PaintOpSerializationTestUtils {
     shader->start_radius_ = 13.4f;
     shader->tx_ = SkTileMode::kRepeat;
     shader->ty_ = SkTileMode::kMirror;
-    shader->fallback_color_ = SkColorSetARGB(254, 252, 250, 248);
+    shader->fallback_color_ = {0.99f, 0.98f, 0.97f, 0.99f};
     shader->scaling_behavior_ = PaintShader::ScalingBehavior::kRasterAtScale;
     if (use_matrix) {
       shader->local_matrix_.emplace(SkMatrix::I());
@@ -88,8 +88,9 @@ class PaintOpSerializationTestUtils {
     shader->start_degrees_ = 123;
     shader->end_degrees_ = 456;
     // TODO(vmpstr): Add PaintImage/PaintRecord.
-    shader->colors_ = {SkColorSetARGB(1, 2, 3, 4), SkColorSetARGB(5, 6, 7, 8),
-                       SkColorSetARGB(9, 0, 1, 2)};
+    shader->colors_ = {{0.1f, 0.2f, 0.3f, 0.4f},
+                       {0.05f, 0.15f, 0.25f, 0.35f},
+                       {0.0f, 0.5f, 0.9f, 0.1f}};
     shader->positions_ = {0.f, 0.4f, 1.f};
   }
 };
@@ -230,12 +231,13 @@ TEST_F(PaintOpAppendTest, MoveThenReappendOperatorEq) {
 TEST(PaintOpBufferTest, SaveDrawRestore) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
+  int paint_flags_alpha = 50;
   PaintFlags draw_flags;
-  draw_flags.setColor(SK_ColorMAGENTA);
-  draw_flags.setAlpha(50);
+  draw_flags.setColor(SkColors::kMagenta);
+  draw_flags.setAlpha(paint_flags_alpha);
   EXPECT_TRUE(draw_flags.SupportsFoldingAlpha());
   SkRect rect = SkRect::MakeXYWH(1, 2, 3, 4);
   buffer.push<DrawRectOp>(rect, draw_flags);
@@ -250,15 +252,15 @@ TEST(PaintOpBufferTest, SaveDrawRestore) {
 
   // Expect the alpha from the draw and the save layer to be folded together.
   // Since alpha is stored in a uint8_t and gets rounded, so use tolerance.
-  float expected_alpha = alpha * 50 / 255.f;
-  EXPECT_LE(std::abs(expected_alpha - canvas.paint_.getAlpha()), 1.f);
+  float expected_alpha = alpha * paint_flags_alpha / 255.0f;
+  EXPECT_LE(std::abs(expected_alpha - canvas.paint_.getAlphaf()), 0.01f);
 }
 
 // Verify that we don't optimize SaveLayerAlpha / DrawTextBlob / Restore.
 TEST(PaintOpBufferTest, SaveDrawTextBlobRestore) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
   PaintFlags paint_flags;
@@ -280,11 +282,11 @@ TEST(PaintOpBufferTest, SaveDrawTextBlobRestore) {
 TEST(PaintOpBufferTest, SaveDrawRestoreFail_BadFlags) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
   PaintFlags draw_flags;
-  draw_flags.setColor(SK_ColorMAGENTA);
+  draw_flags.setColor(SkColors::kMagenta);
   draw_flags.setAlpha(50);
   draw_flags.setBlendMode(SkBlendMode::kSrc);
   EXPECT_FALSE(draw_flags.SupportsFoldingAlpha());
@@ -307,11 +309,11 @@ TEST(PaintOpBufferTest, SaveDrawRestoreFail_BadFlags) {
 TEST(PaintOpBufferTest, SaveDrawRestore_BadFlags255Alpha) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 255;
+  float alpha = 1.0f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
   PaintFlags draw_flags;
-  draw_flags.setColor(SK_ColorMAGENTA);
+  draw_flags.setColor(SkColors::kMagenta);
   draw_flags.setAlpha(50);
   draw_flags.setBlendMode(SkBlendMode::kColorBurn);
   EXPECT_FALSE(draw_flags.SupportsFoldingAlpha());
@@ -332,11 +334,11 @@ TEST(PaintOpBufferTest, SaveDrawRestore_BadFlags255Alpha) {
 TEST(PaintOpBufferTest, SaveDrawRestoreFail_TooManyOps) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
   PaintFlags draw_flags;
-  draw_flags.setColor(SK_ColorMAGENTA);
+  draw_flags.setColor(SkColors::kMagenta);
   draw_flags.setAlpha(50);
   draw_flags.setBlendMode(SkBlendMode::kSrcOver);
   EXPECT_TRUE(draw_flags.SupportsFoldingAlpha());
@@ -359,7 +361,7 @@ TEST(PaintOpBufferTest, SaveDrawRestoreFail_TooManyOps) {
 TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpNotADrawOp) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
   buffer.push<NoopOp>();
@@ -377,9 +379,10 @@ TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpNotADrawOp) {
 TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpRecordWithSingleOp) {
   sk_sp<PaintRecord> record = sk_make_sp<PaintRecord>();
 
+  int paint_flags_alpha = 50;
   PaintFlags draw_flags;
-  draw_flags.setColor(SK_ColorMAGENTA);
-  draw_flags.setAlpha(50);
+  draw_flags.setColor(SkColors::kMagenta);
+  draw_flags.setAlpha(paint_flags_alpha);
   EXPECT_TRUE(draw_flags.SupportsFoldingAlpha());
   SkRect rect = SkRect::MakeXYWH(1, 2, 3, 4);
   record->push<DrawRectOp>(rect, draw_flags);
@@ -387,7 +390,7 @@ TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpRecordWithSingleOp) {
 
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
   buffer.push<DrawRecordOp>(std::move(record));
   buffer.push<RestoreOp>();
@@ -399,8 +402,8 @@ TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpRecordWithSingleOp) {
   EXPECT_EQ(0, canvas.restore_count_);
   EXPECT_EQ(rect, canvas.draw_rect_);
 
-  float expected_alpha = alpha * 50 / 255.f;
-  EXPECT_LE(std::abs(expected_alpha - canvas.paint_.getAlpha()), 1.f);
+  float expected_alpha = alpha * paint_flags_alpha / 255.f;
+  EXPECT_LE(std::abs(expected_alpha - canvas.paint_.getAlphaf()), 0.01f);
 }
 
 // The same as the above SingleOpRecord test, but the single op is not
@@ -415,7 +418,7 @@ TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpRecordWithSingleNonDrawOp) {
 
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
   buffer.push<DrawRecordOp>(std::move(record));
   buffer.push<RestoreOp>();
@@ -429,7 +432,7 @@ TEST(PaintOpBufferTest, SaveDrawRestore_SingleOpRecordWithSingleNonDrawOp) {
 
 TEST(PaintOpBufferTest, SaveLayerRestore_DrawColor) {
   PaintOpBuffer buffer;
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   SkColor original = SkColorSetA(50, SK_ColorRED);
 
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
@@ -507,7 +510,7 @@ TEST(PaintOpBufferTest, DiscardableImagesTracking_OpWithFlags) {
 
 TEST(PaintOpBufferTest, SlowPaths) {
   auto buffer = sk_make_sp<PaintOpBuffer>();
-  EXPECT_EQ(buffer->num_slow_paths(), 0);
+  EXPECT_EQ(buffer->num_slow_paths_up_to_min_for_MSAA(), 0);
 
   // Op without slow paths
   PaintFlags noop_flags;
@@ -523,13 +526,13 @@ TEST(PaintOpBufferTest, SlowPaths) {
   line_effect_slow.setPathEffect(SkDashPathEffect::Make(intervals, 2, 0));
 
   buffer->push<DrawLineOp>(1.f, 2.f, 3.f, 4.f, line_effect_slow);
-  EXPECT_EQ(buffer->num_slow_paths(), 1);
+  EXPECT_EQ(buffer->num_slow_paths_up_to_min_for_MSAA(), 1);
 
   // Line effect special case that Skia handles specially.
   PaintFlags line_effect = line_effect_slow;
   line_effect.setStrokeCap(PaintFlags::kButt_Cap);
   buffer->push<DrawLineOp>(1.f, 2.f, 3.f, 4.f, line_effect);
-  EXPECT_EQ(buffer->num_slow_paths(), 1);
+  EXPECT_EQ(buffer->num_slow_paths_up_to_min_for_MSAA(), 1);
 
   // Antialiased convex path is not slow.
   SkPath path;
@@ -537,7 +540,7 @@ TEST(PaintOpBufferTest, SlowPaths) {
   EXPECT_TRUE(path.isConvex());
   buffer->push<ClipPathOp>(path, SkClipOp::kIntersect, /*antialias=*/true,
                            UsePaintCache::kDisabled);
-  EXPECT_EQ(buffer->num_slow_paths(), 1);
+  EXPECT_EQ(buffer->num_slow_paths_up_to_min_for_MSAA(), 1);
 
   // Concave paths are slow only when antialiased.
   SkPath concave = path;
@@ -545,19 +548,19 @@ TEST(PaintOpBufferTest, SlowPaths) {
   EXPECT_FALSE(concave.isConvex());
   buffer->push<ClipPathOp>(concave, SkClipOp::kIntersect, /*antialias=*/true,
                            UsePaintCache::kDisabled);
-  EXPECT_EQ(buffer->num_slow_paths(), 2);
+  EXPECT_EQ(buffer->num_slow_paths_up_to_min_for_MSAA(), 2);
   buffer->push<ClipPathOp>(concave, SkClipOp::kIntersect, /*antialias=*/false,
                            UsePaintCache::kDisabled);
-  EXPECT_EQ(buffer->num_slow_paths(), 2);
+  EXPECT_EQ(buffer->num_slow_paths_up_to_min_for_MSAA(), 2);
 
   // Drawing a record with slow paths into another adds the same
   // number of slow paths as the record.
   auto buffer2 = sk_make_sp<PaintOpBuffer>();
-  EXPECT_EQ(0, buffer2->num_slow_paths());
+  EXPECT_EQ(0, buffer2->num_slow_paths_up_to_min_for_MSAA());
   buffer2->push<DrawRecordOp>(buffer);
-  EXPECT_EQ(2, buffer2->num_slow_paths());
+  EXPECT_EQ(2, buffer2->num_slow_paths_up_to_min_for_MSAA());
   buffer2->push<DrawRecordOp>(buffer);
-  EXPECT_EQ(4, buffer2->num_slow_paths());
+  EXPECT_EQ(4, buffer2->num_slow_paths_up_to_min_for_MSAA());
 }
 
 TEST(PaintOpBufferTest, NonAAPaint) {
@@ -819,7 +822,7 @@ TEST_F(PaintOpBufferOffsetsTest, ContiguousIndicesWithSaveLayerAlphaRestore) {
 
   push_op<DrawColorOp>(SkColor4f::FromColor(0u), SkBlendMode::kClear);
   push_op<DrawColorOp>(SkColor4f::FromColor(1u), SkBlendMode::kClear);
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   push_op<SaveLayerAlphaOp>(nullptr, alpha);
   push_op<RestoreOp>();
   push_op<DrawColorOp>(SkColor4f::FromColor(2u), SkBlendMode::kClear);
@@ -845,7 +848,7 @@ TEST_F(PaintOpBufferOffsetsTest,
 
   push_op<DrawColorOp>(SkColor4f::FromColor(0u), SkBlendMode::kClear);
   push_op<DrawColorOp>(SkColor4f::FromColor(1u), SkBlendMode::kClear);
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   push_op<SaveLayerAlphaOp>(nullptr, alpha);
   push_op<DrawColorOp>(SkColor4f::FromColor(2u), SkBlendMode::kClear);
   push_op<DrawColorOp>(SkColor4f::FromColor(3u), SkBlendMode::kClear);
@@ -895,7 +898,7 @@ TEST_F(PaintOpBufferOffsetsTest,
 
   add_draw_rect(0u);
   add_draw_rect(1u);
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   push_op<SaveLayerAlphaOp>(nullptr, alpha);
   add_draw_rect(2u);
   push_op<RestoreOp>();
@@ -928,7 +931,7 @@ TEST_F(PaintOpBufferOffsetsTest,
 
   add_draw_rect(0u);
   add_draw_rect(1u);
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   push_op<SaveLayerAlphaOp>(nullptr, alpha);
   add_draw_rect(2u);
   add_draw_rect(3u);
@@ -987,7 +990,7 @@ TEST(PaintOpBufferTest, SaveLayerAlphaDrawRestoreWithBadBlendMode) {
   };
 
   add_draw_rect(&buffer, 0u);
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
   add_draw_rect(&buffer, 1u);
   buffer.push<RestoreOp>();
@@ -1016,7 +1019,7 @@ TEST(PaintOpBufferTest, UnmatchedSaveRestoreNoSideEffects) {
 
   // Push 2 saves.
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
   add_draw_rect(&buffer, 0u);
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
@@ -1127,7 +1130,7 @@ std::vector<PaintFlags> test_flags = {
       flags.setStrokeJoin(PaintFlags::kBevel_Join);
       flags.setStyle(PaintFlags::kStroke_Style);
       flags.setFilterQuality(PaintFlags::FilterQuality::kMedium);
-      flags.setShader(PaintShader::MakeColor(SkColorSetARGB(1, 2, 3, 4)));
+      flags.setShader(PaintShader::MakeColor({0.1f, 0.2f, 0.3f, 0.4f}));
       return flags;
     }(),
     [] {
@@ -1159,7 +1162,8 @@ std::vector<PaintFlags> test_flags = {
       looper_builder.addLayer(layer_info);
       flags.setLooper(looper_builder.detach());
 
-      sk_sp<PaintShader> shader = PaintShader::MakeColor(SK_ColorTRANSPARENT);
+      sk_sp<PaintShader> shader =
+          PaintShader::MakeColor(SkColors::kTransparent);
       PaintOpSerializationTestUtils::FillArbitraryShaderValues(shader.get(),
                                                                true);
       flags.setShader(std::move(shader));
@@ -1168,13 +1172,14 @@ std::vector<PaintFlags> test_flags = {
     }(),
     [] {
       PaintFlags flags;
-      flags.setShader(PaintShader::MakeColor(SkColorSetARGB(12, 34, 56, 78)));
+      flags.setShader(PaintShader::MakeColor({0.1f, 0.2f, 0.3f, 0.4f}));
 
       return flags;
     }(),
     [] {
       PaintFlags flags;
-      sk_sp<PaintShader> shader = PaintShader::MakeColor(SK_ColorTRANSPARENT);
+      sk_sp<PaintShader> shader =
+          PaintShader::MakeColor(SkColors::kTransparent);
       PaintOpSerializationTestUtils::FillArbitraryShaderValues(shader.get(),
                                                                false);
       flags.setShader(std::move(shader));
@@ -1184,9 +1189,9 @@ std::vector<PaintFlags> test_flags = {
     [] {
       PaintFlags flags;
       SkPoint points[2] = {SkPoint::Make(1, 2), SkPoint::Make(3, 4)};
-      SkColor colors[3] = {SkColorSetARGB(1, 2, 3, 4),
-                           SkColorSetARGB(4, 3, 2, 1),
-                           SkColorSetARGB(0, 10, 20, 30)};
+      SkColor4f colors[3] = {{0.1f, 0.2f, 0.3f, 0.4f},
+                             {0.4f, 0.3f, 0.2f, 0.1f},
+                             {0.2f, 0.4f, 0.6f, 0.0f}};
       SkScalar positions[3] = {0.f, 0.3f, 1.f};
       flags.setShader(PaintShader::MakeLinearGradient(points, colors, positions,
                                                       3, SkTileMode::kMirror));
@@ -1195,9 +1200,9 @@ std::vector<PaintFlags> test_flags = {
     }(),
     [] {
       PaintFlags flags;
-      SkColor colors[3] = {SkColorSetARGB(1, 2, 3, 4),
-                           SkColorSetARGB(4, 3, 2, 1),
-                           SkColorSetARGB(0, 10, 20, 30)};
+      SkColor4f colors[3] = {{0.1f, 0.2f, 0.3f, 0.4f},
+                             {0.4f, 0.3f, 0.2f, 0.1f},
+                             {0.2f, 0.4f, 0.6f, 0.0f}};
       flags.setShader(PaintShader::MakeSweepGradient(
           0.2f, -0.8f, colors, nullptr, 3, SkTileMode::kMirror, 10, 20));
       return flags;
@@ -1725,12 +1730,12 @@ void PushSaveLayerOps(PaintOpBuffer* buffer) {
 }
 
 void PushSaveLayerAlphaOps(PaintOpBuffer* buffer) {
-  size_t len = std::min(test_uint8s.size(), test_rects.size());
+  size_t len = std::min(test_floats.size(), test_rects.size());
   for (size_t i = 0; i < len; ++i)
-    buffer->push<SaveLayerAlphaOp>(&test_rects[i], test_uint8s[i]);
+    buffer->push<SaveLayerAlphaOp>(&test_rects[i], test_floats[i]);
 
   // Test optional args.
-  buffer->push<SaveLayerAlphaOp>(nullptr, test_uint8s[0]);
+  buffer->push<SaveLayerAlphaOp>(nullptr, test_floats[0]);
   ValidateOps<SaveLayerAlphaOp>(buffer);
 }
 
@@ -2443,11 +2448,11 @@ TEST(PaintOpBufferTest, ClipsImagesDuringSerialization) {
 TEST(PaintOpBufferSerializationTest, AlphaFoldingDuringSerialization) {
   PaintOpBuffer buffer;
 
-  uint8_t alpha = 100;
+  float alpha = 0.4f;
   buffer.push<SaveLayerAlphaOp>(nullptr, alpha);
 
   PaintFlags draw_flags;
-  draw_flags.setColor(SK_ColorMAGENTA);
+  draw_flags.setColor(SkColors::kMagenta);
   draw_flags.setAlpha(50);
   SkRect rect = SkRect::MakeXYWH(1, 2, 3, 4);
   buffer.push<DrawRectOp>(rect, draw_flags);
@@ -2497,7 +2502,7 @@ TEST(PaintOpBufferSerializationTest, AlphaFoldingDuringSerialization) {
     ASSERT_EQ(op->GetType(), PaintOpType::DrawRect);
     // Expect the alpha from the draw and the save layer to be folded together.
     // Since alpha is stored in a uint8_t and gets rounded, so use tolerance.
-    float expected_alpha = alpha * 50 / 255.f;
+    float expected_alpha = alpha * 50;
     EXPECT_LE(std::abs(expected_alpha -
                        static_cast<const DrawRectOp*>(op)->flags.getAlpha()),
               1.f);
@@ -2730,7 +2735,7 @@ TEST(PaintOpBufferTest, ValidateRects) {
   buffer.push<DrawRectOp>(bad_rect, test_flags[0]);
   buffer.push<SaveLayerOp>(&bad_rect, nullptr);
   buffer.push<SaveLayerOp>(&bad_rect, &test_flags[0]);
-  buffer.push<SaveLayerAlphaOp>(&bad_rect, test_uint8s[0]);
+  buffer.push<SaveLayerAlphaOp>(&bad_rect, test_floats[0]);
 
   TestOptionsProvider options_provider;
 
@@ -3387,7 +3392,7 @@ TEST_P(PaintFilterSerializationTest, Basic) {
       sk_sp<PaintFilter>{
           new BlurPaintFilter(0.5f, 0.3f, SkTileMode::kRepeat, nullptr)},
       sk_sp<PaintFilter>{new DropShadowPaintFilter(
-          5.f, 10.f, 0.1f, 0.3f, SK_ColorBLUE,
+          5.f, 10.f, 0.1f, 0.3f, SkColors::kBlue,
           DropShadowPaintFilter::ShadowMode::kDrawShadowOnly, nullptr)},
       sk_sp<PaintFilter>{new MagnifierPaintFilter(SkRect::MakeXYWH(5, 6, 7, 8),
                                                   10.5f, nullptr)},
@@ -3408,13 +3413,13 @@ TEST_P(PaintFilterSerializationTest, Basic) {
           SkMatrix::I(), PaintFlags::FilterQuality::kHigh, nullptr)},
       sk_sp<PaintFilter>{new LightingDistantPaintFilter(
           PaintFilter::LightingType::kSpecular, SkPoint3::Make(1, 2, 3),
-          SK_ColorCYAN, 1.1f, 2.2f, 3.3f, nullptr)},
+          SkColors::kCyan, 1.1f, 2.2f, 3.3f, nullptr)},
       sk_sp<PaintFilter>{new LightingPointPaintFilter(
           PaintFilter::LightingType::kDiffuse, SkPoint3::Make(2, 3, 4),
-          SK_ColorRED, 1.2f, 3.4f, 5.6f, nullptr)},
+          SkColors::kRed, 1.2f, 3.4f, 5.6f, nullptr)},
       sk_sp<PaintFilter>{new LightingSpotPaintFilter(
           PaintFilter::LightingType::kSpecular, SkPoint3::Make(100, 200, 300),
-          SkPoint3::Make(400, 500, 600), 1, 2, SK_ColorMAGENTA, 3, 4, 5,
+          SkPoint3::Make(400, 500, 600), 1, 2, SkColors::kMagenta, 3, 4, 5,
           nullptr)},
       sk_sp<PaintFilter>{
           new ImagePaintFilter(CreateDiscardablePaintImage(gfx::Size(100, 100)),
@@ -4141,7 +4146,7 @@ TEST(PaintOpBufferTest, HasEffectsPreventingLCDTextForSaveLayerAlpha) {
 
 TEST(PaintOpBufferTest, NeedsAdditionalInvalidationForLCDText) {
   auto buffer1 = sk_make_sp<PaintOpBuffer>();
-  buffer1->push<SaveLayerAlphaOp>(nullptr, uint8_t{100});
+  buffer1->push<SaveLayerAlphaOp>(nullptr, 0.4f);
   EXPECT_FALSE(buffer1->has_draw_text_ops());
   EXPECT_TRUE(buffer1->has_save_layer_alpha_ops());
   EXPECT_FALSE(buffer1->has_effects_preventing_lcd_text_for_save_layer_alpha());

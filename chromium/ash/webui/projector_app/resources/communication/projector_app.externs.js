@@ -176,9 +176,7 @@ projectorApp.PendingScreencast.prototype.uploadProgress;
 /**
  * The created time of the screencast video, as the number of milliseconds since
  * the epoch.
- * TODO(b/215258794): After adding |createdTime| on Chromium side, remove the
- * 'undefined' from type definition.
- * @type {number|undefined}
+ * @type {number}
  */
 projectorApp.PendingScreencast.prototype.createdTime;
 
@@ -236,6 +234,31 @@ projectorApp.NewScreencastPreconditionState.prototype.state;
  * @type {?Array<number>}
  */
 projectorApp.NewScreencastPreconditionState.prototype.reasons;
+
+/**
+ * Structure for Screencast video object.
+ * @record
+ * @struct
+ */
+projectorApp.Video = function() {};
+
+/**
+ * Duration of the video in milliseconds.
+ * @type {string|undefined}
+ */
+projectorApp.Video.prototype.durationMillis;
+
+/**
+ * The local source url of screencast video.
+ * @type {string|undefined}
+ */
+projectorApp.Video.prototype.srcUrl;
+
+/**
+ * Drive item id of the video file.
+ * @type {string|undefined}
+ */
+projectorApp.Video.prototype.fileId;
 
 /**
  * The delegate interface that the Projector app can use to make requests to
@@ -297,10 +320,11 @@ projectorApp.ClientDelegate.prototype.getPendingScreencasts = function() {};
  * @param {string=} requestBody the request body data.
  * @param {boolean=} useCredentials authorize the request with end user
  *  credentials. Used for getting streaming URL.
+ * @param {Object=} additional headers.
  * @return {!Promise<!projectorApp.XhrResponse>}
  */
 projectorApp.ClientDelegate.prototype.sendXhr = function(
-    url, method, requestBody, useCredentials) {};
+    url, method, requestBody, useCredentials, headers) {};
 
 /**
  * Returns true if the device supports on device speech recognition.
@@ -344,6 +368,15 @@ projectorApp.ClientDelegate.prototype.setUserPref = function(
 projectorApp.ClientDelegate.prototype.openFeedbackDialog = function() {};
 
 /**
+ * Gets information about the specified video from DriveFS.
+ * @param {string} videoFileId The Drive item id of the video file.
+ * @param {string|undefined} resourceKey The Drive item resource key.
+ * @return {!Promise<!projectorApp.Video>}
+ */
+projectorApp.ClientDelegate.prototype.getVideo = function(
+    videoFileId, resourceKey) {};
+
+/**
  * The client Api for interacting with the Projector app instance.
  * @record
  * @struct
@@ -371,6 +404,9 @@ projectorApp.AppApi.prototype.onScreencastsStateChange = function(
  */
 projectorApp.AppApi.prototype.setClientDelegate = function(clientDelegate) {};
 
+// TODO(b/224705800): Don't notify the Projector client for SODA installation
+// progress updates. This number is no longer surfaced in the UI, so the
+// wiring can be cleaned up.
 /**
  * Notifies the Projector App the download and installation progress of the SODA
  * binary and language packs.

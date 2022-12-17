@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Вихід зі стану неактивності</translation>
 <translation id="119944043368869598">Очистити все</translation>
 <translation id="1221825588892235038">Лише виділене</translation>
+<translation id="1234736487471201993">Створити QR-код для цього зображення</translation>
 <translation id="1244303850296295656">Помилка розширення</translation>
 <translation id="125220115284141797">За замовчуванням</translation>
 <translation id="1297175357211070620">Принтер</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Транслювати вкладку</translation>
 <translation id="2150139952286079145">Пошук місць призначення</translation>
 <translation id="215753907730220065">Вийти з повноекранного режиму</translation>
+<translation id="2158475082070321257">Копіювати посилання на виділений текст</translation>
 <translation id="2177950615300672361">Анонімна вкладка: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Вставити як звичайний текст</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Щоб розпізнавати ваш пристрій, сайтам, можливо, буде потрібен ідентифікатор</translation>
 <translation id="2445081178310039857">Потрібен кореневий каталог розширення.</translation>
 <translation id="2470702053775288986">Непідтримувані розширення вимкнено</translation>
-<translation id="2476578072172137802">Налаштування сайту</translation>
+<translation id="2485422356828889247">Видалити</translation>
 <translation id="2498539833203011245">Згорнути</translation>
 <translation id="2509495747794740764">Вкажіть значення від 10 до 200.</translation>
 <translation id="253557089021624350">Кількість з'єднань keepalive</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Повідомити про порушення</translation>
 <translation id="2941112035454246133">Низький</translation>
 <translation id="2972581237482394796">&amp;Повторити</translation>
+<translation id="2993517869960930405">Про додаток</translation>
 <translation id="3003623123441819449">Кеш CSS</translation>
 <translation id="3008272652534848354">Скинути дозволи</translation>
 <translation id="3012631534724231212">(фрейм)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Відкрити посилання як</translation>
 <translation id="3222066309010235055">Візуалізатор: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Виберіть кореневий каталог для пакування розширення. Щоб оновити розширення, також виберіть файл секретного ключа для повторного використання.</translation>
+<translation id="3275778913554317645">Відкрити у вікні</translation>
 <translation id="3280237271814976245">Зберегти &amp;як...</translation>
 <translation id="3285322247471302225">Нова &amp;вкладка</translation>
 <translation id="3288047731229977326">Розширення, які працюють у режимі розробника, можуть пошкодити ваш комп’ютер. Якщо ви не розробник, вимкніть їх заради безпеки.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Перегляд PDF</translation>
 <translation id="3308134619352333507">Сховати кнопку</translation>
 <translation id="3317459757438853210">Двохсторонній друк</translation>
+<translation id="3331974543021145906">Про додаток</translation>
 <translation id="3341703758641437857">Дозволити для локальних файлів</translation>
 <translation id="3347086966102161372">&amp;Копіювати адресу зображення</translation>
 <translation id="3360297538363969800">Помилка друку. Перевірте принтер і повторіть спробу.</translation>
 <translation id="3378572629723696641">Це розширення могло бути пошкоджено.</translation>
 <translation id="3387614642886316601">Використовувати покращену перевірку орфографії</translation>
+<translation id="3390013585654699824">Дані про додаток</translation>
 <translation id="3393582007140394275">Не вдається транслювати екран.</translation>
 <translation id="3432227430032737297">Вилучити всі показані</translation>
 <translation id="345693547134384690">Відкрити &amp;зображення в новій вкладці</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Шукати зображення в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Дозволити сайтам відтворювати захищений вміст (рекомендується)</translation>
 <translation id="3979395879372752341">Додано нове розширення (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Копіювати посилання на виділений текст</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Додати до словника</translation>
 <translation id="407520071244661467">Масштаб</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Закрити браузер перед імпортуванням</translation>
 <translation id="4130207949184424187">Це розширення змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
 <translation id="4131410914670010031">Чорно-білий друк</translation>
+<translation id="4165986682804962316">Налаштування сайтів</translation>
 <translation id="4176463684765177261">Вимкнено</translation>
 <translation id="4200983522494130825">Нова &amp;вкладка</translation>
 <translation id="4225397296022057997">На всіх сайтах</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Відновити налаштування</translation>
 <translation id="4726710629007580002">При встановленні розширення були такі попередження:</translation>
 <translation id="479536056609751218">Веб-сторінка, тільки HTML</translation>
+<translation id="4827904420700932487">Створити QR-код для цього зображення</translation>
 <translation id="4839303808932127586">Збере&amp;гти відео як...</translation>
 <translation id="4840096453115567876">Усе одно вийти з приватного режиму?</translation>
 <translation id="488785315393301722">Показати деталі</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Запитувати, перш ніж надавати доступ (рекомендовано)</translation>
 <translation id="5677928146339483299">Заблоковано</translation>
 <translation id="5707185214361380026">Помилка завантаження розширення з:</translation>
+<translation id="5713171467967533494">Відкривати у браузері Vivaldi</translation>
 <translation id="5715711091495208045">Посередник для плагінів: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Зберегти як PDF</translation>
 <translation id="5747809636523347288">Вс&amp;тавити й перейти до <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Параметри</translation>
 <translation id="6579369886355986318">Показати всі &amp;елементи керування</translation>
 <translation id="6639554308659482635">Пам'ять SQLite</translation>
+<translation id="666731172850799929">Відкрити в додатку <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Зберегти пароль</translation>
 <translation id="6691936601825168937">&amp;Переслати</translation>
 <translation id="6798954102094737107">Плагін: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@
 <translation id="9003647077635673607">Дозволити на всіх веб-сайтах</translation>
 <translation id="9027459031423301635">Відкрити посилання в новій &amp;вкладці</translation>
 <translation id="9056810968620647706">Нічого не знайдено.</translation>
+<translation id="9084064520949870008">Відкрити у вікні</translation>
 <translation id="9137916601698928395">Відкрити посилання як <ph name="USER" /></translation>
 <translation id="91568222606626347">Створити ярлик…</translation>
 <translation id="916607977885256133">Картинка в картинці</translation>

@@ -68,8 +68,10 @@ bool StructTraits<blink::mojom::StreamControlsDataView, blink::StreamControls>::
 #endif
   out->hotword_enabled = input.hotword_enabled();
   out->disable_local_echo = input.disable_local_echo();
+  out->exclude_system_audio = input.exclude_system_audio();
   out->request_pan_tilt_zoom_permission =
       input.request_pan_tilt_zoom_permission();
+  out->request_all_screens = input.request_all_screens();
   return true;
 }
 

@@ -22,9 +22,9 @@
 #include "net/cert/cert_net_fetcher.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verify_result.h"
-#include "net/cert/internal/cert_errors.h"
-#include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/known_roots.h"
+#include "net/cert/pki/cert_errors.h"
+#include "net/cert/pki/parsed_certificate.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "url/gurl.h"
@@ -341,7 +341,7 @@ CertVerifyProcAndroid::CertVerifyProcAndroid(
     scoped_refptr<CertNetFetcher> cert_net_fetcher)
     : cert_net_fetcher_(std::move(cert_net_fetcher)) {}
 
-CertVerifyProcAndroid::~CertVerifyProcAndroid() {}
+CertVerifyProcAndroid::~CertVerifyProcAndroid() = default;
 
 bool CertVerifyProcAndroid::SupportsAdditionalTrustAnchors() const {
   return false;

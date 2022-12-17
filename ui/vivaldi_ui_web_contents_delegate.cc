@@ -29,7 +29,6 @@
 
 #include "app/vivaldi_constants.h"
 #include "ui/vivaldi_browser_window.h"
-#include "ui/vivaldi_native_app_window_views.h"
 
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
 #include "components/paint_preview/browser/paint_preview_client.h"
@@ -245,7 +244,7 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
 void VivaldiUIWebContentsDelegate::RenderViewHostChanged(
     content::RenderViewHost* old_host,
     content::RenderViewHost* new_host) {
-  window_->views()->OnViewWasResized();
+  window_->OnViewWasResized();
 }
 
 void VivaldiUIWebContentsDelegate::PrimaryMainFrameRenderProcessGone(
@@ -299,7 +298,7 @@ void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(
     const std::vector<extensions::DraggableRegion>& regions) {
   // Only process events for the main frame.
   if (!sender->GetParent()) {
-    window_->views()->UpdateDraggableRegions(regions);
+    window_->UpdateDraggableRegions(regions);
   }
 }
 
@@ -322,6 +321,10 @@ void VivaldiUIWebContentsDelegate::DidStartNavigation(
     return;
 
   window_->ContentsDidStartNavigation();
+}
+
+void VivaldiUIWebContentsDelegate::PrimaryMainDocumentElementAvailable() {
+  window_->ContentsLoadCompletedInMainFrame();
 }
 
 content::WebContents* VivaldiUIWebContentsDelegate::OpenURLFromTab(

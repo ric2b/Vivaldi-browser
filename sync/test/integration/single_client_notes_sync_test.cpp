@@ -11,7 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
-#include "components/sync/test/fake_server/entity_builder_factory.h"
+#include "components/sync/test/entity_builder_factory.h"
 #include "content/public/test/browser_test.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
@@ -119,7 +119,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(ModelMatchesVerifier(0));
 
-  ASSERT_EQ(1, tier1_a_url0->parent()->GetIndexOf(tier1_a_url0));
+  ASSERT_EQ(1UL, tier1_a_url0->parent()->GetIndexOf(tier1_a_url0).value());
   Move(0, tier1_a_url0, top, top->children().size());
   const NoteNode* boa =
       AddNote(0, top, top->children().size(), "Bank of America",

@@ -64,10 +64,10 @@ std::unique_ptr<PageSchedulerImpl> CreatePageScheduler(
 std::unique_ptr<FrameSchedulerImpl> CreateFrameScheduler(
     PageSchedulerImpl* page_scheduler,
     FrameScheduler::Delegate* delegate,
-    blink::BlameContext* blame_context,
+    bool is_in_embedded_frame_tree,
     FrameScheduler::FrameType frame_type) {
-  auto frame_scheduler =
-      page_scheduler->CreateFrameScheduler(delegate, blame_context, frame_type);
+  auto frame_scheduler = page_scheduler->CreateFrameScheduler(
+      delegate, is_in_embedded_frame_tree, frame_type);
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler_impl(
       static_cast<FrameSchedulerImpl*>(frame_scheduler.release()));
   return frame_scheduler_impl;
@@ -116,7 +116,8 @@ class PageSchedulerImplTest : public testing::Test {
         CreatePageScheduler(page_scheduler_delegate_.get(), scheduler_.get(),
                             *agent_group_scheduler_);
     frame_scheduler_ =
-        CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+        CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                             /*is_in_embedded_frame_tree=*/false,
                              FrameScheduler::FrameType::kSubframe);
   }
 
@@ -268,19 +269,23 @@ class PageSchedulerImplTest : public testing::Test {
 TEST_F(PageSchedulerImplTest, TestDestructionOfFrameSchedulersBefore) {
   std::unique_ptr<blink::FrameScheduler> frame1(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, /*is_in_embedded_frame_tree=*/false,
+          FrameScheduler::FrameType::kSubframe));
   std::unique_ptr<blink::FrameScheduler> frame2(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, /*is_in_embedded_frame_tree=*/false,
+          FrameScheduler::FrameType::kSubframe));
 }
 
 TEST_F(PageSchedulerImplTest, TestDestructionOfFrameSchedulersAfter) {
   std::unique_ptr<blink::FrameScheduler> frame1(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, /*is_in_embedded_frame_tree=*/false,
+          FrameScheduler::FrameType::kSubframe));
   std::unique_ptr<blink::FrameScheduler> frame2(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, /*is_in_embedded_frame_tree=*/false,
+          FrameScheduler::FrameType::kSubframe));
   page_scheduler_.reset();
 }
 
@@ -367,7 +372,8 @@ TEST_F(PageSchedulerImplTest, RepeatingTimers_OneBackgroundOneForeground) {
   std::unique_ptr<PageSchedulerImpl> page_scheduler2 =
       CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler2 =
-      CreateFrameScheduler(page_scheduler2.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler2.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
 
   page_scheduler_->SetPageVisible(true);
@@ -656,7 +662,8 @@ TEST_F(PageSchedulerImplTest, VirtualTimeSettings_NewFrameScheduler) {
   vtc->SetVirtualTimePolicy(VirtualTimePolicy::kPause);
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
 
   ThrottleableTaskQueueForScheduler(frame_scheduler.get())
@@ -687,7 +694,8 @@ base::OnceClosure MakeDeletionTask(T* obj) {
 TEST_F(PageSchedulerImplTest, DeleteFrameSchedulers_InTask) {
   for (int i = 0; i < 10; i++) {
     FrameSchedulerImpl* frame_scheduler =
-        CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+        CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                             /*is_in_embedded_frame_tree=*/false,
                              FrameScheduler::FrameType::kSubframe)
             .release();
     ThrottleableTaskQueueForScheduler(frame_scheduler)
@@ -708,7 +716,8 @@ TEST_F(PageSchedulerImplTest, DeleteThrottledQueue_InTask) {
   page_scheduler_->SetPageVisible(false);
 
   FrameSchedulerImpl* frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe)
           .release();
   scoped_refptr<MainThreadTaskQueue> timer_task_queue =
@@ -762,7 +771,8 @@ TEST_F(PageSchedulerImplTest,
   vtc->SetVirtualTimePolicy(VirtualTimePolicy::kDeterministicLoading);
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
 
   {
@@ -828,7 +838,8 @@ TEST_F(PageSchedulerImplTest,
   base::TimeTicks time_second_task;
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
 
   // Pauses and unpauses virtual time, thereby advancing virtual time by an
@@ -862,7 +873,8 @@ TEST_F(PageSchedulerImplTest,
   vtc->SetVirtualTimePolicy(VirtualTimePolicy::kDeterministicLoading);
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
 
   WebScopedVirtualTimePauser virtual_time_pauser1 =
@@ -910,7 +922,8 @@ TEST_F(PageSchedulerImplTest, PauseTimersWhileVirtualTimeIsPaused) {
   Vector<int> run_order;
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
   VirtualTimeController* vtc = page_scheduler_->GetVirtualTimeController();
   vtc->EnableVirtualTime(base::Time());
@@ -1129,9 +1142,9 @@ TEST_F(PageSchedulerImplTest, BackgroundTimerThrottling) {
   base::TimeTicks start_time = test_task_runner_->NowTicks();
 
   Vector<base::TimeTicks> run_times;
-  frame_scheduler_ =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
-                           FrameScheduler::FrameType::kSubframe);
+  frame_scheduler_ = CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                                          /*is_in_embedded_frame_tree=*/false,
+                                          FrameScheduler::FrameType::kSubframe);
   page_scheduler_->SetPageVisible(true);
   EXPECT_FALSE(page_scheduler_->IsCPUTimeThrottled());
 
@@ -1189,10 +1202,12 @@ TEST_F(PageSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
   Vector<base::TimeTicks> run_times;
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler1 =
-      CreateFrameScheduler(page_scheduler.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler2 =
-      CreateFrameScheduler(page_scheduler.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
 
   page_scheduler->SetPageVisible(false);
@@ -1456,178 +1471,6 @@ TEST_F(PageSchedulerImplTest, PageFrozenOnlyWhileNotVisible) {
   test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() +
                                    base::Milliseconds(100));
   EXPECT_FALSE(page_scheduler_->IsFrozen());
-}
-
-class PageSchedulerImplPageTransitionTest : public PageSchedulerImplTest {
- public:
-  typedef PageSchedulerImpl::PageLifecycleStateTransition Transition;
-
-  PageSchedulerImplPageTransitionTest() {
-    for (int i = 0; i <= static_cast<int>(Transition::kMaxValue); i++)
-      transition_counts_.push_back(0);
-  }
-
-  ~PageSchedulerImplPageTransitionTest() override = default;
-
-  void IncrementPageTransition(Transition transition) {
-    transition_counts_[static_cast<int>(transition)] += 1;
-  }
-
-  Vector<Bucket> GetExpectedBuckets() {
-    Vector<Bucket> buckets;
-    for (int i = 0; i <= static_cast<int>(Transition::kMaxValue); i++) {
-      if (transition_counts_[i] > 0)
-        buckets.push_back(Bucket(i, transition_counts_[i]));
-    }
-    return buckets;
-  }
-
-  void WaitForFreezingDelay() {
-    test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() +
-                                     base::Milliseconds(100));
-  }
-
-  void DisableAudioAndWaitForSilent() {
-    page_scheduler_->AudioStateChanged(false);
-    test_task_runner_->FastForwardBy(recent_audio_delay() +
-                                     base::Milliseconds(100));
-  }
-
- protected:
-  Vector<int> transition_counts_;
-};
-
-TEST_F(PageSchedulerImplPageTransitionTest,
-       PageLifecycleStateTransitionMetric) {
-  typedef PageSchedulerImpl::PageLifecycleStateTransition Transition;
-
-  base::HistogramTester histogram_tester_;
-
-  if (kDefaultPageVisibility == PageVisibilityState::kHidden) {
-    page_scheduler_->SetPageVisible(true);
-    IncrementPageTransition(Transition::kHiddenBackgroundedToActive);
-    EXPECT_THAT(histogram_tester_.GetAllSamples(
-                    PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-                UnorderedElementsAreArray(GetExpectedBuckets()));
-  }
-
-  // Visible w/o audio -> hidden/backgrounded -> frozen.
-  page_scheduler_->SetPageVisible(false);
-  IncrementPageTransition(Transition::kActiveToHiddenBackgrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  WaitForFreezingDelay();
-  IncrementPageTransition(Transition::kHiddenBackgroundedToFrozen);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-
-  // Visible w/ audio -> hidden/not backgrouneded -> hidden/backgrounded ->
-  // frozen.
-  page_scheduler_->SetPageVisible(true);
-  IncrementPageTransition(Transition::kFrozenToActive);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->AudioStateChanged(true);
-  // No transition when audio state changes in the foreground.
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->SetPageVisible(false);
-  IncrementPageTransition(Transition::kActiveToHiddenForegrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  DisableAudioAndWaitForSilent();
-  IncrementPageTransition(Transition::kHiddenForegroundedToHiddenBackgrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  WaitForFreezingDelay();
-  IncrementPageTransition(Transition::kHiddenBackgroundedToFrozen);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-
-  // When freezing from outside the renderer, it's possible to have transitions
-  // to frozen from hidden/foregrounded and hidden/backgrounded.
-  //
-  // Visible w/o audio -> hidden/backgrounded -> frozen from outside the
-  // renderer.
-  page_scheduler_->SetPageVisible(true);
-  IncrementPageTransition(Transition::kFrozenToActive);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->SetPageVisible(false);
-  IncrementPageTransition(Transition::kActiveToHiddenBackgrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->SetPageFrozen(true);
-  IncrementPageTransition(Transition::kHiddenBackgroundedToFrozen);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  // Unfreezing from outside the renderer should return to hidden/backgrounded.
-  page_scheduler_->SetPageFrozen(false);
-  IncrementPageTransition(Transition::kFrozenToHiddenBackgrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-
-  // Hidden/backgrounded -> hidden/not backgrouneded -> frozen from outside the
-  // renderer.
-  page_scheduler_->AudioStateChanged(true);
-  IncrementPageTransition(Transition::kHiddenBackgroundedToHiddenForegrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->SetPageFrozen(true);
-  IncrementPageTransition(Transition::kHiddenForegroundedToFrozen);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  // Unfreezing from outside the renderer should return to hidden/foregrounded.
-  page_scheduler_->SetPageFrozen(false);
-  IncrementPageTransition(Transition::kFrozenToHiddenForegrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-
-  // Visible -> hidden* -> hidden* -> visible.
-  page_scheduler_->SetPageVisible(true);
-  IncrementPageTransition(Transition::kHiddenForegroundedToActive);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->SetPageVisible(false);
-  IncrementPageTransition(Transition::kActiveToHiddenForegrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  DisableAudioAndWaitForSilent();
-  IncrementPageTransition(Transition::kHiddenForegroundedToHiddenBackgrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->AudioStateChanged(true);
-  IncrementPageTransition(Transition::kHiddenBackgroundedToHiddenForegrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  DisableAudioAndWaitForSilent();
-  IncrementPageTransition(Transition::kHiddenForegroundedToHiddenBackgrounded);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
-  page_scheduler_->SetPageVisible(true);
-  IncrementPageTransition(Transition::kHiddenBackgroundedToActive);
-  EXPECT_THAT(histogram_tester_.GetAllSamples(
-                  PageSchedulerImpl::kHistogramPageLifecycleStateTransition),
-              UnorderedElementsAreArray(GetExpectedBuckets()));
 }
 
 }  // namespace page_scheduler_impl_unittest

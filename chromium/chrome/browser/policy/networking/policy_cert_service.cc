@@ -16,8 +16,8 @@
 #include "chrome/browser/policy/networking/policy_cert_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/network/policy_certificate_provider.h"
 #include "chromeos/components/onc/certificate_scope.h"
-#include "chromeos/network/policy_certificate_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -36,7 +36,7 @@ PolicyCertService::~PolicyCertService() {
 
 PolicyCertService::PolicyCertService(
     Profile* profile,
-    chromeos::PolicyCertificateProvider* policy_certificate_provider,
+    ash::PolicyCertificateProvider* policy_certificate_provider,
     bool may_use_profile_wide_trust_anchors)
     : profile_(profile),
       policy_certificate_provider_(policy_certificate_provider),

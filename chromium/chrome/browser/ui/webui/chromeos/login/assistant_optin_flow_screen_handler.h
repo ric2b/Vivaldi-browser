@@ -15,7 +15,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
-#include "chromeos/services/assistant/public/cpp/assistant_settings.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_settings.h"
 #include "components/sync/protocol/user_consent_types.pb.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -123,8 +123,8 @@ class AssistantOptInFlowScreenHandler
   void StopSpeakerIdEnrollment();
 
   // Send message and consent data to the page.
-  void ReloadContent(base::Value dict);
-  void AddSettingZippy(const std::string& type, base::Value data);
+  void ReloadContent(base::Value::Dict dict);
+  void AddSettingZippy(const std::string& type, base::Value::List data);
 
   // Update value prop screen to show the next settings.
   void UpdateValuePropScreen();

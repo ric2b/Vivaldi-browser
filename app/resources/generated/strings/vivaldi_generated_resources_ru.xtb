@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Переходы в активный режим</translation>
 <translation id="119944043368869598">Удалить всё</translation>
 <translation id="1221825588892235038">Только выбранные</translation>
+<translation id="1234736487471201993">Создать QR-код для этого изображения</translation>
 <translation id="1244303850296295656">Ошибка расширения</translation>
 <translation id="125220115284141797">По умолчанию</translation>
 <translation id="1297175357211070620">Принтер</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Трансляция содержимого вкладки</translation>
 <translation id="2150139952286079145">Поиск мест назначения</translation>
 <translation id="215753907730220065">Выход из полноэкранного режима</translation>
+<translation id="2158475082070321257">Копировать ссылку на выделенный текст</translation>
 <translation id="2177950615300672361">Вкладка в приватном режиме: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Вставить как обычный текст</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Возможно, сайтам потребуется распознавать ваше устройство с помощью идентификатора</translation>
 <translation id="2445081178310039857">Требуется корневой каталог расширения.</translation>
 <translation id="2470702053775288986">Неподдерживаемые расширения отключены</translation>
-<translation id="2476578072172137802">Настройки для сайтов</translation>
+<translation id="2485422356828889247">Удалить</translation>
 <translation id="2498539833203011245">Свернуть</translation>
 <translation id="2509495747794740764">Укажите значение от 10 до 200.</translation>
 <translation id="253557089021624350">Количество соединений keepalive</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Сообщить о нарушении</translation>
 <translation id="2941112035454246133">Низкий</translation>
 <translation id="2972581237482394796">&amp;Повторить</translation>
+<translation id="2993517869960930405">О приложении</translation>
 <translation id="3003623123441819449">Кэш CSS</translation>
 <translation id="3008272652534848354">Сбросить всё</translation>
 <translation id="3012631534724231212">(фрейм)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Открыть ссылку как</translation>
 <translation id="3222066309010235055">Предварительная обработка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Выберите корневой каталог упаковываемого расширения. Для обновления расширения также укажите закрытый ключ.</translation>
+<translation id="3275778913554317645">Открыть в отдельном окне</translation>
 <translation id="3280237271814976245">Сохранить &amp;как...</translation>
 <translation id="3285322247471302225">Новая вкладка</translation>
 <translation id="3288047731229977326">Расширения, запущенные в режиме разработчика, могут причинить вред вашему компьютеру. Если вы не разработчик, их следует отключить, чтобы обеспечить безопасность данных.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Просмотр PDF</translation>
 <translation id="3308134619352333507">Скрыть кнопку</translation>
 <translation id="3317459757438853210">Двусторонняя печать</translation>
+<translation id="3331974543021145906">О приложении</translation>
 <translation id="3341703758641437857">Разрешить для локальных файлов</translation>
 <translation id="3347086966102161372">&amp;Копировать адрес картинки</translation>
 <translation id="3360297538363969800">Печать не удалась. Проверьте принтер и повторите попытку.</translation>
 <translation id="3378572629723696641">Это расширение могло быть повреждено.</translation>
 <translation id="3387614642886316601">Расширенная проверка правописания</translation>
+<translation id="3390013585654699824">Сведения о приложении</translation>
 <translation id="3393582007140394275">Не удается транслировать экран.</translation>
 <translation id="3432227430032737297">Удалить все видимые</translation>
 <translation id="345693547134384690">Открыть &amp;картинку в новой вкладке</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Найти картинку в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Разрешить сайтам воспроизводить защищённое содержимое (рекомендуется)</translation>
 <translation id="3979395879372752341">Добавлено новое расширение (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Копировать ссылку на выделенный текст</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Добавить в словарь</translation>
 <translation id="407520071244661467">Масштаб</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Закройте другой браузер</translation>
 <translation id="4130207949184424187">Расширение изменило поисковую систему по умолчанию в поле поиска.</translation>
 <translation id="4131410914670010031">Чёрно-белая печать</translation>
+<translation id="4165986682804962316">Настройки сайтов</translation>
 <translation id="4176463684765177261">Отключено</translation>
 <translation id="4200983522494130825">Новая &amp;вкладка</translation>
 <translation id="4225397296022057997">На всех сайтах</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Восстановить настройки</translation>
 <translation id="4726710629007580002">При установке расширения были следующие предупреждения:</translation>
 <translation id="479536056609751218">Веб-страница, только HTML</translation>
+<translation id="4827904420700932487">Создать QR-код для этого изображения</translation>
 <translation id="4839303808932127586">&amp;Сохранить видео как...</translation>
 <translation id="4840096453115567876">Выйти из приватного режима?</translation>
 <translation id="488785315393301722">Показать настройки</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Спрашивать разрешение на доступ (рекомендуется)</translation>
 <translation id="5677928146339483299">Заблокировано</translation>
 <translation id="5707185214361380026">Не удалась загрузка расширения с:</translation>
+<translation id="5713171467967533494">Открывать в браузере Vivaldi</translation>
 <translation id="5715711091495208045">Посредник: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Сохранить как PDF</translation>
 <translation id="5747809636523347288">Вс&amp;тавить и перейти на <ph name="URL" /></translation>
@@ -273,7 +283,7 @@
 <translation id="5828633471261496623">Печать...</translation>
 <translation id="583281660410589416">Неизвестен</translation>
 <translation id="5860491529813859533">Включить</translation>
-<translation id="5867841422488265304">Ввести адрес или поисковый запрос</translation>
+<translation id="5867841422488265304">Введите адрес или запрос</translation>
 <translation id="5910363049092958439">&amp;Сохранить картинку как...</translation>
 <translation id="5956585768868398362">Установить новую поисковую систему по умолчанию?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (макс. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Параметры</translation>
 <translation id="6579369886355986318">Показать все &amp;элементы управления</translation>
 <translation id="6639554308659482635">Память SQLite</translation>
+<translation id="666731172850799929">Открыть в <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Сохранить пароль</translation>
 <translation id="6691936601825168937">&amp;Вперёд</translation>
 <translation id="6798954102094737107">Плагин: <ph name="PLUGIN_NAME" /></translation>
@@ -430,6 +441,7 @@
 <translation id="9003647077635673607">Разрешить на всех сайтах</translation>
 <translation id="9027459031423301635">Открыть ссылку в новой &amp;вкладке</translation>
 <translation id="9056810968620647706">Ничего не найдено.</translation>
+<translation id="9084064520949870008">Открыть в отдельном окне</translation>
 <translation id="9137916601698928395">Открыть ссылку как <ph name="USER" /></translation>
 <translation id="91568222606626347">Создать ярлык...</translation>
 <translation id="916607977885256133">Картинка в картинке</translation>

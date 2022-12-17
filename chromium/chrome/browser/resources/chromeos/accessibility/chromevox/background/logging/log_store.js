@@ -6,17 +6,12 @@
  * @fileoverview Store ChromeVox log.
  */
 
-goog.provide('LogStore');
+import {BridgeConstants} from '../../common/bridge_constants.js';
+import {BridgeHelper} from '../../common/bridge_helper.js';
+import {BaseLog, LogType, TextLog, TreeLog} from '../../common/log_types.js';
+import {TreeDumper} from '../../common/tree_dumper.js';
 
-goog.require('TreeDumper');
-goog.require('BaseLog');
-goog.require('EventLog');
-goog.require('LogType');
-goog.require('SpeechLog');
-goog.require('TextLog');
-goog.require('TreeLog');
-
-LogStore = class {
+export class LogStore {
   constructor() {
     /**
      * Ring buffer of size this.LOG_LIMIT
@@ -145,7 +140,7 @@ LogStore = class {
     }
     return LogStore.instance;
   }
-};
+}
 
 /**
  * @const
@@ -164,4 +159,4 @@ BridgeHelper.registerHandler(
     () => LogStore.instance.clearLog());
 BridgeHelper.registerHandler(
     BridgeConstants.LogStore.TARGET, BridgeConstants.LogStore.Action.GET_LOGS,
-    () => LogStore.instance.getLogs());
+    () => LogStore.instance.getLogs().map(log => log.serialize()));

@@ -24,6 +24,7 @@
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/browser/web_applications/web_app_sources.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
@@ -33,10 +34,10 @@
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_error.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/manifest/capture_links.mojom.h"
-#include "third_party/blink/public/mojom/manifest/handle_links.mojom.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -108,69 +109,57 @@ WebAppProto::CaptureLinks CaptureLinksToProto(
   }
 }
 
-blink::mojom::HandleLinks ProtoToHandleLinks(
-    WebAppProto::HandleLinks handle_links) {
-  switch (handle_links) {
-    case WebAppProto_HandleLinks_AUTO:
-      return blink::mojom::HandleLinks::kAuto;
-    case WebAppProto_HandleLinks_PREFERRED:
-      return blink::mojom::HandleLinks::kPreferred;
-    case WebAppProto_HandleLinks_NOT_PREFERRED:
-      return blink::mojom::HandleLinks::kNotPreferred;
-  }
-}
-
-WebAppProto::HandleLinks HandleLinksToProto(
-    blink::mojom::HandleLinks handle_links) {
-  switch (handle_links) {
-    case blink::mojom::HandleLinks::kUndefined:
-      NOTREACHED();
-      [[fallthrough]];
-    case blink::mojom::HandleLinks::kAuto:
-      return WebAppProto_HandleLinks_AUTO;
-    case blink::mojom::HandleLinks::kPreferred:
-      return WebAppProto_HandleLinks_PREFERRED;
-    case blink::mojom::HandleLinks::kNotPreferred:
-      return WebAppProto_HandleLinks_NOT_PREFERRED;
-  }
-}
-
-LaunchHandler::RouteTo ProtoToLaunchHandlerRouteTo(
-    const LaunchHandlerProto::RouteTo& route_to,
-    const LaunchHandlerProto::NavigateExistingClient&
-        navigate_existing_client) {
-  switch (route_to) {
-    case LaunchHandlerProto_RouteTo_UNSPECIFIED_ROUTE:
-    case LaunchHandlerProto_RouteTo_AUTO:
-      return LaunchHandler::RouteTo::kAuto;
-    case LaunchHandlerProto_RouteTo_NEW_CLIENT:
-      return LaunchHandler::RouteTo::kNewClient;
-    case LaunchHandlerProto_RouteTo_DEPRECATED_EXISTING_CLIENT:
-      // route_to: existing-client and navigate_existing_client were removed in
-      // favor of existing-client-navigate and existing-client-retain.
-      if (navigate_existing_client ==
-          LaunchHandlerProto_NavigateExistingClient_NEVER) {
-        return LaunchHandler::RouteTo::kExistingClientRetain;
+LaunchHandler::ClientMode ProtoLaunchHandlerToLaunchHandlerClientMode(
+    LaunchHandlerProto::DeprecatedRouteTo route_to,
+    LaunchHandlerProto::DeprecatedNavigateExistingClient
+        navigate_existing_client,
+    LaunchHandlerProto::ClientMode client_mode) {
+  switch (client_mode) {
+    case LaunchHandlerProto_ClientMode_AUTO:
+      return LaunchHandler::ClientMode::kAuto;
+    case LaunchHandlerProto_ClientMode_NAVIGATE_NEW:
+      return LaunchHandler::ClientMode::kNavigateNew;
+    case LaunchHandlerProto_ClientMode_NAVIGATE_EXISTING:
+      return LaunchHandler::ClientMode::kNavigateExisting;
+    case LaunchHandlerProto_ClientMode_FOCUS_EXISTING:
+      return LaunchHandler::ClientMode::kFocusExisting;
+    case LaunchHandlerProto_ClientMode_UNSPECIFIED_CLIENT_MODE: {
+      // route_to was removed in favor of client_mode, fall back to it if client
+      // mode is unset.
+      switch (route_to) {
+        case LaunchHandlerProto_DeprecatedRouteTo_UNSPECIFIED_ROUTE:
+        case LaunchHandlerProto_DeprecatedRouteTo_AUTO_ROUTE:
+          return LaunchHandler::ClientMode::kAuto;
+        case LaunchHandlerProto_DeprecatedRouteTo_NEW_CLIENT:
+          return LaunchHandler::ClientMode::kNavigateNew;
+        case LaunchHandlerProto_DeprecatedRouteTo_EXISTING_CLIENT:
+          // route_to: existing-client and navigate_existing_client were removed
+          // in favor of existing-client-navigate and existing-client-retain.
+          if (navigate_existing_client ==
+              LaunchHandlerProto_DeprecatedNavigateExistingClient_NEVER) {
+            return LaunchHandler::ClientMode::kFocusExisting;
+          }
+          return LaunchHandler::ClientMode::kNavigateExisting;
+        case LaunchHandlerProto_DeprecatedRouteTo_EXISTING_CLIENT_NAVIGATE:
+          return LaunchHandler::ClientMode::kNavigateExisting;
+        case LaunchHandlerProto_DeprecatedRouteTo_EXISTING_CLIENT_RETAIN:
+          return LaunchHandler::ClientMode::kFocusExisting;
       }
-      return LaunchHandler::RouteTo::kExistingClientNavigate;
-    case LaunchHandlerProto_RouteTo_EXISTING_CLIENT_NAVIGATE:
-      return LaunchHandler::RouteTo::kExistingClientNavigate;
-    case LaunchHandlerProto_RouteTo_EXISTING_CLIENT_RETAIN:
-      return LaunchHandler::RouteTo::kExistingClientRetain;
+    }
   }
 }
 
-LaunchHandlerProto::RouteTo LaunchHandlerRouteToToProto(
-    const LaunchHandler::RouteTo& route_to) {
-  switch (route_to) {
-    case LaunchHandler::RouteTo::kAuto:
-      return LaunchHandlerProto_RouteTo_AUTO;
-    case LaunchHandler::RouteTo::kNewClient:
-      return LaunchHandlerProto_RouteTo_NEW_CLIENT;
-    case LaunchHandler::RouteTo::kExistingClientNavigate:
-      return LaunchHandlerProto_RouteTo_EXISTING_CLIENT_NAVIGATE;
-    case LaunchHandler::RouteTo::kExistingClientRetain:
-      return LaunchHandlerProto_RouteTo_EXISTING_CLIENT_RETAIN;
+LaunchHandlerProto::ClientMode LaunchHandlerClientModeToProto(
+    LaunchHandler::ClientMode client_mode) {
+  switch (client_mode) {
+    case LaunchHandler::ClientMode::kAuto:
+      return LaunchHandlerProto_ClientMode_AUTO;
+    case LaunchHandler::ClientMode::kNavigateNew:
+      return LaunchHandlerProto_ClientMode_NAVIGATE_NEW;
+    case LaunchHandler::ClientMode::kNavigateExisting:
+      return LaunchHandlerProto_ClientMode_NAVIGATE_EXISTING;
+    case LaunchHandler::ClientMode::kFocusExisting:
+      return LaunchHandlerProto_ClientMode_FOCUS_EXISTING;
   }
 }
 
@@ -242,20 +231,20 @@ WebAppFileHandlerProto::LaunchType LaunchTypeToProto(
 
 WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
   switch (type) {
-    case web_app::WebAppManagementProto::WEBAPPMANAGEMENT_UNSPECIFIED:
+    case WebAppManagementProto::WEBAPPMANAGEMENT_UNSPECIFIED:
       NOTREACHED();
       [[fallthrough]];
-    case web_app::WebAppManagementProto::SYSTEM:
+    case WebAppManagementProto::SYSTEM:
       return WebAppManagement::Type::kSystem;
-    case web_app::WebAppManagementProto::POLICY:
+    case WebAppManagementProto::POLICY:
       return WebAppManagement::Type::kPolicy;
-    case web_app::WebAppManagementProto::SUBAPP:
+    case WebAppManagementProto::SUBAPP:
       return WebAppManagement::Type::kSubApp;
-    case web_app::WebAppManagementProto::WEBAPPSTORE:
+    case WebAppManagementProto::WEBAPPSTORE:
       return WebAppManagement::Type::kWebAppStore;
-    case web_app::WebAppManagementProto::SYNC:
+    case WebAppManagementProto::SYNC:
       return WebAppManagement::Type::kSync;
-    case web_app::WebAppManagementProto::DEFAULT:
+    case WebAppManagementProto::DEFAULT:
       return WebAppManagement::Type::kDefault;
   }
 }
@@ -263,17 +252,37 @@ WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
 WebAppManagementProto WebAppManagementToProto(WebAppManagement::Type type) {
   switch (type) {
     case WebAppManagement::Type::kSystem:
-      return web_app::WebAppManagementProto::SYSTEM;
+      return WebAppManagementProto::SYSTEM;
     case WebAppManagement::Type::kPolicy:
-      return web_app::WebAppManagementProto::POLICY;
+      return WebAppManagementProto::POLICY;
     case WebAppManagement::Type::kSubApp:
-      return web_app::WebAppManagementProto::SUBAPP;
+      return WebAppManagementProto::SUBAPP;
     case WebAppManagement::Type::kWebAppStore:
-      return web_app::WebAppManagementProto::WEBAPPSTORE;
+      return WebAppManagementProto::WEBAPPSTORE;
     case WebAppManagement::Type::kSync:
-      return web_app::WebAppManagementProto::SYNC;
+      return WebAppManagementProto::SYNC;
     case WebAppManagement::Type::kDefault:
-      return web_app::WebAppManagementProto::DEFAULT;
+      return WebAppManagementProto::DEFAULT;
+  }
+}
+
+proto::TabStrip::Visibility TabStripVisibilityToProto(
+    TabStrip::Visibility visibility) {
+  switch (visibility) {
+    case TabStrip::Visibility::kAuto:
+      return proto::TabStrip_Visibility_AUTO;
+    case TabStrip::Visibility::kAbsent:
+      return proto::TabStrip_Visibility_ABSENT;
+  }
+}
+
+TabStrip::Visibility ProtoToTabStripVisibility(
+    proto::TabStrip::Visibility visibility) {
+  switch (visibility) {
+    case proto::TabStrip_Visibility_AUTO:
+      return TabStrip::Visibility::kAuto;
+    case proto::TabStrip_Visibility_ABSENT:
+      return TabStrip::Visibility::kAbsent;
   }
 }
 
@@ -617,11 +626,6 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   else
     local_data->clear_capture_links();
 
-  if (web_app.handle_links() != blink::mojom::HandleLinks::kUndefined)
-    local_data->set_handle_links(HandleLinksToProto(web_app.handle_links()));
-  else
-    local_data->clear_handle_links();
-
   if (!web_app.manifest_url().is_empty())
     local_data->set_manifest_url(web_app.manifest_url().spec());
 
@@ -637,8 +641,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   local_data->set_is_storage_isolated(web_app.IsStorageIsolated());
 
   if (web_app.launch_handler()) {
-    local_data->mutable_launch_handler()->set_route_to(
-        LaunchHandlerRouteToToProto(web_app.launch_handler()->route_to));
+    local_data->mutable_launch_handler()->set_client_mode(
+        LaunchHandlerClientModeToProto(web_app.launch_handler()->client_mode));
   }
 
   if (web_app.parent_app_id_) {
@@ -679,11 +683,66 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     }
   }
 
+  if (web_app.tab_strip()) {
+    TabStrip tab_strip = web_app.tab_strip().value();
+
+    auto* mutable_tab_strip = local_data->mutable_tab_strip();
+    if (absl::holds_alternative<TabStrip::Visibility>(tab_strip.home_tab)) {
+      mutable_tab_strip->set_home_tab_visibility(TabStripVisibilityToProto(
+          absl::get<TabStrip::Visibility>(tab_strip.home_tab)));
+    }
+
+    if (absl::holds_alternative<TabStrip::Visibility>(
+            tab_strip.new_tab_button)) {
+      mutable_tab_strip->set_new_tab_button_visibility(
+          TabStripVisibilityToProto(absl::get<TabStrip::Visibility>(
+              web_app.tab_strip().value().new_tab_button)));
+    } else {
+      auto* mutable_new_tab_button_params =
+          mutable_tab_strip->mutable_new_tab_button_params();
+      absl::optional<GURL> url = absl::get<blink::Manifest::NewTabButtonParams>(
+                                     tab_strip.new_tab_button)
+                                     .url;
+      if (url)
+        mutable_new_tab_button_params->set_url(url.value().spec());
+    }
+  }
+
+  if (web_app.current_os_integration_states().has_value()) {
+    local_data->mutable_current_os_integration_states();
+  }
+
   if (web_app.app_size_in_bytes().has_value())
     local_data->set_app_size_in_bytes(web_app.app_size_in_bytes().value());
 
   if (web_app.data_size_in_bytes().has_value())
     local_data->set_data_size_in_bytes(web_app.data_size_in_bytes().value());
+
+  local_data->set_always_show_toolbar_in_fullscreen(
+      web_app.always_show_toolbar_in_fullscreen());
+
+  if (web_app.isolation_data().has_value()) {
+    struct ContentVisitor {
+      void operator()(const WebApp::IsolationData::InstalledBundle& bundle) {
+        mutable_isolation_data->mutable_installed_bundle()->set_path(
+            bundle.path);
+      }
+
+      void operator()(const WebApp::IsolationData::DevModeBundle& bundle) {
+        mutable_isolation_data->mutable_dev_mode_bundle()->set_path(
+            bundle.path);
+      }
+
+      void operator()(const WebApp::IsolationData::DevModeProxy& proxy) {
+        mutable_isolation_data->mutable_dev_mode_proxy()->set_proxy_url(
+            proxy.proxy_url);
+      }
+
+      IsolationData* mutable_isolation_data;
+    };
+    absl::visit(ContentVisitor{local_data->mutable_isolation_data()},
+                web_app.isolation_data().value().content);
+  }
 
   return local_data;
 }
@@ -1167,11 +1226,6 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   else
     web_app->SetCaptureLinks(blink::mojom::CaptureLinks::kUndefined);
 
-  if (local_data.has_handle_links())
-    web_app->SetHandleLinks(ProtoToHandleLinks(local_data.handle_links()));
-  else
-    web_app->SetHandleLinks(blink::mojom::HandleLinks::kUndefined);
-
   if (local_data.has_manifest_url()) {
     GURL manifest_url(local_data.manifest_url());
     if (manifest_url.is_empty() || !manifest_url.is_valid()) {
@@ -1200,16 +1254,13 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   web_app->SetStorageIsolated(local_data.is_storage_isolated());
 
   if (local_data.has_launch_handler()) {
-    LaunchHandler launch_handler;
     const LaunchHandlerProto& launch_handler_proto =
         local_data.launch_handler();
-    if (launch_handler_proto.has_route_to()) {
-      launch_handler.route_to = ProtoToLaunchHandlerRouteTo(
-          launch_handler_proto.route_to(),
-          launch_handler_proto.navigate_existing_client());
-    }
-
-    web_app->SetLaunchHandler(std::move(launch_handler));
+    web_app->SetLaunchHandler(
+        LaunchHandler{ProtoLaunchHandlerToLaunchHandlerClientMode(
+            launch_handler_proto.route_to(),
+            launch_handler_proto.navigate_existing_client(),
+            launch_handler_proto.client_mode())});
   }
 
   if (local_data.has_parent_app_id()) {
@@ -1237,8 +1288,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     web_app->SetPermissionsPolicy(policy);
   }
 
-  base::flat_map<WebAppManagement::Type, WebApp::ExternalManagementConfig>
-      management_to_external_config;
+  WebApp::ExternalConfigMap management_to_external_config;
   for (const auto& management_proto :
        local_data.management_to_external_config_info()) {
     WebApp::ExternalManagementConfig config;
@@ -1260,12 +1310,74 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
   web_app->SetWebAppManagementExternalConfigMap(management_to_external_config);
 
+  if (local_data.has_tab_strip()) {
+    TabStrip tab_strip;
+    if (local_data.tab_strip().has_home_tab_visibility()) {
+      tab_strip.home_tab = ProtoToTabStripVisibility(
+          local_data.tab_strip().home_tab_visibility());
+    } else {
+      tab_strip.home_tab = blink::Manifest::HomeTabParams();
+    }
+
+    if (local_data.tab_strip().has_new_tab_button_visibility()) {
+      tab_strip.new_tab_button = ProtoToTabStripVisibility(
+          local_data.tab_strip().new_tab_button_visibility());
+    } else {
+      blink::Manifest::NewTabButtonParams new_tab_button_params;
+      if (local_data.tab_strip().new_tab_button_params().has_url()) {
+        new_tab_button_params.url =
+            GURL(local_data.tab_strip().new_tab_button_params().url());
+      }
+      tab_strip.new_tab_button = new_tab_button_params;
+    }
+    web_app->SetTabStrip(std::move(tab_strip));
+  }
+
+  if (local_data.has_current_os_integration_states()) {
+    web_app->SetCurrentOsIntegrationStates(
+        local_data.current_os_integration_states());
+  }
+
   if (local_data.has_app_size_in_bytes()) {
     web_app->SetAppSizeInBytes(local_data.app_size_in_bytes());
   }
 
   if (local_data.has_data_size_in_bytes()) {
     web_app->SetDataSizeInBytes(local_data.data_size_in_bytes());
+  }
+
+  if (local_data.has_always_show_toolbar_in_fullscreen()) {
+    web_app->SetAlwaysShowToolbarInFullscreen(
+        local_data.always_show_toolbar_in_fullscreen());
+  }
+
+  if (local_data.has_isolation_data()) {
+    switch (local_data.isolation_data().content_case()) {
+      case IsolationData::ContentCase::kInstalledBundle:
+        web_app->SetIsolationData(
+            WebApp::IsolationData(WebApp::IsolationData::InstalledBundle{
+                .path =
+                    local_data.isolation_data().installed_bundle().path()}));
+        break;
+
+      case IsolationData::ContentCase::kDevModeBundle:
+        web_app->SetIsolationData(
+            WebApp::IsolationData(WebApp::IsolationData::DevModeBundle{
+                .path = local_data.isolation_data().dev_mode_bundle().path()}));
+        break;
+
+      case IsolationData::ContentCase::kDevModeProxy:
+        web_app->SetIsolationData(
+            WebApp::IsolationData(WebApp::IsolationData::DevModeProxy{
+                .proxy_url =
+                    local_data.isolation_data().dev_mode_proxy().proxy_url()}));
+        break;
+
+      case IsolationData::ContentCase::CONTENT_NOT_SET:
+        DLOG(ERROR) << "WebApp proto isolation_data parse error: "
+                    << "content not set";
+        return nullptr;
+    }
   }
 
   return web_app;
@@ -1382,6 +1494,8 @@ DisplayMode ToMojomDisplayMode(WebAppProto::DisplayMode display_mode) {
       return DisplayMode::kWindowControlsOverlay;
     case WebAppProto::TABBED:
       return DisplayMode::kTabbed;
+    case WebAppProto::BORDERLESS:
+      return DisplayMode::kBorderless;
   }
 }
 
@@ -1418,6 +1532,8 @@ WebAppProto::DisplayMode ToWebAppProtoDisplayMode(DisplayMode display_mode) {
       return WebAppProto::WINDOW_CONTROLS_OVERLAY;
     case DisplayMode::kTabbed:
       return WebAppProto::TABBED;
+    case DisplayMode::kBorderless:
+      return WebAppProto::BORDERLESS;
   }
 }
 

@@ -27,6 +27,11 @@ export default function src_path_resolver(rootPath, pathMappingsJson) {
         if (sourcePath in pathMappings) {
           return pathMappings[sourcePath]
         }
+        // vivaldi
+        const chromiumSourcePath = path.join("chromium", sourcePath)
+        if (chromiumSourcePath in pathMappings) {
+          return pathMappings[chromiumSourcePath]
+        }
 
         // Assume file exists at root.
         return path.join(rootPath, sourcePath);
@@ -35,9 +40,29 @@ export default function src_path_resolver(rootPath, pathMappingsJson) {
       // Relative paths are acceptable from within third-party scripts.
       if (!source.startsWith('/')) {
         let fullPath = path.join(path.dirname(originScript), source);
+        // vivaldi
+        if (source.startsWith('./text-fragment-utils.js')) {
+          return fullPath;
+        }
+
         let relativeToRoot = path.relative(rootPath, fullPath);
+        // The referenced path is a path in third_party.
         if (relativeToRoot.startsWith('third_party')) {
           return fullPath;
+        }
+
+        // If the third_party script has already been processed through the
+        // TypeScript compiler, it will not start with "thrid_party". In this
+        // case, find the script in the pathMappings to validate the original
+        // relative path.
+        const pathMappings = JSON.parse(pathMappingsJson);
+        for (const [relPath, absPath] of Object.entries(pathMappings)) {
+          if (fullPath === absPath) {
+            if (relPath.startsWith('third_party')) {
+              return fullPath;
+            }
+            break;
+          }
         }
       }
 

@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/timer/timer.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_db_task.h"
@@ -69,7 +70,9 @@ HistoryClustersService::HistoryClustersService(
 
   backend_ = std::make_unique<OnDeviceClusteringBackend>(
       entity_metadata_provider, engagement_score_provider,
-      optimization_guide_decider);
+      optimization_guide_decider, JourneysMidBlocklist());
+
+  RepeatedlyUpdateClusters();
 }
 
 HistoryClustersService::~HistoryClustersService() = default;
@@ -137,7 +140,7 @@ void HistoryClustersService::CompleteVisitContextAnnotationsIfReady(
     // And if the persist-only switch is enabled, we also want to persist them.
     if (IsJourneysEnabled() ||
         GetConfig().persist_context_annotations_in_history_db) {
-      history_service_->AddContextAnnotationsForVisit(
+      history_service_->SetOnCloseContextAnnotationsForVisit(
           visit_context_annotations.visit_row.visit_id,
           visit_context_annotations.context_annotations);
     }
@@ -150,6 +153,7 @@ HistoryClustersService::QueryClusters(
     ClusteringRequestSource clustering_request_source,
     base::Time begin_time,
     QueryClustersContinuationParams continuation_params,
+    bool recluster,
     QueryClustersCallback callback) {
   if (ShouldNotifyDebugMessage()) {
     NotifyDebugMessage("HistoryClustersService::QueryClusters()");
@@ -167,7 +171,37 @@ HistoryClustersService::QueryClusters(
   return std::make_unique<HistoryClustersServiceTaskGetMostRecentClusters>(
       weak_ptr_factory_.GetWeakPtr(), incomplete_visit_context_annotations_,
       backend_.get(), history_service_, clustering_request_source, begin_time,
-      continuation_params, std::move(callback));
+      continuation_params, recluster, std::move(callback));
+}
+
+void HistoryClustersService::RepeatedlyUpdateClusters() {
+  if (!GetConfig().persist_clusters_in_history_db)
+    return;
+  // Update clusters, both periodically and once after startup because:
+  // 1) To avoid having very stale (up to 90 days) clusters for the initial
+  //    period after startup.
+  // 2) Likewise, to avoid having very stale keywords.
+  // 3) Some users might not keep chrome running for the period.
+  update_clusters_after_startup_delay_timer_.Start(
+      FROM_HERE,
+      base::Minutes(
+          GetConfig()
+              .persist_clusters_in_history_db_after_startup_delay_minutes),
+      this, &HistoryClustersService::UpdateClusters);
+  update_clusters_period_timer_.Start(
+      FROM_HERE,
+      base::Minutes(GetConfig().persist_clusters_in_history_db_period_minutes),
+      this, &HistoryClustersService::UpdateClusters);
+}
+
+void HistoryClustersService::UpdateClusters() {
+  DCHECK(history_service_);
+  if (update_clusters_task_ && !update_clusters_task_->Done())
+    return;
+  update_clusters_task_ =
+      std::make_unique<HistoryClustersServiceTaskUpdateClusters>(
+          incomplete_visit_context_annotations_, backend_.get(),
+          history_service_, base::DoNothing());
 }
 
 absl::optional<history::ClusterKeywordData>
@@ -247,7 +281,7 @@ void HistoryClustersService::StartKeywordCacheRefresh() {
     cache_keyword_query_task_ = QueryClusters(
         ClusteringRequestSource::kKeywordCacheGeneration,
         /*begin_time=*/base::Time(),
-        /*continuation_params=*/{},
+        /*continuation_params=*/{}, false,
         base::BindOnce(&HistoryClustersService::PopulateClusterKeywordCache,
                        weak_ptr_factory_.GetWeakPtr(), base::ElapsedTimer(),
                        /*begin_time=*/base::Time(),
@@ -265,7 +299,7 @@ void HistoryClustersService::StartKeywordCacheRefresh() {
     cache_keyword_query_task_ = QueryClusters(
         ClusteringRequestSource::kKeywordCacheGeneration,
         /*begin_time=*/all_keywords_cache_timestamp_,
-        /*continuation_params=*/{},
+        /*continuation_params=*/{}, false,
         base::BindOnce(&HistoryClustersService::PopulateClusterKeywordCache,
                        weak_ptr_factory_.GetWeakPtr(), base::ElapsedTimer(),
                        all_keywords_cache_timestamp_,
@@ -301,12 +335,18 @@ void HistoryClustersService::PopulateClusterKeywordCache(
     }
     // Lowercase the keywords for case insensitive matching while adding to the
     // accumulator.
+    // Keep the keyword data with the highest score if found in multiple
+    // clusters.
     if (keyword_accumulator->size() < max_keyword_phrases) {
       for (const auto& keyword_data_p : cluster.keyword_to_data_map) {
         auto keyword = base::i18n::ToLower(keyword_data_p.first);
-        if (keyword_accumulator->find(keyword) == keyword_accumulator->end()) {
+        auto it = keyword_accumulator->find(keyword);
+        if (it == keyword_accumulator->end()) {
           keyword_accumulator->insert(
               std::make_pair(keyword, keyword_data_p.second));
+        } else if (it->second.score < keyword_data_p.second.score) {
+          // Update keyword data to the one with a higher score.
+          it->second = keyword_data_p.second;
         }
       }
     }
@@ -337,12 +377,12 @@ void HistoryClustersService::PopulateClusterKeywordCache(
   // haven't reached the soft cap `max_keyword_phrases` (or there is no cap).
   constexpr char kKeywordCacheThreadTimeUmaName[] =
       "History.Clusters.KeywordCache.ThreadTime";
-  if (!continuation_params.is_done &&
+  if (!continuation_params.exhausted_all_visits &&
       (keyword_accumulator->size() < max_keyword_phrases ||
        url_keyword_accumulator->size() < max_keyword_phrases)) {
     cache_keyword_query_task_ = QueryClusters(
         ClusteringRequestSource::kKeywordCacheGeneration, begin_time,
-        continuation_params,
+        continuation_params, /*recluster=*/false,
         base::BindOnce(&HistoryClustersService::PopulateClusterKeywordCache,
                        weak_ptr_factory_.GetWeakPtr(),
                        std::move(total_latency_timer), begin_time,

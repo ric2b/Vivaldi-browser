@@ -65,6 +65,11 @@ def IsReclientEnabled(host_os):
     return True
   return os.access(os.path.join(SRC,".enable_gn_reclient"), os.F_OK)
 
+def IsIOSEnabled():
+  if "IOS_ENABLED" in os.environ:
+    return True
+  return os.access(os.path.join(SRC,".enable_ios"), os.F_OK)
+
 def get_variables(a_checkout_os=None):
   host_os = VivaldiBaseDeps.DEPS_OS_CHOICES.get(sys.platform, 'linux')
   if host_os == "unix":
@@ -74,6 +79,9 @@ def get_variables(a_checkout_os=None):
   if IsAndroidEnabled():
     checkout_os = "android"
     checkout_cpu = ["arm"]
+  if IsIOSEnabled():
+    checkout_os = "ios"
+    checkout_cpu = ["arm64", "x64"]
 
   gnvars = GetGNVars()
   if "target_cpu" in gnvars:
@@ -254,7 +262,8 @@ class VivaldiBaseDeps(gclient.GitDependency):
       if s.really_should_process:
         work_queue.enqueue(s)
     work_queue.flush(revision_overrides, "update", [], options=self._options,
-                     patch_refs=patch_refs, target_branches=target_branches)
+                     patch_refs=patch_refs, target_branches=target_branches,
+                     skip_sync_revisions=None)
     if self._cipd_root:
       self._cipd_root.run("update")
 

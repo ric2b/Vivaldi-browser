@@ -6,8 +6,13 @@
 
 #include <string>
 
+#include "base/base_paths_win.h"
+#include "base/files/file_path.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/registry.h"
+#include "chrome/updater/updater_branding.h"
 #include "chrome/updater/win/win_constants.h"
 #include "chrome/updater/win/win_util.h"
 
@@ -30,6 +35,7 @@ class TokenService : public TokenServiceInterface {
   bool StoreEnrollmentToken(const std::string& enrollment_token) override;
   std::string GetEnrollmentToken() const override;
   bool StoreDmToken(const std::string& dm_token) override;
+  bool DeleteDmToken() override;
   std::string GetDmToken() const override;
 };
 
@@ -69,6 +75,27 @@ bool TokenService::StoreDmToken(const std::string& token) {
          ERROR_SUCCESS;
 }
 
+bool TokenService::DeleteDmToken() {
+  base::win::RegKey key;
+  auto result = key.Open(HKEY_LOCAL_MACHINE, kRegKeyCompanyEnrollment,
+                         Wow6432(KEY_SET_VALUE));
+
+  // The registry key which stores the DMToken value was not found, so deletion
+  // is not necessary.
+  if (result == ERROR_FILE_NOT_FOUND)
+    return true;
+
+  if (result == ERROR_SUCCESS)
+    result = key.DeleteValue(kRegValueDmToken);
+  else
+    return false;
+
+  // Delete the key if no other values are present.
+  base::win::RegKey(HKEY_LOCAL_MACHINE, L"", Wow6432(KEY_QUERY_VALUE))
+      .DeleteEmptyKey(kRegKeyCompanyEnrollment);
+  return true;
+}
+
 std::string TokenService::GetDmToken() const {
   std::wstring token;
   base::win::RegKey key;
@@ -83,5 +110,17 @@ std::string TokenService::GetDmToken() const {
 
 DMStorage::DMStorage(const base::FilePath& policy_cache_root)
     : DMStorage(policy_cache_root, std::make_unique<TokenService>()) {}
+
+scoped_refptr<DMStorage> GetDefaultDMStorage() {
+  base::FilePath program_filesx86_dir;
+  if (!base::PathService::Get(base::DIR_PROGRAM_FILESX86,
+                              &program_filesx86_dir)) {
+    return nullptr;
+  }
+
+  return base::MakeRefCounted<DMStorage>(
+      program_filesx86_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
+          .AppendASCII("Policies"));
+}
 
 }  // namespace updater

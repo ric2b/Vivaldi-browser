@@ -31,6 +31,8 @@
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
 
 #include <memory>
+
+#include "base/numerics/safe_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -48,7 +50,6 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
-#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
 
@@ -68,7 +69,7 @@ class RawResourceTest : public testing::Test {
     void DidReceiveData(base::span<const char>) override {}
     void DidReceiveDecodedData(
         const String& data,
-        std::unique_ptr<ParkableStringImpl::SecureDigest> digest) override {}
+        std::unique_ptr<Resource::DecodedDataInfo> info) override {}
     void DidFinishLoadingBody() override {}
     void DidFailLoadingBody() override {}
     void DidCancelLoadingBody() override {}
@@ -77,25 +78,6 @@ class RawResourceTest : public testing::Test {
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
 };
-
-TEST_F(RawResourceTest, DontIgnoreAcceptForCacheReuse) {
-  scoped_refptr<const SecurityOrigin> source_origin =
-      SecurityOrigin::CreateUniqueOpaque();
-
-  ResourceRequest jpeg_request;
-  jpeg_request.SetHTTPAccept("image/jpeg");
-  jpeg_request.SetRequestorOrigin(source_origin);
-
-  RawResource* jpeg_resource(
-      RawResource::CreateForTest(jpeg_request, ResourceType::kRaw));
-
-  ResourceRequest png_request;
-  png_request.SetHTTPAccept("image/png");
-  png_request.SetRequestorOrigin(source_origin);
-  EXPECT_NE(jpeg_resource->CanReuse(
-                FetchParameters::CreateForTest(std::move(png_request))),
-            Resource::MatchStatus::kOk);
-}
 
 class DummyClient final : public GarbageCollected<DummyClient>,
                           public RawResourceClient {
@@ -108,7 +90,7 @@ class DummyClient final : public GarbageCollected<DummyClient>,
   String DebugName() const override { return "DummyClient"; }
 
   void DataReceived(Resource*, const char* data, size_t length) override {
-    data_.Append(data, SafeCast<wtf_size_t>(length));
+    data_.Append(data, base::checked_cast<wtf_size_t>(length));
   }
 
   bool RedirectReceived(Resource*,

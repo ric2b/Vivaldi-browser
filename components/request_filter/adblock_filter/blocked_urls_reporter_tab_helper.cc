@@ -2,7 +2,7 @@
 
 #include "components/request_filter/adblock_filter/blocked_urls_reporter_tab_helper.h"
 
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 #include "content/public/browser/navigation_handle.h"

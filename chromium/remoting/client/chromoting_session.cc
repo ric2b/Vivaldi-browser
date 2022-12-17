@@ -542,22 +542,13 @@ void ChromotingSession::Core::ConnectOnNetworkThread() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           std::make_unique<protocol::ChromiumPortAllocatorFactory>(),
+          webrtc::ThreadWrapper::current()->SocketServer(),
           runtime_->url_loader_factory(),
           /* oauth_token_getter= */ nullptr,
           protocol::NetworkSettings(
               protocol::NetworkSettings::NAT_TRAVERSAL_FULL),
           protocol::TransportRole::CLIENT);
 
-#if defined(ENABLE_WEBRTC_REMOTING_CLIENT)
-  if (session_context_->info.flags.find("useWebrtc") != std::string::npos) {
-    VLOG(0) << "Attempting to connect using WebRTC.";
-    std::unique_ptr<protocol::CandidateSessionConfig> protocol_config =
-        protocol::CandidateSessionConfig::CreateEmpty();
-    protocol_config->set_webrtc_supported(true);
-    protocol_config->set_ice_supported(false);
-    client_->set_protocol_config(std::move(protocol_config));
-  }
-#endif  // defined(ENABLE_WEBRTC_REMOTING_CLIENT)
   if (session_context_->info.pairing_id.length() &&
       session_context_->info.pairing_secret.length()) {
     logger_->SetAuthMethod(ChromotingEvent::AuthMethod::PINLESS);

@@ -127,6 +127,9 @@ class SCTAuditingHandlerTest : public testing::Test {
         {features::kSCTAuditingRetryReports,
          features::kSCTAuditingPersistReports},
         {});
+
+    // Clear out any pending tasks before starting tests.
+    task_environment_.RunUntilIdle();
   }
 
   // Get the contents of `persistence_path_`. Pumps the message loop before
@@ -171,6 +174,10 @@ class SCTAuditingHandlerTest : public testing::Test {
   }
 
  protected:
+  // Must be first because ScopedFeatureList must be initialized before other
+  // threads are started.
+  base::test::ScopedFeatureList feature_list_{
+      /*enable_feature=*/features::kSCTAuditingPersistReports};
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::IO,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
@@ -369,8 +376,12 @@ TEST_F(SCTAuditingHandlerTest, PopulateSCTMetadataOnHashdanceMode) {
     histograms.ExpectUniqueSample(
         "Security.SCTAuditing.OptOut.PopularSCTSkipped", false,
         mode == mojom::SCTAuditingMode::kHashdance ? 1 : 0);
-    handler_->ClearPendingReports();
+
+    // Reset by clearing all pending reports and cache entries.
+    base::RunLoop run_loop;
+    handler_->ClearPendingReports(run_loop.QuitClosure());
     network_service_->sct_auditing_cache()->ClearCache();
+    run_loop.Run();
   }
 }
 
@@ -415,8 +426,11 @@ TEST_F(SCTAuditingHandlerTest, DoNotReportPopularSCT) {
         "Security.SCTAuditing.OptOut.PopularSCTSkipped", true,
         mode == mojom::SCTAuditingMode::kHashdance ? 1 : 0);
 
-    handler_->ClearPendingReports();
+    // Reset by clearing all pending reports and cache entries.
+    base::RunLoop run_loop;
+    handler_->ClearPendingReports(run_loop.QuitClosure());
     network_service_->sct_auditing_cache()->ClearCache();
+    run_loop.Run();
   }
 }
 
@@ -731,6 +745,8 @@ TEST_F(SCTAuditingHandlerTest, DataRoundTrip) {
 // Test that deserializing bad data shouldn't result in any reporters being
 // created.
 TEST_F(SCTAuditingHandlerTest, DeserializeBadData) {
+  base::HistogramTester histograms;
+
   mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
   url_loader_factory_.Clone(factory_remote.InitWithNewPipeAndPassReceiver());
 
@@ -766,11 +782,19 @@ TEST_F(SCTAuditingHandlerTest, DeserializeBadData) {
 
   // Check that no file got written to the persistence path.
   EXPECT_EQ(GetTestFileContents(), std::string());
+
+  // Check that these deserializations resulted in logging the 0-bucket of the
+  // NumPersistedReportsLoaded histogram. The count should be equal to the
+  // number of calls to DeserializeData() above.
+  histograms.ExpectUniqueSample(
+      "Security.SCTAuditing.NumPersistedReportsLoaded", 0, 5);
 }
 
 // Test that a handler loads valid persisted data from disk and creates pending
 // reporters for each entry.
 TEST_F(SCTAuditingHandlerTest, HandlerWithExistingPersistedData) {
+  base::HistogramTester histograms;
+
   // Set up previously persisted data on disk:
   // - Default-initialized net::HashValue(net::HASH_VALUE_SHA256)
   // - Empty SCTClientReport for origin "example.test:443".
@@ -818,6 +842,10 @@ TEST_F(SCTAuditingHandlerTest, HandlerWithExistingPersistedData) {
   ASSERT_FALSE(file_writer->HasPendingWrite());
   EXPECT_FALSE(FileContentsHasString(
       "sha256/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="));
+
+  // Check that the NumPersistedReportsLoaded histogram was correctly logged.
+  histograms.ExpectUniqueSample(
+      "Security.SCTAuditing.NumPersistedReportsLoaded", 1, 1);
 }
 
 // Test that scheduling a retry causes the failure count to increment in
@@ -932,11 +960,13 @@ TEST_F(SCTAuditingHandlerTest, RestoringMaxRetries) {
 // and log a histogram for this case.
 TEST_F(SCTAuditingHandlerTest, LogNotFound) {
   // Set up an empty CT log list.
-  std::vector<mojom::CTLogInfoPtr> log_list;
-  base::RunLoop run_loop;
-  network_service_->UpdateCtLogList(std::move(log_list), base::Time::Now(),
-                                    run_loop.QuitClosure());
-  run_loop.Run();
+  {
+    std::vector<mojom::CTLogInfoPtr> log_list;
+    base::RunLoop run_loop;
+    network_service_->UpdateCtLogList(std::move(log_list), base::Time::Now(),
+                                      run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   const net::HostPortPair host_port_pair("example.com", 443);
   net::SignedCertificateTimestampAndStatusList sct_list;
@@ -968,8 +998,159 @@ TEST_F(SCTAuditingHandlerTest, LogNotFound) {
         mode == mojom::SCTAuditingMode::kHashdance ? 1 : 0);
 
     // Reset by clearing all pending reports and cache entries.
-    handler_->ClearPendingReports();
+    base::RunLoop run_loop;
+    handler_->ClearPendingReports(run_loop.QuitClosure());
     network_service_->sct_auditing_cache()->ClearCache();
+    run_loop.Run();
+  }
+}
+
+// Regression test for crbug.com/1344881
+// Writes a pre-existing persisted reporter, starts up the SCTAuditingHandler,
+// waits for the Reporter to be created from the persisted data, and then
+// clears the pending reporters. (Prior to the fix for crbug.com/1344881, it was
+// possible for the ImportantFileWriter `after_write_callback` to run on the
+// background sequence in some circumstances, causing thread safety violations
+// when dereferencing the WeakPtr. This test explicitly covers the case where
+// the `after_write_callback` code path is exercised.)
+TEST_F(SCTAuditingHandlerTest, ClearPendingReports) {
+  // Set up previously persisted data on disk:
+  // - Default-initialized net::HashValue(net::HASH_VALUE_SHA256)
+  // - Empty SCTClientReport for origin "example.test:443".
+  // - A simple BackoffEntry.
+  std::string persisted_report =
+      R"(
+        [{
+          "reporter_key":
+            "sha256/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=",
+          "report": "EhUKExIRCgxleGFtcGxlLnRlc3QQuwM=",
+          "backoff_entry": [2,0,"30000000","11644578625551798"]
+        }]
+      )";
+  ASSERT_TRUE(base::WriteFile(persistence_path_, persisted_report));
+
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
+  url_loader_factory_.Clone(factory_remote.InitWithNewPipeAndPassReceiver());
+
+  SCTAuditingHandler handler(network_context_.get(), persistence_path_);
+  handler.SetMode(mojom::SCTAuditingMode::kEnhancedSafeBrowsingReporting);
+  handler.SetURLLoaderFactoryForTesting(std::move(factory_remote));
+
+  auto* file_writer = handler.GetFileWriterForTesting();
+  ASSERT_TRUE(file_writer);
+
+  WaitForRequests(1u);
+
+  EXPECT_EQ(handler.GetPendingReportersForTesting()->size(), 1u);
+  EXPECT_EQ(1, url_loader_factory_.NumPending());
+
+  // Clear pending reports (with persistence set up and data on disk) to
+  // exercise the full clearing and callbacks code paths.
+  base::RunLoop run_loop;
+  handler.ClearPendingReports(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Check that the pending reporter was deleted.
+  EXPECT_TRUE(handler.GetPendingReportersForTesting()->empty());
+
+  // Check that the Reporter is no longer in the file.
+  EXPECT_FALSE(FileContentsHasString(
+      "sha256/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="));
+}
+
+// Test that the "counted_towards_report_limit" flag is correctly reapplied when
+// deserialize a persisted reporter. See crbug.com/1348313.
+TEST_F(SCTAuditingHandlerTest, PersistedDataWithReportAlreadyCounted) {
+  // Set up previously persisted data on disk:
+  // - Default-initialized net::HashValue(net::HASH_VALUE_SHA256)
+  // - Empty SCTClientReport for origin "example.test:443".
+  // - A simple BackoffEntry.
+  // - A simple SCTHashdanceMetadata value.
+  // - The "already counted toward report limit" flag set to `true`.
+  std::string persisted_report =
+      R"(
+        [{
+          "reporter_key":
+            "sha256/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=",
+          "report": "EhUKExIRCgxleGFtcGxlLnRlc3QQuwM=",
+          "backoff_entry": [2,0,"30000000","11644578625551798"],
+          "sct_metadata": {
+            "leaf_hash": "ZmFrZS1sZWFmLWhhc2g=",
+            "issued": "1659045681000000",
+            "log_id": "ZmFrZS1sb2ctaWQ=",
+            "log_mmd": "86400000000",
+            "cert_expiry": "1661724081000000"
+          },
+          "counted_towards_report_limit": true
+        }]
+      )";
+  ASSERT_TRUE(base::WriteFile(persistence_path_, persisted_report));
+
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
+  url_loader_factory_.Clone(factory_remote.InitWithNewPipeAndPassReceiver());
+
+  SCTAuditingHandler handler(network_context_.get(), persistence_path_);
+  handler.SetMode(mojom::SCTAuditingMode::kHashdance);
+  handler.SetURLLoaderFactoryForTesting(std::move(factory_remote));
+
+  // Wait for a lookup query request to be sent to ensure the persisted report
+  // has been deserialized and a new SCTAuditingReporter created.
+  WaitForRequests(1u);
+
+  auto* pending_reporters = handler.GetPendingReportersForTesting();
+  ASSERT_EQ(pending_reporters->size(), 1u);
+  // Reporter should have the `counted_toward_report_limit` flag set to `true`.
+  for (const auto& reporter : *pending_reporters) {
+    EXPECT_TRUE(reporter.second->counted_towards_report_limit());
+  }
+}
+
+// Test that when a persisted reporter is deserialized that does not have the
+// "counted_towards_report_limit" flag set, it gets defaulted to `false` in the
+// newly created SCTAuditingReporter. (This covers the case for existing
+// serialized data from versions before the flag was added.)
+// See crbug.com/1348313.
+TEST_F(SCTAuditingHandlerTest, PersistedDataWithoutReportAlreadyCounted) {
+  // Set up previously persisted data on disk:
+  // - Default-initialized net::HashValue(net::HASH_VALUE_SHA256)
+  // - Empty SCTClientReport for origin "example.test:443".
+  // - A simple BackoffEntry.
+  // - A simple SCTHashdanceMetadata value.
+  // - The "already counted toward report limit" not set.
+  std::string persisted_report =
+      R"(
+        [{
+          "reporter_key":
+            "sha256/qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=",
+          "report": "EhUKExIRCgxleGFtcGxlLnRlc3QQuwM=",
+          "backoff_entry": [2,0,"30000000","11644578625551798"],
+          "sct_metadata": {
+            "leaf_hash": "ZmFrZS1sZWFmLWhhc2g=",
+            "issued": "1659045681000000",
+            "log_id": "ZmFrZS1sb2ctaWQ=",
+            "log_mmd": "86400000000",
+            "cert_expiry": "1661724081000000"
+          }
+        }]
+      )";
+  ASSERT_TRUE(base::WriteFile(persistence_path_, persisted_report));
+
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
+  url_loader_factory_.Clone(factory_remote.InitWithNewPipeAndPassReceiver());
+
+  SCTAuditingHandler handler(network_context_.get(), persistence_path_);
+  handler.SetMode(mojom::SCTAuditingMode::kHashdance);
+  handler.SetURLLoaderFactoryForTesting(std::move(factory_remote));
+
+  // Wait for a lookup query request to be sent to ensure the persisted report
+  // has been deserialized and a new SCTAuditingReporter created.
+  WaitForRequests(1u);
+
+  auto* pending_reporters = handler.GetPendingReportersForTesting();
+  ASSERT_EQ(pending_reporters->size(), 1u);
+  // Reporter should have the `counted_toward_report_limit` flag set to `false`.
+  for (const auto& reporter : *pending_reporters) {
+    EXPECT_FALSE(reporter.second->counted_towards_report_limit());
   }
 }
 

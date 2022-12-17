@@ -11,10 +11,10 @@
 #include <map>
 #include <set>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
@@ -40,6 +40,7 @@
 #include "ui/accessibility/ax_action_handler_registry.h"
 #include "ui/accessibility/ax_active_popup.h"
 #include "ui/accessibility/ax_constants.mojom.h"
+#include "ui/accessibility/ax_enum_localization_util.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_mode_observer.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -208,7 +209,7 @@ namespace ui {
 
 namespace {
 
-typedef std::unordered_set<AXPlatformNodeWin*> AXPlatformNodeWinSet;
+typedef base::flat_set<AXPlatformNodeWin*> AXPlatformNodeWinSet;
 // Set of all AXPlatformNodeWin objects that were the target of an
 // alert event.
 base::LazyInstance<AXPlatformNodeWinSet>::Leaky g_alert_targets =
@@ -469,6 +470,18 @@ SAFEARRAY* AXPlatformNodeWin::CreateUIAControllerForArray() {
 
     if (IsValidUiaRelationTarget(view_popup_node_win))
       platform_node_list.push_back(view_popup_node_win);
+  }
+
+  // The aria-errormessage attribute (mapped to the kErrormessageId) is expected
+  // to be exposed through the ControllerFor property on UIA:
+  // https://www.w3.org/TR/wai-aria-1.1/#aria-errormessage.
+  if (HasIntAttribute(ax::mojom::IntAttribute::kErrormessageId)) {
+    AXPlatformNodeWin* error_message_node_win =
+        static_cast<AXPlatformNodeWin*>(GetFromUniqueId(
+            GetIntAttribute(ax::mojom::IntAttribute::kErrormessageId)));
+
+    if (IsValidUiaRelationTarget(error_message_node_win))
+      platform_node_list.push_back(error_message_node_win);
   }
 
   return CreateUIAElementsSafeArray(platform_node_list);
@@ -761,7 +774,7 @@ AXPlatformNodeWin::UIARoleProperties AXPlatformNodeWin::GetUIARoleProperties() {
   // If this is a web area for a presentational iframe, give it a role of
   // something other than document so that the fact that it's a separate doc
   // is not exposed to AT.
-  if (GetDelegate()->IsWebAreaForPresentationalIframe())
+  if (GetDelegate()->IsRootWebAreaForPresentationalIframe())
     return {UIALocalizationStrategy::kSupply, UIA_GroupControlTypeId, L"group"};
 
   // See UIARoleProperties for descriptions of the properties.
@@ -1010,8 +1023,8 @@ AXPlatformNodeWin::UIARoleProperties AXPlatformNodeWin::GetUIARoleProperties() {
               L"document"};
 
     case ax::mojom::Role::kGraphicsObject:
-      return {UIALocalizationStrategy::kSupply, UIA_PaneControlTypeId,
-              L"region"};
+      return {UIALocalizationStrategy::kSupply, UIA_GroupControlTypeId,
+              L"group"};
 
     case ax::mojom::Role::kGraphicsSymbol:
       return {UIALocalizationStrategy::kSupply, UIA_ImageControlTypeId, L"img"};
@@ -1214,7 +1227,7 @@ AXPlatformNodeWin::UIARoleProperties AXPlatformNodeWin::GetUIARoleProperties() {
               L"document"};
 
     case ax::mojom::Role::kPopUpButton: {
-      const std::string html_tag =
+      const std::string& html_tag =
           GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
       if (html_tag == "select") {
         return {UIALocalizationStrategy::kDeferToControlType,
@@ -4144,7 +4157,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_caretOffset(LONG* offset) {
   AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
   *offset = 0;
 
-  if (!HasCaret())
+  if (!HasVisibleCaretOrSelection())
     return S_FALSE;
 
   int selection_start, selection_end;
@@ -4561,9 +4574,11 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelections(LONG nSelections,
     return E_INVALIDARG;
 
   AXPosition start_position =
-      start_node->HypertextOffsetToEndpoint(selections->startOffset);
+      start_node->HypertextOffsetToEndpoint(selections->startOffset)
+          ->AsDomSelectionPosition();
   AXPosition end_position =
-      end_node->HypertextOffsetToEndpoint(selections->endOffset);
+      end_node->HypertextOffsetToEndpoint(selections->endOffset)
+          ->AsDomSelectionPosition();
   if (!start_position->IsNullPosition() || end_position->IsNullPosition())
     return E_INVALIDARG;
 
@@ -5223,7 +5238,7 @@ HRESULT AXPlatformNodeWin::GetPropertyValueImpl(PROPERTYID property_id,
           // Localized Control Type of "output" whereas the Core-AAM states
           // the Localized Control Type of the ARIA status role should be
           // "status".
-          const std::string html_tag =
+          const std::string& html_tag =
               GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
           std::u16string localized_control_type =
               html_tag == "output"
@@ -6110,7 +6125,7 @@ int AXPlatformNodeWin::MSAARole() {
   // If this is a web area for a presentational iframe, give it a role of
   // something other than DOCUMENT so that the fact that it's a separate doc
   // is not exposed to AT.
-  if (GetDelegate()->IsWebAreaForPresentationalIframe())
+  if (GetDelegate()->IsRootWebAreaForPresentationalIframe())
     return ROLE_SYSTEM_GROUPING;
 
   switch (GetRole()) {
@@ -6707,7 +6722,7 @@ int32_t AXPlatformNodeWin::ComputeIA2Role() {
   // If this is a web area for a presentational iframe, give it a role of
   // something other than DOCUMENT so that the fact that it's a separate doc
   // is not exposed to AT.
-  if (GetDelegate()->IsWebAreaForPresentationalIframe()) {
+  if (GetDelegate()->IsRootWebAreaForPresentationalIframe()) {
     return ROLE_SYSTEM_GROUPING;
   }
 
@@ -7273,6 +7288,10 @@ bool AXPlatformNodeWin::IsUIAControl() const {
       case ax::mojom::Role::kLabelText:
       case ax::mojom::Role::kListBoxOption:
       case ax::mojom::Role::kListItem:
+      // Treat the root of a MathML tree as content/control so that it is seen
+      // by UIA clients. The remainder of the tree remains as text for now until
+      // UIA mappings for MathML are defined (https://crbug.com/1260585).
+      case ax::mojom::Role::kMathMLMath:
       case ax::mojom::Role::kMeter:
       case ax::mojom::Role::kProgressIndicator:
       case ax::mojom::Role::kRow:
@@ -7362,20 +7381,15 @@ bool AXPlatformNodeWin::ShouldHideChildrenForUIA() const {
     return true;
 
   auto role = GetRole();
-  if (HasPresentationalChildren(role))
-    return true;
-
   switch (role) {
-    // Other elements that are expected by UIA to hide their children without
-    // having "Children Presentational: True".
-    //
+    // Even though a node with  role kButton has presentational children, it
+    // should only hide its children from UIA when it has a single text node
+    // (to avoid having its name announced twice). This is because buttons can
+    // have complex structures and they shouldn't hide their subtree.
+    case ax::mojom::Role::kButton:
     // TODO(bebeaudr): We might be able to remove ax::mojom::Role::kLink once
     // http://crbug.com/1054514 is fixed. Links should not have to hide their
     // children.
-    // TODO(virens): |kPdfActionableHighlight| needs to follow a fix similar to
-    // links. At present Pdf highlghts have text nodes as children. But, we may
-    // enable pdf highlights to have complex children like links based on user
-    // feedback.
     case ax::mojom::Role::kLink:
       // Links with a single text-only child should hide their subtree.
       if (GetChildCount() == 1) {
@@ -7383,10 +7397,16 @@ bool AXPlatformNodeWin::ShouldHideChildrenForUIA() const {
         return only_child && only_child->IsText();
       }
       return false;
+    // TODO(virens): |kPdfActionableHighlight| needs to follow a fix similar to
+    // links. At present Pdf highlights have text nodes as children. But, we may
+    // enable pdf highlights to have complex children like links based on user
+    // feedback.
     case ax::mojom::Role::kPdfActionableHighlight:
       return true;
     default:
-      return false;
+      // UIA expects nodes that have "Children Presentational: True" to hide
+      // their children.
+      return HasPresentationalChildren(role);
   }
 }
 
@@ -7424,9 +7444,9 @@ int AXPlatformNodeWin::MSAAState() const {
   // Exposing the busy state on the root web area means the NVDA user will end
   // up without a virtualBuffer until the page fully loads. So if we have
   // content, don't expose the busy state.
-  if (GetBoolAttribute(ax::mojom::BoolAttribute::kBusy) &&
-      !IsPlatformDocumentWithContent()) {
-    msaa_state |= STATE_SYSTEM_BUSY;
+  if (GetBoolAttribute(ax::mojom::BoolAttribute::kBusy)) {
+    if (!IsPlatformDocument() || !GetChildCount())
+      msaa_state |= STATE_SYSTEM_BUSY;
   }
 
   if (HasState(ax::mojom::State::kCollapsed))

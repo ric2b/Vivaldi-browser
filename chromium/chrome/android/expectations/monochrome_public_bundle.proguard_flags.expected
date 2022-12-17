@@ -225,7 +225,7 @@
 
 # Never merge classes horizontally or vertically with this annotation.
 # Relevant to classes being used as a key in maps or sets.
--keep,allowaccessmodification,allowobfuscation,allowshrinking @DoNotClassMerge class *
+-keep,allowaccessmodification,allowobfuscation,allowshrinking @org.chromium.base.annotations.DoNotClassMerge class *
 
 # Keep all CREATOR fields within Parcelable that are kept.
 -keepclassmembers class org.chromium.** implements android.os.Parcelable {
@@ -415,6 +415,15 @@
 -keep class com.android.webview.chromium.WebViewChromium {
   public *;
 }
+
+# This rule prevents class merging on R$* resource classes (for example, R$anim,
+# R$styleable, R$bool). This causes issues for WebView when unused resource
+# stripping, since in WebView we are forced to detect which resources are unused
+# by scanning the dex file for R$<res_type>.<res_name>. Having the R$* classes
+# being merged together means that R$anim.foo may now be found in R$bool.foo,
+# and this mistakenly will mark the foo resouce to be removed. More details in
+# crbug.com/1348329.
+-keep,allowaccessmodification,allowobfuscation,allowshrinking class **.R$*
 
 # Functor classes with native methods implemented in Android.
 -keep class com.android.webview.chromium.DrawFunctor

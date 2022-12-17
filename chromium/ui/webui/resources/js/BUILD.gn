@@ -24,7 +24,7 @@ generate_grd("build_grdp") {
     "$target_gen_dir/$preprocess_src_manifest",
   ]
   if (include_polymer) {
-    manifest_files += [ "$target_gen_dir/browser_command/tsconfig.manifest" ]
+    manifest_files += [ "$target_gen_dir/browser_command/build_ts.manifest" ]
   }
   resource_path_prefix = "js"
 }
@@ -51,6 +51,7 @@ preprocess_if_expr("preprocess_src_ts") {
     "custom_element.ts",
     "i18n_mixin.ts",
     "list_property_update_mixin.ts",
+    "search_highlight_utils.ts",
     "web_ui_listener_mixin.ts",
   ]
 }
@@ -64,14 +65,14 @@ preprocess_if_expr("preprocess_src") {
     "assert.js",
     "color_utils.js",
     "cr.m.js",
-    "i18n_template_no_process.js",
     "icon.js",
     "load_time_data.m.js",
     "plural_string_proxy.js",
     "static_types.js",
-    "search_highlight_utils.js",
     "test_loader.js",
     "test_loader_util.js",
+
+    # Used by security interstitials and ios inspect UI
     "util.js",
     "webui_resource_test.js",
     "webview_manager.js",
@@ -96,6 +97,7 @@ preprocess_if_expr("preprocess_src") {
       "cr.js",
       "event_tracker.js",
       "i18n_behavior.js",
+      "i18n_template_no_process.js",
       "list_property_update_behavior.js",
       "parse_html_subset.js",
       "polymer_config.js",
@@ -134,7 +136,6 @@ preprocess_if_expr("preprocess_generated") {
   if (include_polymer) {
     in_files += [
       "i18n_behavior.m.js",
-      "list_property_update_behavior.m.js",
       "web_ui_listener_behavior.m.js",
     ]
   }
@@ -150,36 +151,45 @@ preprocess_if_expr("preprocess_generated") {
 }
 
 group("closure_compile") {
-  deps = [
-    ":js_resources",
-    "cr:closure_compile",
-    "cr/ui:closure_compile",
-  ]
+  deps = [ ":js_resources" ]
+  if (is_chromeos_ash) {
+    deps += [
+      "cr:closure_compile",
+      "cr/ui:closure_compile",
+    ]
+  }
 }
 
 js_type_check("js_resources") {
   uses_legacy_modules = true
   deps = [
-    ":action_link",
     ":assert",
     ":cr",
-    ":event_tracker",
-    ":i18n_behavior",
-    ":i18n_template_no_process",
-    ":list_property_update_behavior",
     ":load_time_data",
-    ":parse_html_subset",
     ":promise_resolver",
     ":util",
-    ":web_ui_listener_behavior",
     ":webui_resource_test",
   ]
+
   if (is_ios) {
     deps += [ "ios:web_ui" ]
   }
+
+  if (is_chromeos_ash) {
+    deps += [
+      ":action_link",
+      ":event_tracker",
+      ":i18n_behavior",
+      ":i18n_template_no_process",
+      ":parse_html_subset",
+      ":web_ui_listener_behavior",
+    ]
+  }
 }
 
-js_library("action_link") {
+if (is_chromeos_ash) {
+  js_library("action_link") {
+  }
 }
 
 js_library("assert") {
@@ -193,22 +203,20 @@ js_library("cr") {
   externs_list = [ "$externs_path/chrome_send.js" ]
 }
 
-js_library("event_tracker") {
-  deps = [ ":cr" ]
-}
+if (is_chromeos_ash) {
+  js_library("event_tracker") {
+    deps = [ ":cr" ]
+  }
 
-js_library("i18n_template_no_process") {
-  deps = [ ":load_time_data" ]
-}
-
-js_library("i18n_behavior") {
-  deps = [
-    ":load_time_data",
-    ":parse_html_subset",
-  ]
-}
-
-js_library("list_property_update_behavior") {
+  js_library("i18n_template_no_process") {
+    deps = [ ":load_time_data" ]
+  }
+  js_library("i18n_behavior") {
+    deps = [
+      ":load_time_data",
+      ":parse_html_subset",
+    ]
+  }
 }
 
 js_library("load_time_data") {
@@ -216,7 +224,9 @@ js_library("load_time_data") {
   extra_deps = [ ":unmodulize" ]
 }
 
-js_library("parse_html_subset") {
+if (is_chromeos_ash) {
+  js_library("parse_html_subset") {
+  }
 }
 
 js_library("promise_resolver") {
@@ -231,8 +241,10 @@ js_library("util") {
 js_library("webview_manager") {
 }
 
-js_library("web_ui_listener_behavior") {
-  deps = [ ":cr" ]
+if (is_chromeos_ash) {
+  js_library("web_ui_listener_behavior") {
+    deps = [ ":cr" ]
+  }
 }
 
 js_library("webui_resource_test") {
@@ -253,7 +265,6 @@ js_modulizer("modulize_local") {
     "assert.js",
     "event_tracker.js",
     "i18n_behavior.js",
-    "list_property_update_behavior.js",
     "parse_html_subset.js",
     "promise_resolver.js",
     "util.js",
@@ -268,10 +279,8 @@ js_modulizer("modulize_local") {
     ]
   }
 
-  namespace_rewrites = [
-    "cr.search_highlight_utils.Range|Range",
-    "Polymer.ArraySplice.calculateSplices|calculateSplices",
-  ]
+  namespace_rewrites =
+      [ "Polymer.ArraySplice.calculateSplices|calculateSplices" ]
 }
 
 js_unmodulizer("unmodulize") {
@@ -294,12 +303,11 @@ js_type_check("js_resources_modules") {
     ":event_tracker.m",
     ":i18n_behavior.m",
     ":icon",
-    ":list_property_update_behavior.m",
+    ":list_property_update_behavior",
     ":load_time_data.m",
     ":parse_html_subset.m",
     ":plural_string_proxy",
     ":promise_resolver.m",
-    ":search_highlight_utils",
     ":static_types",
     ":util.m",
     ":web_ui_listener_behavior.m",
@@ -345,14 +353,10 @@ js_library("i18n_behavior.m") {
   extra_deps = [ ":modulize_local" ]
 }
 
-js_library("list_property_update_behavior.m") {
-  sources = [
-    "$root_gen_dir/ui/webui/resources/js/list_property_update_behavior.m.js",
-  ]
+js_library("list_property_update_behavior") {
   deps = [
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
   ]
-  extra_deps = [ ":modulize_local" ]
 }
 
 js_library("load_time_data.m") {
@@ -399,10 +403,6 @@ js_library("promise_resolver.m") {
   sources = [ "$root_gen_dir/ui/webui/resources/js/promise_resolver.m.js" ]
   deps = [ ":assert.m" ]
   extra_deps = [ ":modulize_local" ]
-}
-
-js_library("search_highlight_utils") {
-  deps = [ ":assert.m" ]
 }
 
 js_library("static_types") {

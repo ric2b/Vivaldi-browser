@@ -196,9 +196,9 @@ void WebSocketTransportClientSocketPool::FlushWithError(
         net_log_reason_utf8);
     it = pending_connects_.erase(it);
   }
-  for (auto it = stalled_request_queue_.begin();
-       it != stalled_request_queue_.end(); ++it) {
-    InvokeUserCallbackLater(it->handle, std::move(it->callback), error);
+  for (auto& stalled_request : stalled_request_queue_) {
+    InvokeUserCallbackLater(stalled_request.handle,
+                            std::move(stalled_request.callback), error);
   }
   stalled_request_map_.clear();
   stalled_request_queue_.clear();
@@ -248,6 +248,13 @@ base::Value WebSocketTransportClientSocketPool::GetInfoAsValue(
   dict.Set("max_socket_count", max_sockets_);
   dict.Set("max_sockets_per_group", max_sockets_);
   return base::Value(std::move(dict));
+}
+
+bool WebSocketTransportClientSocketPool::HasActiveSocket(
+    const GroupId& group_id) const {
+  // This method is not supported for WebSocket.
+  NOTREACHED();
+  return false;
 }
 
 bool WebSocketTransportClientSocketPool::IsStalled() const {

@@ -12,6 +12,7 @@
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
@@ -147,7 +148,7 @@ void PhoneFieldTest::RunParsingTest(const std::vector<TestFieldData>& fields,
 
   // Verify expecations.
   if (expect_success) {
-    field_->AddClassificationsForTesting(&field_candidates_map_);
+    field_->AddClassificationsForTesting(field_candidates_map_);
     for (size_t i = 0; i < fields.size(); i++) {
       CheckField(global_ids[i], fields[i].expected_type);
     }
@@ -201,8 +202,10 @@ TEST_P(PhoneFieldTest, ThreePartPhoneNumber) {
   for (const char* field_type : kFieldTypes) {
     RunParsingTest(
         {{field_type, u"Phone:", u"dayphone1", PHONE_HOME_CITY_CODE},
-         {field_type, u"-", u"dayphone2", PHONE_HOME_NUMBER, /*max_length=*/3},
-         {field_type, u"-", u"dayphone3", PHONE_HOME_NUMBER, /*max_length=*/4},
+         {field_type, u"-", u"dayphone2", PHONE_HOME_NUMBER_PREFIX,
+          /*max_length=*/3},
+         {field_type, u"-", u"dayphone3", PHONE_HOME_NUMBER_SUFFIX,
+          /*max_length=*/4},
          {field_type, u"ext.:", u"dayphone4", PHONE_HOME_EXTENSION}});
   }
 }
@@ -213,8 +216,8 @@ TEST_P(PhoneFieldTest, ThreePartPhoneNumber) {
 TEST_P(PhoneFieldTest, ThreePartPhoneNumberPrefixSuffix) {
   for (const char* field_type : kFieldTypes) {
     RunParsingTest({{field_type, u"Phone:", u"area", PHONE_HOME_CITY_CODE},
-                    {field_type, u"", u"prefix", PHONE_HOME_NUMBER},
-                    {field_type, u"", u"suffix", PHONE_HOME_NUMBER,
+                    {field_type, u"", u"prefix", PHONE_HOME_NUMBER_PREFIX},
+                    {field_type, u"", u"suffix", PHONE_HOME_NUMBER_SUFFIX,
                      /*max_length=*/4}});
   }
 }
@@ -223,8 +226,9 @@ TEST_P(PhoneFieldTest, ThreePartPhoneNumberPrefixSuffix2) {
   for (const char* field_type : kFieldTypes) {
     RunParsingTest(
         {{field_type, u"(", u"phone1", PHONE_HOME_CITY_CODE, /*max_length=*/3},
-         {field_type, u")", u"phone2", PHONE_HOME_NUMBER, /*max_length=*/3},
-         {field_type, u"", u"phone3", PHONE_HOME_NUMBER,
+         {field_type, u")", u"phone2", PHONE_HOME_NUMBER_PREFIX,
+          /*max_length=*/3},
+         {field_type, u"", u"phone3", PHONE_HOME_NUMBER_SUFFIX,
           /*max_length=*/4}});
   }
 }
@@ -256,6 +260,18 @@ TEST_P(PhoneFieldTest, EmptyLabels) {
   RunParsingTest({{"text", u"Phone", u"", PHONE_HOME_COUNTRY_CODE},
                   {"text", u"", u"", PHONE_HOME_CITY_CODE},
                   {"text", u"", u"", PHONE_HOME_NUMBER}});
+}
+
+// Tests that when a phone field is parsed, a metric indicating the used grammar
+// is emitted.
+TEST_P(PhoneFieldTest, GrammarMetrics) {
+  // PHONE_HOME_WHOLE_NUMBER corresponds to the last grammar. We thus expect
+  // that 2*16 + 1 = 33 is logged.
+  base::HistogramTester histogram_tester;
+  RunParsingTest({{"text", u"Phone", u"phone", PHONE_HOME_WHOLE_NUMBER}});
+  EXPECT_THAT(histogram_tester.GetAllSamples(
+                  "Autofill.FieldPrediction.PhoneNumberGrammarUsage"),
+              BucketsAre(base::Bucket(33, 1)));
 }
 
 TEST_P(PhoneFieldTest, TrunkPrefixTypes) {

@@ -185,6 +185,32 @@ bool ShouldReduceUserAgentMinorVersion(
               UserAgentReductionEnterprisePolicyState::kForceEnabled);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+// Returns true if both kReduceUserAgentMinorVersionName and
+// kReduceUserAgentPlatformOsCpu are enabled. It makes
+// kReduceUserAgentPlatformOsCpu depend on kReduceUserAgentMinorVersionName.
+// It helps us avoid introducing individual enterprise policy controls for
+// reducing the user agent platform and oscpu.
+bool ShouldReduceUserAgentPlatformOsCpu(
+    UserAgentReductionEnterprisePolicyState user_agent_reduction) {
+// For legacy windows, only reduce the user agent platform and oscpu when
+// kLegacyWindowsPlatform parameter set to true.
+#if BUILDFLAG(IS_WIN)
+  if (base::win::GetVersion() < base::win::Version::WIN10) {
+    return ShouldReduceUserAgentMinorVersion(user_agent_reduction) &&
+           base::FeatureList::IsEnabled(
+               blink::features::kReduceUserAgentPlatformOsCpu) &&
+           blink::features::kLegacyWindowsPlatform.Get();
+  }
+#endif
+
+  return ShouldReduceUserAgentMinorVersion(user_agent_reduction) &&
+         base::FeatureList::IsEnabled(
+             blink::features::kReduceUserAgentPlatformOsCpu) &&
+         blink::features::kAllExceptLegacyWindowsPlatform.Get();
+}
+#endif
+
 const std::string& GetMajorInMinorVersionNumber() {
   static const base::NoDestructor<std::string> version_number([] {
     base::Version version(version_info::GetVersionNumber());
@@ -372,8 +398,14 @@ std::string GetUserAgentInternal(
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseMobileUserAgent))
     product += " Mobile";
-#endif
   return content::BuildUserAgentFromProduct(product);
+#else
+  // In User-Agent reduction phase 5, only apply the <unifiedPlatform> to
+  // desktop UA strings.
+  return ShouldReduceUserAgentPlatformOsCpu(user_agent_reduction)
+             ? content::BuildUnifiedPlatformUserAgentFromProduct(product)
+             : content::BuildUserAgentFromProduct(product);
+#endif
 }
 
 std::string GetUserAgent(
@@ -504,19 +536,20 @@ blink::UserAgentBrandVersion GetGreasedUserAgentBrandVersion(
     blink::UserAgentBrandVersionType output_version_type) {
   std::string greasey_brand;
   std::string greasey_version;
+  // The updated algorithm is enabled by default, but we maintain the ability
+  // to opt out of it either via Finch (setting updated_algorithm to false) or
+  // via an enterprise policy escape hatch.
   if (enable_updated_grease_by_policy &&
       base::GetFieldTrialParamByFeatureAsBool(features::kGreaseUACH,
-                                              "updated_algorithm", false)) {
+                                              "updated_algorithm", true)) {
     const std::vector<std::string> greasey_chars = {
         " ", "(", ":", "-", ".", "/", ")", ";", "=", "?", "_"};
     const std::vector<std::string> greased_versions = {"8", "99", "24"};
-    // The spec disallows a leading or trailing space, so ensuring the first
-    // char isn't index 0. See the spec:
+    // See the spec:
     // https://wicg.github.io/ua-client-hints/#create-arbitrary-brands-section
     greasey_brand = base::StrCat(
-        {greasey_chars[(seed % (greasey_chars.size() - 1)) + 1], "Not",
-         greasey_chars[(seed + 1) % greasey_chars.size()], "A",
-         greasey_chars[(seed + 2) % greasey_chars.size()], "Brand"});
+        {"Not", greasey_chars[(seed) % greasey_chars.size()], "A",
+         greasey_chars[(seed + 1) % greasey_chars.size()], "Brand"});
     greasey_version = greased_versions[seed % greased_versions.size()];
 
     return GetProcessedGreasedBrandVersion(

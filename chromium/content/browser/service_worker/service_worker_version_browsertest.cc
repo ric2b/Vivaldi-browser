@@ -465,8 +465,7 @@ class ServiceWorkerVersionBrowserTest : public ContentBrowserTest {
             /*is_parent_frame_secure=*/true, wrapper()->context()->AsWeakPtr(),
             &remote_endpoints_.back());
     const GURL url = embedded_test_server()->GetURL("/service_worker/host");
-    container_host->UpdateUrls(url, net::SiteForCookies::FromUrl(url),
-                               url::Origin::Create(url),
+    container_host->UpdateUrls(url, url::Origin::Create(url),
                                blink::StorageKey(url::Origin::Create(url)));
     container_host->SetControllerRegistration(
         registration_, false /* notify_controllerchange */);
@@ -479,8 +478,8 @@ class ServiceWorkerVersionBrowserTest : public ContentBrowserTest {
             wrapper()->context()->registry(), registration_.get(),
             embedded_test_server()->GetURL(worker_url),
             blink::mojom::ScriptType::kClassic));
-    waiting_version->set_fetch_handler_existence(
-        ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
+    waiting_version->set_fetch_handler_type(
+        ServiceWorkerVersion::FetchHandlerType::kNotSkippable);
     waiting_version->SetStatus(ServiceWorkerVersion::INSTALLED);
     registration_->SetWaitingVersion(waiting_version.get());
     registration_->ActivateWaitingVersionWhenReady();
@@ -713,8 +712,8 @@ class ServiceWorkerVersionBrowserTest : public ContentBrowserTest {
 
   void SetActiveVersion(ServiceWorkerRegistration* registration,
                         ServiceWorkerVersion* version) {
-    version->set_fetch_handler_existence(
-        ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
+    version->set_fetch_handler_type(
+        ServiceWorkerVersion::FetchHandlerType::kNotSkippable);
     version->SetStatus(ServiceWorkerVersion::ACTIVATED);
     registration->SetActiveVersion(version);
   }
@@ -940,6 +939,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
             blink::ServiceWorkerStatusCode::kOk);
   EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::EXISTS,
             version_->fetch_handler_existence());
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerType::kNotSkippable,
+            version_->fetch_handler_type());
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
@@ -949,6 +950,19 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
             blink::ServiceWorkerStatusCode::kOk);
   EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST,
             version_->fetch_handler_existence());
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerType::kNoHandler,
+            version_->fetch_handler_type());
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
+                       InstallEmptyFetchHandler) {
+  StartServerAndNavigateToSetup();
+  ASSERT_EQ(Install("/service_worker/empty_fetch_event.js"),
+            blink::ServiceWorkerStatusCode::kOk);
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::EXISTS,
+            version_->fetch_handler_existence());
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerType::kEmptyFetchHandler,
+            version_->fetch_handler_type());
 }
 
 // Check that fetch event handler added in the install event should result in a
@@ -1420,7 +1434,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, RendererCrash) {
 
   // Crash the renderer process. The version should stop.
   RenderProcessHost* process =
-      shell()->web_contents()->GetMainFrame()->GetProcess();
+      shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
   RenderProcessHostWatcher process_watcher(
       process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   base::RunLoop run_loop;

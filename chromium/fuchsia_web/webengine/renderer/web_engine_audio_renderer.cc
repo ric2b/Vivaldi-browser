@@ -28,9 +28,11 @@ absl::optional<std::unique_ptr<fuchsia::media::Compression>>
 GetFuchsiaCompressionFromDecoderConfig(media::AudioDecoderConfig config) {
   auto compression = std::make_unique<fuchsia::media::Compression>();
   switch (config.codec()) {
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     case media::AudioCodec::kAAC:
       compression->type = fuchsia::media::AUDIO_ENCODING_AAC;
       break;
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
     case media::AudioCodec::kMP3:
       compression->type = fuchsia::media::AUDIO_ENCODING_MP3;
       break;
@@ -158,6 +160,7 @@ void WebEngineAudioRenderer::Initialize(media::DemuxerStream* stream,
 }
 
 void WebEngineAudioRenderer::InitializeStream() {
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   // AAC streams require bitstream conversion. Without it the demuxer may
   // produce decoded stream without ADTS headers which are required for AAC
   // streams in AudioConsumer.
@@ -166,6 +169,7 @@ void WebEngineAudioRenderer::InitializeStream() {
       media::AudioCodec::kAAC) {
     demuxer_stream_->EnableBitstreamConverter();
   }
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
   if (demuxer_stream_->audio_decoder_config().is_encrypted()) {
     if (!cdm_context_) {
@@ -652,11 +656,12 @@ void WebEngineAudioRenderer::OnDemuxerStreamReadDone(
 
 void WebEngineAudioRenderer::SendInputPacket(
     media::StreamProcessorHelper::IoPacket packet) {
+  const auto packet_size = packet.size();
   fuchsia::media::StreamPacket stream_packet;
   stream_packet.payload_buffer_id = packet.buffer_index();
   stream_packet.pts = packet.timestamp().ToZxDuration();
   stream_packet.payload_offset = packet.offset();
-  stream_packet.payload_size = packet.size();
+  stream_packet.payload_size = packet_size;
 
   stream_sink_->SendPacket(
       std::move(stream_packet),
@@ -669,7 +674,7 @@ void WebEngineAudioRenderer::SendInputPacket(
   // safe to report it as decoded right away since the packet is expected to be
   // decoded soon after AudioConsumer receives it.
   media::PipelineStatistics stats;
-  stats.audio_bytes_decoded = packet.size();
+  stats.audio_bytes_decoded = packet_size;
   client_->OnStatisticsUpdate(stats);
 }
 

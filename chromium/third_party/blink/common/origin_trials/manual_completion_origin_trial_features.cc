@@ -15,9 +15,12 @@ namespace blink::origin_trials {
 
 bool FeatureHasExpiryGracePeriod(OriginTrialFeature feature) {
   static OriginTrialFeature const kHasExpiryGracePeriod[] = {
-      // Enable the kOriginTrialsSampleAPIExpiryGracePeriod feature as a manual
-      // completion feature, for tests.
+      // Enable the kOriginTrialsSampleAPIExpiryGracePeriod and
+      // kOriginTrialsSampleAPIExpiryGracePeriodThirdParty features
+      // as a manual completion features, for tests.
       OriginTrialFeature::kOriginTrialsSampleAPIExpiryGracePeriod,
+      OriginTrialFeature::kOriginTrialsSampleAPIExpiryGracePeriodThirdParty,
+      OriginTrialFeature::kOriginTrialsSampleAPIPersistentExpiryGracePeriod,
   };
   return base::Contains(kHasExpiryGracePeriod, feature);
 }

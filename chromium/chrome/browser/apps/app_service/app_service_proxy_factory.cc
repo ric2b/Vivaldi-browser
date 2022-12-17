@@ -20,6 +20,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager_factory.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -94,6 +95,7 @@ AppServiceProxyFactory::AppServiceProxyFactory()
   DependsOn(HostContentSettingsMapFactory::GetInstance());
   DependsOn(web_app::WebAppProviderFactory::GetInstance());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  DependsOn(ash::SystemWebAppManagerFactory::GetInstance());
   DependsOn(guest_os::GuestOsRegistryServiceFactory::GetInstance());
   DependsOn(NotificationDisplayServiceFactory::GetInstance());
   DependsOn(extensions::AppWindowRegistry::Factory::GetInstance());
@@ -117,16 +119,15 @@ content::BrowserContext* AppServiceProxyFactory::GetBrowserContextToUse(
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (ash::ProfileHelper::IsSigninProfile(profile)) {
-    return nullptr;
-  }
-
   // We must have a proxy in guest mode to ensure default extension-based apps
   // are served.
   if (profile->IsGuestSession()) {
     return profile->IsOffTheRecord()
                ? chrome::GetBrowserContextOwnInstanceInIncognito(context)
                : nullptr;
+  }
+  if (ash::ProfileHelper::IsSigninProfile(profile)) {
+    return nullptr;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

@@ -220,7 +220,6 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://dino",
     // TODO(crbug.com/1113446): Test failure due to excessive output.
     // "chrome://discards",
-    "chrome://domain-reliability-internals",
     "chrome://download-internals",
     "chrome://downloads",
     "chrome://extensions",
@@ -316,8 +315,6 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://linux-proxy-config",
     "chrome://multidevice-setup",
     "chrome://network",
-    // TODO(crbug.com/1329058): Eliminate chrome://oobe/login
-    "chrome://oobe/login",
     "chrome://os-credits",
     "chrome://os-settings",
     "chrome://power",

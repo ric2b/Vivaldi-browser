@@ -23,6 +23,9 @@ import org.chromium.ui.widget.Toast;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Bottom sheet content to display a list of devices a user can send a tab to after they have
  * chosen to share it with themselves through the send-tab-to-self feature.
@@ -68,7 +71,10 @@ public class DevicePickerBottomSheetContent implements BottomSheetContent, OnIte
         listView.setAdapter(mAdapter);
         listView.setOnItemClickListener(this);
 
-        listView.addFooterView(new ManageAccountDevicesLinkView(mContext));
+        // Vivaldi
+        if (!BuildConfig.IS_VIVALDI)
+        listView.addFooterView(LayoutInflater.from(mContext).inflate(
+                R.layout.send_tab_to_self_device_picker_footer, null));
     }
 
     @Override
@@ -136,7 +142,7 @@ public class DevicePickerBottomSheetContent implements BottomSheetContent, OnIte
 
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-        MetricsRecorder.recordDeviceClickedInShareSheet();
+        MetricsRecorder.recordSendingEvent(SendingEvent.CLICK_ITEM);
         TargetDeviceInfo targetDeviceInfo = mAdapter.getItem(position);
 
         SendTabToSelfAndroidBridge.addEntry(mProfile, mUrl, mTitle, targetDeviceInfo.cacheGuid);

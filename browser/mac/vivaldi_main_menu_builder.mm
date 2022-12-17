@@ -78,6 +78,7 @@ base::scoped_nsobject<NSMenuItem> BuildFileMenu(NSApplication* nsapp,
                 .action(@selector(performClose:)),
             Item(IDS_SAVE_PAGE_MAC).command_id(IDC_SAVE_PAGE),
             Item().is_separator(),
+            Item(IDS_SHARE_MAC).tag(-1).submenu({}),
             Item().is_separator(),
             Item(IDS_PRINT).command_id(IDC_PRINT),
           })

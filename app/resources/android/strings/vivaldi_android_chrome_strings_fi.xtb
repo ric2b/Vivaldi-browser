@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
 <translation id="1397811292916898096">Etsi hakukoneella <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushaku. Se lähettää valitun sanan ja nykyisen sivun sen kontekstiksi Google-hakuun. Sen voi poistaa käytöstä <ph name="BEGIN_LINK" />asetuksista<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Tavalliset/yksityiset välilehdet</translation>
 <translation id="1644574205037202324">Historia</translation>
 <translation id="17513872634828108">Avoimet välilehdet</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Uusi yksityisvälilehti</translation>
 <translation id="4243710787042215766">Avaa yksityisvälilehteen</translation>
 <translation id="4526803704855831732">Yksityisvälilehdet</translation>
+<translation id="4719086422742491124">Lue lisää sivuston aiheista jättämättä sivua. Etsi sanoja valitsemalla niitä sivulta yksi tai useampia.
+
+Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushakukone.</translation>
 <translation id="4759238208242260848">Lataukset</translation>
 <translation id="4883379392681899581">Poistu yksityistilasta</translation>
 <translation id="4943872375798546930">Ei tuloksia</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> – tallennustila</translation>
 <translation id="5186185447130319458">Yksityinen</translation>
 <translation id="5233638681132016545">Uusi välilehti</translation>
-<translation id="572328651809341494">Viimeaikaiset välilehdet</translation>
-<translation id="5840488417521835756">Lue lisää sivustojen aiheista sivulta poistumatta. Napautushaku on käytettävissä vain, kun Google on Vivaldin oletushakukoneena. Se lähettää sanan konteksteineen Googleen ja palauttaa määritelmiä, kuvia, hakutuloksia ja muita tietoja.
+<translation id="5375131951310889874">Lue lisää sivuston aiheista jättämättä sivua. Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushakukone. Se lähettää sanan konteksteineen Google-hakuun ja palauttaa määritelmiä, kuvia, hakutuloksia ja muuta tietoa.
 
-Muokataksesi hakusanaa valitse se ensin painamalla pitkään. Tarkenna hakua liu'uttamalla paneelissa ylös asti ja napauttamalla hakukenttää.</translation>
+Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua pyyhkäisemällä paneeli ylös asti ja napauttamalla hakukenttää.</translation>
+<translation id="572328651809341494">Viimeaikaiset välilehdet</translation>
 <translation id="6150320133806434356">Kirjanmerkki tallennettu</translation>
 <translation id="6336451774241870485">Uusi yksityisvälilehti</translation>
 <translation id="6585139692466700358">Tarjoa sivujen käännöstä eri kielille Vivaldin käännöspalvelulla</translation>
@@ -53,7 +57,6 @@ Muokataksesi hakusanaa valitse se ensin painamalla pitkään. Tarkenna hakua liu
 <translation id="732145680195464316">Kirjanmerkki tallennettu ohjelmalle <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Tietoja Vivaldista</translation>
 <translation id="7465104139234185284">Sulje kaikki yksityisvälilehdet</translation>
-<translation id="7519434535192513364">Napautushaku on käytettävissä vain, jos Google on asetettu Vivaldin oletushakukoneeksi. Se lähettää valitun sanan ja nykyisen sivun sen kontekstina Googleen. Ominaisuuden voi poistaa käytöstä <ph name="BEGIN_LINK" />asetuksissa<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Vivaldin käyttöehdot</translation>
 <translation id="85991616550051997">Siirry kotisivulle</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>

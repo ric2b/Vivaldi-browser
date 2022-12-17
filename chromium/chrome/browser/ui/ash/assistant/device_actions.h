@@ -13,15 +13,15 @@
 #include "base/scoped_multi_source_observation.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/assistant/device_actions_delegate.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
-#include "chromeos/services/assistant/public/cpp/device_actions.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/ash/services/assistant/public/cpp/device_actions.h"
 #include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 
 class DeviceActions : public ash::AndroidIntentHelper,
-                      public chromeos::assistant::DeviceActions,
+                      public ash::assistant::DeviceActions,
                       public ArcAppListPrefs::Observer {
  public:
   explicit DeviceActions(std::unique_ptr<DeviceActionsDelegate> delegate);
@@ -31,7 +31,7 @@ class DeviceActions : public ash::AndroidIntentHelper,
 
   ~DeviceActions() override;
 
-  // chromeos::assistant::DeviceActions overrides:
+  // ash::assistant::DeviceActions overrides:
   void SetWifiEnabled(bool enabled) override;
   void SetBluetoothEnabled(bool enabled) override;
   void GetScreenBrightnessLevel(
@@ -45,9 +45,9 @@ class DeviceActions : public ash::AndroidIntentHelper,
       const chromeos::assistant::AndroidAppInfo& app_info) override;
   void LaunchAndroidIntent(const std::string& intent) override;
   void AddAndFireAppListEventSubscriber(
-      chromeos::assistant::AppListEventSubscriber* subscriber) override;
+      ash::assistant::AppListEventSubscriber* subscriber) override;
   void RemoveAppListEventSubscriber(
-      chromeos::assistant::AppListEventSubscriber* subscriber) override;
+      ash::assistant::AppListEventSubscriber* subscriber) override;
 
   // ash::AndroidIntentHelper overrides:
   absl::optional<std::string> GetAndroidAppLaunchIntent(
@@ -64,7 +64,7 @@ class DeviceActions : public ash::AndroidIntentHelper,
 
   base::ScopedMultiSourceObservation<ArcAppListPrefs, ArcAppListPrefs::Observer>
       scoped_prefs_observations_{this};
-  base::ObserverList<chromeos::assistant::AppListEventSubscriber>
+  base::ObserverList<ash::assistant::AppListEventSubscriber>
       app_list_subscribers_;
 
   mojo::Remote<chromeos::bluetooth_config::mojom::CrosBluetoothConfig>

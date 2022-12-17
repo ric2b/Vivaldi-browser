@@ -44,7 +44,7 @@ bool WebAppSourceSupported(const WebApp& web_app) {
     return false;
   }
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (web_app.IsSystemApp() && !AreSystemWebAppsSupported())
+  if (web_app.IsSystemApp())
     return false;
 #endif
   return true;
@@ -85,13 +85,14 @@ bool WebAppRegistrar::IsPlaceholderApp(
   if (!web_app)
     return false;
 
-  if (!base::Contains(web_app->management_to_external_config_map(),
-                      source_type)) {
+  const WebApp::ExternalConfigMap& config_map =
+      web_app->management_to_external_config_map();
+  auto it = config_map.find(source_type);
+
+  if (it == config_map.end()) {
     return false;
   }
-
-  return web_app->management_to_external_config_map()[source_type]
-      .is_placeholder;
+  return it->second.is_placeholder;
 }
 
 absl::optional<AppId> WebAppRegistrar::LookupPlaceholderAppId(
@@ -216,14 +217,12 @@ WebAppRegistrar::GetExternallyInstalledApps(
   WebAppManagement::Type management_source =
       ConvertExternalInstallSourceToSource(install_source);
   for (const WebApp& web_app : GetApps()) {
-    if (base::Contains(web_app.management_to_external_config_map(),
-                       management_source)) {
-      installed_apps[web_app.app_id()] =
-          web_app.management_to_external_config_map()[management_source]
-              .install_urls;
-    }
+    const WebApp::ExternalConfigMap& config_map =
+        web_app.management_to_external_config_map();
+    auto it = config_map.find(management_source);
+    if (it != config_map.end() && !it->second.install_urls.empty())
+      installed_apps[web_app.app_id()] = it->second.install_urls;
   }
-
   return installed_apps;
 }
 
@@ -473,6 +472,58 @@ bool WebAppRegistrar::IsTabbedWindowModeEnabled(const AppId& app_id) const {
   return GetAppEffectiveDisplayMode(app_id) == DisplayMode::kTabbed;
 }
 
+GURL WebAppRegistrar::GetAppNewTabUrl(const AppId& app_id) const {
+  if (IsTabbedWindowModeEnabled(app_id)) {
+    auto* web_app = GetAppById(app_id);
+    if (!web_app)
+      return GURL::EmptyGURL();
+
+    if (web_app->tab_strip() &&
+        absl::holds_alternative<blink::Manifest::NewTabButtonParams>(
+            web_app->tab_strip().value().new_tab_button)) {
+      absl::optional<GURL> url =
+          absl::get<blink::Manifest::NewTabButtonParams>(
+              web_app->tab_strip().value().new_tab_button)
+              .url;
+      if (url.has_value())
+        return url.value();
+    }
+  }
+  // Apps with new_tab_button.url set to 'auto' will use the start URL.
+  return GetAppStartUrl(app_id);
+}
+
+absl::optional<GURL> WebAppRegistrar::GetAppPinnedHomeTabUrl(
+    const AppId& app_id) const {
+  if (IsTabbedWindowModeEnabled(app_id)) {
+    const WebApp* web_app = GetAppById(app_id);
+    if (!web_app)
+      return absl::nullopt;
+
+    if (web_app->tab_strip() &&
+        absl::holds_alternative<blink::Manifest::HomeTabParams>(
+            web_app->tab_strip().value().home_tab)) {
+      return GetAppStartUrl(app_id);
+    }
+  }
+  // Apps with home_tab set to 'auto' will not have a home tab.
+  return absl::nullopt;
+}
+
+#if BUILDFLAG(IS_MAC)
+bool WebAppRegistrar::AlwaysShowToolbarInFullscreen(const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->always_show_toolbar_in_fullscreen() : true;
+}
+
+void WebAppRegistrar::NotifyAlwaysShowToolbarInFullscreenChanged(
+    const AppId& app_id,
+    bool show) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnAlwaysShowToolbarInFullscreenChanged(app_id, show);
+}
+#endif
+
 const WebApp* WebAppRegistrar::GetAppById(const AppId& app_id) const {
   if (registry_profile_being_deleted_)
     return nullptr;
@@ -511,6 +562,31 @@ std::vector<AppId> WebAppRegistrar::GetAppsFromSyncAndPendingInstallation()
     app_ids.push_back(app.app_id());
 
   return app_ids;
+}
+
+std::vector<AppId> WebAppRegistrar::GetAppsPendingUninstall() const {
+  AppSet apps_in_sync_uninstall = AppSet(
+      this,
+      [](const WebApp& web_app) {
+        return WebAppSourceSupported(web_app) &&
+               !web_app.is_from_sync_and_pending_installation() &&
+               web_app.is_uninstalling();
+      },
+      /*empty=*/registry_profile_being_deleted_);
+
+  std::vector<AppId> app_ids;
+  for (const WebApp& app : apps_in_sync_uninstall)
+    app_ids.push_back(app.app_id());
+
+  return app_ids;
+}
+
+bool WebAppRegistrar::AppsExistWithExternalConfigData() const {
+  for (const WebApp& web_app : GetApps()) {
+    if (web_app.management_to_external_config_map().size() > 0)
+      return true;
+  }
+  return false;
 }
 
 void WebAppRegistrar::Start() {
@@ -567,8 +643,8 @@ bool WebAppRegistrar::IsActivelyInstalled(const AppId& app_id) const {
 
   auto* web_app = GetAppById(app_id);
   DCHECK(web_app);
-  return !web_app->HasOnlySource(web_app::WebAppManagement::kDefault) ||
-         GetAppEffectiveDisplayMode(app_id) != web_app::DisplayMode::kBrowser;
+  return !web_app->HasOnlySource(WebAppManagement::kDefault) ||
+         GetAppEffectiveDisplayMode(app_id) != DisplayMode::kBrowser;
 }
 
 bool WebAppRegistrar::IsIsolated(const AppId& app_id) const {
@@ -738,13 +814,6 @@ const apps::ShareTarget* WebAppRegistrar::GetAppShareTarget(
              : nullptr;
 }
 
-blink::mojom::HandleLinks WebAppRegistrar::GetAppHandleLinks(
-    const AppId& app_id) const {
-  auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->handle_links()
-                 : blink::mojom::HandleLinks::kUndefined;
-}
-
 const apps::FileHandlers* WebAppRegistrar::GetAppFileHandlers(
     const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
@@ -752,7 +821,7 @@ const apps::FileHandlers* WebAppRegistrar::GetAppFileHandlers(
 }
 
 bool WebAppRegistrar::IsAppFileHandlerPermissionBlocked(
-    const web_app::AppId& app_id) const {
+    const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
   if (!web_app)
     return false;

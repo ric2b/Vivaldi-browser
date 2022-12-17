@@ -189,12 +189,17 @@ test("device_unittests") {
     ]
 
     deps += [ "//device/fido:mocks" ]
+
+    if (is_mac) {
+      data_deps += [ "fido/strings:fido_test_strings" ]
+    }
   }
 
   if (is_mac) {
     sources += [
       "fido/mac/browsing_data_deletion_unittest.mm",
       "fido/mac/credential_metadata_unittest.cc",
+      "fido/mac/credential_store_unittest.mm",
       "fido/mac/get_assertion_operation_unittest_mac.mm",
       "fido/mac/make_credential_operation_unittest_mac.mm",
       "fido/mac/util_unittest.cc",
@@ -218,8 +223,7 @@ test("device_unittests") {
     ]
     deps += [
       "//device/fido:test_support",
-      "//services/device/public/cpp/hid",
-      "//services/device/public/mojom",
+      "//services/device/public/cpp:test_support",
     ]
   }
 
@@ -271,8 +275,10 @@ test("device_unittests") {
       "bluetooth/dbus/bluetooth_gatt_application_service_provider_unittest.cc",
       "bluetooth/dbus/bluetooth_gatt_characteristic_service_provider_unittest.cc",
       "bluetooth/floss/bluetooth_floss_unittest.cc",
+      "bluetooth/floss/exported_callback_manager_unittest.cc",
       "bluetooth/floss/floss_adapter_client_unittest.cc",
       "bluetooth/floss/floss_manager_client_unittest.cc",
+      "bluetooth/floss/floss_socket_manager_unittest.cc",
       "bluetooth/test/bluetooth_test_bluez.cc",
       "bluetooth/test/bluetooth_test_bluez.h",
     ]
@@ -321,6 +327,8 @@ test("device_unittests") {
       "CoreBluetooth.framework",
       "IOBluetooth.framework",
       "IOKit.framework",
+      "Foundation.framework",
+      "Security.framework",
     ]
   }
 
@@ -417,7 +425,7 @@ test("device_unittests") {
     deps += [
       "//services/device:test_support",
       "//services/device/hid",
-      "//services/device/hid:test_support",
+      "//services/device/public/cpp:test_support",
     ]
   }
 
@@ -452,7 +460,7 @@ if (is_android) {
     srcjar_deps = [ ":bluetooth_test_javagen" ]
   }
 
-  junit_binary("device_junit_tests") {
+  robolectric_binary("device_junit_tests") {
     sources = [
       "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadDeviceTest.java",
       "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",

@@ -18,13 +18,12 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
+#include "components/reporting/resources/memory_resource_impl.h"
+#include "components/reporting/resources/resource_interface.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/test_support_callbacks.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-namespace reporting {
-namespace {
 
 using ::testing::_;
 using ::testing::Eq;
@@ -35,27 +34,28 @@ using ::testing::Return;
 using ::testing::StrictMock;
 using ::testing::WithArgs;
 
-// Ensures that profile cannot be null.
-TEST(DmServerUploadServiceTest, DeniesNullptrProfile) {
-  content::BrowserTaskEnvironment task_envrionment;
-  test::TestEvent<StatusOr<std::unique_ptr<DmServerUploadService>>> e;
-  DmServerUploadService::Create(/*client=*/nullptr, e.cb());
-  StatusOr<std::unique_ptr<DmServerUploadService>> result = e.result();
-  EXPECT_THAT(result.status(),
-              Property(&Status::error_code, Eq(error::INVALID_ARGUMENT)));
+namespace reporting {
+namespace {
+
+EncryptedRecord DummyRecord() {
+  EncryptedRecord record;
+  record.set_encrypted_wrapped_record("TEST_DATA");
+  return record;
 }
 
 class TestRecordHandler : public DmServerUploadService::RecordHandler {
  public:
-  TestRecordHandler() : RecordHandler(/*client=*/nullptr) {}
+  TestRecordHandler() = default;
   ~TestRecordHandler() override = default;
 
   void HandleRecords(bool need_encryption_key,
                      std::vector<EncryptedRecord> records,
+                     ScopedReservation scoped_reservation,
                      DmServerUploadService::CompletionCallback upload_complete,
                      DmServerUploadService::EncryptionKeyAttachedCallback
                          encryption_key_attached_cb) override {
-    HandleRecords_(need_encryption_key, records, std::move(upload_complete),
+    HandleRecords_(need_encryption_key, records, std::move(scoped_reservation),
+                   std::move(upload_complete),
                    std::move(encryption_key_attached_cb));
   }
 
@@ -63,6 +63,7 @@ class TestRecordHandler : public DmServerUploadService::RecordHandler {
               HandleRecords_,
               (bool,
                std::vector<EncryptedRecord>&,
+               ScopedReservation scoped_reservation,
                DmServerUploadService::CompletionCallback,
                DmServerUploadService::EncryptionKeyAttachedCallback));
 };
@@ -71,7 +72,12 @@ class DmServerTest {
  public:
   DmServerTest()
       : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})),
-        handler_(std::make_unique<TestRecordHandler>()) {}
+        handler_(std::make_unique<TestRecordHandler>()),
+        memory_resource_(base::MakeRefCounted<MemoryResourceImpl>(
+            4u * 1024LLu * 1024LLu))  // 4 MiB
+  {}
+
+  virtual ~DmServerTest() { EXPECT_THAT(memory_resource_->GetUsed(), Eq(0uL)); }
 
  protected:
   content::BrowserTaskEnvironment task_envrionment_{
@@ -83,6 +89,8 @@ class DmServerTest {
   std::vector<EncryptedRecord> records_;
 
   const base::TimeDelta kMaxDelay_ = base::Seconds(1);
+
+  scoped_refptr<ResourceInterface> memory_resource_;
 };
 
 class DmServerFailureTest : public DmServerTest,
@@ -103,12 +111,15 @@ using TestSuccessfulUpload = MockFunction<void(SequenceInformation,
 using TestEncryptionKeyAttached = MockFunction<void(SignedEncryptionInfo)>;
 
 TEST_P(DmServerUploaderTest, ProcessesRecord) {
-  // Add an empty record.
-  records_.emplace_back();
+  records_.emplace_back(DummyRecord());
+
+  ScopedReservation record_reservation(records_.back().ByteSizeLong(),
+                                       memory_resource_);
+  EXPECT_TRUE(record_reservation.reserved());
 
   const bool force_confirm_flag = force_confirm();
-  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _, _))
+      .WillOnce(WithArgs<0, 3, 4>(
           Invoke([&force_confirm_flag](
                      bool need_encryption_key,
                      DmServerUploadService::CompletionCallback callback,
@@ -135,9 +146,10 @@ TEST_P(DmServerUploaderTest, ProcessesRecord) {
 
   test::TestEvent<DmServerUploadService::CompletionResponse> callback_waiter;
   Start<DmServerUploadService::DmServerUploader>(
-      need_encryption_key(), std::move(records_), handler_.get(),
-      std::move(successful_upload_cb), std::move(encryption_key_attached_cb),
-      callback_waiter.cb(), sequenced_task_runner_);
+      need_encryption_key(), std::move(records_), std::move(record_reservation),
+      handler_.get(), std::move(successful_upload_cb),
+      std::move(encryption_key_attached_cb), callback_waiter.cb(),
+      sequenced_task_runner_);
 
   const auto response = callback_waiter.result();
   EXPECT_OK(response);
@@ -147,6 +159,8 @@ TEST_P(DmServerUploaderTest, ProcessesRecords) {
   const int64_t kNumberOfRecords = 10;
   const int64_t kGenerationId = 1234;
 
+  ScopedReservation records_reservation(0uL, memory_resource_);
+  EXPECT_FALSE(records_reservation.reserved());
   for (int64_t i = 0; i < kNumberOfRecords; i++) {
     EncryptedRecord encrypted_record;
     encrypted_record.set_encrypted_wrapped_record(
@@ -156,12 +170,17 @@ TEST_P(DmServerUploaderTest, ProcessesRecords) {
     sequence_information->set_generation_id(kGenerationId);
     sequence_information->set_sequencing_id(i);
     sequence_information->set_priority(Priority::IMMEDIATE);
+    ScopedReservation record_reservation(encrypted_record.ByteSizeLong(),
+                                         memory_resource_);
+    EXPECT_TRUE(record_reservation.reserved());
+    records_reservation.HandOver(record_reservation);
     records_.push_back(std::move(encrypted_record));
   }
+  EXPECT_TRUE(records_reservation.reserved());
 
   const bool force_confirm_flag = force_confirm();
-  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _, _))
+      .WillOnce(WithArgs<0, 3, 4>(
           Invoke([&force_confirm_flag](
                      bool need_encryption_key,
                      DmServerUploadService::CompletionCallback callback,
@@ -188,7 +207,8 @@ TEST_P(DmServerUploaderTest, ProcessesRecords) {
 
   test::TestEvent<DmServerUploadService::CompletionResponse> callback_waiter;
   Start<DmServerUploadService::DmServerUploader>(
-      need_encryption_key(), std::move(records_), handler_.get(),
+      need_encryption_key(), std::move(records_),
+      std::move(records_reservation), handler_.get(),
       std::move(successful_upload_cb), std::move(encryption_key_attached_cb),
       callback_waiter.cb(), sequenced_task_runner_);
 
@@ -197,11 +217,14 @@ TEST_P(DmServerUploaderTest, ProcessesRecords) {
 }
 
 TEST_P(DmServerUploaderTest, ReportsFailureToProcess) {
-  // Add an empty record.
-  records_.emplace_back();
+  records_.emplace_back(DummyRecord());
 
-  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _))
-      .WillOnce(WithArgs<2>(
+  ScopedReservation record_reservation(records_.back().ByteSizeLong(),
+                                       memory_resource_);
+  EXPECT_TRUE(record_reservation.reserved());
+
+  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _, _))
+      .WillOnce(WithArgs<3>(
           Invoke([](DmServerUploadService::CompletionCallback callback) {
             std::move(callback).Run(
                 Status(error::FAILED_PRECONDITION, "Fail for test"));
@@ -219,9 +242,10 @@ TEST_P(DmServerUploaderTest, ReportsFailureToProcess) {
 
   test::TestEvent<DmServerUploadService::CompletionResponse> callback_waiter;
   Start<DmServerUploadService::DmServerUploader>(
-      need_encryption_key(), std::move(records_), handler_.get(),
-      std::move(successful_upload_cb), std::move(encryption_key_attached_cb),
-      callback_waiter.cb(), sequenced_task_runner_);
+      need_encryption_key(), std::move(records_), std::move(record_reservation),
+      handler_.get(), std::move(successful_upload_cb),
+      std::move(encryption_key_attached_cb), callback_waiter.cb(),
+      sequenced_task_runner_);
 
   const auto response = callback_waiter.result();
   EXPECT_THAT(response.status(),
@@ -229,6 +253,9 @@ TEST_P(DmServerUploaderTest, ReportsFailureToProcess) {
 }
 
 TEST_P(DmServerUploaderTest, ReprotWithZeroRecords) {
+  ScopedReservation no_records_reservation(0uL, memory_resource_);
+  EXPECT_FALSE(no_records_reservation.reserved());
+
   StrictMock<TestSuccessfulUpload> successful_upload;
   EXPECT_CALL(successful_upload, Call(_, _))
       .Times(need_encryption_key() ? 1 : 0);
@@ -243,8 +270,8 @@ TEST_P(DmServerUploaderTest, ReprotWithZeroRecords) {
 
   const bool force_confirm_flag = force_confirm();
   if (need_encryption_key()) {
-    EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _))
-        .WillOnce(WithArgs<0, 2, 3>(
+    EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _, _))
+        .WillOnce(WithArgs<0, 3, 4>(
             Invoke([&force_confirm_flag](
                        bool need_encryption_key,
                        DmServerUploadService::CompletionCallback callback,
@@ -259,12 +286,13 @@ TEST_P(DmServerUploaderTest, ReprotWithZeroRecords) {
                       .force_confirm = force_confirm_flag});
             })));
   } else {
-    EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _)).Times(0);
+    EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _, _)).Times(0);
   }
 
   test::TestEvent<DmServerUploadService::CompletionResponse> callback_waiter;
   Start<DmServerUploadService::DmServerUploader>(
-      need_encryption_key(), std::move(records_), handler_.get(),
+      need_encryption_key(), std::move(records_),
+      std::move(no_records_reservation), handler_.get(),
       std::move(successful_upload_cb), std::move(encryption_key_attached_cb),
       callback_waiter.cb(), sequenced_task_runner_);
 
@@ -279,11 +307,15 @@ TEST_P(DmServerUploaderTest, ReprotWithZeroRecords) {
 
 TEST_P(DmServerFailureTest, ReportsFailureToUpload) {
   const error::Code& error_code = GetParam();
-  // Add an empty record.
-  records_.emplace_back();
 
-  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _))
-      .WillOnce(WithArgs<2>(Invoke(
+  records_.emplace_back(DummyRecord());
+
+  ScopedReservation record_reservation(records_.back().ByteSizeLong(),
+                                       memory_resource_);
+  EXPECT_TRUE(record_reservation.reserved());
+
+  EXPECT_CALL(*handler_, HandleRecords_(_, _, _, _, _))
+      .WillOnce(WithArgs<3>(Invoke(
           [error_code](DmServerUploadService::CompletionCallback callback) {
             std::move(callback).Run(Status(error_code, "Failing for test"));
           })));
@@ -300,7 +332,8 @@ TEST_P(DmServerFailureTest, ReportsFailureToUpload) {
 
   test::TestEvent<DmServerUploadService::CompletionResponse> callback_waiter;
   Start<DmServerUploadService::DmServerUploader>(
-      /*need_encryption_key*/ true, std::move(records_), handler_.get(),
+      /*need_encryption_key*/ true, std::move(records_),
+      std::move(record_reservation), handler_.get(),
       std::move(successful_upload_cb), std::move(encryption_key_attached_cb),
       callback_waiter.cb(), sequenced_task_runner_);
 

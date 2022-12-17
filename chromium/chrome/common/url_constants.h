@@ -23,6 +23,7 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/webui_url_constants.h"
 #include "content/public/common/url_constants.h"
+#include "net/net_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 
 namespace chrome {
@@ -75,6 +76,10 @@ extern const char kChromeHelpViaWebUIURL[];
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const char kChromeOsHelpViaWebUIURL[];
 #endif
+
+// The isolated-app: scheme is used for Isolated Web Apps. A public explainer
+// can be found here: https://github.com/reillyeon/isolated-web-apps
+extern const char kIsolatedAppScheme[];
 
 // The chrome-native: scheme is used show pages rendered with platform specific
 // widgets instead of using HTML.
@@ -248,6 +253,10 @@ extern const char kSyncGoogleDashboardURL[];
 // The URL for the "Learn more" page for sync setup on the personal stuff page.
 extern const char kSyncLearnMoreURL[];
 
+// The URL for the "Learn more" link in the enterprise disclaimer for managed
+// profile in the Signin Intercept bubble.
+extern const char kSigninInterceptManagedDisclaimerLearnMoreURL[];
+
 #if !BUILDFLAG(IS_ANDROID)
 // The URL for the trusted vault sync passphrase opt in.
 extern const char kSyncTrustedVaultOptInURL[];
@@ -270,6 +279,12 @@ extern const char kCwsEnhancedSafeBrowsingLearnMoreURL[];
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 // "Learn more" URL for the enhanced playback notification dialog.
 extern const char kEnhancedPlaybackNotificationLearnMoreURL[];
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+// Chrome OS default pre-defined custom handlers
+extern const char kChromeOSDefaultMailtoHandler[];
+extern const char kChromeOSDefaultWebcalHandler[];
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -451,6 +466,10 @@ extern const char kPhoneHubPermissionLearnMoreURL[];
 
 // "Learn more" URL for the chrome apps deprecation dialog.
 extern const char kChromeAppsDeprecationLearnMoreURL[];
+#endif
+
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+extern const char kChromeRootStoreSettingsHelpCenterURL[];
 #endif
 
 // Please do not append entries here. See the comments at the top of the file.

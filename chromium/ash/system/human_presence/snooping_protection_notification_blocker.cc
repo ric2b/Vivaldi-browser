@@ -15,6 +15,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/human_presence/human_presence_metrics.h"
 #include "ash/system/human_presence/snooping_protection_controller.h"
 #include "ash/system/human_presence/snooping_protection_notification_blocker_internal.h"
 #include "ash/system/model/system_tray_model.h"
@@ -28,7 +29,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
-#include "chromeos/dbus/hps/hps_service.pb.h"
+#include "chromeos/ash/components/dbus/hps/hps_service.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -38,6 +39,8 @@
 namespace ash {
 
 namespace {
+
+namespace metrics = ash::snooping_protection_metrics;
 
 constexpr char kNotifierId[] = "hps-notify";
 
@@ -138,8 +141,7 @@ void SnoopingProtectionNotificationBlocker::OnBlockingPrefChanged() {
   const bool pref_enabled = pref_change_registrar_->prefs()->GetBoolean(
       prefs::kSnoopingProtectionNotificationSuppressionEnabled);
   base::UmaHistogramBoolean(
-      "ChromeOS.HPS.SnoopingProtectionNotificationSuppression.Enabled",
-      pref_enabled);
+      metrics::kNotificationSuppressionEnabledHistogramName, pref_enabled);
 
   OnBlockingActiveChanged();
 }

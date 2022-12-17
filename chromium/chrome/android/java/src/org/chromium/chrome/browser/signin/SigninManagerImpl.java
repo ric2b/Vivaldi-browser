@@ -296,6 +296,7 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
         mSignInState = signInState;
         signInState = null;
 
+        Log.i(TAG, "Signin starts (enabling sync: %b).", mSignInState.shouldTurnSyncOn());
         AccountInfoServiceProvider.get()
                 .getAccountInfoByEmail(mSignInState.mAccount.name)
                 .then(accountInfo -> {
@@ -357,7 +358,7 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
             mSignInState.mCallback.onSignInComplete();
         }
 
-        Log.d(TAG, "Signin completed.");
+        Log.i(TAG, "Signin completed.");
         mSignInState = null;
         notifyCallbacksWaitingForOperation();
         notifySignInAllowedChanged();
@@ -473,7 +474,10 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
                 (forceWipeUserData || managementDomain != null)
                         ? SignOutState.DataWipeAction.WIPE_SYNC_DATA_ONLY
                         : SignOutState.DataWipeAction.WIPE_SIGNIN_DATA_ONLY);
-        Log.d(TAG, "Revoking sync consent, management domain: " + managementDomain);
+        Log.i(TAG, "Revoking sync consent, dataWipeAction: %d",
+                (forceWipeUserData || managementDomain != null)
+                        ? SignOutState.DataWipeAction.WIPE_SYNC_DATA_ONLY
+                        : SignOutState.DataWipeAction.WIPE_SIGNIN_DATA_ONLY);
 
         mIdentityMutator.revokeSyncConsent(signoutSource,
                 // Always use IGNORE_METRIC as Chrome Android has just a single-profile which is
@@ -512,7 +516,10 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
                 (forceWipeUserData || managementDomain != null)
                         ? SignOutState.DataWipeAction.WIPE_ALL_PROFILE_DATA
                         : SignOutState.DataWipeAction.WIPE_SIGNIN_DATA_ONLY);
-        Log.d(TAG, "Signing out, management domain: " + managementDomain);
+        Log.i(TAG, "Signing out, dataWipeAction: %d",
+                (forceWipeUserData || managementDomain != null)
+                        ? SignOutState.DataWipeAction.WIPE_ALL_PROFILE_DATA
+                        : SignOutState.DataWipeAction.WIPE_SIGNIN_DATA_ONLY);
 
         // User data will be wiped in disableSyncAndWipeData(), called from
         // onPrimaryAccountChanged().
@@ -686,7 +693,8 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
     }
 
     private void disableSyncAndWipeData(final Runnable wipeDataCallback) {
-        Log.d(TAG, "On native signout, user data wipe action: " + mSignOutState.mDataWipeAction);
+        Log.i(TAG, "Native signout complete, wiping data (user callback: %s)",
+                mSignOutState.mDataWipeAction);
 
         if (mSignOutState.mSignOutCallback != null) {
             mSignOutState.mSignOutCallback.preWipeData();

@@ -28,7 +28,7 @@ extern const base::Feature kSettingsShowsPerKeyboardSettings;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kInputMethodSettingsUiUpdate;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const base::Feature kPercentBasedScrolling;
+extern const base::Feature kWindowsScrollingPersonality;
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsPercentBasedScrollingEnabled();
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kPointerLockOptions;
@@ -38,8 +38,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kSystemKeyboardLock;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kUiCompositorScrollWithLayers;
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const base::Feature kVirtualKeyboardMultitouch;
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUiGpuRasterizationEnabled();
 
@@ -49,6 +47,8 @@ extern const base::Feature kElasticOverscroll;
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const base::Feature kAndroidPermissionsCache;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const char kElasticOverscrollType[];
 COMPONENT_EXPORT(UI_BASE_FEATURES)

@@ -33,6 +33,7 @@
 <translation id="1197088940767939838">نارنجی</translation>
 <translation id="1198865190323699001">ٹچ اشارے</translation>
 <translation id="1201402288615127009">اگلا</translation>
+<translation id="1202112913213080585">منسوخ کریں</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1207086294218137981">اگلی سطح 4 کی کوئی ہیڈنگ نہیں ہے</translation>
 <translation id="1212770441379271564">‏اگلے کچھ شارٹ کٹس ChromeVox کمانڈز نہیں ہیں، لیکن Chrome سے زیادہ سے زیادہ فائدہ حاصل کرنے کیلئے وہ ابھی بھی بہت مفید ہیں۔
@@ -44,6 +45,7 @@ Chrome براؤزر کا پتہ باکس، جسے اومنی باکس بھی ک�
 Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</translation>
 <translation id="1213216066620407844">‏ChromeVox‏ - Chrome کی آواز بن رہا ہے</translation>
 <translation id="1225969361094801578">گہرا سلیٹی خاکستری</translation>
+<translation id="122928249241119550">پچھلے جملے پر جائیں</translation>
 <translation id="1230503547248836149">انتخاب کا آغاز سیٹ کریں</translation>
 <translation id="1236794971743289975">اختتامی نوٹ</translation>
 <translation id="1237797094773582699">اسی طرح، پچھلے سیکشن پر جانے کے لیے دائیں سے بائیں چار انگلیوں سے سوائپ کر سکتے ہیں۔ اسے ابھی آزمائیں!</translation>
@@ -214,6 +216,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="2435422727584637732">ڈاجر نیلا</translation>
 <translation id="2438712309510062123">تجویز کریں</translation>
 <translation id="2450814015951372393">چیک باکس</translation>
+<translation id="2450992626945324272">اگلے جملے پر جائیں</translation>
 <translation id="2461822463642141190">حالیہ</translation>
 <translation id="2462626033734746142">ریڈیو بٹن گروپ</translation>
 <translation id="2467741090055146971">غیر منتخب کریں</translation>
@@ -490,6 +493,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="42164919740161077">کیڈٹ نیلا</translation>
 <translation id="4217571870635786043">املاء</translation>
 <translation id="4218529045364428769">{COUNT,plural, =1{ڈیش}other{# ڈیشز}}</translation>
+<translation id="4220024144662591089">جملے سے <ph name="START_PHRASE" /> جملے تک <ph name="END_PHRASE" /> منتخب کریں</translation>
 <translation id="4221012616705981690">کوئی سابقہ فہرست نہیں ہے</translation>
 <translation id="4225355998815256469">فارم کنٹرولز</translation>
 <translation id="4230834257931120629">ہلکا سلیٹی خاکستری</translation>
@@ -508,6 +512,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="4300318234632215983">‏لنک کے پیچھے URL کا اعلان کریں</translation>
 <translation id="4322625298640984693">زردی مائل بھورا</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{ڈاٹ}=3{ایلپسیس}other{# ڈاٹس}}</translation>
+<translation id="4352022650330571548"><ph name="PHRASE" /> ٹائپ کریں</translation>
 <translation id="4372435075475052704">کم از کم:<ph name="X" /></translation>
 <translation id="4372705107434148843">اسپیچ کو روکیں</translation>
 <translation id="4376316291247992553">گرافک کو بریل کے طور پر دیکھیں</translation>
@@ -760,6 +765,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="611827076493383239">vtd</translation>
 <translation id="6122013438240733403">btn</translation>
 <translation id="6132506484792346370">ایک فہرست باکس یا کومبو باکس</translation>
+<translation id="613344593214611552">پچھلے جملے کو حذف کریں</translation>
 <translation id="6142308968191113180">سرخی 4</translation>
 <translation id="6150023170003443621">پیلا مائل سبز</translation>
 <translation id="6158882249329863701">قطار <ph name="TABLECELLROWINDEX" /> کالم <ph name="TABLECELLCOLUMNINDEX" /></translation>
@@ -769,6 +775,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="6186305613600865047">صفحہ کے نیچے پہنچیں</translation>
 <translation id="6187190722927752226">سبزی مائل نیلا</translation>
 <translation id="6197361807490522975">گہرا نیلا</translation>
+<translation id="6218813441317556731"><ph name="DELETE_PHRASE" /> کو <ph name="INSERT_PHRASE" /> سے بدلیں</translation>
 <translation id="6236061028292614533">اگلی سرخی</translation>
 <translation id="6254901459154107917">اگلا قابل ترمیم متن ایریا</translation>
 <translation id="6259464875943891919"><ph name="TYPE" /> سے خارج ہو گئے۔</translation>
@@ -797,7 +804,6 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="641759969622533235">{COUNT,plural, =1{کولن}other{# کولنز}}</translation>
 <translation id="6444046323172968959">الرٹ ڈائیلاگ</translation>
 <translation id="6452403590345320472">فہرست مشمولات</translation>
-<translation id="6457542714329819968">قسم</translation>
 <translation id="6468049171101508116">اگلا بٹن</translation>
 <translation id="646954774886932461">فہرست مضامین</translation>
 <translation id="6475604559827479857">لفظ کی نمائش کا رنگ:</translation>
@@ -943,6 +949,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="7533226154149229506">ہلکا گولڈن راڈ نما پیلا</translation>
 <translation id="7543255924852002459">لیبل مسترد کریں</translation>
 <translation id="7552432549459840808">‏Chrome کے مفید شارٹ کٹس</translation>
+<translation id="7553679324939294712"><ph name="BEFORE_PHRASE" /> سے پہلے <ph name="INSERT_PHRASE" /> داخل کریں</translation>
 <translation id="7569983096843329377">سیاہ</translation>
 <translation id="7579911500627256166">نقطہ <ph name="DOT" /></translation>
 <translation id="7592060599656252486">کچھ</translation>
@@ -966,6 +973,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="7684431668231950609">‏متن میں ترمیم کریں، URL اندراج</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">پچھلا ریڈیو بٹن</translation>
+<translation id="7696631298608145306">اگلے لفظ پر جائیں</translation>
 <translation id="7701040980221191251">کوئی نہیں</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7713139339518499741">قدرتی آواز</translation>
@@ -1073,6 +1081,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="8455868257606149352">زیادہ سے زیادہ <ph name="X" /></translation>
 <translation id="84575901236241018">رسائی کلید ہے، <ph name="KEY" /></translation>
 <translation id="8463645336674919227">گرامر کی غلطی کو چھوڑنا</translation>
+<translation id="8465573210279050749">پچھلا لفظ حذف کریں</translation>
 <translation id="847040613207937740">کوئی اگلا چیک باکس نہیں ہے</translation>
 <translation id="8473540203671727883">ماؤس کے نیچے موجود ٹیکسٹ بولیں</translation>
 <translation id="8476408756881832830">‏ChromeVox کے بولتے وقت پلے بیک موقوف کریں</translation>
@@ -1109,6 +1118,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="8697111817566059991">{COUNT,plural, =1{پائپ}other{# عمودی پائپس}}</translation>
 <translation id="8741370088760768424">‏تجویز: موجودہ آئٹم کو فعال کرنے کیلئے Search + Space دبائیں۔</translation>
 <translation id="8743786158317878347">منظم مواد، جیسے ٹیبلز درج کریں</translation>
+<translation id="8746846427395705317">پچھلے لفظ پر جائیں</translation>
 <translation id="8747966237988593539">نمبر وار فہرست</translation>
 <translation id="8749988712346667988">سلور</translation>
 <translation id="875769700429317857">ڈاؤن لوڈ مکمل ہو گیا <ph name="FILE_NAME" /></translation>
@@ -1136,6 +1146,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="8970172509886453271">کوئی پچھلا سیکشن نہیں ہے</translation>
 <translation id="89720367119469899">چھوڑیں</translation>
 <translation id="8978496506222343566">tltip</translation>
+<translation id="898089897833732740"><ph name="PHRASE" /> حذف کریں</translation>
 <translation id="8986362086234534611">بھول جائیں</translation>
 <translation id="8989104346085848538">‏کسی بھی موجودہ ChromeVox اسپیچ کو روکنے کیلئے Control کلید دبائیں۔</translation>
 <translation id="8993737615451556423">رفتار بڑھانے، کم کرنے اور پڑھنے کی آواز کو روکنے کیلئے کنٹرول فراہم کرتا ہے</translation>

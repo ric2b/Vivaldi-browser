@@ -15,10 +15,11 @@
 #include "components/autofill_assistant/browser/assistant_field_trial_util.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/onboarding_result.h"
+#include "components/autofill_assistant/browser/public/headless_script_controller.h"
+#include "components/autofill_assistant/browser/public/password_change/website_login_manager.h"
 #include "components/autofill_assistant/browser/starter.h"
 #include "components/autofill_assistant/browser/starter_platform_delegate.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
-#include "components/autofill_assistant/browser/website_login_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -76,9 +77,9 @@ class StarterDelegateAndroid
   void HideOnboarding() override;
   bool GetProactiveHelpSettingEnabled() const override;
   void SetProactiveHelpSettingEnabled(bool enabled) override;
-  bool GetMakeSearchesAndBrowsingBetterEnabled() const override;
   bool GetIsLoggedIn() override;
   bool GetIsSupervisedUser() override;
+  bool GetIsAllowedForMachineLearning() override;
   bool GetIsCustomTab() const override;
   bool GetIsWebLayer() const override;
   bool GetIsTabCreatedByGSA() const override;
@@ -130,10 +131,14 @@ class StarterDelegateAndroid
 
   void CreateJavaDependenciesIfNecessary();
 
+  void HeadlessControllerDoneCallback(
+      HeadlessScriptController::ScriptResult result);
+
   WEB_CONTENTS_USER_DATA_KEY_DECL();
   base::WeakPtr<Starter> starter_;
   // Contains AssistantStaticDependencies which do not change.
   const std::unique_ptr<const DependenciesAndroid> dependencies_;
+  std::unique_ptr<HeadlessScriptController> headless_script_controller_;
   // Can change based on activity attachment.
   base::android::ScopedJavaGlobalRef<jobject> java_dependencies_;
 

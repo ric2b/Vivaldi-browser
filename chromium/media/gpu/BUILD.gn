@@ -338,10 +338,10 @@ source_set("common") {
 
   if (is_win || use_vaapi) {
     sources += [
+      "video_rate_control.cc",
+      "video_rate_control.h",
       "vp9_svc_layers.cc",
       "vp9_svc_layers.h",
-      "vpx_rate_control.cc",
-      "vpx_rate_control.h",
     ]
     configs += [ "//third_party/libvpx:libvpx_config" ]
     deps += [ "//third_party/libvpx:libvpxrc" ]
@@ -607,7 +607,6 @@ if (use_v4l2_codec || use_vaapi) {
       "test:test_helpers",
       "test:video_player",
       "test:video_player_test_environment",
-      "test:video_player_thumbnail_renderer",
       "//media:test_support",
       "//testing/gtest",
     ]

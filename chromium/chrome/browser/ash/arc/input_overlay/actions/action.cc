@@ -36,9 +36,8 @@ constexpr char kRadius[] = "radius";
 constexpr int kMinRadius = 18;
 constexpr float kHalf = 0.5;
 
-std::vector<std::unique_ptr<Position>> ParseLocation(
-    const base::Value& position) {
-  std::vector<std::unique_ptr<Position>> positions;
+std::vector<Position> ParseLocation(const base::Value& position) {
+  std::vector<Position> positions;
   for (const base::Value& val : position.GetListDeprecated()) {
     auto pos = ParsePosition(val);
     if (!pos) {
@@ -46,7 +45,7 @@ std::vector<std::unique_ptr<Position>> ParseLocation(
       positions.clear();
       return positions;
     }
-    positions.emplace_back(std::move(pos));
+    positions.emplace_back(std::move(*pos));
   }
 
   return positions;
@@ -184,9 +183,9 @@ bool Action::ParseFromJson(const base::Value& value) {
   if (position) {
     auto parsed_pos = ParseLocation(*position);
     if (!parsed_pos.empty()) {
-      std::move(parsed_pos.begin(), parsed_pos.end(),
-                std::back_inserter(locations_));
-      on_left_or_middle_side_ = (locations_.front()->anchor().x() <= kHalf);
+      original_positions_ = parsed_pos;
+      on_left_or_middle_side_ =
+          (original_positions_.front().anchor().x() <= kHalf);
     }
   }
   // Parse action radius.
@@ -237,10 +236,15 @@ void Action::BindPending() {
 void Action::CancelPendingBind(const gfx::RectF& content_bounds) {
   if (!pending_binding_)
     return;
+  pending_binding_.reset();
+
   DCHECK(action_view_);
   if (!action_view_)
     return;
   action_view_->SetViewContent(BindingOption::kCurrent, content_bounds);
+}
+
+void Action::ResetPendingBind() {
   pending_binding_.reset();
 }
 
@@ -270,29 +274,6 @@ bool Action::IsOverlapped(const InputElement& input_element) {
     return false;
   auto& binding = GetCurrentDisplayedBinding();
   return binding.IsOverlapped(input_element);
-}
-
-absl::optional<gfx::PointF> Action::CalculateTouchPosition(
-    const gfx::RectF& content_bounds) {
-  if (locations_.empty())
-    return absl::nullopt;
-  DCHECK(current_position_index_ < locations_.size());
-  Position* position = locations_[current_position_index_].get();
-  const gfx::PointF point = position->CalculatePosition(content_bounds);
-
-  float scale = target_window_->GetHost()->device_scale_factor();
-
-  gfx::PointF root_point = gfx::PointF(point);
-  gfx::PointF origin = content_bounds.origin();
-  root_point.Offset(origin.x(), origin.y());
-
-  gfx::PointF root_location = gfx::PointF(root_point);
-  root_location.Scale(scale);
-
-  VLOG(1) << "Calculate touch position: local position {" << point.ToString()
-          << "}, root location {" << root_point.ToString()
-          << "}, root location in pixels {" << root_location.ToString() << "}";
-  return absl::make_optional(root_location);
 }
 
 absl::optional<ui::TouchEvent> Action::GetTouchCanceledEvent() {
@@ -344,23 +325,35 @@ bool Action::IsRepeatedKeyEvent(const ui::KeyEvent& key_event) {
   return false;
 }
 
+bool Action::VerifyOnKeyRelease(ui::DomCode code) {
+  if (!touch_id_) {
+    LOG(ERROR) << "There should be a touch ID for the release {"
+               << ui::KeycodeConverter::DomCodeToCodeString(code) << "}.";
+    DCHECK_EQ(keys_pressed_.size(), 0);
+    return false;
+  }
+
+  DCHECK_NE(keys_pressed_.size(), 0);
+  if (keys_pressed_.size() == 0 || !keys_pressed_.contains(code))
+    return false;
+
+  return true;
+}
+
 void Action::OnTouchReleased() {
   DCHECK(touch_id_);
   TouchIdManager::GetInstance()->ReleaseTouchID(*touch_id_);
   touch_id_ = absl::nullopt;
-  if (locations_.empty())
+  keys_pressed_.clear();
+  if (original_positions_.empty())
     return;
-  current_position_index_ = (current_position_index_ + 1) % locations_.size();
+  current_position_idx_ =
+      (current_position_idx_ + 1) % original_positions_.size();
 }
 
 void Action::OnTouchCancelled() {
-  DCHECK(touch_id_);
-  TouchIdManager::GetInstance()->ReleaseTouchID(*touch_id_);
-  touch_id_ = absl::nullopt;
-  keys_pressed_.clear();
-  if (locations_.empty())
-    return;
-  current_position_index_ = 0;
+  OnTouchReleased();
+  current_position_idx_ = 0;
 }
 
 void Action::PostUnbindProcess() {
@@ -385,6 +378,37 @@ std::unique_ptr<ActionProto> Action::ConvertToProtoIfCustomized() {
   proto->set_allocated_input_element(
       current_binding_->ConvertToProto().release());
   return proto;
+}
+
+void Action::UpdateTouchDownPositions(
+    const gfx::RectF& content_bounds,
+    const gfx::Transform* rotation_transform) {
+  if (original_positions_.empty())
+    return;
+
+  touch_down_positions_.clear();
+
+  for (int i = 0; i < original_positions_.size(); i++) {
+    const gfx::PointF point =
+        original_positions_[i].CalculatePosition(content_bounds);
+
+    float scale = target_window_->GetHost()->device_scale_factor();
+
+    gfx::PointF root_point = gfx::PointF(point);
+    gfx::PointF origin = content_bounds.origin();
+    root_point.Offset(origin.x(), origin.y());
+
+    gfx::PointF root_location = gfx::PointF(root_point);
+    root_location.Scale(scale);
+    if (rotation_transform)
+      rotation_transform->TransformPoint(&root_location);
+    touch_down_positions_.emplace_back(root_location);
+    VLOG(1) << "Calculate touch position for location at index " << i
+            << ": local position {" << point.ToString() << "}, root location {"
+            << root_point.ToString() << "}, root location in pixels {"
+            << root_location.ToString() << "}";
+  }
+  DCHECK_EQ(touch_down_positions_.size(), original_positions_.size());
 }
 
 }  // namespace input_overlay

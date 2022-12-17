@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/webui/settings/about_handler.h"
 #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
 #include "chrome/browser/ui/webui/settings/appearance_handler.h"
+#include "chrome/browser/ui/webui/settings/autofill_assistant_handler.h"
 #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
 #include "chrome/browser/ui/webui/settings/extension_control_handler.h"
@@ -62,6 +63,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/settings_resources.h"
 #include "chrome/grit/settings_resources_map.h"
@@ -72,7 +74,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -95,12 +96,11 @@
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/language/core/common/language_experiments.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/account_manager/account_manager_factory.h"
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/login/auth/password_visibility_utils.h"
 #include "ash/components/phonehub/phone_hub_manager.h"
@@ -117,12 +117,12 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/account_manager_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/android_apps_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/multidevice_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/browser_resources.h"
+#include "chromeos/ash/components/account_manager/account_manager_factory.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/user_manager/user.h"
@@ -135,6 +135,10 @@
 #include "chrome/browser/ui/webui/settings/settings_manage_profile_handler.h"
 #include "chrome/browser/ui/webui/settings/system_handler.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(USE_NSS_CERTS)
 #include "chrome/browser/ui/webui/certificates_handler.h"
@@ -179,11 +183,11 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 #elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   AddSettingsPageUIHandler(std::make_unique<NativeCertificatesHandler>());
 #endif  // BUILDFLAG(USE_NSS_CERTS)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   AddSettingsPageUIHandler(
       chromeos::cert_provisioning::CertificateProvisioningUiHandler::
           CreateForProfile(profile));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   AddSettingsPageUIHandler(std::make_unique<AccessibilityMainHandler>());
   AddSettingsPageUIHandler(std::make_unique<BrowserLifetimeHandler>());
@@ -225,6 +229,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       std::make_unique<SecurityKeysBioEnrollmentHandler>());
   AddSettingsPageUIHandler(std::make_unique<SecurityKeysPhonesHandler>());
 
+#if BUILDFLAG(IS_WIN)
+  AddSettingsPageUIHandler(std::make_unique<PasskeysHandler>());
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   InitBrowserSettingsWebUIHandlers();
 #else
@@ -235,9 +243,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(std::make_unique<SystemHandler>());
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   html_source->AddBoolean("isSecondaryUser", !profile->IsMainProfile());
-  html_source->AddBoolean(
-      "nonSyncingProfilesEnabled",
-      base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles));
 #endif
 
 #endif
@@ -286,18 +291,23 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       "enableSendPasswords",
       base::FeatureList::IsEnabled(password_manager::features::kSendPasswords));
 
-  // Autofill Assistant on Desktop is currently used only by password change.
-  // As soon as it becomes more widely used, this condition needs to be
-  // adjusted.
+  // Indicates whether any automated password change entry point is enabled.
+  // This is currently used as a prerequisite for showing a settings toggle
+  // for Autofill Assistant.
   html_source->AddBoolean(
-      "enableAutofillAssistant",
+      "isAutomatedPasswordChangeEnabled",
       password_manager::features::IsAutomatedPasswordChangeEnabled());
 
-#if !BUILDFLAG(IS_CHROMEOS)
+  html_source->AddBoolean(
+      "enableAutomaticPasswordChangeInSettings",
+      base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordChangeInSettings));
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   html_source->AddBoolean(
       "enableDesktopDetailedLanguageSettings",
       base::FeatureList::IsEnabled(language::kDesktopDetailedLanguageSettings));
-#endif  // !BUILDFLAG(IS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   html_source->AddBoolean(
@@ -323,16 +333,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("userCannotManuallyEnterPassword", false);
 #endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
-  bool privacy_guide_enabled =
-      !chrome::ShouldDisplayManagedUi(profile) && !profile->IsChild() &&
-      base::FeatureList::IsEnabled(features::kPrivacyGuide);
-  html_source->AddBoolean("privacyGuideEnabled", privacy_guide_enabled);
-
   html_source->AddBoolean(
       "privacyGuide2Enabled",
-      // #privacy-guide-2 only has effect if #privacy-guide is enabled too.
-      privacy_guide_enabled &&
-          base::FeatureList::IsEnabled(features::kPrivacyGuide2));
+      base::FeatureList::IsEnabled(features::kPrivacyGuide2));
 
   AddSettingsPageUIHandler(std::make_unique<AboutHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ResetSettingsHandler>(profile));
@@ -355,10 +358,21 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       IDS_SETTINGS_COMPROMISED_PASSWORDS_COUNT_SHORT);
   plural_string_handler->AddLocalizedString(
       "safetyCheckPasswordsWeak", IDS_SETTINGS_WEAK_PASSWORDS_COUNT_SHORT);
+  plural_string_handler->AddLocalizedString(
+      "importPasswordsSuccessSummaryDevice",
+      IDS_SETTINGS_PASSWORDS_IMPORT_SUCCESS_SUMMARY_DEVICE);
+  plural_string_handler->AddLocalizedString(
+      "importPasswordsSuccessSummaryAccount",
+      IDS_SETTINGS_PASSWORDS_IMPORT_SUCCESS_SUMMARY_ACCOUNT);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 
   // Add the metrics handler to write uma stats.
   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
+  // Add the handler for personalization options, e.g. Autofill Assistant
+  // consent.
+  web_ui->AddMessageHandler(std::make_unique<AutofillAssistantHandler>(
+      std::vector<int>{IDS_SETTINGS_AUTOFILL_ASSISTANT_PREF,
+                       IDS_SETTINGS_AUTOFILL_ASSISTANT_PREF_DESC}));
 
   webui::SetupWebUIDataSource(
       html_source, base::make_span(kSettingsResources, kSettingsResourcesSize),
@@ -385,6 +399,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
     html_source->AddResourcePath(
         "privacySandbox", IDR_SETTINGS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_HTML);
   }
+
+  html_source->AddBoolean(
+      "safetyCheckPermissionsEnabled",
+      base::FeatureList::IsEnabled(features::kSafetyCheckPermissions));
 
   TryShowHatsSurveyWithTimeout();
 }

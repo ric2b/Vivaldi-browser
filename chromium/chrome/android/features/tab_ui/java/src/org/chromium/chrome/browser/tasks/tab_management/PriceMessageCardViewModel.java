@@ -13,7 +13,7 @@ import android.graphics.drawable.Drawable;
 
 import androidx.appcompat.content.res.AppCompatResources;
 
-import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerFactory;
 import org.chromium.chrome.browser.tasks.tab_management.PriceMessageService.PriceMessageType;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -56,7 +56,9 @@ public class PriceMessageCardViewModel {
                 .with(MessageCardViewProperties.SHOULD_KEEP_AFTER_REVIEW, false)
                 .with(MessageCardViewProperties.IS_ICON_VISIBLE, isIconVisible)
                 .with(MessageCardViewProperties.IS_INCOGNITO, false)
-                .with(MessageCardViewProperties.SHOULD_SHOW_IN_INCOGNITO, false)
+                .with(MessageCardViewProperties
+                                .MESSAGE_CARD_VISIBILITY_CONTROL_IN_REGULAR_AND_INCOGNITO_MODE,
+                        MessageCardViewProperties.MessageCardScope.REGULAR)
                 .with(MessageCardViewProperties.TITLE_TEXT, titleText)
                 .with(MessageCardViewProperties.PRICE_DROP, data.getPriceDrop())
                 .with(MessageCardViewProperties.ICON_PROVIDER,
@@ -79,7 +81,7 @@ public class PriceMessageCardViewModel {
         if (type == PriceMessageType.PRICE_WELCOME) {
             return context.getString(R.string.price_drop_spotted_content);
         } else if (type == PriceMessageType.PRICE_ALERTS) {
-            if ((new PriceDropNotificationManager()).areAppNotificationsEnabled()) {
+            if ((PriceDropNotificationManagerFactory.create()).areAppNotificationsEnabled()) {
                 return context.getString(R.string.price_drop_alerts_card_get_notified_content);
             } else {
                 return context.getString(R.string.price_drop_alerts_card_go_to_settings_content);
@@ -92,7 +94,7 @@ public class PriceMessageCardViewModel {
         if (type == PriceMessageType.PRICE_WELCOME) {
             return context.getString(R.string.price_drop_spotted_show_me);
         } else if (type == PriceMessageType.PRICE_ALERTS) {
-            if ((new PriceDropNotificationManager()).areAppNotificationsEnabled()) {
+            if ((PriceDropNotificationManagerFactory.create()).areAppNotificationsEnabled()) {
                 return context.getString(R.string.price_drop_alerts_card_get_notified);
             } else {
                 return context.getString(R.string.price_drop_alerts_card_go_to_settings);

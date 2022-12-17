@@ -4,6 +4,8 @@
 
 #include "device/bluetooth/bluetooth_adapter_mac.h"
 
+#include "base/memory/raw_ptr.h"
+
 #import <Foundation/Foundation.h>
 
 #include <memory>
@@ -35,12 +37,6 @@
 #else  // !BUILDFLAG(IS_IOS)
 #import <IOBluetooth/IOBluetooth.h>
 #endif  // BUILDFLAG(IS_IOS)
-
-// List of undocumented IOBluetooth APIs used for BluetoothAdapterMac.
-extern "C" {
-int IOBluetoothPreferenceGetControllerPowerState();
-void IOBluetoothPreferenceSetControllerPowerState(int state);
-}
 
 namespace {
 
@@ -215,7 +211,7 @@ class BluetoothAdapterMacTest : public testing::Test {
   base::test::TaskEnvironment task_environment_;
   scoped_refptr<base::TestSimpleTaskRunner> ui_task_runner_;
   scoped_refptr<BluetoothAdapter> adapter_;
-  BluetoothAdapterMac* adapter_mac_;
+  raw_ptr<BluetoothAdapterMac> adapter_mac_;
   scoped_refptr<FakeBluetoothLowEnergyDeviceWatcherMac>
       fake_low_energy_device_watcher_;
   TestBluetoothAdapterObserver observer_;
@@ -229,15 +225,6 @@ class BluetoothAdapterMacTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
   base::FilePath test_property_list_file_path_;
 };
-
-// Test if private IOBluetooth APIs are callable on all supported macOS
-// versions.
-TEST_F(BluetoothAdapterMacTest, IOBluetoothPrivateAPIs) {
-  // Obtain current power state, toggle it, and reset it to it's original value.
-  int previous_state = IOBluetoothPreferenceGetControllerPowerState();
-  IOBluetoothPreferenceSetControllerPowerState(!previous_state);
-  IOBluetoothPreferenceSetControllerPowerState(previous_state);
-}
 
 TEST_F(BluetoothAdapterMacTest, Poll) {
   PollAdapter();

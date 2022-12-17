@@ -289,12 +289,8 @@ ReadableStream* SerialPort::readable(ScriptState* script_state,
   DCHECK(!underlying_source_);
   underlying_source_ = MakeGarbageCollected<SerialPortUnderlyingSource>(
       script_state, this, std::move(consumer));
-  // Ideally the stream would report the number of bytes that can be read from
-  // the underlying Mojo data pipe. As an approximation the high water mark is
-  // set to 0 so that data remains in the pipe rather than being queued in the
-  // stream and thus adding an extra layer of buffering.
-  readable_ = ReadableStream::CreateWithCountQueueingStrategy(
-      script_state, underlying_source_, /*high_water_mark=*/0);
+  readable_ =
+      ReadableStream::CreateByteStream(script_state, underlying_source_);
   return readable_;
 }
 
@@ -559,25 +555,25 @@ DispatchEventResult SerialPort::DispatchEventInternal(Event& event) {
   event.SetTarget(this);
 
   // Events fired on a SerialPort instance bubble to the parent Serial instance.
-  event.SetEventPhase(Event::kCapturingPhase);
+  event.SetEventPhase(Event::PhaseType::kCapturingPhase);
   event.SetCurrentTarget(parent_);
   parent_->FireEventListeners(event);
   if (event.PropagationStopped())
     goto doneDispatching;
 
-  event.SetEventPhase(Event::kAtTarget);
+  event.SetEventPhase(Event::PhaseType::kAtTarget);
   event.SetCurrentTarget(this);
   FireEventListeners(event);
   if (event.PropagationStopped() || !event.bubbles())
     goto doneDispatching;
 
-  event.SetEventPhase(Event::kBubblingPhase);
+  event.SetEventPhase(Event::PhaseType::kBubblingPhase);
   event.SetCurrentTarget(parent_);
   parent_->FireEventListeners(event);
 
 doneDispatching:
   event.SetCurrentTarget(nullptr);
-  event.SetEventPhase(Event::kNone);
+  event.SetEventPhase(Event::PhaseType::kNone);
   return EventTarget::GetDispatchEventResult(event);
 }
 
@@ -592,7 +588,7 @@ void SerialPort::OnSendError(device::mojom::blink::SerialSendError error) {
   if (SendErrorIsFatal(error))
     write_fatal_ = true;
   if (underlying_sink_)
-    underlying_sink_->SignalErrorOnClose(DOMExceptionFromSendError(error));
+    underlying_sink_->SignalError(DOMExceptionFromSendError(error));
 }
 
 bool SerialPort::CreateDataPipe(mojo::ScopedDataPipeProducerHandle* producer,
@@ -640,7 +636,7 @@ void SerialPort::OnConnectionError() {
   }
 
   if (underlying_sink_) {
-    underlying_sink_->SignalErrorOnClose(
+    underlying_sink_->SignalError(
         DOMExceptionFromSendError(SerialSendError::DISCONNECTED));
   }
 }

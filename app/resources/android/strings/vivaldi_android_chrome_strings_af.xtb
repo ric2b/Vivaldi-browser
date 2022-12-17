@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="af">
 <translation id="1397811292916898096">Soek met <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as versteksoekenjin in Vivaldi. Dit stuur die geselekteerde woord en die huidige blad as konteks na Google Search. U kan dit in <ph name="BEGIN_LINK" /> Instellings <ph name="END_LINK" /> afskakel.</translation>
 <translation id="1598449788754183301">Tokkel normale/privaat oortjies</translation>
 <translation id="1644574205037202324">Geskiedenis</translation>
 <translation id="17513872634828108">Open oortjies</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nuwe privaat oortjie</translation>
 <translation id="4243710787042215766">Open in privaat oortjie</translation>
 <translation id="4526803704855831732">Privaat Oortjies</translation>
+<translation id="4719086422742491124">Leer meer oor onderwerpe op webwerwe sonder om die blad te verlaat. Kies een of meer woorde op die blad om daarna te soek.
+
+Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as die versteksoekenjin in Vivaldi.</translation>
 <translation id="4759238208242260848">Aflaaie</translation>
 <translation id="4883379392681899581">Verlaat privaat modus</translation>
 <translation id="4943872375798546930">Geen resultate</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> berging</translation>
 <translation id="5186185447130319458">Privaat</translation>
 <translation id="5233638681132016545">Nuwe oortjie</translation>
-<translation id="572328651809341494">Onlangse oortjies</translation>
-<translation id="5840488417521835756">Vind uit oor onderwerpe op webwerwe sonder om die blad te verlaat. Tik om te Soek is ’n funksie wat slegs beskikbaar is wanneer Google die versteksoekenjin in Vivaldi is. Dit stuur ’n woord en sy konteks na Google Soek, waarna definisies, beelde, soekresultate en ander detail weergegee word.
+<translation id="5375131951310889874">Leer meer oor onderwerpe op webwerwe sonder om die blad te verlaat. Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as versteksoekenjin in Vivaldi. Dit stuur ’n woord en die omringende konteks na Google Search en antwoord met definisies, beelde, soekresultate en ander details.
 
-Druk die soekterm lank in om dit aan te pas. Vee die paneel tot heel bo en tik op die soekkas om die soekopdrag te verfyn.</translation>
+Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfyn, skuif die paneel heeltemal na bo en tik op die soekkassie.</translation>
+<translation id="572328651809341494">Onlangse oortjies</translation>
 <translation id="6150320133806434356">Boekmerk bewaar</translation>
 <translation id="6336451774241870485">Nuwe privaat oortjie</translation>
 <translation id="6585139692466700358">Bied aan om bladsye in vreemde tale d.m.v. Vivaldi se vertaaldiens te vertaal</translation>
@@ -53,7 +57,6 @@ Druk die soekterm lank in om dit aan te pas. Vee die paneel tot heel bo en tik o
 <translation id="732145680195464316">Boekmerk is in <ph name="PRODUCT_NAME" /> bewaar</translation>
 <translation id="7427132068601343474">Oor Vivaldi</translation>
 <translation id="7465104139234185284">Sluit alle privaat oortjies</translation>
-<translation id="7519434535192513364">Tik om te Soek is ’n funksie wat slegs beskikbaar is wanneer Google die versteksoekenjin in Vivaldi is. Dit stuur die gekose woord en die huidige blad as konteks na Google Soek. U kan dit in <ph name="BEGIN_LINK" />Instellings<ph name="END_LINK" /> deaktiveer.</translation>
 <translation id="804786196054284061">Eindgebruikerlisensieooreenkoms</translation>
 <translation id="85991616550051997">Gaan na tuisblad</translation>
 <translation id="8820817407110198400">Boekmerke</translation>

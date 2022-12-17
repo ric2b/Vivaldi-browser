@@ -5,9 +5,32 @@
 /**
  * @fileoverview Provides output services for ChromeVox.
  */
-import {EventSourceState} from '/chromevox/background/event_source.js';
-import {OutputAncestryInfo} from '/chromevox/background/output/output_ancestry_info.js';
-import {EventSourceType} from '/chromevox/common/event_source_type.js';
+import {AutomationPredicate} from '../../../common/automation_predicate.js';
+import {AutomationUtil} from '../../../common/automation_util.js';
+import {constants} from '../../../common/constants.js';
+import {Cursor, CURSOR_NODE_INDEX} from '../../../common/cursors/cursor.js';
+import {CursorRange} from '../../../common/cursors/range.js';
+import {AutomationTreeWalker} from '../../../common/tree_walker.js';
+import {NavBraille} from '../../common/braille/nav_braille.js';
+import {EventSourceType} from '../../common/event_source_type.js';
+import {LocaleOutputHelper} from '../../common/locale_output_helper.js';
+import {LogType} from '../../common/log_types.js';
+import {Msgs} from '../../common/msgs.js';
+import {Spannable} from '../../common/spannable.js';
+import {QueueMode, TtsCategory, TtsSpeechProperties} from '../../common/tts_interface.js';
+import {ValueSelectionSpan, ValueSpan} from '../braille/spans.js';
+import {ChromeVox} from '../chromevox.js';
+import {EventSourceState} from '../event_source.js';
+import {FocusBounds} from '../focus_bounds.js';
+import {LogStore} from '../logging/log_store.js';
+import {PhoneticData} from '../phonetic_data.js';
+
+import {OutputAncestryInfo} from './output_ancestry_info.js';
+import {OutputFormatParser, OutputFormatParserObserver} from './output_format_parser.js';
+import {OutputFormatTree} from './output_format_tree.js';
+import {OutputRulesStr} from './output_logger.js';
+import {OutputRoleInfo} from './output_role_info.js';
+import {OutputAction, OutputContextOrder, OutputEarconAction, OutputEventType, OutputNodeSpan, OutputSelectionSpan, OutputSpeechProperties} from './output_types.js';
 
 const AriaCurrentState = chrome.automation.AriaCurrentState;
 const AutomationNode = chrome.automation.AutomationNode;
@@ -20,7 +43,7 @@ const RoleType = chrome.automation.RoleType;
 const StateType = chrome.automation.StateType;
 
 /**
- * An Output object formats a cursors.Range into speech, braille, or both
+ * An Output object formats a CursorRange into speech, braille, or both
  * representations. This is typically a |Spannable|.
  * The translation from Range to these output representations rely upon format
  * rules which specify how to convert AutomationNode objects into annotated
@@ -49,39 +72,36 @@ const StateType = chrome.automation.StateType;
 export class Output {
   constructor() {
     // TODO(dtseng): Include braille specific rules.
-    /** @type {!Array<!Spannable>} @private */
+    /** @private {!Array<!Spannable>} */
     this.speechBuffer_ = [];
-    /** @type {!Array<!Spannable>} @private */
+    /** @private {!Array<!Spannable>} */
     this.brailleBuffer_ = [];
-    /** @type {!Array<!Object>} @private */
+    /** @private {!Array<!Object>} */
     this.locations_ = [];
-    /** @type {function(?)} @private */
+    /** @private {function(boolean=)} */
     this.speechEndCallback_;
 
-    /** Store output rules */
-    /** @type {!OutputRulesStr} @private */
+    // Store output rules.
+    /** @private {!OutputRulesStr} */
     this.speechRulesStr_ = new OutputRulesStr('enableSpeechLogging');
-    /** @type {!OutputRulesStr} @private */
+    /** @private {!OutputRulesStr} */
     this.brailleRulesStr_ = new OutputRulesStr('enableBrailleLogging');
 
     /**
      * Current global options.
-     * @type {{speech: boolean, braille: boolean, auralStyle: boolean}}
-     * @private
+     * @private {{speech: boolean, braille: boolean, auralStyle: boolean}}
      */
     this.formatOptions_ = {speech: true, braille: false, auralStyle: false};
 
     /**
      * The speech category for the generated speech utterance.
-     * @type {TtsCategory}
-     * @private
+     * @private {TtsCategory}
      */
     this.speechCategory_ = TtsCategory.NAV;
 
     /**
      * The speech queue mode for the generated speech utterance.
-     * @type {QueueMode}
-     * @private
+     * @private {QueueMode}
      */
     this.queueMode_;
 
@@ -94,8 +114,8 @@ export class Output {
     /** @private {boolean} */
     this.enableHints_ = true;
 
-    /** @private {!Object} */
-    this.initialSpeechProps_ = {};
+    /** @private {!TtsSpeechProperties} */
+    this.initialSpeechProps_ = new TtsSpeechProperties();
 
     /** @private {boolean} */
     this.drawFocusRing_ = true;
@@ -187,9 +207,7 @@ export class Output {
    * @return {boolean} True if there is only whitespace in this output.
    */
   get isOnlyWhitespace() {
-    return this.speechBuffer_.every(function(buff) {
-      return !/\S+/.test(buff.toString());
-    });
+    return this.speechBuffer_.every(buff => !/\S+/.test(buff.toString()));
   }
 
   /** @return {Spannable} */
@@ -199,8 +217,8 @@ export class Output {
 
   /**
    * Specify ranges for speech.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @return {!Output}
    */
@@ -214,8 +232,8 @@ export class Output {
 
   /**
    * Specify ranges for aurally styled speech.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @return {!Output}
    */
@@ -229,8 +247,8 @@ export class Output {
 
   /**
    * Specify ranges for braille.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @return {!Output}
    */
@@ -250,9 +268,8 @@ export class Output {
       while (end.lastChild) {
         end = end.lastChild;
       }
-      prevRange = cursors.Range.fromNode(range.start.node.parent);
-      range = new cursors.Range(
-          cursors.Cursor.fromNode(start), cursors.Cursor.fromNode(end));
+      prevRange = CursorRange.fromNode(range.start.node.parent);
+      range = new CursorRange(Cursor.fromNode(start), Cursor.fromNode(end));
     }
     this.render_(
         range, prevRange, type, this.brailleBuffer_, this.brailleRulesStr_);
@@ -261,8 +278,8 @@ export class Output {
 
   /**
    * Specify ranges for location.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @return {!Output}
    */
@@ -277,8 +294,8 @@ export class Output {
 
   /**
    * Specify the same ranges for speech and braille.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @return {!Output}
    */
@@ -290,8 +307,8 @@ export class Output {
 
   /**
    * Specify the same ranges for aurally styled speech and braille.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @return {!Output}
    */
@@ -363,7 +380,7 @@ export class Output {
 
   /**
    * Supply initial speech properties that will be applied to all output.
-   * @param {!Object} speechProps
+   * @param {!TtsSpeechProperties} speechProps
    * @return {!Output}
    */
   withInitialSpeechProperties(speechProps) {
@@ -420,7 +437,7 @@ export class Output {
       node,
       outputFormat: formatStr,
       outputBuffer: this.speechBuffer_,
-      outputRuleString: this.speechRulesStr_
+      outputRuleString: this.speechRulesStr_,
     });
 
     return this;
@@ -443,7 +460,7 @@ export class Output {
       node,
       outputFormat: formatStr,
       outputBuffer: this.brailleBuffer_,
-      outputRuleString: this.brailleRulesStr_
+      outputRuleString: this.brailleRulesStr_,
     });
     return this;
   }
@@ -454,11 +471,12 @@ export class Output {
    * @return {!Output}
    */
   onSpeechEnd(callback) {
-    this.speechEndCallback_ = function(opt_cleanupOnly) {
-      if (!opt_cleanupOnly) {
-        callback();
-      }
-    }.bind(this);
+    this.speechEndCallback_ =
+        /** @type {function(boolean=)} */ (function(opt_cleanupOnly) {
+          if (!opt_cleanupOnly) {
+            callback();
+          }
+        }.bind(this));
     return this;
   }
 
@@ -487,7 +505,7 @@ export class Output {
         continue;
       }
 
-      let speechProps = {};
+      let speechProps;
       const speechPropsInstance = /** @type {OutputSpeechProperties} */ (
           buff.getSpanInstanceOf(OutputSpeechProperties));
 
@@ -499,25 +517,23 @@ export class Output {
             speechPropsInstance.properties[key] = value;
           }
         }
-        speechProps = speechPropsInstance.properties;
+        speechProps = new TtsSpeechProperties(speechPropsInstance.properties);
       }
 
       speechProps.category = this.speechCategory_;
 
       (function() {
         const scopedBuff = buff;
-        speechProps['startCallback'] = function() {
+        speechProps.startCallback = function() {
           const actions = scopedBuff.getSpansInstanceOf(OutputAction);
           if (actions) {
-            actions.forEach(function(a) {
-              a.run();
-            });
+            actions.forEach(action => action.run());
           }
         };
       }());
 
       if (i === this.speechBuffer_.length - 1) {
-        speechProps['endCallback'] = this.speechEndCallback_;
+        speechProps.endCallback = this.speechEndCallback_;
       }
       let finalSpeech = buff.toString();
       for (const text in this.replacements_) {
@@ -541,7 +557,8 @@ export class Output {
     if (this.brailleBuffer_.length) {
       const buff = this.mergeBraille_(this.brailleBuffer_);
       const selSpan = buff.getSpanInstanceOf(OutputSelectionSpan);
-      let startIndex = -1, endIndex = -1;
+      let startIndex = -1;
+      let endIndex = -1;
       if (selSpan) {
         const valueStart = buff.getSpanStart(selSpan);
         const valueEnd = buff.getSpanEnd(selSpan);
@@ -609,8 +626,8 @@ export class Output {
   /**
    * Renders the given range using optional context previous range and event
    * type.
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @param {!Array<Spannable>} buff Buffer to receive rendered output.
    * @param {!OutputRulesStr} ruleStr
@@ -957,9 +974,7 @@ export class Output {
     options.annotation.push(token);
     if (node.name &&
         (node.nameFrom !== NameFromType.CONTENTS ||
-         node.children.every(function(child) {
-           return child.role === RoleType.STATIC_TEXT;
-         }))) {
+         node.children.every(child => child.role === RoleType.STATIC_TEXT))) {
       this.append_(buff, node.name || '', options);
       ruleStr.writeTokenWithValue(token, node.name);
     } else {
@@ -968,7 +983,7 @@ export class Output {
         node,
         outputFormat: '$descendants',
         outputBuffer: buff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
     }
   }
@@ -1020,7 +1035,7 @@ export class Output {
         node,
         outputFormat: '@' + msg,
         outputBuffer: buff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
     }
   }
@@ -1039,7 +1054,7 @@ export class Output {
         node,
         outputFormat: '@' + msg,
         outputBuffer: buff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
     }
   }
@@ -1058,7 +1073,7 @@ export class Output {
         node,
         outputFormat: '@' + msg,
         outputBuffer: buff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
     }
   }
@@ -1071,18 +1086,18 @@ export class Output {
    */
   formatState_(node, token, buff, ruleStr) {
     if (node.state) {
-      Object.getOwnPropertyNames(node.state).forEach(function(s) {
-        const stateInfo = Output.STATE_INFO_[s];
+      Object.getOwnPropertyNames(node.state).forEach(state => {
+        const stateInfo = Output.STATE_INFO_[state];
         if (stateInfo && !stateInfo.isRoleSpecific && stateInfo.on) {
           ruleStr.writeToken(token);
           this.format_({
             node,
-            outputFormat: '$' + s,
+            outputFormat: '$' + state,
             outputBuffer: buff,
-            outputRuleString: ruleStr
+            outputRuleString: ruleStr,
           });
         }
-      }.bind(this));
+      });
     }
   }
 
@@ -1106,7 +1121,7 @@ export class Output {
           node,
           outputFormat: formatString,
           outputBuffer: buff,
-          outputRuleString: ruleStr
+          outputRuleString: ruleStr,
         });
       }
     }
@@ -1146,12 +1161,12 @@ export class Output {
       return;
     }
 
-    const subrange = new cursors.Range(
-        new cursors.Cursor(leftmost, cursors.NODE_INDEX),
-        new cursors.Cursor(rightmost, cursors.NODE_INDEX));
+    const subrange = new CursorRange(
+        new Cursor(leftmost, CURSOR_NODE_INDEX),
+        new Cursor(rightmost, CURSOR_NODE_INDEX));
     let prev = null;
     if (node) {
-      prev = cursors.Range.fromNode(node);
+      prev = CursorRange.fromNode(node);
     }
     ruleStr.writeToken(token);
     this.render_(
@@ -1173,7 +1188,7 @@ export class Output {
       node,
       outputFormat: '$descendants',
       outputBuffer: unjoined,
-      outputRuleString: ruleStr
+      outputRuleString: ruleStr,
     });
     this.append_(buff, unjoined.join(' '), options);
     ruleStr.write(
@@ -1276,7 +1291,7 @@ export class Output {
                 $if($tableCellAriaColumnIndex, $tableCellAriaColumnIndex,
                   $tableCellColumnIndex))`,
         outputBuffer: buff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
     }
   }
@@ -1347,7 +1362,7 @@ export class Output {
         node,
         outputFormat: '$name',
         outputBuffer: buff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
       return;
     }
@@ -1364,7 +1379,7 @@ export class Output {
         // into it.
         return n !== root && AutomationPredicate.leafOrStaticText(n);
       },
-      root: r => r === root
+      root: r => r === root,
     });
     const outputStrings = [];
     while (walker.next().node) {
@@ -1486,7 +1501,7 @@ export class Output {
           node,
           outputFormat: cond.nextSibling || '',
           outputBuffer: buff,
-          outputRuleString: ruleStr
+          outputRuleString: ruleStr,
         });
       } else if (Output.isFalsey(node, attrib)) {
         ruleStr.write(attrib + '==false => ');
@@ -1494,7 +1509,7 @@ export class Output {
           node,
           outputFormat: cond.nextSibling.nextSibling || '',
           outputBuffer: buff,
-          outputRuleString: ruleStr
+          outputRuleString: ruleStr,
         });
       }
     } else if (token === 'nif') {
@@ -1507,7 +1522,7 @@ export class Output {
           node,
           outputFormat: cond.nextSibling || '',
           outputBuffer: buff,
-          outputRuleString: ruleStr
+          outputRuleString: ruleStr,
         });
       } else if (Output.isTruthy(node, attrib)) {
         ruleStr.write(attrib + '==true => ');
@@ -1515,7 +1530,7 @@ export class Output {
           node,
           outputFormat: cond.nextSibling.nextSibling || '',
           outputBuffer: buff,
-          outputRuleString: ruleStr
+          outputRuleString: ruleStr,
         });
       }
     } else if (token === 'earcon') {
@@ -1546,13 +1561,13 @@ export class Output {
     }
     // Tokens can have substitutions.
     const pieces = token.split('+');
-    token = pieces.reduce(function(prev, cur) {
+    token = pieces.reduce((prev, cur) => {
       let lookup = cur;
       if (cur[0] === '$') {
         lookup = node[cur.slice(1)];
       }
       return prev + lookup;
-    }.bind(this), '');
+    }, '');
     const msgId = token;
     let msgArgs = [];
     ruleStr.write(token + '{');
@@ -1570,7 +1585,7 @@ export class Output {
           node,
           outputFormat: curArg,
           outputBuffer: msgBuff,
-          outputRuleString: ruleStr
+          outputRuleString: ruleStr,
         });
         // Fill in empty string if nothing was formatted.
         if (!msgBuff.length) {
@@ -1614,7 +1629,7 @@ export class Output {
         node,
         outputFormat: arg,
         outputBuffer: argBuff,
-        outputRuleString: ruleStr
+        outputRuleString: ruleStr,
       });
       const namedArgs = {COUNT: Number(argBuff[0])};
       msg = new goog.i18n.MessageFormat(msg).format(namedArgs);
@@ -1640,8 +1655,8 @@ export class Output {
   }
 
   /**
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @param {!Array<Spannable>} rangeBuff
    * @param {!OutputRulesStr} ruleStr
@@ -1654,7 +1669,7 @@ export class Output {
     }
 
     if (!prevRange && range.start.node.root) {
-      prevRange = cursors.Range.fromNode(range.start.node.root);
+      prevRange = CursorRange.fromNode(range.start.node.root);
     } else if (!prevRange) {
       return;
     }
@@ -1728,17 +1743,16 @@ export class Output {
            AutomationUtil.getDirection(node, range.end.node) === Dir.FORWARD) {
       if (hasPartialNodeStart && node === range.start.node) {
         if (range.start.index !== range.start.node.name.length) {
-          const partialRange = new cursors.Range(
-              new cursors.Cursor(node, range.start.index),
-              new cursors.Cursor(
+          const partialRange = new CursorRange(
+              new Cursor(node, range.start.index),
+              new Cursor(
                   node, node.name.length, {preferNodeStartEquivalent: true}));
           this.subNode_(partialRange, prevRange, type, rangeBuff, ruleStr);
         }
       } else if (hasPartialNodeEnd && node === range.end.node) {
         if (range.end.index !== 0) {
-          const partialRange = new cursors.Range(
-              new cursors.Cursor(node, 0),
-              new cursors.Cursor(node, range.end.index));
+          const partialRange = new CursorRange(
+              new Cursor(node, 0), new Cursor(node, range.end.index));
           this.subNode_(partialRange, prevRange, type, rangeBuff, ruleStr);
         }
       } else {
@@ -1808,7 +1822,7 @@ export class Output {
       type,
       ancestors: info.leaveAncestors,
       formatName: 'leave',
-      exclude: [...info.enterAncestors, node]
+      exclude: [...info.enterAncestors, node],
     });
     this.ancestryHelper_({
       node,
@@ -1818,7 +1832,7 @@ export class Output {
       type,
       ancestors: info.enterAncestors,
       formatName: 'enter',
-      excludePreviousAncestors: true
+      excludePreviousAncestors: true,
     });
 
     if (optionalArgs.suppressStartEndAncestry) {
@@ -1835,7 +1849,7 @@ export class Output {
         type,
         ancestors: info.startAncestors,
         formatName: 'startOf',
-        excludePreviousAncestors: true
+        excludePreviousAncestors: true,
       });
     }
 
@@ -1848,7 +1862,7 @@ export class Output {
         type,
         ancestors: info.endAncestors,
         formatName: 'endOf',
-        exclude: [...info.startAncestors].concat(node)
+        exclude: [...info.startAncestors].concat(node),
       });
     }
   }
@@ -1925,7 +1939,7 @@ export class Output {
           outputFormat: enterFormat,
           outputBuffer: buff,
           outputRuleString: ruleStr,
-          opt_prevNode: prevNode
+          opt_prevNode: prevNode,
         });
 
         if (this.formatOptions_.braille && buff.length) {
@@ -1988,7 +2002,7 @@ export class Output {
       outputFormat: eventBlock[rule.role][rule.output],
       outputBuffer: buff,
       outputRuleString: ruleStr,
-      opt_prevNode: prevNode
+      opt_prevNode: prevNode,
     });
 
     // Restore braille and add an annotation for this node.
@@ -2000,8 +2014,8 @@ export class Output {
   }
 
   /**
-   * @param {!cursors.Range} range
-   * @param {cursors.Range} prevRange
+   * @param {!CursorRange} range
+   * @param {CursorRange} prevRange
    * @param {EventType|OutputEventType} type
    * @param {!Array<Spannable>} buff
    * @private
@@ -2010,7 +2024,7 @@ export class Output {
     if (!prevRange) {
       prevRange = range;
     }
-    const dir = cursors.Range.getDirection(prevRange, range);
+    const dir = CursorRange.getDirection(prevRange, range);
     const node = range.start.node;
     const prevNode = prevRange.getBound(dir).node;
     if (!node || !prevNode) {
@@ -2099,7 +2113,7 @@ export class Output {
    * additions. Rendering processes these two methods in order. The only
    * distinction is a small delay gets introduced before the first hint in
    * |computeDelayedHints_|.
-   * @param {!cursors.Range} range
+   * @param {!CursorRange} range
    * @param {!Array<AutomationNode>} uniqueAncestors
    * @param {EventType|OutputEventType} type
    * @param {!Array<Spannable>} buff Buffer to receive rendered output.
@@ -2150,7 +2164,7 @@ export class Output {
           outputFormat: msg.outputFormat,
           outputBuffer: buff,
           outputRuleString: ruleStr,
-          opt_speechProps: msg.props
+          opt_speechProps: msg.props,
         });
       } else {
         throw new Error('Unexpected hint: ' + msg);
@@ -2198,7 +2212,7 @@ export class Output {
       if (currentNode.ariaCurrentState &&
           Output.ARIA_CURRENT_STATE_INFO_[currentNode.ariaCurrentState]) {
         ret.push({
-          msgId: Output.ARIA_CURRENT_STATE_INFO_[currentNode.ariaCurrentState]
+          msgId: Output.ARIA_CURRENT_STATE_INFO_[currentNode.ariaCurrentState],
         });
         break;
       }
@@ -2225,7 +2239,7 @@ export class Output {
       if (node.state[StateType.EDITABLE]) {
         ret.push({
           msgId: node.state[StateType.FOCUSED] ? 'hint_is_editing' :
-                                                 'hint_double_tap_to_edit'
+                                                 'hint_double_tap_to_edit',
         });
         return ret;
       }
@@ -2310,7 +2324,7 @@ export class Output {
                  [RoleType.MENU, RoleType.MENU_BAR]))))) {
       ret.push({
         msgId: foundAncestor.state.horizontal ? 'hint_menu_horizontal' :
-                                                'hint_menu'
+                                                'hint_menu',
       });
     }
     if (uniqueAncestors.find(
@@ -2334,33 +2348,30 @@ export class Output {
 
     // Reject empty values without meaningful annotations.
     if ((!value || value.length === 0) &&
-        opt_options.annotation.every(function(a) {
-          return !(a instanceof OutputAction) &&
-              !(a instanceof OutputSelectionSpan);
-        })) {
+        opt_options.annotation.every(
+            annotation => !(annotation instanceof OutputAction) &&
+                !(annotation instanceof OutputSelectionSpan))) {
       return;
     }
 
     const spannableToAdd = new Spannable(value);
-    opt_options.annotation.forEach(function(a) {
-      spannableToAdd.setSpan(a, 0, spannableToAdd.length);
-    });
+    opt_options.annotation.forEach(
+        annotation =>
+            spannableToAdd.setSpan(annotation, 0, spannableToAdd.length));
 
     // |isUnique| specifies an annotation that cannot be duplicated.
     if (opt_options.isUnique) {
-      const annotationSansNodes =
-          opt_options.annotation.filter(function(annotation) {
-            return !(annotation instanceof OutputNodeSpan);
-          });
+      const annotationSansNodes = opt_options.annotation.filter(
+          annotation => !(annotation instanceof OutputNodeSpan));
 
-      const alreadyAnnotated = buff.some(function(s) {
-        return annotationSansNodes.some(function(annotation) {
-          if (!s.hasSpan(annotation)) {
+      const alreadyAnnotated = buff.some(spannable => {
+        annotationSansNodes.some(annotation => {
+          if (!spannable.hasSpan(annotation)) {
             return false;
           }
-          const start = s.getSpanStart(annotation);
-          const end = s.getSpanEnd(annotation);
-          const substr = s.substring(start, end);
+          const start = spannable.getSpanStart(annotation);
+          const end = spannable.getSpanEnd(annotation);
+          const substr = spannable.substring(start, end);
           if (substr && value) {
             return substr.toString() === value.toString();
           } else {
@@ -2386,7 +2397,7 @@ export class Output {
     let separator = '';  // Changes to space as appropriate.
     let prevHasInlineNode = false;
     let prevIsName = false;
-    return spans.reduce(function(result, cur) {
+    return spans.reduce((result, cur) => {
       // Ignore empty spans except when they contain a selection.
       const hasSelection = cur.getSpanInstanceOf(OutputSelectionSpan);
       if (cur.length === 0 && !hasSelection) {
@@ -2405,12 +2416,12 @@ export class Output {
       // Keep track of if there's an inline node associated with
       // |cur|.
       const hasInlineNode =
-          cur.getSpansInstanceOf(OutputNodeSpan).some(function(s) {
-            if (!s.node) {
+          cur.getSpansInstanceOf(OutputNodeSpan).some(spannable => {
+            if (!spannable.node) {
               return false;
             }
-            return s.node.display === 'inline' ||
-                s.node.role === RoleType.INLINE_TEXT_BOX;
+            return spannable.node.display === 'inline' ||
+                spannable.node.role === RoleType.INLINE_TEXT_BOX;
           });
 
       const isName = cur.hasSpan('name');
@@ -2481,7 +2492,7 @@ export class Output {
    * @return {string}
    */
   toString() {
-    return this.speechBuffer_.reduce(function(prev, cur) {
+    return this.speechBuffer_.reduce((prev, cur) => {
       if (prev === null || prev === '') {
         return cur.toString();
       }
@@ -2495,7 +2506,7 @@ export class Output {
    * @return {!Spannable}
    */
   get speechOutputForTest() {
-    return this.speechBuffer_.reduce(function(prev, cur) {
+    return this.speechBuffer_.reduce((prev, cur) => {
       if (prev === null) {
         return cur;
       }
@@ -2556,7 +2567,7 @@ Output.STATE_INFO_ = {
   expanded: {on: {msgId: 'aria_expanded_true'}},
   multiselectable: {on: {msgId: 'aria_multiselectable_true'}},
   required: {on: {msgId: 'aria_required_true'}},
-  visited: {on: {msgId: 'visited_state'}}
+  visited: {on: {msgId: 'visited_state'}},
 };
 
 /**
@@ -2570,7 +2581,7 @@ Output.ARIA_CURRENT_STATE_INFO_ = {
   [AriaCurrentState.STEP]: 'aria_current_step',
   [AriaCurrentState.LOCATION]: 'aria_current_location',
   [AriaCurrentState.DATE]: 'aria_current_date',
-  [AriaCurrentState.TIME]: 'aria_current_time'
+  [AriaCurrentState.TIME]: 'aria_current_time',
 };
 
 /**
@@ -2605,7 +2616,7 @@ Output.RESTRICTION_STATE_MAP[Restriction.READ_ONLY] = 'aria_readonly_true';
 Output.CHECKED_STATE_MAP = {
   'true': 'checked_true',
   'false': 'checked_false',
-  'mixed': 'checked_mixed'
+  'mixed': 'checked_mixed',
 };
 
 /**
@@ -2616,7 +2627,7 @@ Output.CHECKED_STATE_MAP = {
 Output.PRESSED_STATE_MAP = {
   'true': 'aria_pressed_true',
   'false': 'aria_pressed_false',
-  'mixed': 'aria_pressed_mixed'
+  'mixed': 'aria_pressed_mixed',
 };
 
 /**
@@ -2637,15 +2648,15 @@ Output.RULES = {
     'default': {
       speak: `$name $node(activeDescendant) $value $state $restriction $role
           $description`,
-      braille: ``
+      braille: ``,
     },
     abstractContainer: {
       startOf: `$nameFromNode $role $state $description`,
-      endOf: `@end_of_container($role)`
+      endOf: `@end_of_container($role)`,
     },
     abstractFormFieldContainer: {
       enter: `$nameFromNode $role $state $description`,
-      leave: `@exited_container($role)`
+      leave: `@exited_container($role)`,
     },
     abstractItem: {
       // Note that ChromeVox generally does not output position/count. Only for
@@ -2655,12 +2666,12 @@ Output.RULES = {
           $if($posInSet, @describe_index($posInSet, $setSize))`,
       speak: `$state $nameOrTextContent= $role
           $if($posInSet, @describe_index($posInSet, $setSize))
-          $description $restriction`
+          $description $restriction`,
     },
     abstractList: {
       startOf: `$nameFromNode $role @@list_with_items($setSize)
           $restriction $description`,
-      endOf: `@end_of_container($role) @@list_nested_level($listNestedLevel)`
+      endOf: `@end_of_container($role) @@list_nested_level($listNestedLevel)`,
     },
     abstractNameFromContents: {
       speak: `$nameOrDescendants $node(activeDescendant) $value $state
@@ -2671,26 +2682,26 @@ Output.RULES = {
           $if($value, $value, $if($valueForRange, $valueForRange))
           $state $restriction
           $if($minValueForRange, @aria_value_min($minValueForRange))
-          $if($maxValueForRange, @aria_value_max($maxValueForRange))`
+          $if($maxValueForRange, @aria_value_max($maxValueForRange))`,
     },
     abstractSpan: {
       startOf: `$nameFromNode $role $state $description`,
-      endOf: `@end_of_container($role)`
+      endOf: `@end_of_container($role)`,
     },
     alert: {
       enter: `$name $role $state`,
       speak: `$earcon(ALERT_NONMODAL) $role $nameOrTextContent $description
-          $state`
+          $state`,
     },
     alertDialog: {
       enter: `$earcon(ALERT_MODAL) $name $state $description $roleDescription
           $textContent`,
       speak: `$earcon(ALERT_MODAL) $name $nameOrTextContent $description $state
-          $role`
+          $role`,
     },
     button: {
       speak: `$name $node(activeDescendant) $state $restriction $role
-          $description`
+          $description`,
     },
     cell: {
       enter: {
@@ -2704,12 +2715,12 @@ Output.RULES = {
       braille: `$state
           $name $cellIndexText $node(tableCellColumnHeaders) $roleDescription
           $description
-          $if($selected, @aria_selected_true)`
+          $if($selected, @aria_selected_true)`,
     },
     checkBox: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $name $role $if($checkedStateDescription, $checkedStateDescription, $checked)
-          $description $state $restriction`
+          $description $state $restriction`,
     },
     client: {speak: `$name`},
     comboBoxMenuButton: {
@@ -2721,18 +2732,18 @@ Output.RULES = {
     dialog: {enter: `$nameFromNode $role $description`},
     genericContainer: {
       enter: `$nameFromNode $description $state`,
-      speak: `$nameOrTextContent $description $state`
+      speak: `$nameOrTextContent $description $state`,
     },
     embeddedObject: {speak: `$name`},
     grid: {
       speak: `$name $node(activeDescendant) $role $state $restriction
-          $description`
+          $description`,
     },
     group: {
       enter: `$nameFromNode $roleDescription $state $restriction $description`,
       speak: `$nameOrDescendants $value $state $restriction $roleDescription
           $description`,
-      leave: ``
+      leave: ``,
     },
     heading: {
       enter: `!relativePitch(hierarchicalLevel)
@@ -2742,7 +2753,7 @@ Output.RULES = {
       speak: `!relativePitch(hierarchicalLevel)
           $nameOrDescendants=
           $if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state
-          $restriction $description`
+          $restriction $description`,
     },
     image: {
       speak: `$if($name, $name,
@@ -2764,11 +2775,11 @@ Output.RULES = {
     },
     list: {
       speak: `$nameFromNode $descendants $role
-          @@list_with_items($setSize) $description $state`
+          @@list_with_items($setSize) $description $state`,
     },
     listBox: {
       enter: `$nameFromNode $role @@list_with_items($setSize)
-          $restriction $description`
+          $restriction $description`,
     },
     listBoxOption: {
       speak: `$state $name $role @describe_index($posInSet, $setSize)
@@ -2776,29 +2787,29 @@ Output.RULES = {
           $nif($selected, @aria_selected_false)`,
       braille: `$state $name $role @describe_index($posInSet, $setSize)
           $description $restriction
-          $if($selected, @aria_selected_true, @aria_selected_false)`
+          $if($selected, @aria_selected_true, @aria_selected_false)`,
     },
     listMarker: {speak: `$name`},
     menu: {
       enter: `$name $role `,
       speak: `$name $node(activeDescendant)
-          $role @@list_with_items($setSize) $description $state $restriction`
+          $role @@list_with_items($setSize) $description $state $restriction`,
     },
     menuItem: {
       speak: `$name $role $if($hasPopup, @has_submenu)
-          @describe_index($posInSet, $setSize) $description $state $restriction`
+          @describe_index($posInSet, $setSize) $description $state $restriction`,
     },
     menuItemCheckBox: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $name $role $checked $state $restriction $description
-          @describe_index($posInSet, $setSize)`
+          @describe_index($posInSet, $setSize)`,
     },
     menuItemRadio: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $if($checked, @describe_menu_item_radio_selected($name),
           @describe_menu_item_radio_unselected($name)) $state $roleDescription
           $restriction $description
-          @describe_index($posInSet, $setSize)`
+          @describe_index($posInSet, $setSize)`,
     },
     menuListOption: {
       speak: `$name $role @describe_index($posInSet, $setSize) $state
@@ -2806,7 +2817,7 @@ Output.RULES = {
           $restriction $description`,
       braille: `$name $role @describe_index($posInSet, $setSize) $state
           $if($selected, @aria_selected_true, @aria_selected_false)
-          $restriction $description`
+          $restriction $description`,
     },
     paragraph: {speak: `$nameOrDescendants $roleDescription`},
     radioButton: {
@@ -2814,21 +2825,23 @@ Output.RULES = {
           $if($checked, @describe_radio_selected($name),
           @describe_radio_unselected($name))
           @describe_index($posInSet, $setSize)
-          $roleDescription $description $state $restriction`
+          $roleDescription $description $state $restriction`,
     },
     rootWebArea: {enter: `$name`, speak: `$if($name, $name, @web_content)`},
     region: {speak: `$state $nameOrTextContent $description $roleDescription`},
     row: {
-      startOf: `$node(tableRowHeader) $roleDescription`,
-      speak: `$name $node(activeDescendant) $value $state $restriction $role
-          $if($selected, @aria_selected_true) $description`
+      startOf: `$node(tableRowHeader) $roleDescription
+          $if($hierarchicalLevel, @describe_depth($hierarchicalLevel))`,
+      speak: ` $if($hierarchicalLevel, @describe_depth($hierarchicalLevel))
+          $name $node(activeDescendant) $value $state $restriction $role
+          $if($selected, @aria_selected_true) $description`,
     },
     staticText: {speak: `$precedingBullet $name= $description`},
     switch: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $if($checked, @describe_switch_on($name),
           @describe_switch_off($name)) $roleDescription
-          $description $state $restriction`
+          $description $state $restriction`,
     },
     tab: {
       speak: `@describe_tab($name) $roleDescription $description
@@ -2839,7 +2852,7 @@ Output.RULES = {
       enter: `$roleDescription @table_summary($name,
           $if($ariaRowCount, $ariaRowCount, $tableRowCount),
           $if($ariaColumnCount, $ariaColumnCount, $tableColumnCount))
-          $node(tableHeader)`
+          $node(tableHeader)`,
     },
     tabList: {
       speak: `$name $node(activeDescendant) $state $restriction $role
@@ -2850,15 +2863,15 @@ Output.RULES = {
           $if($roleDescription, $roleDescription,
               $if($multiline, @tag_textarea,
                   $if($inputType, $inputType, $role)))
-          $description $state $restriction`
+          $description $state $restriction`,
     },
     timer: {
       speak: `$nameFromNode $descendants $value $state $role
-        $description`
+        $description`,
     },
     toggleButton: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
-          $name $role $pressed $description $state $restriction`
+          $name $role $pressed $description $state $restriction`,
     },
     toolbar: {enter: `$name $role $description $restriction`},
     tree: {enter: `$name $role @@list_with_items($setSize) $restriction`},
@@ -2870,13 +2883,13 @@ Output.RULES = {
           $role $description $state $restriction
           $nif($selected, @aria_selected_false)
           @describe_index($posInSet, $setSize)
-          @describe_depth($hierarchicalLevel)`
+          @describe_depth($hierarchicalLevel)`,
     },
     unknown: {speak: ``},
     window: {
       enter: `@describe_window($name) $description`,
-      speak: `@describe_window($name) $description $earcon(OBJECT_OPEN)`
-    }
+      speak: `@describe_window($name) $description $earcon(OBJECT_OPEN)`,
+    },
   },
   menuStart:
       {'default': {speak: `@chrome_menu_opened($name)  $earcon(OBJECT_OPEN)`}},
@@ -2885,12 +2898,12 @@ Output.RULES = {
     'default': {
       speak: `$value $name
           $find({"state": {"selected": true, "invisible": false}},
-          @describe_index($posInSet, $setSize)) `
-    }
+          @describe_index($posInSet, $setSize)) `,
+    },
   },
   alert: {
-    default: {speak: `$earcon(ALERT_NONMODAL) $nameOrTextContent $description`}
-  }
+    default: {speak: `$earcon(ALERT_NONMODAL) $nameOrTextContent $description`},
+  },
 };
 
 /**

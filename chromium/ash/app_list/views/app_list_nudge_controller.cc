@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
@@ -57,11 +58,9 @@ std::string GetPrefPath(AppListNudgeController::NudgeType type) {
 
 // Returns true if the app list has been reordered before.
 bool WasAppListReorderedPreviously(PrefService* prefs) {
-  const base::Value* dictionary =
-      prefs->GetDictionary(prefs::kAppListReorderNudge);
-  if (!dictionary)
-    return false;
-  return dictionary->FindBoolPath(kReorderNudgeConfirmed).value_or(false);
+  const base::Value::Dict& dictionary =
+      prefs->GetValueDict(prefs::kAppListReorderNudge);
+  return dictionary.FindBool(kReorderNudgeConfirmed).value_or(false);
 }
 
 }  // namespace
@@ -83,11 +82,9 @@ void AppListNudgeController::ResetPrefsForNewUserSession(PrefService* prefs) {
 
 // static
 int AppListNudgeController::GetShownCount(PrefService* prefs, NudgeType type) {
-  const base::Value* dictionary = prefs->GetDictionary(GetPrefPath(type));
-  if (!dictionary)
-    return 0;
+  const base::Value::Dict& dictionary = prefs->GetValueDict(GetPrefPath(type));
 
-  return dictionary->FindIntPath(kReorderNudgeShownCount).value_or(0);
+  return dictionary.FindIntByDottedPath(kReorderNudgeShownCount).value_or(0);
 }
 
 // static
@@ -161,12 +158,9 @@ bool AppListNudgeController::IsPrivacyNoticeAccepted() const {
   if (!prefs)
     return false;
 
-  const base::Value* result = prefs->Get(prefs::kLauncherFilesPrivacyNotice)
-                                  ->FindKey(kPrivacyNoticeAcceptedKey);
-  if (!result || !result->is_bool())
-    return false;
-
-  return result->GetBool();
+  return prefs->GetValueDict(prefs::kLauncherFilesPrivacyNotice)
+      .FindBool(kPrivacyNoticeAcceptedKey)
+      .value_or(false);
 }
 
 bool AppListNudgeController::WasPrivacyNoticeShown() const {
@@ -174,12 +168,9 @@ bool AppListNudgeController::WasPrivacyNoticeShown() const {
   if (!prefs)
     return false;
 
-  const base::Value* result = prefs->Get(prefs::kLauncherFilesPrivacyNotice)
-                                  ->FindKey(kPrivacyNoticeShownKey);
-  if (!result || !result->is_bool())
-    return false;
-
-  return result->GetBool();
+  return prefs->GetValueDict(prefs::kLauncherFilesPrivacyNotice)
+      .FindBool(kPrivacyNoticeShownKey)
+      .value_or(false);
 }
 
 void AppListNudgeController::SetPrivacyNoticeShown(bool shown) {
@@ -273,10 +264,13 @@ void AppListNudgeController::UpdateCurrentNudgeStateInPrefs(
       base::TimeDelta shown_duration =
           base::Time::Now() - current_nudge_show_timestamp_;
 
-      // If the time delta of showing the nudge is long enough, caches that the
-      // nudge is considered as shown.
-      if (shown_duration >= base::Seconds(1))
+      // Caches that the nudge is considered as shown if:
+      // 1. the time threshold is skipped; or
+      // 2. the time delta of showing the nudge is long enough.
+      if (ash::switches::IsSkipRecorderNudgeShowThresholdDurationEnabled() ||
+          shown_duration >= base::Seconds(1)) {
         is_nudge_considered_as_shown_ = true;
+      }
 
       // Update the number of times that the reorder nudge was
       // shown to users if the visibility updates.

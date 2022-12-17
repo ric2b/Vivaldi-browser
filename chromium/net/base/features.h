@@ -15,12 +15,7 @@
 #include "net/base/net_export.h"
 #include "net/net_buildflags.h"
 
-namespace net {
-namespace features {
-
-// Toggles the `Accept-Language` HTTP request header, which
-// https://github.com/WICG/lang-client-hint proposes that we deprecate.
-NET_EXPORT extern const base::Feature kAcceptLanguageHeader;
+namespace net::features {
 
 // Enables ALPS extension of TLS 1.3 for HTTP/2, see
 // https://vasilvv.github.io/tls-alps/draft-vvv-tls-alps.html and
@@ -33,9 +28,6 @@ NET_EXPORT extern const base::Feature kAvoidH2Reprioritization;
 // When kCapReferrerToOriginOnCrossOrigin is enabled, HTTP referrers on cross-
 // origin requests are restricted to contain at most the source origin.
 NET_EXPORT extern const base::Feature kCapReferrerToOriginOnCrossOrigin;
-
-// Enables the ParsedCookie domain attribute to be the empty string.
-NET_EXPORT extern const base::Feature kCookieDomainAttributeEmptyString;
 
 // Support for altering the parameters used for DNS transaction timeout. See
 // ResolveContext::SecureTransactionTimeout().
@@ -170,6 +162,9 @@ NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
 NET_EXPORT extern const base::FeatureParam<int>
     kUseDnsHttpsSvcbExtraTimePercent;
 
+// Update protocol using ALPN information in HTTPS DNS records.
+NET_EXPORT extern const base::Feature kUseDnsHttpsSvcbAlpn;
+
 // Enables TLS 1.3 early data.
 NET_EXPORT extern const base::Feature kEnableTLS13EarlyData;
 
@@ -238,6 +233,24 @@ NET_EXPORT extern const base::Feature
 // testing.
 NET_EXPORT extern const base::Feature
     kPartitionNelAndReportingByNetworkIsolationKey;
+
+// Creates a <double key + is_cross_site> NetworkAnonymizationKey which is used
+// to partition the network state. This double key will have the following
+// properties: `top_frame_site` -> the schemeful site of the top level page.
+// `frame_site ` -> nullopt
+// `is_cross_site` -> true if the `top_frame_site` is cross site when compared
+// to the frame site. The frame site will not be stored in this key so the value
+// of is_cross_site will be computed at key construction. This feature overrides
+// `kEnableDoubleKeyNetworkAnonymizationKey` if both are enabled.
+NET_EXPORT extern const base::Feature
+    kEnableCrossSiteFlagNetworkAnonymizationKey;
+
+// Creates a double keyed NetworkAnonymizationKey which is used to partition the
+// network state. This double key will have the following properties:
+// `top_frame_site` -> the schemeful site of the top level page.
+// `frame_site ` -> nullopt
+// `is_cross_site` -> nullopt
+NET_EXPORT extern const base::Feature kEnableDoubleKeyNetworkAnonymizationKey;
 
 // Enables limiting the size of Expect-CT table.
 NET_EXPORT extern const base::Feature kExpectCTPruning;
@@ -315,6 +328,14 @@ NET_EXPORT extern const base::FeatureParam<int> kCertDualVerificationTrialImpl;
 NET_EXPORT extern const base::FeatureParam<int>
     kCertDualVerificationTrialCacheSize;
 #endif /* BUILDFLAG(IS_MAC) */
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED) && \
+    BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+// If both builtin verifier+system roots and builtin verifier+CRS flags are
+// supported in the same build, this param can be used to choose which to test
+// in the trial.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kCertDualVerificationTrialUseCrs;
+#endif
 #endif /* BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED) */
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
@@ -432,6 +453,9 @@ NET_EXPORT extern const base::Feature kStaticKeyPinningEnforcement;
 // When enabled, cookies with a non-ASCII domain attribute will be rejected.
 NET_EXPORT extern const base::Feature kCookieDomainRejectNonASCII;
 
+// Blocks the 'Set-Cookie' request header on outbound fetch requests.
+NET_EXPORT extern const base::Feature kBlockSetCookieHeader;
+
 NET_EXPORT extern const base::Feature kOptimizeNetworkBuffers;
 
 NET_EXPORT
@@ -443,7 +467,26 @@ NET_EXPORT extern const base::FeatureParam<int>
 NET_EXPORT extern const base::FeatureParam<int>
     kOptimizeNetworkBuffersFilterSourceStreamBufferSize;
 
-}  // namespace features
-}  // namespace net
+NET_EXPORT extern const base::FeatureParam<bool>
+    kOptimizeNetworkBuffersInputStreamCheckAvailable;
+
+// Enable the Storage Access API. https://crbug.com/989663.
+NET_EXPORT extern const base::Feature kStorageAccessAPI;
+
+// Set the default number of "automatic" implicit storage access grants per
+// third party origin that can be granted. This can be overridden via
+// experimentation to allow for field trials to validate the default setting.
+NET_EXPORT extern const int kStorageAccessAPIDefaultImplicitGrantLimit;
+NET_EXPORT extern const base::FeatureParam<int>
+    kStorageAccessAPIImplicitGrantLimit;
+// Whether the Storage Access API can grant access to storage (even if it is
+// unpartitioned). When this feature is disabled, access to storage is only
+// granted if the storage is partitioned.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kStorageAccessAPIGrantsUnpartitionedStorage;
+
+NET_EXPORT extern const base::Feature kThirdPartyStoragePartitioning;
+
+}  // namespace net::features
 
 #endif  // NET_BASE_FEATURES_H_

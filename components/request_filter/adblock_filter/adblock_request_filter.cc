@@ -9,7 +9,7 @@
 
 #include "base/strings/string_util.h"
 #include "components/request_filter/adblock_filter/adblock_resources.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
@@ -111,7 +111,7 @@ bool IsOriginWanted(content::BrowserContext* browser_context,
     return false;
 
   auto* service = RuleServiceFactory::GetForBrowserContext(browser_context);
-  return !service->IsExemptOfFiltering(group, origin);
+  return !service->GetRuleManager()->IsExemptOfFiltering(group, origin);
 }
 }  // namespace
 

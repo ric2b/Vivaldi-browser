@@ -7,9 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/attestation/attestation_flow.h"
-#include "ash/components/attestation/attestation_flow_adaptive.h"
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/location.h"
@@ -17,6 +14,9 @@
 #include "base/time/time.h"
 #include "chrome/browser/ash/attestation/attestation_ca_client.h"
 #include "chrome/browser/ash/attestation/certificate_util.h"
+#include "chromeos/ash/components/attestation/attestation_flow.h"
+#include "chromeos/ash/components/attestation/attestation_flow_adaptive.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
@@ -80,13 +80,6 @@ void EnrollmentCertificateUploaderImpl::ObtainAndUploadCertificate(
 }
 
 void EnrollmentCertificateUploaderImpl::Start() {
-  // We expect a registered CloudPolicyClient.
-  if (!policy_client_->is_registered()) {
-    LOG(ERROR) << "CloudPolicyClient not registered.";
-    RunCallbacks(Status::kFailedToFetch);
-    return;
-  }
-
   if (!attestation_flow_) {
     std::unique_ptr<ServerProxy> attestation_ca_client(
         new AttestationCAClient());
@@ -99,6 +92,12 @@ void EnrollmentCertificateUploaderImpl::Start() {
 }
 
 void EnrollmentCertificateUploaderImpl::GetCertificate(bool force_new_key) {
+  if (!policy_client_->is_registered()) {
+    LOG(ERROR) << "CloudPolicyClient not registered.";
+    RunCallbacks(Status::kInvalidClient);
+    return;
+  }
+
   VLOG_IF(1, force_new_key) << "Fetching certificate with new key";
   attestation_flow_->GetCertificate(
       PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
@@ -177,6 +176,12 @@ void EnrollmentCertificateUploaderImpl::UploadCertificateIfNeeded(
     const std::string& pem_certificate_chain) {
   if (has_already_uploaded_) {
     RunCallbacks(Status::kSuccess);
+    return;
+  }
+
+  if (!policy_client_->is_registered()) {
+    LOG(ERROR) << "CloudPolicyClient not registered.";
+    RunCallbacks(Status::kInvalidClient);
     return;
   }
 

@@ -77,14 +77,14 @@ void VivaldiDataSource::StartDataRequest(
   std::move(callback).Run(nullptr);
 }
 
-std::string VivaldiDataSource::GetMimeType(const std::string& path) {
+std::string VivaldiDataSource::GetMimeType(const GURL& url) {
   // We need to explicitly return a mime type, otherwise if the user tries to
   // drag the image they get no extension.
-  return vivaldi_data_url_utils::GetPathMimeType(path);
+  return vivaldi_data_url_utils::GetPathMimeType(url.spec());
 }
 
-bool VivaldiDataSource::AllowCaching(const std::string& path) {
-  absl::optional<PathType> type = vivaldi_data_url_utils::ParsePath(path);
+bool VivaldiDataSource::AllowCaching(const GURL& url) {
+  absl::optional<PathType> type = vivaldi_data_url_utils::ParsePath(url.path());
   return type == PathType::kLocalPath || type == PathType::kImage;
 }
 

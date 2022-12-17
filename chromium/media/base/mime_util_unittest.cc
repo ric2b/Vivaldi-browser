@@ -31,10 +31,6 @@
 #include "base/win/windows_version.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/feature_toggles.h"
-#endif
-
 namespace media {
 namespace internal {
 
@@ -166,13 +162,10 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/mpegurl"));
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/x-mpegurl"));
 
-#if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp4"));
-#endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp3"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-mp3"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mpeg"));
-#if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
   EXPECT_TRUE(IsSupportedMediaMimeType("video/mp4"));
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -193,7 +186,6 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_FALSE(IsSupportedMediaMimeType("audio/aac"));
   EXPECT_FALSE(IsSupportedMediaMimeType("video/3gpp"));
 #endif  // USE_PROPRIETARY_CODECS
-#endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
   EXPECT_FALSE(IsSupportedMediaMimeType("video/mp3"));
 
   EXPECT_FALSE(IsSupportedMediaMimeType("video/unknown"));
@@ -742,34 +734,6 @@ TEST(IsCodecSupportedOnAndroidTest, AndroidHLSAAC) {
   // are made at a higher level in mime code (parsing rather than checks for
   // platform support).
 }
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-TEST(MimeUtilTest, CommonMediaMimeTypeSystemCodecs) {
-  bool proprietary_audio_supported = false;
-  bool proprietary_video_supported = false;
-#if BUILDFLAG(IS_MAC)
-  proprietary_audio_supported = true;
-  proprietary_video_supported = true;
-#elif BUILDFLAG(IS_WIN)
-  proprietary_audio_supported =
-      base::win::GetVersion() >= base::win::Version::WIN7;
-  proprietary_video_supported = proprietary_audio_supported;
-#endif
-
-#define EXPECT_AUDIO_SUPPORT(mime_type)             \
-  EXPECT_TRUE(IsSupportedMediaMimeType(mime_type) ^ \
-              !proprietary_audio_supported)
-#define EXPECT_VIDEO_SUPPORT(mime_type)             \
-  EXPECT_TRUE(IsSupportedMediaMimeType(mime_type) ^ \
-              !proprietary_video_supported)
-
-  EXPECT_AUDIO_SUPPORT("audio/aac");
-  EXPECT_AUDIO_SUPPORT("audio/mp4");
-  EXPECT_AUDIO_SUPPORT("audio/x-m4a");
-  EXPECT_VIDEO_SUPPORT("video/mp4");
-  EXPECT_VIDEO_SUPPORT("video/x-m4v");
-}
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 }  // namespace internal
 }  // namespace media

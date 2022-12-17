@@ -12,7 +12,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
-#include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom-forward.h"
+#include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -50,8 +50,12 @@ struct BLINK_COMMON_EXPORT
   }
 
   static double priority(const blink::InterestGroup& interest_group) {
-    DCHECK(interest_group.priority);
-    return interest_group.priority.value_or(0);
+    return interest_group.priority;
+  }
+
+  static blink::InterestGroup::ExecutionMode execution_mode(
+      const blink::InterestGroup& interest_group) {
+    return interest_group.execution_mode;
   }
 
   static const absl::optional<GURL>& bidding_url(

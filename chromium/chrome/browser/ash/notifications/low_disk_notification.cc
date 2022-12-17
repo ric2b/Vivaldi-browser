@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -44,13 +44,13 @@ namespace ash {
 
 LowDiskNotification::LowDiskNotification()
     : notification_interval_(kNotificationInterval) {
-  DCHECK(chromeos::UserDataAuthClient::Get());
-  chromeos::UserDataAuthClient::Get()->AddObserver(this);
+  DCHECK(UserDataAuthClient::Get());
+  UserDataAuthClient::Get()->AddObserver(this);
 }
 
 LowDiskNotification::~LowDiskNotification() {
-  DCHECK(chromeos::UserDataAuthClient::Get());
-  chromeos::UserDataAuthClient::Get()->RemoveObserver(this);
+  DCHECK(UserDataAuthClient::Get());
+  UserDataAuthClient::Get()->RemoveObserver(this);
 }
 
 void LowDiskNotification::LowDiskSpace(

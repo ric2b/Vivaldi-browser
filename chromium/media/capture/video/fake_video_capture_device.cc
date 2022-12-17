@@ -459,7 +459,7 @@ void PacmanFramePainter::DrawPacman(base::TimeDelta elapsed_time,
     const SkRect full_frame = SkRect::MakeWH(width, height);
     paint.setARGB(255, 0, 127, 0);
     canvas.drawRect(full_frame, paint);
-    paint.setColor(SK_ColorGREEN);
+    paint.setColor(SkColors::kGreen);
   }
 
   // Draw a sweeping circle to show an animation.
@@ -540,9 +540,9 @@ FakeVideoCaptureDevice::FakeVideoCaptureDevice(
     std::unique_ptr<FakePhotoDevice> photo_device,
     std::unique_ptr<FakeDeviceState> device_state)
     : supported_formats_(supported_formats),
-      frame_deliverer_factory_(std::move(frame_deliverer_factory)),
+      device_state_(std::move(device_state)),
       photo_device_(std::move(photo_device)),
-      device_state_(std::move(device_state)) {}
+      frame_deliverer_factory_(std::move(frame_deliverer_factory)) {}
 
 FakeVideoCaptureDevice::~FakeVideoCaptureDevice() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -665,6 +665,12 @@ void FakePhotoDevice::GetPhotoState(
   photo_state->width->min = 96.0;
   photo_state->width->step = 1.0;
 
+  photo_state->supported_background_blur_modes = {
+      mojom::BackgroundBlurMode::OFF, mojom::BackgroundBlurMode::BLUR};
+  photo_state->background_blur_mode = fake_device_state_->background_blur
+                                          ? mojom::BackgroundBlurMode::BLUR
+                                          : mojom::BackgroundBlurMode::OFF;
+
   std::move(callback).Run(std::move(photo_state));
 }
 
@@ -704,6 +710,17 @@ void FakePhotoDevice::SetPhotoOptions(
         settings->focus_distance, kMinFocusDistance, kMaxFocusDistance);
   }
 
+  if (settings->has_background_blur_mode) {
+    switch (settings->background_blur_mode) {
+      case mojom::BackgroundBlurMode::OFF:
+        device_state_write_access->background_blur = false;
+        break;
+      case mojom::BackgroundBlurMode::BLUR:
+        device_state_write_access->background_blur = true;
+        break;
+    }
+  }
+
   std::move(callback).Run(true);
 }
 
@@ -726,8 +743,8 @@ void OwnBufferFrameDeliverer::Initialize(
     std::unique_ptr<VideoCaptureDevice::Client> client,
     const FakeDeviceState* device_state) {
   FrameDeliverer::Initialize(pixel_format, std::move(client), device_state);
-  buffer_.reset(new uint8_t[VideoFrame::AllocationSize(
-      pixel_format, device_state->format.frame_size)]);
+  buffer_ = std::make_unique<uint8_t[]>(VideoFrame::AllocationSize(
+      pixel_format, device_state->format.frame_size));
 }
 
 void OwnBufferFrameDeliverer::PaintAndDeliverNextFrame(

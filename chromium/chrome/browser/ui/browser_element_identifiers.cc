@@ -7,17 +7,20 @@
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_tracker.h"
 
+// Please keep this list alphabetized.
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kAppMenuButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kAppUninstallDialogOkButtonId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kAutofillCreditCardSuggestionEntryElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kAvatarButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kBookmarkStarViewElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kInstallPwaElementId);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kIntentChipElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kLocationIconElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kMediaButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kOmniboxElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kReadLaterButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kReadLaterSidePanelWebViewElementId);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kSidePanelCloseButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kSavePasswordComboboxElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kSideSearchButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kTabAlertIndicatorButtonElementId);
@@ -30,6 +33,6 @@ DEFINE_ELEMENT_IDENTIFIER_VALUE(kTabElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kTabStripElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kTabStripRegionElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kTopContainerElementId);
-DEFINE_ELEMENT_IDENTIFIER_VALUE(kIntentChipElementId);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kWebUIIPHDemoElementIdentifier);
 
 DEFINE_CUSTOM_ELEMENT_EVENT_TYPE(kTabGroupedCustomEventId);

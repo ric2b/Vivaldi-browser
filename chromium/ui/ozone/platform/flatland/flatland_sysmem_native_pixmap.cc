@@ -12,8 +12,9 @@ namespace ui {
 
 FlatlandSysmemNativePixmap::FlatlandSysmemNativePixmap(
     scoped_refptr<FlatlandSysmemBufferCollection> collection,
-    gfx::NativePixmapHandle handle)
-    : collection_(collection), handle_(std::move(handle)) {}
+    gfx::NativePixmapHandle handle,
+    gfx::Size size)
+    : collection_(collection), handle_(std::move(handle)), size_(size) {}
 
 FlatlandSysmemNativePixmap::~FlatlandSysmemNativePixmap() = default;
 
@@ -63,7 +64,7 @@ gfx::BufferFormat FlatlandSysmemNativePixmap::GetBufferFormat() const {
 }
 
 gfx::Size FlatlandSysmemNativePixmap::GetBufferSize() const {
-  return collection_->size();
+  return size_;
 }
 
 uint32_t FlatlandSysmemNativePixmap::GetUniqueId() const {
@@ -75,6 +76,7 @@ bool FlatlandSysmemNativePixmap::ScheduleOverlayPlane(
     const gfx::OverlayPlaneData& overlay_plane_data,
     std::vector<gfx::GpuFence> acquire_fences,
     std::vector<gfx::GpuFence> release_fences) {
+  NOTREACHED();
   return false;
 }
 
@@ -86,9 +88,8 @@ const gfx::NativePixmapHandle& FlatlandSysmemNativePixmap::PeekHandle() const {
   return handle_;
 }
 
-bool FlatlandSysmemNativePixmap::SupportsOverlayPlane(
-    gfx::AcceleratedWidget widget) const {
-  return false;
+bool FlatlandSysmemNativePixmap::SupportsOverlayPlane() const {
+  return collection_->HasFlatlandImportToken();
 }
 
 }  // namespace ui

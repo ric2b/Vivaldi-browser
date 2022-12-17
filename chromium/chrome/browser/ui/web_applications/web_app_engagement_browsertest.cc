@@ -28,6 +28,7 @@
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "components/site_engagement/content/engagement_type.h"
 #include "components/site_engagement/content/site_engagement_service.h"
@@ -121,10 +122,10 @@ void ExpectLaunchCounts(const base::HistogramTester& tester,
                         base::HistogramBase::Count windowLaunches,
                         base::HistogramBase::Count tabLaunches) {
   tester.ExpectBucketCount("Extensions.BookmarkAppLaunchContainer",
-                           apps::mojom::LaunchContainer::kLaunchContainerWindow,
+                           apps::LaunchContainer::kLaunchContainerWindow,
                            windowLaunches);
   tester.ExpectBucketCount("Extensions.BookmarkAppLaunchContainer",
-                           apps::mojom::LaunchContainer::kLaunchContainerTab,
+                           apps::LaunchContainer::kLaunchContainerTab,
                            tabLaunches);
   tester.ExpectTotalCount("Extensions.BookmarkAppLaunchContainer",
                           windowLaunches + tabLaunches);
@@ -142,10 +143,10 @@ void ExpectLaunchCounts(const base::HistogramTester& tester,
                             windowLaunches + tabLaunches);
 
   tester.ExpectBucketCount("Extensions.BookmarkAppLaunchContainer",
-                           apps::mojom::LaunchContainer::kLaunchContainerWindow,
+                           apps::LaunchContainer::kLaunchContainerWindow,
                            windowLaunches);
   tester.ExpectBucketCount("Extensions.BookmarkAppLaunchContainer",
-                           apps::mojom::LaunchContainer::kLaunchContainerTab,
+                           apps::LaunchContainer::kLaunchContainerTab,
                            tabLaunches);
   tester.ExpectTotalCount("Extensions.BookmarkAppLaunchContainer",
                           windowLaunches + tabLaunches);

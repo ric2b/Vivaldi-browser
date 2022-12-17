@@ -160,9 +160,8 @@ class MdIPHBubbleButton : public views::MdTextButton {
     views::MdTextButton::OnThemeChanged();
 
     const auto* color_provider = GetColorProvider();
-    const SkColor background_color =
-        color_provider->GetColor(delegate_->GetHelpBubbleBackgroundColorId());
-    views::FocusRing::Get(this)->SetColor(background_color);
+    views::FocusRing::Get(this)->SetColorId(
+        delegate_->GetHelpBubbleBackgroundColorId());
 
     const SkColor foreground_color = color_provider->GetColor(
         is_default_button_
@@ -217,8 +216,8 @@ class ClosePromoButton : public views::ImageButton {
     const auto* color_provider = GetColorProvider();
     views::InkDrop::Get(this)->SetBaseColor(color_provider->GetColor(
         delegate_->GetHelpBubbleCloseButtonInkDropColorId()));
-    views::FocusRing::Get(this)->SetColor(
-        color_provider->GetColor(delegate_->GetHelpBubbleForegroundColorId()));
+    views::FocusRing::Get(this)->SetColorId(
+        delegate_->GetHelpBubbleForegroundColorId());
   }
 
  private:
@@ -385,7 +384,7 @@ HelpBubbleView::HelpBubbleView(const HelpBubbleDelegate* delegate,
     labels_.push_back(
         AddChildViewAt(std::make_unique<views::Label>(
                            params.body_text, delegate->GetBodyTextContext()),
-                       GetIndexOf(button_container)));
+                       GetIndexOf(button_container).value()));
   } else {
     labels_.push_back(
         top_text_container->AddChildView(std::make_unique<views::Label>(
@@ -573,6 +572,19 @@ HelpBubbleView::HelpBubbleView(const HelpBubbleDelegate* delegate,
                                     views::DISTANCE_RELATED_BUTTON_HORIZONTAL),
                                 0, 0))
           .SetIgnoreDefaultMainAxisMargins(true);
+
+  // In a handful of (mostly South-Asian) languages, button text can exceed the
+  // available width in the bubble if buttons are aligned horizontally. In those
+  // cases - and only those cases - the bubble can switch to a vertical button
+  // alignment.
+  if (button_container->GetMinimumSize().width() >
+      kBubbleMaxWidthDip - kBubbleContentsInsets.width()) {
+    button_layout.SetOrientation(views::LayoutOrientation::kVertical)
+        .SetCrossAxisAlignment(views::LayoutAlignment::kEnd)
+        .SetDefault(views::kMarginsKey, gfx::Insets::VH(default_spacing, 0))
+        .SetIgnoreDefaultMainAxisMargins(true);
+  }
+
   button_container->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(button_layout.GetDefaultFlexRule()));

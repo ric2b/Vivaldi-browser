@@ -4,7 +4,13 @@
 
 #include "media/gpu/v4l2/test/vp9_decoder.h"
 
+#include <linux/v4l2-controls.h>
+
+// ChromeOS specific header; does not exist upstream
+#if BUILDFLAG(IS_CHROMEOS)
 #include <linux/media/vp9-ctrls-upstream.h>
+#endif
+
 #include <sys/ioctl.h>
 
 #include "base/bits.h"
@@ -410,8 +416,7 @@ void Vp9Decoder::CopyFrameData(const Vp9FrameHeader& frame_hdr,
 
   scoped_refptr<MmapedBuffer> buffer = queue->GetBuffer(0);
 
-  memcpy(static_cast<uint8_t*>(buffer->mmaped_planes()[0].start_addr),
-         frame_hdr.data, frame_hdr.frame_size);
+  buffer->mmaped_planes()[0].CopyIn(frame_hdr.data, frame_hdr.frame_size);
 }
 
 VideoDecoder::Result Vp9Decoder::DecodeNextFrame(std::vector<char>& y_plane,
@@ -458,7 +463,9 @@ VideoDecoder::Result Vp9Decoder::DecodeNextFrame(std::vector<char>& y_plane,
                                       .size = sizeof(v4l2_frame_params),
                                       .ptr = &v4l2_frame_params};
 
-  if (!v4l2_ioctl_->SetExtCtrls(OUTPUT_queue_, ext_ctrl))
+  struct v4l2_ext_controls ext_ctrls = {.count = 1, .controls = &ext_ctrl};
+
+  if (!v4l2_ioctl_->SetExtCtrls(OUTPUT_queue_, &ext_ctrls))
     LOG(FATAL) << "VIDIOC_S_EXT_CTRLS failed.";
 
   if (!v4l2_ioctl_->MediaRequestIocQueue(OUTPUT_queue_))
@@ -475,10 +482,10 @@ VideoDecoder::Result Vp9Decoder::DecodeNextFrame(std::vector<char>& y_plane,
 
   CHECK_EQ(CAPTURE_queue_->fourcc(), v4l2_fourcc('M', 'M', '2', '1'));
   size = CAPTURE_queue_->display_size();
-  ConvertMM21ToYUV(y_plane, u_plane, v_plane,
+  ConvertMM21ToYUV(y_plane, u_plane, v_plane, size,
                    static_cast<char*>(buffer->mmaped_planes()[0].start_addr),
                    static_cast<char*>(buffer->mmaped_planes()[1].start_addr),
-                   size);
+                   CAPTURE_queue_->coded_size());
 
   const std::set<int> reusable_buffer_slots = RefreshReferenceSlots(
       frame_hdr.refresh_frame_flags, CAPTURE_queue_->GetBuffer(index),

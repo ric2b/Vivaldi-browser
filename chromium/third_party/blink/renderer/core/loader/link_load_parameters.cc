@@ -6,6 +6,7 @@
 
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "third_party/blink/renderer/platform/loader/link_header.h"
+#include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
 namespace blink {
 
@@ -22,7 +23,8 @@ LinkLoadParameters::LinkLoadParameters(
     const KURL& href,
     const String& image_srcset,
     const String& image_sizes,
-    const String& blocking)
+    const String& blocking,
+    LinkLoadParameters::Reason reason)
     : rel(rel),
       cross_origin(cross_origin),
       type(type),
@@ -35,7 +37,8 @@ LinkLoadParameters::LinkLoadParameters(
       href(href),
       image_srcset(image_srcset),
       image_sizes(image_sizes),
-      blocking(blocking) {}
+      blocking(blocking),
+      reason(reason) {}
 
 // TODO(domfarolino)
 // Eventually we'll want to support a |fetchpriority| value on
@@ -55,6 +58,13 @@ LinkLoadParameters::LinkLoadParameters(const LinkHeader& header,
       href(KURL(base_url, header.Url())),
       image_srcset(header.ImageSrcset()),
       image_sizes(header.ImageSizes()),
-      blocking(header.Blocking()) {}
+      blocking(header.Blocking()),
+      reason(Reason::kDefault) {
+  if (!header.ReferrerPolicy().IsEmpty()) {
+    SecurityPolicy::ReferrerPolicyFromString(
+        header.ReferrerPolicy(), kDoNotSupportReferrerPolicyLegacyKeywords,
+        &referrer_policy);
+  }
+}
 
 }  // namespace blink

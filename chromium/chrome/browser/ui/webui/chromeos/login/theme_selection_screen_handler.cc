@@ -12,6 +12,11 @@
 #include "components/login/localized_values_builder.h"
 
 namespace chromeos {
+
+namespace {
+constexpr char kSelectedTheme[] = "selectedTheme";
+}
+
 constexpr StaticOobeScreenId ThemeSelectionScreenView::kScreenId;
 
 ThemeSelectionScreenHandler::ThemeSelectionScreenHandler()
@@ -19,15 +24,19 @@ ThemeSelectionScreenHandler::ThemeSelectionScreenHandler()
 
 ThemeSelectionScreenHandler::~ThemeSelectionScreenHandler() = default;
 
-void ThemeSelectionScreenHandler::Show() {
-  ShowInWebUI();
+void ThemeSelectionScreenHandler::Show(const std::string& mode) {
+  base::Value::Dict data;
+  data.Set(kSelectedTheme, mode);
+  ShowInWebUI(std::move(data));
 }
 
 void ThemeSelectionScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   builder->Add("themeSelectionScreenTitle", IDS_THEME_SELECTION_TITLE);
-  builder->Add("themeSelectionScreenDescription",
-               IDS_THEME_SELECTION_DESCRIPTION);
+  builder->Add("themeSelectionScreenDescriptionClamshell",
+               IDS_THEME_SELECTION_DESCRIPTION_CLAMSHELL);
+  builder->Add("themeSelectionScreenDescriptionTablet",
+               IDS_THEME_SELECTION_DESCRIPTION_TABLET);
   builder->Add("lightThemeLabel", IDS_THEME_LIGHT_LABEL);
   builder->Add("lightThemeDescription", IDS_THEME_LIGHT_DESCRIPTION);
   builder->Add("darkThemeLabel", IDS_THEME_DARK_LABEL);

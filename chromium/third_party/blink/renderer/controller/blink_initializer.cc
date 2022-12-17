@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/display_cutout_client_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/parser/atomic_html_token.h"
 #include "third_party/blink/renderer/core/html/parser/literal_buffer.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
@@ -109,6 +110,11 @@ class EndOfTaskRunner : public Thread::TaskObserver {
 const base::Feature kLiteralBufferCreateStringWithEncoding{
     "LiteralBufferCreateStringWithEncoding", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// See description of `g_use_html_attribute_name_lookup` in AtomicHTMLToken as
+// to what this controls.
+const base::Feature kUseHtmlAttributeNameLookup{
+    "UseHtmlAttributeNameLookup", base::FEATURE_DISABLED_BY_DEFAULT};
+
 Thread::TaskObserver* g_end_of_task_runner = nullptr;
 
 BlinkInitializer& GetBlinkInitializer() {
@@ -129,7 +135,7 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
     // Try to reserve as much address space as we reasonably can.
     const size_t kMB = 1024 * 1024;
     for (size_t size = 512 * kMB; size >= 32 * kMB; size -= 16 * kMB) {
-      if (base::ReserveAddressSpace(size)) {
+      if (partition_alloc::ReserveAddressSpace(size)) {
         break;
       }
     }
@@ -181,6 +187,9 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
 
   g_literal_buffer_create_string_with_encoding =
       base::FeatureList::IsEnabled(kLiteralBufferCreateStringWithEncoding);
+
+  g_use_html_attribute_name_lookup =
+      base::FeatureList::IsEnabled(kUseHtmlAttributeNameLookup);
 }
 
 }  // namespace
@@ -213,13 +222,13 @@ bool IsCrossOriginIsolated() {
 }
 
 // Function defined in third_party/blink/public/web/blink.h.
-void SetIsDirectSocketEnabled(bool value) {
-  Agent::SetIsDirectSocketEnabled(value);
+void SetIsIsolatedApplication(bool value) {
+  Agent::SetIsIsolatedApplication(value);
 }
 
 // Function defined in third_party/blink/public/web/blink.h.
-bool IsDirectSocketEnabled() {
-  return Agent::IsDirectSocketEnabled();
+bool IsIsolatedApplication() {
+  return Agent::IsIsolatedApplication();
 }
 
 void BlinkInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
@@ -227,36 +236,44 @@ void BlinkInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
   Thread* main_thread = Thread::MainThread();
   // GetSingleThreadTaskRunner() uses GetTaskRunner() internally.
   // crbug.com/781664
-  if (!main_thread->GetTaskRunner())
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
+      main_thread->GetDeprecatedTaskRunner();
+  if (!main_thread_task_runner)
     return;
 
 #if BUILDFLAG(IS_ANDROID)
-  binders.Add(ConvertToBaseRepeatingCallback(
-                  CrossThreadBindRepeating(&OomInterventionImpl::BindReceiver)),
-              main_thread->GetTaskRunner());
+  binders.Add<mojom::blink::OomIntervention>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&OomInterventionImpl::BindReceiver)),
+      main_thread_task_runner);
 
-  binders.Add(ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
-                  &CrashMemoryMetricsReporterImpl::Bind)),
-              main_thread->GetTaskRunner());
+  binders.Add<mojom::blink::CrashMemoryMetricsReporter>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&CrashMemoryMetricsReporterImpl::Bind)),
+      main_thread_task_runner);
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-  binders.Add(ConvertToBaseRepeatingCallback(
-                  CrossThreadBindRepeating(&MemoryUsageMonitorPosix::Bind)),
-              main_thread->GetTaskRunner());
+  binders.Add<mojom::blink::MemoryUsageMonitorLinux>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&MemoryUsageMonitorPosix::Bind)),
+      main_thread_task_runner);
 #endif
 
-  binders.Add(ConvertToBaseRepeatingCallback(
-                  CrossThreadBindRepeating(&BlinkLeakDetector::Bind)),
-              main_thread->GetTaskRunner());
+  binders.Add<mojom::blink::LeakDetector>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&BlinkLeakDetector::Bind)),
+      main_thread_task_runner);
 
-  binders.Add(ConvertToBaseRepeatingCallback(
-                  CrossThreadBindRepeating(&DiskDataAllocator::Bind)),
-              main_thread->GetTaskRunner());
+  binders.Add<mojom::blink::DiskAllocator>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&DiskDataAllocator::Bind)),
+      main_thread_task_runner);
 
-  binders.Add(ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
-                  &V8DetailedMemoryReporterImpl::Bind)),
-              main_thread->GetTaskRunner());
+  binders.Add<mojom::blink::V8DetailedMemoryReporter>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&V8DetailedMemoryReporterImpl::Bind)),
+      main_thread_task_runner);
 }
 
 void BlinkInitializer::InitLocalFrame(LocalFrame& frame) const {

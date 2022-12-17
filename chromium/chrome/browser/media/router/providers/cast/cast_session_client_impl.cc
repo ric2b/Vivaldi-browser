@@ -51,10 +51,10 @@ void RemoveNullFields(base::Value& value) {
 
 CastSessionClientImpl::CastSessionClientImpl(const std::string& client_id,
                                              const url::Origin& origin,
-                                             int tab_id,
+                                             int frame_tree_node_id,
                                              AutoJoinPolicy auto_join_policy,
                                              CastActivity* activity)
-    : CastSessionClient(client_id, origin, tab_id),
+    : CastSessionClient(client_id, origin, frame_tree_node_id),
       auto_join_policy_(auto_join_policy),
       activity_(activity) {}
 
@@ -98,13 +98,15 @@ void CastSessionClientImpl::SendMediaStatusToClient(
       CreateV2Message(client_id(), media_status, sequence_number));
 }
 
-bool CastSessionClientImpl::MatchesAutoJoinPolicy(url::Origin other_origin,
-                                                  int other_tab_id) const {
+bool CastSessionClientImpl::MatchesAutoJoinPolicy(
+    url::Origin other_origin,
+    int other_frame_tree_node_id) const {
   switch (auto_join_policy_) {
     case AutoJoinPolicy::kPageScoped:
       return false;
     case AutoJoinPolicy::kTabAndOriginScoped:
-      return other_origin == origin() && other_tab_id == tab_id();
+      return other_origin == origin() &&
+             other_frame_tree_node_id == frame_tree_node_id();
     case AutoJoinPolicy::kOriginScoped:
       return other_origin == origin();
   }
@@ -145,19 +147,19 @@ void CastSessionClientImpl::SendErrorToClient(int sequence_number,
 
 void CastSessionClientImpl::HandleParsedClientMessage(
     data_decoder::DataDecoder::ValueOrError result) {
-  if (!result.value) {
+  if (!result.has_value()) {
     ReportClientMessageParseError(activity_->route().media_route_id(),
-                                  *result.error);
+                                  result.error());
     return;
   }
 
   // NOTE(jrw): This step isn't part of the Cast protocol per se, but it's
   // required for backward compatibility.  There is one known case
   // (crbug.com/1129217) where not doing it breaks the Cast SDK.
-  RemoveNullFields(*result.value);
+  RemoveNullFields(*result);
 
   std::unique_ptr<CastInternalMessage> cast_message =
-      CastInternalMessage::From(std::move(*result.value));
+      CastInternalMessage::From(std::move(*result));
   if (!cast_message) {
     ReportClientMessageParseError(activity_->route().media_route_id(),
                                   "Not a Cast message");

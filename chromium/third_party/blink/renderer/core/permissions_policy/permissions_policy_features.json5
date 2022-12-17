@@ -65,6 +65,7 @@
     {
       name: "AttributionReporting",
       permissions_policy_name: "attribution-reporting",
+      feature_default: "EnableForAll",
       depends_on: ["AttributionReporting"],
     },
     {
@@ -230,6 +231,11 @@
       depends_on: ["FreezeFramesOnVisibility"],
     },
     {
+      name: "FederatedCredentials",
+      permissions_policy_name: "federated-credentials",
+      depends_on: ["FedCmIframeSupport"],
+    },
+    {
       name: "FocusWithoutUserActivation",
       permissions_policy_name: "focus-without-user-activation",
       feature_default: "EnableForAll",
@@ -337,9 +343,15 @@
       depends_on: ["SharedAutofill"],
     },
     {
+      name: "SharedStorage",
+      permissions_policy_name: "shared-storage",
+      feature_default: "EnableForAll",
+      depends_on: ["SharedStorageAPI"],
+    },
+    {
       name: "StorageAccessAPI",
       feature_default: "EnableForAll",
-      permissions_policy_name: "storage-access-api",
+      permissions_policy_name: "storage-access",
       depends_on: ["StorageAccessAPI"],
     },
     {
@@ -356,6 +368,12 @@
       name: "Usb",
       permissions_policy_name: "usb",
       depends_on: ["WebUSB"],
+    },
+    {
+      name: "Unload",
+      permissions_policy_name: "unload",
+      feature_default: "EnableForAll",
+      depends_on: ["PermissionsPolicyUnload"],
     },
     {
       name: "VerticalScroll",

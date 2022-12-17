@@ -24,13 +24,14 @@
   <template>
     <style include="oobe-dialog-host-styles">
       #sensorLocationContainer {
-        height: 242px;
-        width: 352px;
+        height: 100%;
+        overflow-y: hidden;
+        width: 100%;
       }
     </style>
     <oobe-adaptive-dialog id="setupFingerprint" role="dialog" for-step="start"
-        footer-shrinkable
-        aria-label$="[[i18nDynamic(locale, 'setupFingerprintScreenAriaLabel')]]">
+        footer-shrinkable aria-label$="[[getAriaLabel_(locale, hasAriaLabel_,
+                                                       isChildAccount_)]]">
       <h1 slot="title" hidden="[[isChildAccount_]]">
         [[i18nDynamic(locale, 'setupFingerprintScreenTitle')]]
       </h1>

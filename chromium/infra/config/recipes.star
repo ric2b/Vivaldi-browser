@@ -115,6 +115,10 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:build_perf",
+)
+
+build_recipe(
     name = "recipe:celab",
 )
 
@@ -143,6 +147,10 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:chromium_polymorphic/launcher",
+)
+
+build_recipe(
     name = "recipe:chromium_3pp",
 )
 
@@ -156,6 +164,11 @@ build_recipe(
 
 build_recipe(
     name = "recipe:chromium_codesearch",
+)
+
+build_recipe(
+    name = "recipe:chromium_expectation_files/expectation_file_scripts",
+    bootstrappable = True,
 )
 
 build_recipe(
@@ -192,7 +205,16 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:flakiness/reproducer",
+)
+
+build_recipe(
     name = "recipe:findit/chromium/single_revision",
+    bootstrappable = POLYMORPHIC,
+)
+
+build_recipe(
+    name = "recipe:gofindit/chromium/single_revision",
     bootstrappable = POLYMORPHIC,
 )
 
@@ -213,6 +235,11 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:reviver/chromium/runner",
+    bootstrappable = POLYMORPHIC,
+)
+
+build_recipe(
     name = "recipe:swarming/deterministic_build",
 )
 
@@ -222,6 +249,10 @@ build_recipe(
 
 build_recipe(
     name = "recipe:tricium_clang_tidy_wrapper",
+)
+
+build_recipe(
+    name = "recipe:tricium_clang_tidy_orchestrator",
 )
 
 build_recipe(

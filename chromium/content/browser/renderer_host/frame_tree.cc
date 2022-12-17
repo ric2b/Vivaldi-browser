@@ -180,7 +180,8 @@ FrameTree::FrameTree(
     RenderWidgetHostDelegate* render_widget_delegate,
     RenderFrameHostManager::Delegate* manager_delegate,
     PageDelegate* page_delegate,
-    Type type)
+    Type type,
+    const base::UnguessableToken& devtools_frame_token)
     : delegate_(delegate),
       render_frame_delegate_(render_frame_delegate),
       render_view_delegate_(render_view_delegate),
@@ -198,12 +199,17 @@ FrameTree::FrameTree(
                               // document scope.
                               blink::mojom::TreeScopeType::kDocument,
                               false,
-                              base::UnguessableToken::Create(),
+                              devtools_frame_token,
                               blink::mojom::FrameOwnerProperties(),
                               blink::FrameOwnerElementType::kNone,
                               blink::FramePolicy())),
       focused_frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId),
-      load_progress_(0.0) {}
+      load_progress_(0.0),
+      fenced_frames_impl_(
+          blink::features::IsFencedFramesEnabled()
+              ? absl::optional<blink::features::FencedFramesImplementationType>(
+                    blink::features::kFencedFramesImplementationTypeParam.Get())
+              : absl::nullopt) {}
 
 FrameTree::~FrameTree() {
   is_being_destroyed_ = true;
@@ -323,6 +329,8 @@ FrameTreeNode* FrameTree::AddFrame(
     mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
         browser_interface_broker_receiver,
     blink::mojom::PolicyContainerBindParamsPtr policy_container_bind_params,
+    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
+        associated_interface_provider_receiver,
     blink::mojom::TreeScopeType scope,
     const std::string& frame_name,
     const std::string& frame_unique_name,
@@ -344,6 +352,8 @@ FrameTreeNode* FrameTree::AddFrame(
   DCHECK_NE(frame_remote.is_valid(), is_dummy_frame_for_inner_tree);
   DCHECK_NE(browser_interface_broker_receiver.is_valid(),
             is_dummy_frame_for_inner_tree);
+  DCHECK_NE(associated_interface_provider_receiver.is_valid(),
+            is_dummy_frame_for_inner_tree);
 
   // A child frame always starts with an initial empty document, which means
   // it is in the same SiteInstance as the parent frame. Ensure that the process
@@ -359,7 +369,7 @@ FrameTreeNode* FrameTree::AddFrame(
   // since initial sandbox flags and permissions policy should apply to the
   // initial empty document in the frame. This needs to happen before the call
   // to AddChild so that the effective policy is sent to any newly-created
-  // RenderFrameProxy objects when the RenderFrameHost is created.
+  // `blink::RemoteFrame` objects when the RenderFrameHost is created.
   // SetPendingFramePolicy is necessary here because next navigation on this
   // frame will need the value of pending frame policy instead of effective
   // frame policy.
@@ -383,6 +393,11 @@ FrameTreeNode* FrameTree::AddFrame(
   if (policy_container_bind_params) {
     added_node->current_frame_host()->policy_container_host()->Bind(
         std::move(policy_container_bind_params));
+  }
+
+  if (associated_interface_provider_receiver.is_valid()) {
+    added_node->current_frame_host()->BindAssociatedInterfaceProviderReceiver(
+        std::move(associated_interface_provider_receiver));
   }
 
   // The last committed NavigationEntry may have a FrameNavigationEntry with the
@@ -444,10 +459,10 @@ void FrameTree::CreateProxiesForSiteInstance(
       // (when source is not a main frame). In the former case, we should use
       // root's current BrowsingContextState, while in the latter case we should
       // use BrowsingContextState from the main RenderFrameHost of the subframe
-      // being navigated. We want to ensure that the RenderView is created in
-      // the right SiteInstance if it doesn't exist, before creating the other
-      // proxies; if the RenderView doesn't exist, the only way to do this is to
-      // also create a proxy for the main frame as well.
+      // being navigated. We want to ensure that the `blink::WebView` is created
+      // in the right SiteInstance if it doesn't exist, before creating the
+      // other proxies; if the `blink::WebView` doesn't exist, the only way to
+      // do this is to also create a proxy for the main frame as well.
       root()->render_manager()->CreateRenderFrameProxy(
           site_instance,
           source ? source->parent()->GetMainFrame()->browsing_context_state()
@@ -584,7 +599,6 @@ void FrameTree::SetFocusedFrame(FrameTreeNode* node,
 scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(
     SiteInstance* site_instance,
     int32_t main_frame_routing_id,
-    bool swapped_out,
     bool renderer_initiated_creation,
     scoped_refptr<BrowsingContextState> main_browsing_context_state) {
   if (main_browsing_context_state) {
@@ -594,7 +608,7 @@ scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(
       static_cast<RenderViewHostImpl*>(RenderViewHostFactory::Create(
           this, static_cast<SiteInstanceImpl*>(site_instance)->group(),
           site_instance->GetStoragePartitionConfig(), render_view_delegate_,
-          render_widget_delegate_, main_frame_routing_id, swapped_out,
+          render_widget_delegate_, main_frame_routing_id,
           renderer_initiated_creation, std::move(main_browsing_context_state)));
   return base::WrapRefCounted(rvh);
 }
@@ -659,7 +673,7 @@ double FrameTree::GetLoadProgress() {
   return root_->current_frame_host()->GetPage().load_progress();
 }
 
-bool FrameTree::IsLoading() const {
+bool FrameTree::IsLoadingIncludingInnerFrameTrees() const {
   for (const FrameTreeNode* node :
        const_cast<FrameTree*>(this)->CollectNodesForIsLoading()) {
     if (node->IsLoading())
@@ -702,14 +716,15 @@ void FrameTree::SetPageFocus(SiteInstanceGroup* group, bool is_focused) {
     RenderFrameProxyHost* proxy = root_manager->current_frame_host()
                                       ->browsing_context_state()
                                       ->GetRenderFrameProxyHost(group);
-    proxy->GetAssociatedRemoteFrame()->SetPageFocus(is_focused);
+    if (proxy->is_render_frame_proxy_live())
+      proxy->GetAssociatedRemoteFrame()->SetPageFocus(is_focused);
   }
 }
 
-void FrameTree::RegisterExistingOriginToPreventOptInIsolation(
+void FrameTree::RegisterExistingOriginAsHavingDefaultIsolation(
     const url::Origin& previously_visited_origin,
     NavigationRequest* navigation_request_to_exclude) {
-  controller().RegisterExistingOriginToPreventOptInIsolation(
+  controller().RegisterExistingOriginAsHavingDefaultIsolation(
       previously_visited_origin);
 
   std::unordered_set<SiteInstance*> matching_site_instances;
@@ -747,7 +762,7 @@ void FrameTree::RegisterExistingOriginToPreventOptInIsolation(
   // Update any SiteInstances found to contain |origin|.
   for (auto* site_instance : matching_site_instances) {
     static_cast<SiteInstanceImpl*>(site_instance)
-        ->PreventOptInOriginIsolation(previously_visited_origin);
+        ->RegisterAsDefaultOriginIsolation(previously_visited_origin);
   }
 }
 
@@ -794,12 +809,12 @@ void FrameTree::DidStartLoadingNode(FrameTreeNode& node,
   if (was_previously_loading)
     return;
 
-  root()->render_manager()->SetIsLoading(IsLoading());
+  root()->render_manager()->SetIsLoading(IsLoadingIncludingInnerFrameTrees());
   delegate_->DidStartLoading(&node, should_show_loading_ui);
 }
 
 void FrameTree::DidStopLoadingNode(FrameTreeNode& node) {
-  if (IsLoading())
+  if (IsLoadingIncludingInnerFrameTrees())
     return;
 
   root()->render_manager()->SetIsLoading(false);

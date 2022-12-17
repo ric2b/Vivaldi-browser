@@ -74,7 +74,9 @@ class TestingDownloadCoreService : public DownloadCoreService {
     ADD_FAILURE();
   }
 
-  bool IsShelfEnabled() override { return true; }
+  bool IsDownloadUiEnabled() override { return true; }
+
+  bool IsDownloadObservedByExtension() override { return false; }
 
   // KeyedService
   void Shutdown() override {}

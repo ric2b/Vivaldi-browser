@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 #include "base/notreached.h"
+#include "base/time/time.h"
 #include "media/formats/hls/items.h"
 #include "media/formats/hls/parse_status.h"
 #include "media/formats/hls/variable_dictionary.h"
@@ -34,7 +35,8 @@ ParseStatus::Or<T> ParseDecimalIntegerTag(TagItem tag,
     return ParseStatusCode::kMalformedTag;
   }
 
-  auto value = types::ParseDecimalInteger(*tag.GetContent());
+  auto value =
+      types::ParseDecimalInteger(tag.GetContent()->SkipVariableSubstitution());
   if (value.has_error()) {
     return ParseStatus(ParseStatusCode::kMalformedTag)
         .AddCause(std::move(value).error());
@@ -62,6 +64,59 @@ constexpr base::StringPiece GetAttributeName(XDefineTagAttribute attribute) {
       return "NAME";
     case XDefineTagAttribute::kValue:
       return "VALUE";
+  }
+
+  NOTREACHED();
+  return "";
+}
+
+// Attributes expected in `EXT-X-MEDIA` tag contents.
+// These must remain sorted alphabetically.
+enum class XMediaTagAttribute {
+  kAssocLanguage,
+  kAutoselect,
+  kChannels,
+  kCharacteristics,
+  kDefault,
+  kForced,
+  kGroupId,
+  kInstreamId,
+  kLanguage,
+  kName,
+  kStableRenditionId,
+  kType,
+  kUri,
+  kMaxValue = kUri,
+};
+
+constexpr base::StringPiece GetAttributeName(XMediaTagAttribute attribute) {
+  switch (attribute) {
+    case XMediaTagAttribute::kAssocLanguage:
+      return "ASSOC-LANGUAGE";
+    case XMediaTagAttribute::kAutoselect:
+      return "AUTOSELECT";
+    case XMediaTagAttribute::kChannels:
+      return "CHANNELS";
+    case XMediaTagAttribute::kCharacteristics:
+      return "CHARACTERISTICS";
+    case XMediaTagAttribute::kDefault:
+      return "DEFAULT";
+    case XMediaTagAttribute::kForced:
+      return "FORCED";
+    case XMediaTagAttribute::kGroupId:
+      return "GROUP-ID";
+    case XMediaTagAttribute::kInstreamId:
+      return "INSTREAM-ID";
+    case XMediaTagAttribute::kLanguage:
+      return "LANGUAGE";
+    case XMediaTagAttribute::kName:
+      return "NAME";
+    case XMediaTagAttribute::kStableRenditionId:
+      return "STABLE-RENDITION-ID";
+    case XMediaTagAttribute::kType:
+      return "TYPE";
+    case XMediaTagAttribute::kUri:
+      return "URI";
   }
 
   NOTREACHED();
@@ -103,6 +158,52 @@ constexpr base::StringPiece GetAttributeName(XStreamInfTagAttribute attribute) {
   return "";
 }
 
+// Attributes expected in `EXT-X-MAP` tag contents.
+// These must remain sorted alphabetically.
+enum class XMapTagAttribute {
+  kByteRange,
+  kUri,
+  kMaxValue = kUri,
+};
+
+constexpr base::StringPiece GetAttributeName(XMapTagAttribute attribute) {
+  switch (attribute) {
+    case XMapTagAttribute::kByteRange:
+      return "BYTERANGE";
+    case XMapTagAttribute::kUri:
+      return "URI";
+  }
+
+  NOTREACHED();
+  return "";
+}
+
+// Attributes expected in `EXT-X-PART` tag contents.
+// These must remain sorted alphabetically.
+enum class XPartTagAttribute {
+  kByteRange,
+  kDuration,
+  kGap,
+  kIndependent,
+  kUri,
+  kMaxValue = kUri,
+};
+
+constexpr base::StringPiece GetAttributeName(XPartTagAttribute attribute) {
+  switch (attribute) {
+    case XPartTagAttribute::kByteRange:
+      return "BYTERANGE";
+    case XPartTagAttribute::kDuration:
+      return "DURATION";
+    case XPartTagAttribute::kGap:
+      return "GAP";
+    case XPartTagAttribute::kIndependent:
+      return "INDEPENDENT";
+    case XPartTagAttribute::kUri:
+      return "URI";
+  }
+}
+
 // Attributes expected in `EXT-X-PART-INF` tag contents.
 // These must remain sorted alphabetically.
 enum class XPartInfTagAttribute {
@@ -114,6 +215,36 @@ constexpr base::StringPiece GetAttributeName(XPartInfTagAttribute attribute) {
   switch (attribute) {
     case XPartInfTagAttribute::kPartTarget:
       return "PART-TARGET";
+  }
+
+  NOTREACHED();
+  return "";
+}
+
+// Attributes expected in `EXT-X-SERVER-CONTROL` tag contents.
+// These must remain sorted alphabetically.
+enum class XServerControlTagAttribute {
+  kCanBlockReload,
+  kCanSkipDateRanges,
+  kCanSkipUntil,
+  kHoldBack,
+  kPartHoldBack,
+  kMaxValue = kPartHoldBack,
+};
+
+constexpr base::StringPiece GetAttributeName(
+    XServerControlTagAttribute attribute) {
+  switch (attribute) {
+    case XServerControlTagAttribute::kCanBlockReload:
+      return "CAN-BLOCK-RELOAD";
+    case XServerControlTagAttribute::kCanSkipDateRanges:
+      return "CAN-SKIP-DATERANGES";
+    case XServerControlTagAttribute::kCanSkipUntil:
+      return "CAN-SKIP-UNTIL";
+    case XServerControlTagAttribute::kHoldBack:
+      return "HOLD-BACK";
+    case XServerControlTagAttribute::kPartHoldBack:
+      return "PART-HOLD-BACK";
   }
 
   NOTREACHED();
@@ -183,86 +314,23 @@ struct TypedAttributeMap {
 
 }  // namespace
 
+// static
 ParseStatus::Or<M3uTag> M3uTag::Parse(TagItem tag) {
   return ParseEmptyTag<M3uTag>(tag);
 }
 
-ParseStatus::Or<XVersionTag> XVersionTag::Parse(TagItem tag) {
-  auto result = ParseDecimalIntegerTag(tag, &XVersionTag::version);
-  if (result.has_error()) {
-    return std::move(result).error();
-  }
-
-  // Reject invalid version numbers.
-  // For valid version numbers, caller will decide if the version is supported.
-  auto out = std::move(result).value();
-  if (out.version == 0) {
-    return ParseStatusCode::kInvalidPlaylistVersion;
-  }
-
-  return out;
-}
-
-ParseStatus::Or<InfTag> InfTag::Parse(TagItem tag) {
-  DCHECK(tag.GetName() == ToTagName(InfTag::kName));
-
-  if (!tag.GetContent()) {
-    return ParseStatusCode::kMalformedTag;
-  }
-  auto content = *tag.GetContent();
-
-  // Inf tags have the form #EXTINF:<duration>,[<title>]
-  // Find the comma.
-  auto comma = content.Str().find_first_of(',');
-  if (comma == base::StringPiece::npos) {
-    return ParseStatusCode::kMalformedTag;
-  }
-
-  auto duration_str = content.Substr(0, comma);
-  auto title_str = content.Substr(comma + 1);
-
-  // Extract duration
-  // TODO(crbug.com/1284763): Below version 3 this should be rounded to an
-  // integer
-  auto duration = types::ParseDecimalFloatingPoint(duration_str);
-  if (duration.has_error()) {
-    return ParseStatus(ParseStatusCode::kMalformedTag)
-        .AddCause(std::move(duration).error());
-  }
-
-  return InfTag{.duration = std::move(duration).value(), .title = title_str};
-}
-
-ParseStatus::Or<XIndependentSegmentsTag> XIndependentSegmentsTag::Parse(
-    TagItem tag) {
-  return ParseEmptyTag<XIndependentSegmentsTag>(tag);
-}
-
-ParseStatus::Or<XEndListTag> XEndListTag::Parse(TagItem tag) {
-  return ParseEmptyTag<XEndListTag>(tag);
-}
-
-ParseStatus::Or<XIFramesOnlyTag> XIFramesOnlyTag::Parse(TagItem tag) {
-  return ParseEmptyTag<XIFramesOnlyTag>(tag);
-}
-
-ParseStatus::Or<XDiscontinuityTag> XDiscontinuityTag::Parse(TagItem tag) {
-  return ParseEmptyTag<XDiscontinuityTag>(tag);
-}
-
-ParseStatus::Or<XGapTag> XGapTag::Parse(TagItem tag) {
-  return ParseEmptyTag<XGapTag>(tag);
-}
-
+// static
 XDefineTag XDefineTag::CreateDefinition(types::VariableName name,
                                         base::StringPiece value) {
   return XDefineTag{.name = name, .value = value};
 }
 
+// static
 XDefineTag XDefineTag::CreateImport(types::VariableName name) {
   return XDefineTag{.name = name, .value = absl::nullopt};
 }
 
+// static
 ParseStatus::Or<XDefineTag> XDefineTag::Parse(TagItem tag) {
   DCHECK(tag.GetName() == ToTagName(XDefineTag::kName));
 
@@ -304,7 +372,7 @@ ParseStatus::Or<XDefineTag> XDefineTag::Parse(TagItem tag) {
     }
 
     auto value = types::ParseQuotedStringWithoutSubstitution(
-        map.GetValue(XDefineTagAttribute::kValue));
+        map.GetValue(XDefineTagAttribute::kValue), /*allow_empty*/ true);
     if (value.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag);
     }
@@ -332,22 +400,315 @@ ParseStatus::Or<XDefineTag> XDefineTag::Parse(TagItem tag) {
   return ParseStatusCode::kMalformedTag;
 }
 
-ParseStatus::Or<XPlaylistTypeTag> XPlaylistTypeTag::Parse(TagItem tag) {
-  DCHECK(tag.GetName() == ToTagName(XPlaylistTypeTag::kName));
+// static
+ParseStatus::Or<XIndependentSegmentsTag> XIndependentSegmentsTag::Parse(
+    TagItem tag) {
+  return ParseEmptyTag<XIndependentSegmentsTag>(tag);
+}
 
-  // This tag requires content
-  if (!tag.GetContent().has_value() || tag.GetContent()->Empty()) {
+// static
+ParseStatus::Or<XVersionTag> XVersionTag::Parse(TagItem tag) {
+  auto result = ParseDecimalIntegerTag(tag, &XVersionTag::version);
+  if (result.has_error()) {
+    return std::move(result).error();
+  }
+
+  // Reject invalid version numbers.
+  // For valid version numbers, caller will decide if the version is supported.
+  auto out = std::move(result).value();
+  if (out.version == 0) {
+    return ParseStatusCode::kInvalidPlaylistVersion;
+  }
+
+  return out;
+}
+
+struct XMediaTag::CtorArgs {
+  decltype(XMediaTag::type) type;
+  decltype(XMediaTag::uri) uri;
+  decltype(XMediaTag::instream_id) instream_id;
+  decltype(XMediaTag::group_id) group_id;
+  decltype(XMediaTag::language) language;
+  decltype(XMediaTag::associated_language) associated_language;
+  decltype(XMediaTag::name) name;
+  decltype(XMediaTag::stable_rendition_id) stable_rendition_id;
+  decltype(XMediaTag::is_default) is_default;
+  decltype(XMediaTag::autoselect) autoselect;
+  decltype(XMediaTag::forced) forced;
+  decltype(XMediaTag::characteristics) characteristics;
+  decltype(XMediaTag::channels) channels;
+};
+
+XMediaTag::XMediaTag(CtorArgs args)
+    : type(std::move(args.type)),
+      uri(std::move(args.uri)),
+      instream_id(std::move(args.instream_id)),
+      group_id(std::move(args.group_id)),
+      language(std::move(args.language)),
+      associated_language(std::move(args.associated_language)),
+      name(std::move(args.name)),
+      stable_rendition_id(std::move(args.stable_rendition_id)),
+      is_default(std::move(args.is_default)),
+      autoselect(std::move(args.autoselect)),
+      forced(std::move(args.forced)),
+      characteristics(std::move(args.characteristics)),
+      channels(std::move(args.channels)) {}
+
+XMediaTag::~XMediaTag() = default;
+
+XMediaTag::XMediaTag(const XMediaTag&) = default;
+
+XMediaTag::XMediaTag(XMediaTag&&) = default;
+
+XMediaTag& XMediaTag::operator=(const XMediaTag&) = default;
+
+XMediaTag& XMediaTag::operator=(XMediaTag&&) = default;
+
+// static
+ParseStatus::Or<XMediaTag> XMediaTag::Parse(
+    TagItem tag,
+    const VariableDictionary& variable_dict,
+    VariableDictionary::SubstitutionBuffer& sub_buffer) {
+  DCHECK(tag.GetName() == ToTagName(XMediaTag::kName));
+  if (!tag.GetContent().has_value()) {
     return ParseStatusCode::kMalformedTag;
   }
 
-  if (tag.GetContent()->Str() == "EVENT") {
-    return XPlaylistTypeTag{.type = PlaylistType::kEvent};
-  }
-  if (tag.GetContent()->Str() == "VOD") {
-    return XPlaylistTypeTag{.type = PlaylistType::kVOD};
+  // Parse the attribute-list
+  TypedAttributeMap<XMediaTagAttribute> map;
+  types::AttributeListIterator iter(*tag.GetContent());
+  auto map_result = map.FillUntilError(&iter);
+
+  if (map_result.code() != ParseStatusCode::kReachedEOF) {
+    return ParseStatus(ParseStatusCode::kMalformedTag)
+        .AddCause(std::move(map_result));
   }
 
-  return ParseStatusCode::kUnknownPlaylistType;
+  // Parse the 'TYPE' attribute
+  MediaType type;
+  if (map.HasValue(XMediaTagAttribute::kType)) {
+    auto str = map.GetValue(XMediaTagAttribute::kType);
+    if (str.Str() == "AUDIO") {
+      type = MediaType::kAudio;
+    } else if (str.Str() == "VIDEO") {
+      type = MediaType::kVideo;
+    } else if (str.Str() == "SUBTITLES") {
+      type = MediaType::kSubtitles;
+    } else if (str.Str() == "CLOSED-CAPTIONS") {
+      type = MediaType::kClosedCaptions;
+    } else {
+      return ParseStatusCode::kMalformedTag;
+    }
+  } else {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the 'URI' attribute
+  absl::optional<ResolvedSourceString> uri;
+  if (map.HasValue(XMediaTagAttribute::kUri)) {
+    // This attribute MUST NOT be defined for closed-captions renditions
+    if (type == MediaType::kClosedCaptions) {
+      return ParseStatusCode::kMalformedTag;
+    }
+
+    auto result = types::ParseQuotedString(
+        map.GetValue(XMediaTagAttribute::kUri), variable_dict, sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    uri = std::move(result).value();
+  } else {
+    // URI MUST be defined for subtitle renditions
+    if (type == MediaType::kSubtitles) {
+      return ParseStatusCode::kMalformedTag;
+    }
+  }
+
+  // Parse the 'GROUP-ID' attribute
+  absl::optional<ResolvedSourceString> group_id;
+  if (map.HasValue(XMediaTagAttribute::kGroupId)) {
+    auto result = types::ParseQuotedString(
+        map.GetValue(XMediaTagAttribute::kGroupId), variable_dict, sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    group_id = std::move(result).value();
+  } else {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the 'LANGUAGE' attribute
+  absl::optional<ResolvedSourceString> language;
+  if (map.HasValue(XMediaTagAttribute::kLanguage)) {
+    auto result = types::ParseQuotedString(
+        map.GetValue(XMediaTagAttribute::kLanguage), variable_dict, sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    language = std::move(result).value();
+  }
+
+  // Parse the 'ASSOC-LANGUAGE' attribute
+  absl::optional<ResolvedSourceString> assoc_language;
+  if (map.HasValue(XMediaTagAttribute::kAssocLanguage)) {
+    auto result = types::ParseQuotedString(
+        map.GetValue(XMediaTagAttribute::kAssocLanguage), variable_dict,
+        sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    assoc_language = std::move(result).value();
+  }
+
+  // Parse the 'NAME' attribute
+  absl::optional<ResolvedSourceString> name;
+  if (map.HasValue(XMediaTagAttribute::kName)) {
+    auto result = types::ParseQuotedString(
+        map.GetValue(XMediaTagAttribute::kName), variable_dict, sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    name = std::move(result).value();
+  } else {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the 'STABLE-RENDITION-ID' attribute
+  absl::optional<types::StableId> stable_rendition_id;
+  if (map.HasValue(XMediaTagAttribute::kStableRenditionId)) {
+    auto result = types::ParseQuotedString(
+                      map.GetValue(XMediaTagAttribute::kStableRenditionId),
+                      variable_dict, sub_buffer)
+                      .MapValue(types::StableId::Parse);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+    stable_rendition_id = std::move(result).value();
+  }
+
+  // Parse the 'DEFAULT' attribute
+  bool is_default = false;
+  if (map.HasValue(XMediaTagAttribute::kDefault)) {
+    if (map.GetValue(XMediaTagAttribute::kDefault).Str() == "YES") {
+      is_default = true;
+    }
+  }
+
+  // Parse the 'AUTOSELECT' attribute
+  bool autoselect = false;
+  if (map.HasValue(XMediaTagAttribute::kAutoselect)) {
+    if (map.GetValue(XMediaTagAttribute::kAutoselect).Str() == "YES") {
+      autoselect = true;
+    } else if (is_default) {
+      // If the 'DEFAULT' attribute is 'YES', then the value of this attribute
+      // must also be 'YES', if present.
+      return ParseStatusCode::kMalformedTag;
+    }
+  }
+
+  // Parse the 'FORCED' attribute
+  bool forced = false;
+  if (map.HasValue(XMediaTagAttribute::kForced)) {
+    // The FORCED attribute MUST NOT be present unless TYPE=SUBTITLES
+    if (type != MediaType::kSubtitles) {
+      return ParseStatusCode::kMalformedTag;
+    }
+
+    if (map.GetValue(XMediaTagAttribute::kForced).Str() == "YES") {
+      forced = true;
+    }
+  }
+
+  // Parse the 'INSTREAM-ID' attribute
+  absl::optional<types::InstreamId> instream_id;
+  if (map.HasValue(XMediaTagAttribute::kInstreamId)) {
+    // The INSTREAM-ID attribute MUST NOT be present unless TYPE=CLOSED-CAPTIONS
+    if (type != MediaType::kClosedCaptions) {
+      return ParseStatusCode::kMalformedTag;
+    }
+
+    auto result =
+        types::ParseQuotedString(map.GetValue(XMediaTagAttribute::kInstreamId),
+                                 variable_dict, sub_buffer)
+            .MapValue(types::InstreamId::Parse);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    instream_id = std::move(result).value();
+  }
+  // This attribute is REQUIRED if TYPE=CLOSED-CAPTIONS
+  else if (type == MediaType::kClosedCaptions) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the 'CHARACTERISTICS' attribute
+  std::vector<std::string> characteristics;
+  if (map.HasValue(XMediaTagAttribute::kCharacteristics)) {
+    auto result = types::ParseQuotedString(
+        map.GetValue(XMediaTagAttribute::kCharacteristics), variable_dict,
+        sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+    auto value = std::move(result).value();
+
+    while (!value.Empty()) {
+      const auto mct = value.ConsumeDelimiter(',');
+      if (mct.Empty()) {
+        return ParseStatusCode::kMalformedTag;
+      }
+
+      characteristics.emplace_back(mct.Str());
+    }
+  }
+
+  // Parse the 'CHANNELS' attribute
+  absl::optional<types::AudioChannels> channels;
+  if (map.HasValue(XMediaTagAttribute::kChannels)) {
+    // Currently only supported type with channel information is `kAudio`.
+    if (type == MediaType::kAudio) {
+      auto result =
+          types::ParseQuotedString(map.GetValue(XMediaTagAttribute::kChannels),
+                                   variable_dict, sub_buffer)
+              .MapValue(types::AudioChannels::Parse);
+      if (result.has_error()) {
+        return ParseStatus(ParseStatusCode::kMalformedTag)
+            .AddCause(std::move(result).error());
+      }
+
+      channels = std::move(result).value();
+    }
+  }
+
+  return XMediaTag(XMediaTag::CtorArgs{
+      .type = type,
+      .uri = uri,
+      .instream_id = instream_id,
+      .group_id = group_id.value(),
+      .language = language,
+      .associated_language = assoc_language,
+      .name = name.value(),
+      .stable_rendition_id = std::move(stable_rendition_id),
+      .is_default = is_default,
+      .autoselect = autoselect,
+      .forced = forced,
+      .characteristics = std::move(characteristics),
+      .channels = std::move(channels),
+  });
 }
 
 XStreamInfTag::XStreamInfTag() = default;
@@ -362,6 +723,7 @@ XStreamInfTag& XStreamInfTag::operator=(const XStreamInfTag&) = default;
 
 XStreamInfTag& XStreamInfTag::operator=(XStreamInfTag&&) = default;
 
+// static
 ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
     TagItem tag,
     const VariableDictionary& variable_dict,
@@ -386,7 +748,8 @@ ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
   // Extract the 'BANDWIDTH' attribute
   if (map.HasValue(XStreamInfTagAttribute::kBandwidth)) {
     auto bandwidth = types::ParseDecimalInteger(
-        map.GetValue(XStreamInfTagAttribute::kBandwidth));
+        map.GetValue(XStreamInfTagAttribute::kBandwidth)
+            .SkipVariableSubstitution());
     if (bandwidth.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag)
           .AddCause(std::move(bandwidth).error());
@@ -400,7 +763,8 @@ ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
   // Extract the 'AVERAGE-BANDWIDTH' attribute
   if (map.HasValue(XStreamInfTagAttribute::kAverageBandwidth)) {
     auto average_bandwidth = types::ParseDecimalInteger(
-        map.GetValue(XStreamInfTagAttribute::kAverageBandwidth));
+        map.GetValue(XStreamInfTagAttribute::kAverageBandwidth)
+            .SkipVariableSubstitution());
     if (average_bandwidth.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag)
           .AddCause(std::move(average_bandwidth).error());
@@ -412,7 +776,8 @@ ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
   // Extract the 'SCORE' attribute
   if (map.HasValue(XStreamInfTagAttribute::kScore)) {
     auto score = types::ParseDecimalFloatingPoint(
-        map.GetValue(XStreamInfTagAttribute::kScore));
+        map.GetValue(XStreamInfTagAttribute::kScore)
+            .SkipVariableSubstitution());
     if (score.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag)
           .AddCause(std::move(score).error());
@@ -430,13 +795,14 @@ ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
       return ParseStatus(ParseStatusCode::kMalformedTag)
           .AddCause(std::move(codecs).error());
     }
-    out.codecs = std::string{std::move(codecs).value()};
+    out.codecs = std::string{std::move(codecs).value().Str()};
   }
 
   // Extract the 'RESOLUTION' attribute
   if (map.HasValue(XStreamInfTagAttribute::kResolution)) {
     auto resolution = types::DecimalResolution::Parse(
-        map.GetValue(XStreamInfTagAttribute::kResolution));
+        map.GetValue(XStreamInfTagAttribute::kResolution)
+            .SkipVariableSubstitution());
     if (resolution.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag)
           .AddCause(std::move(resolution).error());
@@ -447,7 +813,8 @@ ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
   // Extract the 'FRAME-RATE' attribute
   if (map.HasValue(XStreamInfTagAttribute::kFrameRate)) {
     auto frame_rate = types::ParseDecimalFloatingPoint(
-        map.GetValue(XStreamInfTagAttribute::kFrameRate));
+        map.GetValue(XStreamInfTagAttribute::kFrameRate)
+            .SkipVariableSubstitution());
     if (frame_rate.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag)
           .AddCause(std::move(frame_rate).error());
@@ -458,10 +825,238 @@ ParseStatus::Or<XStreamInfTag> XStreamInfTag::Parse(
   return out;
 }
 
-ParseStatus::Or<XTargetDurationTag> XTargetDurationTag::Parse(TagItem tag) {
-  return ParseDecimalIntegerTag(tag, &XTargetDurationTag::duration);
+// static
+ParseStatus::Or<InfTag> InfTag::Parse(TagItem tag) {
+  DCHECK(tag.GetName() == ToTagName(InfTag::kName));
+
+  if (!tag.GetContent()) {
+    return ParseStatusCode::kMalformedTag;
+  }
+  auto content = *tag.GetContent();
+
+  // Inf tags have the form #EXTINF:<duration>,[<title>]
+  // Find the comma.
+  auto comma = content.Str().find_first_of(',');
+  if (comma == base::StringPiece::npos) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  auto duration_str = content.Substr(0, comma);
+  auto title_str = content.Substr(comma + 1);
+
+  // Extract duration
+  // TODO(crbug.com/1284763): Below version 3 this should be rounded to an
+  // integer
+  auto duration_result =
+      types::ParseDecimalFloatingPoint(duration_str.SkipVariableSubstitution());
+  if (duration_result.has_error()) {
+    return ParseStatus(ParseStatusCode::kMalformedTag)
+        .AddCause(std::move(duration_result).error());
+  }
+  const auto duration = base::Seconds(std::move(duration_result).value());
+
+  if (duration.is_max()) {
+    return ParseStatusCode::kValueOverflowsTimeDelta;
+  }
+
+  return InfTag{.duration = duration, .title = title_str};
 }
 
+// static
+ParseStatus::Or<XBitrateTag> XBitrateTag::Parse(TagItem tag) {
+  return ParseDecimalIntegerTag(tag, &XBitrateTag::bitrate);
+}
+
+// static
+ParseStatus::Or<XByteRangeTag> XByteRangeTag::Parse(TagItem tag) {
+  DCHECK(tag.GetName() == ToTagName(XByteRangeTag::kName));
+  if (!tag.GetContent().has_value()) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  auto range = types::ByteRangeExpression::Parse(
+      tag.GetContent()->SkipVariableSubstitution());
+  if (range.has_error()) {
+    return ParseStatus(ParseStatusCode::kMalformedTag)
+        .AddCause(std::move(range).error());
+  }
+
+  return XByteRangeTag{.range = std::move(range).value()};
+}
+
+// static
+ParseStatus::Or<XDiscontinuityTag> XDiscontinuityTag::Parse(TagItem tag) {
+  return ParseEmptyTag<XDiscontinuityTag>(tag);
+}
+
+// static
+ParseStatus::Or<XDiscontinuitySequenceTag> XDiscontinuitySequenceTag::Parse(
+    TagItem tag) {
+  return ParseDecimalIntegerTag(tag, &XDiscontinuitySequenceTag::number);
+}
+
+// static
+ParseStatus::Or<XEndListTag> XEndListTag::Parse(TagItem tag) {
+  return ParseEmptyTag<XEndListTag>(tag);
+}
+
+// static
+ParseStatus::Or<XGapTag> XGapTag::Parse(TagItem tag) {
+  return ParseEmptyTag<XGapTag>(tag);
+}
+
+// static
+ParseStatus::Or<XIFramesOnlyTag> XIFramesOnlyTag::Parse(TagItem tag) {
+  return ParseEmptyTag<XIFramesOnlyTag>(tag);
+}
+
+// static
+ParseStatus::Or<XMapTag> XMapTag::Parse(
+    TagItem tag,
+    const VariableDictionary& variable_dict,
+    VariableDictionary::SubstitutionBuffer& sub_buffer) {
+  DCHECK(tag.GetName() == ToTagName(XMapTag::kName));
+  if (!tag.GetContent().has_value()) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the attribute-list
+  TypedAttributeMap<XMapTagAttribute> map;
+  types::AttributeListIterator iter(*tag.GetContent());
+  auto map_result = map.FillUntilError(&iter);
+
+  if (map_result.code() != ParseStatusCode::kReachedEOF) {
+    return ParseStatus(ParseStatusCode::kMalformedTag)
+        .AddCause(std::move(map_result));
+  }
+
+  absl::optional<ResolvedSourceString> uri;
+  if (map.HasValue(XMapTagAttribute::kUri)) {
+    auto result = types::ParseQuotedString(map.GetValue(XMapTagAttribute::kUri),
+                                           variable_dict, sub_buffer);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    uri = std::move(result).value();
+  } else {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  absl::optional<types::ByteRangeExpression> byte_range;
+  if (map.HasValue(XMapTagAttribute::kByteRange)) {
+    auto result =
+        types::ParseQuotedString(map.GetValue(XMapTagAttribute::kByteRange),
+                                 variable_dict, sub_buffer)
+            .MapValue(types::ByteRangeExpression::Parse);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    byte_range = std::move(result).value();
+  }
+
+  return XMapTag{.uri = uri.value(), .byte_range = byte_range};
+}
+
+// static
+ParseStatus::Or<XMediaSequenceTag> XMediaSequenceTag::Parse(TagItem tag) {
+  return ParseDecimalIntegerTag(tag, &XMediaSequenceTag::number);
+}
+
+// static
+ParseStatus::Or<XPartTag> XPartTag::Parse(
+    TagItem tag,
+    const VariableDictionary& variable_dict,
+    VariableDictionary::SubstitutionBuffer& sub_buffer) {
+  DCHECK(tag.GetName() == ToTagName(XPartTag::kName));
+  if (!tag.GetContent().has_value()) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  TypedAttributeMap<XPartTagAttribute> map;
+  types::AttributeListIterator iter(*tag.GetContent());
+  auto map_result = map.FillUntilError(&iter);
+
+  if (map_result.code() != ParseStatusCode::kReachedEOF) {
+    return ParseStatus(ParseStatusCode::kMalformedTag)
+        .AddCause(std::move(map_result));
+  }
+
+  // Parse the 'URI' attribute
+  absl::optional<ResolvedSourceString> uri;
+  if (map.HasValue(XPartTagAttribute::kUri)) {
+    auto uri_result = types::ParseQuotedString(
+        map.GetValue(XPartTagAttribute::kUri), variable_dict, sub_buffer);
+    if (uri_result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(uri_result).error());
+    }
+
+    uri = std::move(uri_result).value();
+  } else {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the 'DURATION' attribute
+  base::TimeDelta duration;
+  if (map.HasValue(XPartTagAttribute::kDuration)) {
+    auto duration_result = types::ParseDecimalFloatingPoint(
+        map.GetValue(XPartTagAttribute::kDuration).SkipVariableSubstitution());
+    if (duration_result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(duration_result).error());
+    }
+
+    duration = base::Seconds(std::move(duration_result).value());
+    if (duration.is_max()) {
+      return ParseStatusCode::kValueOverflowsTimeDelta;
+    }
+  } else {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  // Parse the 'BYTERANGE' attribute
+  absl::optional<types::ByteRangeExpression> byte_range;
+  if (map.HasValue(XPartTagAttribute::kByteRange)) {
+    auto result =
+        types::ParseQuotedString(map.GetValue(XPartTagAttribute::kByteRange),
+                                 variable_dict, sub_buffer)
+            .MapValue(types::ByteRangeExpression::Parse);
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    byte_range = std::move(result).value();
+  }
+
+  // Parse the 'INDEPENDENT' attribute
+  bool independent = false;
+  if (map.HasValue(XPartTagAttribute::kIndependent)) {
+    if (map.GetValue(XPartTagAttribute::kIndependent).Str() == "YES") {
+      independent = true;
+    }
+  }
+
+  // Parse the 'GAP' attribute
+  bool gap = false;
+  if (map.HasValue(XPartTagAttribute::kGap)) {
+    if (map.GetValue(XPartTagAttribute::kGap).Str() == "YES") {
+      gap = true;
+    }
+  }
+
+  return XPartTag{.uri = uri.value(),
+                  .duration = duration,
+                  .byte_range = byte_range,
+                  .independent = independent,
+                  .gap = gap};
+}
+
+// static
 ParseStatus::Or<XPartInfTag> XPartInfTag::Parse(TagItem tag) {
   DCHECK(tag.GetName() == ToTagName(XPartInfTag::kName));
   if (!tag.GetContent().has_value()) {
@@ -478,50 +1073,176 @@ ParseStatus::Or<XPartInfTag> XPartInfTag::Parse(TagItem tag) {
         .AddCause(std::move(map_result));
   }
 
-  XPartInfTag out;
-
   // Extract the 'PART-TARGET' attribute
+  base::TimeDelta part_target;
   if (map.HasValue(XPartInfTagAttribute::kPartTarget)) {
-    auto target_duration = types::ParseDecimalFloatingPoint(
-        map.GetValue(XPartInfTagAttribute::kPartTarget));
-    if (target_duration.has_error()) {
+    auto result = types::ParseDecimalFloatingPoint(
+        map.GetValue(XPartInfTagAttribute::kPartTarget)
+            .SkipVariableSubstitution());
+
+    if (result.has_error()) {
       return ParseStatus(ParseStatusCode::kMalformedTag)
-          .AddCause(std::move(target_duration).error());
+          .AddCause(std::move(result).error());
     }
-    out.target_duration = std::move(target_duration).value();
+
+    part_target = base::Seconds(std::move(result).value());
+
+    if (part_target.is_max()) {
+      return ParseStatusCode::kValueOverflowsTimeDelta;
+    }
   } else {
     return ParseStatusCode::kMalformedTag;
   }
 
-  return out;
+  return XPartInfTag{.target_duration = part_target};
 }
 
-ParseStatus::Or<XMediaSequenceTag> XMediaSequenceTag::Parse(TagItem tag) {
-  return ParseDecimalIntegerTag(tag, &XMediaSequenceTag::number);
+// static
+ParseStatus::Or<XPlaylistTypeTag> XPlaylistTypeTag::Parse(TagItem tag) {
+  DCHECK(tag.GetName() == ToTagName(XPlaylistTypeTag::kName));
+
+  // This tag requires content
+  if (!tag.GetContent().has_value() || tag.GetContent()->Empty()) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  if (tag.GetContent()->Str() == "EVENT") {
+    return XPlaylistTypeTag{.type = PlaylistType::kEvent};
+  }
+  if (tag.GetContent()->Str() == "VOD") {
+    return XPlaylistTypeTag{.type = PlaylistType::kVOD};
+  }
+
+  return ParseStatusCode::kUnknownPlaylistType;
 }
 
-ParseStatus::Or<XDiscontinuitySequenceTag> XDiscontinuitySequenceTag::Parse(
-    TagItem tag) {
-  return ParseDecimalIntegerTag(tag, &XDiscontinuitySequenceTag::number);
-}
-
-ParseStatus::Or<XByteRangeTag> XByteRangeTag::Parse(TagItem tag) {
-  DCHECK(tag.GetName() == ToTagName(XByteRangeTag::kName));
+// static
+ParseStatus::Or<XServerControlTag> XServerControlTag::Parse(TagItem tag) {
+  DCHECK(tag.GetName() == ToTagName(XServerControlTag::kName));
   if (!tag.GetContent().has_value()) {
     return ParseStatusCode::kMalformedTag;
   }
 
-  auto range = types::ByteRangeExpression::Parse(*tag.GetContent());
-  if (range.has_error()) {
+  // Parse the attribute-list
+  TypedAttributeMap<XServerControlTagAttribute> map;
+  types::AttributeListIterator iter(*tag.GetContent());
+  auto map_result = map.FillUntilError(&iter);
+
+  if (map_result.code() != ParseStatusCode::kReachedEOF) {
     return ParseStatus(ParseStatusCode::kMalformedTag)
-        .AddCause(std::move(range).error());
+        .AddCause(std::move(map_result));
   }
 
-  return XByteRangeTag{.range = std::move(range).value()};
+  // Extract the 'CAN-SKIP-UNTIL' attribute
+  absl::optional<base::TimeDelta> can_skip_until;
+  if (map.HasValue(XServerControlTagAttribute::kCanSkipUntil)) {
+    auto result = types::ParseDecimalFloatingPoint(
+        map.GetValue(XServerControlTagAttribute::kCanSkipUntil)
+            .SkipVariableSubstitution());
+
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    can_skip_until = base::Seconds(std::move(result).value());
+
+    if (can_skip_until->is_max()) {
+      return ParseStatusCode::kValueOverflowsTimeDelta;
+    }
+  }
+
+  // Extract the 'CAN-SKIP-DATERANGES' attribute
+  bool can_skip_dateranges = false;
+  if (map.HasValue(XServerControlTagAttribute::kCanSkipDateRanges)) {
+    if (map.GetValue(XServerControlTagAttribute::kCanSkipDateRanges).Str() ==
+        "YES") {
+      // The existence of this attribute requires the 'CAN-SKIP-UNTIL'
+      // attribute.
+      if (!can_skip_until.has_value()) {
+        return ParseStatusCode::kMalformedTag;
+      }
+
+      can_skip_dateranges = true;
+    }
+  }
+
+  // Extract the 'HOLD-BACK' attribute
+  absl::optional<base::TimeDelta> hold_back;
+  if (map.HasValue(XServerControlTagAttribute::kHoldBack)) {
+    auto result = types::ParseDecimalFloatingPoint(
+        map.GetValue(XServerControlTagAttribute::kHoldBack)
+            .SkipVariableSubstitution());
+
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    hold_back = base::Seconds(std::move(result).value());
+
+    if (hold_back->is_max()) {
+      return ParseStatusCode::kValueOverflowsTimeDelta;
+    }
+  }
+
+  // Extract the 'PART-HOLD-BACK' attribute
+  absl::optional<base::TimeDelta> part_hold_back;
+  if (map.HasValue(XServerControlTagAttribute::kPartHoldBack)) {
+    auto result = types::ParseDecimalFloatingPoint(
+        map.GetValue(XServerControlTagAttribute::kPartHoldBack)
+            .SkipVariableSubstitution());
+
+    if (result.has_error()) {
+      return ParseStatus(ParseStatusCode::kMalformedTag)
+          .AddCause(std::move(result).error());
+    }
+
+    part_hold_back = base::Seconds(std::move(result).value());
+
+    if (part_hold_back->is_max()) {
+      return ParseStatusCode::kValueOverflowsTimeDelta;
+    }
+  }
+
+  // Extract the 'CAN-BLOCK-RELOAD' attribute
+  bool can_block_reload = false;
+  if (map.HasValue(XServerControlTagAttribute::kCanBlockReload)) {
+    if (map.GetValue(XServerControlTagAttribute::kCanBlockReload).Str() ==
+        "YES") {
+      can_block_reload = true;
+    }
+  }
+
+  return XServerControlTag{
+      .skip_boundary = can_skip_until,
+      .can_skip_dateranges = can_skip_dateranges,
+      .hold_back = hold_back,
+      .part_hold_back = part_hold_back,
+      .can_block_reload = can_block_reload,
+  };
 }
 
-ParseStatus::Or<XBitrateTag> XBitrateTag::Parse(TagItem tag) {
-  return ParseDecimalIntegerTag(tag, &XBitrateTag::bitrate);
+// static
+ParseStatus::Or<XTargetDurationTag> XTargetDurationTag::Parse(TagItem tag) {
+  DCHECK(tag.GetName() == ToTagName(XTargetDurationTag::kName));
+  if (!tag.GetContent().has_value()) {
+    return ParseStatusCode::kMalformedTag;
+  }
+
+  auto duration_result = types::ParseDecimalInteger(
+      tag.GetContent().value().SkipVariableSubstitution());
+  if (duration_result.has_error()) {
+    return ParseStatus(ParseStatusCode::kMalformedTag)
+        .AddCause(std::move(duration_result).error());
+  }
+
+  auto duration = base::Seconds(std::move(duration_result).value());
+  if (duration.is_max()) {
+    return ParseStatusCode::kValueOverflowsTimeDelta;
+  }
+
+  return XTargetDurationTag{.duration = duration};
 }
 
 }  // namespace media::hls

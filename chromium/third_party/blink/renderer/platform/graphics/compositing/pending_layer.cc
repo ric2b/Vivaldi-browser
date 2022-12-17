@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/compositing/pending_layer.h"
 
+#include "base/containers/adapters.h"
 #include "cc/layers/scrollbar_layer_base.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.h"
@@ -19,18 +20,6 @@
 namespace blink {
 
 namespace {
-
-const ClipPaintPropertyNode* HighestOutputClipBetween(
-    const EffectPaintPropertyNode& ancestor,
-    const EffectPaintPropertyNode& descendant) {
-  const ClipPaintPropertyNode* result = nullptr;
-  for (const auto* effect = &descendant; effect != &ancestor;
-       effect = effect->UnaliasedParent()) {
-    if (const auto* output_clip = effect->OutputClip())
-      result = &output_clip->Unalias();
-  }
-  return result;
-}
 
 // When possible, provides a clip rect that limits the visibility.
 absl::optional<gfx::RectF> VisibilityLimit(const PropertyTreeState& state) {
@@ -97,7 +86,7 @@ PendingLayer::PendingLayer(const PaintChunkSubset& chunks,
   // true when !has_text to simplify code.
   DCHECK(has_text_ || text_known_to_be_on_opaque_background_);
   if (const absl::optional<gfx::RectF>& visibility_limit =
-          VisibilityLimit(property_tree_state_)) {
+          VisibilityLimit(GetPropertyTreeState())) {
     bounds_.Intersect(*visibility_limit);
     if (bounds_.IsEmpty())
       draws_content_ = false;
@@ -138,7 +127,7 @@ gfx::RectF PendingLayer::MapRectKnownToBeOpaque(
     return gfx::RectF();
 
   FloatClipRect float_clip_rect(rect_known_to_be_opaque_);
-  GeometryMapper::LocalToAncestorVisualRect(property_tree_state_, new_state,
+  GeometryMapper::LocalToAncestorVisualRect(GetPropertyTreeState(), new_state,
                                             float_clip_rect);
   return float_clip_rect.IsTight() ? float_clip_rect.Rect() : gfx::RectF();
 }
@@ -148,31 +137,16 @@ std::unique_ptr<JSONObject> PendingLayer::ToJSON() const {
   result->SetArray("bounds", RectAsJSONArray(bounds_));
   result->SetArray("rect_known_to_be_opaque",
                    RectAsJSONArray(rect_known_to_be_opaque_));
-  result->SetObject("property_tree_state", property_tree_state_.ToJSON());
+  result->SetObject("property_tree_state", GetPropertyTreeState().ToJSON());
   result->SetArray("offset_of_decomposited_transforms",
                    VectorAsJSONArray(offset_of_decomposited_transforms_));
-  std::unique_ptr<JSONArray> json_chunks = std::make_unique<JSONArray>();
-  for (auto it = chunks_.begin(); it != chunks_.end(); ++it) {
-    StringBuilder sb;
-    sb.Append("index=");
-    sb.AppendNumber(it.IndexInPaintArtifact());
-    sb.Append(" ");
-    sb.Append(it->ToString(chunks_.GetPaintArtifact()));
-    json_chunks->PushString(sb.ToString());
-  }
-  result->SetArray("paint_chunks", std::move(json_chunks));
+  result->SetArray("paint_chunks", chunks_.ToJSON());
   result->SetBoolean("draws_content", DrawsContent());
   return result;
 }
 
-gfx::RectF PendingLayer::VisualRectForOverlapTesting(
-    const PropertyTreeState& ancestor_state) const {
-  FloatClipRect visual_rect(bounds_);
-  GeometryMapper::LocalToAncestorVisualRect(
-      property_tree_state_, ancestor_state, visual_rect,
-      kIgnoreOverlayScrollbarSize, kNonInclusiveIntersect,
-      kExpandVisualRectForCompositingOverlap);
-  return visual_rect.Rect();
+std::ostream& operator<<(std::ostream& os, const PendingLayer& layer) {
+  return os << layer.ToJSON()->ToPrettyJSONString().Utf8();
 }
 
 void PendingLayer::Upcast(const PropertyTreeState& new_state) {
@@ -184,7 +158,7 @@ void PendingLayer::Upcast(const PropertyTreeState& new_state) {
     has_decomposited_blend_mode_ = true;
 
   FloatClipRect float_clip_rect(bounds_);
-  GeometryMapper::LocalToAncestorVisualRect(property_tree_state_, new_state,
+  GeometryMapper::LocalToAncestorVisualRect(GetPropertyTreeState(), new_state,
                                             float_clip_rect);
   bounds_ = float_clip_rect.Rect();
 
@@ -217,8 +191,7 @@ bool PendingLayer::MergeInternal(const PendingLayer& guest,
                                  const PropertyTreeState& guest_state,
                                  bool prefers_lcd_text,
                                  bool dry_run) {
-  if (&Chunks().GetPaintArtifact() != &guest.Chunks().GetPaintArtifact())
-    return false;
+  DCHECK_EQ(&Chunks().GetPaintArtifact(), &guest.Chunks().GetPaintArtifact());
   if (ChunkRequiresOwnLayer() || guest.ChunkRequiresOwnLayer())
     return false;
   if (&GetPropertyTreeState().Effect() != &guest_state.Effect())
@@ -344,35 +317,13 @@ bool PendingLayer::PropertyTreeStateChanged(
   if (change_of_decomposited_transforms_ >= change)
     return true;
 
-  return property_tree_state_.ChangedToRoot(change);
+  return GetPropertyTreeState().ChangedToRoot(change);
 }
 
 bool PendingLayer::MightOverlap(const PendingLayer& other) const {
-  PropertyTreeState common_ancestor_state(
-      property_tree_state_.Transform()
-          .LowestCommonAncestor(other.property_tree_state_.Transform())
-          .Unalias(),
-      property_tree_state_.Clip()
-          .LowestCommonAncestor(other.property_tree_state_.Clip())
-          .Unalias(),
-      property_tree_state_.Effect()
-          .LowestCommonAncestor(other.property_tree_state_.Effect())
-          .Unalias());
-  // Move the common clip up if some effect nodes have OutputClip escaping the
-  // common clip.
-  if (const auto* clip_a = HighestOutputClipBetween(
-          common_ancestor_state.Effect(), property_tree_state_.Effect())) {
-    common_ancestor_state.SetClip(
-        clip_a->LowestCommonAncestor(common_ancestor_state.Clip()).Unalias());
-  }
-  if (const auto* clip_b =
-          HighestOutputClipBetween(common_ancestor_state.Effect(),
-                                   other.property_tree_state_.Effect())) {
-    common_ancestor_state.SetClip(
-        clip_b->LowestCommonAncestor(common_ancestor_state.Clip()).Unalias());
-  }
-  return VisualRectForOverlapTesting(common_ancestor_state)
-      .Intersects(other.VisualRectForOverlapTesting(common_ancestor_state));
+  return GeometryMapper::MightOverlapForCompositing(
+      bounds_, property_tree_state_.GetPropertyTreeState(), other.bounds_,
+      other.property_tree_state_.GetPropertyTreeState());
 }
 
 // Walk the pending layer list and build up a table of transform nodes that
@@ -421,14 +372,15 @@ void PendingLayer::DecompositeTransforms(Vector<PendingLayer>& pending_layers) {
          !node->IsRoot() && !can_be_decomposited.Contains(node);
          node = &node->Parent()->Unalias()) {
       if (!node->IsIdentityOr2DTranslation() || node->ScrollNode() ||
-          node->GetStickyConstraint() ||
-          node->IsAffectedByOuterViewportBoundsDelta() ||
           node->HasDirectCompositingReasonsOtherThan3dTransform() ||
           !node->FlattensInheritedTransformSameAsParent() ||
           !node->BackfaceVisibilitySameAsParent()) {
         mark_not_decompositable(*node);
         break;
       }
+      DCHECK(!node->GetStickyConstraint());
+      DCHECK(!node->GetAnchorScrollContainersData());
+      DCHECK(!node->IsAffectedByOuterViewportBoundsDelta());
       can_be_decomposited.insert(node, true);
     }
 
@@ -650,8 +602,22 @@ void PendingLayer::UpdateLayerSelection(cc::LayerSelection& layer_selection) {
   // Foreign layers cannot contain selection.
   if (compositing_type_ == PendingLayer::kForeignLayer)
     return;
-  PaintChunksToCcLayer::UpdateLayerSelection(CcLayer(), GetPropertyTreeState(),
-                                             Chunks(), layer_selection);
+  bool any_selection_was_painted = PaintChunksToCcLayer::UpdateLayerSelection(
+      CcLayer(), GetPropertyTreeState(), Chunks(), layer_selection);
+  if (any_selection_was_painted) {
+    // If any selection was painted, but we didn't see the start or end bound
+    // recorded, it could have been outside of the painting cull rect thus
+    // invisible. Mark the bound as such if this is the case.
+    if (layer_selection.start.type == gfx::SelectionBound::EMPTY) {
+      layer_selection.start.type = gfx::SelectionBound::LEFT;
+      layer_selection.start.hidden = true;
+    }
+
+    if (layer_selection.end.type == gfx::SelectionBound::EMPTY) {
+      layer_selection.end.type = gfx::SelectionBound::RIGHT;
+      layer_selection.end.hidden = true;
+    }
+  }
 }
 
 bool PendingLayer::IsSolidColor() const {
@@ -662,6 +628,48 @@ bool PendingLayer::IsSolidColor() const {
     return false;
   auto* drawing = DynamicTo<DrawingDisplayItem>(*items.begin());
   return drawing && drawing->IsSolidColor();
+}
+
+// The heuristic for picking a checkerboarding color works as follows:
+// - During paint, PaintChunker will look for background color display items,
+//   and record the blending of background colors if the background is larger
+//   than a ratio of the chunk bounds.
+// - After layer allocation, the paint chunks assigned to a layer are examined
+//   for a background color annotation.
+// - The blending of background colors of chunks having background larger than
+//   a ratio of the layer is set as the layer's background color.
+SkColor4f PendingLayer::ComputeBackgroundColor() const {
+  Vector<Color, 4> background_colors;
+  float min_background_area =
+      kMinBackgroundColorCoverageRatio * bounds_.width() * bounds_.height();
+  for (auto it = chunks_.end(); it != chunks_.begin();) {
+    const auto& chunk = *(--it);
+    if (chunk.background_color == Color::kTransparent)
+      continue;
+    if (chunk.background_color_area >= min_background_area) {
+      Color chunk_background_color = chunk.background_color;
+      const auto& chunk_effect = chunk.properties.Effect().Unalias();
+      if (&chunk_effect != &property_tree_state_.Effect()) {
+        if (chunk_effect.UnaliasedParent() != &property_tree_state_.Effect() ||
+            !chunk_effect.IsOpacityOnly()) {
+          continue;
+        }
+        chunk_background_color =
+            chunk_background_color.CombineWithAlpha(chunk_effect.Opacity());
+      }
+      background_colors.push_back(chunk_background_color);
+      if (!chunk_background_color.HasAlpha()) {
+        // If this color is opaque, blending it with subsequent colors will have
+        // no effect.
+        break;
+      }
+    }
+  }
+
+  Color background_color;
+  for (Color color : base::Reversed(background_colors))
+    background_color = background_color.Blend(color);
+  return SkColor4f::FromColor(background_color.Rgb());
 }
 
 }  // namespace blink

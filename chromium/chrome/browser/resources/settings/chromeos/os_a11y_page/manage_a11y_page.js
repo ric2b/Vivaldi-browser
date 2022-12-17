@@ -8,13 +8,13 @@
  * settings.
  */
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import '../../controls/settings_slider.js';
 import '../../controls/settings_toggle_button.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
@@ -22,6 +22,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {BatteryStatus, DevicePageBrowserProxy, DevicePageBrowserProxyImpl, ExternalStorage, getDisplayApi, IdleBehavior, LidClosedBehavior, NoteAppInfo, NoteAppLockScreenSupport, PowerManagementSettings, PowerSource, StorageSpaceState} from '../device_page/device_page_browser_proxy.js';
@@ -46,8 +47,11 @@ const DEFAULT_BLACK_CURSOR_COLOR = 0;
  */
 const SettingsManageA11YPageElementBase = mixinBehaviors(
     [
-      DeepLinkingBehavior, I18nBehavior, RouteObserverBehavior,
-      RouteOriginBehavior, WebUIListenerBehavior
+      DeepLinkingBehavior,
+      I18nBehavior,
+      RouteObserverBehavior,
+      RouteOriginBehavior,
+      WebUIListenerBehavior,
     ],
     PolymerElement);
 
@@ -110,6 +114,10 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
         },
       },
 
+      /**
+       * Drop down menu options for auto click delay.
+       * @protected
+       */
       autoClickDelayOptions_: {
         readOnly: true,
         type: Array,
@@ -120,25 +128,29 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
           return [
             {
               value: 600,
-              name: loadTimeData.getString('delayBeforeClickExtremelyShort')
+              name: loadTimeData.getString('delayBeforeClickExtremelyShort'),
             },
             {
               value: 800,
-              name: loadTimeData.getString('delayBeforeClickVeryShort')
+              name: loadTimeData.getString('delayBeforeClickVeryShort'),
             },
             {
               value: 1000,
-              name: loadTimeData.getString('delayBeforeClickShort')
+              name: loadTimeData.getString('delayBeforeClickShort'),
             },
             {value: 2000, name: loadTimeData.getString('delayBeforeClickLong')},
             {
               value: 4000,
-              name: loadTimeData.getString('delayBeforeClickVeryLong')
+              name: loadTimeData.getString('delayBeforeClickVeryLong'),
             },
           ];
         },
       },
 
+      /**
+       * Drop down menu options for auto click movement threshold.
+       * @protected
+       */
       autoClickMovementThresholdOptions_: {
         readOnly: true,
         type: Array,
@@ -146,31 +158,31 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
           return [
             {
               value: 5,
-              name:
-                  loadTimeData.getString('autoclickMovementThresholdExtraSmall')
+              name: loadTimeData.getString(
+                  'autoclickMovementThresholdExtraSmall'),
             },
             {
               value: 10,
-              name: loadTimeData.getString('autoclickMovementThresholdSmall')
+              name: loadTimeData.getString('autoclickMovementThresholdSmall'),
             },
             {
               value: 20,
-              name: loadTimeData.getString('autoclickMovementThresholdDefault')
+              name: loadTimeData.getString('autoclickMovementThresholdDefault'),
             },
             {
               value: 30,
-              name: loadTimeData.getString('autoclickMovementThresholdLarge')
+              name: loadTimeData.getString('autoclickMovementThresholdLarge'),
             },
             {
               value: 40,
-              name:
-                  loadTimeData.getString('autoclickMovementThresholdExtraLarge')
+              name: loadTimeData.getString(
+                  'autoclickMovementThresholdExtraLarge'),
             },
           ];
         },
       },
 
-      /** @private {!Array<{name: string, value: number}>} */
+      /** @protected {!Array<{name: string, value: number}>} */
       cursorColorOptions_: {
         readOnly: true,
         type: Array,
@@ -213,7 +225,7 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
         },
       },
 
-      /** @private */
+      /** @protected */
       isMagnifierContinuousMouseFollowingModeSettingEnabled_: {
         type: Boolean,
         value() {
@@ -222,21 +234,30 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
         },
       },
 
+      /** @protected */
+      isAccessibilityOSSettingsVisibilityEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean(
+              'isAccessibilityOSSettingsVisibilityEnabled');
+        },
+      },
+
       /**
        * Whether the user is in kiosk mode.
-       * @private
+       * @protected
        */
       isKioskModeActive_: {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('isKioskModeActive');
-        }
+        },
       },
 
       /**
        * Whether a setting for enabling shelf navigation buttons in tablet mode
        * should be displayed in the accessibility settings.
-       * @private
+       * @protected
        */
       showShelfNavigationButtonsSettings_: {
         type: Boolean,
@@ -244,45 +265,30 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
             'computeShowShelfNavigationButtonsSettings_(isKioskModeActive_)',
       },
 
-      /** @private */
+      /**
+       * Whether the user is in guest mode.
+       * @protected
+       */
       isGuest_: {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('isGuest');
-        }
+        },
       },
 
-      /** @private */
-      screenMagnifierHintLabel_: {
-        type: String,
-        value() {
-          return this.i18n(
-              'screenMagnifierHintLabel',
-              this.i18n('screenMagnifierHintSearchKey'));
-        }
-      },
-
-      /** @private */
-      dictationSubtitle_: {
-        type: String,
-        value() {
-          return loadTimeData.getString('dictationDescription');
-        }
-      },
-
-      /** @private */
+      /** @protected */
       dictationLocaleSubtitleOverride_: {
         type: String,
         value: '',
       },
 
-      /** @private */
+      /** @protected */
       useDictationLocaleSubtitleOverride_: {
         type: Boolean,
         value: false,
       },
 
-      /** @private */
+      /** @protected */
       dictationLocaleMenuSubtitle_: {
         type: String,
         computed: 'computeDictationLocaleSubtitle_(' +
@@ -291,29 +297,29 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
             'dictationLocaleSubtitleOverride_)',
       },
 
-      /** @private */
+      /** @protected */
       dictationLocaleOptions_: {
         type: Array,
         value() {
           return [];
-        }
+        },
       },
 
-      /** @private */
+      /** @protected */
       dictationLocalesList_: {
         type: Array,
         value() {
           return [];
-        }
+        },
       },
 
-      /** @private */
+      /** @protected */
       showDictationLocaleMenu_: {
         type: Boolean,
         value: false,
       },
 
-      /** @private */
+      /** @protected */
       dictationLearnMoreUrl_: {
         type: String,
         value: 'https://support.google.com/chromebook?p=text_dictation_m100',
@@ -323,17 +329,17 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
        * |hasKeyboard_|, |hasMouse_|, |hasPointingStick_|, and |hasTouchpad_|
        * start undefined so observers don't trigger until they have been
        * populated.
-       * @private
+       * @protected
        */
       hasKeyboard_: Boolean,
 
-      /** @private */
+      /** @protected */
       hasMouse_: Boolean,
 
-      /** @private */
+      /** @protected */
       hasPointingStick_: Boolean,
 
-      /** @private */
+      /** @protected */
       hasTouchpad_: Boolean,
 
       /**
@@ -342,7 +348,7 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
        * enabled when spoken feedback, automatic clicks, or switch access are
        * enabled. The buttons can also be explicitly enabled by a designated
        * a11y setting.
-       * @private
+       * @protected
        */
       shelfNavigationButtonsImplicitlyEnabled_: {
         type: Boolean,
@@ -356,7 +362,7 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
        * The effective pref value that indicates whether shelf navigation
        * buttons are enabled in tablet mode.
        * @type {chrome.settingsPrivate.PrefObject}
-       * @private
+       * @protected
        */
       shelfNavigationButtonsPref_: {
         type: Object,
@@ -367,32 +373,31 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
         value: () => new Set([
-          chromeos.settings.mojom.Setting.kChromeVox,
-          chromeos.settings.mojom.Setting.kSelectToSpeak,
-          chromeos.settings.mojom.Setting.kHighContrastMode,
-          chromeos.settings.mojom.Setting.kFullscreenMagnifier,
-          chromeos.settings.mojom.Setting
-              .kFullscreenMagnifierMouseFollowingMode,
-          chromeos.settings.mojom.Setting.kFullscreenMagnifierFocusFollowing,
-          chromeos.settings.mojom.Setting.kDockedMagnifier,
-          chromeos.settings.mojom.Setting.kStickyKeys,
-          chromeos.settings.mojom.Setting.kOnScreenKeyboard,
-          chromeos.settings.mojom.Setting.kDictation,
-          chromeos.settings.mojom.Setting.kHighlightKeyboardFocus,
-          chromeos.settings.mojom.Setting.kHighlightTextCaret,
-          chromeos.settings.mojom.Setting.kAutoClickWhenCursorStops,
-          chromeos.settings.mojom.Setting.kLargeCursor,
-          chromeos.settings.mojom.Setting.kHighlightCursorWhileMoving,
-          chromeos.settings.mojom.Setting.kTabletNavigationButtons,
-          chromeos.settings.mojom.Setting.kMonoAudio,
-          chromeos.settings.mojom.Setting.kStartupSound,
-          chromeos.settings.mojom.Setting.kEnableSwitchAccess,
-          chromeos.settings.mojom.Setting.kEnableCursorColor,
+          Setting.kChromeVox,
+          Setting.kSelectToSpeak,
+          Setting.kHighContrastMode,
+          Setting.kFullscreenMagnifier,
+          Setting.kFullscreenMagnifierMouseFollowingMode,
+          Setting.kFullscreenMagnifierFocusFollowing,
+          Setting.kDockedMagnifier,
+          Setting.kStickyKeys,
+          Setting.kOnScreenKeyboard,
+          Setting.kDictation,
+          Setting.kHighlightKeyboardFocus,
+          Setting.kHighlightTextCaret,
+          Setting.kAutoClickWhenCursorStops,
+          Setting.kLargeCursor,
+          Setting.kHighlightCursorWhileMoving,
+          Setting.kTabletNavigationButtons,
+          Setting.kMonoAudio,
+          Setting.kStartupSound,
+          Setting.kEnableSwitchAccess,
+          Setting.kEnableCursorColor,
         ]),
       },
     };
@@ -400,7 +405,7 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
 
   static get observers() {
     return [
-      'pointersChanged_(hasMouse_, hasPointingStick_, hasTouchpad_, ' +
+      'pointersChanged(hasMouse_, hasPointingStick_, hasTouchpad_, ' +
           'isKioskModeActive_)',
     ];
   }
@@ -417,6 +422,14 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
 
     /** @private {!DevicePageBrowserProxy} */
     this.deviceBrowserProxy_ = DevicePageBrowserProxyImpl.getInstance();
+
+    if (loadTimeData.getBoolean('isAccessibilityOSSettingsVisibilityEnabled')) {
+      this.redirectToNewA11ySettings();
+    }
+  }
+
+  redirectToNewA11ySettings() {
+    location.href = 'chrome://os-settings/osAccessibility';
   }
 
   /** @override */
@@ -443,8 +456,8 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
 
     this.addWebUIListener(
         'initial-data-ready',
-        (startup_sound_enabled) =>
-            this.onManageAllyPageReady_(startup_sound_enabled));
+        (startupSoundEnabled) =>
+            this.onManageAllyPageReady_(startupSoundEnabled));
     this.addWebUIListener(
         'dictation-locale-menu-subtitle-changed',
         (result) => this.onDictationLocaleMenuSubtitleChanged_(result));
@@ -486,28 +499,52 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
    * @param {boolean} hasTouchpad
    * @private
    */
-  pointersChanged_(hasMouse, hasTouchpad, hasPointingStick, isKioskModeActive) {
+  pointersChanged(hasMouse, hasTouchpad, hasPointingStick, isKioskModeActive) {
     this.$.pointerSubpageButton.hidden =
         (!hasMouse && !hasPointingStick && !hasTouchpad) || isKioskModeActive;
   }
 
   /**
-   * Updates the Select-to-Speak description text based on:
+   * Return ChromeVox description text based on whether ChromeVox is enabled.
+   * @param {boolean} enabled
+   * @return {string}
+   * @private
+   */
+  getChromeVoxDescription_(enabled) {
+    return this.i18n(
+        enabled ? 'chromeVoxDescriptionOn' : 'chromeVoxDescriptionOff');
+  }
+
+  /**
+   * Return Fullscreen magnifier description text based on whether Fullscreen
+   * magnifier is enabled.
+   * @param {boolean} enabled
+   * @return {string}
+   * @private
+   */
+  getScreenMagnifierDescription_(enabled) {
+    return this.i18n(
+        enabled ? 'screenMagnifierDescriptionOn' :
+                  'screenMagnifierDescriptionOff');
+  }
+
+  /**
+   * Return Select-to-Speak description text based on:
    *    1. Whether Select-to-Speak is enabled.
    *    2. If it is enabled, whether a physical keyboard is present.
    * @param {boolean} enabled
    * @param {boolean} hasKeyboard
-   * @param {string} disabledString String to show when Select-to-Speak is
-   *    disabled.
-   * @param {string} keyboardString String to show when there is a physical
-   *    keyboard
-   * @param {string} noKeyboardString String to show when there is no keyboard
+   * @return {string}
    * @private
    */
-  getSelectToSpeakDescription_(
-      enabled, hasKeyboard, disabledString, keyboardString, noKeyboardString) {
-    return !enabled ? disabledString :
-                      hasKeyboard ? keyboardString : noKeyboardString;
+  getSelectToSpeakDescription_(enabled, hasKeyboard) {
+    if (!enabled) {
+      return this.i18n('selectToSpeakDisabledDescription');
+    }
+    if (hasKeyboard) {
+      return this.i18n('selectToSpeakDescription');
+    }
+    return this.i18n('selectToSpeakDescriptionWithoutKeyboard');
   }
 
   /**
@@ -626,7 +663,7 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
       return /** @type {!chrome.settingsPrivate.PrefObject}*/ ({
         value: true,
         type: chrome.settingsPrivate.PrefType.BOOLEAN,
-        key: ''
+        key: '',
       });
     }
 
@@ -682,11 +719,11 @@ class SettingsManageA11YPageElement extends SettingsManageA11YPageElementBase {
   /**
    * Handles updating the visibility of the shelf navigation buttons setting
    * and updating whether startupSoundEnabled is checked.
-   * @param {boolean} startup_sound_enabled Whether startup sound is enabled.
+   * @param {boolean} startupSoundEnabled Whether startup sound is enabled.
    * @private
    */
-  onManageAllyPageReady_(startup_sound_enabled) {
-    this.$.startupSoundEnabled.checked = startup_sound_enabled;
+  onManageAllyPageReady_(startupSoundEnabled) {
+    this.$.startupSoundEnabled.checked = startupSoundEnabled;
   }
 
   /**

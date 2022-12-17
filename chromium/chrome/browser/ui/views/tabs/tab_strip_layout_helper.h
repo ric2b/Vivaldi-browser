@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "base/callback_forward.h"
-#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/views/tabs/tab_layout_state.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
@@ -21,7 +21,7 @@
 
 class Tab;
 class TabGroupHeader;
-class TabStripController;
+class TabContainerController;
 
 namespace tab_groups {
 class TabGroupId;
@@ -34,7 +34,7 @@ class TabStripLayoutHelper {
  public:
   using GetTabsCallback = base::RepeatingCallback<views::ViewModelT<Tab>*()>;
 
-  TabStripLayoutHelper(const TabStripController* controller,
+  TabStripLayoutHelper(const TabContainerController& controller,
                        GetTabsCallback get_tabs_callback);
   TabStripLayoutHelper(const TabStripLayoutHelper&) = delete;
   TabStripLayoutHelper& operator=(const TabStripLayoutHelper&) = delete;
@@ -54,7 +54,7 @@ class TabStripLayoutHelper {
   int first_non_pinned_tab_x() { return first_non_pinned_tab_x_; }
 
   // Returns the number of pinned tabs in the tabstrip.
-  int GetPinnedTabCount() const;
+  size_t GetPinnedTabCount() const;
 
   // Returns a map of all tab groups and their bounds.
   const std::map<tab_groups::TabGroupId, gfx::Rect>& group_header_ideal_bounds()
@@ -94,7 +94,8 @@ class TabStripLayoutHelper {
   void UpdateGroupHeaderIndex(tab_groups::TabGroupId group);
 
   // Changes the active tab from |prev_active_index| to |new_active_index|.
-  void SetActiveTab(int prev_active_index, int new_active_index);
+  void SetActiveTab(absl::optional<size_t> prev_active_index,
+                    absl::optional<size_t> new_active_index);
 
   // Calculates the smallest width the tabs can occupy.
   int CalculateMinimumWidth();
@@ -152,8 +153,8 @@ class TabStripLayoutHelper {
   // True iff the slot at index |i| is a tab that is in a collapsed group.
   bool SlotIsCollapsedTab(int i) const;
 
-  // The owning tabstrip's controller.
-  const raw_ptr<const TabStripController> controller_;
+  // The owning TabContainer's controller.
+  const raw_ref<const TabContainerController> controller_;
 
   // Callback to get the necessary View objects from the owning tabstrip.
   GetTabsCallback get_tabs_callback_;

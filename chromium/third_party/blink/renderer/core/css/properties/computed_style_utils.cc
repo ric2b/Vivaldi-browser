@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/css/basic_shape_functions.h"
 #include "third_party/blink/renderer/core/css/css_border_image.h"
 #include "third_party/blink/renderer/core/css/css_border_image_slice_value.h"
+#include "third_party/blink/renderer/core/css/css_bracketed_value_list.h"
 #include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_counter_value.h"
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
@@ -15,7 +16,6 @@
 #include "third_party/blink/renderer/core/css/css_function_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_auto_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_integer_repeat_value.h"
-#include "third_party/blink/renderer/core/css/css_grid_line_names_value.h"
 #include "third_party/blink/renderer/core/css/css_initial_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
@@ -118,22 +118,16 @@ CSSValue* ComputedStyleUtils::CurrentColorOrValidColor(
     const ComputedStyle& style,
     const StyleColor& color,
     CSSValuePhase value_phase) {
-  // This function does NOT look at visited information, so that computed style
-  // doesn't expose that.
-  if (value_phase == CSSValuePhase::kComputedValue &&
-      color.IsSystemColorIncludingDeprecated() &&
-      RuntimeEnabledFeatures::CSSSystemColorComputeToSelfEnabled()) {
-    return CSSIdentifierValue::Create(color.GetColorKeyword());
-  }
   return cssvalue::CSSColor::Create(
-      color.Resolve(style.GetCurrentColor(), style.UsedColorScheme()).Rgb());
+      color.Resolve(style.GetCurrentColor(), style.UsedColorScheme()));
 }
 
 const blink::Color ComputedStyleUtils::BorderSideColor(
     const ComputedStyle& style,
     const StyleColor& color,
     EBorderStyle border_style,
-    bool visited_link) {
+    bool visited_link,
+    bool* is_current_color) {
   Color current_color;
   if (visited_link) {
     current_color = style.GetInternalVisitedCurrentColor();
@@ -147,7 +141,8 @@ const blink::Color ComputedStyleUtils::BorderSideColor(
   } else {
     current_color = style.GetCurrentColor();
   }
-  return color.Resolve(current_color, style.UsedColorScheme());
+  return color.Resolve(current_color, style.UsedColorScheme(),
+                       is_current_color);
 }
 
 const CSSValue* ComputedStyleUtils::BackgroundImageOrWebkitMaskImage(
@@ -567,14 +562,13 @@ CSSValue* ComputedStyleUtils::ValueForPositionOffset(
   if (offset.IsPercentOrCalc() && box && layout_object->IsPositioned()) {
     LayoutUnit containing_block_size;
     if (layout_object->IsStickyPositioned()) {
-      const LayoutBox* enclosing_scrollport_box = box->EnclosingScrollportBox();
-      DCHECK(enclosing_scrollport_box);
+      const LayoutBox* scroll_container = box->ContainingScrollContainer();
+      DCHECK(scroll_container);
       bool use_inline_size =
-          is_horizontal_property ==
-          enclosing_scrollport_box->IsHorizontalWritingMode();
-      containing_block_size =
-          use_inline_size ? enclosing_scrollport_box->ContentLogicalWidth()
-                          : enclosing_scrollport_box->ContentLogicalHeight();
+          is_horizontal_property == scroll_container->IsHorizontalWritingMode();
+      containing_block_size = use_inline_size
+                                  ? scroll_container->ContentLogicalWidth()
+                                  : scroll_container->ContentLogicalHeight();
     } else {
       containing_block_size =
           is_horizontal_property ==
@@ -1177,14 +1171,14 @@ class OrderedNamedLinesCollector {
            ordered_named_auto_repeat_grid_lines_.IsEmpty();
   }
   virtual void CollectLineNamesForIndex(
-      cssvalue::CSSGridLineNamesValue&,
+      cssvalue::CSSBracketedValueList&,
       size_t index,
       GridTrackListSerializationType named_line_type = kForGridElements) const;
 
  protected:
   enum NamedLinesType { kNamedLines, kAutoRepeatNamedLines };
   void AppendLines(
-      cssvalue::CSSGridLineNamesValue&,
+      cssvalue::CSSBracketedValueList&,
       size_t index,
       NamedLinesType,
       GridTrackListSerializationType named_line_type = kForGridElements) const;
@@ -1201,7 +1195,7 @@ class OrderedNamedLinesCollectorInsideAutoRepeat
       const OrderedNamedGridLines& ordered_named_auto_repeat_grid_lines)
       : OrderedNamedLinesCollector(ordered_named_grid_lines,
                                    ordered_named_auto_repeat_grid_lines) {}
-  void CollectLineNamesForIndex(cssvalue::CSSGridLineNamesValue&,
+  void CollectLineNamesForIndex(cssvalue::CSSBracketedValueList&,
                                 size_t index,
                                 GridTrackListSerializationType named_line_type =
                                     kForGridElements) const override;
@@ -1221,7 +1215,7 @@ class OrderedNamedLinesCollectorInGridLayout
         insertion_point_(insertion_point),
         auto_repeat_total_tracks_(auto_repeat_tracks_count),
         auto_repeat_track_list_length_(auto_repeat_track_list_length) {}
-  void CollectLineNamesForIndex(cssvalue::CSSGridLineNamesValue&,
+  void CollectLineNamesForIndex(cssvalue::CSSBracketedValueList&,
                                 size_t index,
                                 GridTrackListSerializationType named_line_type =
                                     kForGridElements) const override;
@@ -1234,7 +1228,7 @@ class OrderedNamedLinesCollectorInGridLayout
 
 // RJW
 void OrderedNamedLinesCollector::AppendLines(
-    cssvalue::CSSGridLineNamesValue& line_names_value,
+    cssvalue::CSSBracketedValueList& line_names_value,
     size_t index,
     NamedLinesType type,
     GridTrackListSerializationType named_line_type) const {
@@ -1267,7 +1261,7 @@ void OrderedNamedLinesCollector::AppendLines(
 }
 
 void OrderedNamedLinesCollector::CollectLineNamesForIndex(
-    cssvalue::CSSGridLineNamesValue& line_names_value,
+    cssvalue::CSSBracketedValueList& line_names_value,
     size_t i,
     GridTrackListSerializationType named_line_type) const {
   DCHECK(!IsEmpty());
@@ -1275,7 +1269,7 @@ void OrderedNamedLinesCollector::CollectLineNamesForIndex(
 }
 
 void OrderedNamedLinesCollectorInsideAutoRepeat::CollectLineNamesForIndex(
-    cssvalue::CSSGridLineNamesValue& line_names_value,
+    cssvalue::CSSBracketedValueList& line_names_value,
     size_t i,
     GridTrackListSerializationType named_line_type) const {
   DCHECK(!IsEmpty());
@@ -1284,7 +1278,7 @@ void OrderedNamedLinesCollectorInsideAutoRepeat::CollectLineNamesForIndex(
 
 // RJW
 void OrderedNamedLinesCollectorInGridLayout::CollectLineNamesForIndex(
-    cssvalue::CSSGridLineNamesValue& line_names_value,
+    cssvalue::CSSBracketedValueList& line_names_value,
     size_t i,
     GridTrackListSerializationType named_line_type) const {
   DCHECK(!IsEmpty());
@@ -1332,7 +1326,7 @@ void AddValuesForNamedGridLinesAtIndex(
   if (collector.IsEmpty())
     return;
 
-  auto* line_names = MakeGarbageCollected<cssvalue::CSSGridLineNamesValue>();
+  auto* line_names = MakeGarbageCollected<cssvalue::CSSBracketedValueList>();
   collector.CollectLineNamesForIndex(*line_names, i, named_line_type);
   if (line_names->length())
     list.Append(*line_names);
@@ -2485,40 +2479,40 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
   for (const auto& operation : filter_operations.Operations()) {
     FilterOperation* filter_operation = operation.Get();
     switch (filter_operation->GetType()) {
-      case FilterOperation::kReference:
+      case FilterOperation::OperationType::kReference:
         filter_value = MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kUrl);
         filter_value->Append(*MakeGarbageCollected<CSSStringValue>(
             To<ReferenceFilterOperation>(filter_operation)->Url()));
         break;
-      case FilterOperation::kGrayscale:
+      case FilterOperation::OperationType::kGrayscale:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kGrayscale);
         filter_value->Append(*CSSNumericLiteralValue::Create(
             To<BasicColorMatrixFilterOperation>(filter_operation)->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kSepia:
+      case FilterOperation::OperationType::kSepia:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kSepia);
         filter_value->Append(*CSSNumericLiteralValue::Create(
             To<BasicColorMatrixFilterOperation>(filter_operation)->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kSaturate:
+      case FilterOperation::OperationType::kSaturate:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kSaturate);
         filter_value->Append(*CSSNumericLiteralValue::Create(
             To<BasicColorMatrixFilterOperation>(filter_operation)->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kHueRotate:
+      case FilterOperation::OperationType::kHueRotate:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kHueRotate);
         filter_value->Append(*CSSNumericLiteralValue::Create(
             To<BasicColorMatrixFilterOperation>(filter_operation)->Amount(),
             CSSPrimitiveValue::UnitType::kDegrees));
         break;
-      case FilterOperation::kInvert:
+      case FilterOperation::OperationType::kInvert:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kInvert);
         filter_value->Append(*CSSNumericLiteralValue::Create(
@@ -2526,7 +2520,7 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
                 ->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kOpacity:
+      case FilterOperation::OperationType::kOpacity:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kOpacity);
         filter_value->Append(*CSSNumericLiteralValue::Create(
@@ -2534,7 +2528,7 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
                 ->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kBrightness:
+      case FilterOperation::OperationType::kBrightness:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kBrightness);
         filter_value->Append(*CSSNumericLiteralValue::Create(
@@ -2542,7 +2536,7 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
                 ->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kContrast:
+      case FilterOperation::OperationType::kContrast:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kContrast);
         filter_value->Append(*CSSNumericLiteralValue::Create(
@@ -2550,14 +2544,14 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
                 ->Amount(),
             CSSPrimitiveValue::UnitType::kNumber));
         break;
-      case FilterOperation::kBlur:
+      case FilterOperation::OperationType::kBlur:
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kBlur);
         filter_value->Append(*ZoomAdjustedPixelValue(
             To<BlurFilterOperation>(filter_operation)->StdDeviation().Value(),
             style));
         break;
-      case FilterOperation::kDropShadow: {
+      case FilterOperation::OperationType::kDropShadow: {
         const auto& drop_shadow_operation =
             To<DropShadowFilterOperation>(*filter_operation);
         filter_value =
@@ -2973,7 +2967,7 @@ CSSValueList* ComputedStyleUtils::ValuesForContainerShorthand(
   list->Append(*name);
 
   if (!(IsA<CSSIdentifierValue>(type) &&
-        To<CSSIdentifierValue>(*type).GetValueID() == CSSValueID::kNone)) {
+        To<CSSIdentifierValue>(*type).GetValueID() == CSSValueID::kNormal)) {
     list->Append(*type);
   }
 
@@ -3040,10 +3034,8 @@ const CSSValue* ComputedStyleUtils::ValueForStyleAutoColor(
     const StyleAutoColor& color,
     CSSValuePhase value_phase) {
   if (color.IsAutoColor()) {
-    return cssvalue::CSSColor::Create(
-        StyleColor::CurrentColor()
-            .Resolve(style.GetCurrentColor(), style.UsedColorScheme())
-            .Rgb());
+    return cssvalue::CSSColor::Create(StyleColor::CurrentColor().Resolve(
+        style.GetCurrentColor(), style.UsedColorScheme()));
   }
   return ComputedStyleUtils::CurrentColorOrValidColor(
       style, color.ToStyleColor(), value_phase);
@@ -3058,18 +3050,13 @@ CSSValue* ComputedStyleUtils::ValueForIntrinsicLength(
         intrinsic_length->GetLength(), style);
   }
 
-  if (RuntimeEnabledFeatures::ContainIntrinsicSizeAutoEnabled()) {
-    if (!intrinsic_length)
-      return CSSIdentifierValue::Create(CSSValueID::kNone);
-    CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-    if (intrinsic_length->HasAuto())
-      list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
-    list->Append(*length);
-    return list;
-  }
   if (!intrinsic_length)
-    return CSSIdentifierValue::Create(CSSValueID::kAuto);
-  return length;
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  if (intrinsic_length->HasAuto())
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
+  list->Append(*length);
+  return list;
 }
 
 std::unique_ptr<CrossThreadStyleValue>

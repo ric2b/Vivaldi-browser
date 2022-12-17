@@ -4,17 +4,24 @@
 
 #include "chrome/browser/ash/crosapi/url_handler_ash.h"
 
+#include "ash/webui/camera_app_ui/url_constants.h"
+#include "ash/webui/connectivity_diagnostics/url_constants.h"
+#include "ash/webui/diagnostics_ui/url_constants.h"
+#include "ash/webui/firmware_update_ui/url_constants.h"
 #include "ash/webui/help_app_ui/url_constants.h"
+#include "ash/webui/print_management/url_constants.h"
+#include "ash/webui/scanning/url_constants.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/crosapi/cpp/gurl_os_handler_utils.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "url/url_constants.h"
@@ -51,20 +58,20 @@ void ShowOsAppForProfile(Profile* profile,
     return;
   }
 
-  Browser* browser = web_app::FindSystemWebAppBrowser(profile, app_type,
-                                                      Browser::TYPE_APP, gurl);
+  Browser* browser =
+      ash::FindSystemWebAppBrowser(profile, app_type, Browser::TYPE_APP, gurl);
   if (browser) {
     // If there is a matching browser we simply activate it and be done!
     browser->window()->Activate();
     return;
   }
 
-  web_app::SystemAppLaunchParams params;
+  ash::SystemAppLaunchParams params;
   params.url = gurl;
   int64_t display_id =
       display::Screen::GetScreen()->GetDisplayForNewWindows().id();
-  web_app::LaunchSystemWebAppAsync(profile, app_type, params,
-                                   apps::MakeWindowInfo(display_id));
+  ash::LaunchSystemWebAppAsync(profile, app_type, params,
+                               std::make_unique<apps::WindowInfo>(display_id));
 }
 
 }  // namespace
@@ -118,6 +125,24 @@ bool UrlHandlerAsh::OpenUrlInternal(const GURL& url) {
   } else if (target_url == GURL(chrome::kOsUIHelpAppURL)) {
     app_id = ash::SystemWebAppType::HELP;
     target_url = GURL(ash::kChromeUIHelpAppURL);
+  } else if (target_url == GURL(chrome::kOsUIPrintManagementAppURL)) {
+    app_id = ash::SystemWebAppType::PRINT_MANAGEMENT;
+    target_url = GURL(ash::kChromeUIPrintManagementAppUrl);
+  } else if (target_url == GURL(chrome::kOsUIConnectivityDiagnosticsAppURL)) {
+    app_id = ash::SystemWebAppType::CONNECTIVITY_DIAGNOSTICS;
+    target_url = GURL(ash::kChromeUIConnectivityDiagnosticsUrl);
+  } else if (target_url == GURL(chrome::kOsUIScanningAppURL)) {
+    app_id = ash::SystemWebAppType::SCANNING;
+    target_url = GURL(ash::kChromeUIScanningAppUrl);
+  } else if (target_url == GURL(chrome::kOsUIDiagnosticsAppURL)) {
+    app_id = ash::SystemWebAppType::DIAGNOSTICS;
+    target_url = GURL(ash::kChromeUIDiagnosticsAppUrl);
+  } else if (target_url == GURL(chrome::kOsUIFirmwareUpdaterAppURL)) {
+    app_id = ash::SystemWebAppType::FIRMWARE_UPDATE;
+    target_url = GURL(ash::kChromeUIFirmwareUpdateAppURL);
+  } else if (short_target_url == GURL(ash::kChromeUICameraAppURL)) {
+    app_id = ash::SystemWebAppType::CAMERA;
+    target_url = url;
   } else if (ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(
                  target_url)) {
     app_id = ash::SystemWebAppType::OS_URL_HANDLER;

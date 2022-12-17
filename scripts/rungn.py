@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import sys, os, os.path
 import subprocess
 import argparse
@@ -15,6 +13,7 @@ is_linux = platform.system() == "Linux"
 is_mac = platform.system() == "Darwin"
 is_mac_arm64 = is_mac and platform.processor() == "arm"
 is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
+is_ios = os.access(os.path.join(sourcedir, ".enable_ios"), os.F_OK)
 use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_OK)
 use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
 use_gn_goma = os.access(os.path.join(sourcedir, ".enable_gn_goma"), os.F_OK)
@@ -66,6 +65,7 @@ checkout_oculus_sdk=false
 checkout_openxr=false
 build_with_chromium=true
 checkout_google_benchmark=false
+checkout_ios_webkit=false
 generate_location_tags = false
 """
 
@@ -202,7 +202,7 @@ gn_defines += ' google_default_client_id="" google_default_client_secret=""'
 if args.official:
   gn_defines += " is_official_build=true"
 
-if args.static:
+if args.static or is_ios: # IOS requires static linking
   gn_defines += " is_component_build=false"
 
 if args.no_hermetic:
@@ -258,7 +258,12 @@ if args.refresh or not args.args:
     else:
       ide_kind = "eclipse"
 
-  platform_target=' target_os="android"' if is_android else ""
+  if is_android:
+    platform_target=' target_os="android"'
+  elif is_ios:
+    platform_target=' target_os="ios"'
+  else:
+    platform_target=""
 
   def include_arg(mode):
     user_arg_files = []

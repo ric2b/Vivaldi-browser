@@ -16,6 +16,22 @@ namespace features {
 const base::Feature kAllowWindowDragUsingSystemDragDrop{
     "AllowWindowDragUsingSystemDragDrop", base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+const base::Feature kDesktopPWAsAppHomePage{"DesktopPWAsAppHomePage",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+
+// Enables showing the email of the flex org admin that setup CBCM in the
+// management disclosures.
+
+#if BUILDFLAG(IS_CHROMEOS)
+extern const base::Feature kFlexOrgManagementDisclosure{
+    "FlexOrgManagementDisclosure", base::FEATURE_DISABLED_BY_DEFAULT};
+#else
+extern const base::Feature kFlexOrgManagementDisclosure{
+    "FlexOrgManagementDisclosure", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 // Enables Chrome Labs menu in the toolbar. See https://crbug.com/1145666
 const base::Feature kChromeLabs{"ChromeLabs",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
@@ -128,6 +144,17 @@ const base::FeatureParam<int> kSideSearchPageActionLabelAnimationMaxCount{
 const base::Feature kClobberAllSideSearchSidePanels{
     "ClobberAllSideSearchSidePanels", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Feature that controls whether or not feature engagement configurations can be
+// used to control automatic triggering for side search.
+const base::Feature kSideSearchAutoTriggering{"SideSearchAutoTriggering",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Feature param that determines how many times a user has to return to a given
+// SRP before we automatically trigger the side search side panel for that SRP
+// on a subsequent navigation.
+const base::FeatureParam<int> kSideSearchAutoTriggeringReturnCount{
+    &kSideSearchAutoTriggering, "SideSearchAutoTriggeringReturnCount", 2};
+
 // Adds improved support for handling multiple contextual and global RHS browser
 // side panels. Designed specifically to handle the interim state before the v2
 // side panel project launches.
@@ -136,16 +163,15 @@ const base::Feature kSidePanelImprovedClobbering{
 
 const base::Feature kSidePanelJourneys{"SidePanelJourneys",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+// If enabled, and the main flag is also enabled, the Journeys omnibox
+// entrypoints open Journeys in Side Panel rather than the History WebUI.
+const base::FeatureParam<bool> kSidePanelJourneysOpensFromOmnibox{
+    &kSidePanelJourneys, "SidePanelJourneysOpensFromOmnibox", false};
 
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
 const base::Feature kScrollableTabStrip{"ScrollableTabStrip",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 const char kMinimumTabWidthFeatureParameterName[] = "minTabWidth";
-
-// Enables buttons to permanently appear on the tabstrip when
-// scrollable-tabstrip is enabled. https://crbug.com/1116118
-const base::Feature kScrollableTabStripButtons{
-    "ScrollableTabStripButtons", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Directly controls the "new" badge (as opposed to old "master switch"; see
 // https://crbug.com/1169907 for master switch deprecation and
@@ -161,8 +187,15 @@ const base::Feature kTabGroupsSave{"TabGroupsSave",
 
 // Enables preview images in tab-hover cards.
 // https://crbug.com/928954
-const base::Feature kTabHoverCardImages{"TabHoverCardImages",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kTabHoverCardImages {
+  "TabHoverCardImages",
+#if BUILDFLAG(IS_MAC)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
+
 const char kTabHoverCardImagesNotReadyDelayParameterName[] =
     "page_not_ready_delay";
 const char kTabHoverCardImagesLoadingDelayParameterName[] =

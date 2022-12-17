@@ -9,6 +9,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/android/navigation_handle_proxy.h"
@@ -28,6 +29,13 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
+
+namespace features {
+
+const base::Feature kNotifyJavaSpuriouslyToMeasurePerf{
+    "NotifyJavaSpuriouslyToMeasurePerf", base::FEATURE_DISABLED_BY_DEFAULT};
+
+}  // namespace features
 
 namespace content {
 
@@ -140,9 +148,20 @@ void WebContentsObserverProxy::PrimaryMainDocumentElementAvailable() {
 
 void WebContentsObserverProxy::DidStartNavigation(
     NavigationHandle* navigation_handle) {
-  Java_WebContentsObserverProxy_didStartNavigation(
-      AttachCurrentThread(), java_observer_,
-      navigation_handle->GetJavaNavigationHandle());
+  // TODO(crbug.com/1351884) Remove when NotifyJavaSupriouslyToMeasurePerf
+  // experiment is finished.
+  TRACE_EVENT0("browser", "Java_WebContentsObserverProxy_didStartNavigation");
+
+  if (navigation_handle->IsInPrimaryMainFrame()) {
+    Java_WebContentsObserverProxy_didStartNavigationInPrimaryMainFrame(
+        AttachCurrentThread(), java_observer_,
+        navigation_handle->GetJavaNavigationHandle());
+  } else if (base::FeatureList::IsEnabled(
+                 features::kNotifyJavaSpuriouslyToMeasurePerf)) {
+    Java_WebContentsObserverProxy_didStartNavigationNoop(
+        AttachCurrentThread(), java_observer_,
+        navigation_handle->GetJavaNavigationHandle());
+  }
 }
 
 void WebContentsObserverProxy::DidRedirectNavigation(
@@ -179,12 +198,24 @@ void WebContentsObserverProxy::DidFinishLoad(RenderFrameHost* render_frame_host,
 
 void WebContentsObserverProxy::DOMContentLoaded(
     RenderFrameHost* render_frame_host) {
-  JNIEnv* env = AttachCurrentThread();
-  Java_WebContentsObserverProxy_documentLoadedInFrame(
-      env, java_observer_, render_frame_host->GetProcess()->GetID(),
-      render_frame_host->GetRoutingID(),
-      render_frame_host->IsInPrimaryMainFrame(),
-      static_cast<jint>(render_frame_host->GetLifecycleState()));
+  // TODO(crbug.com/1351884) Remove when NotifyJavaSupriouslyToMeasurePerf
+  // experiment is finished.
+  TRACE_EVENT0("browser", "Java_WebContentsObserverProxy_DOMContentLoaded");
+
+  if (render_frame_host->IsInPrimaryMainFrame()) {
+    Java_WebContentsObserverProxy_documentLoadedInPrimaryMainFrame(
+        AttachCurrentThread(), java_observer_,
+        render_frame_host->GetProcess()->GetID(),
+        render_frame_host->GetRoutingID(),
+        static_cast<jint>(render_frame_host->GetLifecycleState()));
+  } else if (base::FeatureList::IsEnabled(
+                 features::kNotifyJavaSpuriouslyToMeasurePerf)) {
+    Java_WebContentsObserverProxy_documentLoadedInFrameNoop(
+        AttachCurrentThread(), java_observer_,
+        render_frame_host->GetProcess()->GetID(),
+        render_frame_host->GetRoutingID(), false,
+        static_cast<jint>(render_frame_host->GetLifecycleState()));
+  }
 }
 
 void WebContentsObserverProxy::NavigationEntryCommitted(

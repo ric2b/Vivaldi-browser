@@ -82,7 +82,11 @@ class ModeKeyedModel(collections.OrderedDict, Submodel):
                 value = self._CreateValue(value_obj[mode])
                 if mode == 'default':
                     mode = Modes.DEFAULT
-                assert mode in Modes.ALL and mode not in self[name]
+                assert mode in Modes.ALL, f"Invalid mode '{mode}' used in' \
+                    'definition for '{name}'"
+
+                assert mode not in self[
+                    name], f"{mode} mode for '{name}' defined multiple times"
                 self[name][mode] = value
         else:
             self[name][Modes.DEFAULT] = self._CreateValue(value_obj)
@@ -187,6 +191,13 @@ class ColorModel(ModeKeyedModel):
     # Returns a Color that is the final RGBA value for |name| in |mode|.
     def ResolveToRGBA(self, name, mode):
         return self._ResolveColorToRGBA(self.Resolve(name, mode), mode)
+
+    # Returns a Color that is the hexadecimal string for |name| in |mode|.
+    def ResolveToHexString(self, name, mode):
+        color = self._ResolveColorToRGBA(self.Resolve(name, mode), mode)
+        opacity = int(float(repr(color.opacity)) * 255)
+        return '#{:02x}{:02x}{:02x}{:02x}'.format(color.r, color.g, color.b,
+                                                  opacity)
 
     # Returns a Color that is the final RGBA value for |color| in |mode|.
     def _ResolveColorToRGBA(self, color, mode):
@@ -321,13 +332,14 @@ class Model(object):
             return f'{namespace}.{name}'
         return name
 
-    def PostProcess(self):
+    def PostProcess(self, resolve_blended_colors=True):
         '''Called after all variables have been added to perform operations that
            require a complete worldview.
         '''
-        # Resolve blended colors after all the files are added because some
-        # color dependencies are between different files.
-        self.colors._ResolveBlendedColors()
+        if resolve_blended_colors:
+            # Resolve blended colors after all the files are added because some
+            # color dependencies are between different files.
+            self.colors._ResolveBlendedColors()
 
         self.Validate()
 
@@ -351,6 +363,18 @@ class Model(object):
                 raise ValueError("Cannot find opacity %s referenced by %s" %
                                  (name, referrer))
 
+        def CheckColor(color, name):
+            if color.var:
+                CheckColorReference(color.var, name)
+            if color.rgb_var:
+                CheckColorReference(color.RGBVarToVar(), name)
+            if color.opacity and color.opacity.var:
+                CheckOpacityReference(color.opacity.var, name)
+            if color.blended_colors:
+                assert len(color.blended_colors) == 2
+                CheckColor(color.blended_colors[0], name)
+                CheckColor(color.blended_colors[1], name)
+
         RESERVED_SUFFIXES = ['_' + s for s in Modes.ALL + ['rgb', 'inverted']]
 
         # Check all colors in all modes refer to colors that exist in the
@@ -365,17 +389,9 @@ class Model(object):
             if Modes.DEFAULT not in mode_values:
                 raise ValueError("Color %s not defined for default mode" %
                                  name)
+
             for mode, color in mode_values.items():
-                if color.var:
-                    CheckColorReference(color.var, name)
-                if color.rgb_var:
-                    CheckColorReference(color.RGBVarToVar(), name)
-                if color.opacity and color.opacity.var:
-                    CheckOpacityReference(color.opacity.var, name)
-                if color.blended_colors:
-                    assert len(color.blended_colors) == 2
-                    CheckColorReference(color.blended_colors[0], name)
-                    CheckColorReference(color.blended_colors[1], name)
+                CheckColor(color, name)
 
         for name, mode_values in opacities.items():
             for mode, opacity in mode_values.items():

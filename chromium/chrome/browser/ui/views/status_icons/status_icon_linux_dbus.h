@@ -9,6 +9,7 @@
 
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -18,8 +19,8 @@
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/linux/status_icon_linux.h"
 #include "ui/views/controls/menu/menu_runner.h"
-#include "ui/views/linux_ui/status_icon_linux.h"
 
 namespace gfx {
 class ImageSkia;
@@ -30,7 +31,7 @@ class DbusProperties;
 
 // A status icon following the StatusNotifierItem specification.
 // https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem/
-class StatusIconLinuxDbus : public views::StatusIconLinux,
+class StatusIconLinuxDbus : public ui::StatusIconLinux,
                             public ui::SimpleMenuModel::Delegate,
                             public base::RefCounted<StatusIconLinuxDbus> {
  public:
@@ -103,8 +104,8 @@ class StatusIconLinuxDbus : public views::StatusIconLinux,
   scoped_refptr<dbus::Bus> bus_;
 
   int service_id_ = 0;
-  dbus::ObjectProxy* watcher_ = nullptr;
-  dbus::ExportedObject* item_ = nullptr;
+  raw_ptr<dbus::ObjectProxy> watcher_ = nullptr;
+  raw_ptr<dbus::ExportedObject> item_ = nullptr;
 
   base::RepeatingCallback<void(bool)> barrier_;
 

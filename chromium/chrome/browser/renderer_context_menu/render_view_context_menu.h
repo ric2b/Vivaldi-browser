@@ -23,6 +23,7 @@
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "content/public/browser/context_menu_params.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -48,14 +49,9 @@ class LinkToTextMenuObserver;
 class PrintPreviewContextMenuObserver;
 class Profile;
 class QuickAnswersMenuObserver;
-class SharedClipboardContextMenuObserver;
 class SpellingMenuObserver;
 class SpellingOptionsSubMenuObserver;
 class NotesSubMenuObserver;
-
-namespace ash {
-class SystemWebAppDelegate;
-}
 
 namespace content {
 class RenderFrameHost;
@@ -82,6 +78,12 @@ class DataTransferEndpoint;
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+namespace ash {
+class SystemWebAppDelegate;
+}
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
 namespace policy {
 class DlpRulesManager;
 }  // namespace policy
@@ -152,7 +154,7 @@ class RenderViewContextMenu
   // hold escape to exit exclusive access mode.
   bool IsPressAndHoldEscRequiredToExitFullscreen() const;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   virtual const policy::DlpRulesManager* GetDlpRulesManager() const;
 #endif
 
@@ -191,9 +193,11 @@ class RenderViewContextMenu
   // Gets the extension (if any) associated with the WebContents that we're in.
   const extensions::Extension* GetExtension() const;
 
-  // Queries the translate service to obtain the user's transate target
-  // language.
-  std::string GetTargetLanguage() const;
+  // Queries the Translate service to obtain the user's Translate target
+  // language and returns the language name in its same locale.
+  std::u16string GetTargetLanguageDisplayName() const;
+
+  bool IsInProgressiveWebApp() const;
 
   void AppendDeveloperItems();
   void AppendDevtoolsForUnpackedExtensions();
@@ -212,11 +216,16 @@ class RenderViewContextMenu
   void AppendExitFullscreenItem();
   void AppendCopyItem();
   void AppendLinkToTextItems();
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  void AppendPdfOcrItem();
+#endif
   void AppendPrintItem();
+  void AppendPartialTranslateItem();
   void AppendMediaRouterItem();
   void AppendReadAnythingItem();
   void AppendRotationItems();
-  void AppendEditableItems();
+  void AppendSpellingAndSearchSuggestionItems();
+  void AppendOtherEditableItems();
   void AppendLanguageSettings();
   void AppendSpellingSuggestionItems();
   // Returns true if the items were appended. This might not happen in all
@@ -237,10 +246,10 @@ class RenderViewContextMenu
 #if !BUILDFLAG(IS_FUCHSIA)
   void AppendClickToCallItem();
 #endif
-  void AppendSharedClipboardItem();
   void AppendRegionSearchItem();
   bool AppendFollowUnfollowItem();
   void AppendSendTabToSelfItem(bool add_separator);
+  void AppendUserNotesItems();
   bool AppendQRCodeGeneratorItem(bool for_image,
                                  bool draw_icon,
                                  bool add_separator);
@@ -266,8 +275,9 @@ class RenderViewContextMenu
   bool IsQRCodeGeneratorEnabled() const;
   bool IsRouteMediaEnabled() const;
   bool IsOpenLinkOTREnabled() const;
-  bool IsSearchWebForEnabled() const;
+  bool IsOpenLinkAllowedByDlp(const GURL& link_url) const;
   bool IsRegionSearchEnabled() const;
+  bool IsAddANoteEnabled() const;
 
   // Command execution functions.
   void ExecOpenWebApp();
@@ -281,6 +291,7 @@ class RenderViewContextMenu
   void ExecCopyLinkText();
   void ExecCopyImageAt();
   void ExecSearchLensForImage();
+  void ExecAddANote();
   void ExecRegionSearch(int event_flags,
                         bool is_google_default_search_provider);
   void ExecSearchWebForImage();
@@ -296,11 +307,15 @@ class RenderViewContextMenu
   void ExecPrint();
   void ExecRouteMedia();
   void ExecTranslate();
+  void ExecPartialTranslate();
   void ExecLanguageSettings(int event_flags);
   void ExecProtocolHandlerSettings(int event_flags);
   void ExecPictureInPicture();
   // Implemented in RenderViewContextMenuViews.
   void ExecOpenInReadAnything() override {}
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  void ExecRunPdfOcr();
+#endif
 
   void MediaPlayerActionAt(const gfx::Point& location,
                            const blink::mojom::MediaPlayerAction& action);
@@ -383,12 +398,10 @@ class RenderViewContextMenu
   std::unique_ptr<ClickToCallContextMenuObserver>
       click_to_call_context_menu_observer_;
 
-  // Shared clipboard menu observer.
-  std::unique_ptr<SharedClipboardContextMenuObserver>
-      shared_clipboard_context_menu_observer_;
-
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // The system app (if any) associated with the WebContents we're in.
   raw_ptr<const ash::SystemWebAppDelegate> system_app_ = nullptr;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // A one-time callback that will be called the next time a plugin action is
   // executed from a given render frame.

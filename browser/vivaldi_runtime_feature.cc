@@ -272,7 +272,7 @@ bool Enable(content::BrowserContext* browser_context,
   profile = profile->GetOriginalProfile();
   const base::Value* list_value =
       profile->GetPrefs()->Get(vivaldiprefs::kVivaldiExperiments);
-  std::vector<base::Value> updated;
+  base::Value::List updated;
   for (const base::Value& v : list_value->GetList()) {
     if (!v.is_string())
       continue;
@@ -293,14 +293,14 @@ bool Enable(content::BrowserContext* browser_context,
     if (feature_name == name)
       continue;
 
-    updated.push_back(v.Clone());
+    updated.Append(v.Clone());
   }
 
   std::string value_string(feature_name.data(), feature_name.size());
   if (!enabled) {
     value_string.insert(0, 1, negation_prefix);
   }
-  updated.emplace_back(std::move(value_string));
+  updated.Append(std::move(value_string));
 
   profile->GetPrefs()->Set(vivaldiprefs::kVivaldiExperiments,
                            base::Value(std::move(updated)));

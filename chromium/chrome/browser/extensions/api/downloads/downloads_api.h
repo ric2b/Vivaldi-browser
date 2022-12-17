@@ -59,6 +59,8 @@ extern const char kOpenPermission[];
 extern const char kShelfDisabled[];
 extern const char kShelfPermission[];
 extern const char kTooManyListeners[];
+extern const char kUiDisabled[];
+extern const char kUiPermission[];
 extern const char kUnexpectedDeterminer[];
 extern const char kUserGesture[];
 
@@ -299,6 +301,21 @@ class DownloadsSetShelfEnabledFunction : public ExtensionFunction {
   ~DownloadsSetShelfEnabledFunction() override;
 };
 
+class DownloadsSetUiOptionsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("downloads.setUiOptions", DOWNLOADS_SETUIOPTIONS)
+  DownloadsSetUiOptionsFunction();
+
+  DownloadsSetUiOptionsFunction(const DownloadsSetUiOptionsFunction&) = delete;
+  DownloadsSetUiOptionsFunction& operator=(
+      const DownloadsSetUiOptionsFunction&) = delete;
+
+  ResponseAction Run() override;
+
+ protected:
+  ~DownloadsSetUiOptionsFunction() override;
+};
+
 class DownloadsGetFileIconFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("downloads.getFileIcon", DOWNLOADS_GETFILEICON)
@@ -373,8 +390,10 @@ class ExtensionDownloadsEventRouter
 
   ~ExtensionDownloadsEventRouter() override;
 
-  void SetShelfEnabled(const extensions::Extension* extension, bool enabled);
-  bool IsShelfEnabled() const;
+  void SetUiEnabled(const extensions::Extension* extension, bool enabled);
+  bool IsUiEnabled() const;
+
+  bool IsDownloadObservedByExtension() const;
 
   // Called by ChromeDownloadManagerDelegate during the filename determination
   // process, allows extensions to change the item's target filename. If no
@@ -415,7 +434,7 @@ class ExtensionDownloadsEventRouter
 
   raw_ptr<Profile> profile_;
   download::AllDownloadItemNotifier notifier_;
-  std::set<const extensions::Extension*> shelf_disabling_extensions_;
+  std::set<const extensions::Extension*> ui_disabling_extensions_;
 
   base::Time last_checked_removal_;
 

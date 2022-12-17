@@ -32,7 +32,9 @@
 #include "chrome/grit/browser_resources.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
@@ -51,23 +53,20 @@ using ThrottleCheckResult = content::NavigationThrottle::ThrottleCheckResult;
 
 // TODO(crbug.com/1251490 ) Update to make disabled page works in Lacros.
 std::string GetAppDisabledErrorPage() {
-  base::DictionaryValue strings;
+  base::Value::Dict strings;
 
-  strings.SetStringKey(
-      "disabledPageHeader",
-      l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_HEADER));
-  strings.SetStringKey(
-      "disabledPageTitle",
-      l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_TITLE));
-  strings.SetStringKey(
-      "disabledPageMessage",
-      l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_MESSAGE));
+  strings.Set("disabledPageHeader",
+              l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_HEADER));
+  strings.Set("disabledPageTitle",
+              l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_TITLE));
+  strings.Set("disabledPageMessage",
+              l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_MESSAGE));
   std::string html =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           IDR_CHROME_URLS_DISABLED_PAGE_HTML);
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   webui::SetLoadTimeDataDefaults(app_locale, &strings);
-  return webui::GetI18nTemplateHtml(html, &strings);
+  return webui::GetI18nTemplateHtml(html, strings);
 }
 
 bool IsAppDisabled(const std::string& app_id) {
@@ -85,7 +84,7 @@ bool IsAppDisabled(const std::string& app_id) {
 // Usually we want to only capture navigations from clicking a link. For a
 // subset of apps, we want to capture typing into the omnibox as well.
 bool ShouldOnlyCaptureLinks(const std::vector<std::string>& app_ids) {
-  for (auto app_id : app_ids) {
+  for (const auto& app_id : app_ids) {
     if (app_id == ash::kChromeUITrustedProjectorSwaAppId)
       return false;
   }
@@ -125,6 +124,11 @@ GURL RedirectUrlIfSwa(Profile* profile,
     // TODO(b/211787536): Remove the timestamp after we update the trusted URL
     // to match the user's navigations through the post message api.
     ss << override_url << "?timestamp=" << clock->NowTicks();
+
+    if (url.has_query()) {
+      ss << '&' << url.query();
+    }
+
     GURL result(ss.str());
     DCHECK(result.is_valid());
     return result;
@@ -204,7 +208,7 @@ bool CommonAppsNavigationThrottle::ShouldCancelNavigation(
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
 
   std::vector<std::string> app_ids =
-      proxy->GetAppIdsForUrl(url, /*exclude_browser=*/true);
+      proxy->GetAppIdsForUrl(url, /*exclude_browsers=*/true);
 
   if (app_ids.empty())
     return false;
@@ -243,18 +247,25 @@ bool CommonAppsNavigationThrottle::ShouldCancelNavigation(
   if (handle->IsInPrerenderedMainFrame())
     return true;
 
-  auto launch_source = navigate_from_link()
-                           ? apps::mojom::LaunchSource::kFromLink
-                           : apps::mojom::LaunchSource::kFromOmnibox;
+  auto launch_source = navigate_from_link() ? LaunchSource::kFromLink
+                                            : LaunchSource::kFromOmnibox;
   GURL redirected_url =
       RedirectUrlIfSwa(profile, preferred_app_id.value(), url, clock_);
-  proxy->LaunchAppWithUrl(
-      preferred_app_id.value(),
-      GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerWindow,
-                    WindowOpenDisposition::NEW_WINDOW,
-                    /*prefer_container=*/true),
-      redirected_url, launch_source,
-      apps::MakeWindowInfo(display::kDefaultDisplayId));
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    proxy->LaunchAppWithUrl(
+        preferred_app_id.value(),
+        GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                      /*prefer_container=*/true),
+        redirected_url, launch_source,
+        std::make_unique<WindowInfo>(display::kDefaultDisplayId));
+  } else {
+    proxy->LaunchAppWithUrl(
+        preferred_app_id.value(),
+        GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                      /*prefer_container=*/true),
+        redirected_url, ConvertLaunchSourceToMojomLaunchSource(launch_source),
+        apps::MakeWindowInfo(display::kDefaultDisplayId));
+  }
 
   const GURL& last_committed_url = web_contents->GetLastCommittedURL();
   if (!last_committed_url.is_valid() || last_committed_url.IsAboutBlank() ||
@@ -279,9 +290,9 @@ bool CommonAppsNavigationThrottle::ShouldShowDisablePage(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   std::vector<std::string> app_ids =
       apps::AppServiceProxyFactory::GetForProfile(profile)->GetAppIdsForUrl(
-          url, /*exclude_browser=*/true, /*exclude_browser_tab_apps=*/false);
+          url, /*exclude_browsers=*/true, /*exclude_browser_tab_apps=*/false);
 
-  for (auto app_id : app_ids) {
+  for (const auto& app_id : app_ids) {
     if (IsAppDisabled(app_id)) {
       return true;
     }

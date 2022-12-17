@@ -14,10 +14,10 @@
 #include "components/segmentation_platform/internal/execution/default_model_manager.h"
 #include "components/segmentation_platform/internal/execution/execution_request.h"
 #include "components/segmentation_platform/internal/metadata/metadata_utils.h"
-#include "components/segmentation_platform/internal/proto/model_metadata.pb.h"
 #include "components/segmentation_platform/internal/proto/model_prediction.pb.h"
 #include "components/segmentation_platform/internal/scheduler/execution_service.h"
 #include "components/segmentation_platform/public/model_provider.h"
+#include "components/segmentation_platform/public/proto/model_metadata.pb.h"
 
 namespace segmentation_platform {
 namespace {
@@ -271,6 +271,7 @@ void SegmentResultProviderImpl::ExecuteModelAndGetScore(
   // The pointer is kept alive by the `request_state`.
   request->segment_info = segment_info;
   request->record_metrics_for_default = true;
+  request->input_context = request_state->options->input_context;
   request->callback =
       base::BindOnce(&SegmentResultProviderImpl::OnModelExecuted,
                      weak_ptr_factory_.GetWeakPtr(), std::move(request_state),

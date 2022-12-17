@@ -9,6 +9,7 @@
 #include <string>
 #include <type_traits>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
@@ -17,6 +18,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/values.h"
 #include "components/autofill_assistant/browser/base_browsertest.h"
@@ -24,6 +26,7 @@
 #include "components/autofill_assistant/browser/fake_script_executor_delegate.h"
 #include "components/autofill_assistant/browser/fake_script_executor_ui_delegate.h"
 #include "components/autofill_assistant/browser/js_flow_executor_impl.h"
+#include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/mock_script_executor_delegate.h"
 #include "components/autofill_assistant/browser/model.pb.h"
 #include "components/autofill_assistant/browser/script.h"
@@ -32,6 +35,7 @@
 #include "components/autofill_assistant/browser/service/mock_service.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/web/mock_web_controller.h"
+#include "components/version_info/version_info.h"
 #include "content/public/test/browser_test.h"
 #include "content/shell/browser/shell.h"
 #include "net/http/http_status_code.h"
@@ -48,6 +52,8 @@ using ::testing::Eq;
 using ::testing::Field;
 using ::testing::Ne;
 using ::testing::NiceMock;
+using ::testing::NotNull;
+using ::testing::Optional;
 using ::testing::Pair;
 using ::testing::Pointee;
 using ::testing::Property;
@@ -98,6 +104,7 @@ class JsFlowExecutorImplBrowserTest : public BaseBrowserTest {
                                 base::Unretained(this), run_loop.QuitClosure(),
                                 &status, std::ref(result_value)));
     run_loop.Run();
+
     return status;
   }
 
@@ -113,6 +120,7 @@ class JsFlowExecutorImplBrowserTest : public BaseBrowserTest {
 
  protected:
   NiceMock<MockJsFlowExecutorImplDelegate> mock_delegate_;
+  base::HistogramTester histogram_tester_;
 
   std::unique_ptr<JsFlowExecutorImpl> flow_executor_;
   std::unique_ptr<JsFlowDevtoolsWrapper> js_flow_devtools_wrapper_;
@@ -121,11 +129,25 @@ class JsFlowExecutorImplBrowserTest : public BaseBrowserTest {
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest, SmokeTest) {
   EXPECT_THAT(RunTest(std::string()),
               Property(&ClientStatus::proto_status, ACTION_APPLIED));
+
+  histogram_tester_.ExpectBucketCount(
+      "Android.AutofillAssistant.JsFlowStartedEvent",
+      Metrics::JsFlowStartedEvent::EXECUTOR_STARTED, 1);
+  histogram_tester_.ExpectBucketCount(
+      "Android.AutofillAssistant.JsFlowStartedEvent",
+      Metrics::JsFlowStartedEvent::SCRIPT_STARTED, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest, InvalidJs) {
   EXPECT_THAT(RunTest("Not valid Javascript"),
               Property(&ClientStatus::proto_status, UNEXPECTED_JS_ERROR));
+
+  histogram_tester_.ExpectBucketCount(
+      "Android.AutofillAssistant.JsFlowStartedEvent",
+      Metrics::JsFlowStartedEvent::EXECUTOR_STARTED, 1);
+  histogram_tester_.ExpectBucketCount(
+      "Android.AutofillAssistant.JsFlowStartedEvent",
+      Metrics::JsFlowStartedEvent::SCRIPT_STARTED, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,
@@ -272,9 +294,6 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest, ReturnInteger) {
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest, ReturningStringFails) {
-  // Return value checking is more comprehensively tested in
-  // js_flow_util::ContainsOnlyAllowedValues. This test is just to ensure that
-  // that util is actually used for JS flow return values.
   std::unique_ptr<base::Value> result;
   ClientStatus status = RunTest("return 'Strings are not allowed!';", result);
   EXPECT_EQ(status.proto_status(), INVALID_ACTION);
@@ -292,7 +311,8 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest, ReturnDictionary) {
               "keyD": 123.45,
               "keyE": null
             },
-            "keyF": [false, false, true]
+            "keyF": [false, false, true],
+            "keyG": "string"
           };
         )",
       result);
@@ -305,7 +325,8 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest, ReturnDictionary) {
             "keyD": 123.45,
             "keyE": null
           },
-        "keyF": [false, false, true]
+        "keyF": [false, false, true],
+        "keyG": "string"
       }
     )"));
 }
@@ -366,6 +387,39 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,
+                       LineOffsetIsSetCorrectly) {
+  const std::string js_flow =
+      // We override the prepareStackTrace function to gain access to the
+      // CallSite objects (see v8.dev/docs/stack-trace-api).
+      // NOTE: There is no newline below.
+      "Error.prepareStackTrace = (_, structuredStack) => structuredStack;"
+      "const topStackFrame = new Error().stack[0];"
+      "return topStackFrame.getLineNumber() - LINE_OFFSET;";
+
+  std::unique_ptr<base::Value> js_return_value;
+  ASSERT_THAT(RunTest(js_flow, js_return_value),
+              Property(&ClientStatus::proto_status, ACTION_APPLIED));
+
+  ASSERT_THAT(js_return_value, NotNull());
+  // line number is 1-based in getLineNumber so this is the first line
+  EXPECT_THAT(js_return_value->GetIfInt(), Optional(1));
+}
+
+IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,
+                       VersionNumberIsSetCorrectly) {
+  const std::string js_flow = "return {versionNumber: CHROME_VERSION_NUMBER};";
+
+  std::unique_ptr<base::Value> js_return_value;
+  ASSERT_THAT(RunTest(js_flow, js_return_value),
+              Property(&ClientStatus::proto_status, ACTION_APPLIED));
+
+  ASSERT_THAT(js_return_value, NotNull());
+  EXPECT_TRUE(js_return_value->is_dict());
+  EXPECT_THAT(js_return_value->GetIfDict()->FindString("versionNumber"),
+              Pointee(version_info::GetVersionNumber()));
+}
+
+IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,
                        UnserializableRunNativeActionString) {
   std::unique_ptr<base::Value> result;
   EXPECT_CALL(mock_delegate_, RunNativeAction).Times(0);
@@ -415,6 +469,13 @@ IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,
       result);
   ASSERT_EQ(status.proto_status(), ACTION_APPLIED);
   EXPECT_EQ(*result, base::Value(2));
+
+  histogram_tester_.ExpectBucketCount(
+      "Android.AutofillAssistant.JsFlowStartedEvent",
+      Metrics::JsFlowStartedEvent::EXECUTOR_STARTED, 2);
+  histogram_tester_.ExpectBucketCount(
+      "Android.AutofillAssistant.JsFlowStartedEvent",
+      Metrics::JsFlowStartedEvent::FAILED_ALREADY_RUNNING, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(JsFlowExecutorImplBrowserTest,

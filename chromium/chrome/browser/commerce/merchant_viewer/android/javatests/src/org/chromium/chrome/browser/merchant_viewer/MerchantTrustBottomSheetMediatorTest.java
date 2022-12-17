@@ -66,6 +66,7 @@ import org.chromium.url.GURL;
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@SuppressWarnings("DoNotMock") // Mocking GURL
 public class MerchantTrustBottomSheetMediatorTest {
     @Rule
     public TestRule mProcessor = new Features.JUnitProcessor();
@@ -258,7 +259,8 @@ public class MerchantTrustBottomSheetMediatorTest {
 
         assertNull(mToolbarModel.get(BottomSheetToolbarProperties.FAVICON_ICON_DRAWABLE));
 
-        mWebContentsObserverCaptor.getValue().didStartNavigation(mMockNavigationHandle);
+        mWebContentsObserverCaptor.getValue().didStartNavigationInPrimaryMainFrame(
+                mMockNavigationHandle);
         verify(mMockMetrics, times(1)).recordNavigateLinkOnBottomSheet();
         verify(mMockFaviconHelper, times(1))
                 .getLocalFaviconImageForURL(any(Profile.class), any(GURL.class), anyInt(),

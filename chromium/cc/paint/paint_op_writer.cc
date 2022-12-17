@@ -544,7 +544,9 @@ void PaintOpWriter::Write(const PaintShader* shader,
   }
 
   WriteSize(shader->colors_.size());
-  WriteData(shader->colors_.size() * sizeof(SkColor), shader->colors_.data());
+  WriteData(shader->colors_.size() *
+                (shader->colors_.size() > 0 ? sizeof(shader->colors_[0]) : 0u),
+            shader->colors_.data());
 
   WriteSize(shader->positions_.size());
   WriteData(shader->positions_.size() * sizeof(SkScalar),
@@ -715,7 +717,8 @@ void PaintOpWriter::Write(const DropShadowPaintFilter& filter,
   WriteSimple(filter.dy());
   WriteSimple(filter.sigma_x());
   WriteSimple(filter.sigma_y());
-  WriteSimple(filter.color());
+  // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
+  WriteSimple(filter.color().toSkColor());
   WriteEnum(filter.shadow_mode());
   Write(filter.input().get(), current_ctm);
 }
@@ -879,7 +882,8 @@ void PaintOpWriter::Write(const LightingDistantPaintFilter& filter,
                           const SkM44& current_ctm) {
   WriteEnum(filter.lighting_type());
   WriteSimple(filter.direction());
-  WriteSimple(filter.light_color());
+  // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
+  WriteSimple(filter.light_color().toSkColor());
   WriteSimple(filter.surface_scale());
   WriteSimple(filter.kconstant());
   WriteSimple(filter.shininess());
@@ -890,7 +894,8 @@ void PaintOpWriter::Write(const LightingPointPaintFilter& filter,
                           const SkM44& current_ctm) {
   WriteEnum(filter.lighting_type());
   WriteSimple(filter.location());
-  WriteSimple(filter.light_color());
+  // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
+  WriteSimple(filter.light_color().toSkColor());
   WriteSimple(filter.surface_scale());
   WriteSimple(filter.kconstant());
   WriteSimple(filter.shininess());
@@ -904,7 +909,8 @@ void PaintOpWriter::Write(const LightingSpotPaintFilter& filter,
   WriteSimple(filter.target());
   WriteSimple(filter.specular_exponent());
   WriteSimple(filter.cutoff_angle());
-  WriteSimple(filter.light_color());
+  // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
+  WriteSimple(filter.light_color().toSkColor());
   WriteSimple(filter.surface_scale());
   WriteSimple(filter.kconstant());
   WriteSimple(filter.shininess());

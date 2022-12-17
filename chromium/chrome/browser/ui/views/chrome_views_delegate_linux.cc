@@ -12,7 +12,7 @@
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/version_info/channel.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/views/linux_ui/linux_ui.h"
+#include "ui/linux/linux_ui.h"
 
 namespace {
 
@@ -39,17 +39,32 @@ int GetWindowIconResourceId() {
 }
 #endif  // BUILDFLAG(IS_LINUX)
 
+NativeWidgetType GetNativeWidgetTypeForInitParams(
+    const views::Widget::InitParams& params) {
+  // If this is a security surface, always use a toplevel window,
+  // otherwise it's possible for things like menus to obscure the view.
+  if (params.z_order &&
+      params.z_order.value() == ui::ZOrderLevel::kSecuritySurface) {
+    return NativeWidgetType::DESKTOP_NATIVE_WIDGET_AURA;
+  }
+
+  if (params.requires_accelerated_widget)
+    return NativeWidgetType::DESKTOP_NATIVE_WIDGET_AURA;
+
+  return (params.parent &&
+          params.type != views::Widget::InitParams::TYPE_MENU &&
+          params.type != views::Widget::InitParams::TYPE_TOOLTIP)
+             ? NativeWidgetType::NATIVE_WIDGET_AURA
+             : NativeWidgetType::DESKTOP_NATIVE_WIDGET_AURA;
+}
+
 }  // namespace
 
 views::NativeWidget* ChromeViewsDelegate::CreateNativeWidget(
     views::Widget::InitParams* params,
     views::internal::NativeWidgetDelegate* delegate) {
-  NativeWidgetType native_widget_type =
-      (params->parent && params->type != views::Widget::InitParams::TYPE_MENU &&
-       params->type != views::Widget::InitParams::TYPE_TOOLTIP)
-          ? NativeWidgetType::NATIVE_WIDGET_AURA
-          : NativeWidgetType::DESKTOP_NATIVE_WIDGET_AURA;
-  return ::CreateNativeWidget(native_widget_type, params, delegate);
+  return ::CreateNativeWidget(GetNativeWidgetTypeForInitParams(*params), params,
+                              delegate);
 }
 
 #if BUILDFLAG(IS_LINUX)

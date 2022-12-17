@@ -6,19 +6,19 @@
  * @fileoverview 'address-edit-dialog' is the dialog that allows editing a saved
  * address.
  */
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../settings_vars.css.js';
 import '../controls/settings_textarea.js';
 
-import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {flush, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -77,16 +77,16 @@ export class SettingsAddressEditDialogElement extends
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('showHonorific');
-        }
-      }
+        },
+      },
     };
   }
 
   address: chrome.autofillPrivate.AddressEntry;
   private title_: string;
-  private countries_: Array<chrome.autofillPrivate.CountryEntry>;
+  private countries_: chrome.autofillPrivate.CountryEntry[];
   private countryCode_: string|undefined;
-  private addressWrapper_: Array<Array<AddressComponentUI>>;
+  private addressWrapper_: AddressComponentUI[][];
   private phoneNumber_: string;
   private email_: string;
   private canSave_: boolean;
@@ -368,7 +368,7 @@ export interface CountryDetailManager {
    * The default country will be first, followed by a separator, followed by
    * an alphabetized list of countries available.
    */
-  getCountryList(): Promise<Array<chrome.autofillPrivate.CountryEntry>>;
+  getCountryList(): Promise<chrome.autofillPrivate.CountryEntry[]>;
 
   /**
    * Gets the address format for a given country code.
@@ -382,7 +382,7 @@ export interface CountryDetailManager {
  */
 export class CountryDetailManagerImpl implements CountryDetailManager {
   getCountryList() {
-    return new Promise<Array<chrome.autofillPrivate.CountryEntry>>(function(
+    return new Promise<chrome.autofillPrivate.CountryEntry[]>(function(
         callback) {
       chrome.autofillPrivate.getCountryList(callback);
     });

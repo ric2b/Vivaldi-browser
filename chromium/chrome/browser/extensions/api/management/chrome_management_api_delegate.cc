@@ -47,6 +47,7 @@
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -71,7 +72,6 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/web_applications/web_app_utils.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -336,6 +336,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
       // These modes are not supported by the extension app backend.
       case web_app::DisplayMode::kWindowControlsOverlay:
       case web_app::DisplayMode::kTabbed:
+      case web_app::DisplayMode::kBorderless:
       case web_app::DisplayMode::kUndefined:
         info.launch_type = extensions::api::management::LAUNCH_TYPE_NONE;
         break;
@@ -357,9 +358,9 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
   DCHECK(provider);
   absl::optional<web_app::UserDisplayMode> display_mode =
       provider->registrar().GetAppUserDisplayMode(app_id);
-  auto launch_container = apps::mojom::LaunchContainer::kLaunchContainerWindow;
+  auto launch_container = apps::LaunchContainer::kLaunchContainerWindow;
   if (display_mode == web_app::UserDisplayMode::kBrowser)
-    launch_container = apps::mojom::LaunchContainer::kLaunchContainerTab;
+    launch_container = apps::LaunchContainer::kLaunchContainerTab;
 
   if (!apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
     // If the profile doesn't have an App Service Proxy available, that means
@@ -372,7 +373,7 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
   apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithParams(
       apps::AppLaunchParams(app_id, launch_container,
                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                            apps::mojom::LaunchSource::kFromManagementApi));
+                            apps::LaunchSource::kFromManagementApi));
 }
 
 void OnWebAppInstallCompleted(InstallOrLaunchWebAppCallback callback,
@@ -429,7 +430,7 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   // returned.
   // TODO(crbug.com/1003602): Make AppLaunchParams launch container Optional or
   // add a "default" launch container enum value.
-  apps::mojom::LaunchContainer launch_container =
+  apps::LaunchContainer launch_container =
       GetLaunchContainer(extensions::ExtensionPrefs::Get(context), extension);
   Profile* profile = Profile::FromBrowserContext(context);
   if (!apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
@@ -442,7 +443,7 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   apps::AppServiceProxyFactory::GetForProfile(profile)->LaunchAppWithParams(
       apps::AppLaunchParams(extension->id(), launch_container,
                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                            apps::mojom::LaunchSource::kFromManagementApi));
+                            apps::LaunchSource::kFromManagementApi));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::DemoSession::RecordAppLaunchSourceIfInDemoMode(

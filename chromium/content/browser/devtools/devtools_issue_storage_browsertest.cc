@@ -76,7 +76,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageBrowserTest,
   // Report an empty SameSite cookie issue.
   ReportDummyIssue(main_frame_host());
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
   // Verify we have received the SameSite issue.
   WaitForDummyIssueNotification();
 }
@@ -85,7 +85,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageBrowserTest,
                        DevToolsReceivesBrowserIssuesWhileAttached) {
   EXPECT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
   // Report an empty SameSite cookie issue.
   ReportDummyIssue(main_frame_host());
   // Verify we have received the SameSite issue.
@@ -115,7 +115,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageBrowserTest,
 
   // 4) Open DevTools and enable Audits domain.
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
 
   // 5) Verify we have received the SameSite issue on the main target.
   WaitForDummyIssueNotification();
@@ -136,7 +136,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageBrowserTest,
 
   // 4) Open DevTools and enable Audits domain.
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
 
   // 5) Verify that we haven't received any notifications.
   ASSERT_FALSE(HasExistingNotification());
@@ -184,7 +184,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageWithBackForwardCacheBrowserTest,
 
   // 5) Open DevTools and enable Audits domain.
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
 
   // 6) Verify we have received the SameSite issue on the main target.
   WaitForDummyIssueNotification();
@@ -234,7 +234,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageWithPrerenderBrowserTest,
 
   // 5) Open DevTools and enable Audits domain.
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
 
   // 6) Verify we have received the SameSite issue on the main target.
   WaitForDummyIssueNotification();
@@ -264,7 +264,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageFencedFrameTest,
   content::RenderFrameHostImpl* fenced_frame_rfh =
       static_cast<RenderFrameHostImpl*>(
           fenced_frame_test_helper().CreateFencedFrame(
-              web_contents()->GetMainFrame(), fenced_frame_url));
+              web_contents()->GetPrimaryMainFrame(), fenced_frame_url));
   EXPECT_NE(nullptr, fenced_frame_rfh);
 
   // 3) Report an empty SameSite cookie issue in the fenced frame.
@@ -277,7 +277,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsIssueStorageFencedFrameTest,
 
   // 5) Open DevTools and enable Audits domain.
   Attach();
-  SendCommand("Audits.enable", std::make_unique<base::DictionaryValue>());
+  SendCommandSync("Audits.enable");
 
   // 6) Verify we have received the SameSite issue on the main target.
   WaitForDummyIssueNotification();

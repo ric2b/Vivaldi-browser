@@ -7,10 +7,10 @@
  * 'settings-rivacy-guide-dialog' is a settings dialog that helps users guide
  * various privacy settings.
  */
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import '../../prefs/prefs.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import './privacy_guide_page.js';
 
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -72,7 +72,8 @@ export class SettingsPrivacyGuideDialogElement extends PolymerElement {
         new CustomEvent('close', {bubbles: true, composed: true}));
   }
 
-  private onPrivacyGuidePageClose_() {
+  private onPrivacyGuidePageClose_(e: Event) {
+    e.stopPropagation();
     this.$.dialog.close();
   }
 

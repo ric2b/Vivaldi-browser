@@ -9,7 +9,6 @@
 #include "base/containers/contains.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -115,9 +114,6 @@ class LanguageSettingsPrivateApiTest : public ExtensionServiceTestBase {
     // Force Windows hybrid spellcheck to be enabled.
     feature_list_.InitAndEnableFeature(spellcheck::kWinUseBrowserSpellChecker);
 #endif  // BUILDFLAG(IS_WIN)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    feature_list_.InitAndEnableFeature(ash::features::kLanguageSettingsUpdate2);
-#endif
   }
 
 #if BUILDFLAG(IS_WIN)
@@ -268,11 +264,6 @@ TEST_F(LanguageSettingsPrivateApiTest, SetTranslateTargetLanguageTest) {
       api_test_utils::RunFunctionAndReturnSingleResult(function.get(),
                                                        "[\"af\"]", profile());
   ASSERT_EQ(translate_prefs_->GetRecentTargetLanguage(), "af");
-
-  std::vector<std::string> content_languages_after;
-  translate_prefs_->GetLanguageList(&content_languages_after);
-  ASSERT_EQ(std::vector<std::string>({"en-US", "en", "af"}),
-            content_languages_after);
 }
 
 TEST_F(LanguageSettingsPrivateApiTest, GetNeverTranslateLanguagesListTest) {
@@ -306,7 +297,26 @@ TEST_F(LanguageSettingsPrivateApiTest, GetNeverTranslateLanguagesListTest) {
   }
 }
 
-TEST_F(LanguageSettingsPrivateApiTest, GetLanguageListTest) {
+class LanguageSettingsPrivateApiGetLanguageListTest
+    : public LanguageSettingsPrivateApiTest {
+ public:
+  LanguageSettingsPrivateApiGetLanguageListTest() = default;
+  ~LanguageSettingsPrivateApiGetLanguageListTest() override = default;
+
+ protected:
+  void InitFeatures() override {
+#if BUILDFLAG(IS_WIN)
+    // Force Windows hybrid spellcheck to be enabled, and disable the delayed
+    // init feature since that case is tested in
+    // LanguageSettingsPrivateApiTestDelayInit below.
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{spellcheck::kWinUseBrowserSpellChecker},
+        /*disabled_features=*/{spellcheck::kWinDelaySpellcheckServiceInit});
+#endif  // BUILDFLAG(IS_WIN)
+  }
+};
+
+TEST_F(LanguageSettingsPrivateApiGetLanguageListTest, GetLanguageList) {
   translate::TranslateDownloadManager::GetInstance()->ResetForTesting();
   RunGetLanguageListTest();
 }
@@ -565,9 +575,8 @@ TEST_F(LanguageSettingsPrivateApiTest, GetInputMethodListsTest) {
         input_method.FindListKey("languageCodes");
     ASSERT_NE(nullptr, ime_language_codes_ptr);
     for (auto& language_code : ime_language_codes_ptr->GetListDeprecated()) {
-      std::string language_display_name =
-          base::UTF16ToUTF8(l10n_util::GetDisplayNameForLocale(
-              language_code.GetString(), "en", true));
+      std::u16string language_display_name = l10n_util::GetDisplayNameForLocale(
+          language_code.GetString(), "en", true);
       if (!language_display_name.empty())
         EXPECT_TRUE(base::Contains(ime_tags_ptr->GetListDeprecated(),
                                    base::Value(language_display_name)));

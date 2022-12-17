@@ -80,13 +80,11 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"cancelButtonLabel", IDS_SHIMLESS_RMA_CANCEL_BUTTON},
       {"retryButtonLabel", IDS_SHIMLESS_RMA_RETRY_BUTTON},
       {"tryAgainButtonLabel", IDS_SHIMLESS_RMA_TRY_AGAIN_BUTTON},
+      {"doneButtonLabel", IDS_SHIMLESS_RMA_DONE_BUTTON},
       // Exit dialog
       {"exitDialogTitleText", IDS_SHIMLESS_RMA_EXIT_DIALOG_TITLE},
-      {"exitDialogDescriptionText", IDS_SHIMLESS_RMA_EXIT_DIALOG_DESCRIPTION},
       {"exitDialogCancelButtonLabel",
        IDS_SHIMLESS_RMA_EXIT_DIALOG_CANCEL_BUTTON_LABEL},
-      {"exitDialogConfirmButtonLabel",
-       IDS_SHIMLESS_RMA_EXIT_DIALOG_CONFIRM_BUTTON_LABEL},
       // Landing page
       {"beginRmaWarningText", IDS_SHIMLESS_RMA_AUTHORIZED_TECH_ONLY_WARNING},
       {"validatingComponentsText", IDS_SHIMLESS_RMA_VALIDATING_COMPONENTS},
@@ -183,16 +181,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"finalizePageTitleText", IDS_SHIMLESS_RMA_FINALIZE_PAGE_TITLE},
       {"finalizePageProgressText", IDS_SHIMLESS_RMA_FINALIZE_PROGRESS},
       {"finalizePageCompleteText", IDS_SHIMLESS_RMA_FINALIZE_COMPLETE},
-      {"finalizePageFailedBlockingText",
-       IDS_SHIMLESS_RMA_FINALIZE_FAILED_BLOCKING},
-      {"finalizePageFailedNonBlockingText",
-       IDS_SHIMLESS_RMA_FINALIZE_FAILED_NON_BLOCKING},
-      {"finalizePageFailedRetryButtonLabel",
-       IDS_SHIMLESS_RMA_FINALIZE_FAILED_RETRY_BUTTON_LABEL},
-      {"finalizePageWpDisabledDialogTitle",
-       IDS_SHIMLESS_RMA_FINALIZE_WP_DISABLED_DIALOG_TITLE},
-      {"finalizePageWpDisabledDialogBody",
-       IDS_SHIMLESS_RMA_FINALIZE_WP_DISABLED_DIALOG_BODY},
       // Run calibration page
       {"runCalibrationTitleText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_PAGE_TITLE},
       {"runCalibrationCompleteTitleText",
@@ -240,6 +228,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_CUTOFF_COUNTDOWN_DESCRIPTION},
       {"repairCompletedBatteryCutoffShutdownButton",
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_BATTERY_CUTOFF_SHUTDOWN_BUTTON},
+      {"rmaLogsSaveSuccessText", IDS_SHIMLESS_RMA_LOGS_SAVE_SUCCESS},
+      {"rmaLogsSaveFailText", IDS_SHIMLESS_RMA_LOGS_SAVE_FAIL},
       // Powerwash dialog
       {"powerwashDialogTitle", IDS_SHIMLESS_RMA_POWERWASH_DIALOG_TITLE},
       {"powerwashDialogShutdownDescription",
@@ -288,7 +278,10 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"confirmDeviceInfoSkuWarning",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_SKU_WARNING},
       // Firmware reimaging page
-      {"firmwareUpdatePageTitleText", IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_TITLE},
+      {"firmwareUpdateInstallImageTitleText",
+       IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_INSTALL_IMAGE_TITLE},
+      {"firmwareUpdateInstallCompleteTitleText",
+       IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_INSTALL_COMPLETE_TITLE},
       {"firmwareUpdateWaitForUsbText", IDS_SHIMLESS_RMA_FIRMWARE_WAIT_FOR_USB},
       {"firmwareUpdateFileNotFoundText",
        IDS_SHIMLESS_RMA_FIRMWARE_FILE_NOT_FOUND},
@@ -316,6 +309,16 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       // Critical error
       {"criticalErrorMessageText", IDS_SHIMLESS_RMA_CRITICAL_ERROR_MESSAGE},
       {"criticalErrorRebootText", IDS_SHIMLESS_RMA_CRITICAL_REBOOT_BUTTON},
+      // Hardware error
+      {"hardwareErrorTitle", IDS_SHIMLESS_RMA_HARDWARE_ERROR_TITLE},
+      {"hardwareErrorMessage", IDS_SHIMLESS_RMA_HARDWARE_ERROR_MESSAGE},
+      {"hardwareErrorShutDownButton",
+       IDS_SHIMLESS_RMA_HARDWARE_SHUTDOWN_BUTTON},
+      // Reboot page
+      {"rebootPageTitle", IDS_SHIMLESS_RMA_REBOOT_PAGE_TITLE},
+      {"rebootPageMessage", IDS_SHIMLESS_RMA_REBOOT_PAGE_MESSAGE},
+      {"shutdownPageTitle", IDS_SHIMLESS_RMA_REBOOT_PAGE_SHUTDOWN_TITLE},
+      {"shutdownPageMessage", IDS_SHIMLESS_RMA_REBOOT_PAGE_SHUTDOWN_MESSAGE},
       // Wipe device page
       {"wipeDeviceTitleText", IDS_SHIMLESS_RMA_WIPE_DEVICE_TITLE},
       {"wipeDeviceRemoveDataLabel",
@@ -324,6 +327,17 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_WIPE_DEVICE_REMOVE_DATA_OPTION_DESCRIPTION},
       {"wipeDevicePreserveDataLabel",
        IDS_SHIMLESS_RMA_WIPE_DEVICE_PRESERVE_DATA_OPTION},
+      // Illustrations
+      {"baseOnFlatSurfaceAltText",
+       IDS_SHIMLESS_RMA_BASE_ON_FLAT_SURFACE_ALT_TEXT},
+      {"downloadingAltText", IDS_SHIMLESS_RMA_DOWNLOADING_ALT_TEXT},
+      {"errorAltText", IDS_SHIMLESS_RMA_ERROR_ALT_TEXT},
+      {"insertUsbAltText", IDS_SHIMLESS_RMA_INSERT_USB_ALT_TEXT},
+      {"lidOnFlatSurfaceAltText",
+       IDS_SHIMLESS_RMA_LID_ON_FLAT_SURFACE_ALT_TEXT},
+      {"repairStartAltText", IDS_SHIMLESS_RMA_REPAIR_START_ALT_TEXT},
+      {"successAltText", IDS_SHIMLESS_RMA_SUCCESS_ALT_TEXT},
+      {"updateOsAltText", IDS_SHIMLESS_RMA_UPDATE_OS_ALT_TEXT},
   };
 
   html_source->AddLocalizedStrings(kLocalizedStrings);
@@ -343,6 +357,9 @@ void AddDevicePlaceholderStrings(content::WebUIDataSource* html_source) {
   html_source->AddString(
       "criticalErrorTitleText",
       ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_CRITICAL_ERROR_TITLE));
+  html_source->AddString("exitDialogDescriptionText",
+                         ui::SubstituteChromeOSDeviceType(
+                             IDS_SHIMLESS_RMA_EXIT_DIALOG_DESCRIPTION));
 }
 
 void AddFeatureFlags(content::WebUIDataSource* html_source) {

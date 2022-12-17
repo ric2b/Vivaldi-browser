@@ -4,6 +4,8 @@
 
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
 
+#include <limits>
+
 #include "base/check_op.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
@@ -16,6 +18,7 @@
 #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
 #import "ui/base/cocoa/appkit_utils.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
+#include "ui/base/cocoa/find_pasteboard.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_mac.h"
 #include "ui/base/ime/input_method.h"
@@ -518,9 +521,12 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   // Currently there seems to be no use case to pass non-character events routed
   // from insertText: handlers to the View hierarchy.
   if (isFinalInsertForKeyEvent && ![self hasMarkedText]) {
+    int flags = ui::EF_NONE;
+    if ([_keyDownEvent isARepeat])
+      flags |= ui::EF_IS_REPEAT;
     ui::KeyEvent charEvent([text characterAtIndex:0],
                            ui::KeyboardCodeFromNSEvent(_keyDownEvent),
-                           ui::DomCodeFromNSEvent(_keyDownEvent), ui::EF_NONE);
+                           ui::DomCodeFromNSEvent(_keyDownEvent), flags);
     [self handleKeyEvent:&charEvent];
     _hasUnhandledKeyDownEvent = NO;
     if (charEvent.handled())
@@ -1336,24 +1342,30 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 // NSServicesMenuRequestor protocol
 
 - (BOOL)writeSelectionToPasteboard:(NSPasteboard*)pboard types:(NSArray*)types {
-  // NB: The NSServicesMenuRequestor protocol has not (as of 10.14) been
+  // NB: The NSServicesMenuRequestor protocol has not (as of macOS 12) been
   // upgraded to request UTIs rather than obsolete PboardType constants. Handle
   // either for when it is upgraded.
-  DCHECK([types containsObject:NSStringPboardType] ||
-         [types containsObject:base::mac::CFToNSCast(kUTTypeUTF8PlainText)]);
+  bool wasAbleToWriteAtLeastOneType = false;
 
-  bool result = NO;
-  std::u16string text;
-  if (_bridge)
-    _bridge->text_input_host()->GetSelectionText(&result, &text);
-  if (!result)
-    return NO;
-  return [pboard writeObjects:@[ base::SysUTF16ToNSString(text) ]];
+  if ([types containsObject:NSStringPboardType] ||
+      [types containsObject:base::mac::CFToNSCast(kUTTypeUTF8PlainText)]) {
+    bool result = false;
+    std::u16string selection_text;
+    if (_bridge)
+      _bridge->text_input_host()->GetSelectionText(&result, &selection_text);
+
+    if (result) {
+      NSString* text = base::SysUTF16ToNSString(selection_text);
+      wasAbleToWriteAtLeastOneType |= [pboard writeObjects:@[ text ]];
+    }
+  }
+
+  return wasAbleToWriteAtLeastOneType;
 }
 
 - (BOOL)readSelectionFromPasteboard:(NSPasteboard*)pboard {
-  NSArray* objects = [pboard readObjectsForClasses:@ [[NSString class]]
-      options:0];
+  NSArray* objects = [pboard readObjectsForClasses:@[ [NSString class] ]
+                                           options:nil];
   DCHECK([objects count] == 1);
   [self insertText:[objects lastObject]];
   return YES;
@@ -1372,11 +1384,22 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 - (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
                                                actualRange:
                                                    (NSRangePointer)actualRange {
-  // On TouchBar Macs, the IME subsystem sometimes sends an invalid range with a
-  // non-zero length. This will cause a DCHECK in gfx::Range, so repair it here.
-  // See https://crbug.com/888782.
-  if (range.location == NSNotFound)
+  // NSRange uses uint64 but gfx::Range uses uint32 limits. This mismatch might
+  // cause DCHECK in gfx::Range ctor during type conversion.
+  // Speculatively treat out of uint32 limit NSRange as NSNotFound.
+  // See https://crbug.com/1345195.
+  constexpr size_t gfx_range_max = std::numeric_limits<uint32_t>::max();
+  if (range.location > gfx_range_max) {
+    range.location = NSNotFound;
+    // On TouchBar Macs, the IME subsystem sometimes sends an invalid range with
+    // a non-zero length. This will cause a DCHECK in gfx::Range, so repair it
+    // here. See https://crbug.com/888782.
     range.length = 0;
+  } else {
+    // Clamp lengths to avoid overflow, which will cause a checkfailure.
+    range.length = std::min(range.length, gfx_range_max - range.location);
+  }
+
   std::u16string substring;
   gfx::Range actual_range = gfx::Range::InvalidRange();
   if (_bridge) {
@@ -1389,6 +1412,7 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
     *actualRange =
         actual_range.IsValid() ? actual_range.ToNSRange() : NSMakeRange(0, 0);
   }
+
   return substring.empty()
              ? nil
              : [[[NSAttributedString alloc]
@@ -1512,9 +1536,21 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   return @[];
 }
 
+- (void)copyToFindPboard:(id)sender {
+  NSString* selection =
+      [[self attributedSubstringForProposedRange:[self selectedRange]
+                                     actualRange:nullptr] string];
+  if (selection.length > 0)
+    [[FindPasteboard sharedInstance] setFindText:selection];
+}
+
 // NSUserInterfaceValidations protocol implementation.
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
+  // Special case this, since there's no cross-platform text command for it.
+  if (item.action == @selector(copyToFindPboard:))
+    return [self selectedRange].length > 0;
+
   ui::TextEditCommand command = GetTextEditCommandForMenuAction([item action]);
 
   if (command == ui::TextEditCommand::INVALID_COMMAND)

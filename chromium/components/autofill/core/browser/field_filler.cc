@@ -18,7 +18,6 @@
 #include "components/autofill/core/browser/address_normalizer.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/autofill_regexes.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_data_model.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -32,6 +31,7 @@
 #include "components/autofill/core/browser/proto/states.pb.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
+#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
@@ -268,7 +268,11 @@ bool FillStateSelectControl(const std::u16string& value,
       for (const auto& alternative_name : state_entry->alternative_names())
         full_names.push_back(base::UTF8ToUTF16(alternative_name));
     } else {
-      full_names.push_back(value);
+      if (value.size() > 2) {
+        full_names.push_back(value);
+      } else {
+        abbreviations.push_back(value);
+      }
     }
   }
 
@@ -282,6 +286,17 @@ bool FillStateSelectControl(const std::u16string& value,
 
   if (!state_abbreviation.empty())
     abbreviations.push_back(std::move(state_abbreviation));
+
+  // Remove `abbreviations` from the `full_names` as a precautionary measure in
+  // case the `AlternativeStateNameMap` contains bad data.
+  base::ranges::sort(abbreviations);
+  full_names.erase(
+      base::ranges::remove_if(full_names,
+                              [&](const std::u16string& full_name) {
+                                return base::ranges::binary_search(
+                                    abbreviations, full_name);
+                              }),
+      full_names.end());
 
   // Try an exact match of the abbreviation first.
   for (const auto& abbreviation : abbreviations) {
@@ -756,13 +771,14 @@ std::u16string GetExpirationDateForInput(const CreditCard& credit_card,
   if (base::FeatureList::IsEnabled(
           features::kAutofillFillCreditCardAsPerFormatString)) {
     std::vector<std::u16string> groups;
-    const char16_t* kFormatRegEx = u"mm(\\s?[/-]?\\s?)?yy(yy)?";
-    //                                  ^^^^ optional white space
-    //                                      ^^^^^ optional separator
-    //                                           ^^^ optional white space
-    //                                                   ^^^^^ 4 digit year?
-    if (MatchesPattern(field.placeholder, kFormatRegEx, &groups) ||
-        MatchesPattern(field.label, kFormatRegEx, &groups)) {
+    static const char16_t kFormatRegEx[] = u"mm(\\s?[/-]?\\s?)?yy(yy)?";
+    //                                          ^^^^ opt white space
+    //                                              ^^^^^ opt separator
+    //                                                   ^^^ opt white space
+    //                                                           ^^^^^ 4 digit
+    //                                                                 year?
+    if (MatchesRegex<kFormatRegEx>(field.placeholder, &groups) ||
+        MatchesRegex<kFormatRegEx>(field.label, &groups)) {
       bool is_two_digit_year = groups[2].empty();
       std::u16string expiration_candidate =
           base::StrCat({month, groups[1],
@@ -1077,24 +1093,6 @@ std::u16string FieldFiller::GetPhoneNumberValueForInput(
     const std::u16string& number,
     const std::u16string& phone_home_city_and_number,
     const FormFieldData& field_data) {
-  // TODO(crbug.com/581485): Investigate the use of libphonenumber here.
-  // Check to see if the |field| size matches the "prefix" or "suffix" size or
-  // if the field was labeled as such. If so, return the appropriate substring.
-  if (number.length() ==
-      PhoneNumber::kPrefixLength + PhoneNumber::kSuffixLength) {
-    if (field.phone_part() == AutofillField::PHONE_PREFIX ||
-        field_data.max_length == PhoneNumber::kPrefixLength) {
-      return number.substr(PhoneNumber::kPrefixOffset,
-                           PhoneNumber::kPrefixLength);
-    }
-
-    if (field.phone_part() == AutofillField::PHONE_SUFFIX ||
-        field_data.max_length == PhoneNumber::kSuffixLength) {
-      return number.substr(PhoneNumber::kSuffixOffset,
-                           PhoneNumber::kSuffixLength);
-    }
-  }
-
   // If no max length was specified, return the complete number.
   if (field_data.max_length == 0)
     return number;

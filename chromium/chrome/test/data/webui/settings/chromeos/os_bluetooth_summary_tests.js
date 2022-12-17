@@ -9,7 +9,7 @@ import {mojoString16ToString} from 'chrome://resources/cr_components/chromeos/bl
 import {setBluetoothConfigForTesting} from 'chrome://resources/cr_components/chromeos/bluetooth/cros_bluetooth_config.js';
 import {BluetoothSystemProperties, BluetoothSystemState, DeviceConnectionState, SystemPropertiesObserverInterface} from 'chrome://resources/mojo/chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {createDefaultBluetoothDevice, FakeBluetoothConfig,} from 'chrome://test/cr_components/chromeos/bluetooth/fake_bluetooth_config.js';
+import {createDefaultBluetoothDevice, FakeBluetoothConfig} from 'chrome://test/cr_components/chromeos/bluetooth/fake_bluetooth_config.js';
 import {eventToPromise, waitBeforeNextRender} from 'chrome://test/test_util.js';
 
 import {assertEquals, assertNotEquals, assertTrue} from '../../../chai_assert.js';
@@ -44,7 +44,7 @@ suite('OsBluetoothSummaryTest', function() {
        */
       onPropertiesUpdated(properties) {
         bluetoothSummary.systemProperties = properties;
-      }
+      },
     };
     bluetoothConfig.observeSystemProperties(propertiesObserver);
   }
@@ -58,7 +58,8 @@ suite('OsBluetoothSummaryTest', function() {
     init();
     bluetoothConfig.setBluetoothEnabledState(/*enabled=*/ true);
     await flushAsync();
-    const iconButton = bluetoothSummary.$$('#arrowIconButton');
+    const iconButton =
+        bluetoothSummary.shadowRoot.querySelector('#arrowIconButton');
     assertTrue(!!iconButton);
 
     iconButton.click();
@@ -87,7 +88,8 @@ suite('OsBluetoothSummaryTest', function() {
     let a11yMessagesEventPromise =
         eventToPromise('cr-a11y-announcer-messages-sent', document.body);
 
-    const toggle = bluetoothSummary.$$('#enableBluetoothToggle');
+    const toggle =
+        bluetoothSummary.shadowRoot.querySelector('#enableBluetoothToggle');
     assertTrue(toggle.checked);
 
     toggle.click();
@@ -106,7 +108,8 @@ suite('OsBluetoothSummaryTest', function() {
 
   test('Toggle button states', async function() {
     init();
-    const enableBluetoothToggle = bluetoothSummary.$$('#enableBluetoothToggle');
+    const enableBluetoothToggle =
+        bluetoothSummary.shadowRoot.querySelector('#enableBluetoothToggle');
     assertTrue(!!enableBluetoothToggle);
     assertFalse(enableBluetoothToggle.checked);
 
@@ -149,10 +152,11 @@ suite('OsBluetoothSummaryTest', function() {
 
     // Simulate device state is disabled.
     const bluetoothSecondaryLabel =
-        bluetoothSummary.$$('#bluetoothSecondaryLabel');
+        bluetoothSummary.shadowRoot.querySelector('#bluetoothSecondaryLabel');
     const getBluetoothArrowIconBtn = () =>
-        bluetoothSummary.$$('#arrowIconButton');
-    const getBluetoothStatusIcon = () => bluetoothSummary.$$('#statusIcon');
+        bluetoothSummary.shadowRoot.querySelector('#arrowIconButton');
+    const getBluetoothStatusIcon = () =>
+        bluetoothSummary.shadowRoot.querySelector('#statusIcon');
 
     assertFalse(!!getBluetoothArrowIconBtn());
     assertTrue(!!getBluetoothStatusIcon());
@@ -240,7 +244,8 @@ suite('OsBluetoothSummaryTest', function() {
 
     const toggleBluetoothPairingUiPromise =
         eventToPromise('start-pairing', bluetoothSummary);
-    const getPairNewDeviceBtn = () => bluetoothSummary.$$('#pairNewDeviceBtn');
+    const getPairNewDeviceBtn = () =>
+        bluetoothSummary.shadowRoot.querySelector('#pairNewDeviceBtn');
 
     assertTrue(!!getPairNewDeviceBtn());
     getPairNewDeviceBtn().click();
@@ -258,11 +263,13 @@ suite('OsBluetoothSummaryTest', function() {
 
     bluetoothConfig.setBluetoothEnabledState(/*enabled=*/ true);
     await flushAsync();
-    const bluetoothSummaryPrimary = bluetoothSummary.$$('#bluetoothSummary');
+    const bluetoothSummaryPrimary =
+        bluetoothSummary.shadowRoot.querySelector('#bluetoothSummary');
     const bluetoothSummarySecondary =
-        bluetoothSummary.$$('#bluetoothSummarySeconday');
+        bluetoothSummary.shadowRoot.querySelector('#bluetoothSummarySeconday');
     const bluetoothSummarySecondaryText =
-        bluetoothSummary.$$('#bluetoothSummarySecondayText');
+        bluetoothSummary.shadowRoot.querySelector(
+            '#bluetoothSummarySecondayText');
 
     assertFalse(!!bluetoothSummaryPrimary);
     assertTrue(!!bluetoothSummarySecondary);

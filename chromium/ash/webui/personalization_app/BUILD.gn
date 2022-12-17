@@ -33,9 +33,9 @@ static_library("personalization_app") {
     "//ash/webui/personalization_app/mojom",
     "//ash/webui/personalization_app/proto",
     "//ash/webui/resources:personalization_app_resources",
-    "//chromeos/components/local_search_service:local_search_service",
-    "//chromeos/components/local_search_service/public/cpp",
-    "//chromeos/components/local_search_service/public/mojom",
+    "//chromeos/ash/components/local_search_service",
+    "//chromeos/ash/components/local_search_service/public/cpp",
+    "//chromeos/ash/components/local_search_service/public/mojom",
     "//chromeos/strings",
     "//components/keyed_service/content",
     "//components/keyed_service/core",
@@ -71,6 +71,8 @@ source_set("browser_test_support") {
     "test/fake_personalization_app_wallpaper_provider.h",
     "test/personalization_app_browsertest_fixture.cc",
     "test/personalization_app_browsertest_fixture.h",
+    "test/personalization_app_mojom_banned_browsertest_fixture.cc",
+    "test/personalization_app_mojom_banned_browsertest_fixture.h",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -93,11 +95,12 @@ source_set("unit_tests") {
   deps = [
     ":personalization_app",
     "search:mojo_bindings",
+    "//ash:test_support",
     "//ash/constants:constants",
     "//ash/public/cpp:cpp",
     "//base/test:test_support",
-    "//chromeos/components/local_search_service/public/cpp:cpp",
-    "//chromeos/components/local_search_service/public/mojom",
+    "//chromeos/ash/components/local_search_service/public/cpp",
+    "//chromeos/ash/components/local_search_service/public/mojom",
     "//chromeos/strings:strings_grit",
     "//components/prefs:test_support",
     "//mojo/public/cpp/bindings:bindings",

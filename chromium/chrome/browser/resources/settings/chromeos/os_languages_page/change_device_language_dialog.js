@@ -6,21 +6,21 @@
  * @fileoverview 'os-settings-change-device-language-dialog' is a dialog for
  * changing device language.
  */
-import '//resources/cr_elements/cr_button/cr_button.m.js';
-import '//resources/cr_elements/cr_search_field/cr_search_field.js';
-import '//resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '//resources/polymer/v3_0/iron-list/iron-list.js';
-import '//resources/polymer/v3_0/paper-ripple/paper-ripple.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_search_field/cr_search_field.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
+import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
+import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
 import './shared_style.js';
-import '//resources/cr_components/localized_link/localized_link.js';
+import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import './languages.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 
-import {CrScrollableBehavior, CrScrollableBehaviorInterface} from '//resources/cr_elements/cr_scrollable_behavior.m.js';
-import {assert} from '//resources/js/assert.m.js';
-import {I18nBehavior, I18nBehaviorInterface} from '//resources/js/i18n_behavior.m.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrScrollableBehavior, CrScrollableBehaviorInterface} from 'chrome://resources/cr_elements/cr_scrollable_behavior.m.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {LifetimeBrowserProxyImpl} from '../../lifetime_browser_proxy.js';
 import {recordSettingChange} from '../metrics_recorder.js';
@@ -178,12 +178,14 @@ class OsSettingsChangeDeviceLanguageDialogElement extends
     assert(this.selectedLanguage_);
     const languageCode = this.selectedLanguage_.code;
     this.languageHelper.setProspectiveUILanguage(languageCode);
-    // If the language isn't enabled yet, it should be added and moved to top.
-    // If it's already present, we don't do anything.
+    // If the language isn't enabled yet, it should be added.
     if (!this.languageHelper.isLanguageEnabled(languageCode)) {
       this.languageHelper.enableLanguage(languageCode);
-      this.languageHelper.moveLanguageToFront(languageCode);
     }
+    // The new language should always be moved to the top, as users get confused
+    // that websites are displaying in a different language:
+    // https://crbug.com/1330209
+    this.languageHelper.moveLanguageToFront(languageCode);
     recordSettingChange();
     LanguagesMetricsProxyImpl.getInstance().recordInteraction(
         LanguagesPageInteraction.RESTART);

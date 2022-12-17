@@ -39,7 +39,7 @@ void NotesSubMenuObserverHelperViews::InitMap() {
     // In case the top node is not displayed in the menu (ie, we have a flat
     // view where the first level of notes are displayed directly), we have to
     // map the views of the first level of folders too.
-    for (int i = 0; i < menu_model->GetItemCount(); i++) {
+    for (size_t i = 0; i < menu_model->GetItemCount(); i++) {
       ui::MenuModel* sub_menu_model = menu_model->GetSubmenuModelAt(i);
       if (sub_menu_model) {
         menumodel_to_view_map_[sub_menu_model] =

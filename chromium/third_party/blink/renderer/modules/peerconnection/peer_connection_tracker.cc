@@ -15,6 +15,8 @@
 #include "base/containers/contains.h"
 #include "base/types/pass_key.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "build/buildflag.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom-blink.h"
@@ -102,7 +104,27 @@ String SerializeServers(
   return result.ToString();
 }
 
-String SerializeMediaConstraints(const MediaConstraints& constraints) {
+// TODO(https://crbug.com/1318448): When goog-constraints have been removed,
+// this serialization code is no longer needed.
+String SerializePeerConnectionMediaConstraints(
+    const webrtc::PeerConnectionInterface::RTCConfiguration& config) {
+  StringBuilder builder;
+  if (config.disable_ipv6) {
+    builder.Append("googIPv6: false");
+  }
+#if BUILDFLAG(IS_FUCHSIA)
+  if (config.enable_dtls_srtp.has_value()) {
+    if (builder.length())
+      builder.Append(", ");
+    builder.Append("DtlsSrtpKeyAgreement: ");
+    builder.Append(config.enable_dtls_srtp.value() ? "true" : "false");
+  }
+#endif
+  return builder.ToString();
+}
+
+String SerializeGetUserMediaMediaConstraints(
+    const MediaConstraints& constraints) {
   return String(constraints.ToString());
 }
 
@@ -329,6 +351,9 @@ String SerializeSdpSemantics(webrtc::SdpSemantics sdp_semantics) {
   return "\"" + sdp_semantics_str + "\"";
 }
 
+// Serializes things that are of interest from the RTCConfiguration. Note that
+// this does not include some parameters that were passed down via
+// GoogMediaConstraints; see SerializePeerConnectionMediaConstraints() for that.
 String SerializeConfiguration(
     const webrtc::PeerConnectionInterface::RTCConfiguration& config,
     bool usesInsertableStreams) {
@@ -611,7 +636,7 @@ PeerConnectionTracker& PeerConnectionTracker::From(LocalDOMWindow& window) {
       Supplement<LocalDOMWindow>::From<PeerConnectionTracker>(window);
   if (!tracker) {
     tracker = MakeGarbageCollected<PeerConnectionTracker>(
-        window, Thread::MainThread()->GetTaskRunner(),
+        window, Thread::MainThread()->GetDeprecatedTaskRunner(),
         base::PassKey<PeerConnectionTracker>());
     ProvideTo(window, tracker);
   }
@@ -754,7 +779,6 @@ void PeerConnectionTracker::GetLegacyStats() {
 void PeerConnectionTracker::RegisterPeerConnection(
     RTCPeerConnectionHandler* pc_handler,
     const webrtc::PeerConnectionInterface::RTCConfiguration& config,
-    const MediaConstraints& constraints,
     const blink::WebLocalFrame* frame) {
   DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   DCHECK(pc_handler);
@@ -763,13 +787,10 @@ void PeerConnectionTracker::RegisterPeerConnection(
   auto info = blink::mojom::blink::PeerConnectionInfo::New();
 
   info->lid = GetNextLocalID();
-  bool usesInsertableStreams =
-      pc_handler->force_encoded_audio_insertable_streams() &&
-      pc_handler->force_encoded_video_insertable_streams();
   info->rtc_configuration =
-      SerializeConfiguration(config, usesInsertableStreams);
+      SerializeConfiguration(config, pc_handler->encoded_insertable_streams());
 
-  info->constraints = SerializeMediaConstraints(constraints);
+  info->constraints = SerializePeerConnectionMediaConstraints(config);
   if (frame)
     info->url = frame->GetDocument().Url().GetString();
   else
@@ -858,12 +879,9 @@ void PeerConnectionTracker::TrackSetConfiguration(
   if (id == -1)
     return;
 
-  bool usesInsertableStreams =
-      pc_handler->force_encoded_audio_insertable_streams() &&
-      pc_handler->force_encoded_video_insertable_streams();
   SendPeerConnectionUpdate(
       id, "setConfiguration",
-      SerializeConfiguration(config, usesInsertableStreams));
+      SerializeConfiguration(config, pc_handler->encoded_insertable_streams()));
 }
 
 void PeerConnectionTracker::TrackAddIceCandidate(
@@ -1016,18 +1034,6 @@ void PeerConnectionTracker::TrackSignalingStateChange(
       webrtc::PeerConnectionInterface::AsString(state).data());
 }
 
-void PeerConnectionTracker::TrackLegacyIceConnectionStateChange(
-    RTCPeerConnectionHandler* pc_handler,
-    webrtc::PeerConnectionInterface::IceConnectionState state) {
-  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
-  int id = GetLocalIDForHandler(pc_handler);
-  if (id == -1)
-    return;
-  SendPeerConnectionUpdate(
-      id, "iceconnectionstatechange (legacy)",
-      webrtc::PeerConnectionInterface::AsString(state).data());
-}
-
 void PeerConnectionTracker::TrackIceConnectionStateChange(
     RTCPeerConnectionHandler* pc_handler,
     webrtc::PeerConnectionInterface::IceConnectionState state) {
@@ -1131,8 +1137,10 @@ void PeerConnectionTracker::TrackGetUserMedia(
   peer_connection_tracker_host_->GetUserMedia(
       user_media_request->request_id(), user_media_request->Audio(),
       user_media_request->Video(),
-      SerializeMediaConstraints(user_media_request->AudioConstraints()),
-      SerializeMediaConstraints(user_media_request->VideoConstraints()));
+      SerializeGetUserMediaMediaConstraints(
+          user_media_request->AudioConstraints()),
+      SerializeGetUserMediaMediaConstraints(
+          user_media_request->VideoConstraints()));
 }
 
 void PeerConnectionTracker::TrackGetUserMediaSuccess(

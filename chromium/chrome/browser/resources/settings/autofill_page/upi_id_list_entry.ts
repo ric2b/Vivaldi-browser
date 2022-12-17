@@ -7,12 +7,13 @@
  * the settings page. https://en.wikipedia.org/wiki/Unified_Payments_Interface
  */
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import '../i18n_setup.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {getTemplate} from './upi_id_list_entry.html.js';
 
 class SettingsUpiIdListEntryElement extends PolymerElement {

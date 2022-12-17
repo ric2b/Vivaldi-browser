@@ -8,8 +8,6 @@ static_library("core") {
     "bad_clock_ui.h",
     "base_safe_browsing_error_ui.cc",
     "base_safe_browsing_error_ui.h",
-    "blocked_interception_ui.cc",
-    "blocked_interception_ui.h",
     "common_string_util.cc",
     "common_string_util.h",
     "controller_client.cc",
@@ -22,8 +20,6 @@ static_library("core") {
     "https_only_mode_ui_util.h",
     "metrics_helper.cc",
     "metrics_helper.h",
-    "mitm_software_ui.cc",
-    "mitm_software_ui.h",
     "omnibox_https_upgrade_metrics.cc",
     "omnibox_https_upgrade_metrics.h",
     "pref_names.cc",
@@ -40,10 +36,12 @@ static_library("core") {
     "urls.h",
   ]
 
-  if (is_ios) {
-    sources -= [
+  if (!is_ios) {
+    sources += [
       "blocked_interception_ui.cc",
       "blocked_interception_ui.h",
+      "https_only_mode_policy_handler.cc",
+      "https_only_mode_policy_handler.h",
       "mitm_software_ui.cc",
       "mitm_software_ui.h",
     ]
@@ -56,6 +54,8 @@ static_library("core") {
     "//components/google/core/common",
     "//components/history/core/browser",
     "//components/metrics",
+    "//components/policy/core/browser",
+    "//components/policy/core/common",
     "//components/prefs",
     "//components/resources",
     "//components/ssl_errors",

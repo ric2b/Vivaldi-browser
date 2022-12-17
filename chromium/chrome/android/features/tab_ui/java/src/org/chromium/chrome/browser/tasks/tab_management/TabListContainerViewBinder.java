@@ -11,6 +11,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.SHADOW_TOP_OFFSET;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TAB_LIST_ITEM_ANIMATOR_ENABLED;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.VISIBILITY_LISTENER;
 
@@ -83,6 +84,8 @@ class TabListContainerViewBinder {
             view.setShadowTopOffset(model.get(SHADOW_TOP_OFFSET));
         } else if (BOTTOM_PADDING == propertyKey) {
             view.setBottomPadding(model.get(BOTTOM_PADDING));
+        } else if (TAB_LIST_ITEM_ANIMATOR_ENABLED == propertyKey) {
+            view.toggleItemAnimation(model.get(TAB_LIST_ITEM_ANIMATOR_ENABLED));
             // Vivaldi: Set the scroll index for the correct recycler view.
         } else if (TabListContainerProperties.SCROLL_INDEX_NORMAL == propertyKey) {
             if (view.getCurrentTabViewInstance() == TabSwitcherView.PAGE.NORMAL) {

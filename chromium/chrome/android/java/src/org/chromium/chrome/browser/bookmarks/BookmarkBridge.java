@@ -22,11 +22,8 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.commerce.shopping_list.ShoppingFeatures;
+import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
-import org.chromium.chrome.browser.power_bookmarks.PowerBookmarkMeta;
-import org.chromium.chrome.browser.power_bookmarks.PowerBookmarkType;
-import org.chromium.chrome.browser.power_bookmarks.ShoppingSpecifics;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscription;
@@ -36,6 +33,9 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.commerce.PriceTracking.ProductPrice;
+import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
+import org.chromium.components.power_bookmarks.PowerBookmarkType;
+import org.chromium.components.power_bookmarks.ShoppingSpecifics;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
@@ -310,7 +310,7 @@ public class BookmarkBridge {
         }
 
         // TODO(https://crbug.com/1019217): Remove when BookmarkModel is stubbed in tests instead.
-        void forceEditableForTesting() {
+        public void forceEditableForTesting() {
             mForceEditableForTesting = true;
         }
 
@@ -1039,7 +1039,7 @@ public class BookmarkBridge {
     }
 
     /**
-     * Add a new bookmark to a specific position below parent
+     * Add a new bookmark to a specific position below parent.
      *
      * @param parent Folder where to add. Must be a normal editable folder, instead of a partner
      *               bookmark folder or a managed bookmark folder or root node of the entire
@@ -1061,45 +1061,12 @@ public class BookmarkBridge {
 
         if (TextUtils.isEmpty(title)) title = url.getSpec();
         return BookmarkBridgeJni.get().addBookmark(
-                mNativeBookmarkBridge, BookmarkBridge.this, parent, index, title, url);
-    }
-
-    /**
-     * Add a new power bookmark.
-     *
-     * @param webContents A {@link WebContents} associated with the page being bookmarked.
-     * @param parent Folder where to add. Must be a normal editable folder, instead of a partner
-     *               bookmark folder or a managed bookmark folder or root node of the entire
-     *               bookmark model.
-     * @param index The position where the bookmark will be placed in parent folder
-     * @param title Title of the new bookmark. If empty, the URL will be used as the title.
-     * @param url Url of the new bookmark
-     * @return Id of the added node. If adding failed (index is invalid, string is null, parent is
-     *         not editable), returns null.
-     */
-    public BookmarkId addPowerBookmark(
-            WebContents webContents, BookmarkId parent, int index, String title, GURL url) {
-        ThreadUtils.assertOnUiThread();
-        assert parent.getType() == BookmarkType.NORMAL;
-        assert index >= 0;
-        assert title != null;
-        assert url != null;
-
-        recordBookmarkAdded();
-
-        if (TextUtils.isEmpty(title)) title = url.getSpec();
-        return BookmarkBridgeJni.get().addPowerBookmark(
-                mNativeBookmarkBridge, this, webContents, parent, index, title, url);
+                mNativeBookmarkBridge, this, parent, index, title, url);
     }
 
     /** Record the user action for adding a bookmark. */
     private void recordBookmarkAdded() {
         RecordUserAction.record("BookmarkAdded");
-    }
-
-    @Deprecated // Only included until internal repository is updated.
-    public BookmarkId addBookmark(BookmarkId parent, int index, String title, String url) {
-        return addBookmark(parent, index, title, new GURL(url));
     }
 
     /**
@@ -1215,8 +1182,7 @@ public class BookmarkBridge {
         return BookmarkBridgeJni.get().isBookmarked(mNativeBookmarkBridge, url);
     }
 
-    @VisibleForTesting
-    BookmarkId getPartnerFolderId() {
+    public BookmarkId getPartnerFolderId() {
         ThreadUtils.assertOnUiThread();
         assert mIsNativeBookmarkModelLoaded;
         return BookmarkBridgeJni.get().getPartnerFolderId(
@@ -1435,8 +1401,9 @@ public class BookmarkBridge {
         }
     }
 
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods
-    interface Natives {
+    public interface Natives {
         BookmarkId getBookmarkIdForWebContents(long nativeBookmarkBridge, BookmarkBridge caller,
                 WebContents webContents, boolean onlyEditable);
         BookmarkItem getBookmarkByID(
@@ -1491,8 +1458,6 @@ public class BookmarkBridge {
                 BookmarkId newParentId, int index);
         BookmarkId addBookmark(long nativeBookmarkBridge, BookmarkBridge caller, BookmarkId parent,
                 int index, String title, GURL url);
-        BookmarkId addPowerBookmark(long nativeBookmarkBridge, BookmarkBridge caller,
-                WebContents webContents, BookmarkId parent, int index, String title, GURL url);
         BookmarkId addToReadingList(
                 long nativeBookmarkBridge, BookmarkBridge caller, String title, GURL url);
         BookmarkItem getReadingListItem(long nativeBookmarkBridge, BookmarkBridge caller, GURL url);

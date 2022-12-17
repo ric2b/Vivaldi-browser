@@ -1,0 +1,16 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+source_set("vivaldi_account") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_account_manager_factory.mm",
+    "vivaldi_account_manager_factory.h",
+  ]
+
+  deps = [
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/passwords:store_factory",
+    "//vivaldi/prefs",
+    "//vivaldi/vivaldi_account",
+  ]
+}

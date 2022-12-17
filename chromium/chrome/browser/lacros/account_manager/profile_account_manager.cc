@@ -5,7 +5,6 @@
 #include "chrome/browser/lacros/account_manager/profile_account_manager.h"
 
 #include "base/check.h"
-#include "base/containers/flat_set.h"
 #include "base/notreached.h"
 #include "components/account_manager_core/account.h"
 #include "google_apis/gaia/oauth2_access_token_fetcher.h"
@@ -14,7 +13,7 @@ ProfileAccountManager::ProfileAccountManager(AccountProfileMapper* mapper,
                                              const base::FilePath& profile_path)
     : mapper_(mapper), profile_path_(profile_path) {
   DCHECK(mapper_);
-  mapper_observation_.Observe(mapper_);
+  mapper_observation_.Observe(mapper_.get());
 }
 
 ProfileAccountManager::~ProfileAccountManager() = default;
@@ -93,10 +92,15 @@ void ProfileAccountManager::ShowManageAccountsSettings() {
 std::unique_ptr<OAuth2AccessTokenFetcher>
 ProfileAccountManager::CreateAccessTokenFetcher(
     const account_manager::AccountKey& account,
-    const std::string& oauth_consumer_name,
+
     OAuth2AccessTokenConsumer* consumer) {
-  return mapper_->CreateAccessTokenFetcher(profile_path_, account,
-                                           oauth_consumer_name, consumer);
+  return mapper_->CreateAccessTokenFetcher(profile_path_, account, consumer);
+}
+
+void ProfileAccountManager::ReportAuthError(
+    const account_manager::AccountKey& account,
+    const GoogleServiceAuthError& error) {
+  NOTIMPLEMENTED();
 }
 
 void ProfileAccountManager::UpsertAccountForTesting(

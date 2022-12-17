@@ -35,6 +35,7 @@
 
 #include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -858,6 +859,7 @@ static std::unique_ptr<protocol::Network::SecurityDetails> BuildSecurityDetails(
               std::move(signed_certificate_timestamp_list))
           .setCertificateTransparencyCompliance(
               SerializeCTPolicyCompliance(ssl_info.ct_policy_compliance))
+          .setEncryptedClientHello(ssl_info.encrypted_client_hello)
           .build();
 
   if (ssl_info.key_exchange_group != 0) {
@@ -868,6 +870,10 @@ static std::unique_ptr<protocol::Network::SecurityDetails> BuildSecurityDetails(
   }
   if (mac)
     security_details->setMac(mac);
+  if (ssl_info.peer_signature_algorithm != 0) {
+    security_details->setServerSignatureAlgorithm(
+        ssl_info.peer_signature_algorithm);
+  }
 
   return security_details;
 }
@@ -1782,9 +1788,9 @@ void InspectorNetworkAgent::DidReceiveWebSocketMessage(
     size += span.size();
   }
   Vector<char> flatten;
-  flatten.ReserveCapacity(SafeCast<wtf_size_t>(size));
+  flatten.ReserveCapacity(base::checked_cast<wtf_size_t>(size));
   for (const auto& span : data) {
-    flatten.Append(span.data(), SafeCast<wtf_size_t>(span.size()));
+    flatten.Append(span.data(), base::checked_cast<wtf_size_t>(span.size()));
   }
   GetFrontend()->webSocketFrameReceived(
       IdentifiersFactory::SubresourceRequestId(identifier),
@@ -2054,7 +2060,7 @@ Response InspectorNetworkAgent::emulateNetworkConditions(
       // so we must post a task there to make it possible to use
       // NetworkStateNotifier.
       PostCrossThreadTask(
-          *Thread::MainThread()->GetTaskRunner(), FROM_HERE,
+          *Thread::MainThread()->GetDeprecatedTaskRunner(), FROM_HERE,
           CrossThreadBindOnce(SetNetworkStateOverride, offline, latency,
                               download_throughput, upload_throughput, type));
       return Response::Success();

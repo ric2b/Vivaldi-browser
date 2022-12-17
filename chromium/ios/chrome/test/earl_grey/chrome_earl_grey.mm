@@ -46,6 +46,27 @@ NSString* const kTypedURLError =
     @"Error occurred during typed URL verification.";
 NSString* const kWaitForRestoreSessionToFinishError =
     @"Session restoration did not finish";
+
+// Helper class to allow EarlGrey to match elements with isAccessible=N.
+class ScopedMatchNonAccessibilityElements {
+ public:
+  ScopedMatchNonAccessibilityElements() {
+    original_value_ = GREY_CONFIG_BOOL(kGREYConfigKeyIgnoreIsAccessible);
+    [[GREYConfiguration sharedConfiguration]
+            setValue:@YES
+        forConfigKey:kGREYConfigKeyIgnoreIsAccessible];
+  }
+
+  ~ScopedMatchNonAccessibilityElements() {
+    [[GREYConfiguration sharedConfiguration]
+            setValue:[NSNumber numberWithBool:original_value_]
+        forConfigKey:kGREYConfigKeyIgnoreIsAccessible];
+  }
+
+ private:
+  BOOL original_value_;
+};
+
 }  // namespace
 
 namespace chrome_test_util {
@@ -790,6 +811,12 @@ UIWindow* GetAnyKeyWindow() {
                                                          title:title];
 }
 
+- (void)addFakeSyncServerDeviceInfo:(NSString*)deviceName
+               lastUpdatedTimestamp:(base::Time)lastUpdatedTimestamp {
+  [ChromeEarlGreyAppInterface addFakeSyncServerDeviceInfo:deviceName
+                                     lastUpdatedTimestamp:lastUpdatedTimestamp];
+}
+
 - (void)addFakeSyncServerLegacyBookmarkWithURL:(const GURL&)URL
                                          title:(const std::string&)UTF8Title
                      originator_client_item_id:
@@ -1200,10 +1227,6 @@ UIWindow* GetAnyKeyWindow() {
   return [ChromeEarlGreyAppInterface isTriggerVariationEnabled:variationID];
 }
 
-- (BOOL)isAddCredentialsInSettingsEnabled {
-  return [ChromeEarlGreyAppInterface isAddCredentialsInSettingsEnabled];
-}
-
 - (BOOL)isUKMEnabled {
   return [ChromeEarlGreyAppInterface isUKMEnabled];
 }
@@ -1247,6 +1270,15 @@ UIWindow* GetAnyKeyWindow() {
 
 - (BOOL)isNewOmniboxPopupEnabled {
   return [ChromeEarlGreyAppInterface isNewOmniboxPopupEnabled];
+}
+
+- (BOOL)isExperimentalOmniboxEnabled {
+  return [ChromeEarlGreyAppInterface isExperimentalOmniboxEnabled];
+}
+
+// Returns whether the UseLensToSearchForImage feature is enabled;
+- (BOOL)isUseLensToSearchForImageEnabled {
+  return [ChromeEarlGreyAppInterface isUseLensToSearchForImageEnabled];
 }
 
 - (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber {
@@ -1371,12 +1403,24 @@ UIWindow* GetAnyKeyWindow() {
   return [ChromeEarlGreyAppInterface resetBrowsingDataPrefs];
 }
 
+- (void)resetDataForLocalStatePref:(const std::string&)prefName {
+  return [ChromeEarlGreyAppInterface
+      resetDataForLocalStatePref:base::SysUTF8ToNSString(prefName)];
+}
+
 #pragma mark - Pasteboard Utilities (EG2)
 
 - (void)verifyStringCopied:(NSString*)text {
   ConditionBlock condition = ^{
-    return !![[ChromeEarlGreyAppInterface pasteboardString]
-        containsString:text];
+    NSArray<NSString*>* pasteboardStrings =
+        [ChromeEarlGreyAppInterface pasteboardStrings];
+    for (NSString* paste in pasteboardStrings) {
+      if ([paste containsString:text]) {
+        return true;
+      }
+    }
+
+    return false;
   };
   GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(kWaitForActionTimeout,
                                                           condition),
@@ -1448,6 +1492,9 @@ UIWindow* GetAnyKeyWindow() {
     ScopedSynchronizationDisabler disabler;
 #endif
 
+    // On iOS 16, LPLinkView and LPTextView are marked isAccessible=N.
+    ScopedMatchNonAccessibilityElements enabler;
+
     // Page title is added asynchronously, so wait for its appearance.
     NSString* hostString = base::SysUTF8ToNSString(URL.host());
     [self waitForMatcher:grey_allOf(ActivityViewHeader(hostString, pageTitle),
@@ -1479,6 +1526,16 @@ UIWindow* GetAnyKeyWindow() {
 
 - (void)stopWatcher {
   [ChromeEarlGreyAppInterface stopWatcher];
+}
+
+#pragma mark - Url Param Classification utilities
+- (void)setUrlParamClassifications:(const std::string&)raw_classifications {
+  [ChromeEarlGreyAppInterface
+      setUrlParamClassifications:base::SysUTF8ToNSString(raw_classifications)];
+}
+
+- (void)resetUrlParamClassifications {
+  [ChromeEarlGreyAppInterface resetUrlParamClassifications];
 }
 
 @end

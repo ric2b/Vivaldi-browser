@@ -18,6 +18,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
+class IsolationInfo;
 class NetworkIsolationKey;
 }  // namespace net
 
@@ -27,6 +28,20 @@ class FrameTreeNode;
 class NavigationRequest;
 class StoragePartition;
 struct ChildProcessTerminationInfo;
+
+enum class CoopSwapResult { kNoSwap, kSwapWithReference, kSwap };
+
+// Helper function that returns whether the BrowsingInstance should change
+// following COOP rules defined in:
+//
+// https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e#changes-to-navigation
+CONTENT_EXPORT CoopSwapResult
+ShouldSwapBrowsingInstanceForCrossOriginOpenerPolicy(
+    network::mojom::CrossOriginOpenerPolicyValue initiator_coop,
+    const url::Origin& initiator_origin,
+    bool is_navigation_from_initial_empty_document,
+    network::mojom::CrossOriginOpenerPolicyValue destination_coop,
+    const url::Origin& destination_origin);
 
 // Groups information used to apply COOP during navigations. This class will be
 // used to trigger a number of mechanisms such as BrowsingInstance switch or
@@ -56,7 +71,7 @@ class CrossOriginOpenerPolicyStatus : public RenderProcessHostObserver {
   // those references will be broken; window.name will also be reset to an empty
   // string.
   bool require_browsing_instance_swap() const {
-    return require_browsing_instance_swap_;
+    return require_browsing_instance_swap_ > CoopSwapResult::kNoSwap;
   }
 
   // The virtual browsing context group of the document to commit. Initially,
@@ -126,7 +141,7 @@ class CrossOriginOpenerPolicyStatus : public RenderProcessHostObserver {
   base::ScopedObservation<RenderProcessHost, RenderProcessHostObserver>
       previous_document_rph_observation_{this};
 
-  bool require_browsing_instance_swap_ = false;
+  CoopSwapResult require_browsing_instance_swap_ = CoopSwapResult::kNoSwap;
 
   int virtual_browsing_context_group_;
 

@@ -30,6 +30,7 @@
           dan batalkan pilihan "<ph name="NO_PREFETCH_DESCRIPTION" />."
           Jika hal ini tidak menyelesaikan masalah, sebaiknya pilih lagi opsi ini
           untuk meningkatkan kinerja.</translation>
+<translation id="7496505986576158197">Vivaldi dibuat dengan proyek sumber terbuka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dan <ph name="BEGIN_LINK_OSS" />software sumber terbuka lain<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Buka
           Aplikasi &gt; Preferensi Sistem &gt; Jaringan &gt; Lanjutan &gt; Proxy
           dan batalkan proxy apapun yang telah dipilih.</translation>

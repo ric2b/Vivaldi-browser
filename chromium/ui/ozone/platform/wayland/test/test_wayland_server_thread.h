@@ -11,12 +11,14 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "ui/ozone/platform/wayland/test/global_object.h"
 #include "ui/ozone/platform/wayland/test/mock_wp_presentation.h"
 #include "ui/ozone/platform/wayland/test/mock_xdg_shell.h"
+#include "ui/ozone/platform/wayland/test/mock_zaura_shell.h"
 #include "ui/ozone/platform/wayland/test/mock_zwp_linux_dmabuf.h"
 #include "ui/ozone/platform/wayland/test/test_alpha_compositing.h"
 #include "ui/ozone/platform/wayland/test/test_compositor.h"
@@ -111,6 +113,7 @@ class TestWaylandServerThread : public base::Thread,
   TestDataDeviceManager* data_device_manager() { return &data_device_manager_; }
   TestSeat* seat() { return &seat_; }
   MockXdgShell* xdg_shell() { return &xdg_shell_; }
+  MockZAuraShell* zaura_shell() { return &zaura_shell_; }
   TestOutput* output() { return &output_; }
   TestZcrTextInputExtensionV1* text_input_extension_v1() {
     return &zcr_text_input_extension_v1_;
@@ -152,8 +155,8 @@ class TestWaylandServerThread : public base::Thread,
   void OnFileCanWriteWithoutBlocking(int fd) override;
 
   std::unique_ptr<wl_display, DisplayDeleter> display_;
-  wl_client* client_ = nullptr;
-  wl_event_loop* event_loop_ = nullptr;
+  raw_ptr<wl_client> client_ = nullptr;
+  raw_ptr<wl_event_loop> event_loop_ = nullptr;
 
   base::WaitableEvent pause_event_;
   base::WaitableEvent resume_event_;
@@ -175,6 +178,7 @@ class TestWaylandServerThread : public base::Thread,
   TestSeat seat_;
   MockXdgShell xdg_shell_;
   MockZxdgShellV6 zxdg_shell_v6_;
+  MockZAuraShell zaura_shell_;
   TestZcrStylus zcr_stylus_;
   TestZcrTextInputExtensionV1 zcr_text_input_extension_v1_;
   TestZwpTextInputManagerV1 zwp_text_input_manager_v1_;
@@ -188,7 +192,7 @@ class TestWaylandServerThread : public base::Thread,
 
   base::MessagePumpLibevent::FdWatchController controller_;
 
-  OutputDelegate* output_delegate_ = nullptr;
+  raw_ptr<OutputDelegate> output_delegate_ = nullptr;
 };
 
 class TestWaylandServerThread::OutputDelegate {

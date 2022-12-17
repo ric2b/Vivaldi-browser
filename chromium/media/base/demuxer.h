@@ -169,7 +169,7 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
       base::TimeDelta curr_time,
       TrackChangeCB change_completed_cb) = 0;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   // Perform any cleanup operation that are required to run on the media thread
   // before a destructor call on the owner thread. Compared with Stop() this
   // will always be called even if Initialize() was not called.

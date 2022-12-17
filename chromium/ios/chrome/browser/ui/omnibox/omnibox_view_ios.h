@@ -11,7 +11,6 @@
 
 #include "components/omnibox/browser/location_bar_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_left_image_consumer.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_text_change_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #include "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_provider.h"
@@ -33,10 +32,9 @@ class OmniboxViewIOS : public OmniboxView,
                        public OmniboxTextChangeDelegate,
                        public OmniboxTextAcceptDelegate {
  public:
-  // Retains |field|.
+  // Retains `field`.
   OmniboxViewIOS(OmniboxTextFieldIOS* field,
                  WebOmniboxEditController* controller,
-                 id<OmniboxLeftImageConsumer> left_image_consumer,
                  ChromeBrowserState* browser_state,
                  id<OmniboxCommands> omnibox_focuser);
 
@@ -143,12 +141,6 @@ class OmniboxViewIOS : public OmniboxView,
   void OnAccept() override;
 
   // OmniboxPopupViewSuggestionsDelegate methods
-
-  void OnSelectedMatchImageChanged(
-      bool has_match,
-      AutocompleteMatchType::Type match_type,
-      absl::optional<SuggestionAnswer::AnswerType> answer_type,
-      GURL favicon_url) override;
   void OnResultsChanged(const AutocompleteResult& result) override;
   void OnPopupDidScroll() override;
   void OnSelectedMatchForAppending(const std::u16string& str) override;
@@ -176,7 +168,7 @@ class OmniboxViewIOS : public OmniboxView,
   // already focused.
   void FocusOmnibox();
 
-  // Returns |true| if AutocompletePopupView is currently open.
+  // Returns `true` if AutocompletePopupView is currently open.
   BOOL IsPopupOpen();
 
  protected:
@@ -193,7 +185,6 @@ class OmniboxViewIOS : public OmniboxView,
   OmniboxTextFieldIOS* field_;
 
   WebOmniboxEditController* controller_;  // weak, owns us
-  __weak id<OmniboxLeftImageConsumer> left_image_consumer_;
   // Focuser, used to transition the location bar to focused/defocused state as
   // necessary.
   __weak id<OmniboxCommands> omnibox_focuser_;

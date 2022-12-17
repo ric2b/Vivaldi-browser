@@ -3332,6 +3332,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Android.MultiWindowMode.Enter">
+  <obsolete>
+    Deprecated as the data is not valid any more from M100 onward.
+  </obsolete>
   <owner>jinsukkim@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <description>The activity entered Android N multi-window mode.</description>
@@ -3346,7 +3349,20 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.MultiWindowMode.Enter2">
+  <owner>jinsukkim@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The activity entered Android N multi-window mode. This is identical to
+    Android.MultiWindowMode.Enter, but introduced after a bug that affected the
+    logging was fixed.
+  </description>
+</action>
+
 <action name="Android.MultiWindowMode.Exit">
+  <obsolete>
+    Deprecated as the data is not valid any more from M100 onward.
+  </obsolete>
   <owner>twellington@chromium.org</owner>
   <description>The activity exited Android N multi-window mode.</description>
 </action>
@@ -3357,6 +3373,16 @@ should be able to be added at any place in this file.
     The second activity instance (ChromeTabbedActivity2) exited Android N
     multi-window mode. Recorded separately from Android.MultiWindowMode.Exit to
     avoid double counting when two instances are running.
+  </description>
+</action>
+
+<action name="Android.MultiWindowMode.Exit2">
+  <owner>jinsukkim@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The activity exited Android N multi-window mode. This is identical to
+    Android.MultiWindowMode.Exit, but introduced after a bug that affected the
+    logging was fixed.
   </description>
 </action>
 
@@ -3712,6 +3738,61 @@ should be able to be added at any place in this file.
   <description>
     User pressed non Resizable button in compatibility mode menu to turn on the
     resize lock for the ARC app window.
+  </description>
+</action>
+
+<action name="Ash_Clipboard_CopiedItem">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>Emitted when a user copies data to their clipboard.</description>
+</action>
+
+<action name="Ash_Clipboard_PastedItem">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>
+    Emitted when a user pastes data from their clipboard through standard
+    mechanisms, i.e., not using the clipboard history menu.
+  </description>
+</action>
+
+<action name="Ash_ClipboardHistory_PastedItem1">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>
+    Emitted when a user pastes the first item from their clipboard history.
+  </description>
+</action>
+
+<action name="Ash_ClipboardHistory_PastedItem2">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>
+    Emitted when a user pastes the second item from their clipboard history.
+  </description>
+</action>
+
+<action name="Ash_ClipboardHistory_PastedItem3">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>
+    Emitted when a user pastes the third item from their clipboard history.
+  </description>
+</action>
+
+<action name="Ash_ClipboardHistory_PastedItem4">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>
+    Emitted when a user pastes the fourth item from their clipboard history.
+  </description>
+</action>
+
+<action name="Ash_ClipboardHistory_PastedItem5">
+  <owner>ckincaid@chromium.org</owner>
+  <owner>multipaste@google.com</owner>
+  <description>
+    Emitted when a user pastes the fifth item from their clipboard history.
   </description>
 </action>
 
@@ -5057,6 +5138,18 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Bookmarks.Added">
+  <owner>wylieb@chromium.org</owner>
+  <owner>chrome-collections@google.com</owner>
+  <description>Recorded when the user adds a bookmark.</description>
+</action>
+
+<action name="Bookmarks.Opened">
+  <owner>wylieb@chromium.org</owner>
+  <owner>chrome-collections@google.com</owner>
+  <description>Recorded when the user opens a bookmark.</description>
+</action>
+
 <action name="Bookmarks_Search">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -5429,6 +5522,17 @@ should be able to be added at any place in this file.
   <description>
     Recorded when a user clicks the link to open Personal Information
     Suggestions section in Chrome OS Smart Inputs setting page.
+  </description>
+</action>
+
+<action name="ChromeOS.SystemTray.Network.SettingsButtonPressed">
+  <owner>khorimoto@chromium.org</owner>
+  <owner>tjohnsonkanu@chromium.org</owner>
+  <owner>chadduffin@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <description>
+    Recorded when a user clicks on the settings button in Network view within
+    systems tray.
   </description>
 </action>
 
@@ -6145,6 +6249,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="ContentSuggestions.Feed.CardAction.OpenInNewTabInGroup">
+  <owner>jianli@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <description>
+    The user selected the 'open in new tab in group' option for a Feed card.
+  </description>
+</action>
+
 <action name="ContentSuggestions.Feed.CardAction.ReadLater">
   <owner>adamta@google.org</owner>
   <owner>sczs@chromium.org</owner>
@@ -6279,6 +6392,24 @@ should be able to be added at any place in this file.
   <owner>feed@chromium.org</owner>
   <description>
     The user has selected the Following feed in the NTP.
+  </description>
+</action>
+
+<action name="ContentSuggestions.Feed.WebFeed.SortType.GroupByPublisher">
+  <owner>adamta@google.com</owner>
+  <owner>sczs@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <description>
+    The user has selected to group by publisher from the feed sort menu.
+  </description>
+</action>
+
+<action name="ContentSuggestions.Feed.WebFeed.SortType.SortByLatest">
+  <owner>adamta@google.com</owner>
+  <owner>sczs@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <description>
+    The user has selected to sort by latest from the feed sort menu.
   </description>
 </action>
 
@@ -6706,6 +6837,22 @@ should be able to be added at any place in this file.
   <owner>huanzhong@chromium.org</owner>
   <description>
     Third-party cookie blocking was enabled on the incognito NTP.
+  </description>
+</action>
+
+<action name="CookiesInUseDialog.Opened">
+  <owner>alimariam@google.com</owner>
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>The user opens the Cookies in use dialog.</description>
+</action>
+
+<action name="CookiesInUseDialog.RemoveButtonClicked">
+  <owner>alimariam@google.com</owner>
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    The user clicks remove on an entry in the allowed tree view.
   </description>
 </action>
 
@@ -7566,6 +7713,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="DownloadNotification.Button_AlwaysOpenType">
+  <obsolete>It was discovered in June 2022 that this was dead code.</obsolete>
   <owner>yoshiki@chromium.org</owner>
   <description>
     User pushes &quot;Always open type&quot; button on download notification.
@@ -7582,6 +7730,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="DownloadNotification.Button_BypassDeepScanning">
+  <obsolete>It was discovered in June 2022 that this was dead code.</obsolete>
   <owner>drubery@chromium.org</owner>
   <description>
     User pushes &quot;Open now&quot; on the prompt for download deep scanning
@@ -7624,6 +7773,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="DownloadNotification.Button_LearnInterrupted">
+  <obsolete>It was discovered in June 2022 that this was dead code.</obsolete>
   <owner>yoshiki@chromium.org</owner>
   <description>
     User pushes &quot;Learn More about Interrupted&quot; button on download
@@ -7662,6 +7812,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="DownloadNotification.Button_PlatformOpen">
+  <obsolete>It was discovered in June 2022 that this was dead code.</obsolete>
   <owner>yoshiki@chromium.org</owner>
   <description>
     User pushes &quot;Open&quot; button on download notification.
@@ -7672,6 +7823,15 @@ should be able to be added at any place in this file.
   <owner>yoshiki@chromium.org</owner>
   <description>
     User pushes &quot;Resume&quot; button on download notification.
+  </description>
+</action>
+
+<action name="DownloadNotification.Button_Review">
+  <owner>xinghuilu@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <description>
+    User pushes &quot;Review&quot; button on download notification to trigger
+    the enterprise download review dialog.
   </description>
 </action>
 
@@ -7893,6 +8053,16 @@ should be able to be added at any place in this file.
     permissions section of an extension's context menu, where &quot;{site}&quot;
     is the domain of the current page. This is recorded for both keyboard and
     mouse activations.
+  </description>
+</action>
+
+<action name="Extensions.ContextMenu.Hosts.PermissionsPageClicked">
+  <owner>emiliapaz@chromium.org</owner>
+  <owner>extensions-core@chromium.org</owner>
+  <description>
+    The user clicked the &quot;Permissions page&quot; option in the runtime host
+    permissions section of an extension's context menu. This is recorded for
+    both keyboard and mouse activations.
   </description>
 </action>
 
@@ -8125,17 +8295,39 @@ should be able to be added at any place in this file.
   <owner>rdevlin.cronin@chromium.org</owner>
   <owner>extensions-core@chromium.org</owner>
   <description>
-    The user activated an extension from the Extensions Menu in the toolbar.
-    This is recorded for both keyboard and mouse activation.
+    The user triggered an extension from the Extensions Menu in the toolbar. The
+    action may or may not run, depending on other checks. This is recorded for
+    both keyboard and mouse activation.
   </description>
+</action>
+
+<action name="Extensions.Toolbar.ExtensionActivatedFromRequestAccessButton">
+  <obsolete>
+    This was never fully implemented. Metric changed name to
+    &quot;ExtensionsActivatedFromRequestAccessButton&quot; to better fit
+    description
+  </obsolete>
+  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <description>Please enter the description of the metric.</description>
 </action>
 
 <action name="Extensions.Toolbar.ExtensionActivatedFromToolbar">
   <owner>rdevlin.cronin@chromium.org</owner>
   <owner>extensions-core@chromium.org</owner>
   <description>
-    The user activated an extension from the toolbar. This is recorded for both
-    keyboard and mouse activation.
+    The user triggered an extension from the toolbar. The action may or may not
+    run, depending on other checks. This is recorded for both keyboard and mouse
+    activation.
+  </description>
+</action>
+
+<action name="Extensions.Toolbar.ExtensionsActivatedFromRequestAccessButton">
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <owner>emiliapaz@chromium.org</owner>
+  <description>
+    The user triggered multiple extensions from the request access button. Their
+    actions may or may not run, depending on other checks. This is recorded for
+    both keyboard and mouse activation.
   </description>
 </action>
 
@@ -10713,6 +10905,24 @@ should be able to be added at any place in this file.
   <description>
     The number of times the user triggered the &quot;add-to-calendar&quot;
     context after a long press on a date.
+  </description>
+</action>
+
+<action name="IOS.ExperienceKit.Maps.Directions">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user triggered the &quot;get-directions&quot;
+    context after a long press on an address.
+  </description>
+</action>
+
+<action name="IOS.ExperienceKit.Maps.View">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user triggered the &quot;view-location&quot; context
+    after a long press on an address.
   </description>
 </action>
 
@@ -15399,6 +15609,120 @@ should be able to be added at any place in this file.
   <description>The Lens side panel went from hidden to showing.</description>
 </action>
 
+<action name="LensUnifiedSidePanel.HideSidePanel">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>The side panel is hidden when lens was an entry.</description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensEntryHidden">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    The lens entry was hidden in the side panel. User navigated to a different
+    entry in the side panel.
+  </description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensEntryShown">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>The lens entry was shown in the side panel.</description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensQuery">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>The user issued a Lens query.</description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensQuery_Followup">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>The user issued a follow Lens query.</description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensQuery_New">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>The user issued a new Lens query.</description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensQuery_SidePanelClosed">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    Lens query was issued when the side panel is closed. So opening side panel
+    and focusing on lens.
+  </description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensQuery_SidePanelOpenLens">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    Lens query was issued when the side panel is open and lens is focused.
+  </description>
+</action>
+
+<action name="LensUnifiedSidePanel.LensQuery_SidePanelOpenNonLens">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    Lens query was issued when the side panel is open. So focusing on the lens
+    entry in the side panel.
+  </description>
+</action>
+
+<action name="LensUnifiedSidePanel.LoadResultsInNewTab">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    The side panel button to expand results to new tab was clicked.
+  </description>
+</action>
+
+<action name="LensUnifiedSidePanel.ResultLinkClick">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    The user clicked a result link in the Lens entry in the side panel.
+  </description>
+</action>
+
 <action name="LinkNavigationOpenedInForegroundTab">
   <owner>meiliang@chromium.org</owner>
   <owner>sbirch@chromium.org</owner>
@@ -16521,6 +16845,33 @@ should be able to be added at any place in this file.
   <owner>stkhapugin@google.com</owner>
   <description>
     User pressed 'Visit Copied Link' in the omnibox context menu (iOS only).
+  </description>
+</action>
+
+<action name="Mobile.OmniboxPasteButton.SearchCopiedImage">
+  <owner>christianxu@chromium.org</owner>
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    User tapped the paste button in Omnibox's keyboard accessory to search for
+    an image.
+  </description>
+</action>
+
+<action name="Mobile.OmniboxPasteButton.SearchCopiedLink">
+  <owner>christianxu@chromium.org</owner>
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    User tapped the paste button in Omnibox's keyboard accessory to search for a
+    link.
+  </description>
+</action>
+
+<action name="Mobile.OmniboxPasteButton.SearchCopiedText">
+  <owner>christianxu@chromium.org</owner>
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    User tapped the paste button in Omnibox's keyboard accessory to search for
+    text.
   </description>
 </action>
 
@@ -23083,6 +23434,11 @@ should be able to be added at any place in this file.
   <description>Set system time dialog was launched.</description>
 </action>
 
+<action name="Options_ShowAddresses">
+  <owner>vidhanj@google.com</owner>
+  <description>Settings: Show addresses</description>
+</action>
+
 <action name="Options_ShowAdvancedSettings">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Show advanced settings</description>
@@ -23133,6 +23489,11 @@ should be able to be added at any place in this file.
   <owner>kazinova@google.com</owner>
   <owner>vasilii@chromium.org</owner>
   <description>Settings: saved passwords</description>
+</action>
+
+<action name="Options_ShowPaymentMethods">
+  <owner>vidhanj@google.com</owner>
+  <description>Settings: Show payment options</description>
 </action>
 
 <action name="Options_ShowPowerSettings">
@@ -27654,6 +28015,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="SidePanel.Assistant.Shown">
+  <owner>brunobraga@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the assistant side panel entry is shown.
+  </description>
+</action>
+
 <action name="SidePanel.Bookmarks.FolderClose">
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
@@ -27678,10 +28047,40 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="SidePanel.Bookmarks.Shown">
+  <owner>johntlee@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the bookmarks side panel entry is shown.
+  </description>
+</action>
+
+<action name="SidePanel.Feed.Shown">
+  <owner>jianli@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>Recorded when the feed side panel entry is shown.</description>
+</action>
+
 <action name="SidePanel.Hide">
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>The user closed the side panel.</description>
+</action>
+
+<action name="SidePanel.HistoryClusters.Shown">
+  <owner>mfacey@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the history clusters side panel entry is shown.
+  </description>
+</action>
+
+<action name="SidePanel.ReadAnything.Shown">
+  <owner>abigailbklein@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the read anything side panel entry is shown.
+  </description>
 </action>
 
 <action name="SidePanel.ReadingList.AddCurrentPage">
@@ -27700,10 +28099,34 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="SidePanel.ReadingList.Shown">
+  <owner>corising@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the reading list side panel entry is shown.
+  </description>
+</action>
+
 <action name="SidePanel.Show">
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>The user opened the side panel.</description>
+</action>
+
+<action name="SidePanel.SideSearch.Shown">
+  <owner>tluk@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the side search side panel entry is shown.
+  </description>
+</action>
+
+<action name="SidePanel.UserNotes.Shown">
+  <owner>corising@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    Recorded when the user notes side panel entry is shown.
+  </description>
 </action>
 
 <action name="Signin_Abort_Signin">
@@ -28810,6 +29233,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromAvatarBubbleSignin">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28820,6 +29244,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromBookmarkBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28830,6 +29255,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromBookmarkManager">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -28842,6 +29268,7 @@ should be able to be added at any place in this file.
 
 <action
     name="Signin_SigninNewAccountExistingAccount_FromExtensionInstallBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28865,6 +29292,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromNTPContentSuggestions">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28875,6 +29303,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromNTPFeedTopPromo">
+  <obsolete>Removed in M104.</obsolete>
   <owner>mrefaat@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <description>
@@ -28885,6 +29314,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromPasswordBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28895,6 +29325,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromRecentTabs">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -28919,6 +29350,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromSettings">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -28930,6 +29362,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountExistingAccount_FromTabSwitcher">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -28941,6 +29374,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromAvatarBubbleSignin">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28951,6 +29385,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromBookmarkBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28961,6 +29396,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromBookmarkManager">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -28973,6 +29409,7 @@ should be able to be added at any place in this file.
 
 <action
     name="Signin_SigninNewAccountNoExistingAccount_FromExtensionInstallBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -28998,6 +29435,7 @@ should be able to be added at any place in this file.
 
 <action
     name="Signin_SigninNewAccountNoExistingAccount_FromNTPContentSuggestions">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29008,6 +29446,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromNTPFeedTopPromo">
+  <obsolete>Removed in M104.</obsolete>
   <owner>mrefaat@chromium.org</owner>
   <owner>sczs@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
@@ -29019,6 +29458,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromPasswordBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29029,6 +29469,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromRecentTabs">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29054,6 +29495,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromSettings">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29065,6 +29507,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountNoExistingAccount_FromTabSwitcher">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29205,6 +29648,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromAvatarBubbleSignin">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29215,6 +29659,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromBookmarkBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29225,6 +29670,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromBookmarkManager">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29236,6 +29682,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromExtensionInstallBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29257,6 +29704,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromNTPContentSuggestions">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29267,6 +29715,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromNTPFeedTopPromo">
+  <obsolete>Removed in M104.</obsolete>
   <owner>mrefaat@chromium.org</owner>
   <owner>sczs@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
@@ -29278,6 +29727,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromPasswordBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29288,6 +29738,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromRecentTabs">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29312,6 +29763,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromSettings">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29323,6 +29775,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNotDefault_FromTabSwitcher">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29344,6 +29797,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromAvatarBubbleSignin">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29354,6 +29808,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromBookmarkBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29364,6 +29819,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromBookmarkManager">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29375,6 +29831,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromExtensionInstallBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29396,6 +29853,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromNTPContentSuggestions">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29406,6 +29864,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromNTPFeedTopPromo">
+  <obsolete>Removed in M104.</obsolete>
   <owner>mrefaat@chromium.org</owner>
   <owner>sczs@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
@@ -29417,6 +29876,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromPasswordBubble">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -29427,6 +29887,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromRecentTabs">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29451,6 +29912,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromSettings">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -29462,6 +29924,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninWithDefault_FromTabSwitcher">
+  <obsolete>Removed in M104.</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -32434,6 +32897,24 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Tray_ShowChannelInfo">
+  <owner>rtinkoff@chromium.org</owner>
+  <owner>cros-status-area-eng@google.com</owner>
+  <description>
+    Records when the channel indicator icon is displayed in the system tray.
+    This is ChromeOS-specific.
+  </description>
+</action>
+
+<action name="Tray_ShowChannelInfoAdditionalDetails">
+  <owner>rtinkoff@chromium.org</owner>
+  <owner>cros-status-area-eng@google.com</owner>
+  <description>
+    Records when the user presses the OS version button from the quick settings
+    channel indicator UI. This is ChromeOS-specific.
+  </description>
+</action>
+
 <action name="Tray_ShowPowerOptions">
   <owner>michaelpg@chromium.org</owner>
   <description>
@@ -32826,6 +33307,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="WebApp.Preinstalled.UninstallByUser">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user uninstalled a preinstalled app which was previously not in
+    UserUninstalledPreinstalledWebAppPrefs, and has now been added to the prefs.
+  </description>
+</action>
+
 <action name="WebApp.SetWindowMode.Tab">
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
@@ -32844,6 +33334,57 @@ should be able to be added at any place in this file.
   <owner>alancutter@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <description>The user set a web app to open in an app window.</description>
+</action>
+
+<action name="WebAppDetailedInstallAccepted">
+  <owner>dmurph@gchromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user accepted an installation of a web app in the detailed installation
+    dialog (with screenshots, etc).
+  </description>
+</action>
+
+<action name="WebAppDetailedInstallCancelled">
+  <owner>dmurph@gchromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user cancelled an installation of a web app in the detailed installation
+    dialog (with screenshots, etc).
+  </description>
+</action>
+
+<action name="WebAppDetailedInstallShown">
+  <owner>dmurph@gchromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user was shown the detailed installation dialog for a web app (with
+    screenshots, etc).
+  </description>
+</action>
+
+<action name="WebAppInstallAccepted">
+  <owner>dmurph@gchromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user accepted an installation of a web app in the installation dialog.
+  </description>
+</action>
+
+<action name="WebAppInstallCancelled">
+  <owner>dmurph@gchromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user cancelled an installation of a web app in the installation dialog.
+  </description>
+</action>
+
+<action name="WebAppInstallShown">
+  <owner>dmurph@gchromium.org</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>
+    The user was shown the installation dialog for a web app.
+  </description>
 </action>
 
 <action name="WebappMenuOpenInChrome">
@@ -33434,7 +33975,7 @@ should be able to be added at any place in this file.
   <suffix name="AddToHomescreenMessage"
       label="For AddToHomescreen IPH feature."/>
   <suffix name="AddToHomescreenTextBubble"
-      label="For AddToHomescreen IPH feature."/>
+      label="For AddToHomescreen IPH feature using text bubble (obsolete)."/>
   <suffix name="AutoDarkOptOut" label="For AutoDarkOptOut dialog feature."/>
   <suffix name="AutoDarkUserEducationMessage"
       label="For AutoDarkUserEducationMessage feature."/>
@@ -33455,6 +33996,9 @@ should be able to be added at any place in this file.
       label="For ChromeHomePullToRefresh feature."/>
   <suffix name="ContextualPageActions_PriceTracking"
       label="For Contextual page actions price tracking feature."/>
+  <suffix name="ContextualPageActions_PriceTrackingActionChip"
+      label="For action chip variant of Contextual page actions price
+             tracking feature."/>
   <suffix name="ContextualSearch" label="For ContextualSearch feature."/>
   <suffix name="ContextualSearchInPanelHelp"
       label="For ContextualSearchInPanelHelp feature."/>
@@ -33542,6 +34086,8 @@ should be able to be added at any place in this file.
   <suffix name="NewTabPageHomeButton"
       label="For NewTabPageHomeButton feature."/>
   <suffix name="NewTabTip" label="For NewTabTip feature."/>
+  <suffix name="OverflowMenuTip"
+      label="For the overflow menu help tip on iOS."/>
   <suffix name="PageInfo" label="In product help for opening PageInfo."/>
   <suffix name="PageInfoStoreInfo" label="For PageInfoStoreInfo feature."/>
   <suffix name="PasswordsAccountStorage"
@@ -33549,6 +34095,7 @@ should be able to be added at any place in this file.
   <suffix name="PasswordSuggestions" label="For PasswordSuggestions feature."/>
   <suffix name="PreviewsOmniboxUI"
       label="For the Previews UI in the Android Omnibox feature."/>
+  <suffix name="PriceDropNTP" label="For PriceDropNTP feature."/>
   <suffix name="ProfileSwitch"
       label="In product help for switching profiles using the profile menu."/>
   <suffix name="PwaInstallAvailableFeature"
@@ -33561,6 +34108,8 @@ should be able to be added at any place in this file.
       label="For ReadingListEntryPoint feature."/>
   <suffix name="ReadingListMessages" label="For ReadingListMessages feature."/>
   <suffix name="ReopenTab" label="For ReopenTab feature."/>
+  <suffix name="RequestDesktopSiteAppMenu"
+      label="For the RequestDesktopSiteAppMenu feature."/>
   <suffix name="SharedHighlightingBuilder"
       label="For SharedHighlightingBuilder feature."/>
   <suffix name="SharedHighlightingReceiver"
@@ -33570,8 +34119,8 @@ should be able to be added at any place in this file.
   <suffix name="ShoppingListMenuItem"
       label="For ShoppingListMenuItem feature."/>
   <suffix name="SideSearch" label="For the side search feature."/>
-  <suffix name="StartSurfaceTabSwitcherHomeButton"
-      label="For StartSurfaceTabSwitcherHomeButton feature."/>
+  <suffix name="SideSearchAutoTriggering"
+      label="For side search feature automatic triggering."/>
   <suffix name="TabGroupsDragAndDrop" label="For drop-to-merge in tab group."/>
   <suffix name="TabGroupsQuicklyComparePages"
       label="For long press links to create tab groups."/>
@@ -33727,8 +34276,8 @@ should be able to be added at any place in this file.
 
 <action-suffix separator="." ordering="suffix">
   <suffix name="NewTabTile"
-      label="Users tapped the new tab tile in GridTabSwitcher, causing a new
-             tab to be created."/>
+      label="[DEPRECATED] Users tapped the new tab tile in GridTabSwitcher,
+             causing a new tab to be created."/>
   <suffix name="TabGridDialogFromStrip"
       label="Users tapped '+' button on the tab group dialog toolbar, causing
              a new tab to be created in the group. The dialog is expanded

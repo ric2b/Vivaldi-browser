@@ -7,7 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/ash/assistant/assistant_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "components/prefs/pref_service.h"
 
 AssistantServiceMetricsProvider::AssistantServiceMetricsProvider() = default;
@@ -17,17 +17,17 @@ void AssistantServiceMetricsProvider::ProvideCurrentSessionData(
     metrics::ChromeUserMetricsExtension* uma_proto_unused) {
   if (assistant::IsAssistantAllowedForProfile(
           ProfileManager::GetActiveUserProfile()) !=
-      chromeos::assistant::AssistantAllowedState::ALLOWED) {
+      ash::assistant::AssistantAllowedState::ALLOWED) {
     return;
   }
 
   UMA_HISTOGRAM_BOOLEAN(
       "Assistant.ServiceEnabledUserCount",
       ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
-          chromeos::assistant::prefs::kAssistantEnabled));
+          ash::assistant::prefs::kAssistantEnabled));
 
   UMA_HISTOGRAM_BOOLEAN(
       "Assistant.ContextEnabledUserCount",
       ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
-          chromeos::assistant::prefs::kAssistantContextEnabled));
+          ash::assistant::prefs::kAssistantContextEnabled));
 }

@@ -27,16 +27,19 @@
 class Browser;
 class ExtensionsToolbarButton;
 class ToolbarActionViewController;
+class ExtensionsTabbedMenuCoordinator;
 
 // Container for extensions shown in the toolbar. These include pinned
 // extensions and extensions that are 'popped out' transitively to show dialogs
 // or be called out to the user.
-class ExtensionsToolbarContainer : public ToolbarIconContainerView,
-                                   public ExtensionsContainer,
-                                   public TabStripModelObserver,
-                                   public ToolbarActionsModel::Observer,
-                                   public ToolbarActionView::Delegate,
-                                   public views::WidgetObserver {
+class ExtensionsToolbarContainer
+    : public ToolbarIconContainerView,
+      public ExtensionsContainer,
+      public TabStripModelObserver,
+      public ToolbarActionsModel::Observer,
+      public ToolbarActionView::Delegate,
+      public views::WidgetObserver,
+      public extensions::PermissionsManager::Observer {
  public:
   METADATA_HEADER(ExtensionsToolbarContainer);
 
@@ -65,6 +68,11 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   };
 
   static void SetOnVisibleCallbackForTesting(base::OnceClosure callback);
+
+  ExtensionsTabbedMenuCoordinator*
+  GetExtensionsTabbedMenuCoordinatorForTesting() {
+    return extensions_tabbed_menu_coordinator_.get();
+  }
 
   explicit ExtensionsToolbarContainer(
       Browser* browser,
@@ -173,6 +181,18 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
     std::string extension_id;
   };
 
+  // Check if the ExtensionsMenuView or ExtensionsTabbedMenuView is showing.
+  // TODO(crbug.com/1279986): This method will be removed once
+  // ExtensionsTabbedMenu is fully rolled out and we will call directly into the
+  // ExtensionsTabbedMenuCoordinator.
+  bool IsExtensionsMenuShowing() const;
+
+  // // Hides the currently-showing ExtensionsMenuView or
+  // ExtensionsTabbedMenuView, if it exists. TODO(crbug.com/1279986): This
+  // method will be removed once ExtensionsTabbedMenu is fully rolled out and we
+  // will call directly into the ExtensionsTabbedMenuCoordinator.
+  void HideExtensionsMenu();
+
   // Determines whether an action must be visible (i.e. cannot be hidden for any
   // reason). Returns true if the action is popped out or has an attached
   // bubble.
@@ -239,6 +259,11 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
   void OnToolbarModelInitialized() override;
   void OnToolbarPinnedActionsChanged() override;
 
+  // PermissionsManager::Observer:
+  void OnUserPermissionsSettingsChanged(
+      const extensions::PermissionsManager::UserPermissionsSettings& settings)
+      override;
+
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
@@ -255,8 +280,17 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
 
   const raw_ptr<Browser> browser_;
   const raw_ptr<ToolbarActionsModel> model_;
+
   base::ScopedObservation<ToolbarActionsModel, ToolbarActionsModel::Observer>
       model_observation_{this};
+  base::ScopedObservation<extensions::PermissionsManager,
+                          extensions::PermissionsManager::Observer>
+      permissions_manager_observation_{this};
+
+  // Coordinator to show and hide the ExtensionsTabbedMenuView.
+  std::unique_ptr<ExtensionsTabbedMenuCoordinator>
+      extensions_tabbed_menu_coordinator_;
+
   // TODO(emiliapaz): Remove `extensions_button_` once
   // `extensions_features::kExtensionsMenuAccessControl` experiment is released.
   // Exactly one of `extensions_button_ and `extensions_controls_` is created;

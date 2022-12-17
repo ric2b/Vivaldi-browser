@@ -191,7 +191,9 @@ struct ParamTraits<int> {
 template <>
 struct ParamTraits<unsigned int> {
   typedef unsigned int param_type;
-  static void Write(base::Pickle* m, const param_type& p) { m->WriteInt(p); }
+  static void Write(base::Pickle* m, const param_type& p) {
+    m->WriteInt(static_cast<int>(p));
+  }
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
@@ -213,8 +215,7 @@ struct ParamTraits<unsigned int> {
 // these traits for 32 bit ARM then that'll catch any errors.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_FUCHSIA) ||                                              \
-    (BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_64_BITS)) || \
-    defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    (BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_64_BITS))
 template <>
 struct ParamTraits<long> {
   typedef long param_type;
@@ -233,7 +234,7 @@ template <>
 struct ParamTraits<unsigned long> {
   typedef unsigned long param_type;
   static void Write(base::Pickle* m, const param_type& p) {
-    m->WriteLong(p);
+    m->WriteLong(static_cast<long>(p));
   }
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -261,7 +262,9 @@ struct ParamTraits<long long> {
 template <>
 struct ParamTraits<unsigned long long> {
   typedef unsigned long long param_type;
-  static void Write(base::Pickle* m, const param_type& p) { m->WriteInt64(p); }
+  static void Write(base::Pickle* m, const param_type& p) {
+    m->WriteInt64(static_cast<int64_t>(p));
+  }
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
@@ -405,15 +408,15 @@ struct ParamTraits<std::vector<P>> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    int size;
+    size_t size;
     // ReadLength() checks for < 0 itself.
     if (!iter->ReadLength(&size))
       return false;
     // Resizing beforehand is not safe, see BUG 1006367 for details.
-    if (INT_MAX / sizeof(P) <= static_cast<size_t>(size))
+    if (size > INT_MAX / sizeof(P))
       return false;
     r->resize(size);
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
       if (!ReadParam(m, iter, &(*r)[i]))
         return false;
     }
@@ -440,10 +443,10 @@ struct ParamTraits<std::set<P> > {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    int size;
+    size_t size;
     if (!iter->ReadLength(&size))
       return false;
-    for (int i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
       P item;
       if (!ReadParam(m, iter, &item))
         return false;
@@ -885,15 +888,14 @@ struct ParamTraits<base::StackVector<P, stack_capacity> > {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    int size;
-    // ReadLength() checks for < 0 itself.
+    size_t size;
     if (!iter->ReadLength(&size))
       return false;
     // Sanity check for the vector size.
-    if (INT_MAX / sizeof(P) <= static_cast<size_t>(size))
+    if (size > INT_MAX / sizeof(P))
       return false;
     P value;
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
       if (!ReadParam(m, iter, &value))
         return false;
       (*r)->push_back(value);
@@ -923,7 +925,7 @@ struct ParamTraits<base::flat_map<Key, Mapped, Compare>> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r) {
-    int size;
+    size_t size;
     if (!iter->ReadLength(&size))
       return false;
 
@@ -932,7 +934,7 @@ struct ParamTraits<base::flat_map<Key, Mapped, Compare>> {
     // serialized ones will still be handled properly.
     std::vector<typename param_type::value_type> vect;
     vect.resize(size);
-    for (int i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
       if (!ReadParam(m, iter, &vect[i].first))
         return false;
       if (!ReadParam(m, iter, &vect[i].second))

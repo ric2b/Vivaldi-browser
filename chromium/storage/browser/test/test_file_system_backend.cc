@@ -76,6 +76,15 @@ class TestFileSystemBackend::QuotaUtil : public FileSystemQuotaUtil,
     NOTREACHED();
     return base::File::FILE_OK;
   }
+  // FileSystemQuotaUtil overrides.
+  base::File::Error DeleteBucketDataOnFileTaskRunner(
+      FileSystemContext* context,
+      QuotaManagerProxy* proxy,
+      const BucketLocator& bucket_locator,
+      FileSystemType type) override {
+    NOTREACHED();
+    return base::File::FILE_OK;
+  }
 
   void PerformStorageCleanupOnFileTaskRunner(FileSystemContext* context,
                                              QuotaManagerProxy* proxy,
@@ -98,6 +107,12 @@ class TestFileSystemBackend::QuotaUtil : public FileSystemQuotaUtil,
       FileSystemContext* context,
       const blink::StorageKey& storage_key,
       FileSystemType type) override {
+    return usage_;
+  }
+
+  int64_t GetBucketUsageOnFileTaskRunner(FileSystemContext* context,
+                                         const BucketLocator& bucket_locator,
+                                         FileSystemType type) override {
     return usage_;
   }
 

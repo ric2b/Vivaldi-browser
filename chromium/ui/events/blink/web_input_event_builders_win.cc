@@ -12,6 +12,8 @@
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event_utils.h"
 
+#include "app/vivaldi_apptools.h"
+
 using blink::WebInputEvent;
 using blink::WebKeyboardEvent;
 using blink::WebMouseEvent;
@@ -108,6 +110,28 @@ WebMouseEvent WebMouseEventBuilder::Build(
         button = WebMouseEvent::Button::kForward;
       break;
     default:
+      if (vivaldi::IsVivaldiRunning()) {
+        // Vivaldi UI need to react to these events to render the maximized
+        // button properly.
+        switch (message) {
+          case WM_NCMOUSEMOVE:
+            type = WebInputEvent::Type::kMouseMove;
+            button = WebMouseEvent::Button::kNoButton;
+            break;
+          case WM_NCLBUTTONDOWN:
+          case WM_NCLBUTTONDBLCLK:
+            type = WebInputEvent::Type::kMouseDown;
+            button = WebMouseEvent::Button::kLeft;
+            break;
+          case WM_NCLBUTTONUP:
+            type = WebInputEvent::Type::kMouseUp;
+            button = WebMouseEvent::Button::kLeft;
+            break;
+          default:
+            NOTREACHED();
+        }
+        break;
+      }
       NOTREACHED();
   }
 

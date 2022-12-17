@@ -26,6 +26,7 @@
 #include "ash/components/phonehub/notification_manager_impl.h"
 #include "ash/components/phonehub/notification_processor.h"
 #include "ash/components/phonehub/onboarding_ui_tracker_impl.h"
+#include "ash/components/phonehub/phone_hub_metrics_recorder.h"
 #include "ash/components/phonehub/phone_model.h"
 #include "ash/components/phonehub/phone_status_processor.h"
 #include "ash/components/phonehub/recent_apps_interaction_handler_impl.h"
@@ -40,9 +41,6 @@
 namespace ash {
 namespace {
 const char kSecureChannelFeatureName[] = "phone_hub";
-const char kConnectionResultMetricName[] = "PhoneHub.Connection.Result";
-const char kConnectionDurationMetricName[] = "PhoneHub.Connection.Duration";
-const char kConnectionLatencyMetricName[] = "PhoneHub.Connectivity.Latency";
 }  // namespace
 namespace phonehub {
 
@@ -60,9 +58,7 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
               device_sync_client,
               secure_channel_client,
               kSecureChannelFeatureName,
-              kConnectionResultMetricName,
-              kConnectionLatencyMetricName,
-              kConnectionDurationMetricName)),
+              std::make_unique<PhoneHubMetricsRecorder>())),
       feature_status_provider_(std::make_unique<FeatureStatusProviderImpl>(
           device_sync_client,
           multidevice_setup_client,
@@ -161,7 +157,13 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
                                      multidevice_setup_client,
                                      connection_manager_.get(),
                                      std::move(camera_roll_download_manager))
-                               : nullptr) {}
+                               : nullptr),
+      feature_setup_response_processor_(
+          features::IsPhoneHubFeatureSetupErrorHandlingEnabled()
+              ? std::make_unique<FeatureSetupResponseProcessor>(
+                    message_receiver_.get(),
+                    multidevice_feature_access_manager_.get())
+              : nullptr) {}
 
 PhoneHubManagerImpl::~PhoneHubManagerImpl() = default;
 
@@ -236,6 +238,7 @@ void PhoneHubManagerImpl::GetHostLastSeenTimestamp(
 // NOTE: These should be destroyed in the opposite order of how these objects
 // are initialized in the constructor.
 void PhoneHubManagerImpl::Shutdown() {
+  feature_setup_response_processor_.reset();
   camera_roll_manager_.reset();
   invalid_connection_disconnector_.reset();
   multidevice_setup_state_updater_.reset();

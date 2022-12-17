@@ -34,7 +34,7 @@ export const fakeBatteryChargeStatus = [
     powerAdapterStatus: ExternalPowerSource.kAc,
     powerTime: stringToMojoString16('2h 45m'),
     batteryState: BatteryState.kFull,
-  }
+  },
 ];
 
 /** @type {!Array<!BatteryChargeStatus>} */
@@ -55,6 +55,24 @@ export const fakeBatteryHealth2 = [
   },
 ];
 
+/** @type {!Array<!BatteryChargeStatus>} */
+export const fakeBatteryChargeStatus3 = [{
+  chargeNowMilliampHours: 0,
+  currentNowMilliamps: 0,
+  powerAdapterStatus: ExternalPowerSource.kDisconnected,
+  powerTime: stringToMojoString16('0m'),
+}];
+
+/** @type {!Array<!BatteryHealth>} */
+export const fakeBatteryHealth3 = [
+  {
+    batteryWearPercentage: 0,
+    chargeFullDesignMilliampHours: 0,
+    chargeFullNowMilliampHours: 0,
+    cycleCount: 0,
+  },
+];
+
 /** @type {!Array<!BatteryHealth>} */
 export const fakeBatteryHealth = [
   {
@@ -68,7 +86,7 @@ export const fakeBatteryHealth = [
     chargeFullDesignMilliampHours: 6000,
     chargeFullNowMilliampHours: 5699,
     cycleCount: 73,
-  }
+  },
 ];
 
 /** @type {!BatteryInfo} */
@@ -156,7 +174,7 @@ export const fakeMemoryUsage = [
     availableMemoryKib: 650000,
     freeMemoryKib: 150000,
     totalMemoryKib: 1280000,
-  }
+  },
 ];
 
 /** @type {!Array<!MemoryUsage>} */
@@ -180,7 +198,7 @@ export const fakeMemoryUsageLowAvailableMemory = [
     availableMemoryKib: 65000,
     freeMemoryKib: 15000,
     totalMemoryKib: 128000,
-  }
+  },
 ];
 
 /** @type {!SystemInfo} */
@@ -256,20 +274,22 @@ export const fakeRoutineResults = new Map([
 /** @type {!Map<!RoutineType, !PowerRoutineResult>} */
 export const fakePowerRoutineResults = new Map([
   [
-    RoutineType.kBatteryCharge, {
+    RoutineType.kBatteryCharge,
+    {
       result: StandardRoutineResult.kTestPassed,
       is_charging: true,
       percent_delta: 5,
-      time_delta_seconds: 10
-    }
+      time_delta_seconds: 10,
+    },
   ],
   [
-    RoutineType.kBatteryDischarge, {
+    RoutineType.kBatteryDischarge,
+    {
       result: StandardRoutineResult.kUnableToRun,
       is_charging: false,
       percent_delta: 0,
-      time_delta_seconds: 0
-    }
+      time_delta_seconds: 0,
+    },
   ],
 ]);
 
@@ -631,10 +651,16 @@ export const fakeKeyboards = [
     regionCode: 'jp',
     hasAssistantKey: true,
     topRowKeys: [
-      TopRowKey.kBack, TopRowKey.kForward, TopRowKey.kRefresh,
-      TopRowKey.kFullscreen, TopRowKey.kOverview,
-      TopRowKey.kScreenBrightnessDown, TopRowKey.kScreenBrightnessUp,
-      TopRowKey.kVolumeMute, TopRowKey.kVolumeDown, TopRowKey.kVolumeUp
+      TopRowKey.kBack,
+      TopRowKey.kForward,
+      TopRowKey.kRefresh,
+      TopRowKey.kFullscreen,
+      TopRowKey.kOverview,
+      TopRowKey.kScreenBrightnessDown,
+      TopRowKey.kScreenBrightnessUp,
+      TopRowKey.kVolumeMute,
+      TopRowKey.kVolumeDown,
+      TopRowKey.kVolumeUp,
     ],
     topRightKey: TopRightKey.kPower,
     numberPadPresent: NumberPadPresence.kPresent,

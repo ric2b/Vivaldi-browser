@@ -7,8 +7,9 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/ad_blocker/adblock_known_sources_handler.h"
+#include "components/ad_blocker/adblock_rule_manager.h"
+#include "components/ad_blocker/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
@@ -20,21 +21,27 @@ namespace extensions {
 // events to the extension system.
 class ContentBlockingEventRouter
     : public adblock_filter::RuleService::Observer,
+      public adblock_filter::RuleManager::Observer,
       public adblock_filter::KnownRuleSourcesHandler::Observer,
       public adblock_filter::BlockedUrlsReporter::Observer {
  public:
   explicit ContentBlockingEventRouter(content::BrowserContext* browser_context);
   ~ContentBlockingEventRouter() override;
 
+  void Shutdown();
+
   // adblock_filter::RuleService::Observer implementation.
   void OnRuleServiceStateLoaded(
       adblock_filter::RuleService* rule_service) override;
+  void OnGroupStateChanged(adblock_filter::RuleGroup group) override;
+
+  // adblock_filter::RuleManager::Observer implementation.
   void OnRulesSourceUpdated(
       const adblock_filter::RuleSource& rule_source) override;
-  void OnGroupStateChanged(adblock_filter::RuleGroup group) override;
+  void OnExceptionListStateChanged(adblock_filter::RuleGroup group) override;
   void OnExceptionListChanged(
       adblock_filter::RuleGroup group,
-      adblock_filter::RuleService::ExceptionsList list) override;
+      adblock_filter::RuleManager::ExceptionsList list) override;
 
   // adblock_filter::KnownRuleSourcesHandler::Observer implementation.
   void OnKnownSourceAdded(
@@ -366,8 +373,7 @@ class ContentBlockingGetBlockedCountersFunction : public AdBlockFunction {
       adblock_filter::RuleService* rules_service) override;
 };
 
-class ContentBlockingClearBlockedCountersFunction
-    : public AdBlockFunction {
+class ContentBlockingClearBlockedCountersFunction : public AdBlockFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("contentBlocking.clearBlockedCounters",
                              CONTENT_BLOCKING_CLEAR_BLOCKED_COUNTERS)

@@ -30,11 +30,6 @@ class BreadcrumbManager {
   BreadcrumbManager& operator=(const BreadcrumbManager&) = delete;
   ~BreadcrumbManager();
 
-  // Returns the number of collected breadcrumb events which are still relevant.
-  // Note: This method may drop old events so the value can change even when no
-  // new events have been added, but time has passed.
-  size_t GetEventCount();
-
   // Returns a list of the collected breadcrumb events which are still relevant
   // up to |event_count_limit|. Passing zero for |event_count_limit| signifies
   // no limit. Events returned will have a timestamp prepended to the original
@@ -51,9 +46,6 @@ class BreadcrumbManager {
   // Adds and removes observers.
   void AddObserver(BreadcrumbManagerObserver* observer);
   void RemoveObserver(BreadcrumbManagerObserver* observer);
-
-  // TODO(crbug.com/1287441): remove this once crash is understood.
-  bool HasObserver(BreadcrumbManagerObserver* observer);
 
  private:
   // Drops events which are considered stale. Note that stale events are not

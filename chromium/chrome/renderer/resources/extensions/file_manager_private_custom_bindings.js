@@ -225,9 +225,9 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
       });
 
   apiFunctions.setHandleRequest(
-      'getFilesRestrictedByDlp', function(entries, callback) {
+      'getDlpMetadata', function(entries, callback) {
         var sourceUrls = entries.map(getEntryURL);
-        fileManagerPrivateInternal.getFilesRestrictedByDlp(
+        fileManagerPrivateInternal.getDlpMetadata(
             sourceUrls, callback);
       });
 
@@ -387,6 +387,22 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
         }
         fileManagerPrivateInternal.startIOTask(type, urls, newParams, callback);
       });
+
+  apiFunctions.setHandleRequest(
+      'parseTrashInfoFiles', function(entries, callback) {
+        const urls = entries.map(entry => getEntryURL(entry));
+        fileManagerPrivateInternal.parseTrashInfoFiles(
+            urls, function(entryDescriptions) {
+              // Convert the restoreEntry to a DirectoryEntry and the deletion
+              // date to a JS Date.
+              callback(entryDescriptions.map(description => {
+                description.restoreEntry =
+                    GetExternalFileEntry(description.restoreEntry);
+                description.deletionDate = new Date(description.deletionDate);
+                return description;
+              }));
+            });
+      });
 });
 
 bindingUtil.registerEventArgumentMassager(
@@ -405,3 +421,15 @@ bindingUtil.registerEventArgumentMassager(
   }
   dispatch(args);
 });
+
+bindingUtil.registerEventArgumentMassager(
+    'fileManagerPrivate.onIOTaskProgressStatus', function(args, dispatch) {
+      // Convert outputs arguments into real Entry objects if they exist.
+      const outputs = args[0].outputs;
+      if (outputs) {
+        for (let i = 0; i < outputs.length; i++) {
+          outputs[i] = GetExternalFileEntry(outputs[i]);
+        }
+      }
+      dispatch(args);
+    });

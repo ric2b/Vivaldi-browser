@@ -14,8 +14,8 @@
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
-  void CreateSearch(const base::ListValue& search) override;
-  void PasteAndGo(const base::ListValue& search) override;
+  void CreateSearch(const base::Value::List& search) override;
+  void PasteAndGo(const base::Value::List& search) override;
   void ToggleFullscreenModeForTab(content::WebContents* web_contents,
                                   bool enter_fullscreen);
   void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,
@@ -107,7 +107,7 @@
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();
 
-  void VivaldiCreateWebContents(const base::DictionaryValue& create_params,
+  void VivaldiCreateWebContents(const base::Value::Dict& create_params,
                                   WebContentsCreatedCallback callback);
 
   // vivaldi addition:

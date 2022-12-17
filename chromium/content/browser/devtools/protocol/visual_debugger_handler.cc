@@ -34,11 +34,11 @@ void VisualDebuggerHandler::Wire(UberDispatcher* dispatcher) {
 }
 
 DispatchResponse VisualDebuggerHandler::FilterStream(
-    std::unique_ptr<base::flat_map<std::string, base::Value>> in_filter) {
+    std::unique_ptr<base::Value::Dict> in_filter) {
   base::Value dict(std::move(*in_filter));
 
   GpuProcessHost::CallOnIO(
-      GPU_PROCESS_KIND_SANDBOXED,
+      FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
       /*force_create=*/false,
       base::BindOnce(
           [](base::Value json, GpuProcessHost* host) {
@@ -52,7 +52,7 @@ DispatchResponse VisualDebuggerHandler::FilterStream(
 DispatchResponse VisualDebuggerHandler::StartStream() {
   enabled_ = true;
   GpuProcessHost::CallOnIO(
-      GPU_PROCESS_KIND_SANDBOXED,
+      FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
       /*force_create=*/false,
       base::BindOnce(
           [](base::RepeatingCallback<void(base::Value)> callback,
@@ -72,13 +72,12 @@ void VisualDebuggerHandler::OnFrameResponse(base::Value json) {
   // above and thus should be in the correct thread.
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   frontend_->FrameResponse(
-      std::make_unique<base::flat_map<std::string, base::Value>>(
-          std::move(json).TakeDictDeprecated()));
+      std::make_unique<base::Value::Dict>(std::move(json.GetDict())));
 }
 
 DispatchResponse VisualDebuggerHandler::StopStream() {
   if (enabled_) {
-    GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_SANDBOXED,
+    GpuProcessHost::CallOnIO(FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
                              /*force_create=*/false,
                              base::BindOnce([](GpuProcessHost* host) {
                                host->gpu_host()->StopVisualDebugStream();

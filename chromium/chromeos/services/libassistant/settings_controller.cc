@@ -9,22 +9,30 @@
 
 #include "base/callback_helpers.h"
 #include "base/sequence_checker.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/proto/assistant_device_settings_ui.pb.h"
+#include "chromeos/ash/services/assistant/public/proto/settings_ui.pb.h"
 #include "chromeos/assistant/internal/internal_util.h"
 #include "chromeos/assistant/internal/proto/assistant/display_connection.pb.h"
 #include "chromeos/assistant/internal/proto/shared/proto/settings_ui.pb.h"
 #include "chromeos/assistant/internal/proto/shared/proto/v2/config_settings_interface.pb.h"
 #include "chromeos/assistant/internal/proto/shared/proto/v2/display_interface.pb.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/proto/assistant_device_settings_ui.pb.h"
-#include "chromeos/services/assistant/public/proto/settings_ui.pb.h"
 #include "chromeos/services/libassistant/callback_utils.h"
 #include "chromeos/services/libassistant/grpc/assistant_client.h"
 #include "chromeos/services/libassistant/grpc/utils/settings_utils.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 
 namespace chromeos {
-namespace libassistant {
 
+// TODO(https://crbug.com/1164001): remove after migrating to ash.
+namespace assistant {
+using ::ash::assistant::AssistantDevice;
+using ::ash::assistant::AssistantDeviceSettings;
+using ::ash::assistant::AssistantDeviceSettingsUpdate;
+using ::ash::assistant::SettingsUiUpdate;
+}  // namespace assistant
+
+namespace libassistant {
 namespace {
 
 // Each authentication token exists of a [gaia_id, access_token] tuple.
@@ -366,7 +374,7 @@ void SettingsController::UpdateDarkModeEnabledV2(
   assistant_client_->SendDisplayRequest(request);
 }
 
-void SettingsController::OnAssistantClientStarted(
+void SettingsController::OnAssistantClientCreated(
     AssistantClient* assistant_client) {
   assistant_client_ = assistant_client;
 

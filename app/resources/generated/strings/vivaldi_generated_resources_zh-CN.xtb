@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">闲置状态唤醒</translation>
 <translation id="119944043368869598">全部清除</translation>
 <translation id="1221825588892235038">仅限选定内容</translation>
+<translation id="1234736487471201993">创建此图片的二维码</translation>
 <translation id="1244303850296295656">扩展程序错误</translation>
 <translation id="125220115284141797">默认</translation>
 <translation id="1297175357211070620">目标打印机</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">投射标签页</translation>
 <translation id="2150139952286079145">搜索目标打印机</translation>
 <translation id="215753907730220065">退出全屏模式</translation>
+<translation id="2158475082070321257">复制选定的链接</translation>
 <translation id="2177950615300672361">隐身标签页：<ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client 模块：<ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">粘贴为纯文本</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">网站可能还需要使用标识符来识别您的设备</translation>
 <translation id="2445081178310039857">必须指定扩展程序根目录。</translation>
 <translation id="2470702053775288986">已停用不支持的扩展程序</translation>
-<translation id="2476578072172137802">网站设置</translation>
+<translation id="2485422356828889247">卸载</translation>
 <translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">缩放比例必须是一个介于 10 到 200 之间的数字。</translation>
 <translation id="253557089021624350">持续活动者数量</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">举报滥用行为</translation>
 <translation id="2941112035454246133">低</translation>
 <translation id="2972581237482394796">重做(&amp;R)</translation>
+<translation id="2993517869960930405">应用程序信息</translation>
 <translation id="3003623123441819449">CSS 缓存</translation>
 <translation id="3008272652534848354">重置权限</translation>
 <translation id="3012631534724231212">（内嵌框架）</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">以其他身份打开链接</translation>
 <translation id="3222066309010235055">预渲染：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">选择要打包的扩展程序的根目录。要更新某个扩展程序，还需选择要再次使用的私有密钥文件。</translation>
+<translation id="3275778913554317645">在窗口中打开</translation>
 <translation id="3280237271814976245">另存为(&amp;A)...</translation>
 <translation id="3285322247471302225">新建标签(&amp;T)</translation>
 <translation id="3288047731229977326">以开发者模式运行的扩展程序可能会损害您的计算机。如果您不是开发者，那么，为安全起见，应停用以开发者模式运行的扩展程序。</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">在预览中打开PDF</translation>
 <translation id="3308134619352333507">隐藏按钮</translation>
 <translation id="3317459757438853210">双面</translation>
+<translation id="3331974543021145906">应用程序信息</translation>
 <translation id="3341703758641437857">允许访问本地文件 URL</translation>
 <translation id="3347086966102161372">复制图片地址(&amp;O)</translation>
 <translation id="3360297538363969800">打印失败。请检查您的打印机，然后重试。</translation>
 <translation id="3378572629723696641">此扩展程序可能已损坏。</translation>
 <translation id="3387614642886316601">使用增强的“拼写检查”功能</translation>
+<translation id="3390013585654699824">应用程序详细信息</translation>
 <translation id="3393582007140394275">无法投屏。</translation>
 <translation id="3432227430032737297">移除显示的所有 Cookie</translation>
 <translation id="345693547134384690">在新标签中打开图片(&amp;I)</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">通过<ph name="SEARCH_ENGINE" />搜索图片(&amp;S)</translation>
 <translation id="3955193568934677022">允许网站播放受保护的内容（推荐）</translation>
 <translation id="3979395879372752341">已添加新扩展程序（<ph name="EXTENSION_NAME" />）</translation>
+<translation id="398477389655464998">复制选定的链接</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">添加到字典(&amp;A)</translation>
 <translation id="407520071244661467">缩放</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">导入之前关闭浏览器</translation>
 <translation id="4130207949184424187">此扩展程序更改了您通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="4131410914670010031">黑白</translation>
+<translation id="4165986682804962316">网站设置</translation>
 <translation id="4176463684765177261">禁用</translation>
 <translation id="4200983522494130825">新建标签(&amp;T)</translation>
 <translation id="4225397296022057997">在所有网站上</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">恢复设置</translation>
 <translation id="4726710629007580002">安装扩展程序时告警：</translation>
 <translation id="479536056609751218">网页，仅 HTML</translation>
+<translation id="4827904420700932487">创建此图片的二维码</translation>
 <translation id="4839303808932127586">视频另存为(&amp;V)...</translation>
 <translation id="4840096453115567876">仍要退出无痕模式？</translation>
 <translation id="488785315393301722">显示细节</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">访问前先询问（推荐）</translation>
 <translation id="5677928146339483299">已阻止</translation>
 <translation id="5707185214361380026">加载失败的扩展程序来自：</translation>
+<translation id="5713171467967533494">在Vivaldi浏览器中打开</translation>
 <translation id="5715711091495208045">插件代理程序：<ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">另存为 PDF</translation>
 <translation id="5747809636523347288">粘贴并转到 <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">选项</translation>
 <translation id="6579369886355986318">显示所有控件 (&amp;C)</translation>
 <translation id="6639554308659482635">SQLite内存</translation>
+<translation id="666731172850799929">在<ph name="APP_NAME" />中打开</translation>
 <translation id="6686817083349815241">保存您的密码</translation>
 <translation id="6691936601825168937">前进(&amp;F)</translation>
 <translation id="6798954102094737107">插件：<ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@
 <translation id="9003647077635673607">允许在所有网站运行</translation>
 <translation id="9027459031423301635">在新标签页中打开链接(&amp;T)</translation>
 <translation id="9056810968620647706">未找到匹配项。</translation>
+<translation id="9084064520949870008">在窗口中打开</translation>
 <translation id="9137916601698928395">以 <ph name="USER" /> 身份打开链接</translation>
 <translation id="91568222606626347">创建快捷方式…</translation>
 <translation id="916607977885256133">画中画</translation>

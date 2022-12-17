@@ -62,6 +62,7 @@ std::string GetLocaleComponent(const std::string& locale,
   return result;
 }
 
+// Vivaldi: Modified so that we can support "sr-Latn", ref. VAB-3887.
 ScopedJavaLocalRef<jobject> JNI_LocalizationUtils_NewJavaLocale(
     JNIEnv* env,
     const std::string& locale) {
@@ -72,10 +73,14 @@ ScopedJavaLocalRef<jobject> JNI_LocalizationUtils_NewJavaLocale(
       locale, uloc_getCountry, ULOC_COUNTRY_CAPACITY);
   std::string variant = GetLocaleComponent(
       locale, uloc_getVariant, ULOC_FULLNAME_CAPACITY);
+  // Vivaldi
+  std::string script = GetLocaleComponent(
+      locale, uloc_getScript, ULOC_SCRIPT_CAPACITY);
   return Java_LocalizationUtils_getJavaLocale(
       env, base::android::ConvertUTF8ToJavaString(env, language),
       base::android::ConvertUTF8ToJavaString(env, country),
-      base::android::ConvertUTF8ToJavaString(env, variant));
+      base::android::ConvertUTF8ToJavaString(env, variant),
+      base::android::ConvertUTF8ToJavaString(env, script)); // Vivaldi
 }
 
 }  // namespace

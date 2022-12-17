@@ -162,7 +162,10 @@ class DumpAccessibilityScriptTest : public DumpAccessibilityTestBase {
   }
 
   RenderWidgetHost* GetWidgetHost() {
-    return GetWebContents()->GetMainFrame()->GetRenderViewHost()->GetWidget();
+    return GetWebContents()
+        ->GetPrimaryMainFrame()
+        ->GetRenderViewHost()
+        ->GetWidget();
   }
 };
 
@@ -287,6 +290,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXHasPopup) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXHighestEditableAncestor) {
   RunTypedTest<kMacAttributes>("ax-highest-editable-ancestor.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest,
+                       AXInsertionPointLineNumber) {
+  RunTypedTest<kMacAttributes>("ax-insertion-point-line-number.html");
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXInvalid) {

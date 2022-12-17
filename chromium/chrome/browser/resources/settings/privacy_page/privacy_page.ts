@@ -7,9 +7,8 @@
  * 'settings-privacy-page' is the settings page containing privacy and
  * security settings.
  */
-import 'chrome://resources/cr_components/iph_bubble/iph_bubble.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
@@ -19,10 +18,9 @@ import '../site_settings/settings_category_default_radio_group.js';
 import '../site_settings/site_data_details_subpage.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import './privacy_guide/privacy_guide_dialog.js';
 
-import {IPHBubbleElement} from 'chrome://resources/cr_components/iph_bubble/iph_bubble.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
@@ -32,6 +30,7 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {BaseMixin} from '../base_mixin.js';
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
+import {FocusConfig} from '../focus_config.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions} from '../metrics_browser_proxy.js';
@@ -45,18 +44,15 @@ import {SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_
 import {getTemplate} from './privacy_page.html.js';
 import {PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from './privacy_page_browser_proxy.js';
 
-type BlockAutoplayStatus = {
-  enabled: boolean,
-  pref: chrome.settingsPrivate.PrefObject,
-};
-
-type FocusConfig = Map<string, (string|(() => void))>;
+interface BlockAutoplayStatus {
+  enabled: boolean;
+  pref: chrome.settingsPrivate.PrefObject;
+}
 
 export interface SettingsPrivacyPageElement {
   $: {
     clearBrowsingData: CrLinkRowElement,
     cookiesLinkRow: CrLinkRowElement,
-    iphBubble: IPHBubbleElement,
     permissionsLinkRow: CrLinkRowElement,
     securityLinkRow: CrLinkRowElement,
   };
@@ -93,7 +89,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('isGuest');
-        }
+        },
       },
 
       showClearBrowsingDataDialog_: Boolean,
@@ -103,7 +99,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
-        }
+        },
       },
 
       cookieSettingDescription_: String,
@@ -112,21 +108,21 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('enableBlockAutoplayContentSetting');
-        }
+        },
       },
 
       blockAutoplayStatus_: {
         type: Object,
         value() {
           return {};
-        }
+        },
       },
 
       enablePaymentHandlerContentSetting_: {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('enablePaymentHandlerContentSetting');
-        }
+        },
       },
 
       enableFederatedIdentityApiContentSetting_: {
@@ -134,7 +130,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value() {
           return loadTimeData.getBoolean(
               'enableFederatedIdentityApiContentSetting');
-        }
+        },
       },
 
       enableExperimentalWebPlatformFeatures_: {
@@ -150,7 +146,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         readOnly: true,
         value() {
           return loadTimeData.getBoolean('enableSecurityKeysSubpage');
-        }
+        },
       },
 
       enableQuietNotificationPromptsSetting_: {
@@ -165,25 +161,19 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
             loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
       },
 
-      enablePrivacyGuide_: {
+      showPrivacyGuideEntryPoint_: {
         type: Boolean,
-        value: () => loadTimeData.getBoolean('privacyGuideEnabled'),
+        value: true,
       },
 
       enablePrivacyGuidePage_: {
         type: Boolean,
-        computed: 'computeEnablePrivacyGuidePage_(enablePrivacyGuide_)',
+        computed: 'computeEnablePrivacyGuidePage_(showPrivacyGuideEntryPoint_)',
       },
 
       isPrivacySandboxRestricted_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('isPrivacySandboxRestricted'),
-      },
-
-      enableIphDemo_: {
-        reflectToAttribute: true,
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('iphDemoEnabled'),
       },
 
       focusConfig_: {
@@ -258,7 +248,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private enableSecurityKeysSubpage_: boolean;
   private enableQuietNotificationPromptsSetting_: boolean;
   private enableWebBluetoothNewPermissionsBackend_: boolean;
-  private enablePrivacyGuide_: boolean;
+  private showPrivacyGuideEntryPoint_: boolean;
   private enablePrivacyGuidePage_: boolean;
   private isPrivacySandboxRestricted_: boolean;
   private focusConfig_: FocusConfig;
@@ -278,7 +268,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         type: chrome.settingsPrivate.PrefType.BOOLEAN,
         value: false,
       },
-      enabled: false
+      enabled: false,
     });
 
     this.addWebUIListener(
@@ -306,7 +296,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         Router.getInstance().getCurrentRoute() === routes.CLEAR_BROWSER_DATA;
     this.showPrivacyGuideDialog_ =
         Router.getInstance().getCurrentRoute() === routes.PRIVACY_GUIDE &&
-        this.enablePrivacyGuide_ &&
+        this.showPrivacyGuideEntryPoint_ &&
         loadTimeData.getBoolean('privacyGuide2Enabled');
   }
 
@@ -338,15 +328,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     }
   }
 
-  private onShowIPHBubbleTap_() {
-    this.interactedWithPage_();
-    if (this.$.iphBubble.open) {
-      this.$.iphBubble.hide();
-    } else {
-      this.$.iphBubble.show();
-    }
-  }
-
   private onClearBrowsingDataTap_() {
     this.interactedWithPage_();
 
@@ -371,7 +352,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   }
 
   private onPrivacyGuideDialogClosed_() {
-    Router.getInstance().navigateTo(routes.PRIVACY_GUIDE.parent!);
+    Router.getInstance().navigateToPreviousRoute();
     const toFocus = this.shadowRoot!.querySelector('#privacyGuideLinkRow');
     assert(toFocus);
     focusWithoutInk(toFocus);
@@ -416,7 +397,8 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     // However, if the user was managed before and is no longer now, then do not
     // make the privacy guide entry point visible, as the Settings route for
     // privacy guide would still be unavailable until the page is reloaded.
-    this.enablePrivacyGuide_ = this.enablePrivacyGuide_ && !isManaged;
+    this.showPrivacyGuideEntryPoint_ =
+        this.showPrivacyGuideEntryPoint_ && !isManaged;
   }
 
   private onSyncStatusChanged_(syncStatus: SyncStatus) {
@@ -425,12 +407,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     // no longer now then do not make the privacy guide entry point visible, as
     // the Settings route for privacy guide would still be unavailable until
     // the page is reloaded.
-    this.enablePrivacyGuide_ =
-        this.enablePrivacyGuide_ && !syncStatus.childUser;
+    this.showPrivacyGuideEntryPoint_ =
+        this.showPrivacyGuideEntryPoint_ && !syncStatus.childUser;
   }
 
   private computeEnablePrivacyGuidePage_() {
-    return this.enablePrivacyGuide_ &&
+    return this.showPrivacyGuideEntryPoint_ &&
         !loadTimeData.getBoolean('privacyGuide2Enabled');
   }
 

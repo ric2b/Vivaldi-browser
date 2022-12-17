@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_searchable_drop_down/cr_searchable_drop_down.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
@@ -20,7 +20,7 @@ import '../strings.m.js';
 import './throbber.css.js';
 import './destination_list_item_cros.js';
 
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
 import {ListPropertyUpdateMixin} from 'chrome://resources/js/list_property_update_mixin.js';
@@ -30,7 +30,6 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {Destination, GooglePromotedDestinationId} from '../data/destination.js';
 import {DestinationStore, DestinationStoreEventType} from '../data/destination_store.js';
 import {PrintServerStore, PrintServerStoreEventType} from '../data/print_server_store.js';
-import {DestinationSearchBucket, MetricsContext} from '../metrics.js';
 import {NativeLayerImpl} from '../native_layer.js';
 
 import {getTemplate} from './destination_dialog_cros.html.js';
@@ -38,10 +37,10 @@ import {PrintPreviewDestinationListItemElement} from './destination_list_item_cr
 import {PrintPreviewSearchBoxElement} from './print_preview_search_box.js';
 import {PrintPreviewProvisionalDestinationResolverElement} from './provisional_destination_resolver.js';
 
-type PrintServersChangedEventDetail = {
-  printServerNames: string[],
-  isSingleServerFetchingMode: boolean,
-};
+interface PrintServersChangedEventDetail {
+  printServerNames: string[];
+  isSingleServerFetchingMode: boolean;
+}
 
 export interface PrintPreviewDestinationDialogCrosElement {
   $: {
@@ -87,8 +86,6 @@ export class PrintPreviewDestinationDialogCrosElement extends
         value: false,
       },
 
-      metrics_: Object,
-
       searchQuery_: {
         type: Object,
         value: null,
@@ -114,7 +111,7 @@ export class PrintPreviewDestinationDialogCrosElement extends
       loadingAnyDestinations_: {
         type: Boolean,
         computed: 'computeLoadingDestinations_(' +
-            'loadingDestinations_, loadingServerPrinters_)'
+            'loadingDestinations_, loadingServerPrinters_)',
       },
     };
   }
@@ -123,7 +120,6 @@ export class PrintPreviewDestinationDialogCrosElement extends
   private printServerSelected_: string;
   private destinations_: Destination[];
   private loadingDestinations_: boolean;
-  private metrics_: MetricsContext;
   private searchQuery_: RegExp|null;
   private isSingleServerFetchingMode_: boolean;
   private printServerNames_: string[];
@@ -215,10 +211,6 @@ export class PrintPreviewDestinationDialogCrosElement extends
     if (this.searchQuery_) {
       this.$.searchBox.setValue('');
     }
-    const cancelled = this.$.dialog.getNative().returnValue !== 'success';
-    this.metrics_.record(
-        cancelled ? DestinationSearchBucket.DESTINATION_CLOSED_UNCHANGED :
-                    DestinationSearchBucket.DESTINATION_CLOSED_CHANGED);
   }
 
   private onCancelButtonClick_() {
@@ -289,9 +281,6 @@ export class PrintPreviewDestinationDialogCrosElement extends
   }
 
   show() {
-    if (!this.metrics_) {
-      this.metrics_ = MetricsContext.destinationSearch();
-    }
     this.$.dialog.showModal();
     const loading = this.destinationStore === undefined ||
         this.destinationStore.isPrintDestinationSearchInProgress;
@@ -300,7 +289,6 @@ export class PrintPreviewDestinationDialogCrosElement extends
       this.updateDestinations_();
     }
     this.loadingDestinations_ = loading;
-    this.metrics_.record(DestinationSearchBucket.DESTINATION_SHOWN);
   }
 
   /** @return Whether the dialog is open. */
@@ -336,7 +324,6 @@ export class PrintPreviewDestinationDialogCrosElement extends
   }
 
   private onManageButtonClick_() {
-    this.metrics_.record(DestinationSearchBucket.MANAGE_BUTTON_CLICKED);
     NativeLayerImpl.getInstance().managePrinters();
   }
 }

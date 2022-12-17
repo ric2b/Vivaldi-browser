@@ -5,7 +5,6 @@
 #include "content/browser/devtools/devtools_instrumentation.h"
 
 #include "base/containers/adapters.h"
-#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/traced_value.h"
 #include "components/download/public/common/download_create_info.h"
@@ -25,6 +24,7 @@
 #include "content/browser/devtools/protocol/page_handler.h"
 #include "content/browser/devtools/protocol/security_handler.h"
 #include "content/browser/devtools/protocol/target_handler.h"
+#include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/worker_devtools_agent_host.h"
@@ -43,10 +43,8 @@
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/http/http_request_headers.h"
-#include "net/proxy_resolution/proxy_config.h"
 #include "net/quic/web_transport_error.h"
 #include "net/ssl/ssl_info.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/devtools_observer_util.h"
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -212,11 +210,6 @@ std::string FederatedAuthRequestResultToProtocol(
         kErrorFetchingClientMetadataInvalidResponse: {
       return FederatedAuthRequestIssueReasonEnum::ClientMetadataInvalidResponse;
     }
-    case FederatedAuthRequestResult::
-        kErrorClientMetadataMissingPrivacyPolicyUrl: {
-      return FederatedAuthRequestIssueReasonEnum::
-          ClientMetadataMissingPrivacyPolicyUrl;
-    }
     case FederatedAuthRequestResult::kErrorFetchingAccountsHttpNotFound: {
       return FederatedAuthRequestIssueReasonEnum::AccountsHttpNotFound;
     }
@@ -234,9 +227,6 @@ std::string FederatedAuthRequestResultToProtocol(
     }
     case FederatedAuthRequestResult::kErrorFetchingIdTokenInvalidResponse: {
       return FederatedAuthRequestIssueReasonEnum::IdTokenInvalidResponse;
-    }
-    case FederatedAuthRequestResult::kErrorFetchingIdTokenInvalidRequest: {
-      return FederatedAuthRequestIssueReasonEnum::IdTokenInvalidRequest;
     }
     case FederatedAuthRequestResult::kErrorCanceled: {
       return FederatedAuthRequestIssueReasonEnum::Canceled;
@@ -325,10 +315,12 @@ void DidActivatePrerender(const NavigationRequest& nav_request) {
 
 void DidCancelPrerender(const GURL& prerendering_url,
                         FrameTreeNode* ftn,
-                        PrerenderHost::FinalStatus status) {
+                        PrerenderHost::FinalStatus status,
+                        const std::string& reason_details) {
   std::string initiating_frame_id = ftn->devtools_frame_token().ToString();
   DispatchToAgents(ftn, &protocol::PageHandler::DidCancelPrerender,
-                   prerendering_url, initiating_frame_id, status);
+                   prerendering_url, initiating_frame_id, status,
+                   reason_details);
 }
 
 namespace {
@@ -417,10 +409,14 @@ void OnNavigationRequestFailed(
 
   // If a BFCache navigation fails, it will be restarted as a regular
   // navigation, so we don't want to report this failure.
-  // TODO(https://crbug.com/1195751): Stop reporting this for Prerender as well
-  // after it supports fallback to regular navigation on activation failures.
   if (nav_request.IsServedFromBackForwardCache())
     return;
+
+  // Activation of a prerender page is synchronous with its own activation flow
+  // (crrev.com/c/2992411); if the prerender is cancelled (e.g. speculation rule
+  // removed), the flow will fallback to a normal navigation, which is no longer
+  // considered as a page activation.
+  DCHECK(!nav_request.IsPageActivation());
 
   DispatchToAgents(ftn, &protocol::NetworkHandler::LoadingComplete, id,
                    protocol::Network::ResourceTypeEnum::Document, status);
@@ -650,8 +646,10 @@ void ApplyNetworkRequestOverrides(
     bool* report_raw_headers,
     absl::optional<std::vector<net::SourceStream::SourceType>>*
         devtools_accepted_stream_types,
-    bool* devtools_user_agent_overridden) {
+    bool* devtools_user_agent_overridden,
+    bool* devtools_accept_language_overridden) {
   *devtools_user_agent_overridden = false;
+  *devtools_accept_language_overridden = false;
   bool disable_cache = false;
   DevToolsAgentHostImpl* agent_host =
       RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
@@ -665,7 +663,7 @@ void ApplyNetworkRequestOverrides(
     DCHECK(!agent_host);
     agent_host = RenderFrameDevToolsAgentHost::GetFor(
         WebContentsImpl::FromFrameTreeNode(frame_tree_node)
-            ->GetMainFrame()
+            ->GetPrimaryMainFrame()
             ->frame_tree_node());
   }
   if (!agent_host)
@@ -682,8 +680,11 @@ void ApplyNetworkRequestOverrides(
 
   for (auto* emulation : protocol::EmulationHandler::ForAgentHost(agent_host)) {
     bool ua_overridden = false;
-    emulation->ApplyOverrides(&headers, &ua_overridden);
+    bool accept_language_overridden = false;
+    emulation->ApplyOverrides(&headers, &ua_overridden,
+                              &accept_language_overridden);
     *devtools_user_agent_overridden |= ua_overridden;
+    *devtools_accept_language_overridden |= accept_language_overridden;
   }
 
   if (disable_cache) {
@@ -711,7 +712,7 @@ bool ApplyUserAgentMetadataOverrides(
     DCHECK(!agent_host);
     agent_host = RenderFrameDevToolsAgentHost::GetFor(
         WebContentsImpl::FromFrameTreeNode(frame_tree_node)
-            ->GetMainFrame()
+            ->GetPrimaryMainFrame()
             ->frame_tree_node());
   }
   if (!agent_host)
@@ -923,6 +924,46 @@ bool WillCreateURLLoaderFactory(
   return true;
 }
 
+void OnPrefetchRequestWillBeSent(FrameTreeNode* frame_tree_node,
+                                 const std::string& request_id,
+                                 const GURL& initiator,
+                                 const network::ResourceRequest& request) {
+  auto timestamp = base::TimeTicks::Now();
+  std::string frame_token = frame_tree_node->devtools_frame_token().ToString();
+  DispatchToAgents(frame_tree_node,
+                   &protocol::NetworkHandler::PrefetchRequestWillBeSent,
+                   request_id, request, initiator, frame_token, timestamp);
+}
+
+void OnPrefetchResponseReceived(FrameTreeNode* frame_tree_node,
+                                const std::string& request_id,
+                                const GURL& url,
+                                const network::mojom::URLResponseHead& head) {
+  std::string frame_token = frame_tree_node->devtools_frame_token().ToString();
+
+  network::mojom::URLResponseHeadDevToolsInfoPtr head_info =
+      network::ExtractDevToolsInfo(head);
+  DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::ResponseReceived,
+                   request_id, request_id, url,
+                   protocol::Network::ResourceTypeEnum::Prefetch, *head_info,
+                   frame_token);
+}
+void OnPrefetchRequestComplete(
+    FrameTreeNode* frame_tree_node,
+    const std::string& request_id,
+    const network::URLLoaderCompletionStatus& status) {
+  DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::LoadingComplete,
+                   request_id, protocol::Network::ResourceTypeEnum::Prefetch,
+                   status);
+}
+void OnPrefetchBodyDataReceived(FrameTreeNode* frame_tree_node,
+                                const std::string& request_id,
+                                const std::string& body,
+                                bool is_base64_encoded) {
+  DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::BodyDataReceived,
+                   request_id, body, is_base64_encoded);
+}
+
 void OnNavigationRequestWillBeSent(
     const NavigationRequest& navigation_request) {
   // Note this intentionally deviates from the usual instrumentation signal
@@ -1033,6 +1074,17 @@ void FencedFrameCreated(
   agent_host->DidCreateFencedFrame(fenced_frame);
 }
 
+void DidCreateProcessForAuctionWorklet(RenderFrameHostImpl* owner,
+                                       base::ProcessId pid) {
+  // TracingHandler lives on the very root, not local root.
+  // TODO(morlovich): This may not be right for fenced frames, though
+  // that should not currently matter.
+  FrameTreeNode* node = owner->GetMainFrame()->frame_tree_node();
+  if (!node)
+    return;
+  DispatchToAgents(node, &protocol::TracingHandler::AddProcess, pid);
+}
+
 void WillStartDragging(FrameTreeNode* main_frame_tree_node,
                        const blink::mojom::DragDataPtr drag_data,
                        blink::DragOperationsMask drag_operations_mask,
@@ -1077,6 +1129,11 @@ std::unique_ptr<protocol::Array<protocol::String>> BuildExclusionReasons(
           net::CookieInclusionStatus::EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT)) {
     exclusion_reasons->push_back(protocol::Audits::CookieExclusionReasonEnum::
                                      ExcludeSamePartyCrossPartyContext);
+  }
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII)) {
+    exclusion_reasons->push_back(
+        protocol::Audits::CookieExclusionReasonEnum::ExcludeDomainNonASCII);
   }
 
   return exclusion_reasons;
@@ -1132,6 +1189,12 @@ std::unique_ptr<protocol::Array<protocol::String>> BuildWarningReasons(
                      WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE)) {
     warning_reasons->push_back(protocol::Audits::CookieWarningReasonEnum::
                                    WarnSameSiteLaxCrossDowngradeLax);
+  }
+
+  if (status.HasWarningReason(
+          net::CookieInclusionStatus::WARN_DOMAIN_NON_ASCII)) {
+    warning_reasons->push_back(
+        protocol::Audits::CookieWarningReasonEnum::WarnDomainNonASCII);
   }
 
   return warning_reasons;

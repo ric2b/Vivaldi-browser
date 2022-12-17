@@ -31,6 +31,10 @@
 namespace blink {
 
 class CSSParserContext;
+class CSSParserSelector;
+
+// See css_selector_parser.h.
+using CSSSelectorVector = Vector<std::unique_ptr<CSSParserSelector>>;
 
 class CORE_EXPORT CSSParserSelector {
   USING_FAST_MALLOC(CSSParserSelector);
@@ -42,9 +46,13 @@ class CORE_EXPORT CSSParserSelector {
   CSSParserSelector& operator=(const CSSParserSelector&) = delete;
   ~CSSParserSelector();
 
+  // Note that on ReleaseSelector() or GetSelector(), you get that single
+  // selector only, not its entire tag history (so TagHistory() will not
+  // make sense until it's put into a CSSSelectorVector).
   std::unique_ptr<CSSSelector> ReleaseSelector() {
     return std::move(selector_);
   }
+  const CSSSelector* GetSelector() const { return selector_.get(); }
 
   CSSSelector::RelationType Relation() const { return selector_->Relation(); }
   void SetValue(const AtomicString& value, bool match_lower_case = false) {
@@ -64,6 +72,10 @@ class CORE_EXPORT CSSParserSelector {
     selector_->SetRelation(value);
   }
   void SetForPage() { selector_->SetForPage(); }
+  void SetToggle(const AtomicString& name,
+                 std::unique_ptr<ToggleRoot::State>&& value) {
+    selector_->SetToggle(name, std::move(value));
+  }
 
   void UpdatePseudoType(const AtomicString& value,
                         const CSSParserContext& context,
@@ -71,12 +83,11 @@ class CORE_EXPORT CSSParserSelector {
                         CSSParserMode mode) const {
     selector_->UpdatePseudoType(value, context, has_arguments, mode);
   }
-  void UpdatePseudoPage(const AtomicString& value) {
-    selector_->UpdatePseudoPage(value);
+  void UpdatePseudoPage(const AtomicString& value, const Document* document) {
+    selector_->UpdatePseudoPage(value, document);
   }
 
-  void AdoptSelectorVector(
-      Vector<std::unique_ptr<CSSParserSelector>>& selector_vector);
+  void AdoptSelectorVector(CSSSelectorVector& selector_vector);
   void SetSelectorList(std::unique_ptr<CSSSelectorList>);
   void SetAtomics(std::unique_ptr<CSSSelectorList>);
   void SetContainsPseudoInsideHasPseudoClass();

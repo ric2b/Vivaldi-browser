@@ -41,12 +41,12 @@ class SSLInfo;
 
 class NET_EXPORT_PRIVATE HttpStream {
  public:
-  HttpStream() {}
+  HttpStream() = default;
 
   HttpStream(const HttpStream&) = delete;
   HttpStream& operator=(const HttpStream&) = delete;
 
-  virtual ~HttpStream() {}
+  virtual ~HttpStream() = default;
 
   // Registers the HTTP request for the stream.  Must be called before calling
   // InitializeStream().  Separating the registration of the request from the
@@ -194,7 +194,7 @@ class NET_EXPORT_PRIVATE HttpStream {
   // called on the old stream.  The caller should ensure that the response body
   // from the previous request is drained before calling this method.  If the
   // subclass does not support renewing the stream, NULL is returned.
-  virtual HttpStream* RenewStreamForAuth() = 0;
+  virtual std::unique_ptr<HttpStream> RenewStreamForAuth() = 0;
 
   virtual void SetRequestHeadersCallback(RequestHeadersCallback callback) = 0;
 

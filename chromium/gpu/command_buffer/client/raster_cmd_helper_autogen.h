@@ -161,17 +161,6 @@ void UnlockTransferCacheEntryINTERNAL(GLuint entry_type, GLuint entry_id) {
   }
 }
 
-void DeletePaintCacheTextBlobsINTERNALImmediate(GLsizei n, const GLuint* ids) {
-  const uint32_t size =
-      raster::cmds::DeletePaintCacheTextBlobsINTERNALImmediate::ComputeSize(n);
-  raster::cmds::DeletePaintCacheTextBlobsINTERNALImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          raster::cmds::DeletePaintCacheTextBlobsINTERNALImmediate>(size);
-  if (c) {
-    c->Init(n, ids);
-  }
-}
-
 void DeletePaintCachePathsINTERNALImmediate(GLsizei n, const GLuint* ids) {
   const uint32_t size =
       raster::cmds::DeletePaintCachePathsINTERNALImmediate::ComputeSize(n);
@@ -180,6 +169,16 @@ void DeletePaintCachePathsINTERNALImmediate(GLsizei n, const GLuint* ids) {
           raster::cmds::DeletePaintCachePathsINTERNALImmediate>(size);
   if (c) {
     c->Init(n, ids);
+  }
+}
+
+void DeletePaintCachePathsINTERNAL(GLsizei n,
+                                   uint32_t ids_shm_id,
+                                   uint32_t ids_shm_offset) {
+  raster::cmds::DeletePaintCachePathsINTERNAL* c =
+      GetCmdSpace<raster::cmds::DeletePaintCachePathsINTERNAL>();
+  if (c) {
+    c->Init(n, ids_shm_id, ids_shm_offset);
   }
 }
 

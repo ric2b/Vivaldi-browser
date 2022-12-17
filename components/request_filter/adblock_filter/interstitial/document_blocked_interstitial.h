@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/time/time.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/ad_blocker/adblock_metadata.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 
 class GURL;
@@ -44,7 +44,7 @@ class DocumentBlockedInterstitial
  protected:
   // SecurityInterstitialPage implementation:
   void CommandReceived(const std::string& command) override;
-  void PopulateInterstitialStrings(base::Value* load_time_data) override;
+  void PopulateInterstitialStrings(base::Value::Dict& load_time_data) override;
   void OnInterstitialClosing() override;
   bool ShouldDisplayURL() const override;
   int GetHTMLTemplateId() override;

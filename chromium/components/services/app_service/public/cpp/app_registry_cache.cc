@@ -4,11 +4,10 @@
 
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 
+#include <utility>
+
 #include "base/containers/contains.h"
 #include "base/observer_list.h"
-#include "components/services/app_service/public/cpp/features.h"
-
-#include <utility>
 
 namespace apps {
 
@@ -109,10 +108,7 @@ void AppRegistryCache::OnApps(std::vector<AppPtr> deltas,
     DoOnApps(std::move(pending));
   }
 
-  if (base::FeatureList::IsEnabled(
-          kAppServiceOnAppTypeInitializedWithoutMojom)) {
-    OnAppTypeInitialized();
-  }
+  OnAppTypeInitialized();
 }
 
 void AppRegistryCache::DoOnApps(std::vector<apps::mojom::AppPtr> deltas) {
@@ -143,28 +139,6 @@ void AppRegistryCache::DoOnApps(std::vector<apps::mojom::AppPtr> deltas) {
       }
     } else {
       mojom_deltas_in_progress_[delta->app_id] = delta.get();
-    }
-  }
-
-  if (!base::FeatureList::IsEnabled(kAppServiceOnAppUpdateWithoutMojom)) {
-    // The remaining for loops range over the mojom_deltas_in_progress_ map, not
-    // the deltas vector, so that OnAppUpdate is called only once per unique
-    // app_id.
-
-    // Notify the observers for every de-duplicated delta.
-    for (const auto& d_iter : mojom_deltas_in_progress_) {
-      // Do not update subscribers for removed apps.
-      if (d_iter.second->readiness == mojom::Readiness::kRemoved) {
-        continue;
-      }
-      auto s_iter = mojom_states_.find(d_iter.first);
-      apps::mojom::App* state =
-          (s_iter != mojom_states_.end()) ? s_iter->second.get() : nullptr;
-      apps::mojom::App* delta = d_iter.second;
-
-      for (auto& obs : observers_) {
-        obs.OnAppUpdate(AppUpdate(state, delta, account_id_));
-      }
     }
   }
 
@@ -232,24 +206,22 @@ void AppRegistryCache::DoOnApps(std::vector<AppPtr> deltas) {
     }
   }
 
-  if (base::FeatureList::IsEnabled(kAppServiceOnAppUpdateWithoutMojom)) {
-    // The remaining for loops range over the deltas_in_progress_ map, not
-    // the deltas vector, so that OnAppUpdate is called only once per unique
-    // app_id.
+  // The remaining for loops range over the deltas_in_progress_ map, not
+  // the deltas vector, so that OnAppUpdate is called only once per unique
+  // app_id.
 
-    // Notify the observers for every de-duplicated delta.
-    for (const auto& d_iter : deltas_in_progress_) {
-      // Do not update subscribers for removed apps.
-      if (d_iter.second->readiness == Readiness::kRemoved) {
-        continue;
-      }
-      auto s_iter = states_.find(d_iter.first);
-      App* state = (s_iter != states_.end()) ? s_iter->second.get() : nullptr;
-      App* delta = d_iter.second;
+  // Notify the observers for every de-duplicated delta.
+  for (const auto& d_iter : deltas_in_progress_) {
+    // Do not update subscribers for removed apps.
+    if (d_iter.second->readiness == Readiness::kRemoved) {
+      continue;
+    }
+    auto s_iter = states_.find(d_iter.first);
+    App* state = (s_iter != states_.end()) ? s_iter->second.get() : nullptr;
+    App* delta = d_iter.second;
 
-      for (auto& obs : observers_) {
-        obs.OnAppUpdate(AppUpdate(state, delta, account_id_));
-      }
+    for (auto& obs : observers_) {
+      obs.OnAppUpdate(AppUpdate(state, delta, account_id_));
     }
   }
 
@@ -277,27 +249,13 @@ void AppRegistryCache::DoOnApps(std::vector<AppPtr> deltas) {
 AppType AppRegistryCache::GetAppType(const std::string& app_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
 
-  if (base::FeatureList::IsEnabled(kAppServiceOnAppUpdateWithoutMojom)) {
-    auto d_iter = deltas_in_progress_.find(app_id);
-    if (d_iter != deltas_in_progress_.end()) {
-      return d_iter->second->app_type;
-    }
-    auto s_iter = states_.find(app_id);
-    if (s_iter != states_.end()) {
-      return s_iter->second->app_type;
-    }
-    return AppType::kUnknown;
+  auto d_iter = deltas_in_progress_.find(app_id);
+  if (d_iter != deltas_in_progress_.end()) {
+    return d_iter->second->app_type;
   }
-
-  auto d_iter = mojom_deltas_in_progress_.find(app_id);
-  if (d_iter != mojom_deltas_in_progress_.end()) {
-    return ConvertMojomAppTypToAppType(d_iter->second->app_type);
-  }
-  auto s_iter = mojom_states_.find(app_id);
-  if (s_iter != mojom_states_.end()) {
-    return ConvertMojomAppTypToAppType(s_iter->second->app_type);
-  }
-  return AppType::kUnknown;
+  auto s_iter = states_.find(app_id);
+  return (s_iter != states_.end()) ? s_iter->second->app_type
+                                   : AppType::kUnknown;
 }
 
 std::vector<AppPtr> AppRegistryCache::GetAllApps() {
@@ -333,30 +291,7 @@ bool AppRegistryCache::IsAppTypeInitialized(apps::AppType app_type) const {
   return base::Contains(initialized_app_types_, app_type);
 }
 
-void AppRegistryCache::OnMojomAppTypeInitialized() {
-  if (in_progress_initialized_mojom_app_types_.empty()) {
-    return;
-  }
-
-  auto in_progress_initialized_app_types =
-      in_progress_initialized_mojom_app_types_;
-  in_progress_initialized_mojom_app_types_.clear();
-
-  for (auto app_type : in_progress_initialized_app_types) {
-    for (auto& obs : observers_) {
-      obs.OnAppTypeInitialized(ConvertMojomAppTypToAppType(app_type));
-    }
-    initialized_app_types_.insert(ConvertMojomAppTypToAppType(app_type));
-  }
-}
-
 void AppRegistryCache::OnAppTypeInitialized() {
-  if (!base::FeatureList::IsEnabled(
-          kAppServiceOnAppTypeInitializedWithoutMojom)) {
-    OnMojomAppTypeInitialized();
-    return;
-  }
-
   // Check both the non mojom and mojom initialized status. Only when they are
   // not initialized, call OnAppTypeInitialized to notify observers, because
   // observers might use the non mojom or mojom App struct.
@@ -384,10 +319,10 @@ void AppRegistryCache::OnAppTypeInitialized() {
     auto mojom_app_type = ConvertAppTypeToMojomAppType(app_type);
     in_progress_initialized_app_types_.erase(app_type);
     in_progress_initialized_mojom_app_types_.erase(mojom_app_type);
+    initialized_app_types_.insert(app_type);
     for (auto& obs : observers_) {
       obs.OnAppTypeInitialized(app_type);
     }
-    initialized_app_types_.insert(app_type);
   }
 }
 

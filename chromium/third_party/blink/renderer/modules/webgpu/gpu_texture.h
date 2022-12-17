@@ -25,17 +25,14 @@ class GPUTexture : public DawnObject<WGPUTexture> {
   static GPUTexture* Create(GPUDevice* device,
                             const GPUTextureDescriptor* webgpu_desc,
                             ExceptionState& exception_state);
-  static GPUTexture* CreateError(GPUDevice* device);
+  static GPUTexture* CreateError(GPUDevice* device,
+                                 const WGPUTextureDescriptor* desc);
   static GPUTexture* FromCanvas(GPUDevice* device,
                                 HTMLCanvasElement* canvas,
                                 WGPUTextureUsage usage,
                                 ExceptionState& exception_state);
 
-  GPUTexture(GPUDevice* device,
-             WGPUTexture texture,
-             WGPUTextureDimension dimension,
-             WGPUTextureFormat format,
-             WGPUTextureUsage usage);
+  GPUTexture(GPUDevice* device, WGPUTexture texture);
   GPUTexture(GPUDevice* device,
              WGPUTextureFormat format,
              WGPUTextureUsage usage,
@@ -48,6 +45,14 @@ class GPUTexture : public DawnObject<WGPUTexture> {
   GPUTextureView* createView(const GPUTextureViewDescriptor* webgpu_desc,
                              ExceptionState& exception_state);
   void destroy();
+  uint32_t width() const;
+  uint32_t height() const;
+  uint32_t depthOrArrayLayers() const;
+  uint32_t mipLevelCount() const;
+  uint32_t sampleCount() const;
+  String dimension() const;
+  String format() const;
+  uint32_t usage() const;
 
   WGPUTextureDimension Dimension() { return dimension_; }
   WGPUTextureFormat Format() { return format_; }

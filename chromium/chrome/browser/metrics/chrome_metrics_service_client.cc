@@ -20,6 +20,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -50,7 +51,6 @@
 #include "chrome/browser/metrics/desktop_platform_features_metrics_provider.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_profile_session_durations_service_factory.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_metrics_provider.h"
-#include "chrome/browser/metrics/family_link_user_metrics_provider.h"
 #include "chrome/browser/metrics/https_engagement_metrics_provider.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/metrics/network_quality_estimator_provider_impl.h"
@@ -58,7 +58,6 @@
 #include "chrome/browser/privacy_budget/privacy_budget_metrics_provider.h"
 #include "chrome/browser/privacy_budget/privacy_budget_prefs.h"
 #include "chrome/browser/privacy_budget/privacy_budget_ukm_entry_filter.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_metrics_provider.h"
 #include "chrome/browser/safe_browsing/metrics/safe_browsing_metrics_provider.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
@@ -117,7 +116,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
 #include "content/public/browser/network_service_instance.h"
-#include "content/public/browser/notification_service.h"
 #include "google_apis/google_api_keys.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -125,11 +123,12 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/metrics/chrome_android_metrics_provider.h"
+#include "chrome/browser/metrics/family_link_user_metrics_provider.h"
 #include "chrome/browser/metrics/page_load_metrics_provider.h"
 #include "components/metrics/android_metrics_provider.h"
 #else
 #include "chrome/browser/metrics/browser_activity_watcher.h"
-#include "components/performance_manager/public/metrics/metrics_provider.h"
+#include "chrome/browser/performance_manager/metrics/metrics_provider.h"
 #endif
 
 #if BUILDFLAG(IS_POSIX)
@@ -145,7 +144,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/metrics/lacros_metrics_provider.h"
-#include "chromeos/startup/browser_init_params.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -154,6 +153,7 @@
 #include "chrome/browser/ash/printing/printer_metrics_provider.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chrome/browser/ash/web_applications/personalization_app/keyboard_backlight_color_metrics_provider.h"
 #include "chrome/browser/metrics/ambient_mode_metrics_provider.h"
 #include "chrome/browser/metrics/assistant_service_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_family_link_user_metrics_provider.h"
@@ -172,6 +172,10 @@
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/notification_helper/notification_helper_constants.h"
+#endif
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+#include "components/metrics/motherboard_metrics_provider.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)
@@ -650,7 +654,7 @@ void ChromeMetricsServiceClient::Initialize() {
   metrics_service_ = std::make_unique<metrics::MetricsService>(
       metrics_state_manager_, this, local_state);
 
-  notification_listeners_active_ = RegisterForNotifications();
+  observers_active_ = RegisterObservers();
   RegisterMetricsServiceProviders();
 
   if (IsMetricsReportingForceEnabled() ||
@@ -661,7 +665,7 @@ void ChromeMetricsServiceClient::Initialize() {
     uint64_t client_id = 0;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     // Read metrics service client id from ash chrome if it's present.
-    client_id = chromeos::BrowserInitParams::Get()->ukm_client_id;
+    client_id = chromeos::BrowserParamsProxy::Get()->UkmClientId();
 #endif
 
     ukm_service_ = std::make_unique<ukm::UkmService>(
@@ -716,6 +720,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::CPUMetricsProvider>());
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<metrics::MotherboardMetricsProvider>());
+#endif
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::EntropyStateProvider>(local_state));
@@ -777,7 +786,7 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<FamilyLinkUserMetricsProvider>());
 #else
   metrics_service_->RegisterMetricsProvider(
-      std::make_unique<performance_manager::MetricsProvider>(local_state));
+      base::WrapUnique(new performance_manager::MetricsProvider(local_state)));
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
@@ -844,6 +853,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
     metrics_service_->RegisterMetricsProvider(
         std::make_unique<UserTypeByDeviceTypeMetricsProvider>());
   }
+
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<KeyboardBacklightColorMetricsProvider>());
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -881,8 +893,6 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   metrics_service_->RegisterMetricsProvider(
       metrics::CreateDesktopSessionMetricsProvider());
-  metrics_service_->RegisterMetricsProvider(
-      std::make_unique<FamilyLinkUserMetricsProvider>());
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX)
 }
 
@@ -1000,14 +1010,7 @@ void ChromeMetricsServiceClient::RecordCommandLineMetrics() {
   }
 }
 
-bool ChromeMetricsServiceClient::RegisterForNotifications() {
-  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this, content::NOTIFICATION_RENDER_WIDGET_HOST_HANG,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this, chrome::NOTIFICATION_PROFILE_ADDED,
-                 content::NotificationService::AllBrowserContextsAndSources());
-
+bool ChromeMetricsServiceClient::RegisterObservers() {
   omnibox_url_opened_subscription_ =
       OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(
           base::BindRepeating(
@@ -1027,10 +1030,25 @@ bool ChromeMetricsServiceClient::RegisterForNotifications() {
       all_profiles_succeeded = false;
     }
   }
+  profile_manager_observer_.Observe(g_browser_process->profile_manager());
+
   return all_profiles_succeeded;
 }
 
 bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
+  // Only Original Profiles are checked in this call, meaning Incognito and
+  // Guest Off the record status are not checked in this method for UKM consent.
+  // The equivalent check is done in this method
+  // `MetricsServicesManager::UpdateUkmService()`
+  DCHECK(!profile->IsOffTheRecord());
+
+  // Non-Regular Profiles consent information are not expected to be
+  // observed or checked, therefore they are whitelisted for the UKM
+  // validation that checks consent on all profiles.
+  // E.g System Profile consent should be always true.
+  if (!profile->IsRegularProfile())
+    return true;
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Ignore the signin, lock screen app and lock screen profile for sync
   // disables / history deletion.
@@ -1046,14 +1064,12 @@ bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
   // for metrics collection, ignoring the sign-in profile, lock screen app
   // profile, and guest sessions.
   //
-  // TODO(crbug.com/1016655): This conditional would be better placed in
+  // TODO(crbug.com/1016655): This call would be better placed in
   // metrics::structured::Recorder, but can't be because it depends on Chrome
   // code. Investigate whether there's a way of checking this from the
   // component.
-  if (!profile->IsGuestSession()) {
-    metrics::structured::Recorder::GetInstance()->ProfileAdded(
-        profile->GetPath());
-  }
+  metrics::structured::Recorder::GetInstance()->ProfileAdded(
+      profile->GetPath());
 #endif
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
@@ -1082,33 +1098,18 @@ bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
   return true;
 }
 
-void ChromeMetricsServiceClient::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  switch (type) {
-    case content::NOTIFICATION_RENDERER_PROCESS_CLOSED:
-    case content::NOTIFICATION_RENDER_WIDGET_HOST_HANG:
-      metrics_service_->OnApplicationNotIdle();
-      break;
-
-    case chrome::NOTIFICATION_PROFILE_ADDED: {
-      bool success =
-          RegisterForProfileEvents(content::Source<Profile>(source).ptr());
-      // On failure, set `notification_listeners_active_` to false which will
-      // disable UKM reporting via UpdateRunningServices().
-      if (!success && notification_listeners_active_) {
-        notification_listeners_active_ = false;
-        UpdateRunningServices();
-      }
-      break;
-    }
-
-    default:
-      NOTREACHED();
+void ChromeMetricsServiceClient::OnProfileAdded(Profile* profile) {
+  bool success = RegisterForProfileEvents(profile);
+  // On failure, set `observers_active_` to false which will
+  // disable UKM reporting via UpdateRunningServices().
+  if (!success && observers_active_) {
+    observers_active_ = false;
+    UpdateRunningServices();
   }
+}
+
+void ChromeMetricsServiceClient::OnProfileManagerDestroying() {
+  profile_manager_observer_.Reset();
 }
 
 void ChromeMetricsServiceClient::LoadingStateChanged(bool /*is_loading*/) {
@@ -1148,6 +1149,23 @@ void ChromeMetricsServiceClient::OnUkmAllowedStateChanged(bool total_purge) {
 
   // Signal service manager to enable/disable UKM based on new states.
   UpdateRunningServices();
+}
+
+void ChromeMetricsServiceClient::OnRenderProcessHostCreated(
+    content::RenderProcessHost* host) {
+  if (!scoped_observations_.IsObservingSource(host))
+    scoped_observations_.AddObservation(host);
+}
+
+void ChromeMetricsServiceClient::RenderProcessExited(
+    content::RenderProcessHost* host,
+    const content::ChildProcessTerminationInfo& info) {
+  metrics_service_->OnApplicationNotIdle();
+}
+
+void ChromeMetricsServiceClient::RenderProcessHostDestroyed(
+    content::RenderProcessHost* host) {
+  scoped_observations_.RemoveObservation(host);
 }
 
 // static
@@ -1216,18 +1234,18 @@ bool ChromeMetricsServiceClient::IsUkmAllowedWithExtensionsForAllProfiles() {
   return UkmConsentStateObserver::IsUkmAllowedWithExtensionsForAllProfiles();
 }
 
-bool g_notification_listeners_failed = false;
+bool g_observer_registration_failed = false;
 void ChromeMetricsServiceClient::SetNotificationListenerSetupFailedForTesting(
     bool simulate_failure) {
-  g_notification_listeners_failed = simulate_failure;
+  g_observer_registration_failed = simulate_failure;
 }
 
 bool ChromeMetricsServiceClient::
     AreNotificationListenersEnabledOnAllProfiles() {
   // For testing
-  if (g_notification_listeners_failed)
+  if (g_observer_registration_failed)
     return false;
-  return notification_listeners_active_;
+  return observers_active_;
 }
 
 std::string ChromeMetricsServiceClient::GetAppPackageNameIfLoggable() {

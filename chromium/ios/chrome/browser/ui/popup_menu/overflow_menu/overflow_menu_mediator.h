@@ -18,16 +18,21 @@ class BookmarkModel;
 namespace feature_engagement {
 class Tracker;
 }
+@protocol ActivityServiceCommands;
 @protocol ApplicationCommands;
+@protocol BookmarksCommands;
 @protocol BrowserCommands;
+@protocol BrowserCoordinatorCommands;
 class BrowserPolicyConnectorIOS;
 class OverlayPresenter;
+@protocol PageInfoCommands;
+@protocol PopupMenuCommands;
 class PrefService;
 @protocol FindInPageCommands;
 @protocol TextZoomCommands;
 class WebNavigationBrowserAgent;
 class WebStateList;
-@class FeedMetricsRecorder;
+class FollowBrowserAgent;
 
 // Mediator for the overflow menu. This object is in charge of creating and
 // updating the items of the overflow menu.
@@ -42,20 +47,17 @@ class WebStateList;
 @property(nonatomic, assign) WebStateList* webStateList;
 
 // Dispatcher.
-// TODO(crbug.com/906662): This class uses BrowserCoordinatorCommands via their
-// includion in BrowserCommands. That dependency should be explicit, and instead
-// of a single parameter for all command protocols, separate handler properties
-// should be used for each necessary protocol (see ToolbarButtonActionsHandler
-// for an example of this).
-// TODO(crbug.com/1323758): This uses PageInfoCommands via inclusion in
-// BrowserCommands, and should instead use a dedicated handler.
-// TODO(crbug.com/1323764): This uses PopupMenuCommands via inclusion in
-// BrowserCommands, and should instead use a dedicated handler.
-@property(nonatomic, weak) id<ApplicationCommands,
+@property(nonatomic, weak) id<ActivityServiceCommands,
+                              ApplicationCommands,
                               BrowserCommands,
+                              BrowserCoordinatorCommands,
                               FindInPageCommands,
                               TextZoomCommands>
     dispatcher;
+
+@property(nonatomic, weak) id<BookmarksCommands> bookmarksCommandsHandler;
+@property(nonatomic, weak) id<PopupMenuCommands> popupMenuCommandsHandler;
+@property(nonatomic, weak) id<PageInfoCommands> pageInfoCommandsHandler;
 
 // Navigation agent for reloading pages.
 @property(nonatomic, assign) WebNavigationBrowserAgent* navigationAgent;
@@ -88,8 +90,8 @@ class WebStateList;
 // The current browser policy connector.
 @property(nonatomic, assign) BrowserPolicyConnectorIOS* browserPolicyConnector;
 
-// The metrics recorder to record follow related metrics.
-@property(nonatomic, assign) FeedMetricsRecorder* feedMetricsRecorder;
+// The FollowBrowserAgent used to manage web channels subscriptions.
+@property(nonatomic, assign) FollowBrowserAgent* followBrowserAgent;
 
 // Disconnect the mediator.
 - (void)disconnect;

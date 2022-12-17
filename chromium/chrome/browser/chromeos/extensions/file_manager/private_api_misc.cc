@@ -16,7 +16,7 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/new_window_delegate.h"
-#include "ash/public/cpp/style/color_provider.h"
+#include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "base/bind.h"
@@ -59,9 +59,9 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes_util.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chrome/common/extensions/api/manifest_types.h"
@@ -160,8 +160,17 @@ bool ConvertURLsToProvidedInfo(
 
   *file_system = nullptr;
   for (const auto& url : urls) {
-    const storage::FileSystemURL file_system_url(
+    storage::FileSystemURL file_system_url(
         file_system_context->CrackURLInFirstPartyContext(GURL(url)));
+
+    // Convert fusebox URL to its backing (FSP) file system provider URL.
+    if (file_system_url.type() == storage::kFileSystemTypeFuseBox) {
+      std::string fsp_url(url);
+      base::ReplaceFirstSubstringAfterOffset(&fsp_url, 0, "/external/fusebox",
+                                             "/external/");
+      file_system_url =
+          file_system_context->CrackURLInFirstPartyContext(GURL(fsp_url));
+    }
 
     ash::file_system_provider::util::FileSystemURLParser parser(
         file_system_url);
@@ -228,7 +237,7 @@ FileManagerPrivateLogoutUserForReauthenticationFunction::Run() {
   }
 
   chrome::AttemptUserExit();
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -254,15 +263,14 @@ FileManagerPrivateGetPreferencesFunction::Run() {
       service->GetBoolean(arc::prefs::kArcHasAccessToRemovableMedia);
   std::vector<std::string> folder_shortcuts;
   const auto& value_list =
-      service->GetList(ash::prefs::kFilesAppFolderShortcuts)
-          ->GetListDeprecated();
+      service->GetValueList(ash::prefs::kFilesAppFolderShortcuts);
   for (const base::Value& value : value_list) {
     folder_shortcuts.push_back(value.is_string() ? value.GetString() : "");
   }
   result.folder_shortcuts = folder_shortcuts;
 
   return RespondNow(
-      OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
+      WithArguments(base::Value::FromUniquePtrValue(result.ToValue())));
 }
 
 ExtensionFunction::ResponseAction
@@ -288,15 +296,15 @@ FileManagerPrivateSetPreferencesFunction::Run() {
         *params->change_info.arc_removable_media_access_enabled);
   }
   if (params->change_info.folder_shortcuts) {
-    std::vector<base::Value> folder_shortcuts;
+    base::Value::List folder_shortcuts;
     for (auto& shortcut : *params->change_info.folder_shortcuts) {
-      folder_shortcuts.push_back(base::Value(shortcut));
+      folder_shortcuts.Append(shortcut);
     }
-    service->Set(ash::prefs::kFilesAppFolderShortcuts,
-                 base::Value(std::move(folder_shortcuts)));
+    service->SetList(ash::prefs::kFilesAppFolderShortcuts,
+                     std::move(folder_shortcuts));
   }
 
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 // Collection of active ZipFileCreator objects, indexed by ZIP operation ID.
@@ -400,8 +408,7 @@ void FileManagerPrivateInternalZipSelectionFunction::ZipItems() {
   // Start the ZipFileCreator.
   creator->Start(LaunchFileUtilService());
 
-  Respond(TwoArguments(base::Value(zip_id),
-                       base::Value(static_cast<double>(total_bytes_))));
+  Respond(WithArguments(zip_id, static_cast<double>(total_bytes_)));
 }
 
 FileManagerPrivateCancelZipFunction::FileManagerPrivateCancelZipFunction() =
@@ -427,7 +434,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateCancelZipFunction::Run() {
   // Tell the ZipFileCreator to stop.
   creator->Stop();
 
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 FileManagerPrivateGetZipProgressFunction::
@@ -453,8 +460,8 @@ FileManagerPrivateGetZipProgressFunction::ZipProgressValue(
     DCHECK_GT(n, 0u);
   }
 
-  return TwoArguments(base::Value(static_cast<int>(progress.result)),
-                      base::Value(static_cast<double>(progress.bytes)));
+  return WithArguments(static_cast<int>(progress.result),
+                       static_cast<double>(progress.bytes));
 }
 
 ExtensionFunction::ResponseAction
@@ -512,7 +519,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateZoomFunction::Run() {
       return RespondNow(Error(kUnknownErrorDoNotUse));
   }
   zoom::PageZoom::Zoom(GetSenderWebContents(), zoom_type);
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 FileManagerPrivateRequestWebStoreAccessTokenFunction::
@@ -566,7 +573,7 @@ void FileManagerPrivateRequestWebStoreAccessTokenFunction::OnAccessTokenFetched(
     DCHECK(access_token == auth_service_->access_token());
     if (logger)
       logger->Log(logging::LOG_INFO, "CWS OAuth token fetch succeeded.");
-    Respond(OneArgument(base::Value(access_token)));
+    Respond(WithArguments(access_token));
   } else {
     if (logger) {
       logger->Log(logging::LOG_ERROR,
@@ -638,7 +645,7 @@ FileManagerPrivateOpenInspectorFunction::Run() {
           base::StringPrintf("Unexpected inspection type(%d) is specified.",
                              static_cast<int>(params->type))));
   }
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -654,7 +661,7 @@ FileManagerPrivateOpenSettingsSubpageFunction::Run() {
   } else {
     chrome::ShowSettingsSubPageForProfile(profile, params->sub_page);
   }
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 FileManagerPrivateInternalGetMimeTypeFunction::
@@ -688,7 +695,7 @@ FileManagerPrivateInternalGetMimeTypeFunction::Run() {
 
 void FileManagerPrivateInternalGetMimeTypeFunction::OnGetMimeType(
     const std::string& mimeType) {
-  Respond(OneArgument(base::Value(mimeType)));
+  Respond(WithArguments(mimeType));
 }
 
 FileManagerPrivateGetProvidersFunction::
@@ -754,7 +761,7 @@ FileManagerPrivateAddProvidedFileSystemFunction::Run() {
   if (!service->RequestMount(ProviderId::FromString(params->provider_id)))
     return RespondNow(Error("Failed to request a new mount."));
 
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 FileManagerPrivateConfigureVolumeFunction::
@@ -770,11 +777,18 @@ FileManagerPrivateConfigureVolumeFunction::Run() {
   using file_manager::VolumeManager;
   VolumeManager* const volume_manager =
       VolumeManager::Get(Profile::FromBrowserContext(browser_context()));
-  base::WeakPtr<Volume> volume =
-      volume_manager->FindVolumeById(params->volume_id);
-  if (!volume.get())
-    return RespondNow(Error("ConfigureVolume: volume with ID * not found.",
-                            params->volume_id));
+  DCHECK(volume_manager);
+
+  std::string volume_id = params->volume_id;
+  volume_manager->ConvertFuseBoxFSPVolumeIdToFSPIfNeeded(&volume_id);
+
+  const base::WeakPtr<Volume> volume =
+      volume_manager->FindVolumeById(volume_id);
+  if (!volume) {
+    return RespondNow(
+        Error("ConfigureVolume: volume with ID * not found.", volume_id));
+  }
+
   if (!volume->configurable())
     return RespondNow(Error("Volume not configurable."));
 
@@ -807,7 +821,7 @@ void FileManagerPrivateConfigureVolumeFunction::OnCompleted(
     return;
   }
 
-  Respond(NoArguments());
+  Respond(WithArguments());
 }
 
 FileManagerPrivateMountCrostiniFunction::
@@ -828,7 +842,7 @@ FileManagerPrivateMountCrostiniFunction::Run() {
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
   DCHECK(crostini::CrostiniFeatures::Get()->IsEnabled(profile));
   crostini::CrostiniManager::GetForProfile(profile)->RestartCrostini(
-      crostini::ContainerId::GetDefault(),
+      crostini::DefaultContainerId(),
       base::BindOnce(&FileManagerPrivateMountCrostiniFunction::RestartCallback,
                      this));
   return RespondLater();
@@ -847,7 +861,7 @@ void FileManagerPrivateMountCrostiniFunction::RestartCallback(
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
   DCHECK(crostini::CrostiniFeatures::Get()->IsEnabled(profile));
   crostini::CrostiniManager::GetForProfile(profile)->MountCrostiniFiles(
-      crostini::ContainerId::GetDefault(),
+      crostini::DefaultContainerId(),
       base::BindOnce(&FileManagerPrivateMountCrostiniFunction::MountCallback,
                      this),
       false);
@@ -860,7 +874,7 @@ void FileManagerPrivateMountCrostiniFunction::MountCallback(
         base::StringPrintf("Error mounting crostini container: %d", result)));
     return;
   }
-  Respond(NoArguments());
+  Respond(WithArguments());
 }
 
 FileManagerPrivateInternalImportCrostiniImageFunction::
@@ -887,7 +901,7 @@ FileManagerPrivateInternalImportCrostiniImageFunction::Run() {
           .path();
 
   crostini::CrostiniExportImport::GetForProfile(profile)->ImportContainer(
-      crostini::ContainerId::GetDefault(), path,
+      crostini::DefaultContainerId(), path,
       base::BindOnce(
           [](base::FilePath path, crostini::CrostiniResult result) {
             if (result != crostini::CrostiniResult::SUCCESS) {
@@ -896,7 +910,7 @@ FileManagerPrivateInternalImportCrostiniImageFunction::Run() {
             }
           },
           path));
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -928,7 +942,7 @@ FileManagerPrivateInternalSharePathsWithCrostiniFunction::Run() {
 
 void FileManagerPrivateInternalSharePathsWithCrostiniFunction::
     SharePathsCallback(bool success, const std::string& failure_reason) {
-  Respond(success ? NoArguments() : Error(failure_reason));
+  Respond(success ? WithArguments() : Error(failure_reason));
 }
 
 ExtensionFunction::ResponseAction
@@ -956,7 +970,7 @@ FileManagerPrivateInternalUnsharePathWithCrostiniFunction::Run() {
 
 void FileManagerPrivateInternalUnsharePathWithCrostiniFunction::
     UnsharePathCallback(bool success, const std::string& failure_reason) {
-  Respond(success ? NoArguments() : Error(failure_reason));
+  Respond(success ? WithArguments() : Error(failure_reason));
 }
 
 ExtensionFunction::ResponseAction
@@ -998,8 +1012,7 @@ FileManagerPrivateInternalGetCrostiniSharedPathsFunction::Run() {
     entry.Set("fileIsDirectory", true);
     entries.Append(std::move(entry));
   }
-  return RespondNow(TwoArguments(base::Value(std::move(entries)),
-                                 base::Value(first_for_session)));
+  return RespondNow(WithArguments(std::move(entries), first_for_session));
 }
 
 ExtensionFunction::ResponseAction
@@ -1014,7 +1027,7 @@ FileManagerPrivateInternalGetLinuxPackageInfoFunction::Run() {
           profile, render_frame_host());
 
   crostini::CrostiniPackageService::GetForProfile(profile)->GetLinuxPackageInfo(
-      crostini::ContainerId::GetDefault(),
+      crostini::DefaultContainerId(),
       file_system_context->CrackURLInFirstPartyContext(GURL(params->url)),
       base::BindOnce(&FileManagerPrivateInternalGetLinuxPackageInfoFunction::
                          OnGetLinuxPackageInfo,
@@ -1055,7 +1068,7 @@ FileManagerPrivateInternalInstallLinuxPackageFunction::Run() {
 
   crostini::CrostiniPackageService::GetForProfile(profile)
       ->QueueInstallLinuxPackage(
-          crostini::ContainerId::GetDefault(),
+          crostini::DefaultContainerId(),
           file_system_context->CrackURLInFirstPartyContext(GURL(params->url)),
           base::BindOnce(
               &FileManagerPrivateInternalInstallLinuxPackageFunction::
@@ -1180,7 +1193,7 @@ void FileManagerPrivateInternalExecuteCustomActionFunction::OnCompleted(
     return;
   }
 
-  Respond(NoArguments());
+  Respond(WithArguments());
 }
 
 FileManagerPrivateInternalGetRecentFilesFunction::
@@ -1270,30 +1283,30 @@ void FileManagerPrivateInternalGetRecentFilesFunction::
             entry_definition_list) {
   DCHECK(entry_definition_list);
 
-  Respond(OneArgument(base::Value::FromUniquePtrValue(
-      file_manager::util::ConvertEntryDefinitionListToListValue(
-          *entry_definition_list))));
+  Respond(
+      WithArguments(file_manager::util::ConvertEntryDefinitionListToListValue(
+          *entry_definition_list)));
 }
 
 // TODO(crbug.com/1212768): Remove this once Files app SWA has fully launched.
 ExtensionFunction::ResponseAction
 FileManagerPrivateGetFrameColorFunction::Run() {
   ash::ScopedLightModeAsDefault scoped_light_mode_as_default;
-  auto* color_provider = ash::ColorProvider::Get();
   std::string frame_color = SkColorToHexString(SK_ColorWHITE);
-  if (color_provider) {
+  if (auto* dark_light_mode_controller = ash::DarkLightModeController::Get()) {
     frame_color = SkColorToHexString(cros_styles::ResolveColor(
-        cros_styles::ColorName::kBgColor, color_provider->IsDarkModeEnabled(),
-        /*use_debug_color=*/false));
+        cros_styles::ColorName::kBgColor,
+        dark_light_mode_controller->IsDarkModeEnabled(),
+        /*use_debug_colors=*/false));
   }
-  return RespondNow(OneArgument(base::Value(frame_color)));
+  return RespondNow(WithArguments(frame_color));
 }
 
 ExtensionFunction::ResponseAction
 FileManagerPrivateIsTabletModeEnabledFunction::Run() {
   ash::TabletMode* tablet_mode = ash::TabletMode::Get();
-  return RespondNow(OneArgument(
-      base::Value(tablet_mode ? tablet_mode->InTabletMode() : false)));
+  return RespondNow(
+      WithArguments(tablet_mode ? tablet_mode->InTabletMode() : false));
 }
 
 ExtensionFunction::ResponseAction FileManagerPrivateOpenURLFunction::Run() {
@@ -1307,9 +1320,10 @@ ExtensionFunction::ResponseAction FileManagerPrivateOpenURLFunction::Run() {
         Error("Could not get NewWindowDelegate's primary browser"));
   }
   ash::NewWindowDelegate::GetPrimary()->OpenUrl(
-      url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction);
+      url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+      ash::NewWindowDelegate::Disposition::kNewForegroundTab);
 
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 ExtensionFunction::ResponseAction FileManagerPrivateOpenWindowFunction::Run() {
@@ -1336,15 +1350,15 @@ ExtensionFunction::ResponseAction FileManagerPrivateOpenWindowFunction::Run() {
           /*show_android_picker_apps=*/false,
           /*volume_filter=*/{});
 
-  web_app::SystemAppLaunchParams launch_params;
+  ash::SystemAppLaunchParams launch_params;
   launch_params.url = files_swa_url;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
 
-  web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::FILE_MANAGER,
-                                   launch_params);
+  ash::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::FILE_MANAGER,
+                               launch_params);
 
-  return RespondNow(OneArgument(base::Value(true)));
+  return RespondNow(WithArguments(true));
 }
 
 ExtensionFunction::ResponseAction
@@ -1360,7 +1374,7 @@ FileManagerPrivateSendFeedbackFunction::Run() {
                            /*description_placeholder_text=*/std::string(),
                            /*category_tag=*/"chromeos-files-app",
                            /*extra_diagnostics=*/std::string());
-  return RespondNow(NoArguments());
+  return RespondNow(WithArguments());
 }
 
 }  // namespace extensions

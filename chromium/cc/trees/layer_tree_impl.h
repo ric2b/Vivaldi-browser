@@ -360,10 +360,11 @@ class CC_EXPORT LayerTreeImpl {
   void SetCurrentlyScrollingNode(const ScrollNode* node);
   void ClearCurrentlyScrollingNode();
 
-  void ApplySentScrollAndScaleDeltasFromAbortedCommit();
+  void ApplySentScrollAndScaleDeltasFromAbortedCommit(
+      bool main_frame_applied_deltas);
 
-  SkColor background_color() const { return background_color_; }
-  void set_background_color(SkColor color) { background_color_ = color; }
+  SkColor4f background_color() const { return background_color_; }
+  void set_background_color(SkColor4f color) { background_color_ = color; }
 
   gfx::OverlayTransform display_transform_hint() const {
     return display_transform_hint_;
@@ -835,7 +836,7 @@ class CC_EXPORT LayerTreeImpl {
   int is_first_frame_after_commit_tracker_;
   raw_ptr<HeadsUpDisplayLayerImpl> hud_layer_;
   PropertyTrees property_trees_;
-  SkColor background_color_;
+  SkColor4f background_color_;
 
   int last_scrolled_scroll_node_index_;
 

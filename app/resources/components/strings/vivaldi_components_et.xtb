@@ -29,6 +29,7 @@
           ja tühjenda ruut „<ph name="NO_PREFETCH_DESCRIPTION" />”.
           Kui see aga probleemi ei lahenda, on parema jõudluse nimel soovitatav
           ruut taas märkida.</translation>
+<translation id="7496505986576158197">Vivaldi on loodud avatud lähtekoodiga <ph name="BEGIN_LINK_CHROMIUM" />Chromiumi projekti<ph name="END_LINK_CHROMIUM" /> ja hulga <ph name="BEGIN_LINK_OSS" />muu avatud lähtekoodiga tarkvara<ph name="END_LINK_OSS" /> põhjal.</translation>
 <translation id="8187289872471304532">ava
           Rakendused &gt; Süsteemi eelistused &gt; Võrk &gt; Täpsemalt &gt; Puhverserverid
           (Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies)

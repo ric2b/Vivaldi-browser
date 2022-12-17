@@ -310,7 +310,7 @@ void FeedStream::StreamLoadComplete(LoadStreamTask::Result result) {
       stream.type, result.load_from_store_status, result.final_status,
       result.load_type == LoadType::kInitialLoad,
       result.loaded_new_content_from_network, result.stored_content_age,
-      content_stats, GetRequestMetadata(stream.type, false),
+      content_stats, GetContentOrder(result.stream_type),
       std::move(result.latencies));
 
   stream.model_loading_in_progress = false;
@@ -386,7 +386,7 @@ void FeedStream::SetStreamStale(const StreamType& stream_type, bool is_stale) {
   if (stream_metadata.is_known_stale() != is_stale) {
     stream_metadata.set_is_known_stale(is_stale);
     if (is_stale) {
-      SetStreamViewContentIds(metadata_, stream_type, {});
+      SetStreamViewContentHashes(metadata_, stream_type, {});
     }
     SetMetadata(metadata);
   }
@@ -934,6 +934,7 @@ RequestMetadata FeedStream::GetCommonRequestMetadata(
   result.notice_card_acknowledged =
       privacy_notice_card_tracker_.HasAcknowledgedNoticeCard();
   result.autoplay_enabled = delegate_->IsAutoplayEnabled();
+  result.tab_group_enabled_state = delegate_->GetTabGroupEnabledState();
 
   if (signed_in_request) {
     result.client_instance_id = prefs::GetClientInstanceId(*profile_prefs_);
@@ -978,14 +979,14 @@ RequestMetadata FeedStream::GetRequestMetadata(const StreamType& stream_type,
         /*allow_expired_session_id =*/false);
   }
 
-  if (stream_type.IsWebFeed()) {
-    result.content_order = GetValidWebFeedContentOrder(*profile_prefs_);
-  }
+  result.content_order = GetContentOrder(stream_type);
 
-  if (stream->model) {
+  const feedstore::Metadata::StreamMetadata* stream_metadata =
+      FindMetadataForStream(GetMetadata(), stream_type);
+  if (stream_metadata != nullptr) {
     result.info_card_tracking_states = info_card_tracker_.GetAllStates(
-        stream->model->last_server_response_time_millis(),
-        stream->model->last_added_time_millis());
+        stream_metadata->last_server_response_time_millis(),
+        stream_metadata->last_fetch_time_millis());
   }
 
   return result;
@@ -1123,8 +1124,8 @@ bool FeedStream::HasUnreadContent(const StreamType& stream_type) {
   // ViewContentIds to whatever the current set is. This can happen if the
   // surface already shown is refreshed.
   if (stream.model && stream.surfaces.HasSurfaceShowingContent()) {
-    SetMetadata(SetStreamViewContentIds(metadata_, stream_type,
-                                        stream.model->GetContentIds()));
+    SetMetadata(SetStreamViewContentHashes(metadata_, stream_type,
+                                           stream.model->GetContentIds()));
     return false;
   }
   return true;
@@ -1256,7 +1257,8 @@ void FeedStream::UpdateUserProfileOnLinkClick(
 
 void FeedStream::ReportOpenAction(const GURL& url,
                                   const StreamType& stream_type,
-                                  const std::string& slice_id) {
+                                  const std::string& slice_id,
+                                  OpenActionType action_type) {
   recent_feed_navigations_.insert(recent_feed_navigations_.begin(), url);
   recent_feed_navigations_.resize(
       std::min(kMaxRecentFeedNavigations, recent_feed_navigations_.size()));
@@ -1266,7 +1268,7 @@ void FeedStream::ReportOpenAction(const GURL& url,
   int index = stream.surface_updater->GetSliceIndexFromSliceId(slice_id);
   if (index < 0)
     index = MetricsReporter::kUnknownCardIndex;
-  metrics_reporter_->OpenAction(stream_type, index);
+  metrics_reporter_->OpenAction(stream_type, index, action_type);
 
   if (stream.model) {
     privacy_notice_card_tracker_.OnOpenAction(
@@ -1274,27 +1276,9 @@ void FeedStream::ReportOpenAction(const GURL& url,
   }
   ScheduleFeedCloseRefreshOnInteraction(stream_type);
 }
+
 void FeedStream::ReportOpenVisitComplete(base::TimeDelta visit_time) {
   metrics_reporter_->OpenVisitComplete(visit_time);
-}
-void FeedStream::ReportOpenInNewTabAction(const GURL& url,
-                                          const StreamType& stream_type,
-                                          const std::string& slice_id) {
-  recent_feed_navigations_.insert(recent_feed_navigations_.begin(), url);
-  recent_feed_navigations_.resize(
-      std::min(kMaxRecentFeedNavigations, recent_feed_navigations_.size()));
-
-  Stream& stream = GetStream(stream_type);
-  int index = stream.surface_updater->GetSliceIndexFromSliceId(slice_id);
-  if (index < 0)
-    index = MetricsReporter::kUnknownCardIndex;
-  metrics_reporter_->OpenInNewTabAction(stream_type, index);
-
-  if (stream.model) {
-    privacy_notice_card_tracker_.OnOpenAction(
-        stream.model->FindContentId(ToContentRevision(slice_id)));
-  }
-  ScheduleFeedCloseRefreshOnInteraction(stream_type);
 }
 
 void FeedStream::ReportSliceViewed(SurfaceId surface_id,
@@ -1425,13 +1409,9 @@ void FeedStream::SetContentOrder(const StreamType& stream_type,
           &FeedStream::ForceRefreshTask, base::Unretained(this), stream_type)));
 }
 
-ContentOrder FeedStream::GetContentOrder(const StreamType& stream_type) {
-  if (!stream_type.IsWebFeed()) {
-    NOTREACHED()
-        << "GetContentOrderFromPrefs is not supported for this stream_type "
-        << stream_type;
+ContentOrder FeedStream::GetContentOrder(const StreamType& stream_type) const {
+  if (!stream_type.IsWebFeed())
     return ContentOrder::kUnspecified;
-  }
   return GetValidWebFeedContentOrder(*profile_prefs_);
 }
 

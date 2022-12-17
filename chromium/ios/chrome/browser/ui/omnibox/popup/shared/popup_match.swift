@@ -28,6 +28,11 @@ import SwiftUI
     return suggestion.isTabMatch
   }
 
+  /// Some suggestions are from the clipboard provider.
+  var isClipboardMatch: Bool {
+    return suggestion.isClipboardMatch
+  }
+
   /// Some suggestions can be deleted with a swipe-to-delete gesture.
   var supportsDeletion: Bool {
     return suggestion.supportsDeletion
@@ -67,6 +72,7 @@ extension PopupMatch {
     let detailText: NSAttributedString?
     let isAppendable: Bool
     let isTabMatch: Bool
+    let isClipboardMatch: Bool
     let supportsDeletion: Bool
     let icon: OmniboxIcon?
     let pedal: (OmniboxIcon & OmniboxPedal)?
@@ -76,11 +82,15 @@ extension PopupMatch {
     let numberOfLines: Int
     let isTailSuggestion = false
     let commonPrefix = ""
+    let matchTypeIcon: UIImage? = nil
+    let isMatchTypeSearch = false
+    let omniboxPreviewText: NSAttributedString? = nil
+    let destinationUrl: CrURL? = nil
 
     init(
       text: String, detailText: String? = nil, isAppendable: Bool = false, isTabMatch: Bool = false,
-      supportsDeletion: Bool = false, icon: OmniboxIcon? = nil, hasAnswer: Bool = false,
-      numberOfLines: Int = 1, pedal: OmniboxPedalData? = nil
+      isClipboardMatch: Bool = false, supportsDeletion: Bool = false, icon: OmniboxIcon? = nil,
+      hasAnswer: Bool = false, numberOfLines: Int = 1, pedal: OmniboxPedalData? = nil
     ) {
       self.text = NSAttributedString(string: text, attributes: [:])
       self.detailText = detailText.flatMap { string in
@@ -88,6 +98,7 @@ extension PopupMatch {
       }
       self.isAppendable = isAppendable
       self.isTabMatch = isTabMatch
+      self.isClipboardMatch = isClipboardMatch
       self.supportsDeletion = supportsDeletion
       self.icon = icon
       self.pedal = pedal
@@ -97,7 +108,8 @@ extension PopupMatch {
 
     init(
       attributedText: NSAttributedString, attributedDetailText: NSAttributedString? = nil,
-      isAppendable: Bool = false, isTabMatch: Bool = false, hasAnswer: Bool = false,
+      isAppendable: Bool = false, isTabMatch: Bool = false, isClipboardMatch: Bool = false,
+      hasAnswer: Bool = false,
       supportsDeletion: Bool = false, icon: OmniboxIcon? = nil, numberOfLines: Int = 1,
       pedal: OmniboxPedalData? = nil
     ) {
@@ -105,6 +117,7 @@ extension PopupMatch {
       self.detailText = attributedDetailText
       self.isAppendable = isAppendable
       self.isTabMatch = isTabMatch
+      self.isClipboardMatch = isClipboardMatch
       self.supportsDeletion = supportsDeletion
       self.icon = icon
       self.pedal = pedal

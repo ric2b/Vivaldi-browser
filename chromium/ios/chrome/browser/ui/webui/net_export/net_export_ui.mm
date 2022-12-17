@@ -66,20 +66,20 @@ class NetExportMessageHandler
   void RegisterMessages() override;
 
   // Messages.
-  void OnEnableNotifyUIWithState(const base::ListValue* list);
-  void OnStartNetLog(const base::ListValue* list);
-  void OnStopNetLog(const base::ListValue* list);
-  void OnSendNetLog(const base::ListValue* list);
+  void OnEnableNotifyUIWithState(const base::Value::List& list);
+  void OnStartNetLog(const base::Value::List& list);
+  void OnStopNetLog(const base::Value::List& list);
+  void OnSendNetLog(const base::Value::List& list);
 
   // net_log::NetExportFileWriter::StateObserver implementation.
-  void OnNewState(const base::DictionaryValue& state) override;
+  void OnNewState(const base::Value::Dict& state) override;
 
  private:
   // Send NetLog data via email.
   void SendEmail(const base::FilePath& file_to_send);
 
   void NotifyUIWithState(
-      std::unique_ptr<base::DictionaryValue> file_writer_state);
+      const base::Value::Dict& file_writer_state);
 
   // Cache of GetApplicationContext()->GetNetExportFileWriter().
   // This is owned by the ApplicationContext.
@@ -105,26 +105,26 @@ NetExportMessageHandler::~NetExportMessageHandler() {
 void NetExportMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       net_log::kEnableNotifyUIWithStateHandler,
       base::BindRepeating(&NetExportMessageHandler::OnEnableNotifyUIWithState,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       net_log::kStartNetLogHandler,
       base::BindRepeating(&NetExportMessageHandler::OnStartNetLog,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       net_log::kStopNetLogHandler,
       base::BindRepeating(&NetExportMessageHandler::OnStopNetLog,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       net_log::kSendNetLogHandler,
       base::BindRepeating(&NetExportMessageHandler::OnSendNetLog,
                           base::Unretained(this)));
 }
 
 void NetExportMessageHandler::OnEnableNotifyUIWithState(
-    const base::ListValue* list) {
+    const base::Value::List& list) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   if (!state_observation_manager_.IsObserving()) {
     state_observation_manager_.Observe(file_writer_);
@@ -132,10 +132,8 @@ void NetExportMessageHandler::OnEnableNotifyUIWithState(
   NotifyUIWithState(file_writer_->GetState());
 }
 
-void NetExportMessageHandler::OnStartNetLog(const base::ListValue* list) {
+void NetExportMessageHandler::OnStartNetLog(const base::Value::List& params) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-
-  base::Value::ConstListView params = list->GetListDeprecated();
 
   // Determine the capture mode.
   net::NetLogCaptureMode capture_mode = net::NetLogCaptureMode::kDefault;
@@ -160,19 +158,19 @@ void NetExportMessageHandler::OnStartNetLog(const base::ListValue* list) {
       GetChannelString(), GetApplicationContext()->GetSystemNetworkContext());
 }
 
-void NetExportMessageHandler::OnStopNetLog(const base::ListValue* list) {
+void NetExportMessageHandler::OnStopNetLog(const base::Value::List& list) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   file_writer_->StopNetLog();
 }
 
-void NetExportMessageHandler::OnSendNetLog(const base::ListValue* list) {
+void NetExportMessageHandler::OnSendNetLog(const base::Value::List& list) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   file_writer_->GetFilePathToCompletedLog(base::BindOnce(
       &NetExportMessageHandler::SendEmail, base::Unretained(this)));
 }
 
-void NetExportMessageHandler::OnNewState(const base::DictionaryValue& state) {
-  NotifyUIWithState(state.CreateDeepCopy());
+void NetExportMessageHandler::OnNewState(const base::Value::Dict& state) {
+  NotifyUIWithState(state);
 }
 
 void NetExportMessageHandler::SendEmail(const base::FilePath& file_to_send) {
@@ -199,14 +197,12 @@ void NetExportMessageHandler::SendEmail(const base::FilePath& file_to_send) {
 }
 
 void NetExportMessageHandler::NotifyUIWithState(
-    std::unique_ptr<base::DictionaryValue> file_writer_state) {
+    const base::Value::Dict& file_writer_state) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(web_ui());
 
-  base::Value state = file_writer_state->Clone();
   base::Value event(net_log::kNetLogInfoChangedEvent);
-
-  std::vector<const base::Value*> args{&event, &state};
+  base::ValueView args[] = {event, file_writer_state};
   web_ui()->CallJavascriptFunction("cr.webUIListenerCallback", args);
 }
 

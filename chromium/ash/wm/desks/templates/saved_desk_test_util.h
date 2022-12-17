@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ash/public/cpp/desk_template.h"
+#include "ash/wm/desks/templates/saved_desk_feedback_button.h"
 #include "ash/wm/desks/templates/saved_desk_grid_view.h"
 #include "ash/wm/desks/templates/saved_desk_icon_container.h"
 #include "ash/wm/desks/templates/saved_desk_icon_view.h"
@@ -41,6 +42,14 @@ class SavedDeskPresenterTestApi {
   SavedDeskPresenterTestApi& operator=(const SavedDeskPresenterTestApi&) =
       delete;
   ~SavedDeskPresenterTestApi();
+
+  // When Save & Recall closes windows, they might object and present a blocking
+  // dialog. This function waits until that dialog is detected.
+  static void WaitForSaveAndRecallBlockingDialog();
+
+  // Fire window watcher's timer to automatically transition into the saved desk
+  // library. This will DCHECK if the timer is not active.
+  static void FireWindowWatcherTimer();
 
   void SetOnUpdateUiClosure(base::OnceClosure closure);
 
@@ -162,9 +171,11 @@ SavedDeskItemView* GetItemViewFromTemplatesGrid(size_t grid_item_index);
 views::Button* GetZeroStateDesksTemplatesButton();
 views::Button* GetExpandedStateDesksTemplatesButton();
 views::Button* GetSaveDeskAsTemplateButton();
+views::Button* GetSaveDeskForLaterButton();
 views::Button* GetTemplateItemButton(int index);
 views::Button* GetTemplateItemDeleteButton(int index);
 views::Button* GetSavedDeskDialogAcceptButton();
+FeedbackButton* GetSavedDeskFeedbackButton();
 
 // A lot of the UI relies on calling into the local desk data manager to
 // update, which sends callbacks via posting tasks. Call

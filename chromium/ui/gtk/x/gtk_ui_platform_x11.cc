@@ -8,7 +8,6 @@
 #include "base/check.h"
 #include "base/environment.h"
 #include "base/strings/stringprintf.h"
-#include "ui/base/linux/linux_ui_delegate.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
@@ -20,7 +19,9 @@
 #include "ui/gfx/x/xproto_util.h"
 #include "ui/gtk/gtk_compat.h"
 #include "ui/gtk/gtk_util.h"
+#include "ui/gtk/input_method_context_impl_gtk.h"
 #include "ui/gtk/x/gtk_event_loop_x11.h"
+#include "ui/linux/linux_ui_delegate.h"
 
 namespace gtk {
 
@@ -114,8 +115,10 @@ void GtkUiPlatformX11::ShowGtkWindow(GtkWindow* window) {
       static_cast<uint32_t>(ui::X11EventSource::GetInstance()->GetTimestamp()));
 }
 
-bool GtkUiPlatformX11::PreferGtkIme() {
-  return true;
+std::unique_ptr<ui::LinuxInputMethodContext>
+GtkUiPlatformX11::CreateInputMethodContext(
+    ui::LinuxInputMethodContextDelegate* delegate) const {
+  return std::make_unique<InputMethodContextImplGtk>(delegate);
 }
 
 }  // namespace gtk

@@ -30,6 +30,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -139,11 +140,10 @@ void LacrosWebAppsController::OnReady() {
   PublishWebApps(std::move(apps));
 }
 
-void LacrosWebAppsController::Uninstall(
-    const std::string& app_id,
-    apps::mojom::UninstallSource uninstall_source,
-    bool clear_site_data,
-    bool report_abuse) {
+void LacrosWebAppsController::Uninstall(const std::string& app_id,
+                                        apps::UninstallSource uninstall_source,
+                                        bool clear_site_data,
+                                        bool report_abuse) {
   const WebApp* web_app = GetWebApp(app_id);
   if (!web_app) {
     return;
@@ -224,12 +224,14 @@ void LacrosWebAppsController::ExecuteContextMenuCommand(
     return;
   }
 
-  fre_service->OpenFirstRunIfNeeded(base::BindOnce(
-      &OnOpenPrimaryProfileFirstRunExited,
-      std::move(execution_finished_callback),
+  fre_service->OpenFirstRunIfNeeded(
+      LacrosFirstRunService::EntryPoint::kWebAppContextMenu,
       base::BindOnce(
-          &LacrosWebAppsController::ExecuteContextMenuCommandInternal,
-          weak_ptr_factory_.GetWeakPtr(), app_id, id)));
+          &OnOpenPrimaryProfileFirstRunExited,
+          std::move(execution_finished_callback),
+          base::BindOnce(
+              &LacrosWebAppsController::ExecuteContextMenuCommandInternal,
+              weak_ptr_factory_.GetWeakPtr(), app_id, id)));
 }
 
 void LacrosWebAppsController::ExecuteContextMenuCommandInternal(
@@ -248,8 +250,7 @@ void LacrosWebAppsController::StopApp(const std::string& app_id) {
 
 void LacrosWebAppsController::SetPermission(const std::string& app_id,
                                             apps::PermissionPtr permission) {
-  publisher_helper().SetPermission(
-      app_id, apps::ConvertPermissionToMojomPermission(permission));
+  publisher_helper().SetPermission(app_id, std::move(permission));
 }
 
 // TODO(crbug.com/1144877): Clean up the multiple launch interfaces and remove
@@ -277,18 +278,21 @@ void LacrosWebAppsController::Launch(
     return;
   }
 
-  fre_service->OpenFirstRunIfNeeded(base::BindOnce(
-      &OnOpenPrimaryProfileFirstRunExited, std::move(launch_finished_callback),
-      base::BindOnce(&LacrosWebAppsController::LaunchInternal,
-                     weak_ptr_factory_.GetWeakPtr(), launch_params->app_id,
-                     std::move(params))));
+  fre_service->OpenFirstRunIfNeeded(
+      LacrosFirstRunService::EntryPoint::kWebAppLaunch,
+      base::BindOnce(&OnOpenPrimaryProfileFirstRunExited,
+                     std::move(launch_finished_callback),
+                     base::BindOnce(&LacrosWebAppsController::LaunchInternal,
+                                    weak_ptr_factory_.GetWeakPtr(),
+                                    launch_params->app_id, std::move(params))));
 }
 
 void LacrosWebAppsController::LaunchInternal(const std::string& app_id,
                                              apps::AppLaunchParams params,
                                              CommandFinishedCallback callback) {
   bool is_file_handling_launch =
-      !params.launch_files.empty() && !apps_util::IsShareIntent(params.intent);
+      !params.launch_files.empty() &&
+      !(params.intent && params.intent->IsShareIntent());
   if (is_file_handling_launch) {
     // File handling may create the WebContents asynchronously.
     publisher_helper().LaunchAppWithFilesCheckingUserPermission(

@@ -359,20 +359,20 @@ var defaultTests = [
   },
   // This test verifies the error message when trying to set Assistant-related
   // preferences without enabling Assistant service first.
-  function setWhitelistedPref() {
-    chrome.autotestPrivate.setWhitelistedPref(
+  function setAllowedPref() {
+    chrome.autotestPrivate.setAllowedPref(
         'settings.voice_interaction.hotword.enabled' /* pref_name */,
         true /* value */,
         chrome.test.callbackFail(
             'Unable to set the pref because Assistant has not been enabled.'));
-    chrome.autotestPrivate.setWhitelistedPref(
+    chrome.autotestPrivate.setAllowedPref(
         'settings.voice_interaction.context.enabled' /* pref_name */,
         true /* value */,
         chrome.test.callbackFail(
             'Unable to set the pref because Assistant has not been enabled.'));
     // Note that onboarding pref is a counter that can be set without
     // enabling Assistant at the same time.
-    chrome.autotestPrivate.setWhitelistedPref(
+    chrome.autotestPrivate.setAllowedPref(
         'ash.assistant.num_sessions_where_onboarding_shown' /* pref_name */,
         3 /* value */, chrome.test.callbackPass());
   },
@@ -1273,7 +1273,21 @@ var arcEnabledTests = [
               chrome.test.callbackPass(function() {
           }));
     });
-  },
+  }
+];
+
+var arcProcessTests = [
+  async function requestLowMemoryKillCounts() {
+    const counts = await promisify(chrome.autotestPrivate.getArcAppKills);
+    chrome.test.assertEq(counts.oom, 1);
+    chrome.test.assertEq(counts.lmkdForeground, 2);
+    chrome.test.assertEq(counts.lmkdPerceptible, 3);
+    chrome.test.assertEq(counts.lmkdCached, 4);
+    chrome.test.assertEq(counts.pressureForeground, 5);
+    chrome.test.assertEq(counts.pressurePerceptible, 6);
+    chrome.test.assertEq(counts.pressureCached, 7);
+    chrome.test.succeed();
+  }
 ];
 
 var policyTests = [
@@ -1566,6 +1580,7 @@ var systemWebAppsTests = [
 var test_suites = {
   'default': defaultTests,
   'arcEnabled': arcEnabledTests,
+  'arcProcess': arcProcessTests,
   'enterprisePolicies': policyTests,
   'arcPerformanceTracing': arcPerformanceTracingTests,
   'overviewDefault': overviewTests,

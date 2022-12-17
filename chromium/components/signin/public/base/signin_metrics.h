@@ -335,26 +335,6 @@ enum AccountReconcilorState {
   kMaxValue = ACCOUNT_RECONCILOR_SCHEDULED,
 };
 
-// Values of histogram comparing account id and email.
-enum class AccountEquality : int {
-  // Expected case when the user is not switching accounts.
-  BOTH_EQUAL = 0,
-  // Expected case when the user is switching accounts.
-  BOTH_DIFFERENT,
-  // The user has changed at least two email account names. This is actually
-  // a different account, even though the email matches.
-  ONLY_SAME_EMAIL,
-  // The user has changed the email of their account, but the account is
-  // actually the same.
-  ONLY_SAME_ID,
-  // The last account id was not present, email equality was used. This should
-  // happen once to all old clients. Does not differentiate between same and
-  // different accounts.
-  EMAIL_FALLBACK,
-  // Always the last enumerated type.
-  HISTOGRAM_COUNT,
-};
-
 // Values of Signin.AccountType histogram. This histogram records if the user
 // uses a gmail account or a managed account when signing in.
 enum class SigninAccountType : int {
@@ -510,10 +490,6 @@ void LogAuthError(const GoogleServiceAuthError& auth_error);
 // be shown a different set of accounts in the content-area and the settings UI.
 void LogAccountReconcilorStateOnGaiaResponse(AccountReconcilorState state);
 
-// Records the AccountEquality metric when an investigator compares the current
-// and previous id/emails during a signin.
-void LogAccountEquality(AccountEquality equality);
-
 // Records the amount of time since the cookie jar was last changed.
 void LogCookieJarStableAge(const base::TimeDelta stable_age,
                            const ReportingType type);
@@ -557,8 +533,7 @@ void RecordSigninAccountType(signin::ConsentLevel consent_level,
 // -----------------------------------------------------------------------------
 
 // Records corresponding sign in user action for an access point.
-void RecordSigninUserActionForAccessPoint(AccessPoint access_point,
-                                          PromoAction promo_action);
+void RecordSigninUserActionForAccessPoint(AccessPoint access_point);
 
 // Records |Signin_Impression_From*| user action.
 void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point);

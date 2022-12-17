@@ -124,10 +124,12 @@ LacrosAvailability GetCachedLacrosAvailability() {
 LacrosAvailability DetermineLacrosAvailabilityFromPolicyValue(
     base::StringPiece policy_value) {
   // Users can set this switch in chrome://flags to disable the effect of the
-  // lacros-availability policy.
+  // lacros-availability policy. This should only be allows for googlers.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(ash::switches::kLacrosAvailabilityIgnore))
+  if (command_line->HasSwitch(ash::switches::kLacrosAvailabilityIgnore) &&
+      IsGoogleInternal()) {
     return LacrosAvailability::kUserChoice;
+  }
 
   if (policy_value.empty()) {
     // Some tests call IsLacrosAllowedToBeEnabled but don't have the value set.
@@ -626,6 +628,16 @@ bool IsLacrosPrimaryBrowserForMigration(const user_manager::User* user,
   return base::FeatureList::IsEnabled(chromeos::features::kLacrosPrimary);
 }
 
+LacrosMode GetLacrosMode() {
+  if (!IsAshWebBrowserEnabled())
+    return LacrosMode::kOnly;
+  if (IsLacrosPrimaryBrowser())
+    return LacrosMode::kPrimary;
+  if (IsLacrosEnabled())
+    return LacrosMode::kSideBySide;
+  return LacrosMode::kDisabled;
+}
+
 void SetLacrosPrimaryBrowserForTest(absl::optional<bool> value) {
   g_lacros_primary_browser_for_test = value;
 }
@@ -772,9 +784,9 @@ bool DoesMetadataSupportNewAccountManager(base::Value* metadata) {
 
 base::Version GetDataVer(PrefService* local_state,
                          const std::string& user_id_hash) {
-  const base::Value* data_versions = local_state->GetDictionary(kDataVerPref);
-  const std::string* data_version_str =
-      data_versions->FindStringKey(user_id_hash);
+  const base::Value::Dict& data_versions =
+      local_state->GetValueDict(kDataVerPref);
+  const std::string* data_version_str = data_versions.FindString(user_id_hash);
 
   if (!data_version_str)
     return base::Version();
@@ -993,8 +1005,10 @@ LacrosLaunchSwitchSource GetLacrosLaunchSwitchSource() {
   // Note: this check needs to be consistent with the one in
   // DetermineLacrosAvailabilityFromPolicyValue.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(ash::switches::kLacrosAvailabilityIgnore))
+  if (command_line->HasSwitch(ash::switches::kLacrosAvailabilityIgnore) &&
+      IsGoogleInternal()) {
     return LacrosLaunchSwitchSource::kForcedByUser;
+  }
 
   return GetCachedLacrosAvailability() == LacrosAvailability::kUserChoice
              ? LacrosLaunchSwitchSource::kPossiblySetByUser
@@ -1051,8 +1065,8 @@ void ClearGotoFilesClicked(PrefService* local_state,
 
 bool WasGotoFilesClicked(PrefService* local_state,
                          const std::string& user_id_hash) {
-  const base::Value* list = local_state->GetList(kGotoFilesPref);
-  return base::Contains(list->GetList(), base::Value(user_id_hash));
+  const base::Value::List& list = local_state->GetValueList(kGotoFilesPref);
+  return base::Contains(list, base::Value(user_id_hash));
 }
 
 bool ShouldEnforceAshExtensionKeepList() {

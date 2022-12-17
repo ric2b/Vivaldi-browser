@@ -99,9 +99,10 @@ public class FeedStream implements Stream {
         public void navigateTab(String url, View actionSourceView) {
             assert ThreadUtils.runningOnUiThread();
             FeedStreamJni.get().reportOpenAction(mNativeFeedStream, FeedStream.this,
-                    mMakeGURL.apply(url), getSliceIdFromView(actionSourceView));
+                    mMakeGURL.apply(url), getSliceIdFromView(actionSourceView),
+                    OpenActionType.DEFAULT);
 
-            openSuggestionUrl(url, WindowOpenDisposition.CURRENT_TAB);
+            openSuggestionUrl(url, WindowOpenDisposition.CURRENT_TAB, /*inGroup=*/false);
 
             // Attempts to load more content if needed.
             maybeLoadMore();
@@ -110,10 +111,11 @@ public class FeedStream implements Stream {
         @Override
         public void navigateNewTab(String url, View actionSourceView) {
             assert ThreadUtils.runningOnUiThread();
-            FeedStreamJni.get().reportOpenInNewTabAction(mNativeFeedStream, FeedStream.this,
-                    mMakeGURL.apply(url), getSliceIdFromView(actionSourceView));
+            FeedStreamJni.get().reportOpenAction(mNativeFeedStream, FeedStream.this,
+                    mMakeGURL.apply(url), getSliceIdFromView(actionSourceView),
+                    OpenActionType.NEW_TAB);
 
-            openSuggestionUrl(url, WindowOpenDisposition.NEW_BACKGROUND_TAB);
+            openSuggestionUrl(url, WindowOpenDisposition.NEW_BACKGROUND_TAB, /*inGroup=*/false);
 
             // Attempts to load more content if needed.
             maybeLoadMore();
@@ -125,7 +127,7 @@ public class FeedStream implements Stream {
             FeedStreamJni.get().reportOtherUserAction(mNativeFeedStream, FeedStream.this,
                     FeedUserActionType.TAPPED_OPEN_IN_NEW_INCOGNITO_TAB);
 
-            openSuggestionUrl(url, WindowOpenDisposition.OFF_THE_RECORD);
+            openSuggestionUrl(url, WindowOpenDisposition.OFF_THE_RECORD, /*inGroup=*/false);
 
             // Attempts to load more content if needed.
             maybeLoadMore();
@@ -233,25 +235,27 @@ public class FeedStream implements Stream {
                 return;
             }
             if (update.isFollow()) {
-                WebFeedBridge.followFromId(webFeedId, update.isDurable(), results -> {
-                    WebFeedFollowUpdate.Callback callback = update.callback();
-                    if (callback != null) {
-                        callback.requestComplete(
-                                results.requestStatus == WebFeedSubscriptionRequestStatus.SUCCESS);
-                    }
-                });
+                WebFeedBridge.followFromId(
+                        webFeedId, update.isDurable(), update.webFeedChangeReason(), results -> {
+                            WebFeedFollowUpdate.Callback callback = update.callback();
+                            if (callback != null) {
+                                callback.requestComplete(results.requestStatus
+                                        == WebFeedSubscriptionRequestStatus.SUCCESS);
+                            }
+                        });
             } else {
-                WebFeedBridge.unfollow(webFeedId, update.isDurable(), results -> {
-                    WebFeedFollowUpdate.Callback callback = update.callback();
-                    if (callback != null) {
-                        callback.requestComplete(
-                                results.requestStatus == WebFeedSubscriptionRequestStatus.SUCCESS);
-                    }
-                });
+                WebFeedBridge.unfollow(
+                        webFeedId, update.isDurable(), update.webFeedChangeReason(), results -> {
+                            WebFeedFollowUpdate.Callback callback = update.callback();
+                            if (callback != null) {
+                                callback.requestComplete(results.requestStatus
+                                        == WebFeedSubscriptionRequestStatus.SUCCESS);
+                            }
+                        });
             }
         }
 
-        private void openSuggestionUrl(String url, int disposition) {
+        private void openSuggestionUrl(String url, int disposition, boolean inGroup) {
             boolean inNewTab = (disposition == WindowOpenDisposition.NEW_BACKGROUND_TAB
                     || disposition == WindowOpenDisposition.OFF_THE_RECORD);
 
@@ -266,13 +270,27 @@ public class FeedStream implements Stream {
             // triggers unbind, which can break event handling.
             PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
                 mActionDelegate.openSuggestionUrl(disposition,
-                        new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK),
+                        new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK), inGroup,
                         ()
                                 -> FeedStreamJni.get().reportPageLoaded(
                                         mNativeFeedStream, FeedStream.this, inNewTab),
                         visitResult
                         -> FeedServiceBridge.reportOpenVisitComplete(visitResult.visitTimeMs));
             });
+        }
+
+        @Override
+        public void navigateNewTabInGroup(String url, View actionSourceView) {
+            assert ThreadUtils.runningOnUiThread();
+            FeedStreamJni.get().reportOpenAction(mNativeFeedStream, FeedStream.this,
+                    mMakeGURL.apply(url), getSliceIdFromView(actionSourceView),
+                    OpenActionType.NEW_TAB_IN_GROUP);
+
+            openSuggestionUrl(url, WindowOpenDisposition.NEW_BACKGROUND_TAB,
+                    /*inGroup=*/true);
+
+            // Attempts to load more content if needed.
+            maybeLoadMore();
         }
     }
 
@@ -282,6 +300,9 @@ public class FeedStream implements Stream {
     class FeedActionsHandlerImpl implements FeedActionsHandler {
         private static final int SNACKBAR_DURATION_MS_SHORT = 4000;
         private static final int SNACKBAR_DURATION_MS_LONG = 10000;
+        // This is based on the menu animation time (218ms) from BottomSheet.java.
+        // It is private to an internal target, so we can't link, to it here.
+        private static final int MENU_DISMISS_TASK_DELAY = 318;
 
         @VisibleForTesting
         static final String FEEDBACK_REPORT_TYPE =
@@ -302,9 +323,6 @@ public class FeedStream implements Stream {
             FeedStreamJni.get().reportOtherUserAction(
                     mNativeFeedStream, FeedStream.this, FeedUserActionType.TAPPED_SEND_FEEDBACK);
 
-            // Make sure the bottom sheet is dismissed before we take a snapshot.
-            dismissBottomSheet();
-
             Profile profile = Profile.getLastUsedRegularProfile();
             if (profile == null) {
                 return;
@@ -314,11 +332,19 @@ public class FeedStream implements Stream {
 
             Map<String, String> feedContext = convertNameFormat(productSpecificDataMap);
 
+            // We want to hide the bottom sheet before sending feedback so the snapshot doesn't show
+            // the menu covering the article.  However the menu is animating down, we need to wait
+            // for the animation to finish.  We post a task to wait for the duration of the
+            // animation, then call send feedback.
+
             // FEEDBACK_REPORT_TYPE: Reports for Chrome mobile must have a contextTag of the form
             // com.chrome.feed.USER_INITIATED_FEEDBACK_REPORT, or they will be discarded for not
             // matching an allow list rule.
-            mHelpAndFeedbackLauncher.showFeedback(
-                    mActivity, profile, url, FEEDBACK_REPORT_TYPE, feedContext);
+            PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT,
+                    ()
+                            -> mHelpAndFeedbackLauncher.showFeedback(
+                                    mActivity, profile, url, FEEDBACK_REPORT_TYPE, feedContext),
+                    MENU_DISMISS_TASK_DELAY);
         }
 
         @Override
@@ -1183,6 +1209,16 @@ public class FeedStream implements Stream {
     class RestoreScrollObserver extends RecyclerView.AdapterDataObserver {
         @Override
         public void onItemRangeInserted(int positionStart, int itemCount) {
+            restoreScrollStateIfNeeded();
+        }
+
+        // This is the triggering event when FeedReplaceAll experiment is on.
+        @Override
+        public void onChanged() {
+            restoreScrollStateIfNeeded();
+        }
+
+        private void restoreScrollStateIfNeeded() {
             if (mScrollStateToRestore != null) {
                 if (restoreScrollState(mScrollStateToRestore)) {
                     mScrollStateToRestore = null;
@@ -1265,9 +1301,8 @@ public class FeedStream implements Stream {
         void reportFeedViewed(long nativeFeedStream, FeedStream caller);
         void reportSliceViewed(long nativeFeedStream, FeedStream caller, String sliceId);
         void reportPageLoaded(long nativeFeedStream, FeedStream caller, boolean inNewTab);
-        void reportOpenAction(long nativeFeedStream, FeedStream caller, GURL url, String sliceId);
-        void reportOpenInNewTabAction(
-                long nativeFeedStream, FeedStream caller, GURL url, String sliceId);
+        void reportOpenAction(long nativeFeedStream, FeedStream caller, GURL url, String sliceId,
+                @OpenActionType int openActionType);
         void reportOtherUserAction(
                 long nativeFeedStream, FeedStream caller, @FeedUserActionType int userAction);
         void reportStreamScrolled(long nativeFeedStream, FeedStream caller, int distanceDp);

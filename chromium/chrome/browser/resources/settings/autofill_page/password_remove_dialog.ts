@@ -10,26 +10,25 @@
  * which copies were deleted.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import './avatar_icon.js';
 
-import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SyncBrowserProxyImpl} from '../people_page/sync_browser_proxy.js';
 
-import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
 import {PasswordManagerImpl} from './password_manager_proxy.js';
 import {getTemplate} from './password_remove_dialog.html.js';
 
 export type PasswordRemoveDialogPasswordsRemovedEvent =
-    CustomEvent<{removedFromAccount: boolean, removedFromDevice: boolean}>;
+    CustomEvent<{removedFromStores: chrome.passwordsPrivate.PasswordStoreSet}>;
 
 declare global {
   interface HTMLElementEventMap {
@@ -86,7 +85,7 @@ export class PasswordRemoveDialogElement extends
     };
   }
 
-  duplicatedPassword: MultiStorePasswordUiEntry;
+  duplicatedPassword: chrome.passwordsPrivate.PasswordUiEntry;
   private removeFromAccountChecked_: boolean;
   private removeFromDeviceChecked_: boolean;
   private accountEmail_: string;
@@ -96,8 +95,9 @@ export class PasswordRemoveDialogElement extends
 
     // At creation time, the password should exist in both locations.
     assert(
-        this.duplicatedPassword.isPresentInAccount() &&
-        this.duplicatedPassword.isPresentOnDevice());
+        this.duplicatedPassword.storedIn ===
+        chrome.passwordsPrivate.PasswordStoreSet.DEVICE_AND_ACCOUNT);
+
     this.$.dialog.showModal();
 
     SyncBrowserProxyImpl.getInstance().getStoredAccounts().then(accounts => {
@@ -111,14 +111,17 @@ export class PasswordRemoveDialogElement extends
   }
 
   private onRemoveButtonClick_() {
-    const idsToRemove: Array<number> = [];
-    if (this.removeFromAccountChecked_) {
-      idsToRemove.push(this.duplicatedPassword.accountId!);
+    let fromStores: chrome.passwordsPrivate.PasswordStoreSet =
+        chrome.passwordsPrivate.PasswordStoreSet.DEVICE;
+    if (this.removeFromAccountChecked_ && this.removeFromDeviceChecked_) {
+      fromStores = chrome.passwordsPrivate.PasswordStoreSet.DEVICE_AND_ACCOUNT;
+    } else if (this.removeFromAccountChecked_) {
+      fromStores = chrome.passwordsPrivate.PasswordStoreSet.ACCOUNT;
+    } else {
+      assert(this.removeFromDeviceChecked_);
     }
-    if (this.removeFromDeviceChecked_) {
-      idsToRemove.push(this.duplicatedPassword.deviceId!);
-    }
-    PasswordManagerImpl.getInstance().removeSavedPasswords(idsToRemove);
+    PasswordManagerImpl.getInstance().removeSavedPassword(
+        this.duplicatedPassword.id, fromStores);
 
     this.$.dialog.close();
     this.dispatchEvent(
@@ -126,8 +129,7 @@ export class PasswordRemoveDialogElement extends
           bubbles: true,
           composed: true,
           detail: {
-            removedFromAccount: this.removeFromAccountChecked_,
-            removedFromDevice: this.removeFromDeviceChecked_,
+            removedFromStores: fromStores,
           },
         }));
   }

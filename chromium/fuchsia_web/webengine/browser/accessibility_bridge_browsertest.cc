@@ -11,8 +11,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "content/public/test/browser_test.h"
-#include "fuchsia/base/test/frame_test_util.h"
-#include "fuchsia/base/test/test_navigation_listener.h"
+#include "fuchsia_web/common/test/frame_test_util.h"
+#include "fuchsia_web/common/test/test_navigation_listener.h"
 #include "fuchsia_web/webengine/browser/accessibility_bridge.h"
 #include "fuchsia_web/webengine/browser/context_impl.h"
 #include "fuchsia_web/webengine/browser/fake_semantics_manager.h"
@@ -109,11 +109,10 @@ bool HasAction(const fuchsia::accessibility::semantics::Node& node,
 
 }  // namespace
 
-class AccessibilityBridgeTest : public cr_fuchsia::WebEngineBrowserTest {
+class AccessibilityBridgeTest : public WebEngineBrowserTest {
  public:
   AccessibilityBridgeTest() {
-    cr_fuchsia::WebEngineBrowserTest::set_test_server_root(
-        base::FilePath(cr_fuchsia::kTestServerRoot));
+    WebEngineBrowserTest::set_test_server_root(base::FilePath(kTestServerRoot));
   }
 
   ~AccessibilityBridgeTest() override = default;
@@ -126,11 +125,11 @@ class AccessibilityBridgeTest : public cr_fuchsia::WebEngineBrowserTest {
     command_line->AppendSwitchNative(switches::kOzonePlatform,
                                      switches::kHeadless);
     command_line->AppendSwitch(switches::kHeadless);
-    cr_fuchsia::WebEngineBrowserTest::SetUp();
+    WebEngineBrowserTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
-    frame_ = cr_fuchsia::FrameForTest::Create(context(), {});
+    frame_ = FrameForTest::Create(context(), {});
     base::RunLoop().RunUntilIdle();
 
     frame_impl_ = context_impl()->GetFrameImplForTest(&frame_.ptr());
@@ -162,15 +161,15 @@ class AccessibilityBridgeTest : public cr_fuchsia::WebEngineBrowserTest {
 
   void LoadPage(base::StringPiece url, base::StringPiece page_title) {
     GURL page_url(embedded_test_server()->GetURL(std::string(url)));
-    ASSERT_TRUE(cr_fuchsia::LoadUrlAndExpectResponse(
-        frame_.GetNavigationController(), fuchsia::web::LoadUrlParams(),
-        page_url.spec()));
+    ASSERT_TRUE(LoadUrlAndExpectResponse(frame_.GetNavigationController(),
+                                         fuchsia::web::LoadUrlParams(),
+                                         page_url.spec()));
     frame_.navigation_listener().RunUntilUrlAndTitleEquals(page_url,
                                                            page_title);
   }
 
  protected:
-  cr_fuchsia::FrameForTest frame_;
+  FrameForTest frame_;
   FrameImpl* frame_impl_;
   FakeSemanticsManager semantics_manager_;
 };
@@ -490,6 +489,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
   // Set a name in a node so we can wait for this node to appear. This pattern
   // is used throughout this test to ensure that the new data we are waiting for
   // arrived.
+  tree_accessibility_event.updates[0].nodes[0].role =
+      ax::mojom::Role::kStaticText;
   tree_accessibility_event.updates[0].nodes[0].SetName(kUpdate1Name);
 
   bridge->AccessibilityEventReceived(tree_accessibility_event);
@@ -507,6 +508,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
     update.nodes[0].child_ids.push_back(5);
     update.nodes[0].child_ids.push_back(6);
     update.nodes[1].id = 6;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate2Name);
 
     bridge->AccessibilityEventReceived(
@@ -526,6 +528,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
     update.nodes[0].child_ids.push_back(5);
 
     update.nodes[1].id = 5;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate3Name);
 
     bridge->AccessibilityEventReceived(
@@ -549,6 +552,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
 
     update.nodes[1].id = 4;
     update.nodes[2].id = 5;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate4Name);
 
     bridge->AccessibilityEventReceived(
@@ -577,6 +581,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
 
     update.nodes[3].id = 4;
     update.nodes[4].id = 5;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate5Name);
 
     bridge->AccessibilityEventReceived(
@@ -598,6 +603,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
     update.nodes[0].child_ids.push_back(2);
 
     update.nodes[1].id = 2;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate6Name);
 
     bridge->AccessibilityEventReceived(
@@ -619,6 +625,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
     update.nodes[0].child_ids.push_back(2);
 
     update.nodes[1].id = 2;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate7Name);
 
     bridge->AccessibilityEventReceived(
@@ -637,6 +644,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, TreeModificationsAreForwarded) {
     update.node_id_to_clear = 7;
     update.nodes.resize(1);
     update.nodes[0].id = 1;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate8Name);
 
     bridge->AccessibilityEventReceived(
@@ -678,6 +686,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
   // Set a name in a node so we can wait for this node to appear. This pattern
   // is used throughout this test to ensure that the new data we are waiting for
   // arrived.
+  tree_accessibility_event.updates[0].nodes[0].role =
+      ax::mojom::Role::kStaticText;
   tree_accessibility_event.updates[0].nodes[0].SetName(kUpdate1Name);
 
   bridge->AccessibilityEventReceived(tree_accessibility_event);
@@ -696,6 +706,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
     update.nodes[0].child_ids.push_back(6);
     update.nodes[1].id = 6;
     update.nodes[1].relative_bounds.offset_container_id = 3;
+    update.nodes[1].role = ax::mojom::Role::kStaticText;
     update.nodes[1].SetName(kUpdate2Name);
 
     bridge->AccessibilityEventReceived(
@@ -723,6 +734,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
     update.nodes.resize(1);
     update.nodes[0].id = 6;
     update.nodes[0].relative_bounds.offset_container_id = 4;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate3Name);
 
     bridge->AccessibilityEventReceived(
@@ -765,6 +777,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
     update.nodes[0].child_ids.push_back(5);
 
     update.nodes[1].id = 5;
+    update.nodes[1].role = ax::mojom::Role::kStaticText;
     update.nodes[1].SetName(kUpdate4Name);
 
     bridge->AccessibilityEventReceived(
@@ -792,6 +805,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
     update.node_id_to_clear = 3;
     update.nodes.resize(1);
     update.nodes[0].id = 3;
+    update.nodes[0].role = ax::mojom::Role::kStaticText;
     update.nodes[0].SetName(kUpdate5Name);
 
     bridge->AccessibilityEventReceived(
@@ -839,6 +853,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
   // Set a name in a node so we can wait for this node to appear. This pattern
   // is used throughout this test to ensure that the new data we are waiting for
   // arrived.
+  tree_accessibility_event.updates[0].nodes[0].role =
+      ax::mojom::Role::kStaticText;
   tree_accessibility_event.updates[0].nodes[0].SetName(kUpdate1Name);
 
   bridge->AccessibilityEventReceived(tree_accessibility_event);
@@ -856,8 +872,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
   // Update the relative bounds of node 1, which is node 2's offset container.
   update.nodes[0].relative_bounds.bounds = gfx::RectF(2, 3, 4, 5);
   update.nodes[0].child_ids = {2};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
   update.nodes[0].SetName(kUpdate2Name);
   update.nodes[1].id = 2;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
   update.nodes[1].SetName(kNodeName);
   update.nodes[1].relative_bounds.offset_container_id = 1;
   // Node 2 should have non-trivial relative bounds to ensure that the
@@ -924,6 +942,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
   // Set a name in a node so we can wait for this node to appear. This pattern
   // is used throughout this test to ensure that the new data we are waiting for
   // arrived.
+  tree_accessibility_event.updates[0].nodes[0].role =
+      ax::mojom::Role::kStaticText;
   tree_accessibility_event.updates[0].nodes[0].SetName(kUpdate1Name);
 
   bridge->AccessibilityEventReceived(tree_accessibility_event);
@@ -946,8 +966,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest,
   // Update the relative bounds of node 1, which is node 2's offset container.
   update.nodes[0].relative_bounds.bounds = gfx::RectF(2, 3, 4, 5);
   update.nodes[0].child_ids = {2};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
   update.nodes[0].SetName(kUpdate2Name);
   update.nodes[1].id = 2;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
   update.nodes[1].SetName(kNodeName);
   bridge->AccessibilityEventReceived(
       CreateAccessibilityEventWithUpdate(std::move(update), tree_id));
@@ -997,6 +1019,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, OneUpdatePerNode) {
   // Set a name in a node so we can wait for this node to appear. This pattern
   // is used throughout this test to ensure that the new data we are waiting for
   // arrived.
+  tree_accessibility_event.updates[0].nodes[0].role =
+      ax::mojom::Role::kStaticText;
   tree_accessibility_event.updates[0].nodes[0].SetName(kUpdate1Name);
 
   bridge->AccessibilityEventReceived(tree_accessibility_event);
@@ -1030,12 +1054,14 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, OneUpdatePerNode) {
   auto new_root_bounds = gfx::RectF(2, 3, 4, 5);
   update.nodes[0].relative_bounds.bounds = new_root_bounds;
   update.nodes[0].child_ids = {2};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
   update.nodes[0].SetName(kUpdate2Name);
   update.nodes[1].id = 2;
   update.nodes[1].relative_bounds.bounds = gfx::RectF(20, 30, 40, 50);
   update.nodes[1].child_ids = {3};
   update.nodes[2].id = 3;
   update.nodes[2].relative_bounds.offset_container_id = 1u;
+  update.nodes[2].role = ax::mojom::Role::kStaticText;
   update.nodes[2].SetName(kNodeName);
 
   bridge->AccessibilityEventReceived(
@@ -1064,7 +1090,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityBridgeTest, OutOfProcessIframe) {
   // used as the src for an iframe.
   net::EmbeddedTestServer second_test_server;
   second_test_server.ServeFilesFromSourceDirectory(
-      base::FilePath(cr_fuchsia::kTestServerRoot));
+      base::FilePath(kTestServerRoot));
   ASSERT_TRUE(second_test_server.Start());
   GURL out_of_process_url = second_test_server.GetURL(kPage1Path);
 

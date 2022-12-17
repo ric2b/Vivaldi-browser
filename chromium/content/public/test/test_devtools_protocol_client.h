@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "base/callback.h"
 #include "base/values.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -31,18 +32,19 @@ class TestDevToolsProtocolClient : public DevToolsAgentHostClient {
     return SendSessionCommand(method, std::move(params), std::string(), wait);
   }
 
-  // DEPRECATED! Use the overload above.
-  const base::Value::Dict* SendCommand(
-      std::string method,
-      std::unique_ptr<base::DictionaryValue> params,
-      bool wait = true) {
-    base::Value::Dict params_dict;
-    if (params) {
-      params_dict = std::move(
-          base::Value::FromUniquePtrValue(std::move(params)).GetDict());
-    }
-    return SendSessionCommand(std::move(method), std::move(params_dict),
-                              std::string(), wait);
+  const base::Value::Dict* SendCommandSync(std::string method) {
+    return SendCommand(std::move(method), base::Value::Dict(), true);
+  }
+  const base::Value::Dict* SendCommandSync(std::string method,
+                                           base::Value::Dict params) {
+    return SendCommand(std::move(method), std::move(params), true);
+  }
+  const base::Value::Dict* SendCommandAsync(std::string method) {
+    return SendCommand(std::move(method), base::Value::Dict(), false);
+  }
+  const base::Value::Dict* SendCommandAsync(std::string method,
+                                            base::Value::Dict params) {
+    return SendCommand(std::move(method), std::move(params), false);
   }
 
   const base::Value::Dict* SendSessionCommand(const std::string method,

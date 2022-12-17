@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_components/history_clusters/clusters.js';
-import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/cr_tabs/cr_tabs.js';
@@ -17,7 +17,7 @@ import './side_bar.js';
 import './strings.m.js';
 
 import {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
-import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {FindShortcutMixin, FindShortcutMixinInterface} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
@@ -74,7 +74,7 @@ export function listenForPrivilegedLinkClicks() {
         return;
       }
 
-      const eventPath = e.composedPath() as Array<HTMLElement>;
+      const eventPath = e.composedPath() as HTMLElement[];
       let anchor: HTMLAnchorElement|null = null;
       if (eventPath) {
         for (let i = 0; i < eventPath.length; i++) {
@@ -219,7 +219,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
         value: () => {
           return [
             loadTimeData.getString('historyListTabLabel'),
-            loadTimeData.getString('historyClustersTabLabel')
+            loadTimeData.getString('historyClustersTabLabel'),
           ];
         },
       },
@@ -239,8 +239,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
   private selectedPage_: Page;
   private selectedTab_: number;
   private showHistoryClusters_: boolean;
-  private tabsIcons_: Array<string>;
-  private tabsNames_: Array<string>;
+  private tabsIcons_: string[];
+  private tabsNames_: string[];
   private toolbarShadow_: boolean;
   private historyClustersViewStartTime_: Date|null = null;
 
@@ -272,7 +272,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
             this.onHasOtherFormsChanged_(hasOtherForms));
     this.addWebUIListener(
         'foreign-sessions-changed',
-        (sessionList: Array<ForeignSession>) =>
+        (sessionList: ForeignSession[]) =>
             this.setForeignSessions_(sessionList));
     this.browserService_ = BrowserServiceImpl.getInstance();
     this.shadowRoot!.querySelector('history-query-manager')!.initialize();
@@ -334,6 +334,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
   }
 
   /** Overridden from IronScrollTargetBehavior */
+  /* eslint-disable-next-line @typescript-eslint/naming-convention */
   override _scrollHandler() {
     if (this.scrollTarget) {
       // When the tabs are visible, show the toolbar shadow for the synced
@@ -448,7 +449,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
    * @param sessionList Array of objects describing the sessions from other
    *     devices.
    */
-  private setForeignSessions_(sessionList: Array<ForeignSession>) {
+  private setForeignSessions_(sessionList: ForeignSession[]) {
     this.set('queryResult_.sessionList', sessionList);
   }
 
@@ -559,7 +560,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
    * first time. Otherwise the fallback selection will continue to be used after
    * the corresponding item is added as a child of iron-pages.
    */
-  private getSelectedPage_(selectedPage: string, _items: Array<any>): string {
+  private getSelectedPage_(selectedPage: string, _items: any[]): string {
     return selectedPage;
   }
 

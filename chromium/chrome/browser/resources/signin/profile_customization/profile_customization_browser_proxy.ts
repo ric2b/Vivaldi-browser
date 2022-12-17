@@ -10,12 +10,12 @@
 import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
 
 // Profile info (colors and avatar) sent from C++.
-export type ProfileInfo = {
-  backgroundColor: string,
-  pictureUrl: string,
-  isManaged: boolean,
-  welcomeTitle: string,
-};
+export interface ProfileInfo {
+  backgroundColor: string;
+  pictureUrl: string;
+  isManaged: boolean;
+  welcomeTitle: string;
+}
 
 export interface ProfileCustomizationBrowserProxy {
   // Called when the page is ready.
@@ -23,6 +23,9 @@ export interface ProfileCustomizationBrowserProxy {
 
   // Called when the user clicks the done button.
   done(profileName: string): void;
+
+  // Called when the user clicks the skip button.
+  skip(): void;
 }
 
 export class ProfileCustomizationBrowserProxyImpl implements
@@ -33,6 +36,10 @@ export class ProfileCustomizationBrowserProxyImpl implements
 
   done(profileName: string) {
     chrome.send('done', [profileName]);
+  }
+
+  skip() {
+    chrome.send('skip');
   }
 
   static getInstance(): ProfileCustomizationBrowserProxy {

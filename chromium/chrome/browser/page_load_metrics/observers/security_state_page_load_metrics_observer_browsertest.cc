@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -283,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
     run_loop.Run();
     // The UKM isn't recorded until the page is destroyed.
     ASSERT_TRUE(browser()->tab_strip_model()->CloseWebContentsAt(
-        1, TabStripModel::CLOSE_NONE));
+        1, TabCloseTypes::CLOSE_NONE));
 
     histogram_tester.ExpectTotalCount(
         kSiteEngagementHistogramPrefix +
@@ -645,10 +646,8 @@ IN_PROC_BROWSER_TEST_F(
   prerender_helper()->NavigatePrimaryPage(prerender_url);
   EXPECT_TRUE(host_observer.was_activated());
 
-  // Prerendering doesn't invoke OnCommit method of PageLoadMetricsObserver
-  // even after activating the prerendered page. So,
-  // Security.SecurityLevel.OnCommit metric's count should not be changed.
-  histogram_tester()->ExpectTotalCount("Security.SecurityLevel.OnCommit", 1);
+  // Prerendering records it on DidActivatePrerenderedPage.
+  histogram_tester()->ExpectTotalCount("Security.SecurityLevel.OnCommit", 2);
 }
 
 class SecurityStatePageLoadMetricsFencedFrameBrowserTest

@@ -187,10 +187,10 @@ class SelectionColumn<T extends Selectable> implements Column<T> {
 
 class Source {
   sourceEventId: bigint;
-  impressionOrigin: string;
+  sourceOrigin: string;
   attributionDestination: string;
   reportingOrigin: string;
-  impressionTime: Date;
+  sourceTime: Date;
   expiryTime: Date;
   sourceType: string;
   filterData: string;
@@ -202,10 +202,10 @@ class Source {
 
   constructor(mojo: WebUISource) {
     this.sourceEventId = mojo.sourceEventId;
-    this.impressionOrigin = originToText(mojo.impressionOrigin);
+    this.sourceOrigin = originToText(mojo.sourceOrigin);
     this.attributionDestination = mojo.attributionDestination;
     this.reportingOrigin = originToText(mojo.reportingOrigin);
-    this.impressionTime = new Date(mojo.impressionTime);
+    this.sourceTime = new Date(mojo.sourceTime);
     this.expiryTime = new Date(mojo.expiryTime);
     this.sourceType = sourceTypeToText(mojo.sourceType);
     this.priority = mojo.priority;
@@ -229,19 +229,16 @@ class SourceTableModel extends TableModel<Source> {
       new ValueColumn<Source, bigint>(
           'Source Event ID', (e) => e.sourceEventId),
       new ValueColumn<Source, string>('Status', (e) => e.status),
-      new ValueColumn<Source, string>(
-          'Source Origin', (e) => e.impressionOrigin),
+      new ValueColumn<Source, string>('Source Origin', (e) => e.sourceOrigin),
       new ValueColumn<Source, string>(
           'Destination', (e) => e.attributionDestination),
       new ValueColumn<Source, string>('Report To', (e) => e.reportingOrigin),
-      new DateColumn<Source>(
-          'Source Registration Time', (e) => e.impressionTime),
+      new DateColumn<Source>('Source Registration Time', (e) => e.sourceTime),
       new DateColumn<Source>('Expiry Time', (e) => e.expiryTime),
       new ValueColumn<Source, string>('Source Type', (e) => e.sourceType),
       new ValueColumn<Source, bigint>('Priority', (e) => e.priority),
       new CodeColumn<Source>('Filter Data', (e) => e.filterData),
-      new CodeColumn<Source>(
-          'Aggregation Keys', (e) => e.aggregationKeys),
+      new CodeColumn<Source>('Aggregation Keys', (e) => e.aggregationKeys),
       new ValueColumn<Source, string>('Debug Key', (e) => e.debugKey),
       new ValueColumn<Source, string>('Dedup Keys', (e) => e.dedupKeys),
     ];
@@ -284,6 +281,7 @@ class Trigger {
   destinationOrigin: string;
   reportingOrigin: string;
   filters: string;
+  notFilters: string;
   debugKey: string;
   eventTriggers: string;
   eventLevelStatus: string;
@@ -296,6 +294,7 @@ class Trigger {
     this.destinationOrigin = originToText(mojo.destinationOrigin);
     this.reportingOrigin = originToText(mojo.reportingOrigin);
     this.filters = JSON.stringify(mojo.filters, null, ' ');
+    this.notFilters = JSON.stringify(mojo.notFilters, null, ' ');
     this.debugKey = mojo.debugKey ? mojo.debugKey.value.toString() : '';
 
     this.eventTriggers = JSON.stringify(
@@ -354,9 +353,12 @@ class TriggerTableModel extends TableModel<Trigger> {
       new ValueColumn<Trigger, string>('Report To', (e) => e.reportingOrigin),
       new ValueColumn<Trigger, string>('Debug Key', (e) => e.debugKey),
       new CodeColumn<Trigger>('Filters', (e) => e.filters),
+      new CodeColumn<Trigger>('Negated Filters', (e) => e.notFilters),
       new CodeColumn<Trigger>('Event Triggers', (e) => e.eventTriggers),
-      new CodeColumn<Trigger>('Aggregatable Triggers', (e) => e.aggregatableTriggers),
-      new CodeColumn<Trigger>('Aggregatable Values', (e) => e.aggregatableValues),
+      new CodeColumn<Trigger>(
+          'Aggregatable Triggers', (e) => e.aggregatableTriggers),
+      new CodeColumn<Trigger>(
+          'Aggregatable Values', (e) => e.aggregatableValues),
     ];
 
     this.emptyRowText = 'No triggers.';
@@ -762,7 +764,7 @@ function updatePageData() {
     const debugModeContent =
         document.querySelector<HTMLElement>('#debug-mode-content');
     assert(debugModeContent);
-    const html = getTrustedHTML`The #conversion-measurement-debug-mode flag is
+    const html = getTrustedHTML`The #attribution-reporting-debug-mode flag is
  <strong>enabled</strong>, reports are sent immediately and never pending.`;
     debugModeContent.innerHTML = html as unknown as string;
 

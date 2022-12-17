@@ -211,6 +211,15 @@ enum PermissionsPolicyFeature {
   // Controls access to Bluetooth API.
   kBluetooth = 101,
 
+  // Controls use of FedCM API.
+  kFederatedCredentials = 102,
+
+  // "shared-storage" permissions policy that controls the use of Shared Storage
+  // API.
+  kSharedStorage = 103,
+
+// Controls use of unload handlers.
+  kUnload = 104,
 
   // Don't change assigned numbers of any item, and don't reuse removed slots.
   // Add new features at the end of the enum.

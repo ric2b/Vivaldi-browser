@@ -57,7 +57,8 @@
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />正在嘗試執行連線診斷<ph name="END_LINK" />。</translation>
 <translation id="3154506275960390542">這個網頁中的表單可能不會經由安全途徑提交。其他人可能會在傳輸期間檢視你的資料，攻擊者也可能會修改這些資料，導致伺服器接收不同內容。</translation>
 <translation id="3176929007561373547">檢查您的代理設定，或是與您的網路管理員聯絡確認您的代理伺服器
-運作正常。如果您認為自己不需要使用代理伺服器：
+運作正常。
+如果您認為自己不需要使用代理伺服器：
 <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">按下重新載入按鈕，重新提交載入網頁所需的資料。</translation>
 <translation id="3234666976984236645">一律偵測這個網站的重要內容</translation>
@@ -151,7 +152,7 @@
 <translation id="6328639280570009161">建議停用網路預測功能</translation>
 <translation id="6328786501058569169">這是詐欺網站</translation>
 <translation id="6348220984832452017">目前的變更</translation>
-<translation id="6358450015545214790">我需要進一步資訊</translation>
+<translation id="6358450015545214790">我需要進一步資訊？</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">確認重新提交表單</translation>

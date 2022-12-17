@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 GEN_INCLUDE([
-  'accessibility_test_base.js', 'assert_additions.js', 'callback_helper.js',
-  'common.js', 'doc_utils.js'
+  'accessibility_test_base.js',
+  'assert_additions.js',
+  'callback_helper.js',
+  'common.js',
+  'doc_utils.js',
 ]);
 
 /**
@@ -23,6 +26,8 @@ E2ETestBase = class extends AccessibilityTestBase {
   async setUpDeferred() {
     await super.setUpDeferred();
     await importModule('EventGenerator', '/common/event_generator.js');
+    await importModule('KeyCode', '/common/key_code.js');
+    await importModule('constants', '/common/constants.js');
   }
 
   /** @override */
@@ -133,13 +138,13 @@ E2ETestBase = class extends AccessibilityTestBase {
    * @param {boolean=} capture
    */
   async waitForEvent(node, eventType, capture) {
-    return new Promise(resolve => {
+    return new Promise(this.newCallback(resolve => {
       const callback = this.newCallback(() => {
         node.removeEventListener(eventType, callback, capture);
         resolve();
       });
       node.addEventListener(eventType, callback, capture);
-    });
+    }));
   }
 
   /**
@@ -222,7 +227,7 @@ E2ETestBase = class extends AccessibilityTestBase {
    *     returned once the document is ready.
    */
   async runWithLoadedTree(doc, opt_params = {}) {
-    return new Promise(async resolve => {
+    return new Promise(this.newCallback(async resolve => {
       // Make sure the test doesn't finish until this function has resolved.
       let callback = this.newCallback(resolve);
       this.desktop_ = await new Promise(r => chrome.automation.getDesktop(r));
@@ -240,7 +245,7 @@ E2ETestBase = class extends AccessibilityTestBase {
 
       // Listener for both load complete and focus events that eventually
       // triggers the test.
-      const listener = async (event) => {
+      const listener = async event => {
         if (hasLacrosChromePath && !didNavigateForLacros) {
           // We have yet to request navigation in the Lacros tab. Do so now by
           // getting the default focus (the address bar), setting the value to
@@ -290,7 +295,7 @@ E2ETestBase = class extends AccessibilityTestBase {
           listener({target: f});
         });
       }
-    });
+    }));
   }
 
   /**
@@ -302,8 +307,8 @@ E2ETestBase = class extends AccessibilityTestBase {
    */
   runWithLoadedOptionsPage(callback, matchUrlRegExp = /options.html/) {
     callback = this.newCallback(callback);
-    chrome.automation.getDesktop((desktop) => {
-      const listener = (event) => {
+    chrome.automation.getDesktop(desktop => {
+      const listener = event => {
         if (!matchUrlRegExp.test(event.target.docUrl) ||
             !event.target.docLoaded) {
           return;

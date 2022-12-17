@@ -34,42 +34,41 @@ void HashSpecifics(const sync_pb::EntitySpecifics& specifics,
 
 SyncedNoteTrackerEntity::SyncedNoteTrackerEntity(
     const vivaldi::NoteNode* note_node,
-    std::unique_ptr<sync_pb::EntityMetadata> metadata)
+    sync_pb::EntityMetadata metadata)
     : note_node_(note_node), metadata_(std::move(metadata)) {
-  DCHECK(metadata_);
   if (note_node) {
-    DCHECK(!metadata_->is_deleted());
+    DCHECK(!metadata_.is_deleted());
   } else {
-    DCHECK(metadata_->is_deleted());
+    DCHECK(metadata_.is_deleted());
   }
 }
 
 SyncedNoteTrackerEntity::~SyncedNoteTrackerEntity() = default;
 
 bool SyncedNoteTrackerEntity::IsUnsynced() const {
-  return metadata_->sequence_number() > metadata_->acked_sequence_number();
+  return metadata_.sequence_number() > metadata_.acked_sequence_number();
 }
 
 bool SyncedNoteTrackerEntity::MatchesData(
     const syncer::EntityData& data) const {
-  if (metadata_->is_deleted() || data.is_deleted()) {
+  if (metadata_.is_deleted() || data.is_deleted()) {
     // In case of deletion, no need to check the specifics.
-    return metadata_->is_deleted() == data.is_deleted();
+    return metadata_.is_deleted() == data.is_deleted();
   }
   return MatchesSpecificsHash(data.specifics);
 }
 
 bool SyncedNoteTrackerEntity::MatchesSpecificsHash(
     const sync_pb::EntitySpecifics& specifics) const {
-  DCHECK(!metadata_->is_deleted());
+  DCHECK(!metadata_.is_deleted());
   DCHECK_GT(specifics.ByteSize(), 0);
   std::string hash;
   HashSpecifics(specifics, &hash);
-  return hash == metadata_->specifics_hash();
+  return hash == metadata_.specifics_hash();
 }
 
 syncer::ClientTagHash SyncedNoteTrackerEntity::GetClientTagHash() const {
-  return syncer::ClientTagHash::FromHashed(metadata_->client_tag_hash());
+  return syncer::ClientTagHash::FromHashed(metadata_.client_tag_hash());
 }
 
 size_t SyncedNoteTrackerEntity::EstimateMemoryUsage() const {

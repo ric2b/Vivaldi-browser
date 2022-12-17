@@ -137,7 +137,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
       DevToolsWindow::InspectElement(
           static_cast<VivaldiBrowserWindow*>(browser->window())
               ->web_contents()
-              ->GetMainFrame(),
+              ->GetPrimaryMainFrame(),
           0, 0);
     } else {
       if (panelType == PanelType::PANEL_TYPE_DEFAULT) {

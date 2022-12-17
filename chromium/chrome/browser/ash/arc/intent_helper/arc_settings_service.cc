@@ -20,6 +20,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/json/json_writer.h"
 #include "base/memory/singleton.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -35,12 +36,12 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/ash/components/network/proxy/proxy_config_service_impl.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_state_handler_observer.h"
 #include "components/arc/common/intent_helper/arc_intent_helper_package.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/language/core/browser/pref_names.h"
@@ -100,8 +101,8 @@ bool GetHttpProxyServer(const ProxyConfigDictionary* proxy_config_dict,
   return !host->empty() && *port;
 }
 
-bool IsProxyAutoDetectionConfigured(const base::Value* proxy_config_dict) {
-  ProxyConfigDictionary dict(proxy_config_dict->Clone());
+bool IsProxyAutoDetectionConfigured(const base::Value& proxy_config_dict) {
+  ProxyConfigDictionary dict(proxy_config_dict.Clone());
   ProxyPrefs::ProxyMode mode;
   dict.GetMode(&mode);
   return mode == ProxyPrefs::MODE_AUTO_DETECT;
@@ -137,7 +138,7 @@ class ArcSettingsServiceFactory
 // about and sends the new values to Android to keep the state in sync.
 class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
                                public ConnectionObserver<mojom::AppInstance>,
-                               public chromeos::NetworkStateHandlerObserver {
+                               public ash::NetworkStateHandlerObserver {
  public:
   ArcSettingsServiceImpl(Profile* profile,
                          ArcBridgeService* arc_bridge_service);
@@ -153,7 +154,7 @@ class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
   void TimezoneChanged(const icu::TimeZone& timezone) override;
 
   // NetworkStateHandlerObserver:
-  void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+  void DefaultNetworkChanged(const ash::NetworkState* network) override;
 
   // Retrieves Chrome's state for the settings that need to be synced on the
   // initial Android boot and send it to Android. Called by ArcSettingsService.
@@ -253,6 +254,10 @@ class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
   // automatically unregisters a callback when it's destructed.
   base::CallbackListSubscription default_zoom_level_subscription_;
 
+  base::ScopedObservation<ash::NetworkStateHandler,
+                          ash::NetworkStateHandlerObserver>
+      network_state_handler_observer_{this};
+
   // Name of the default network. Used to keep track of whether the default
   // network has changed.
   std::string default_network_name_;
@@ -338,7 +343,7 @@ void ArcSettingsServiceImpl::TimezoneChanged(const icu::TimeZone& timezone) {
 // - ONC policy changes;
 // - DHCP settings the WPAD URL via  option 252.
 void ArcSettingsServiceImpl::DefaultNetworkChanged(
-    const chromeos::NetworkState* network) {
+    const ash::NetworkState* network) {
   if (!network)
     return;
 
@@ -352,8 +357,9 @@ void ArcSettingsServiceImpl::DefaultNetworkChanged(
     //  configured to use the Web Proxy Auto-Discovery (WPAD) Protocol via the
     //  DHCP discovery method, the PAC URL will be propagated to Chrome via the
     //  default network properties.
-    if (dhcp_wpad_url_changed && IsProxyAutoDetectionConfigured(GetPrefs()->Get(
-                                     proxy_config::prefs::kProxy))) {
+    if (dhcp_wpad_url_changed &&
+        IsProxyAutoDetectionConfigured(
+            GetPrefs()->GetValue(proxy_config::prefs::kProxy))) {
       SyncProxySettings();
     }
     return;
@@ -377,7 +383,7 @@ void ArcSettingsServiceImpl::DefaultNetworkChanged(
   // Check if proxy auto detection is enabled. If yes, and the PAC URL set via
   // DHCP has changed, propagate the change to ARC.
   if (!default_proxy_config_.is_none() && dhcp_wpad_url_changed &&
-      IsProxyAutoDetectionConfigured(&default_proxy_config_)) {
+      IsProxyAutoDetectionConfigured(default_proxy_config_)) {
     sync_proxy = true;
   }
 
@@ -427,8 +433,8 @@ void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
 
   TimezoneSettings::GetInstance()->AddObserver(this);
 
-  chromeos::NetworkHandler::Get()->network_state_handler()->AddObserver(
-      this, FROM_HERE);
+  network_state_handler_observer_.Observe(
+      ash::NetworkHandler::Get()->network_state_handler());
 }
 
 void ArcSettingsServiceImpl::StopObservingSettingsChanges() {
@@ -437,8 +443,7 @@ void ArcSettingsServiceImpl::StopObservingSettingsChanges() {
   reporting_consent_subscription_ = {};
 
   TimezoneSettings::GetInstance()->RemoveObserver(this);
-  chromeos::NetworkHandler::Get()->network_state_handler()->RemoveObserver(
-      this, FROM_HERE);
+  network_state_handler_observer_.Reset();
 }
 
 void ArcSettingsServiceImpl::SyncInitialSettings() const {
@@ -563,7 +568,7 @@ void ArcSettingsServiceImpl::SyncLocationServiceEnabled() const {
 // multi-network support so we should sync per-network proxy configuration.
 void ArcSettingsServiceImpl::SyncProxySettings() const {
   std::unique_ptr<ProxyConfigDictionary> proxy_config_dict =
-      chromeos::ProxyConfigServiceImpl::GetActiveProxyConfigDictionary(
+      ash::ProxyConfigServiceImpl::GetActiveProxyConfigDictionary(
           GetPrefs(), g_browser_process->local_state());
 
   ProxyPrefs::ProxyMode mode;

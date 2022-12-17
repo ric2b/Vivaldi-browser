@@ -74,10 +74,8 @@ int GetCategoryLabelID(CookieTreeNode::DetailedInfo::NodeType node_type) {
       {CookieTreeNode::DetailedInfo::TYPE_CACHE_STORAGE,
        IDS_SETTINGS_COOKIES_CACHE_STORAGE},
 
-      {CookieTreeNode::DetailedInfo::TYPE_MEDIA_LICENSES,
-       IDS_SETTINGS_COOKIES_MEDIA_LICENSE},
-      {CookieTreeNode::DetailedInfo::TYPE_MEDIA_LICENSE,
-       IDS_SETTINGS_COOKIES_MEDIA_LICENSE},
+      {CookieTreeNode::DetailedInfo::TYPE_QUOTA,
+       IDS_SETTINGS_COOKIES_QUOTA_STORAGE},
   };
   // Before optimizing, consider the data size and the cost of L2 cache misses.
   // A linear search over a couple dozen integers is very fast.
@@ -225,10 +223,10 @@ void CookiesViewHandler::SetCookiesTreeModelForTesting(
 void CookiesViewHandler::RecreateCookiesTreeModel() {
   cookies_tree_model_.reset();
   filter_.clear();
-  cookies_tree_model_ =
-      cookies_tree_model_for_testing_.get()
-          ? std::move(cookies_tree_model_for_testing_)
-          : CookiesTreeModel::CreateForProfile(Profile::FromWebUI(web_ui()));
+  cookies_tree_model_ = cookies_tree_model_for_testing_.get()
+                            ? std::move(cookies_tree_model_for_testing_)
+                            : CookiesTreeModel::CreateForProfileDeprecated(
+                                  Profile::FromWebUI(web_ui()));
   cookies_tree_model_->AddCookiesTreeObserver(this);
 }
 
@@ -255,13 +253,9 @@ void CookiesViewHandler::GetCookieDetails(const std::string& callback_id,
     return;
   }
 
-  // TODO (crbug.com/642955): Pass true for `include_quota_nodes` parameter
-  // when quota nodes include local/session storage in the total.
-  base::Value::List children =
-      model_util_->GetChildNodeDetails(node, /* include_quota_nodes */ false);
+  base::Value::List children = model_util_->GetChildNodeDetailsDeprecated(node);
 
-  ResolveJavascriptCallback(base::Value(callback_id),
-                            base::Value(std::move(children)));
+  ResolveJavascriptCallback(base::Value(callback_id), children);
 }
 
 void CookiesViewHandler::HandleGetNumCookiesString(
@@ -440,14 +434,12 @@ void CookiesViewHandler::ReturnLocalDataList(const std::string& callback_id) {
   for (const auto& site : parent->children()) {
     std::u16string description;
     for (const auto& category : site->children()) {
+      const auto node_type = category->GetDetailedInfo().node_type;
       if (!description.empty())
         description += u", ";
-      const auto node_type = category->GetDetailedInfo().node_type;
       size_t item_count = category->children().size();
+
       switch (node_type) {
-        case CookieTreeNode::DetailedInfo::TYPE_QUOTA:
-          // TODO(crbug.com/642955): Omit quota values until bug is addressed.
-          continue;
         case CookieTreeNode::DetailedInfo::TYPE_COOKIE:
           DCHECK_EQ(0u, item_count);
           item_count = 1;
@@ -480,8 +472,7 @@ void CookiesViewHandler::ReturnLocalDataList(const std::string& callback_id) {
               return *a.FindStringKey(kSite) < *b.FindStringKey(kSite);
             });
 
-  ResolveJavascriptCallback(base::Value(callback_id),
-                            base::Value(std::move(site_list)));
+  ResolveJavascriptCallback(base::Value(callback_id), site_list);
 }
 
 void CookiesViewHandler::ProcessPendingRequests() {

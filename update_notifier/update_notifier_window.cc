@@ -27,7 +27,7 @@
 namespace vivaldi_update_notifier {
 
 using installer::GetLocalizedString;
-using installer::GetLocalizedStringF;
+using vivaldi_installer::GetLocalizedStringF;
 
 namespace {
 const int kNotificationUid = 1;

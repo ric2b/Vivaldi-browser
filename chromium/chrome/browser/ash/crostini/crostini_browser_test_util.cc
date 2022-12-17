@@ -7,9 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/path_service.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
-#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/crostini/fake_crostini_features.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_wayland_server.h"
@@ -19,7 +17,7 @@
 #include "chrome/browser/component_updater/fake_cros_component_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_features.h"
-#include "components/component_updater/component_updater_paths.h"
+#include "chrome/test/base/browser_process_platform_part_test_api_chromeos.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/network_connection_change_simulator.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -112,14 +110,14 @@ void CrostiniBrowserTestBase::DiskMountImpl(
     const std::string& source_format,
     const std::string& mount_label,
     const std::vector<std::string>& mount_options,
-    chromeos::MountType type,
-    chromeos::MountAccessMode access_mode,
+    ash::MountType type,
+    ash::MountAccessMode access_mode,
     ash::disks::DiskMountManager::MountPathCallback callback) {
-  ash::disks::DiskMountManager::MountPointInfo info(
-      source_path, "/path/to/mount", type, ash::disks::MOUNT_CONDITION_NONE);
-  std::move(callback).Run(chromeos::MountError::MOUNT_ERROR_NONE, info);
+  const ash::disks::DiskMountManager::MountPoint info{source_path,
+                                                      "/path/to/mount", type};
+  std::move(callback).Run(ash::MountError::kNone, info);
   dmgr_->NotifyMountEvent(ash::disks::DiskMountManager::MountEvent::MOUNTING,
-                          chromeos::MountError::MOUNT_ERROR_NONE, info);
+                          ash::MountError::kNone, info);
 }
 
 void CrostiniBrowserTestBase::CreatedBrowserMainParts(

@@ -42,6 +42,7 @@
 #include "chrome/test/base/android/android_browser_test.h"
 #else
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #endif  // defined (OS_ANDROID)
 
@@ -474,11 +475,14 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TreeModelDeletion) {
   EXPECT_EQ(cookies.size(),
             kEmbeddedPageCookieCount + kTopLevelPageCookieCount);
 
-  auto tree_model =
-      CookiesTreeModel::CreateForProfile(chrome_test_utils::GetProfile(this));
-  CookiesTreeObserver observer;
-  tree_model->AddCookiesTreeObserver(&observer);
-  observer.AwaitTreeModelEndBatch();
+  auto tree_model = CookiesTreeModel::CreateForProfileDeprecated(
+      chrome_test_utils::GetProfile(this));
+  {
+    CookiesTreeObserver observer;
+    tree_model->AddCookiesTreeObserver(&observer);
+    observer.AwaitTreeModelEndBatch();
+    tree_model->RemoveCookiesTreeObserver(&observer);
+  }
 
   tree_model->DeleteAllStoredObjects();
 
@@ -541,7 +545,7 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TabClosed) {
 #else
   ASSERT_TRUE(AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_TYPED));
   browser()->tab_strip_model()->CloseWebContentsAt(0,
-                                                   TabStripModel::CLOSE_NONE);
+                                                   TabCloseTypes::CLOSE_NONE);
 #endif  // defined (OS_ANDROID)
 
   auto records = GetAllAccessRecords();

@@ -20,8 +20,9 @@
 
 namespace blink {
 
-class Document;
 class CSSPrimitiveValue;
+class ComputedStyle;
+class Document;
 class LocalFrame;
 enum class CSSValueID;
 enum class ColorSpaceGamut;
@@ -86,6 +87,9 @@ class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues>,
   virtual int GetHorizontalViewportSegments() const = 0;
   virtual int GetVerticalViewportSegments() const = 0;
   virtual device::mojom::blink::DevicePostureType GetDevicePosture() const = 0;
+  // Returns the ComputedStyle used for style() query evaluation for container
+  // queries.
+  virtual const ComputedStyle* GetComputedStyle() const { return nullptr; }
 
  protected:
   static double CalculateViewportWidth(LocalFrame*);
@@ -99,6 +103,7 @@ class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues>,
   static float CalculateEmSize(LocalFrame*);
   static float CalculateExSize(LocalFrame*);
   static float CalculateChSize(LocalFrame*);
+  static float CalculateIcSize(LocalFrame*);
   static int CalculateDeviceWidth(LocalFrame*);
   static int CalculateDeviceHeight(LocalFrame*);
   static bool CalculateStrictMode(LocalFrame*);

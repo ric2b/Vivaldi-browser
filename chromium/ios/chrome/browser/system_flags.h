@@ -59,6 +59,11 @@ void DidResetFirstFollowCount();
 // TODO(crbug.com/1312124): Remove after launch.
 bool ShouldAlwaysShowFirstFollow();
 
+// Returns true if the Follow IPH should always be shown when the user
+// browsing a eligible website in non-incognito mode.
+// TODO(crbug.com/1340154): Remove after launch.
+bool ShouldAlwaysShowFollowIPH();
+
 // Whether memory debugging tools are enabled.
 bool IsMemoryDebuggingEnabled();
 

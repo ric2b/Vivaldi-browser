@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
 <translation id="1397811292916898096">Sykje mei <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Taast om te sykjen is in funksje dy allinne beskikber is wannear Google ynsteld is as de standert sykmotor yn Vivaldi. it stjoerd in wurd en de omringende kontekst nei GoogleSykjen en bringt defenysjes, ôfbyldingen, resultaten fan it sykjen en oare details wer werom. Jo kinne it útsette yn <ph name="BEGIN_LINK" />Ymnstellingen<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Normale/Privee ljeppers wikselje</translation>
 <translation id="1644574205037202324">Skiednis</translation>
 <translation id="17513872634828108">Ljeppers iepenje</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nije privee ljepper</translation>
 <translation id="4243710787042215766">Yn privee ljepper iepenje</translation>
 <translation id="4526803704855831732">Privee ljeppers</translation>
+<translation id="4719086422742491124">Leer mear oer ûnderwerpen fan websteeën sûnder siden te ferlitten. Selektearje ien of meardere wurde op de webstee om nei har te sykjen.
+
+Taast om te sykjen is in funksje dy allinne beskikber is wannear Google ynsteld is as de standert sykmotor yn Vivaldi.</translation>
 <translation id="4759238208242260848">Ynladen</translation>
 <translation id="4883379392681899581">Privee modus ferlitte</translation>
 <translation id="4943872375798546930">Gjin resultaat</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> bewarring</translation>
 <translation id="5186185447130319458">Privee</translation>
 <translation id="5233638681132016545">Nije ljepper</translation>
-<translation id="572328651809341494">Resinte ljeppers</translation>
-<translation id="5840488417521835756">Lear oer ûnderwerpen op websteeën sûnder de side te ferlitten. Druk op Sykje is in funksje dy allinne beskikber is as Google de standert syk motor is yn Vivaldi. It stjoerd in wurd en de omrinnende ynhâld nei Google Sykjen, en komt werom mei defenysjes, printsjes, syk resultaten, en oare details.
+<translation id="5375131951310889874">Leer mear oer ûnderwerpen fan websteeën sûnder siden te ferlitten. Taast om te sykjen is in funksje dy allinne beskikber is wannear Google ynsteld is as de standert sykmotor yn Vivaldi. it stjoerd in wurd en de omringende kontekst nei GoogleSykjen en bringt defenysjes, ôfbyldingen, resultaten fan it sykjen en oare details wer werom.
 
-Om jo syk opdracht oan te passen, druk lang om te selektearjen. Om jo sykjen te ferbetterjen, glydzje it paniel hielendal omheech en druk op it syk fak.</translation>
+Druk lang op de syk term, om it te selektearjen. Om it sykjen te ferbetterjen, skow it paniel hielendal nei boppe en tik op it fjild fan it sykjen.</translation>
+<translation id="572328651809341494">Resinte ljeppers</translation>
 <translation id="6150320133806434356">Blêdwizer bewarre</translation>
 <translation id="6336451774241870485">Nije privee ljepper</translation>
 <translation id="6585139692466700358">Bied oan om siden oer te setten yn oare talen mei help fan Vivaldi's oerset tsjinst</translation>
@@ -53,7 +57,6 @@ Om jo syk opdracht oan te passen, druk lang om te selektearjen. Om jo sykjen te 
 <translation id="732145680195464316">Blêdwizer bewarre yn <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Ynfo oer Vivaldi</translation>
 <translation id="7465104139234185284">Alle privee ljeppers slute</translation>
-<translation id="7519434535192513364">Druk op sykje is in funksje dat allinne beskikber is as Google as standert syk motor setten is yn Vivaldi. It stjoerd it selektearre wurd en de aktive side as kontekst nei Google Sykjen. Jo kinne it útskeakelje yn <ph name="BEGIN_LINK" />Ynstellingen<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Lisinsjeoerienkomst foar einbrûkers</translation>
 <translation id="85991616550051997">Gean nei thúsblêd</translation>
 <translation id="8820817407110198400">Blêdwizers</translation>

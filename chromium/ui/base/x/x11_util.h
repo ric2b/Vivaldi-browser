@@ -16,6 +16,7 @@
 
 #include "base/component_export.h"
 #include "base/containers/flat_set.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
@@ -337,7 +338,9 @@ COMPONENT_EXPORT(UI_BASE_X) bool IsCompositingManagerPresent();
 COMPONENT_EXPORT(UI_BASE_X) bool IsX11WindowFullScreen(x11::Window window);
 
 // Suspends or resumes the X screen saver, and returns whether the operation was
-// successful.  Must be called on the UI thread.
+// successful.  Must be called on the UI thread. If called multiple times with
+// |suspend| set to true, the screen saver is not un-suspended until this method
+// is called an equal number of times with |suspend| set to false.
 COMPONENT_EXPORT(UI_BASE_X) bool SuspendX11ScreenSaver(bool suspend);
 
 // Returns true if the window manager supports the given hint.
@@ -415,7 +418,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XVisualManager {
     x11::ColorMap GetColormap();
 
     const uint8_t depth;
-    const x11::VisualType* const info;
+    const raw_ptr<const x11::VisualType> info;
 
    private:
     x11::ColorMap colormap_{};

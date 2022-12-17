@@ -30,10 +30,6 @@ namespace base {
 class SequencedTaskRunner;
 }  // namespace base
 
-namespace value_store {
-class ValueStore;
-}
-
 namespace {
 class WallpaperControllerClientImplTest;
 }
@@ -66,7 +62,6 @@ class WallpaperControllerClientImpl
 
   // ash::WallpaperControllerClient:
   void OpenWallpaperPicker() override;
-  void MaybeClosePreviewWallpaper() override;
   void SetDefaultWallpaper(
       const AccountId& account_id,
       bool show_wallpaper,
@@ -102,7 +97,7 @@ class WallpaperControllerClientImpl
   bool IsWallpaperSyncEnabled(const AccountId& account_id) const override;
 
   // file_manager::VolumeManagerObserver:
-  void OnVolumeMounted(chromeos::MountError error_code,
+  void OnVolumeMounted(ash::MountError error_code,
                        const file_manager::Volume& volume) override;
 
   // session_manager::SessionManagerObserver implementation.
@@ -113,7 +108,8 @@ class WallpaperControllerClientImpl
                           const std::string& file_name,
                           ash::WallpaperLayout layout,
                           const gfx::ImageSkia& image,
-                          bool preview_mode);
+                          bool preview_mode,
+                          const std::string& file_path = "");
   void SetOnlineWallpaper(
       const ash::OnlineWallpaperParams& params,
       ash::WallpaperController::SetWallpaperCallback callback);
@@ -158,11 +154,8 @@ class WallpaperControllerClientImpl
   const std::vector<SkColor>& GetWallpaperColors();
   bool IsWallpaperBlurred();
   bool IsActiveUserWallpaperControlledByPolicy();
-  ash::WallpaperInfo GetActiveUserWallpaperInfo();
+  absl::optional<ash::WallpaperInfo> GetActiveUserWallpaperInfo();
   bool ShouldShowWallpaperSetting();
-  void MigrateCollectionIdFromValueStoreForTesting(
-      const AccountId& account_id,
-      value_store::ValueStore* storage);
   // Record Ash.Wallpaper.Source metric when a new wallpaper is set,
   // either by built-in Wallpaper app or a third party extension/app.
   void RecordWallpaperSourceUMA(const ash::WallpaperType type);
@@ -183,14 +176,6 @@ class WallpaperControllerClientImpl
   bool ShouldShowUserNamesOnLogin() const;
 
   base::FilePath GetDeviceWallpaperImageFilePath();
-
-  // Used as callback to |MigrateCollectionIdFromChromeApp|. Called on backend
-  // task runner. Extracts the daily refresh collection id and calls
-  // |SetDailyRefreshCollectionId| on main task runner.
-  void OnGetWallpaperChromeAppValueStore(
-      scoped_refptr<base::SequencedTaskRunner> main_task_runner,
-      base::OnceCallback<void(const std::string&)> result_callback,
-      value_store::ValueStore* value_store);
 
   // Passes |collection_id| to wallpaper controller on main task runner.
   void SetDailyRefreshCollectionId(const AccountId& account_id,

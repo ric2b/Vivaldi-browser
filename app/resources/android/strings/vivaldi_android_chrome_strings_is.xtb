@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="is">
 <translation id="1397811292916898096">Leita með <ph name="PRODUCT_NAME" /> 1</translation>
+<translation id="1456207338570705181">Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er valin sem sjálfgefin leitarvél í Vivaldi. Þá er orðið og samhengi þessi sent inn í leitarvél Google. Slökkva má á því í <ph name="BEGIN_LINK" />stillingum<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Skiptu á milli venjulegra/einka flipa</translation>
 <translation id="1644574205037202324">Saga</translation>
 <translation id="17513872634828108">Opnir flipar</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nýr einkaflipi</translation>
 <translation id="4243710787042215766">Opna í einkaglugga</translation>
 <translation id="4526803704855831732">Einkaflipar</translation>
+<translation id="4719086422742491124">Kynntu þér efni vefsíða án þess að yfirgefa síðuna. Veldu eitt eða fleiri orð á síðunni, til þess að leita þeirra.
+
+Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er valin sem sjálfgefin leitarvél í Vivaldi.</translation>
 <translation id="4759238208242260848">Niðurhöl</translation>
 <translation id="4883379392681899581">Fara úr einkaham</translation>
 <translation id="4943872375798546930">Engin niðurstaða</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> geymslusvæði</translation>
 <translation id="5186185447130319458">Einka</translation>
 <translation id="5233638681132016545">Nýr flipi</translation>
-<translation id="572328651809341494">Nýlegir flipar</translation>
-<translation id="5840488417521835756">Kynntu þér efni netsins án þess að fara af síðunni. "Ýttu til að leita" er eiginleiki sem virkar þegar Google er sjálfgefin leitarvél. Það sendir orð og umhverfi þess inn í Google leitarvélina, og finnur skilgreiningar, myndir, niðurstöður og fleira.
+<translation id="5375131951310889874">Kynntu þér efni vefsíða án þess að yfirgefa síðuna. Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er valin sem sjálfgefin leitarvél í Vivaldi. Þá er orðið og samhengi þessi sent inn í leitarvél Google, sem skilar þá skilgreiningum, myndum, leitarniðurstöðum, og fleiru.
 
-Haltu við orðið sem þú vilt leita að. Þá birtist leitarspjald neðst á skjánum. Renndu spjaldinu upp til þess að fínstilla leitina.</translation>
+Ýttu lengi til að velja leitarorð. Fyrir nákvæmari leitarskilyrði má draga spjald alla leið upp og slá á leitarboxið.</translation>
+<translation id="572328651809341494">Nýlegir flipar</translation>
 <translation id="6150320133806434356">Bókamerki vistað</translation>
 <translation id="6336451774241870485">Nýr einkaflipi</translation>
 <translation id="6585139692466700358">Bjóða upp á að þýða síður af erlendum tungumálum með þýðingarþjónustu Vivaldi</translation>
@@ -53,7 +57,6 @@ Haltu við orðið sem þú vilt leita að. Þá birtist leitarspjald neðst á 
 <translation id="732145680195464316">Bókamerki vistað í <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Um Vivaldi</translation>
 <translation id="7465104139234185284">Loka öllum einkagluggum</translation>
-<translation id="7519434535192513364">"Ýttu til að leita" er eiginleiki sem virkar þegar Google er sjálfgefin leitarvél. Það sendir orð og umhverfi þess inn í Google leitarvélina. Þú getur slökkt á því í <ph name="BEGIN_LINK" />stillingum<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Leyfisskilmálar notenda</translation>
 <translation id="85991616550051997">Fara á heimasíðu</translation>
 <translation id="8820817407110198400">Bókamerki</translation>

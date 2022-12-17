@@ -29,15 +29,19 @@ class MessagePopupView;
 
 namespace ash {
 
+class AutozoomToastController;
 class AshMessagePopupCollection;
 class CameraMicTrayItemView;
+class ChannelIndicatorView;
 class CurrentLocaleView;
 class ImeModeView;
 class ManagedDeviceTrayItemView;
 class NetworkTrayView;
 class NotificationGroupingController;
 class NotificationIconsController;
+class PrivacyIndicatorsTrayItemView;
 class PrivacyScreenToastController;
+class ScreenCaptureTrayItemView;
 class SnoopingProtectionView;
 class TimeTrayItemView;
 class TrayItemView;
@@ -85,6 +89,10 @@ class ASH_EXPORT UnifiedSystemTray
   // Adds a padding on top of the vertical clock if there are other visible
   // icons in the tray, removes it if the clock is the only visible icon.
   void MaybeUpdateVerticalClockPadding();
+
+  // Update `privacy_indicators_view_` according to camera/microphone access.
+  void UpdatePrivacyIndicatorsTrayItem(bool camera_is_used,
+                                       bool microphone_is_used);
 
   // views::ViewObserver:
   void OnViewVisibilityChanged(views::View* observed_view,
@@ -213,6 +221,9 @@ class ASH_EXPORT UnifiedSystemTray
   // Whether the bubble is currently showing the calendar view.
   bool IsShowingCalendarView() const;
 
+  // Returns whether the channel indicator should be shown.
+  bool ShouldChannelIndicatorBeShown() const;
+
   std::u16string GetAccessibleNameForQuickSettingsBubble();
 
   AshMessagePopupCollection* GetMessagePopupCollection();
@@ -224,6 +235,14 @@ class ASH_EXPORT UnifiedSystemTray
 
   UnifiedMessageCenterBubble* message_center_bubble() {
     return message_center_bubble_.get();
+  }
+
+  PrivacyIndicatorsTrayItemView* privacy_indicators_view() {
+    return privacy_indicators_view_;
+  }
+
+  ChannelIndicatorView* channel_indicator_view() {
+    return channel_indicator_view_;
   }
 
  private:
@@ -275,6 +294,8 @@ class ASH_EXPORT UnifiedSystemTray
   const std::unique_ptr<PrivacyScreenToastController>
       privacy_screen_toast_controller_;
 
+  std::unique_ptr<AutozoomToastController> autozoom_toast_controller_;
+
   // Manages showing notification icons in the tray.
   const std::unique_ptr<NotificationIconsController>
       notification_icons_controller_;
@@ -286,8 +307,11 @@ class ASH_EXPORT UnifiedSystemTray
   CameraMicTrayItemView* const camera_view_;
   CameraMicTrayItemView* const mic_view_;
   TimeTrayItemView* const time_view_;
+  PrivacyIndicatorsTrayItemView* const privacy_indicators_view_;
+  ScreenCaptureTrayItemView* const screen_capture_view_;
 
   NetworkTrayView* network_tray_view_ = nullptr;
+  ChannelIndicatorView* channel_indicator_view_ = nullptr;
 
   // Contains all tray items views added to tray_container().
   std::list<TrayItemView*> tray_items_;

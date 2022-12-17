@@ -25,12 +25,18 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sync/desk_sync_service_factory.h"
 #include "chrome/browser/ui/ash/desks/desks_templates_app_launch_handler.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "components/app_constants/constants.h"
 #include "components/app_restore/app_restore_info.h"
 #include "components/app_restore/window_properties.h"
 #include "components/desks_storage/core/desk_model_wrapper.h"
 #include "components/desks_storage/core/desk_sync_service.h"
 #include "components/desks_storage/core/local_desk_data_manager.h"
+#include "components/sessions/core/session_id.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/window.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -51,9 +57,11 @@ constexpr char kBadProfileError[] =
     "Either the profile is not valid or there is not an active proflile.";
 constexpr char kNoSavedTemplatesError[] = "You can create up to 6 templates.";
 constexpr char kNoSuchDeskError[] = "The desk cannot be found.";
-constexpr char kInvalidDeskIdError[] = "The desk id is not valid.";
+constexpr char kInvalidDeskIdError[] = "The desk identifier is not valid.";
 constexpr char kCantCloseDeskError[] = "The desk cannot be closed.";
 constexpr char kCantGetAllDesksError[] = "Unable to retrieve all desks.";
+constexpr char kNoSuchWindowError[] = "The window cannot be found.";
+constexpr char kInvalidWindowIdError[] = "The window identifier is not valid.";
 
 // Timeout time used in LaunchPerformanceTracker.
 constexpr base::TimeDelta kLaunchPerformanceTimeout = base::Minutes(3);
@@ -201,7 +209,8 @@ void DesksClient::OnActiveUserSessionChanged(const AccountId& account_id) {
         std::make_unique<desks_storage::LocalDeskDataManager>(
             active_profile_->GetPath(), account_id);
 
-    if (ash::saved_desk_util::AreDesksTemplatesEnabled()) {
+    if (ash::saved_desk_util::AreDesksTemplatesEnabled() &&
+        chromeos::features::IsDeskTemplateSyncEnabled()) {
       saved_desk_storage_manager_ =
           std::make_unique<desks_storage::DeskModelWrapper>(
               save_and_recall_desks_storage_manager_.get());
@@ -269,9 +278,14 @@ void DesksClient::GetDeskTemplates(GetDeskTemplatesCallback callback) {
     return;
   }
 
-  GetDeskModel()->GetAllEntries(base::BindOnce(&DesksClient::OnGetAllTemplates,
-                                               weak_ptr_factory_.GetWeakPtr(),
-                                               std::move(callback)));
+  auto result = GetDeskModel()->GetAllEntries();
+
+  std::move(callback).Run(
+      result.entries,
+      std::string(result.status !=
+                          desks_storage::DeskModel::GetAllEntriesStatus::kOk
+                      ? kStorageError
+                      : ""));
 }
 
 void DesksClient::GetTemplateJson(const std::string uuid,
@@ -320,16 +334,19 @@ void DesksClient::LaunchDeskTemplate(
 
 void DesksClient::LaunchEmptyDesk(LaunchDeskCallback callback,
                                   const std::u16string& customized_desk_name) {
-  desks_controller_->CreateNewDeskForTemplate(
-      /*activate_desk=*/true,
-      base::BindOnce(&DesksClient::OnLaunchEmptyDesk,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
-      customized_desk_name);
+  if (!desks_controller_->CanCreateDesks()) {
+    std::move(callback).Run(kMaximumDesksOpenedError, {});
+    return;
+  }
+
+  const ash::Desk* new_desk = desks_controller_->CreateNewDeskForTemplate(
+      /*activate_desk=*/true, customized_desk_name);
+  std::move(callback).Run(/*error=*/"", new_desk->uuid());
 }
 
 void DesksClient::RemoveDesk(const base::GUID& desk_uuid,
                              bool combine_desk,
-                             CloseAllCallBack callback) {
+                             ErrorHandlingCallBack callback) {
   // Return error if `desk_uuid` is invalid.
   if (!desk_uuid.is_valid()) {
     std::move(callback).Run(kInvalidDeskIdError);
@@ -415,7 +432,8 @@ void DesksClient::LaunchAppsFromTemplate(
 
 desks_storage::DeskModel* DesksClient::GetDeskModel() {
   if (chromeos::features::IsSavedDesksEnabled()) {
-    if (!ash::saved_desk_util::AreDesksTemplatesEnabled()) {
+    if (!ash::saved_desk_util::AreDesksTemplatesEnabled() ||
+        !chromeos::features::IsDeskTemplateSyncEnabled()) {
       DCHECK(save_and_recall_desks_storage_manager_.get());
       return save_and_recall_desks_storage_manager_.get();
     }
@@ -476,66 +494,66 @@ void DesksClient::NotifyMovedSingleInstanceApp(int32_t window_id) {
     id_to_tracker.second->OnMovedSingleInstanceApp(window_id);
 }
 
+void DesksClient::SetAllDeskPropertyByBrowserSessionId(
+    SessionID browser_session_id,
+    bool all_desk,
+    ErrorHandlingCallBack callback) {
+  if (!browser_session_id.is_valid()) {
+    std::move(callback).Run(kInvalidWindowIdError);
+    return;
+  }
+
+  aura::Window* window = GetWindowByBrowserSessionId(browser_session_id);
+  if (!window) {
+    std::move(callback).Run(kNoSuchWindowError);
+    return;
+  }
+  window->SetProperty(aura::client::kWindowWorkspaceKey,
+                      all_desk
+                          ? aura::client::kWindowWorkspaceVisibleOnAllWorkspaces
+                          : aura::client::kWindowWorkspaceUnassignedWorkspace);
+  std::move(callback).Run("");
+}
+
 void DesksClient::OnGetTemplateForDeskLaunch(
     LaunchDeskCallback callback,
     std::u16string customized_desk_name,
     base::Time time_launch_started,
     desks_storage::DeskModel::GetEntryByUuidStatus status,
-    std::unique_ptr<ash::DeskTemplate> entry) {
+    std::unique_ptr<ash::DeskTemplate> saved_desk) {
   if (status != desks_storage::DeskModel::GetEntryByUuidStatus::kOk) {
     std::move(callback).Run(kStorageError, {});
     return;
   }
-  // Launch the windows as specified in the template to a new desk.
-  const auto template_name = entry->template_name();
-  const bool activate_desk = entry->type() == ash::DeskTemplateType::kTemplate;
-  desks_controller_->CreateNewDeskForTemplate(
-      activate_desk,
-      base::BindOnce(&DesksClient::OnCreateAndActivateNewDeskForTemplate,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(entry),
-                     std::move(callback), time_launch_started),
-      // We prioritize `customized_desk_name` over `template_name`. An example
-      // is that for call center application use case, we launch the same
-      // template for different customer and assign desk name to be customer's
-      // name.
-      customized_desk_name.empty() ? template_name : customized_desk_name);
-}
-
-void DesksClient::OnCreateAndActivateNewDeskForTemplate(
-    std::unique_ptr<ash::DeskTemplate> desk_template,
-    LaunchDeskCallback callback,
-    base::Time time_launch_started,
-    const ash::Desk* new_desk) {
-  if (new_desk == nullptr) {
-    // This will only fail if the number of desks is at a maximum.
+  if (!desks_controller_->CanCreateDesks()) {
     std::move(callback).Run(kMaximumDesksOpenedError, {});
     return;
   }
 
-  DCHECK(desk_template);
-  if (!desk_template->desk_restore_data()) {
+  // We prioritize `customized_desk_name` over the saved desk's name. An example
+  // is that for call center application use case, we launch the same template
+  // for different customer and assign desk name to be customer's name.
+  const auto& template_name = customized_desk_name.empty()
+                                  ? saved_desk->template_name()
+                                  : customized_desk_name;
+  const bool activate_desk =
+      saved_desk->type() == ash::DeskTemplateType::kTemplate;
+  const ash::Desk* new_desk =
+      desks_controller_->CreateNewDeskForTemplate(activate_desk, template_name);
+
+  if (!saved_desk->desk_restore_data()) {
     std::move(callback).Run(kMissingTemplateDataError, {});
     return;
   }
 
-  // Copy the index of the newly created desk to the template. This ensures that
-  // apps appear on the right desk even if the user switches to another.
-  desk_template->SetDeskIndex(desks_controller_->GetDeskIndex(new_desk));
+  // Copy the index of the newly created desk to the saved desk. This ensures
+  // that apps appear on the right desk even if the user switches to another.
+  saved_desk->SetDeskIndex(desks_controller_->GetDeskIndex(new_desk));
 
-  LaunchAppsFromTemplate(std::move(desk_template), time_launch_started,
+  // Launch the windows as specified in the saved desk to a new desk.
+  LaunchAppsFromTemplate(std::move(saved_desk), time_launch_started,
                          base::TimeDelta());
   std::move(callback).Run("", new_desk->uuid());
-}
-
-void DesksClient::OnLaunchEmptyDesk(LaunchDeskCallback callback,
-                                    const ash::Desk* new_desk) {
-  if (!new_desk) {
-    // This will only fail if the number of desks is at a maximum.
-    std::move(callback).Run(kMaximumDesksOpenedError, {});
-    return;
-  }
-
-  std::move(callback).Run(/*error=*/"", new_desk->uuid());
 }
 
 void DesksClient::OnCaptureActiveDeskAndSaveTemplate(
@@ -585,17 +603,6 @@ void DesksClient::OnGetTemplateToBeUpdated(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void DesksClient::OnGetAllTemplates(
-    GetDeskTemplatesCallback callback,
-    desks_storage::DeskModel::GetAllEntriesStatus status,
-    const std::vector<const ash::DeskTemplate*>& entries) {
-  std::move(callback).Run(
-      entries,
-      std::string(status != desks_storage::DeskModel::GetAllEntriesStatus::kOk
-                      ? kStorageError
-                      : ""));
-}
-
 void DesksClient::OnCapturedDeskTemplate(
     CaptureActiveDeskAndSaveTemplateCallback callback,
     std::unique_ptr<ash::DeskTemplate> desk_template) {
@@ -627,4 +634,13 @@ void DesksClient::OnLaunchComplete(int32_t launch_id) {
 
 void DesksClient::RemoveLaunchPerformanceTracker(base::GUID tracker_uuid) {
   template_ids_to_launch_performance_trackers_.erase(tracker_uuid);
+}
+
+aura::Window* DesksClient::GetWindowByBrowserSessionId(
+    SessionID browser_session_id) {
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser->session_id() == browser_session_id)
+      return browser->window()->GetNativeWindow();
+  }
+  return nullptr;
 }

@@ -20,7 +20,9 @@ bool DocumentLayoutUpgrade::ShouldUpgrade() {
 }
 
 bool ParentLayoutUpgrade::ShouldUpgrade() {
-  return document_.GetStyleEngine().HasViewportDependentMediaQueries() ||
+  StyleEngine& style_engine = document_.GetStyleEngine();
+  return style_engine.HasViewportDependentMediaQueries() ||
+         style_engine.HasViewportDependentPropertyRegistrations() ||
          NodeLayoutUpgrade(owner_).ShouldUpgrade();
 }
 
@@ -29,24 +31,25 @@ NodeLayoutUpgrade::Reasons NodeLayoutUpgrade::GetReasons(const Node& node) {
 
   const ComputedStyle* style =
       ComputedStyle::NullifyEnsured(node.GetComputedStyle());
-  if (style && style->DependsOnContainerQueries())
-    reasons |= kDependsOnContainerQueries;
+  if (style && style->DependsOnSizeContainerQueries())
+    reasons |= kDependsOnSizeContainerQueries;
   if (ComputedStyle::IsInterleavingRoot(node.GetComputedStyle()))
     reasons |= kInterleavingRoot;
   return reasons;
 }
 
 bool NodeLayoutUpgrade::ShouldUpgrade() {
+  if (!node_.isConnected())
+    return false;
   // We do not allow any elements to remain in a skipped state after a style
   // update, therefore we always upgrade whenever we've skipped something, even
   // if the current ancestors chain does not depend on layout.
   StyleEngine& style_engine = node_.GetDocument().GetStyleEngine();
   if (style_engine.SkippedContainerRecalc())
     return true;
-  if (!style_engine.StyleAffectedByLayout())
-    return false;
 
-  Reasons mask = kDependsOnContainerQueries;
+  Reasons mask =
+      style_engine.StyleAffectedByLayout() ? kDependsOnSizeContainerQueries : 0;
 
   if (GetReasons(node_) & mask)
     return true;
@@ -57,6 +60,10 @@ bool NodeLayoutUpgrade::ShouldUpgrade() {
   // inside any interleaving root.
   if (ComputedStyle::IsNullOrEnsured(node_.GetComputedStyle()))
     mask |= NodeLayoutUpgrade::kInterleavingRoot;
+
+  // Early out if nothing can possibly match.
+  if (!mask)
+    return false;
 
   for (ContainerNode* ancestor = LayoutTreeBuilderTraversal::Parent(node_);
        ancestor; ancestor = LayoutTreeBuilderTraversal::Parent(*ancestor)) {

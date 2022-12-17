@@ -438,14 +438,14 @@ BrowsingDataRemoverBrowserTestBase::GetCookiesTreeModel(Profile* profile) {
       base::MakeRefCounted<browsing_data::SharedWorkerHelper>(
           storage_partition),
       base::MakeRefCounted<browsing_data::CacheStorageHelper>(
-          storage_partition),
-      BrowsingDataMediaLicenseHelper::Create(file_system_context));
+          storage_partition));
   base::RunLoop run_loop;
   CookiesTreeObserver observer(run_loop.QuitClosure());
   auto model = std::make_unique<CookiesTreeModel>(
       std::move(container), profile->GetExtensionSpecialStoragePolicy());
   model->AddCookiesTreeObserver(&observer);
   run_loop.Run();
+  model->RemoveCookiesTreeObserver(&observer);
   return model;
 }
 

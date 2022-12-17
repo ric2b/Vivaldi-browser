@@ -14,6 +14,8 @@
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenized_value.h"
+#include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -117,9 +119,11 @@ class CORE_EXPORT CSSParserImpl {
       const CSSParserContext*,
       StyleSheetContents*,
       CSSDeferPropertyParsing = CSSDeferPropertyParsing::kNo,
-      bool allow_import_rules = true);
+      bool allow_import_rules = true,
+      std::unique_ptr<CachedCSSTokenizer> tokenizer = nullptr);
   static CSSSelectorList ParsePageSelector(CSSParserTokenRange,
-                                           StyleSheetContents*);
+                                           StyleSheetContents*,
+                                           const CSSParserContext& context);
 
   static std::unique_ptr<Vector<double>> ParseKeyframeKeyList(const String&);
 
@@ -205,6 +209,12 @@ class CORE_EXPORT CSSParserImpl {
   static std::unique_ptr<Vector<double>> ConsumeKeyframeKeyList(
       CSSParserTokenRange);
 
+  // Finds a previously parsed MediaQuerySet for the given `prelude_string`
+  // and returns it. If no MediaQuerySet is found, parses one using `prelude`,
+  // and returns the result after caching it.
+  const MediaQuerySet* CachedMediaQuerySet(String prelude_string,
+                                           CSSParserTokenRange prelude);
+
   // FIXME: Can we build CSSPropertyValueSets directly?
   HeapVector<CSSPropertyValue, 64> parsed_properties_;
 
@@ -215,6 +225,8 @@ class CORE_EXPORT CSSParserImpl {
   CSSParserObserver* observer_;
 
   CSSLazyParsingState* lazy_state_;
+
+  HeapHashMap<String, Member<const MediaQuerySet>> media_query_cache_;
 };
 
 }  // namespace blink

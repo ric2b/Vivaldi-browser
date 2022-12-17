@@ -9,7 +9,7 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/sync/driver/sync_service_impl.h"
-#include "components/sync/test/fake_server/fake_server_http_post_provider.h"
+#include "components/sync/test/fake_server_http_post_provider.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/network_connection_change_simulator.h"
 #include "net/base/network_change_notifier.h"
@@ -37,7 +37,13 @@ class SyncExponentialBackoffTest : public SyncTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, OfflineToOnline) {
+// TODO(crbug.com/1346194): Test fails on Lacros.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_OfflineToOnline DISABLED_OfflineToOnline
+#else
+#define MAYBE_OfflineToOnline OfflineToOnline
+#endif
+IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, MAYBE_OfflineToOnline) {
   const std::string kFolderTitle1 = "folder1";
   const std::string kFolderTitle2 = "folder2";
 

@@ -1098,16 +1098,6 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
 
   gfx::Rect GetTextureSourceSubRectangle(GLsizei width, GLsizei height);
 
-  enum ClearBufferCaller {
-    kClearBufferiv,
-    kClearBufferuiv,
-    kClearBufferfv,
-    kClearBufferfi
-  };
-  void UpdateBuffersToAutoClear(ClearBufferCaller caller,
-                                GLenum buffer,
-                                GLint drawbuffer);
-
   /* WebGLRenderingContextBase overrides */
   unsigned GetMaxWebGLLocationLength() const override { return 1024; }
   bool ValidateCapability(const char* function_name, GLenum) override;
@@ -1133,10 +1123,15 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   void GetCurrentUnpackState(TexImageParams& params) override;
   WebGLTexture* ValidateTexImageBinding(const TexImageParams& params) override;
   // Helper function to check texture 3D target and texture bound to the target.
-  // Generate GL errors and return 0 if target is invalid or texture bound is
-  // null.  Otherwise, return the texture bound to the target.
+  // Generates GL errors and returns 0 if target is invalid or texture bound is
+  // null.  Otherwise, returns the texture bound to the target.
+  // If |validate_opaque_textures| is true, the helper will also generate a GL
+  // error when the texture bound to the target is opaque.
+  // See https://www.w3.org/TR/webxrlayers-1/#opaque-texture for details about
+  // opaque textures.
   WebGLTexture* ValidateTexture3DBinding(const char* function_name,
-                                         GLenum target);
+                                         GLenum target,
+                                         bool validate_opaque_textures = false);
 
   WebGLBuffer* ValidateBufferDataTarget(const char* function_name,
                                         GLenum target) override;

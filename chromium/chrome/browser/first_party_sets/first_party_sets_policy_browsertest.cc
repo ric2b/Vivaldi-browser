@@ -433,12 +433,11 @@ class OverridesPolicyEmptyBrowsertest : public EnabledPolicyBrowsertest {
  public:
   void SetUpPolicyMapWithOverridesPolicy() override {
     // POLICY_LEVEL_MANDATORY - since administrators will control FPS policy
-    // POLICY_SCOPE_MACHINE - since this policy lives on local state, not per
-    // profile
+    // POLICY_SCOPE_USER - since this policy is per profile, not on local state
     // POLICY_SOURCE_ENTERPRISE_DEFAULT - since this is an enterprise
     // policy
     policy_map().Set(policy::key::kFirstPartySetsOverrides,
-                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                      POLICY_SOURCE_ENTERPRISE_DEFAULT,
                      base::JSONReader::Read(R"( {} )"), nullptr);
   }
@@ -473,12 +472,11 @@ class OverridesPolicyReplacementBrowsertest : public EnabledPolicyBrowsertest {
  public:
   void SetUpPolicyMapWithOverridesPolicy() override {
     // POLICY_LEVEL_MANDATORY - since administrators will control FPS policy
-    // POLICY_SCOPE_MACHINE - since this policy lives on local state, not per
-    // profile
+    // POLICY_SCOPE_USER - since this policy is per profile, not on local state
     // POLICY_SOURCE_ENTERPRISE_DEFAULT - since this is an enterprise
     // policy
     policy_map().Set(policy::key::kFirstPartySetsOverrides,
-                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                      POLICY_SOURCE_ENTERPRISE_DEFAULT,
                      base::JSONReader::Read(R"(
                               {
@@ -537,12 +535,11 @@ class OverridesPolicyAdditionBrowsertest : public EnabledPolicyBrowsertest {
  public:
   void SetUpPolicyMapWithOverridesPolicy() override {
     // POLICY_LEVEL_MANDATORY - since administrators will control FPS policy
-    // POLICY_SCOPE_MACHINE - since this policy lives on local state, not per
-    // profile
+    // POLICY_SCOPE_USER - since this policy is per profile, not on local state
     // POLICY_SOURCE_ENTERPRISE_DEFAULT - since this is an enterprise
     // policy
     policy_map().Set(policy::key::kFirstPartySetsOverrides,
-                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                      POLICY_SOURCE_ENTERPRISE_DEFAULT,
                      base::JSONReader::Read(R"(
                               {
@@ -589,12 +586,11 @@ class OverridesPolicyReplacementAndAdditionBrowsertest
  public:
   void SetUpPolicyMapWithOverridesPolicy() override {
     // POLICY_LEVEL_MANDATORY - since administrators will control FPS policy
-    // POLICY_SCOPE_MACHINE - since this policy lives on local state, not per
-    // profile
+    // POLICY_SCOPE_USER - since this policy is per profile, not on local state
     // POLICY_SOURCE_ENTERPRISE_DEFAULT - since this is an enterprise
     // policy
     policy_map().Set(policy::key::kFirstPartySetsOverrides,
-                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                      POLICY_SOURCE_ENTERPRISE_DEFAULT,
                      base::JSONReader::Read(R"(
                               {

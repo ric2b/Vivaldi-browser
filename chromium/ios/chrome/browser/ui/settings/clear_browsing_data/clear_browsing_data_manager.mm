@@ -21,6 +21,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
+#import "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
@@ -45,7 +46,6 @@
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
-#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
@@ -60,7 +60,6 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_link_item.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/common/channel_info.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -72,6 +71,8 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+const char kCBDSignOutOfChromeURL[] = "settings://CBDSignOutOfChrome";
 
 namespace {
 // Maximum number of times to show a notice about other forms of browsing
@@ -91,22 +92,28 @@ const std::vector<BrowsingDataRemoveMask> _browsingDataRemoveFlags = {
 };
 
 // The size of the symbol image used in the 'Clear Browsing Data' view.
-NSInteger kSymbolPointSize = 22;
+const CGFloat kSymbolPointSize = 22;
 
 // Specific symbols used in the 'Clear Browsing Data' view.
-NSString* kCachedDataSymbol = @"photo.on.rectangle";
-NSString* kAutofillDataSymbol = @"wand.and.rays";
+NSString* const kCachedDataSymbol = @"photo.on.rectangle";
+NSString* const kAutofillDataSymbol = @"wand.and.rays";
 
 // Returns the symbol coresponding to the given itemType.
 UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
   UIImage* symbol = nil;
   switch (itemType) {
     case ItemTypeDataTypeBrowsingHistory:
+      symbol = DefaultSymbolTemplateWithPointSize(kClockArrowSymbol,
+                                                  kSymbolPointSize);
+      break;
     case ItemTypeDataTypeCookiesSiteData:
+      symbol = DefaultSymbolTemplateWithPointSize(kInfoCircleSymbol,
+                                                  kSymbolPointSize);
+      break;
     case ItemTypeDataTypeSavedPasswords:
-      // TODO(crbug.com/1315544): update these cases when custom symbols are
+      // TODO(crbug.com/1315544): update this case when the custom symbol is
       // done.
-      symbol = DefaultSymbolTemplateWithPointSize(kCachedDataSymbol,
+      symbol = DefaultSymbolTemplateWithPointSize(kClockArrowSymbol,
                                                   kSymbolPointSize);
       break;
     case ItemTypeDataTypeCache:
@@ -237,6 +244,27 @@ static NSDictionary* imageNamesByItemTypes = @{
       toSectionWithIdentifier:SectionIdentifierTimeRange];
   [self addClearBrowsingDataItemsToModel:model];
   [self addSyncProfileItemsToModel:model];
+}
+
+- (void)updateModel:(ListModel*)model withTableView:(UITableView*)tableView {
+  if (!base::FeatureList::IsEnabled(switches::kEnableCbdSignOut)) {
+    // Footer update are only needed in the Enabled Cbd Signout experiment.
+    return;
+  }
+  const BOOL hasSectionSavedSiteData =
+      [model hasSectionForSectionIdentifier:SectionIdentifierSavedSiteData];
+  if (hasSectionSavedSiteData == [self loggedIn]) {
+    // Nothing to do. We have data iff we are logged-in
+    return;
+  }
+  if (hasSectionSavedSiteData) {
+    // User signed-out, no need for footer anymore.
+    [model removeSectionWithIdentifier:SectionIdentifierSavedSiteData];
+  } else if (!hasSectionSavedSiteData) {
+    // User signed-in, we need to add footer
+    [self addSavedSiteDataSectionWithModel:model];
+  }
+  [tableView reloadData];
 }
 
 - (void)prepare {
@@ -384,12 +412,7 @@ static NSDictionary* imageNamesByItemTypes = @{
 // Add footers about user's account data.
 - (void)addSyncProfileItemsToModel:(ListModel*)model {
   // Google Account footer.
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(self.browserState);
-
-  const BOOL loggedIn =
-      identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin) ||
-      identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync);
+  const BOOL loggedIn = [self loggedIn];
   const TemplateURLService* templateURLService =
       ios::TemplateURLServiceFactory::GetForBrowserState(_browserState);
   const TemplateURL* defaultSearchEngine =
@@ -412,19 +435,11 @@ static NSDictionary* imageNamesByItemTypes = @{
         forSectionWithIdentifier:SectionIdentifierGoogleAccount];
   }
 
-  [model addSectionWithIdentifier:SectionIdentifierSavedSiteData];
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(self.browserState);
-  if (syncService && syncService->IsSyncFeatureActive()) {
-    [model setFooter:[self footerClearSyncAndSavedSiteDataItem]
-        forSectionWithIdentifier:SectionIdentifierSavedSiteData];
-  } else {
-    [model setFooter:[self footerSavedSiteDataItem]
-        forSectionWithIdentifier:SectionIdentifierSavedSiteData];
-  }
+  syncer::SyncService* syncService = [self syncService];
+  [self addSavedSiteDataSectionWithModel:model];
 
-  // If not signed in, no need to continue with profile syncing.
-  if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
+  // If not syncing, no need to continue with profile syncing.
+  if (![self identityManager]->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     return;
   }
 
@@ -580,50 +595,55 @@ static NSDictionary* imageNamesByItemTypes = @{
 }
 
 - (TableViewLinkHeaderFooterItem*)footerGoogleAccountAndMyActivityItem {
-  UIImage* image = ios::provider::GetBrandedImage(
-      ios::provider::BrandedImage::kClearBrowsingDataAccountActivity);
-
   return [self
       footerItemWithType:ItemTypeFooterGoogleAccountAndMyActivity
                  titleID:IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_ACCOUNT_AND_HISTORY
                      URL:kClearBrowsingDataMyActivityUrlInFooterURL
-                   image:image];
+       appendLocaleToURL:YES];
 }
 
 - (TableViewLinkHeaderFooterItem*)footerSavedSiteDataItem {
-  UIImage* image = ios::provider::GetBrandedImage(
-      ios::provider::BrandedImage::kClearBrowsingDataSiteData);
-
   return [self
       footerItemWithType:ItemTypeFooterSavedSiteData
                  titleID:IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_SAVED_SITE_DATA
                      URL:kClearBrowsingDataLearnMoreURL
-                   image:image];
+       appendLocaleToURL:YES];
 }
 
 - (TableViewLinkHeaderFooterItem*)footerClearSyncAndSavedSiteDataItem {
-  UIImage* infoIcon = [ChromeIcon infoIcon];
-  UIImage* image = TintImage(infoIcon, [[MDCPalette greyPalette] tint500]);
   return [self
       footerItemWithType:ItemTypeFooterClearSyncAndSavedSiteData
                  titleID:
                      IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_CLEAR_SYNC_AND_SAVED_SITE_DATA
                      URL:kClearBrowsingDataLearnMoreURL
-                   image:image];
+       appendLocaleToURL:YES];
 }
 
+- (TableViewLinkHeaderFooterItem*)signOutFooterItem {
+  return [self
+      footerItemWithType:ItemTypeFooterClearSyncAndSavedSiteData
+                 titleID:
+                     IDS_IOS_CLEAR_BROWSING_DATA_FOOTER_SIGN_OUT_EVERY_WEBSITE
+                     URL:kCBDSignOutOfChromeURL
+       appendLocaleToURL:NO];
+}
+
+// Creates item of type `itemType` with `titleMessageId`, containing a link to
+// `URL`. If appendLocaleToURL, the local is added to the URL.
 - (TableViewLinkHeaderFooterItem*)footerItemWithType:
                                       (ClearBrowsingDataItemType)itemType
                                              titleID:(int)titleMessageID
                                                  URL:(const char[])URL
-                                               image:(UIImage*)image {
+                                   appendLocaleToURL:(BOOL)appendLocaleToURL {
   TableViewLinkHeaderFooterItem* footerItem =
       [[TableViewLinkHeaderFooterItem alloc] initWithType:itemType];
   footerItem.text = l10n_util::GetNSString(titleMessageID);
-  footerItem.urls = @[ [[CrURL alloc]
-      initWithGURL:google_util::AppendGoogleLocaleParam(
-                       GURL(URL),
-                       GetApplicationContext()->GetApplicationLocale())] ];
+  GURL gurl = GURL(URL);
+  if (appendLocaleToURL) {
+    gurl = google_util::AppendGoogleLocaleParam(
+        gurl, GetApplicationContext()->GetApplicationLocale());
+  }
+  footerItem.urls = @[ [[CrURL alloc] initWithGURL:gurl] ];
   return footerItem;
 }
 
@@ -662,19 +682,55 @@ static NSDictionary* imageNamesByItemTypes = @{
 
 #pragma mark - Private Methods
 
+// An identity manager
+- (signin::IdentityManager*)identityManager {
+  return IdentityManagerFactory::GetForBrowserState(self.browserState);
+}
+
+// Whether user is currently logged-in.
+- (BOOL)loggedIn {
+  return
+      [self identityManager]->HasPrimaryAccount(signin::ConsentLevel::kSignin);
+}
+
+// A sync service
+- (syncer::SyncService*)syncService {
+  return SyncServiceFactory::GetForBrowserState(self.browserState);
+}
+
+// Add at the end of the list model the elements related to signing-out.
+- (void)addSavedSiteDataSectionWithModel:(ListModel*)model {
+  syncer::SyncService* syncService = [self syncService];
+  if (!base::FeatureList::IsEnabled(switches::kEnableCbdSignOut)) {
+    [model addSectionWithIdentifier:SectionIdentifierSavedSiteData];
+    if (syncService && syncService->IsSyncFeatureActive()) {
+      [model setFooter:[self footerClearSyncAndSavedSiteDataItem]
+          forSectionWithIdentifier:SectionIdentifierSavedSiteData];
+    } else {
+      [model setFooter:[self footerSavedSiteDataItem]
+          forSectionWithIdentifier:SectionIdentifierSavedSiteData];
+    }
+  } else if ([self loggedIn]) {
+    [model addSectionWithIdentifier:SectionIdentifierSavedSiteData];
+    [model setFooter:[self signOutFooterItem]
+        forSectionWithIdentifier:SectionIdentifierSavedSiteData];
+  }
+}
+
 // Signs the user out of Chrome if the sign-in state is `ConsentLevel::kSignin`.
 - (void)signOutIfNotSyncing {
   DCHECK(self.browserState);
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(self.browserState);
+  signin::IdentityManager* identityManager = [self identityManager];
   DCHECK(identityManager);
   if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     AuthenticationService* authenticationService =
         AuthenticationServiceFactory::GetForBrowserState(_browserState);
     DCHECK(authenticationService);
-    authenticationService->SignOut(
-        signin_metrics::ProfileSignout::USER_DELETED_ACCOUNT_COOKIES,
-        /*force_clear_browsing_data=*/false, nil);
+    if (!base::FeatureList::IsEnabled(switches::kEnableCbdSignOut)) {
+      authenticationService->SignOut(
+          signin_metrics::ProfileSignout::USER_DELETED_ACCOUNT_COOKIES,
+          /*force_clear_browsing_data=*/false, nil);
+    }
   }
 }
 
@@ -734,14 +790,18 @@ static NSDictionary* imageNamesByItemTypes = @{
       "History.ClearBrowsingData.HistoryNoticeShownInFooterWhenUpdated",
       _shouldShowNoticeAboutOtherFormsOfBrowsingHistory);
 
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(_browserState);
-  if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
+  if (![self identityManager]->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
     return;
   }
 
   [model setFooter:[self footerForGoogleAccountSectionItem]
       forSectionWithIdentifier:SectionIdentifierGoogleAccount];
+}
+
+#pragma mark - IdentityManagerObserverBridgeDelegate
+
+- (void)onPrimaryAccountChanged:
+    (const signin::PrimaryAccountChangeEvent&)event {
 }
 
 #pragma mark - PrefObserverDelegate

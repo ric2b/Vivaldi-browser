@@ -81,12 +81,12 @@ void NetworkConfigurationUpdater::OnPolicyServiceInitialized(
 }
 
 void NetworkConfigurationUpdater::AddPolicyProvidedCertsObserver(
-    chromeos::PolicyCertificateProvider::Observer* observer) {
+    ash::PolicyCertificateProvider::Observer* observer) {
   observer_list_.AddObserver(observer);
 }
 
 void NetworkConfigurationUpdater::RemovePolicyProvidedCertsObserver(
-    chromeos::PolicyCertificateProvider::Observer* observer) {
+    ash::PolicyCertificateProvider::Observer* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
@@ -215,7 +215,7 @@ void NetworkConfigurationUpdater::ApplyPolicy() {
 void NetworkConfigurationUpdater::
     MarkFieldsAsRecommendedForBackwardsCompatibility(
         base::Value* network_configs_onc) {
-  for (auto& network_config_onc : network_configs_onc->GetListDeprecated()) {
+  for (auto& network_config_onc : network_configs_onc->GetList()) {
     DCHECK(network_config_onc.is_dict());
     const std::string* type =
         network_config_onc.FindStringKey(::onc::network_config::kType);

@@ -28,7 +28,6 @@ class CloseButton;
 class PillButton;
 class SavedDeskIconContainer;
 class SavedDeskNameView;
-class ViewShadow;
 
 // A view that represents each individual saved desk item in the saved desk
 // grid. The view has different shown contents depending on whether the mouse is
@@ -91,9 +90,9 @@ class ASH_EXPORT SavedDeskItemView : public views::Button,
   bool IsNameBeingModified() const;
 
   // To prevent duplications when saving a desk multiple times, check if there's
-  // an existing saved desk that shares the same name as current active desk, if
-  // so, remove auto added number.
-  void MaybeRemoveNameNumber();
+  // an existing saved desk that shares the same name as the `saved_desk_name`.
+  // If so, remove auto added number.
+  void MaybeRemoveNameNumber(const std::u16string& saved_desk_name);
   // Show replace dialog when found a name duplication.
   void MaybeShowReplaceDialog(ash::DeskTemplateType type,
                               const base::GUID& uuid);
@@ -115,6 +114,8 @@ class ASH_EXPORT SavedDeskItemView : public views::Button,
   void OnThemeChanged() override;
   void OnViewFocused(views::View* observed_view) override;
   void OnViewBlurred(views::View* observed_view) override;
+  void OnFocus() override;
+  void OnBlur() override;
   KeyClickAction GetKeyClickActionForEvent(const ui::KeyEvent& event) override;
 
   // views::TextfieldController:
@@ -130,6 +131,9 @@ class ASH_EXPORT SavedDeskItemView : public views::Button,
 
  private:
   friend class SavedDeskItemViewTestApi;
+
+  void OnHoverAnimationEnded();
+  void AnimateHover(ui::Layer* layer_to_show, ui::Layer* layer_to_hide);
 
   void OnDeleteTemplate();
   void OnDeleteButtonPressed();
@@ -170,8 +174,6 @@ class ASH_EXPORT SavedDeskItemView : public views::Button,
   // Container used for holding all the views that appear on hover.
   views::View* hover_container_ = nullptr;
 
-  std::unique_ptr<ViewShadow> shadow_;
-
   // When the `name_view_` is focused, we select all its text. However, if it is
   // focused via a mouse press event, on mouse release will clear the selection.
   // Therefore, we defer selecting all text until we receive that mouse release.
@@ -188,6 +190,8 @@ class ASH_EXPORT SavedDeskItemView : public views::Button,
   // `HandleKeyEvent` function detects that the escape key was pressed so that
   // `OnViewBlurred` does not update the template name.
   bool should_commit_name_changes_ = true;
+
+  bool hover_container_should_be_visible_ = false;
 
   base::ScopedObservation<views::View, views::ViewObserver>
       name_view_observation_{this};

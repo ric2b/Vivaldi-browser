@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_FILE_SYSTEM_CONSENT_PROVIDER_H_
 #define CHROME_BROWSER_EXTENSIONS_API_FILE_SYSTEM_CONSENT_PROVIDER_H_
 
+#include <string>
+
 #include "base/callback_forward.h"
-#include "base/memory/weak_ptr.h"
-#include "build/build_config.h"
-#include "extensions/browser/api/file_system/file_system_delegate.h"
+#include "extensions/common/extension_id.h"
 #include "ui/base/ui_base_types.h"
 
 class Profile;
@@ -16,10 +16,6 @@ class Profile;
 namespace content {
 class RenderFrameHost;
 }  // content
-
-namespace file_manager {
-class Volume;
-}  // namespace file_manager
 
 namespace extensions {
 class Extension;
@@ -33,8 +29,8 @@ namespace file_system_api {
 // TestingConsentProviderDelegate.
 // This class may post callbacks given to it, but does not asynchronously call
 // itself. It is generally safe to use a temporary ConsentProvider.
-// TODO(michaelpg): Make this easier to use by replacing member functions with
-// static methods.
+// TODO(crbug.com/1351493): Make this easier to use, perhaps by replacing member
+// functions with static methods.
 class ConsentProvider {
  public:
   enum Consent { CONSENT_GRANTED, CONSENT_REJECTED, CONSENT_IMPOSSIBLE };
@@ -45,26 +41,26 @@ class ConsentProvider {
   class DelegateInterface {
    public:
     // Shows a dialog for granting permissions.
-    virtual void ShowDialog(const Extension& extension,
-                            content::RenderFrameHost* host,
-                            const base::WeakPtr<file_manager::Volume>& volume,
+    virtual void ShowDialog(content::RenderFrameHost* host,
+                            const extensions::ExtensionId& extension_id,
+                            const std::string& extension_name,
+                            const std::string& volume_id,
+                            const std::string& volume_label,
                             bool writable,
                             ShowDialogCallback callback) = 0;
 
     // Shows a notification about permissions automatically granted access.
-    virtual void ShowNotification(
-        const Extension& extension,
-        const base::WeakPtr<file_manager::Volume>& volume,
-        bool writable) = 0;
+    virtual void ShowNotification(const extensions::ExtensionId& extension_id,
+                                  const std::string& extension_name,
+                                  const std::string& volume_id,
+                                  const std::string& volume_label,
+                                  bool writable) = 0;
 
     // Checks if the extension was launched in auto-launch kiosk mode.
     virtual bool IsAutoLaunched(const Extension& extension) = 0;
 
     // Checks if the extension is a allowlisted component extension or app.
     virtual bool IsAllowlistedComponent(const Extension& extension) = 0;
-
-    // Checks if the extension has the permission to access Downloads.
-    virtual bool HasRequestDownloadsPermission(const Extension& extension) = 0;
   };
 
   explicit ConsentProvider(DelegateInterface* delegate);
@@ -74,23 +70,18 @@ class ConsentProvider {
 
   ~ConsentProvider();
 
-  // Requests consent for granting |writable| permissions to the |volume|
-  // volume by the |extension|. Must be called only if the extension is
-  // grantable, which can be checked with GetGrantVolumesMode() and
-  // IsGrantableForVolume().
-  void RequestConsent(const Extension& extension,
-                      content::RenderFrameHost* host,
-                      const base::WeakPtr<file_manager::Volume>& volume,
+  // Requests consent for granting |writable| permissions to a volume with
+  // |volume_id| and |volume_label| by |extension|, which is assumed to be
+  // grantable (i.e., passes IsGrantable()).
+  void RequestConsent(content::RenderFrameHost* host,
+                      const Extension& extension,
+                      const std::string& volume_id,
+                      const std::string& volume_label,
                       bool writable,
                       ConsentCallback callback);
 
-  // Returns granted access mode for the |extension|.
-  FileSystemDelegate::GrantVolumesMode GetGrantVolumesMode(
-      const Extension& extension);
-
-  // Checks whether the |extension| can be granted |volume| access.
-  bool IsGrantableForVolume(const Extension& extension,
-                            const base::WeakPtr<file_manager::Volume>& volume);
+  // Checks whether the |extension| can be granted access.
+  bool IsGrantable(const Extension& extension);
 
  private:
   DelegateInterface* const delegate_;
@@ -115,18 +106,21 @@ class ConsentProviderDelegate : public ConsentProvider::DelegateInterface {
   static void SetAutoDialogButtonForTest(ui::DialogButton button);
 
   // ConsentProvider::DelegateInterface overrides:
-  void ShowDialog(
-      const Extension& extension,
-      content::RenderFrameHost* host,
-      const base::WeakPtr<file_manager::Volume>& volume,
-      bool writable,
-      file_system_api::ConsentProvider::ShowDialogCallback callback) override;
-  void ShowNotification(const Extension& extension,
-                        const base::WeakPtr<file_manager::Volume>& volume,
+  void ShowDialog(content::RenderFrameHost* host,
+                  const extensions::ExtensionId& extension_id,
+                  const std::string& extension_name,
+                  const std::string& volume_id,
+                  const std::string& volume_label,
+                  bool writable,
+                  ConsentProvider::ShowDialogCallback callback) override;
+
+  void ShowNotification(const extensions::ExtensionId& extension_id,
+                        const std::string& extension_name,
+                        const std::string& volume_id,
+                        const std::string& volume_label,
                         bool writable) override;
   bool IsAutoLaunched(const Extension& extension) override;
   bool IsAllowlistedComponent(const Extension& extension) override;
-  bool HasRequestDownloadsPermission(const Extension& extension) override;
 
   Profile* const profile_;
 };

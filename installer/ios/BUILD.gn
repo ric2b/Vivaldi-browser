@@ -1,0 +1,137 @@
+# Sign the Vialdi IOS App
+
+vivaldi_app = "$root_out_dir/Vivaldi.app"
+vivaldi_profiles = "${vivaldi_app}/PlugIns"
+
+template("sign_bundle") {
+  action(target_name) {
+    script = "//build/config/ios/codesign.py"
+    args = [
+      "code-sign-bundle",
+      "-t=iphoneos",
+      "--identity", vivaldi_signing_id,
+      "--binary", rebase_path(invoker.binary),
+      rebase_path(invoker.app),
+    ]
+    if (defined(invoker.entitlements)){
+      args += [ "--entitlements", rebase_path(invoker.entitlements)]
+    }
+    if (defined(invoker.plists)){
+      if (defined(invoker.plist_compiler)) {
+        args += [ "--plist-compiler-path", rebase_path(invoker.plist_compiler), ]
+      } else {
+        args += [ "--plist-compiler-path", rebase_path("//build/apple/plist_util.py"), ]
+      }
+      foreach(plist, invoker.plists) {
+        args += [
+          "--partial-info-plist", rebase_path(plist),
+        ]
+      }
+    }
+    if (defined(invoker.extra_args)) {
+      args += invoker.extra_args
+    }
+    outputs = [
+      "$target_gen_dir/$target_name.signed.stamp"
+    ]
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+  }
+}
+
+sign_bundle("sign_credential_provider_extension") {
+  bindir = "$root_out_dir/obj/ios/chrome/credential_provider_extension"
+  gendir = "$root_out_dir/gen/ios/chrome/credential_provider_extension"
+
+  binary = "$bindir/credential_provider_extension"
+  entitlements = "$gendir/credential_provider_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/credential_provider_extension.appex"
+  plists =[
+    "$gendir/credential_provider_extension_generate_info_plist.plist",
+    "$gendir/credential_provider_extension_partial_info.plist",
+  ]
+}
+
+
+sign_bundle("sign_share_extension") {
+  bindir = "$root_out_dir/obj/ios/chrome/share_extension"
+  gendir = "$root_out_dir/gen/ios/chrome/share_extension"
+
+  binary = "$bindir/share_extension"
+  entitlements = "$gendir/share_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/share_extension.appex"
+  plists =[
+    "$gendir/share_extension_generate_info_plist.plist",
+    "$gendir/share_extension_partial_info.plist",
+  ]
+}
+
+sign_bundle("sign_widget_kit_extension") {
+  bindir = "$root_out_dir/obj/ios/chrome/widget_kit_extension"
+  gendir = "$root_out_dir/gen/ios/chrome/widget_kit_extension"
+
+  binary = "$bindir/widget_kit_extension"
+  entitlements = "$gendir/widget_kit_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/widget_kit_extension.appex"
+  plists =[
+    "$gendir/widget_kit_extension_generate_info_plist.plist",
+    "$gendir/widget_kit_extension_partial_info.plist",
+  ]
+}
+
+sign_bundle("sign_content_widget_extension") {
+  bindir = "$root_out_dir/ios_clang_arm64_13_0/obj/ios/chrome/content_widget_extension"
+  gendir = "$root_out_dir/ios_clang_arm64_13_0/gen/ios/chrome/content_widget_extension"
+
+  binary = "$bindir/content_widget_extension"
+  entitlements = "$gendir/content_widget_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/content_widget_extension.appex"
+  plists =[
+    "$gendir/content_widget_extension_generate_info_plist.plist",
+    "$gendir/content_widget_extension_partial_info.plist",
+  ]
+}
+
+sign_bundle("sign_search_widget_extension") {
+  bindir = "$root_out_dir/ios_clang_arm64_13_0/obj/ios/chrome/search_widget_extension"
+  gendir = "$root_out_dir/ios_clang_arm64_13_0/gen/ios/chrome/search_widget_extension"
+
+  binary = "$bindir/search_widget_extension"
+  entitlements = "$gendir/search_widget_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/search_widget_extension.appex"
+  plists =[
+    "$gendir/search_widget_extension_generate_info_plist.plist",
+    "$gendir/search_widget_extension_partial_info.plist",
+  ]
+}
+
+sign_bundle("sign_MaterialComponents") {
+  bindir = "$root_out_dir/obj/ios/third_party/material_components_ios"
+
+  binary = "$bindir/MaterialComponents"
+  extra_args = ["--disable-embedded-mobileprovision"]
+  app = "${vivaldi_app}/Frameworks/MaterialComponents.framework"
+}
+
+sign_bundle("sign_ios") {
+  bindir = "$root_out_dir/obj/ios/chrome/app"
+  gendir = "$root_out_dir/gen/ios/chrome/app"
+
+  app = vivaldi_app
+  binary = "$bindir/Vivaldi"
+  entitlements = "$gendir/Vivaldi.entitlements"
+  plists = [
+    "$gendir/chrome_generate_info_plist.plist",
+    "$gendir/chrome_partial_info.plist",
+  ]
+  deps = [
+    ":sign_MaterialComponents",
+    ":sign_credential_provider_extension",
+    ":sign_search_widget_extension",
+    ":sign_content_widget_extension",
+    ":sign_widget_kit_extension",
+    ":sign_share_extension",
+  ]
+}

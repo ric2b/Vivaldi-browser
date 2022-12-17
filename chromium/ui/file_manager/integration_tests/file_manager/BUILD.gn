@@ -16,6 +16,7 @@ js_type_check("closure_compile") {
     ":crostini",
     ":directory_tree",
     ":directory_tree_context_menu",
+    ":dlp",
     ":drive_specific",
     ":file_dialog",
     ":file_display",
@@ -58,9 +59,10 @@ js_type_check("closure_compile") {
 
   closure_flags =
       strict_error_checking_closure_args + [
+        "language_in=ECMASCRIPT_2020",
         "js_module_root=gen/ui/file_manager/",
         "js_module_root=../../ui/file_manager/",
-        "browser_resolver_prefix_replacements=\"chrome://test/=./\"",
+        "browser_resolver_prefix_replacements=\"chrome://webui-test/=./\"",
         "hide_warnings_for=third_party/",
       ]
 }
@@ -129,6 +131,14 @@ js_library("directory_tree") {
 }
 
 js_library("directory_tree_context_menu") {
+  testonly = true
+  deps = [
+    ":test_data",
+    "//ui/file_manager/integration_tests:testcase",
+  ]
+}
+
+js_library("dlp") {
   testonly = true
   deps = [
     ":test_data",
@@ -360,6 +370,7 @@ js_library("tasks") {
 js_library("toolbar") {
   testonly = true
   deps = [
+    ":tasks",
     ":test_data",
     "//ui/file_manager/integration_tests:testcase",
   ]
@@ -376,6 +387,7 @@ js_library("transfer") {
 js_library("trash") {
   testonly = true
   deps = [
+    ":tasks",
     ":test_data",
     "//ui/file_manager/integration_tests:testcase",
   ]

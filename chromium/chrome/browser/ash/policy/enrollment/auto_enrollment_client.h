@@ -29,7 +29,7 @@ enum AutoEnrollmentState {
   AUTO_ENROLLMENT_STATE_IDLE = 0,
   // Working, another event will be fired eventually.
   AUTO_ENROLLMENT_STATE_PENDING = 1,
-  // Failed to connect to DMServer.
+  // Failed to connect to DMServer or to synchronize the system clock.
   AUTO_ENROLLMENT_STATE_CONNECTION_ERROR = 2,
   // Connection successful, but the server failed to generate a valid reply.
   AUTO_ENROLLMENT_STATE_SERVER_ERROR = 3,
@@ -103,10 +103,6 @@ class AutoEnrollmentClient {
   // called by consumers when they become aware of environment changes (such as
   // captive portal setup being complete).
   virtual void Retry() = 0;
-
-  // Cancels any pending requests. |progress_callback_| will not be invoked.
-  // |this| will delete itself.
-  virtual void CancelAndDeleteSoon() = 0;
 };
 
 }  // namespace policy

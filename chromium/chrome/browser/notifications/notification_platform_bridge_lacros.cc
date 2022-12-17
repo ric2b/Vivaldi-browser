@@ -8,24 +8,26 @@
 
 #include "base/check.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "chrome/browser/notifications/notification_platform_bridge_delegate.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chromeos/crosapi/mojom/message_center.mojom.h"
+#include "chromeos/crosapi/mojom/notification.mojom-shared.h"
 #include "chromeos/crosapi/mojom/notification.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/native_theme/native_theme.h"
 
 namespace {
 
 crosapi::mojom::NotificationType ToMojo(message_center::NotificationType type) {
   switch (type) {
     case message_center::NOTIFICATION_TYPE_SIMPLE:
-    case message_center::NOTIFICATION_TYPE_BASE_FORMAT:
-      // TYPE_BASE_FORMAT is displayed the same as TYPE_SIMPLE.
+    case message_center::DEPRECATED_NOTIFICATION_TYPE_BASE_FORMAT:
       return crosapi::mojom::NotificationType::kSimple;
     case message_center::NOTIFICATION_TYPE_IMAGE:
       return crosapi::mojom::NotificationType::kImage;
@@ -37,6 +39,23 @@ crosapi::mojom::NotificationType ToMojo(message_center::NotificationType type) {
       // TYPE_CUSTOM exists only within ash.
       NOTREACHED();
       return crosapi::mojom::NotificationType::kSimple;
+  }
+}
+
+crosapi::mojom::NotifierType ToMojo(message_center::NotifierType type) {
+  switch (type) {
+    case message_center::NotifierType::APPLICATION:
+      return crosapi::mojom::NotifierType::kApplication;
+    case message_center::NotifierType::ARC_APPLICATION:
+      return crosapi::mojom::NotifierType::kArcApplication;
+    case message_center::NotifierType::WEB_PAGE:
+      return crosapi::mojom::NotifierType::kWebPage;
+    case message_center::NotifierType::SYSTEM_COMPONENT:
+      return crosapi::mojom::NotifierType::kSystemComponent;
+    case message_center::NotifierType::CROSTINI_APPLICATION:
+      return crosapi::mojom::NotifierType::kCrostiniApplication;
+    case message_center::NotifierType::PHONE_HUB:
+      return crosapi::mojom::NotifierType::kPhoneHub;
   }
 }
 
@@ -94,6 +113,14 @@ crosapi::mojom::NotificationPtr ToMojo(
   mojo_note->fullscreen_visibility =
       ToMojo(notification.fullscreen_visibility());
   mojo_note->accent_color = notification.accent_color();
+
+  mojo_note->notifier_id = crosapi::mojom::NotifierId::New();
+  mojo_note->notifier_id->type = ToMojo(notification.notifier_id().type);
+  mojo_note->notifier_id->id = notification.notifier_id().id;
+  mojo_note->notifier_id->url = notification.notifier_id().url;
+  mojo_note->notifier_id->title = notification.notifier_id().title;
+  mojo_note->notifier_id->profile_id = notification.notifier_id().profile_id;
+
   return mojo_note;
 }
 
@@ -153,7 +180,7 @@ class NotificationPlatformBridgeLacros::RemoteNotificationDelegate
 
  private:
   const std::string notification_id_;
-  NotificationPlatformBridgeDelegate* const bridge_delegate_;
+  const raw_ptr<NotificationPlatformBridgeDelegate> bridge_delegate_;
   base::WeakPtr<NotificationPlatformBridgeLacros> owner_;
   mojo::Receiver<crosapi::mojom::NotificationDelegate> receiver_{this};
 };
@@ -184,10 +211,13 @@ void NotificationPlatformBridgeLacros::Display(
   auto pending_notification = std::make_unique<RemoteNotificationDelegate>(
       notification.id(), bridge_delegate_, weak_factory_.GetWeakPtr());
   // Display the notification, or update an existing one with the same ID.
-  // `profile` may be null in tests.
+  // `profile` may be null for e.g. system notifications.
   const auto* const color_provider =
-      profile ? ThemeServiceFactory::GetForProfile(profile)->GetColorProvider()
-              : nullptr;
+      profile
+          ? ThemeServiceFactory::GetForProfile(profile)->GetColorProvider()
+          : ui::ColorProviderManager::Get().GetColorProviderFor(
+                ui::NativeTheme::GetInstanceForNativeUi()->GetColorProviderKey(
+                    nullptr));
   (*message_center_remote_)
       ->DisplayNotification(ToMojo(notification, color_provider),
                             pending_notification->BindNotificationDelegate());

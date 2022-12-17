@@ -76,6 +76,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_switches.h"
@@ -96,6 +97,7 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/startup/browser_init_params.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #include "components/account_id/account_id.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
@@ -203,7 +205,7 @@ void CreatePrefsFileInDirectory(const base::FilePath& directory_path) {
   ASSERT_TRUE(base::WriteFile(pref_path, data));
 }
 
-void CheckChromeVersion(Profile *profile, bool is_new) {
+void CheckChromeVersion(Profile* profile, bool is_new) {
   std::string created_by_version;
   if (is_new) {
     created_by_version = version_info::GetVersionNumber();
@@ -537,19 +539,20 @@ std::string GetExitTypePreferenceFromDisk(Profile* profile) {
   if (!base::ReadFileToString(prefs_path, &prefs))
     return std::string();
 
-  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(prefs);
+  absl::optional<base::Value> value = base::JSONReader::Read(prefs);
   if (!value)
     return std::string();
 
-  base::DictionaryValue* dict = NULL;
-  if (!value->GetAsDictionary(&dict) || !dict)
+  base::Value::Dict* dict = value->GetIfDict();
+  if (!dict)
     return std::string();
 
-  std::string exit_type;
-  if (!dict->GetString("profile.exit_type", &exit_type))
+  const std::string* exit_type =
+      dict->FindStringByDottedPath("profile.exit_type");
+  if (!exit_type)
     return std::string();
 
-  return exit_type;
+  return *exit_type;
 }
 
 }  // namespace
@@ -853,6 +856,59 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTestWithoutDestroyProfile,
   EXPECT_TRUE(watcher2.destroyed());
 }
 
+// Regression test for: https://crbug.com/1357476
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, DestroyOnOTRProfileAmongMany) {
+  // Create 3 OTR profiles. The first is the "primary" OTR profile. It is used
+  // to create a RenderProcessHost depending on it, holding it alive.
+  Profile* otr_profile[3] = {
+      browser()->profile()->GetOffTheRecordProfile(
+          Profile::OTRProfileID::PrimaryID(), true),
+      browser()->profile()->GetOffTheRecordProfile(
+          Profile::OTRProfileID::CreateUniqueForTesting(), true),
+      browser()->profile()->GetOffTheRecordProfile(
+          Profile::OTRProfileID::CreateUniqueForTesting(), true),
+  };
+  Browser* incognito_browser =
+      OpenURLOffTheRecord(browser()->profile(), GURL(url::kAboutBlankURL));
+
+  ProfileDestructionWatcher watcher[3];
+  watcher[0].Watch(otr_profile[0]);
+  watcher[1].Watch(otr_profile[1]);
+  watcher[2].Watch(otr_profile[2]);
+
+  scoped_refptr<base::SequencedTaskRunner> profile_task_runner =
+      incognito_browser->profile()->GetIOTaskRunner();
+
+  // Request the destruction of one OTR profile:
+  ProfileDestroyer::DestroyProfileWhenAppropriate(otr_profile[1]);
+  EXPECT_FALSE(watcher[0].destroyed());
+  EXPECT_TRUE(watcher[1].destroyed());
+  EXPECT_FALSE(watcher[2].destroyed());
+  // The `watcher` are not observing the real destruction of the Profile. Make
+  // sure no crash are happening during the real destruction of the Profile.
+  // This is needed to reproduce: https://crbug.com/1357476
+  base::RunLoop loop;
+  profile_task_runner->PostDelayedTask(FROM_HERE, loop.QuitClosure(),
+                                       base::Milliseconds(2100));
+  loop.Run();
+
+  // Request the destruction of the primary OTR profile. This happens
+  // synchronously, because it requires releasing the RenderProcessHost used.
+  incognito_browser->tab_strip_model()->CloseAllTabs();
+  EXPECT_FALSE(watcher[0].destroyed());
+  EXPECT_TRUE(watcher[1].destroyed());
+  EXPECT_FALSE(watcher[2].destroyed());
+
+  watcher[0].WaitForDestruction();
+  EXPECT_TRUE(watcher[0].destroyed());
+  EXPECT_TRUE(watcher[1].destroyed());
+  EXPECT_FALSE(watcher[2].destroyed());
+
+  // Cleanup
+  ProfileDestroyer::DestroyProfileWhenAppropriate(otr_profile[2]);
+  watcher[2].WaitForDestruction();
+}
+
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 class ProfileBrowserTestWithDestroyProfile : public ProfileBrowserTest {
  public:
@@ -1071,7 +1127,7 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
     init_params->session_type = crosapi::mojom::SessionType::kPublicSession;
     chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
 
-    EXPECT_EQ(chromeos::BrowserInitParams::Get()->session_type,
+    EXPECT_EQ(chromeos::BrowserParamsProxy::Get()->SessionType(),
               crosapi::mojom::SessionType::kPublicSession);
     EXPECT_TRUE(profile->IsMainProfile());
 
@@ -1101,7 +1157,7 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
     init_params->session_type = crosapi::mojom::SessionType::kWebKioskSession;
     chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
 
-    EXPECT_EQ(chromeos::BrowserInitParams::Get()->session_type,
+    EXPECT_EQ(chromeos::BrowserParamsProxy::Get()->SessionType(),
               crosapi::mojom::SessionType::kWebKioskSession);
     EXPECT_TRUE(profile->IsMainProfile());
 
@@ -1134,7 +1190,7 @@ IN_PROC_BROWSER_TEST_F(
         crosapi::mojom::DeviceMode::kEnterpriseActiveDirectory;
     chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
 
-    EXPECT_EQ(chromeos::BrowserInitParams::Get()->session_type,
+    EXPECT_EQ(chromeos::BrowserParamsProxy::Get()->SessionType(),
               crosapi::mojom::SessionType::kRegularSession);
     EXPECT_TRUE(profile->IsMainProfile());
 

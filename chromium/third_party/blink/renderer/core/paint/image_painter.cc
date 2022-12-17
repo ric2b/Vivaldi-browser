@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/path.h"
@@ -69,6 +70,24 @@ bool CheckForOversizedImagesPolicy(const LayoutImage& layout_image,
       blink::PolicyValue::CreateDecDouble(
           std::max(downscale_ratio_width, downscale_ratio_height)),
       ReportOptions::kReportOnFailure, g_empty_string, image_url);
+}
+
+ImagePaintTimingInfo ComputeImagePaintTimingInfo(
+    const LayoutImage& layout_image,
+    const Image& image,
+    const ImageResourceContent* image_content,
+    const GraphicsContext& context,
+    const gfx::Rect& image_border) {
+  // |report_paint_timing| for ImagePaintTimingInfo is set to false since we
+  // expect all images to be contentful and non-generated
+  if (!image_content) {
+    return ImagePaintTimingInfo(/* image_may_be_lcp_candidate */ false,
+                                /* report_paint_timing */ false);
+  }
+  return ImagePaintTimingInfo(PaintTimingDetector::NotifyImagePaint(
+      layout_image, image.Size(), *image_content,
+      context.GetPaintController().CurrentPaintChunkProperties(),
+      image_border));
 }
 
 }  // namespace
@@ -178,9 +197,15 @@ void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
   PhysicalRect paint_rect = layout_image_.ReplacedContentRect();
   paint_rect.offset += paint_offset;
 
-  BoxDrawingRecorder recorder(context, layout_image_, paint_info.phase,
-                              paint_offset);
-  PaintIntoRect(context, paint_rect, content_rect);
+  // If |overflow| is supported for replaced elements, paint the complete image
+  // and the painting will be clipped based on overflow value by clip paint
+  // property nodes.
+  const PhysicalRect visual_rect =
+      layout_image_.ClipsToContentBox() ? content_rect : paint_rect;
+
+  DrawingRecorder recorder(context, layout_image_, paint_info.phase,
+                           ToEnclosingRect(visual_rect));
+  PaintIntoRect(context, paint_rect, visual_rect);
 }
 
 void ImagePainter::PaintIntoRect(GraphicsContext& context,
@@ -260,25 +285,27 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
       *layout_image_.GetFrame(), layout_image_.StyleRef(),
       gfx::RectF(pixel_snapped_dest_rect), src_rect);
 
-  context.DrawImage(image.get(), decode_mode, image_auto_dark_mode,
-                    gfx::RectF(pixel_snapped_dest_rect), &src_rect,
-                    SkBlendMode::kSrcOver, respect_orientation);
-
-  if (ImageResourceContent* image_content = image_resource.CachedImage()) {
-    if ((IsA<HTMLImageElement>(node) || IsA<HTMLVideoElement>(node)) &&
-        image_content->IsLoaded()) {
-      LocalDOMWindow* window = layout_image_.GetDocument().domWindow();
-      DCHECK(window);
-      ImageElementTiming::From(*window).NotifyImagePainted(
-          layout_image_, *image_content,
-          context.GetPaintController().CurrentPaintChunkProperties(),
-          pixel_snapped_dest_rect);
-    }
-    PaintTimingDetector::NotifyImagePaint(
-        layout_image_, image->Size(), *image_content,
+  // At this point we have all the necessary information to report paint
+  // timing data. Do so now in order to mark the resulting PaintImage as
+  // an LCP candidate.
+  ImageResourceContent* image_content = image_resource.CachedImage();
+  if (image_content &&
+      (IsA<HTMLImageElement>(node) || IsA<HTMLVideoElement>(node)) &&
+      image_content->IsLoaded()) {
+    LocalDOMWindow* window = layout_image_.GetDocument().domWindow();
+    DCHECK(window);
+    ImageElementTiming::From(*window).NotifyImagePainted(
+        layout_image_, *image_content,
         context.GetPaintController().CurrentPaintChunkProperties(),
         pixel_snapped_dest_rect);
   }
+
+  context.DrawImage(
+      image.get(), decode_mode, image_auto_dark_mode,
+      ComputeImagePaintTimingInfo(layout_image_, *image, image_content, context,
+                                  pixel_snapped_dest_rect),
+      gfx::RectF(pixel_snapped_dest_rect), &src_rect, SkBlendMode::kSrcOver,
+      respect_orientation);
 }
 
 }  // namespace blink

@@ -1205,16 +1205,6 @@ bool GetGFXBufferFormat(GLenum internal_format, gfx::BufferFormat* out_format) {
   }
 }
 
-bool GetGFXBufferUsage(GLenum buffer_usage, gfx::BufferUsage* out_usage) {
-  switch (buffer_usage) {
-    case GL_SCANOUT_CHROMIUM:
-      *out_usage = gfx::BufferUsage::SCANOUT;
-      return true;
-    default:
-      return false;
-  }
-}
-
 bool IsASTCFormat(GLenum internal_format) {
   switch (internal_format) {
     case GL_COMPRESSED_RGBA_ASTC_4x4_KHR:
@@ -1332,6 +1322,17 @@ bool IsCompressedTextureFormat(GLenum internal_format) {
       break;
   }
   return false;
+}
+
+Texture* CreateGLES2TextureWithLightRef(GLuint service_id, GLenum target) {
+  Texture* texture = new Texture(service_id);
+  texture->SetLightweightRef();
+  texture->SetTarget(target, 1 /*max_levels=*/);
+  texture->set_min_filter(GL_LINEAR);
+  texture->set_mag_filter(GL_LINEAR);
+  texture->set_wrap_t(GL_CLAMP_TO_EDGE);
+  texture->set_wrap_s(GL_CLAMP_TO_EDGE);
+  return texture;
 }
 
 }  // namespace gles2

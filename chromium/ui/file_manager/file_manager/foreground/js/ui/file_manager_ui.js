@@ -4,16 +4,14 @@
 
 import {assertInstanceof} from 'chrome://resources/js/assert.m.js';
 import {decorate, define as crUiDefine} from 'chrome://resources/js/cr/ui.m.js';
-import {contextMenuHandler} from 'chrome://resources/js/cr/ui/context_menu_handler.m.js';
-import {BaseDialog} from 'chrome://resources/js/cr/ui/dialogs.m.js';
-import {Menu} from 'chrome://resources/js/cr/ui/menu.m.js';
-import {MenuItem} from 'chrome://resources/js/cr/ui/menu_item.m.js';
-import {Splitter} from 'chrome://resources/js/cr/ui/splitter.js';
-import {queryRequiredElement} from 'chrome://resources/js/util.m.js';
+import {contextMenuHandler} from 'chrome://resources/js/cr/ui/context_menu_handler.js';
+import {Menu} from 'chrome://resources/js/cr/ui/menu.js';
+import {MenuItem} from 'chrome://resources/js/cr/ui/menu_item.js';
 
 import {DialogType} from '../../../common/js/dialog_type.js';
 import {str, strf, util} from '../../../common/js/util.js';
 import {AllowedPaths} from '../../../common/js/volume_manager_types.js';
+import {BreadcrumbContainer} from '../../../containers/breadcrumb_container.js';
 import {VolumeManager} from '../../../externs/volume_manager.js';
 import {FilesPasswordDialog} from '../../elements/files_password_dialog.js';
 import {FilesToast} from '../../elements/files_toast.js';
@@ -25,10 +23,10 @@ import {ProvidersModel} from '../providers_model.js';
 import {A11yAnnounce} from './a11y_announce.js';
 import {ActionModelUI} from './action_model_ui.js';
 import {ActionsSubmenu} from './actions_submenu.js';
-import {BreadcrumbController} from './breadcrumb_controller.js';
 import {ComboButton} from './combobutton.js';
 import {DefaultTaskDialog} from './default_task_dialog.js';
 import {DialogFooter} from './dialog_footer.js';
+import {BaseDialog} from './dialogs.js';
 import {DirectoryTree} from './directory_tree.js';
 import {FileGrid} from './file_grid.js';
 import {FileTable} from './file_table.js';
@@ -44,6 +42,7 @@ import {MultiMenuButton} from './multi_menu_button.js';
 import {ProgressCenterPanel} from './progress_center_panel.js';
 import {ProvidersMenu} from './providers_menu.js';
 import {SearchBox} from './search_box.js';
+import {Splitter} from './splitter.js';
 
 
 /**
@@ -142,7 +141,7 @@ export class FileManagerUI {
      * Dialog for formatting
      * @const {!HTMLElement}
      */
-    this.formatDialog = queryRequiredElement('#format-dialog');
+    this.formatDialog = util.queryRequiredElement('#format-dialog');
 
     /**
      * Dialog for password prompt
@@ -155,7 +154,7 @@ export class FileManagerUI {
      * @type {!HTMLElement}
      */
     this.dialogContainer =
-        queryRequiredElement('.dialog-container', this.element);
+        util.queryRequiredElement('.dialog-container', this.element);
     this.dialogContainer.addEventListener('relayout', (event) => {
       this.layoutChanged_();
     });
@@ -170,16 +169,16 @@ export class FileManagerUI {
 
     /**
      * Breadcrumb controller.
-     * @type {BreadcrumbController}
+     * @private {?BreadcrumbContainer}
      */
-    this.breadcrumbController = null;
+    this.breadcrumbContainer_ = null;
 
     /**
      * The toolbar which contains controls.
      * @type {!HTMLElement}
      * @const
      */
-    this.toolbar = queryRequiredElement('.dialog-header', this.element);
+    this.toolbar = util.queryRequiredElement('.dialog-header', this.element);
 
     /**
      * The tooltip element.
@@ -194,7 +193,7 @@ export class FileManagerUI {
      * @type {!HTMLElement}
      * @const
      */
-    this.actionbar = queryRequiredElement('#action-bar', this.toolbar);
+    this.actionbar = util.queryRequiredElement('#action-bar', this.toolbar);
 
     /**
      * The navigation list.
@@ -202,7 +201,7 @@ export class FileManagerUI {
      * @const
      */
     this.dialogNavigationList =
-        queryRequiredElement('.dialog-navigation-list', this.element);
+        util.queryRequiredElement('.dialog-navigation-list', this.element);
 
     /**
      * Search box.
@@ -210,16 +209,17 @@ export class FileManagerUI {
      * @const
      */
     this.searchBox = new SearchBox(
-        queryRequiredElement('#search-box', this.element),
-        queryRequiredElement('#search-wrapper', this.element),
-        queryRequiredElement('#search-button', this.element));
+        util.queryRequiredElement('#search-box', this.element),
+        util.queryRequiredElement('#search-wrapper', this.element),
+        util.queryRequiredElement('#search-button', this.element));
 
     /**
      * Toggle-view button.
      * @type {!Element}
      * @const
      */
-    this.toggleViewButton = queryRequiredElement('#view-button', this.element);
+    this.toggleViewButton =
+        util.queryRequiredElement('#view-button', this.element);
 
     /**
      * The button to sort the file list.
@@ -236,7 +236,7 @@ export class FileManagerUI {
      */
     this.sortButtonToggleRipple =
         /** @type {!FilesToggleRippleElement} */ (
-            queryRequiredElement('files-toggle-ripple', this.sortButton));
+            util.queryRequiredElement('files-toggle-ripple', this.sortButton));
 
     /**
      * The button to open gear menu.
@@ -253,7 +253,7 @@ export class FileManagerUI {
      */
     this.gearButtonToggleRipple =
         /** @type {!FilesToggleRippleElement} */ (
-            queryRequiredElement('files-toggle-ripple', this.gearButton));
+            util.queryRequiredElement('files-toggle-ripple', this.gearButton));
 
     /**
      * @type {!GearMenu}
@@ -288,7 +288,7 @@ export class FileManagerUI {
      * @const
      */
     this.activityProgressPanel =
-        queryRequiredElement('#progress-panel', this.element);
+        util.queryRequiredElement('#progress-panel', this.element);
 
     /**
      * List container.
@@ -309,13 +309,14 @@ export class FileManagerUI {
      */
     this.defaultTaskMenuItem =
         /** @type {!FilesMenuItem} */
-        (queryRequiredElement('#default-task-menu-item', this.fileContextMenu));
+        (util.queryRequiredElement(
+            '#default-task-menu-item', this.fileContextMenu));
 
     /**
      * @public @const {!MenuItem}
      */
     this.tasksSeparator = /** @type {!MenuItem} */
-        (queryRequiredElement('#tasks-separator', this.fileContextMenu));
+        (util.queryRequiredElement('#tasks-separator', this.fileContextMenu));
 
     /**
      * The combo button to specify the task.
@@ -370,14 +371,21 @@ export class FileManagerUI {
      * @const {!HTMLElement}
      */
     this.fileTypeFilterContainer =
-        queryRequiredElement('#file-type-filter-container', this.element);
+        util.queryRequiredElement('#file-type-filter-container', this.element);
+
+    /**
+     * Empty folder element inside the file list container.
+     * @type {!HTMLElement}
+     * @const
+     */
+    this.emptyFolder = util.queryRequiredElement('#empty-folder', this.element);
 
     /**
      * A hidden div that can be used to announce text to screen
      * reader/ChromeVox.
      * @private {!HTMLElement}
      */
-    this.a11yMessage_ = queryRequiredElement('#a11y-msg', this.element);
+    this.a11yMessage_ = util.queryRequiredElement('#a11y-msg', this.element);
 
     if (window.IN_TEST) {
       /**
@@ -438,23 +446,22 @@ export class FileManagerUI {
   initAdditionalUI(table, grid, volumeManager) {
     // List container.
     this.listContainer = new ListContainer(
-        queryRequiredElement('#list-container', this.element), table, grid,
+        util.queryRequiredElement('#list-container', this.element), table, grid,
         this.dialogType_);
 
-    // Breadcrumb controller.
-    this.breadcrumbController = new BreadcrumbController(
-        queryRequiredElement('#location-breadcrumbs', this.element),
-        volumeManager, this.listContainer);
+    // Breadcrumb container.
+    this.breadcrumbContainer_ = new BreadcrumbContainer(
+        util.queryRequiredElement('#location-breadcrumbs', this.element));
 
     // Splitter.
     this.decorateSplitter_(
-        queryRequiredElement('#navigation-list-splitter', this.element));
+        util.queryRequiredElement('#navigation-list-splitter', this.element));
 
     // Init context menus.
     contextMenuHandler.setContextMenu(grid, this.fileContextMenu);
     contextMenuHandler.setContextMenu(table.list, this.fileContextMenu);
     contextMenuHandler.setContextMenu(
-        queryRequiredElement('.drive-welcome.page'), this.fileContextMenu);
+        util.queryRequiredElement('.drive-welcome.page'), this.fileContextMenu);
 
     // Add window resize handler.
     document.defaultView.addEventListener('resize', this.relayout.bind(this));
@@ -501,7 +508,7 @@ export class FileManagerUI {
     // bar buttons can become wide enough to extend past the available viewport,
     // and this.layoutChanged_() is used to clamp their size to the viewport.
     const resizeObserver = new ResizeObserver(() => this.layoutChanged_());
-    resizeObserver.observe(queryRequiredElement('div.dialog-header'));
+    resizeObserver.observe(util.queryRequiredElement('div.dialog-header'));
   }
 
   /**
@@ -688,7 +695,7 @@ export class FileManagerUI {
       handleSplitterDragEnd: function(e) {
         FileSplitter.prototype.handleSplitterDragEnd.apply(this, arguments);
         this.ownerDocument.documentElement.classList.remove('col-resize');
-      }
+      },
     };
 
     /** @type Object */ (customSplitter).decorate(splitterElement);

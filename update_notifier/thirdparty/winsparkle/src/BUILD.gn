@@ -1,5 +1,5 @@
 import("//vivaldi/gn/config/version.gni")
-import("//build/util/version.gni")
+import("//chrome/version.gni")
 
 wxwidgets_top = "../../wxWidgets"
 

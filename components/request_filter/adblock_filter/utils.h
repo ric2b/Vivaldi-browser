@@ -6,9 +6,7 @@
 #include <string>
 
 #include "base/containers/span.h"
-#include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
 
 namespace flatbuffers {
 struct String;
@@ -30,9 +28,6 @@ struct ScriptletInjectionRule;
 
 std::string GetIndexVersionHeader();
 std::string GetRulesListVersionHeader();
-
-base::FilePath::StringType GetRulesFolderName();
-base::FilePath::StringType GetGroupFolderName(RuleGroup group);
 
 std::string CalculateBufferChecksum(base::span<const uint8_t> data);
 

@@ -4,17 +4,19 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/webui/diagnostics_ui/url_constants.h"
+#include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
-#include "chrome/browser/ash/web_applications/system_web_app_integration_test.h"
+#include "chrome/browser/ash/system_web_apps/test_support/system_web_app_integration_test.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
 namespace {
@@ -27,11 +29,13 @@ const char kDiagnosticsUmaFeatureUsetimeFullPath[] =
 const char kDiagnosticsUmaOpenDurationFullPath[] =
     "ChromeOS.DiagnosticsUi.OpenDuration";
 const char kFromChromeLaunch[] = "Apps.DefaultAppLaunch.FromChromeInternal";
+const char kFindDiagnosticsAppScript[] =
+    R"(document.querySelectorAll('diagnostics-app').length === 1)";
 // Same as feature_usage::FeatureUsageMetrics::Event::kUsedWithSuccess enum.
 const size_t kUsedWithSuccess = 2;
 }  // namespace
 
-class DiagnosticsAppIntegrationTest : public SystemWebAppIntegrationTest {
+class DiagnosticsAppIntegrationTest : public ash::SystemWebAppIntegrationTest {
  public:
   DiagnosticsAppIntegrationTest() {
     scoped_feature_list_.InitAndEnableFeature(
@@ -77,9 +81,8 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest, LaunchMetricsTest) {
   WaitForTestSystemAppInstall();
 
-  web_app::LaunchSystemWebAppAsync(profile(),
-                                   ash::SystemWebAppType::DIAGNOSTICS);
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::DIAGNOSTICS);
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   histogram_tester_.ExpectUniqueSample(kFromChromeLaunch, kDiagnosticsApp, 1);
 }
@@ -92,7 +95,7 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest, UsageMetricsTest) {
   LaunchApp(ash::SystemWebAppType::DIAGNOSTICS, &system_app_browser);
 
   // Find system browser for diagnostics and close it to trigger usage metrics.
-  EXPECT_TRUE(web_app::IsSystemWebApp(system_app_browser));
+  EXPECT_TRUE(ash::IsSystemWebApp(system_app_browser));
   chrome::CloseWindow(system_app_browser);
   ui_test_utils::WaitForBrowserToClose();
 
@@ -150,10 +153,10 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
 
   EXPECT_TRUE(content::ExecuteScript(
       web_contents, "chrome.send('recordNavigation', [0, 1]);"));
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   chrome::CloseAllBrowsers();
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.DiagnosticsUi.System.OpenDuration", 1);
@@ -177,10 +180,10 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
       content::ExecuteScript(web_contents, "chrome.send('recordNavigation');"));
   EXPECT_TRUE(content::ExecuteScript(web_contents,
                                      "chrome.send('recordNavigation', []);"));
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   chrome::CloseAllBrowsers();
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.DiagnosticsUi.System.OpenDuration", 1);
@@ -188,6 +191,31 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
       "ChromeOS.DiagnosticsUi.Connectivity.OpenDuration", 0);
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.DiagnosticsUi.Input.OpenDuration", 0);
+}
+
+IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
+                       DiagnosticsAppCapturesNavigation) {
+  auto* app_web_contents = LaunchDiagnosticsApp();
+
+  const auto* app_browser = ash::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::DIAGNOSTICS);
+  EXPECT_TRUE(app_browser);
+  // DiagnosticsApp launched in its own browser.
+  EXPECT_NE(browser(), app_browser);
+
+  // Attempting to navigate to app URL returns to the existing window with
+  // DiagnosticsSystemAppDelegate::ShouldCaptureNavigations() set to true.
+  const GURL url(ash::kChromeUIDiagnosticsAppUrl);
+  ui_test_utils::NavigateToURLWithDispositionBlockUntilNavigationsComplete(
+      browser(), url, /*number_of_navigations=*/2,
+      WindowOpenDisposition::CURRENT_TAB, /*browser_test_flags=*/0);
+
+  auto* browser_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_FALSE(content::EvalJs(browser_web_contents, kFindDiagnosticsAppScript)
+                   .ExtractBool());
+  EXPECT_TRUE(content::EvalJs(app_web_contents, kFindDiagnosticsAppScript)
+                  .ExtractBool());
 }
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(

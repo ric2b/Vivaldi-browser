@@ -26,7 +26,7 @@
 #include "ui/gfx/win/direct_write.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/win/platform_media_init.h"
+#include "platform_media/sandbox/win/platform_media_init.h"
 #endif
 
 namespace content {

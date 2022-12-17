@@ -85,6 +85,8 @@ class MockClientCommandBuffer : public CommandBuffer,
 
   void SetTokenForSetGetBuffer(int32_t token) { token_ = token; }
 
+  void ForceLostContext(error::ContextLostReason reason) override;
+
  private:
   int32_t put_offset_ = 0;
   int32_t token_ = 10000;  // All token checks in the tests should pass.
@@ -156,7 +158,9 @@ class FakeDecoderClient : public DecoderClient {
  public:
   ~FakeDecoderClient() override;
   void OnConsoleMessage(int32_t id, const std::string& message) override;
-  void CacheShader(const std::string& key, const std::string& shader) override;
+  void CacheBlob(gpu::GpuDiskCacheType type,
+                 const std::string& key,
+                 const std::string& shader) override;
   void OnFenceSyncRelease(uint64_t release) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;

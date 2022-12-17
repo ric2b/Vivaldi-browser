@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="1397811292916898096">用 <ph name="PRODUCT_NAME" /> 搜索</translation>
+<translation id="1456207338570705181">即触即搜是一个只有在您将谷歌搜索设置为默认搜索引擎时才能使用的功能。它将所选单词和当前页面作为上下文发送到谷歌搜索。您可以在 <ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭这个功能。</translation>
 <translation id="1598449788754183301">切换普通/隐匿标签</translation>
 <translation id="1644574205037202324">历史</translation>
 <translation id="17513872634828108">打开的标签</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">新建隐身标签</translation>
 <translation id="4243710787042215766">在隐私标签中打开</translation>
 <translation id="4526803704855831732">隐私标签</translation>
+<translation id="4719086422742491124">了解网站上某些关键字无需离开页面，您可以直接划词搜索。
+
+只有将谷歌搜索设置为默认搜索引擎时才能使用即触即搜功能。</translation>
 <translation id="4759238208242260848">下载</translation>
 <translation id="4883379392681899581">离开隐私模式</translation>
 <translation id="4943872375798546930">无结果</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 存储数据</translation>
 <translation id="5186185447130319458">隐私</translation>
 <translation id="5233638681132016545">新建标签</translation>
-<translation id="572328651809341494">最近打开的标签</translation>
-<translation id="5840488417521835756">无需离开所在页面，便可了解网站上的主题。“点按搜索”功能会在Google为默认搜索的前提下将所选字词及上下文一起发送给 Google 搜索，后者即会据此返回相应的定义、图片、搜索结果及其他详情。
+<translation id="5375131951310889874">了解网站上某些关键字无需离开页面，您可以直接即触即搜。只有将谷歌搜索设置为默认搜索引擎时才能使用即触即搜功能。它将单词及其附近的上下文发送到谷歌搜索，返回定义、图片、搜索结果和其他详细信息。
 
-要调整您的搜索内容，长按即可选中所需内容。要缩小您的搜索范围，请向上滑动到面板顶部，然后点按搜索框。</translation>
+要调整您的搜索词，请长按选择。 要优化搜索，请将面板一直向上滑动并点击搜索框。</translation>
+<translation id="572328651809341494">最近打开的标签</translation>
 <translation id="6150320133806434356">书签已保存</translation>
 <translation id="6336451774241870485">新建隐私标签</translation>
 <translation id="6585139692466700358">借助 Vivaldi 的翻译服务将网站翻译为其他语言</translation>
@@ -53,7 +57,6 @@
 <translation id="732145680195464316">书签已保存至 <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">关于 Vivaldi</translation>
 <translation id="7465104139234185284">关闭全部隐私标签</translation>
-<translation id="7519434535192513364">“点按搜索”功能会在以谷歌为默认搜索引擎的前提下将所选字词和当前页面（作为上下文）一起发送至谷歌搜索。您可在<ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭该功能。</translation>
 <translation id="804786196054284061">最终用户许可协议</translation>
 <translation id="85991616550051997">前往首页</translation>
 <translation id="8820817407110198400">书签</translation>

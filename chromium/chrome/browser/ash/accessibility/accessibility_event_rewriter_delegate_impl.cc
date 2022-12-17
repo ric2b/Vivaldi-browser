@@ -112,8 +112,8 @@ void AccessibilityEventRewriterDelegateImpl::SendSwitchAccessCommand(
   extensions::EventRouter* event_router =
       extensions::EventRouter::Get(AccessibilityManager::Get()->profile());
 
-  std::vector<base::Value> event_args;
-  event_args.push_back(base::Value(ToString(command)));
+  base::Value::List event_args;
+  event_args.Append(ToString(command));
 
   auto event = std::make_unique<extensions::Event>(
       extensions::events::ACCESSIBILITY_PRIVATE_ON_SWITCH_ACCESS_COMMAND,
@@ -133,8 +133,8 @@ void AccessibilityEventRewriterDelegateImpl::SendPointScanPoint(
   point_dict.SetDoubleKey("x", point.x());
   point_dict.SetDoubleKey("y", point.y());
 
-  std::vector<base::Value> event_args;
-  event_args.push_back(std::move(point_dict));
+  base::Value::List event_args;
+  event_args.Append(std::move(point_dict));
 
   auto event = std::make_unique<extensions::Event>(
       extensions::events::ACCESSIBILITY_PRIVATE_ON_POINT_SCAN_SET,
@@ -150,8 +150,8 @@ void AccessibilityEventRewriterDelegateImpl::SendMagnifierCommand(
   extensions::EventRouter* event_router =
       extensions::EventRouter::Get(AccessibilityManager::Get()->profile());
 
-  std::vector<base::Value> event_args;
-  event_args.push_back(base::Value(ToString(command)));
+  base::Value::List event_args;
+  event_args.Append(ToString(command));
 
   auto event = std::make_unique<extensions::Event>(
       extensions::events::ACCESSIBILITY_PRIVATE_ON_SWITCH_ACCESS_COMMAND,
@@ -171,7 +171,7 @@ void AccessibilityEventRewriterDelegateImpl::OnUnhandledSpokenFeedbackEvent(
 bool AccessibilityEventRewriterDelegateImpl::HandleKeyboardEvent(
     content::WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
-  OnUnhandledSpokenFeedbackEvent(ui::Event::Clone(*event.os_event));
+  OnUnhandledSpokenFeedbackEvent(event.os_event->Clone());
   return true;
 }
 

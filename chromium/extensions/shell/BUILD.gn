@@ -195,7 +195,6 @@ source_set("app_shell_lib") {
       "browser/shell_native_app_window_aura.h",
     ]
     deps += [
-      "//ui/aura/cursor",
       "//ui/base/cursor",
       "//ui/base/cursor/mojom:cursor_type",
       "//ui/platform_window",
@@ -219,7 +218,10 @@ source_set("app_shell_lib") {
   }
 
   if (is_chromeos) {
-    deps += [ "//chromeos/dbus/constants" ]
+    deps += [
+      "//chromeos/dbus/constants",
+      "//chromeos/dbus/power",
+    ]
   }
 
   if (is_chromeos_ash) {
@@ -228,15 +230,16 @@ source_set("app_shell_lib") {
       "browser/shell_screen.h",
     ]
     deps += [
-      "//ash/components/audio",
       "//ash/components/disks",
       "//ash/constants",
-      "//chromeos/dbus",
-      "//chromeos/dbus/audio",
-      "//chromeos/dbus/hermes",
-      "//chromeos/dbus/power",
+      "//chromeos/ash/components/audio",
+      "//chromeos/ash/components/dbus",
+      "//chromeos/ash/components/dbus/audio",
+      "//chromeos/ash/components/dbus/cros_disks",
+      "//chromeos/ash/components/dbus/hermes",
+      "//chromeos/ash/components/dbus/shill",
+      "//chromeos/ash/components/network",
       "//chromeos/login/login_state",
-      "//chromeos/network",
       "//ui/chromeos",
       "//ui/display/manager",
     ]
@@ -355,16 +358,19 @@ test("app_shell_unittests") {
     ]
   }
 
+  if (is_chromeos) {
+    deps += [ "//chromeos/dbus/power" ]
+  }
+
   if (is_chromeos_ash) {
     sources += [
       "browser/shell_audio_controller_chromeos_unittest.cc",
       "browser/shell_screen_unittest.cc",
     ]
     deps += [
-      "//ash/components/audio",
-      "//chromeos/dbus:test_support",
-      "//chromeos/dbus/audio",
-      "//chromeos/dbus/power",
+      "//chromeos/ash/components/audio",
+      "//chromeos/ash/components/dbus:test_support",
+      "//chromeos/ash/components/dbus/audio",
     ]
   }
 

@@ -17,6 +17,10 @@ class SyncServiceImpl;
 class SyncService;
 }  // namespace syncer
 
+namespace vivaldi {
+class VivaldiSyncServiceFactory;
+}
+
 // Singleton that owns all SyncServices and associates them with
 // ChromeBrowserState.
 class SyncServiceFactory : public BrowserStateKeyedServiceFactory {
@@ -27,16 +31,14 @@ class SyncServiceFactory : public BrowserStateKeyedServiceFactory {
   static syncer::SyncService* GetForBrowserStateIfExists(
       ChromeBrowserState* browser_state);
 
-  static syncer::SyncServiceImpl* GetAsSyncServiceImplForBrowserState(
-      ChromeBrowserState* browser_state);
-
-  static syncer::SyncServiceImpl* GetAsSyncServiceImplForBrowserStateIfExists(
+  static syncer::SyncServiceImpl* GetAsSyncServiceImplForBrowserStateForTesting(
       ChromeBrowserState* browser_state);
 
   static SyncServiceFactory* GetInstance();
 
  private:
   friend class base::NoDestructor<SyncServiceFactory>;
+  friend vivaldi::VivaldiSyncServiceFactory;
 
   SyncServiceFactory();
   ~SyncServiceFactory() override;

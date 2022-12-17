@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/feature_list.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -16,20 +15,18 @@
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/core/browser/account_reconcilor_delegate.h"
 #include "components/signin/core/browser/mirror_account_reconcilor_delegate.h"
 #include "components/signin/public/base/account_consistency_method.h"
 #include "components/signin/public/base/signin_buildflags.h"
-#include "components/signin/public/base/signin_switches.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/tpm/install_attributes.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/account_manager/account_manager_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/active_directory_account_reconcilor_delegate.h"
@@ -116,9 +113,7 @@ class ChromeOSLimitedAccessAccountReconcilorDelegate
 }  // namespace
 
 AccountReconcilorFactory::AccountReconcilorFactory()
-    : BrowserContextKeyedServiceFactory(
-          "AccountReconcilor",
-          BrowserContextDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactory("AccountReconcilor") {
   DependsOn(ChromeSigninClientFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
 }
@@ -196,15 +191,11 @@ AccountReconcilorFactory::CreateAccountReconcilorDelegate(Profile* profile) {
       return std::make_unique<signin::MirrorAccountReconcilorDelegate>(
           IdentityManagerFactory::GetForProfile(profile));
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-      if (base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles)) {
-        bool is_main_profile = ChromeSigninClientFactory::GetForProfile(profile)
-                                   ->GetInitialPrimaryAccount()
-                                   .has_value();
-        return std::make_unique<signin::MirrorLandingAccountReconcilorDelegate>(
-            IdentityManagerFactory::GetForProfile(profile), is_main_profile);
-      }
-      return std::make_unique<signin::MirrorAccountReconcilorDelegate>(
-          IdentityManagerFactory::GetForProfile(profile));
+      return std::make_unique<signin::MirrorLandingAccountReconcilorDelegate>(
+          IdentityManagerFactory::GetForProfile(profile),
+          ChromeSigninClientFactory::GetForProfile(profile)
+              ->GetInitialPrimaryAccount()
+              .has_value());
 #else
       return std::make_unique<signin::MirrorAccountReconcilorDelegate>(
           IdentityManagerFactory::GetForProfile(profile));

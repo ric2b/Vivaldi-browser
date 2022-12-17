@@ -275,23 +275,29 @@ TEST_F(DragWindowFromShelfControllerTest, MayOrMayNotReShowHiddenWindows) {
       Shelf::ForWindow(Shell::GetPrimaryRootWindow())->GetIdealBounds();
   auto window2 = CreateTestWindow();
   auto window1 = CreateTestWindow();
+  EXPECT_FALSE(window1->GetProperty(kHideDuringWindowDragging));
+  EXPECT_FALSE(window2->GetProperty(kHideDuringWindowDragging));
 
   // If the dragged window restores to its original position, reshow the hidden
   // windows.
   StartDrag(window1.get(), shelf_bounds.CenterPoint());
   Drag(gfx::Point(200, 200), 0.f, 1.f);
   EXPECT_FALSE(window2->IsVisible());
+  EXPECT_TRUE(window2->GetProperty(kHideDuringWindowDragging));
   EndDrag(shelf_bounds.CenterPoint(), absl::nullopt);
   EXPECT_TRUE(window2->IsVisible());
+  EXPECT_FALSE(window2->GetProperty(kHideDuringWindowDragging));
 
   // If fling to homescreen, do not reshow the hidden windows.
   StartDrag(window1.get(), shelf_bounds.CenterPoint());
   Drag(gfx::Point(200, 200), 0.f, 1.f);
+  EXPECT_TRUE(window2->GetProperty(kHideDuringWindowDragging));
   EXPECT_FALSE(window2->IsVisible());
   EndDrag(gfx::Point(200, 200),
           -DragWindowFromShelfController::kVelocityToHomeScreenThreshold);
   EXPECT_FALSE(window1->IsVisible());
   EXPECT_FALSE(window2->IsVisible());
+  EXPECT_FALSE(window2->GetProperty(kHideDuringWindowDragging));
 
   // If the dragged window is added to overview, do not reshow the hidden
   // windows.
@@ -300,6 +306,7 @@ TEST_F(DragWindowFromShelfControllerTest, MayOrMayNotReShowHiddenWindows) {
   StartDrag(window1.get(), shelf_bounds.CenterPoint());
   Drag(gfx::Point(200, 200), 0.f, 1.f);
   EXPECT_FALSE(window2->IsVisible());
+  EXPECT_TRUE(window2->GetProperty(kHideDuringWindowDragging));
   OverviewController* overview_controller = Shell::Get()->overview_controller();
   EXPECT_TRUE(overview_controller->InOverviewSession());
   DragWindowFromShelfControllerTestApi().WaitUntilOverviewIsShown(
@@ -309,6 +316,7 @@ TEST_F(DragWindowFromShelfControllerTest, MayOrMayNotReShowHiddenWindows) {
   EXPECT_TRUE(overview_controller->overview_session()->IsWindowInOverview(
       window1.get()));
   EXPECT_FALSE(window2->IsVisible());
+  EXPECT_FALSE(window2->GetProperty(kHideDuringWindowDragging));
   ExitOverview();
 
   // If the dragged window is snapped in splitview, while the other windows are
@@ -318,12 +326,14 @@ TEST_F(DragWindowFromShelfControllerTest, MayOrMayNotReShowHiddenWindows) {
   StartDrag(window1.get(), shelf_bounds.left_center());
   Drag(gfx::Point(0, 200), 0.f, 1.f);
   EXPECT_FALSE(window2->IsVisible());
+  EXPECT_TRUE(window2->GetProperty(kHideDuringWindowDragging));
   EXPECT_TRUE(overview_controller->InOverviewSession());
   EndDrag(gfx::Point(0, 200), absl::nullopt);
   EXPECT_TRUE(overview_controller->InOverviewSession());
   EXPECT_TRUE(split_view_controller()->InSplitViewMode());
   EXPECT_TRUE(split_view_controller()->IsWindowInSplitView(window1.get()));
   EXPECT_FALSE(window2->IsVisible());
+  EXPECT_FALSE(window2->GetProperty(kHideDuringWindowDragging));
 }
 
 // Test during window dragging, if overview is open, the minimized windows can
@@ -1396,6 +1406,35 @@ TEST_F(DragWindowFromShelfControllerTest,
   EXPECT_FALSE(window->IsVisible());
   EXPECT_FALSE(transient_child_win1->IsVisible());
   EXPECT_FALSE(transient_child_win2->IsVisible());
+}
+
+// Tests that destroying a trasient child that is being dragged from the shelf
+// does not result in a crash. Regression test for https://crbug.com/1200596.
+TEST_F(DragWindowFromShelfControllerTest, DestroyTransientWhileAnimating) {
+  const gfx::Rect shelf_bounds =
+      Shelf::ForWindow(Shell::GetPrimaryRootWindow())->GetIdealBounds();
+
+  // The crash occurred while destroying an animating window.
+  ui::ScopedAnimationDurationScaleMode animation_scale(
+      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+
+  // The transient child needs to also be an app window.
+  auto window = CreateAppWindow();
+  auto child = CreateAppWindow();
+  wm::AddTransientChild(window.get(), child.get());
+
+  // Drag the child barely above the shelf so that it returns to its original
+  // position on release. The drag can go anywhere as long as the window moves
+  // and the release is close to the top of the shelf.
+  StartDrag(child.get(), shelf_bounds.right_center());
+  Drag(gfx::Point(100, 100), 1.f, 1.f);
+  EndDrag(gfx::Point(shelf_bounds.width() / 2, shelf_bounds.y() - 10),
+          /*velocity_y=*/absl::nullopt);
+  ASSERT_TRUE(window->layer()->GetAnimator()->is_animating());
+  ASSERT_TRUE(child->layer()->GetAnimator()->is_animating());
+
+  // Destroy the transient child during animation. There should be no crash.
+  child.reset();
 }
 
 // Tests that destroying a dragged window in split view will not cause crash.

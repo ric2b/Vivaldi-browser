@@ -86,6 +86,14 @@ constexpr char kUninstalled[] = "uninstalled";
 constexpr char kVPNProvider[] = "vpnprovider";
 constexpr char kPermissionStateGranted[] = "granted";
 constexpr char kPermissionStateManaged[] = "managed";
+constexpr char kWebAppInfo[] = "web_app_info";
+constexpr char kTitle[] = "title";
+constexpr char kStartUrl[] = "start_url";
+constexpr char kScopeUrl[] = "scope_url";
+constexpr char kThemeColor[] = "theme_color";
+constexpr char kIsWebOnlyTwa[] = "is_web_only_twa";
+constexpr char kCertificateSha256Fingerprint[] =
+    "certificate_sha256_fingerprint";
 constexpr char kWindowLayout[] = "window_layout";
 constexpr char kWindowSizeType[] = "window_layout_type";
 constexpr char kWindowResizability[] = "window_resizability";
@@ -127,9 +135,9 @@ class NotificationsEnabledDeferred {
   }
 
   bool Get(const std::string& app_id) {
-    const base::Value* dict =
-        prefs_->GetDictionary(arc::prefs::kArcSetNotificationsEnabledDeferred);
-    return dict->GetDict().FindBool(app_id).value_or(false);
+    const base::Value::Dict& dict =
+        prefs_->GetValueDict(arc::prefs::kArcSetNotificationsEnabledDeferred);
+    return dict.FindBool(app_id).value_or(false);
   }
 
   void Remove(const std::string& app_id) {
@@ -414,11 +422,9 @@ void ArcAppListPrefs::UprevCurrentIconsVersionForTesting() {
 
 std::string ArcAppListPrefs::GetAppIdByPackageName(
     const std::string& package_name) const {
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  if (!apps)
-    return std::string();
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
 
-  for (const auto it : apps->DictItems()) {
+  for (const auto it : apps) {
     const base::Value& value = it.second;
     const std::string* installed_package_name =
         value.GetDict().FindString(kPackageName);
@@ -726,11 +732,10 @@ std::unique_ptr<ArcAppListPrefs::PackageInfo> ArcAppListPrefs::GetPackage(
   if (!IsArcAlive() || !IsArcAndroidEnabledForProfile(profile_))
     return nullptr;
 
-  const base::Value* packages = prefs_->GetDictionary(arc::prefs::kArcPackages);
-  if (!packages)
-    return nullptr;
+  const base::Value::Dict& packages =
+      prefs_->GetValueDict(arc::prefs::kArcPackages);
 
-  const base::Value::Dict* package = packages->GetDict().FindDict(package_name);
+  const base::Value::Dict* package = packages.FindDict(package_name);
   if (!package)
     return nullptr;
 
@@ -776,12 +781,30 @@ std::unique_ptr<ArcAppListPrefs::PackageInfo> ArcAppListPrefs::GetPackage(
     }
   }
 
+  arc::mojom::WebAppInfoPtr web_app_info;
+  if (const base::Value* web_app_info_value = package->Find(kWebAppInfo)) {
+    const base::Value::Dict& web_app_info_dict = web_app_info_value->GetDict();
+    web_app_info = arc::mojom::WebAppInfo::New();
+    web_app_info->title = *web_app_info_dict.FindString(kTitle);
+    web_app_info->start_url = *web_app_info_dict.FindString(kStartUrl);
+    web_app_info->scope_url = *web_app_info_dict.FindString(kScopeUrl);
+    bool must_convert_to_int = base::StringToInt64(
+        *web_app_info_dict.FindString(kThemeColor), &web_app_info->theme_color);
+    DCHECK(must_convert_to_int);
+    web_app_info->is_web_only_twa = *web_app_info_dict.FindBool(kIsWebOnlyTwa);
+    if (const std::string* fingerprint =
+            web_app_info_dict.FindString(kCertificateSha256Fingerprint)) {
+      web_app_info->certificate_sha256_fingerprint = *fingerprint;
+    }
+  }
+
   return std::make_unique<PackageInfo>(
       package_name, package->FindInt(kPackageVersion).value_or(0),
       last_backup_android_id, last_backup_time,
       package->FindBool(kShouldSync).value_or(false),
       package->FindBool(kSystem).value_or(false),
-      package->FindBool(kVPNProvider).value_or(false), std::move(permissions));
+      package->FindBool(kVPNProvider).value_or(false), std::move(permissions),
+      std::move(web_app_info));
 }
 
 bool ArcAppListPrefs::IsPackageInstalled(
@@ -812,11 +835,10 @@ std::vector<std::string> ArcAppListPrefs::GetAppIds() const {
 
 std::vector<std::string> ArcAppListPrefs::GetAppIdsNoArcEnabledCheck() const {
   std::vector<std::string> ids;
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  DCHECK(apps);
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
 
   // crx_file::id_util is de-facto utility for id generation.
-  for (const auto app : apps->DictItems()) {
+  for (const auto app : apps) {
     if (!crx_file::id_util::IdIsValid(app.first))
       continue;
 
@@ -839,10 +861,8 @@ std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetApp(
 
 std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetAppFromPrefs(
     const std::string& app_id) const {
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  if (!apps)
-    return nullptr;
-  const base::Value::Dict* app_dict = apps->GetDict().FindDict(app_id);
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
+  const base::Value::Dict* app_dict = apps.FindDict(app_id);
   if (!app_dict)
     return nullptr;
 
@@ -926,8 +946,8 @@ bool ArcAppListPrefs::IsRegistered(const std::string& app_id) const {
       !default_apps_->HasApp(app_id))
     return false;
 
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  return apps && apps->FindDictKey(app_id);
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
+  return apps.FindDict(app_id);
 }
 
 bool ArcAppListPrefs::IsDefault(const std::string& app_id) const {
@@ -1222,7 +1242,12 @@ void ArcAppListPrefs::SetResizeLockState(const std::string& app_id,
   base::Value* app_dict = update.Get();
   app_dict->GetDict().Set(kResizeLockState, static_cast<int32_t>(state));
 
-  NotifyAppStatesChanged(app_id);
+  // If the app is not "ready", we shouldn't fire the AppStatesChanged
+  // callbacks. Otherwise, it would cause a crash (See crbug.com/127660). When
+  // the app is changed to "ready", ArcAppListPrefs sends the notifications
+  // afterwards so it's fine not to fire it here.
+  if (app_info->ready)
+    NotifyAppStatesChanged(app_id);
 }
 
 bool ArcAppListPrefs::GetResizeLockNeedsConfirmation(
@@ -1650,6 +1675,23 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
     package_dict.Remove(kPermissionStates);
   }
 
+  if (package.web_app_info) {
+    const arc::mojom::WebAppInfo& web_app_info = *package.web_app_info;
+    base::Value::Dict web_app_info_dict;
+    web_app_info_dict.Set(kTitle, web_app_info.title);
+    web_app_info_dict.Set(kStartUrl, web_app_info.start_url);
+    web_app_info_dict.Set(kScopeUrl, web_app_info.scope_url);
+    web_app_info_dict.Set(kThemeColor,
+                          base::NumberToString(web_app_info.theme_color));
+    web_app_info_dict.Set(kIsWebOnlyTwa, web_app_info.is_web_only_twa);
+    if (const auto& fingerprint = web_app_info.certificate_sha256_fingerprint) {
+      web_app_info_dict.Set(kCertificateSha256Fingerprint, *fingerprint);
+    }
+    package_dict.Set(kWebAppInfo, std::move(web_app_info_dict));
+  } else {
+    package_dict.Remove(kWebAppInfo);
+  }
+
   if (old_package_version == -1 ||
       old_package_version == package.package_version) {
     return;
@@ -1872,8 +1914,8 @@ void ArcAppListPrefs::OnInstallShortcut(arc::mojom::ShortcutInfoPtr shortcut) {
 void ArcAppListPrefs::OnUninstallShortcut(const std::string& package_name,
                                           const std::string& intent_uri) {
   std::vector<std::string> shortcuts_to_remove;
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  for (const auto app : apps->DictItems()) {
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
+  for (const auto app : apps) {
     if (!app.second.is_dict()) {
       VLOG(2) << "Failed to extract information for " << app.first << ".";
       continue;
@@ -1913,8 +1955,8 @@ std::unordered_set<std::string> ArcAppListPrefs::GetAppsAndShortcutsForPackage(
     bool include_only_launchable_apps,
     bool include_shortcuts) const {
   std::unordered_set<std::string> app_set;
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  for (const auto app : apps->DictItems()) {
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
+  for (const auto app : apps) {
     if (!crx_file::id_util::IdIsValid(app.first))
       continue;
 
@@ -2058,8 +2100,8 @@ void ArcAppListPrefs::OnTaskSetActive(int32_t task_id) {
 void ArcAppListPrefs::OnNotificationsEnabledChanged(
     const std::string& package_name,
     bool enabled) {
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  for (const auto app : apps->DictItems()) {
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
+  for (const auto app : apps) {
     if (!app.second.is_dict()) {
       NOTREACHED();
       continue;
@@ -2158,9 +2200,9 @@ std::vector<std::string> ArcAppListPrefs::GetPackagesFromPrefs(
     return packages;
   }
 
-  const base::Value* package_prefs =
-      prefs_->GetDictionary(arc::prefs::kArcPackages);
-  for (const auto package : package_prefs->DictItems()) {
+  const base::Value::Dict& package_prefs =
+      prefs_->GetValueDict(arc::prefs::kArcPackages);
+  for (const auto package : package_prefs) {
     if (!package.second.is_dict()) {
       NOTREACHED();
       continue;
@@ -2178,15 +2220,13 @@ std::vector<std::string> ArcAppListPrefs::GetPackagesFromPrefs(
 }
 
 base::Time ArcAppListPrefs::GetInstallTime(const std::string& app_id) const {
-  const base::Value* apps = prefs_->GetDictionary(arc::prefs::kArcApps);
-  if (!apps)
-    return base::Time();
+  const base::Value::Dict& apps = prefs_->GetValueDict(arc::prefs::kArcApps);
 
-  const base::Value* app = apps->FindDictKey(app_id);
+  const base::Value::Dict* app = apps.FindDict(app_id);
   if (!app)
     return base::Time();
 
-  const std::string* install_time_str = app->GetDict().FindString(kInstallTime);
+  const std::string* install_time_str = app->FindString(kInstallTime);
   if (!install_time_str)
     return base::Time();
 
@@ -2363,7 +2403,8 @@ ArcAppListPrefs::PackageInfo::PackageInfo(
     bool system,
     bool vpn_provider,
     base::flat_map<arc::mojom::AppPermission, arc::mojom::PermissionStatePtr>
-        permissions)
+        permissions,
+    arc::mojom::WebAppInfoPtr web_app_info)
     : package_name(package_name),
       package_version(package_version),
       last_backup_android_id(last_backup_android_id),
@@ -2371,7 +2412,8 @@ ArcAppListPrefs::PackageInfo::PackageInfo(
       should_sync(should_sync),
       system(system),
       vpn_provider(vpn_provider),
-      permissions(std::move(permissions)) {}
+      permissions(std::move(permissions)),
+      web_app_info(std::move(web_app_info)) {}
 
 // Need to add explicit destructor for chromium style checker error:
 // Complex class/struct needs an explicit out-of-line destructor

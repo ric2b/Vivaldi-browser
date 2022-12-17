@@ -58,6 +58,9 @@ enum ShellWindowId {
   // The wallpaper (desktop background) window.
   kShellWindowId_WallpaperContainer,
 
+  // The glanceables ("welcome back") window container.
+  kShellWindowId_GlanceablesContainer,
+
   // The containers for standard top-level windows per active desks.
   // * Notes:
   //   - There are no direct mapping between `kShellWindowId_DeskContainerA` and
@@ -140,7 +143,8 @@ enum ShellWindowId {
   // The container for menus.
   kShellWindowId_MenuContainer,
 
-  // The container for drag/drop images and tooltips.
+  // The container for drag/drop images, tooltips, and widgets that are tagged
+  // with ui::ZOrderLevel::kSecuritySurface.
   kShellWindowId_DragImageAndTooltipContainer,
 
   // The container for the fullscreen power button menu.

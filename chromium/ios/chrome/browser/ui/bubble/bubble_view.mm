@@ -9,7 +9,6 @@
 #include "base/check.h"
 #include "base/notreached.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
-#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
@@ -28,6 +27,8 @@ NSString* const kBubbleViewCloseButtonIdentifier =
 // Accessibility identifier for the title label.
 NSString* const kBubbleViewTitleLabelIdentifier =
     @"BubbleViewTitleLabelIdentifier";
+// Accessibility identifier for the label.
+NSString* const kBubbleViewLabelIdentifier = @"BubbleViewLabelIdentifier";
 // Accessibility identifier for the image view.
 NSString* const kBubbleViewImageViewIdentifier =
     @"BubbleViewImageViewIdentifier";
@@ -97,7 +98,7 @@ const CGFloat kSnoozeButtonMinimumSize = 48.0f;
 const CGFloat kSnoozeButtonFontSize = 15.0f;
 
 // The size of symbol action images.
-const NSInteger kSymbolBubblePointSize = 17;
+const CGFloat kSymbolBubblePointSize = 17;
 
 // Returns a background view for BubbleView.
 UIView* BubbleBackgroundView() {
@@ -185,6 +186,7 @@ UIButton* BubbleCloseButton() {
                                    kCloseButtonTopTrailingPadding)];
   }
   [button setTintColor:[UIColor colorNamed:kSolidButtonTextColor]];
+  [button setAccessibilityLabel:l10n_util::GetNSString(IDS_IOS_ICON_CLOSE)];
   [button setAccessibilityIdentifier:kBubbleViewCloseButtonIdentifier];
   [button setTranslatesAutoresizingMaskIntoConstraints:NO];
   return button;
@@ -299,7 +301,7 @@ UIImageView* BubbleImageViewWithImage(UIImage* image) {
     [self addSubview:_background];
     // Add label view.
     _label = BubbleLabelWithText(text, textAlignment);
-    [self setAccessibilityLabel:_label.text];
+    _label.accessibilityIdentifier = kBubbleViewLabelIdentifier;
     [self addSubview:_label];
     // Add arrow view.
     _arrow = BubbleArrowViewWithDirection(direction);
@@ -341,6 +343,8 @@ UIImageView* BubbleImageViewWithImage(UIImage* image) {
     }
     _delegate = delegate;
     _needsAddConstraints = YES;
+
+    self.isAccessibilityElement = YES;
   }
   return self;
 }
@@ -364,6 +368,34 @@ UIImageView* BubbleImageViewWithImage(UIImage* image) {
 - (void)setAlignmentOffset:(CGFloat)alignmentOffset {
   _alignmentOffset = alignmentOffset;
   [self updateArrowAlignmentConstraint];
+}
+
+- (NSString*)accessibilityLabel {
+  return self.titleLabel.text;
+}
+
+- (NSString*)accessibilityValue {
+  return self.label.text;
+}
+
+- (NSArray<UIAccessibilityCustomAction*>*)accessibilityCustomActions {
+  NSMutableArray<UIAccessibilityCustomAction*>* accessibilityCustomActions =
+      [NSMutableArray array];
+  if (self.showsSnoozeButton) {
+    [accessibilityCustomActions
+        addObject:[[UIAccessibilityCustomAction alloc]
+                      initWithName:self.snoozeButton.accessibilityLabel
+                            target:self
+                          selector:@selector(snoozeButtonWasTapped:)]];
+  }
+  if (self.showsCloseButton) {
+    [accessibilityCustomActions
+        addObject:[[UIAccessibilityCustomAction alloc]
+                      initWithName:self.closeButton.accessibilityLabel
+                            target:self
+                          selector:@selector(closeButtonWasTapped:)]];
+  }
+  return accessibilityCustomActions;
 }
 
 #pragma mark - Private instance methods

@@ -187,6 +187,9 @@ std::unique_ptr<KeyedService> MakeMockPersonalizationAppManager(
 class TestWallpaperObserver
     : public ash::personalization_app::mojom::WallpaperObserver {
  public:
+  // WallpaperObserver:
+  void OnWallpaperPreviewEnded() override {}
+
   void OnWallpaperChanged(
       ash::personalization_app::mojom::CurrentWallpaperPtr image) override {
     current_wallpaper_ = std::move(image);
@@ -224,8 +227,7 @@ class PersonalizationAppWallpaperProviderImplTest
       : scoped_user_manager_(std::make_unique<ash::FakeChromeUserManager>()),
         profile_manager_(TestingBrowserProcess::GetGlobal()) {
     std::vector<base::Feature> disabled_features;
-    std::vector<base::Feature> enabled_features = {
-        ash::features::kWallpaperWebUI};
+    std::vector<base::Feature> enabled_features;
 
     // Conditionally enable/disable Google Photos integration based on test
     // parameterization.

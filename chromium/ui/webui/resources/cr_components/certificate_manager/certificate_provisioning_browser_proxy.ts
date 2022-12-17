@@ -15,16 +15,16 @@
  *
  * @see chrome/browser/ui/webui/settings/certificates_handler.cc
  */
-export type CertificateProvisioningProcess = {
-  certProfileId: string,
-  certProfileName: string,
-  isDeviceWide: boolean,
-  lastUnsuccessfulMessage: string,
-  status: string,
-  stateId: number,
-  timeSinceLastUpdate: string,
-  publicKey: string,
-};
+export interface CertificateProvisioningProcess {
+  certProfileId: string;
+  certProfileName: string;
+  isDeviceWide: boolean;
+  lastUnsuccessfulMessage: string;
+  status: string;
+  stateId: number;
+  timeSinceLastUpdate: string;
+  publicKey: string;
+}
 
 export interface CertificateProvisioningBrowserProxy {
   /**
@@ -39,8 +39,7 @@ export interface CertificateProvisioningBrowserProxy {
    * provisioning process identified by |certProfileId|.
    * This is Chrome OS specific, but always present for simplicity.
    */
-  triggerCertificateProvisioningProcessUpdate(
-      certProfileId: string, isDeviceWide: boolean): void;
+  triggerCertificateProvisioningProcessUpdate(certProfileId: string): void;
 }
 
 export class CertificateProvisioningBrowserProxyImpl implements
@@ -49,11 +48,8 @@ export class CertificateProvisioningBrowserProxyImpl implements
     chrome.send('refreshCertificateProvisioningProcessses');
   }
 
-  triggerCertificateProvisioningProcessUpdate(
-      certProfileId: string, isDeviceWide: boolean) {
-    chrome.send(
-        'triggerCertificateProvisioningProcessUpdate',
-        [certProfileId, isDeviceWide]);
+  triggerCertificateProvisioningProcessUpdate(certProfileId: string) {
+    chrome.send('triggerCertificateProvisioningProcessUpdate', [certProfileId]);
   }
 
   static getInstance(): CertificateProvisioningBrowserProxy {

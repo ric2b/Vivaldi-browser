@@ -2,31 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {addEntries, ENTRIES, getCaller, getDateWithinLastMonth, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo, wait} from '../test_util.js';
+import {addEntries, ENTRIES, getCaller, getDateWithDayDiff, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
 import {mountCrostini, navigateWithDirectoryTree, openNewWindow, remoteCall, setupAndWaitUntilReady} from './background.js';
 import {BASIC_CROSTINI_ENTRY_SET, BASIC_DRIVE_ENTRY_SET, BASIC_LOCAL_ENTRY_SET, NESTED_ENTRY_SET, RECENT_ENTRY_SET} from './test_data.js';
 
+// Mock files with recently modified dates, be aware the days passed in should
+// be larger than 3 to prevent file list from showing "Today/Yesterday", which
+// will break the waitForFiles() function.
 // Test entry for a recently-modified video file.
 const RECENTLY_MODIFIED_VIDEO =
-    ENTRIES.world.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.world.cloneWithModifiedDate(getDateWithDayDiff(7));
 const RECENTLY_MODIFIED_MOV_VIDEO =
-    ENTRIES.movFile.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.movFile.cloneWithModifiedDate(getDateWithDayDiff(10));
 
 // Test entry for a recently-modified document file.
 const RECENTLY_MODIFIED_DOCUMENT =
-    ENTRIES.docxFile.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.docxFile.cloneWithModifiedDate(getDateWithDayDiff(12));
 
 // Test entries for recent-modified android files.
 const RECENT_MODIFIED_ANDROID_DOCUMENT =
-    ENTRIES.documentsText.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.documentsText.cloneWithModifiedDate(getDateWithDayDiff(15));
 const RECENT_MODIFIED_ANDROID_IMAGE =
-    ENTRIES.picturesImage.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.picturesImage.cloneWithModifiedDate(getDateWithDayDiff(20));
 const RECENT_MODIFIED_ANDROID_AUDIO =
-    ENTRIES.musicAudio.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.musicAudio.cloneWithModifiedDate(getDateWithDayDiff(21));
 const RECENT_MODIFIED_ANDROID_VIDEO =
-    ENTRIES.moviesVideo.cloneWithModifiedDate(getDateWithinLastMonth());
+    ENTRIES.moviesVideo.cloneWithModifiedDate(getDateWithDayDiff(25));
 
 /**
  * Enum for supported recent filter types.
@@ -211,9 +214,7 @@ async function verifyRecentDocuments(appId, expectedEntries) {
  * @param {string} expectedPath Expected breadcrumb path.
  */
 async function verifyBreadcrumbsPath(appId, expectedPath) {
-  const path =
-      await remoteCall.callRemoteTestUtil('getBreadcrumbPath', appId, []);
-  chrome.test.assertEq(expectedPath, path);
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, expectedPath);
 }
 
 /**
@@ -226,8 +227,7 @@ async function verifyBreadcrumbsPath(appId, expectedPath) {
  */
 async function rightClickContextMenu(appId, fileName, commandId) {
   // Select the item.
-  chrome.test.assertTrue(
-      !!await remoteCall.callRemoteTestUtil('selectFile', appId, [fileName]));
+  await remoteCall.waitUntilSelected(appId, fileName);
 
   // Right-click the selected file.
   await remoteCall.waitAndRightClick(appId, '.table-row[selected]');
@@ -326,6 +326,31 @@ async function cutFileAndPasteTo(appId, fileName, newFolder) {
 }
 
 /**
+ * Wait for the empty folder element to show and assert the content to
+ * match the expected message.
+ *
+ * @param {string} appId Files app windowId.
+ * @param {string} expectedMessage The expected empty folder message
+ */
+async function waitForEmptyFolderMessage(appId, expectedMessage) {
+  const caller = getCaller();
+  // Use repeatUntil() here because when we switch between different filters,
+  // the message changes but the element itself will always show there.
+  await repeatUntil(async () => {
+    const emptyMessage = await remoteCall.waitForElement(
+        appId, '#empty-folder:not(.hidden) > .label');
+    if (emptyMessage.text === expectedMessage) {
+      return;
+    }
+
+    return pending(
+        caller,
+        `Expected empty folder message: "${expectedMessage}", got "${
+            emptyMessage.text}"`);
+  });
+}
+
+/**
  * Tests that file entries populated in the Downloads folder recently will be
  * displayed in Recent folder.
  */
@@ -378,8 +403,9 @@ testcase.recentsPlayFiles = async () => {
   // Verifies file list in Recents. Audio files from Play Files folder are
   // not supported in Recents.
   await verifyRecents(appId, [
-    RECENT_MODIFIED_ANDROID_DOCUMENT, RECENT_MODIFIED_ANDROID_IMAGE,
-    RECENT_MODIFIED_ANDROID_VIDEO
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
 };
 
@@ -433,8 +459,9 @@ testcase.recentsDownloadsAndDriveAndPlayFiles = async () => {
       [ENTRIES.desktop, ENTRIES.world, ENTRIES.testDocument]);
 
   await verifyRecents(appId, RECENT_ENTRY_SET.concat([
-    RECENT_MODIFIED_ANDROID_DOCUMENT, RECENT_MODIFIED_ANDROID_IMAGE,
-    RECENT_MODIFIED_ANDROID_VIDEO
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]));
 };
 
@@ -606,8 +633,9 @@ testcase.recentVideosDownloadsAndDriveAndPlayFiles = async () => {
       BASIC_LOCAL_ENTRY_SET.concat([RECENTLY_MODIFIED_VIDEO]),
       BASIC_DRIVE_ENTRY_SET.concat([RECENTLY_MODIFIED_VIDEO]));
   await verifyRecentVideos(appId, [
-    RECENTLY_MODIFIED_VIDEO, RECENTLY_MODIFIED_VIDEO,
-    RECENT_MODIFIED_ANDROID_VIDEO
+    RECENTLY_MODIFIED_VIDEO,
+    RECENTLY_MODIFIED_VIDEO,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
 };
 
@@ -648,8 +676,9 @@ testcase.recentDocumentsDownloadsAndDriveAndPlayFiles = async () => {
       RootPath.DOWNLOADS, [RECENTLY_MODIFIED_DOCUMENT],
       [RECENTLY_MODIFIED_DOCUMENT]);
   await verifyRecentDocuments(appId, [
-    RECENTLY_MODIFIED_DOCUMENT, RECENTLY_MODIFIED_DOCUMENT,
-    RECENT_MODIFIED_ANDROID_DOCUMENT
+    RECENTLY_MODIFIED_DOCUMENT,
+    RECENTLY_MODIFIED_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
   ]);
 };
 
@@ -730,24 +759,30 @@ testcase.recentsAllowDeletion = async () => {
       RootPath.DOWNLOADS, [ENTRIES.beautiful], [ENTRIES.desktop]);
   await navigateToRecent(appId);
   const files = TestEntryInfo.getExpectedRows([
-    ENTRIES.beautiful, ENTRIES.desktop, RECENT_MODIFIED_ANDROID_DOCUMENT,
-    RECENT_MODIFIED_ANDROID_IMAGE, RECENT_MODIFIED_ANDROID_VIDEO
+    ENTRIES.beautiful,
+    ENTRIES.desktop,
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
   await remoteCall.waitForFiles(appId, files);
 
   // Delete a file originated from Downloads.
   await deleteFile(appId, ENTRIES.beautiful.nameText);
   const files1 = TestEntryInfo.getExpectedRows([
-    ENTRIES.desktop, RECENT_MODIFIED_ANDROID_DOCUMENT,
-    RECENT_MODIFIED_ANDROID_IMAGE, RECENT_MODIFIED_ANDROID_VIDEO
+    ENTRIES.desktop,
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
   await remoteCall.waitForFiles(appId, files1);
 
   // Delete a file originated from Drive.
   await deleteFile(appId, ENTRIES.desktop.nameText);
   const files2 = TestEntryInfo.getExpectedRows([
-    RECENT_MODIFIED_ANDROID_DOCUMENT, RECENT_MODIFIED_ANDROID_IMAGE,
-    RECENT_MODIFIED_ANDROID_VIDEO
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
   await remoteCall.waitForFiles(appId, files2);
 
@@ -768,8 +803,11 @@ testcase.recentsAllowMultipleFilesDeletion = async () => {
       RootPath.DOWNLOADS, [ENTRIES.beautiful], [ENTRIES.desktop]);
   await navigateToRecent(appId);
   const files = TestEntryInfo.getExpectedRows([
-    ENTRIES.beautiful, ENTRIES.desktop, RECENT_MODIFIED_ANDROID_DOCUMENT,
-    RECENT_MODIFIED_ANDROID_IMAGE, RECENT_MODIFIED_ANDROID_VIDEO
+    ENTRIES.beautiful,
+    ENTRIES.desktop,
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
   await remoteCall.waitForFiles(appId, files);
 
@@ -846,14 +884,16 @@ testcase.recentsNoRenameForPlayFiles = async () => {
       await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.beautiful], []);
   await navigateToRecent(appId);
   const files = TestEntryInfo.getExpectedRows([
-    ENTRIES.beautiful, RECENT_MODIFIED_ANDROID_DOCUMENT,
-    RECENT_MODIFIED_ANDROID_IMAGE, RECENT_MODIFIED_ANDROID_VIDEO
+    ENTRIES.beautiful,
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
   ]);
   await remoteCall.waitForFiles(appId, files);
 
   // Select the item.
-  chrome.test.assertTrue(!!await remoteCall.callRemoteTestUtil(
-      'selectFile', appId, [RECENT_MODIFIED_ANDROID_DOCUMENT.nameText]));
+  await remoteCall.waitUntilSelected(
+      appId, RECENT_MODIFIED_ANDROID_DOCUMENT.nameText);
 
   // Right-click the selected file.
   await remoteCall.waitAndRightClick(appId, '.table-row[selected]');
@@ -866,17 +906,12 @@ testcase.recentsNoRenameForPlayFiles = async () => {
 
 /**
  * Tests cut operation can be performed in Recents view on files from
- * Downloads, Drive and Play Files.
+ * Downloads.
  */
-testcase.recentsAllowCut = async () => {
-  await addPlayFileEntries();
+testcase.recentsAllowCutForDownloads = async () => {
   const appId = await setupAndWaitUntilReady(
-      RootPath.DOWNLOADS, [ENTRIES.beautiful, ENTRIES.directoryA],
-      [ENTRIES.desktop]);
-  const files = TestEntryInfo.getExpectedRows([
-    ENTRIES.beautiful, ENTRIES.desktop, RECENT_MODIFIED_ANDROID_DOCUMENT,
-    RECENT_MODIFIED_ANDROID_IMAGE, RECENT_MODIFIED_ANDROID_VIDEO
-  ]);
+      RootPath.DOWNLOADS, [ENTRIES.beautiful, ENTRIES.directoryA], []);
+  const files = [ENTRIES.beautiful.getExpectedRow()];
   const newFolderBreadcrumb =
       `/My files/Downloads/${ENTRIES.directoryA.nameText}`;
 
@@ -886,8 +921,7 @@ testcase.recentsAllowCut = async () => {
   await cutFileAndPasteTo(
       appId, ENTRIES.beautiful.nameText, newFolderBreadcrumb);
   // The file being cut should appear in the new directory.
-  const filesInNewDir1 = TestEntryInfo.getExpectedRows([ENTRIES.beautiful]);
-  await remoteCall.waitForFiles(appId, filesInNewDir1);
+  await remoteCall.waitForFiles(appId, files);
   // Recents view still have the full file list because the file being cut just
   // moves to a new directory, but it still belongs to Recent.
   await navigateToRecent(appId);
@@ -895,19 +929,27 @@ testcase.recentsAllowCut = async () => {
   // Use "go to location" to validate the file in Recents after cut is
   // collected from the new folder.
   await goToFileLocation(appId, ENTRIES.beautiful.nameText);
-  await remoteCall.waitForFiles(appId, filesInNewDir1);
+  await remoteCall.waitForFiles(appId, files);
   await verifyBreadcrumbsPath(appId, newFolderBreadcrumb);
+};
+
+/**
+ * Tests cut operation can be performed in Recents view on files from
+ * Drive.
+ */
+testcase.recentsAllowCutForDrive = async () => {
+  const appId = await setupAndWaitUntilReady(
+      RootPath.DOWNLOADS, [ENTRIES.directoryA], [ENTRIES.desktop]);
+  const files = TestEntryInfo.getExpectedRows([ENTRIES.desktop]);
+  const newFolderBreadcrumb =
+      `/My files/Downloads/${ENTRIES.directoryA.nameText}`;
 
   // Cut/Paste a file originated from Drive.
   await navigateToRecent(appId);
   await remoteCall.waitForFiles(appId, files);
   await cutFileAndPasteTo(appId, ENTRIES.desktop.nameText, newFolderBreadcrumb);
   // The file being cut should appear in the new directory.
-  const filesInNewDir2 = TestEntryInfo.getExpectedRows([
-    ENTRIES.beautiful,
-    ENTRIES.desktop,
-  ]);
-  await remoteCall.waitForFiles(appId, filesInNewDir2);
+  await remoteCall.waitForFiles(appId, files);
   // Recents view still have the full file list because the file being cut just
   // moves to a new directory, but it still belongs to Recent.
   await navigateToRecent(appId);
@@ -915,8 +957,25 @@ testcase.recentsAllowCut = async () => {
   // Use "go to location" to validate the file in Recents after cut is
   // collected from the new folder.
   await goToFileLocation(appId, ENTRIES.desktop.nameText);
-  await remoteCall.waitForFiles(appId, filesInNewDir2);
+  await remoteCall.waitForFiles(appId, files);
   await verifyBreadcrumbsPath(appId, newFolderBreadcrumb);
+};
+
+/**
+ * Tests cut operation can be performed in Recents view on files from
+ * Play Files.
+ */
+testcase.recentsAllowCutForPlayFiles = async () => {
+  await addPlayFileEntries();
+  const appId = await setupAndWaitUntilReady(
+      RootPath.DOWNLOADS, [ENTRIES.directoryA], []);
+  const files = TestEntryInfo.getExpectedRows([
+    RECENT_MODIFIED_ANDROID_DOCUMENT,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+    RECENT_MODIFIED_ANDROID_VIDEO,
+  ]);
+  const newFolderBreadcrumb =
+      `/My files/Downloads/${ENTRIES.directoryA.nameText}`;
 
   // Cut/Paste a file originated from Play Files.
   await navigateToRecent(appId);
@@ -924,9 +983,9 @@ testcase.recentsAllowCut = async () => {
   await cutFileAndPasteTo(
       appId, RECENT_MODIFIED_ANDROID_IMAGE.nameText, newFolderBreadcrumb);
   // The file being cut should appear in the new directory.
-  const filesInNewDir3 = TestEntryInfo.getExpectedRows(
-      [ENTRIES.beautiful, ENTRIES.desktop, RECENT_MODIFIED_ANDROID_IMAGE]);
-  await remoteCall.waitForFiles(appId, filesInNewDir3);
+  const filesInNewDir =
+      TestEntryInfo.getExpectedRows([RECENT_MODIFIED_ANDROID_IMAGE]);
+  await remoteCall.waitForFiles(appId, filesInNewDir);
   // Recents view still have the full file list because the file being cut just
   // moves to a new directory, but it still belongs to Recent.
   await navigateToRecent(appId);
@@ -934,6 +993,96 @@ testcase.recentsAllowCut = async () => {
   // Use "go to location" to validate the file in Recents after cut is
   // collected from the new folder.
   await goToFileLocation(appId, RECENT_MODIFIED_ANDROID_IMAGE.nameText);
-  await remoteCall.waitForFiles(appId, filesInNewDir3);
+  await remoteCall.waitForFiles(appId, filesInNewDir);
   await verifyBreadcrumbsPath(appId, newFolderBreadcrumb);
+};
+
+/**
+ * Tests the time-period group heading can be displayed in Recents.
+ */
+testcase.recentsTimePeriodHeadings = async () => {
+  const todayFile = ENTRIES.hello.cloneWithModifiedDate(getDateWithDayDiff(0));
+  const yesterdayFile =
+      ENTRIES.desktop.cloneWithModifiedDate(getDateWithDayDiff(1));
+  const appId = await setupAndWaitUntilReady(
+      RootPath.DOWNLOADS, [todayFile, yesterdayFile], []);
+  await navigateToRecent(appId);
+  await remoteCall.waitForFiles(
+      appId, TestEntryInfo.getExpectedRows([todayFile, yesterdayFile]), {
+        // Ignore last modified time because it will show Today/Yesterday
+        // instead of the actual date.
+        ignoreLastModifiedTime: true,
+      });
+  // Check headings in list view mode.
+  await remoteCall.waitForElementsCount(appId, ['.group-heading'], 2);
+  const groupHeadings = await remoteCall.callRemoteTestUtil(
+      'deepQueryAllElements', appId, ['.group-heading']);
+  chrome.test.assertEq(2, groupHeadings.length);
+  const fileItems = await remoteCall.callRemoteTestUtil(
+      'deepQueryAllElements', appId, ['.group-heading + .table-row']);
+  chrome.test.assertEq(2, fileItems.length);
+
+  chrome.test.assertEq('Today', groupHeadings[0].text);
+  chrome.test.assertEq(
+      todayFile.nameText, fileItems[0].attributes['file-name']);
+  chrome.test.assertEq('Yesterday', groupHeadings[1].text);
+  chrome.test.assertEq(
+      yesterdayFile.nameText, fileItems[1].attributes['file-name']);
+
+  // Switch to grid view.
+  await remoteCall.waitAndClickElement(appId, '#view-button');
+  await remoteCall.waitForElementsCount(appId, ['.grid-title'], 2);
+  // Check headings in grid view mode.
+  const groupTitles = await remoteCall.callRemoteTestUtil(
+      'deepQueryAllElements', appId, ['.grid-title']);
+  chrome.test.assertEq(2, groupTitles.length);
+  const gridItems = await remoteCall.callRemoteTestUtil(
+      'deepQueryAllElements', appId, ['.grid-title + .thumbnail-item']);
+  chrome.test.assertEq(2, gridItems.length);
+
+  chrome.test.assertEq('Today', groupTitles[0].text);
+  chrome.test.assertEq(
+      todayFile.nameText, gridItems[0].attributes['file-name']);
+  chrome.test.assertEq('Yesterday', groupTitles[1].text);
+  chrome.test.assertEq(
+      yesterdayFile.nameText, gridItems[1].attributes['file-name']);
+};
+
+/**
+ * Tests message will show in Recents for empty folder.
+ */
+testcase.recentsEmptyFolderMessage = async () => {
+  const appId = await setupAndWaitUntilReady(
+      RootPath.DOWNLOADS, [ENTRIES.directoryA], []);
+  await navigateToRecent(appId);
+  // All filter is on by default.
+  await waitForEmptyFolderMessage(appId, 'No recent files');
+  // Activates to audio filter.
+  await remoteCall.waitAndClickElement(appId, [`[file-type-filter="audio"]`]);
+  await waitForEmptyFolderMessage(appId, 'No recent audio files');
+  // Activates to documents filter.
+  await remoteCall.waitAndClickElement(
+      appId, [`[file-type-filter="document"]`]);
+  await waitForEmptyFolderMessage(appId, 'No recent documents');
+  // Activates to images filter.
+  await remoteCall.waitAndClickElement(appId, [`[file-type-filter="image"]`]);
+  await waitForEmptyFolderMessage(appId, 'No recent images');
+  // Activates to videos filter.
+  await remoteCall.waitAndClickElement(appId, [`[file-type-filter="video"]`]);
+  await waitForEmptyFolderMessage(appId, 'No recent videos');
+};
+
+
+/**
+ * Tests message will show in Recents after the last file is
+ * deleted.
+ */
+testcase.recentsEmptyFolderMessageAfterDeletion = async () => {
+  const appId =
+      await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.beautiful], []);
+  await navigateToRecent(appId);
+  const files = TestEntryInfo.getExpectedRows([ENTRIES.beautiful]);
+  await remoteCall.waitForFiles(appId, files);
+  await deleteFile(appId, ENTRIES.beautiful.nameText);
+  await waitForEmptyFolderMessage(appId, 'No recent files');
 };

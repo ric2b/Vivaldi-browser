@@ -17,12 +17,12 @@
 #include "chrome/browser/net/nss_service.h"
 #include "chrome/browser/net/nss_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/components/network/managed_network_configuration_handler.h"
+#include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/ash/components/network/onc/onc_certificate_importer_impl.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
 #include "chromeos/components/onc/onc_utils.h"
-#include "chromeos/network/managed_network_configuration_handler.h"
-#include "chromeos/network/network_cert_loader.h"
 #include "components/policy/policy_constants.h"
 #include "components/user_manager/user.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -49,9 +49,8 @@ void GetNssCertDatabaseOnIOThread(
 
 UserNetworkConfigurationUpdaterAsh::~UserNetworkConfigurationUpdaterAsh() {
   // NetworkCertLoader may be not initialized in tests.
-  if (chromeos::NetworkCertLoader::IsInitialized()) {
-    chromeos::NetworkCertLoader::Get()->SetUserPolicyCertificateProvider(
-        nullptr);
+  if (ash::NetworkCertLoader::IsInitialized()) {
+    ash::NetworkCertLoader::Get()->SetUserPolicyCertificateProvider(nullptr);
   }
 }
 
@@ -61,7 +60,7 @@ UserNetworkConfigurationUpdaterAsh::CreateForUserPolicy(
     Profile* profile,
     const user_manager::User& user,
     PolicyService* policy_service,
-    chromeos::ManagedNetworkConfigurationHandler* network_config_handler) {
+    ash::ManagedNetworkConfigurationHandler* network_config_handler) {
   std::unique_ptr<UserNetworkConfigurationUpdaterAsh> updater(
       new UserNetworkConfigurationUpdaterAsh(profile, user, policy_service,
                                              network_config_handler));
@@ -70,7 +69,7 @@ UserNetworkConfigurationUpdaterAsh::CreateForUserPolicy(
 }
 
 void UserNetworkConfigurationUpdaterAsh::SetClientCertificateImporterForTest(
-    std::unique_ptr<chromeos::onc::CertificateImporter>
+    std::unique_ptr<ash::onc::CertificateImporter>
         client_certificate_importer) {
   SetClientCertificateImporter(std::move(client_certificate_importer));
 }
@@ -108,7 +107,7 @@ UserNetworkConfigurationUpdaterAsh::UserNetworkConfigurationUpdaterAsh(
     Profile* profile,
     const user_manager::User& user,
     PolicyService* policy_service,
-    chromeos::ManagedNetworkConfigurationHandler* network_config_handler)
+    ash::ManagedNetworkConfigurationHandler* network_config_handler)
     : UserNetworkConfigurationUpdater(policy_service),
       user_(&user),
       network_config_handler_(network_config_handler) {
@@ -126,15 +125,15 @@ UserNetworkConfigurationUpdaterAsh::UserNetworkConfigurationUpdaterAsh(
   // primary profile. This assumes that a |UserNetworkConfigurationUpdaterAsh|
   // is only created for the primary profile. NetworkCertLoader may be not
   // initialized in tests.
-  if (chromeos::NetworkCertLoader::IsInitialized())
-    chromeos::NetworkCertLoader::Get()->SetUserPolicyCertificateProvider(this);
+  if (ash::NetworkCertLoader::IsInitialized())
+    ash::NetworkCertLoader::Get()->SetUserPolicyCertificateProvider(this);
 
   // Set profile-wide expansions for policy networks (i.e. those that apply to
   // all networks in this profile). Note that this does currently not apply
   // user-imported networks (through chrome://network) because those currently
   // don't use the ManagedNetworkConfigurationHandler (b/235297258).
   network_config_handler_->SetProfileWideVariableExpansions(
-      user.username_hash(), chromeos::onc::GetVariableExpansionsForUser(&user));
+      user.username_hash(), ash::onc::GetVariableExpansionsForUser(&user));
 }
 
 void UserNetworkConfigurationUpdaterAsh::ImportClientCertificates() {
@@ -157,7 +156,7 @@ void UserNetworkConfigurationUpdaterAsh::ApplyNetworkPolicy(
   // Call on UserSessionManager to send the user's password to session manager
   // if the password substitution variable exists in the ONC.
   bool save_password =
-      chromeos::onc::HasUserPasswordSubsitutionVariable(network_configs_onc);
+      ash::onc::HasUserPasswordSubsitutionVariable(network_configs_onc);
   ash::UserSessionManager::GetInstance()->VoteForSavingLoginPassword(
       ash::UserSessionManager::PasswordConsumingService::kNetwork,
       save_password);
@@ -195,12 +194,12 @@ void UserNetworkConfigurationUpdaterAsh::CreateAndSetClientCertificateImporter(
     net::NSSCertDatabase* database) {
   DCHECK(database);
   SetClientCertificateImporter(
-      std::make_unique<chromeos::onc::CertificateImporterImpl>(
+      std::make_unique<ash::onc::CertificateImporterImpl>(
           content::GetIOThreadTaskRunner({}), database));
 }
 
 void UserNetworkConfigurationUpdaterAsh::SetClientCertificateImporter(
-    std::unique_ptr<chromeos::onc::CertificateImporter>
+    std::unique_ptr<ash::onc::CertificateImporter>
         client_certificate_importer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool initial_client_certificate_importer =

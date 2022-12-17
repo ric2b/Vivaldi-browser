@@ -12,11 +12,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
+#include "gpu/command_buffer/service/command_buffer_task_executor.h"
+#include "gpu/command_buffer/service/gpu_task_scheduler_helper.h"
 #include "gpu/command_buffer/service/scheduler.h"
-#include "gpu/ipc/command_buffer_task_executor.h"
-#include "gpu/ipc/gpu_task_scheduler_helper.h"
-#include "gpu/ipc/scheduler_sequence.h"
+#include "gpu/command_buffer/service/scheduler_sequence.h"
 #include "gpu/ipc/service/image_transport_surface.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 namespace viz {
@@ -107,10 +108,11 @@ scoped_refptr<gl::GLSurface> SkiaOutputSurfaceDependencyImpl::CreateGLSurface(
     base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub,
     gl::GLSurfaceFormat format) {
   if (IsOffscreen()) {
-    return gl::init::CreateOffscreenGLSurfaceWithFormat(gfx::Size(), format);
+    return gl::init::CreateOffscreenGLSurfaceWithFormat(gl::GetDefaultDisplay(),
+                                                        gfx::Size(), format);
   } else {
     return gpu::ImageTransportSurface::CreateNativeSurface(
-        stub, surface_handle_, format);
+        gl::GetDefaultDisplay(), stub, surface_handle_, format);
   }
 }
 
@@ -127,9 +129,9 @@ base::ScopedClosureRunner SkiaOutputSurfaceDependencyImpl::CacheGLSurface(
   return base::ScopedClosureRunner(std::move(release_callback));
 }
 
-void SkiaOutputSurfaceDependencyImpl::PostTaskToClientThread(
-    base::OnceClosure closure) {
-  client_thread_task_runner_->PostTask(FROM_HERE, std::move(closure));
+scoped_refptr<base::TaskRunner>
+SkiaOutputSurfaceDependencyImpl::GetClientTaskRunner() {
+  return client_thread_task_runner_;
 }
 
 void SkiaOutputSurfaceDependencyImpl::ScheduleGrContextCleanup() {
@@ -150,16 +152,6 @@ void SkiaOutputSurfaceDependencyImpl::DidCreateAcceleratedSurfaceChildWindow(
   gpu_service_impl_->SendCreatedChildWindow(parent_window, child_window);
 }
 #endif
-
-void SkiaOutputSurfaceDependencyImpl::RegisterDisplayContext(
-    gpu::DisplayContext* display_context) {
-  gpu_service_impl_->RegisterDisplayContext(display_context);
-}
-
-void SkiaOutputSurfaceDependencyImpl::UnregisterDisplayContext(
-    gpu::DisplayContext* display_context) {
-  gpu_service_impl_->UnregisterDisplayContext(display_context);
-}
 
 void SkiaOutputSurfaceDependencyImpl::DidLoseContext(
     gpu::error::ContextLostReason reason,

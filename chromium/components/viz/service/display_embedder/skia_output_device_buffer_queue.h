@@ -92,7 +92,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
 
   // Given an overlay mailbox, returns the corresponding OverlayData* from
   // |overlays_|. Inserts an OverlayData if mailbox is not in |overlays_|.
-  OverlayData* GetOrCreateOverlayData(const gpu::Mailbox& mailbox);
+  OverlayData* GetOrCreateOverlayData(const gpu::Mailbox& mailbox,
+                                      bool* is_existing = nullptr);
 
   std::unique_ptr<OutputPresenter> presenter_;
 
@@ -144,8 +145,9 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
   base::flat_set<OverlayData, OverlayDataComparator> overlays_;
 
 #if defined(USE_OZONE)
-  const gpu::Mailbox GetImageMailboxForColor(const SkColor& color);
+  const gpu::Mailbox GetImageMailboxForColor(const SkColor4f& color);
 
+  // TODO(crbug.com/1342015): Move this to SkColor4f.
   // All in-flight solid color images are held in this container until a swap
   // buffer with the identifying mailbox releases them.
   base::flat_map<gpu::Mailbox,

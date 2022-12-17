@@ -14,7 +14,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/values.h"
 #include "components/reporting/metrics/fake_metric_report_queue.h"
 #include "components/reporting/metrics/fake_reporting_settings.h"
 #include "components/reporting/metrics/fake_sampler.h"
@@ -106,12 +105,15 @@ class MockDelegate : public MetricReportingManager::Delegate {
 
   MOCK_METHOD(std::unique_ptr<MetricReportQueue>,
               CreateMetricReportQueue,
-              (Destination destination, Priority priority),
+              (EventType event_type,
+               Destination destination,
+               Priority priority),
               (override));
 
   MOCK_METHOD(std::unique_ptr<MetricReportQueue>,
               CreatePeriodicUploadReportQueue,
-              (Destination destination,
+              (EventType event_type,
+               Destination destination,
                Priority priority,
                ReportingSettings* reporting_settings,
                const std::string& rate_setting_path,
@@ -180,6 +182,8 @@ const MetricReportingSettingData memory_info_settings = {
     ::ash::kReportDeviceMemoryInfo, false, "", 0};
 const MetricReportingSettingData bus_info_settings = {
     ::ash::kReportDeviceSecurityStatus, false, "", 0};
+const MetricReportingSettingData input_info_settings = {
+    ::ash::kReportDeviceGraphicsStatus, false, "", 0};
 const MetricReportingSettingData network_telemetry_settings = {
     ::ash::kReportDeviceNetworkStatus, true,
     ::ash::kReportDeviceNetworkTelemetryCollectionRateMs, 1};
@@ -210,6 +214,7 @@ class MetricReportingManagerTest
     telemetry_queue_ = std::make_unique<test::FakeMetricReportQueue>();
     event_queue_ = std::make_unique<test::FakeMetricReportQueue>();
     peripheral_queue_ = std::make_unique<test::FakeMetricReportQueue>();
+    user_telemetry_queue_ = std::make_unique<test::FakeMetricReportQueue>();
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_{
@@ -218,6 +223,7 @@ class MetricReportingManagerTest
   std::unique_ptr<test::FakeMetricReportQueue> telemetry_queue_;
   std::unique_ptr<test::FakeMetricReportQueue> event_queue_;
   std::unique_ptr<test::FakeMetricReportQueue> peripheral_queue_;
+  std::unique_ptr<test::FakeMetricReportQueue> user_telemetry_queue_;
 };
 
 TEST_F(MetricReportingManagerTest, InitiallyDeprovisioned) {
@@ -232,17 +238,24 @@ TEST_F(MetricReportingManagerTest, InitiallyDeprovisioned) {
 
   ON_CALL(*mock_delegate, IsDeprovisioned).WillByDefault(Return(true));
   ON_CALL(*mock_delegate, IsAffiliated).WillByDefault(Return(true));
-  ON_CALL(*mock_delegate, CreateMetricReportQueue(Destination::INFO_METRIC,
-                                                  Priority::SLOW_BATCH))
+  ON_CALL(*mock_delegate,
+          CreateMetricReportQueue(EventType::kDevice, Destination::INFO_METRIC,
+                                  Priority::SLOW_BATCH))
       .WillByDefault(Return(ByMove(std::move(info_queue_))));
-  ON_CALL(*mock_delegate, CreateMetricReportQueue(Destination::EVENT_METRIC,
-                                                  Priority::SLOW_BATCH))
+  ON_CALL(*mock_delegate,
+          CreateMetricReportQueue(EventType::kDevice, Destination::EVENT_METRIC,
+                                  Priority::SLOW_BATCH))
       .WillByDefault(Return(ByMove(std::move(event_queue_))));
   ON_CALL(*mock_delegate,
-          CreatePeriodicUploadReportQueue(Destination::TELEMETRY_METRIC,
-                                          Priority::MANUAL_BATCH, _,
-                                          ::ash::kReportUploadFrequency, _, 1))
+          CreatePeriodicUploadReportQueue(
+              EventType::kDevice, Destination::TELEMETRY_METRIC,
+              Priority::MANUAL_BATCH, _, ::ash::kReportUploadFrequency, _, 1))
       .WillByDefault(Return(ByMove(std::move(telemetry_queue_))));
+  ON_CALL(*mock_delegate,
+          CreatePeriodicUploadReportQueue(
+              EventType::kUser, Destination::TELEMETRY_METRIC,
+              Priority::MANUAL_BATCH, _, ::ash::kReportUploadFrequency, _, 1))
+      .WillByDefault(Return(ByMove(std::move(user_telemetry_queue_))));
 
   ON_CALL(*mock_delegate, CreateOneShotCollector).WillByDefault([&]() {
     return std::make_unique<FakeCollector>(&one_shot_collector_count);
@@ -294,8 +307,9 @@ TEST_P(MetricReportingManagerInfoTest, Default) {
   int collector_count = 0;
   ON_CALL(*mock_delegate_ptr, IsAffiliated)
       .WillByDefault(Return(test_case.is_affiliated));
-  ON_CALL(*mock_delegate_ptr, CreateMetricReportQueue(Destination::INFO_METRIC,
-                                                      Priority::SLOW_BATCH))
+  ON_CALL(*mock_delegate_ptr,
+          CreateMetricReportQueue(EventType::kDevice, Destination::INFO_METRIC,
+                                  Priority::SLOW_BATCH))
       .WillByDefault(Return(ByMove(std::move(info_queue_))));
   ON_CALL(*mock_delegate_ptr,
           CreateOneShotCollector(
@@ -352,6 +366,12 @@ INSTANTIATE_TEST_SUITE_P(
           /*disabled_features=*/{},
           /*is_affiliated=*/true, bus_info_settings,
           /*expected_count_before_login=*/1,
+          /*expected_count_after_login=*/1},
+         {"InputInfo",
+          /*enabled_features=*/{},
+          /*disabled_features=*/{},
+          /*is_affiliated=*/true, input_info_settings,
+          /*expected_count_before_login=*/1,
           /*expected_count_after_login=*/1}}),
     [](const testing::TestParamInfo<MetricReportingManagerInfoTest::ParamType>&
            info) { return info.param.test_name; });
@@ -373,8 +393,9 @@ TEST_P(MetricReportingManagerEventTest, Default) {
   int observer_manager_count = 0;
   ON_CALL(*mock_delegate_ptr, IsAffiliated)
       .WillByDefault(Return(test_case.is_affiliated));
-  ON_CALL(*mock_delegate_ptr, CreateMetricReportQueue(Destination::EVENT_METRIC,
-                                                      Priority::SLOW_BATCH))
+  ON_CALL(*mock_delegate_ptr,
+          CreateMetricReportQueue(EventType::kDevice, Destination::EVENT_METRIC,
+                                  Priority::SLOW_BATCH))
       .WillByDefault(Return(ByMove(std::move(event_queue_))));
   ON_CALL(*mock_delegate_ptr,
           CreateEventObserverManager(
@@ -448,7 +469,8 @@ TEST_P(MetricReportingManagerPeripheralTest, Default) {
   ON_CALL(*mock_delegate_ptr, IsAffiliated)
       .WillByDefault(Return(test_case.is_affiliated));
   ON_CALL(*mock_delegate_ptr,
-          CreateMetricReportQueue(Destination::PERIPHERAL_EVENTS,
+          CreateMetricReportQueue(EventType::kDevice,
+                                  Destination::PERIPHERAL_EVENTS,
                                   Priority::SECURITY))
       .WillByDefault(Return(ByMove(std::move(peripheral_queue_))));
   ON_CALL(*mock_delegate_ptr,
@@ -507,9 +529,9 @@ TEST_F(MetricReportingManagerTelemetryTest, OneShotCollectorBootPerformance) {
   int collector_count = 0;
 
   ON_CALL(*mock_delegate_ptr,
-          CreatePeriodicUploadReportQueue(Destination::TELEMETRY_METRIC,
-                                          Priority::MANUAL_BATCH, _,
-                                          ::ash::kReportUploadFrequency, _, 1))
+          CreatePeriodicUploadReportQueue(
+              EventType::kDevice, Destination::TELEMETRY_METRIC,
+              Priority::MANUAL_BATCH, _, ::ash::kReportUploadFrequency, _, 1))
       .WillByDefault(Return(ByMove(std::move(telemetry_queue_))));
   ON_CALL(*mock_delegate_ptr,
           CreateOneShotCollector(_, telemetry_queue_ptr, _,
@@ -548,14 +570,20 @@ TEST_P(MetricReportingManagerTelemetryTest, Default) {
   const auto upload_delay = mock_delegate->GetInitialUploadDelay();
   auto* const mock_delegate_ptr = mock_delegate.get();
   auto* const telemetry_queue_ptr = telemetry_queue_.get();
+  auto* const user_telemetry_queue_ptr = user_telemetry_queue_.get();
   int collector_count = 0;
   ON_CALL(*mock_delegate_ptr, IsAffiliated)
       .WillByDefault(Return(test_case.is_affiliated));
   ON_CALL(*mock_delegate_ptr,
-          CreatePeriodicUploadReportQueue(Destination::TELEMETRY_METRIC,
-                                          Priority::MANUAL_BATCH, _,
-                                          ::ash::kReportUploadFrequency, _, 1))
+          CreatePeriodicUploadReportQueue(
+              EventType::kDevice, Destination::TELEMETRY_METRIC,
+              Priority::MANUAL_BATCH, _, ::ash::kReportUploadFrequency, _, 1))
       .WillByDefault(Return(ByMove(std::move(telemetry_queue_))));
+  ON_CALL(*mock_delegate_ptr,
+          CreatePeriodicUploadReportQueue(
+              EventType::kUser, Destination::TELEMETRY_METRIC,
+              Priority::MANUAL_BATCH, _, ::ash::kReportUploadFrequency, _, 1))
+      .WillByDefault(Return(ByMove(std::move(user_telemetry_queue_))));
   ON_CALL(
       *mock_delegate_ptr,
       CreatePeriodicCollector(
@@ -563,6 +591,15 @@ TEST_P(MetricReportingManagerTelemetryTest, Default) {
           test_case.setting_data.setting_enabled_default_value,
           test_case.setting_data.rate_setting_path, _,
           test_case.setting_data.rate_unit_to_ms))
+      .WillByDefault(
+          [&]() { return std::make_unique<FakeCollector>(&collector_count); });
+  ON_CALL(*mock_delegate_ptr,
+          CreatePeriodicCollector(
+              _, user_telemetry_queue_ptr, _,
+              test_case.setting_data.enable_setting_path,
+              test_case.setting_data.setting_enabled_default_value,
+              test_case.setting_data.rate_setting_path, _,
+              test_case.setting_data.rate_unit_to_ms))
       .WillByDefault(
           [&]() { return std::make_unique<FakeCollector>(&collector_count); });
 
@@ -609,7 +646,7 @@ INSTANTIATE_TEST_SUITE_P(
           /*disabled_features=*/{},
           /*is_affiliated=*/true, network_telemetry_settings,
           /*expected_count_before_login=*/0,
-          /*expected_count_after_login=*/1},
+          /*expected_count_after_login=*/2},
          {"AudioTelemetry_Unaffiliated", /*enabled_features=*/{},
           /*disabled_features=*/{},
           /*is_affiliated=*/false, audio_metric_settings,
@@ -642,8 +679,9 @@ TEST_P(MetricReportingManagerPeriodicEventTest, Default) {
   int collector_count = 0;
   ON_CALL(*mock_delegate_ptr, IsAffiliated)
       .WillByDefault(Return(test_case.is_affiliated));
-  ON_CALL(*mock_delegate_ptr, CreateMetricReportQueue(Destination::EVENT_METRIC,
-                                                      Priority::SLOW_BATCH))
+  ON_CALL(*mock_delegate_ptr,
+          CreateMetricReportQueue(EventType::kDevice, Destination::EVENT_METRIC,
+                                  Priority::SLOW_BATCH))
       .WillByDefault(Return(ByMove(std::move(event_queue_))));
   ON_CALL(*mock_delegate_ptr,
           CreatePeriodicEventCollector(

@@ -90,7 +90,7 @@ class ProfileStorageObserver : public ProfileAttributesStorage::Observer {
 };
 
 ProfileStorageObserver::ProfileStorageObserver() {
-  if (!::vivaldi::IsVivaldiRunning() && !::vivaldi::IsDebuggingVivaldi())
+  if (!::vivaldi::IsVivaldiRunning())
     return;
   ProfileAttributesStorage& storage =
       g_browser_process->profile_manager()->GetProfileAttributesStorage();

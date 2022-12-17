@@ -57,6 +57,8 @@ class UkmPageLoadMetricsObserver
   ObservePolicy OnFencedFramesStart(
       content::NavigationHandle* navigation_handle,
       const GURL& currently_committed_url) override;
+  ObservePolicy OnPrerenderStart(content::NavigationHandle* navigation_handle,
+                                 const GURL& currently_committed_url) override;
 
   ObservePolicy OnRedirect(
       content::NavigationHandle* navigation_handle) override;
@@ -251,6 +253,9 @@ class UkmPageLoadMetricsObserver
 
   // True if the page main resource was served from disk cache.
   bool was_cached_ = false;
+
+  // True if the navigation is a reload after the page has been discarded.
+  bool was_discarded_ = false;
 
   // Whether the first URL in the redirect chain matches the default search
   // engine template.

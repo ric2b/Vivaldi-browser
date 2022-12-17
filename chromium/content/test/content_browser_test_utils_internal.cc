@@ -23,7 +23,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/browser/prerender/prerender_host_registry.h"
+#include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -441,8 +441,9 @@ Shell* OpenPopup(const ToRenderFrameHost& opener,
   observer.Wait();
 
   Shell* new_shell = new_shell_observer.GetShell();
-  EXPECT_EQ(url,
-            new_shell->web_contents()->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(
+      url,
+      new_shell->web_contents()->GetPrimaryMainFrame()->GetLastCommittedURL());
   return new_shell_observer.GetShell();
 }
 
@@ -756,6 +757,9 @@ void DevToolsInspectorLogWatcher::FlushAndStopWatching() {
   run_loop_disable_log_.Run();
 }
 
+FrameNavigateParamsCapturer::FrameNavigateParamsCapturer(WebContents* contents)
+    : WebContentsObserver(contents) {}
+
 FrameNavigateParamsCapturer::FrameNavigateParamsCapturer(FrameTreeNode* node)
     : WebContentsObserver(
           WebContents::FromRenderFrameHost(node->current_frame_host())),
@@ -766,7 +770,9 @@ FrameNavigateParamsCapturer::~FrameNavigateParamsCapturer() = default;
 void FrameNavigateParamsCapturer::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
   if (!navigation_handle->HasCommitted() ||
-      navigation_handle->GetFrameTreeNodeId() != frame_tree_node_id_ ||
+      (frame_tree_node_id_.has_value() &&
+       navigation_handle->GetFrameTreeNodeId() !=
+           frame_tree_node_id_.value()) ||
       navigations_remaining_ == 0) {
     return;
   }

@@ -23,10 +23,19 @@ struct MediaLogRecord {
   MediaLogRecord& operator=(const MediaLogRecord& event) {
     id = event.id;
     type = event.type;
-    std::unique_ptr<base::DictionaryValue> event_copy(event.params.DeepCopy());
-    params.Swap(event_copy.get());
+    params.Swap(base::DictionaryValue::From(
+                    base::Value::ToUniquePtrValue(event.params.Clone()))
+                    .get());
     time = event.time;
     return *this;
+  }
+
+  bool operator==(const MediaLogRecord& other) const {
+    return id == other.id && type == other.type && params == other.params &&
+           time == other.time;
+  }
+  bool operator!=(const MediaLogRecord& other) const {
+    return !(*this == other);
   }
 
   enum class Type {

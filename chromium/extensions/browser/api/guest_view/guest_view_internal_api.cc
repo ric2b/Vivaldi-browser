@@ -69,8 +69,7 @@ ExtensionFunction::ResponseAction GuestViewInternalCreateGuestFunction::Run() {
   }
 
   guest_view_manager->CreateGuest(view_type, sender_web_contents,
-                                  base::Value::AsDictionaryValue(create_params),
-                                  std::move(callback));
+                                  create_params.GetDict(), std::move(callback));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
 

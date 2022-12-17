@@ -283,37 +283,37 @@ LoadStateWithParam URLRequest::GetLoadState() const {
 }
 
 base::Value URLRequest::GetStateAsValue() const {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetStringKey("url", original_url().possibly_invalid_spec());
+  base::Value::Dict dict;
+  dict.Set("url", original_url().possibly_invalid_spec());
 
   if (url_chain_.size() > 1) {
     base::Value list(base::Value::Type::LIST);
     for (const GURL& url : url_chain_) {
       list.Append(url.possibly_invalid_spec());
     }
-    dict.SetKey("url_chain", std::move(list));
+    dict.Set("url_chain", std::move(list));
   }
 
-  dict.SetIntKey("load_flags", load_flags_);
+  dict.Set("load_flags", load_flags_);
 
   LoadStateWithParam load_state = GetLoadState();
-  dict.SetIntKey("load_state", load_state.state);
+  dict.Set("load_state", load_state.state);
   if (!load_state.param.empty())
-    dict.SetStringKey("load_state_param", load_state.param);
+    dict.Set("load_state_param", load_state.param);
   if (!blocked_by_.empty())
-    dict.SetStringKey("delegate_blocked_by", blocked_by_);
+    dict.Set("delegate_blocked_by", blocked_by_);
 
-  dict.SetStringKey("method", method_);
-  dict.SetStringKey("network_isolation_key",
-                    isolation_info_.network_isolation_key().ToDebugString());
-  dict.SetBoolKey("has_upload", has_upload());
-  dict.SetBoolKey("is_pending", is_pending_);
+  dict.Set("method", method_);
+  dict.Set("network_isolation_key",
+           isolation_info_.network_isolation_key().ToDebugString());
+  dict.Set("has_upload", has_upload());
+  dict.Set("is_pending", is_pending_);
 
-  dict.SetIntKey("traffic_annotation", traffic_annotation_.unique_id_hash_code);
+  dict.Set("traffic_annotation", traffic_annotation_.unique_id_hash_code);
 
   if (status_ != OK)
-    dict.SetIntKey("net_error", status_);
-  return dict;
+    dict.Set("net_error", status_);
+  return base::Value(std::move(dict));
 }
 
 void URLRequest::LogBlockedBy(const char* blocked_by) {
@@ -808,6 +808,7 @@ int URLRequest::NotifyConnected(const TransportInfo& info,
 
 void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
                                         bool* defer_redirect) {
+  DCHECK_EQ(OK, status_);
   is_redirecting_ = true;
   OnCallToDelegate(NetLogEventType::URL_REQUEST_DELEGATE_RECEIVED_REDIRECT);
   delegate_->OnReceivedRedirect(this, redirect_info, defer_redirect);
@@ -1019,6 +1020,7 @@ void URLRequest::SetPriority(RequestPriority priority) {
 
 void URLRequest::NotifyAuthRequired(
     std::unique_ptr<AuthChallengeInfo> auth_info) {
+  DCHECK_EQ(OK, status_);
   DCHECK(auth_info);
   // Check that there are no callbacks to already failed or cancelled requests.
   DCHECK(!failed());
@@ -1047,9 +1049,7 @@ bool URLRequest::CanSetCookie(const net::CanonicalCookie& cookie,
   DCHECK(!(load_flags_ & LOAD_DO_NOT_SAVE_COOKIES));
   bool can_set_cookies = g_default_can_use_cookies;
   if (network_delegate()) {
-    can_set_cookies =
-        network_delegate()->CanSetCookie(*this, cookie, options,
-                                         /*allowed_from_caller=*/true);
+    can_set_cookies = network_delegate()->CanSetCookie(*this, cookie, options);
   }
   if (!can_set_cookies)
     net_log_.AddEvent(NetLogEventType::COOKIE_SET_BLOCKED_BY_NETWORK_DELEGATE);
@@ -1080,6 +1080,10 @@ void URLRequest::NotifyReadCompleted(int bytes_read) {
 }
 
 void URLRequest::OnHeadersComplete() {
+  // The URLRequest status should still be IO_PENDING, which it was set to
+  // before the URLRequestJob was started.  On error or cancellation, this
+  // method should not be called.
+  DCHECK_EQ(ERR_IO_PENDING, status_);
   set_status(OK);
   // Cache load timing information now, as information will be lost once the
   // socket is closed and the ClientSocketHandle is Reset, which will happen

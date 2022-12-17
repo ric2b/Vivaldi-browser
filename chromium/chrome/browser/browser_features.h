@@ -25,6 +25,8 @@ extern const base::Feature kColorProviderRedirectionForThemeProvider;
 extern const base::Feature kDestroyProfileOnBrowserClose;
 extern const base::Feature kDestroySystemProfiles;
 
+extern const base::Feature kDevToolsTabTarget;
+
 extern const base::Feature kNukeProfileBeforeCreateMultiAsync;
 
 extern const base::Feature kPromoBrowserCommands;
@@ -67,6 +69,10 @@ extern const base::Feature kObserverBasedPostProfileInit;
 extern const base::Feature kRestartNetworkServiceUnsandboxedForFailedLaunch;
 
 extern const base::Feature kKeyPinningComponentUpdater;
+
+#if BUILDFLAG(IS_WIN)
+extern const base::Feature kAppBoundEncryptionMetrics;
+#endif
 
 }  // namespace features
 

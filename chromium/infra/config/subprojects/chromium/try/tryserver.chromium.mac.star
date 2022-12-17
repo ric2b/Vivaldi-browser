@@ -27,7 +27,7 @@ def ios_builder(*, name, **kwargs):
     kwargs.setdefault("builderless", False)
     kwargs.setdefault("os", os.MAC_DEFAULT)
     kwargs.setdefault("ssd", None)
-    kwargs.setdefault("xcode", xcode.x13main)
+    kwargs.setdefault("xcode", xcode.x14main)
     return try_.builder(name = name, **kwargs)
 
 consoles.list_view(
@@ -48,9 +48,10 @@ try_.builder(
 try_.builder(
     name = "mac-osxbeta-rel",
     mirrors = [
-        "ci/Mac Builder",
+        "ci/Mac Builder (dbg)",
         "ci/mac-osxbeta-rel",
     ],
+    builderless = False,
     os = os.MAC_DEFAULT,
 )
 
@@ -59,7 +60,7 @@ try_.builder(
     name = "mac-inverse-fieldtrials-fyi-rel",
     mirrors = [
         "ci/Mac Builder",
-        "ci/Mac11 Tests",
+        "ci/Mac12 Tests",
         "ci/GPU Mac Builder",
         "ci/Mac Release (Intel)",
         "ci/Mac Retina Release (AMD)",
@@ -68,7 +69,7 @@ try_.builder(
 )
 
 try_.builder(
-    name = "mac-fieldtrial-fyi-rel",
+    name = "mac-fieldtrial-rel",
     os = os.MAC_DEFAULT,
     mirrors = ["ci/mac-fieldtrial-rel"],
 )
@@ -79,19 +80,14 @@ try_.builder(
     builderless = False,
 )
 
-try_.builder(
-    name = "mac-clang-tidy-rel",
-    executable = "recipe:tricium_clang_tidy_wrapper",
-    goma_jobs = goma.jobs.J150,
-)
-
 try_.orchestrator_builder(
     name = "mac-rel",
     compilator = "mac-rel-compilator",
+    check_for_flakiness = True,
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
     mirrors = [
         "ci/Mac Builder",
-        "ci/Mac11 Tests",
+        "ci/Mac12 Tests",
         "ci/GPU Mac Builder",
         "ci/Mac Release (Intel)",
         "ci/Mac Retina Release (AMD)",
@@ -106,23 +102,39 @@ try_.orchestrator_builder(
     tryjob = try_.job(),
     experiments = {
         "remove_src_checkout_experiment": 100,
+        "enable_weetbix_queries": 100,
     },
+    use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
     name = "mac-rel-compilator",
+    check_for_flakiness = True,
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
     main_list_view = "try",
     os = os.MAC_DEFAULT,
+    experiments = {
+        "luci.buildbucket.omit_python2": 100,
+    },
 )
 
-try_.orchestrator_builder(
+try_.builder(
     name = "mac11-arm64-rel",
+    builderless = True,
     check_for_flakiness = True,
-    compilator = "mac11-arm64-rel-compilator",
     mirrors = [
         "ci/mac-arm64-rel",
         "ci/mac11-arm64-rel-tests",
+    ],
+)
+
+try_.orchestrator_builder(
+    name = "mac12-arm64-rel",
+    check_for_flakiness = True,
+    compilator = "mac12-arm64-rel-compilator",
+    mirrors = [
+        "ci/mac-arm64-rel",
+        "ci/mac12-arm64-rel-tests",
     ],
     main_list_view = "try",
     tryjob = try_.job(
@@ -131,12 +143,15 @@ try_.orchestrator_builder(
 )
 
 try_.compilator_builder(
-    name = "mac11-arm64-rel-compilator",
+    name = "mac12-arm64-rel-compilator",
     check_for_flakiness = True,
     main_list_view = "try",
-    os = os.MAC_DEFAULT,
+    os = os.MAC_12,
     # TODO (crbug.com/1245171): Revert when root issue is fixed
     grace_period = 4 * time.minute,
+    experiments = {
+        "luci.buildbucket.omit_python2": 100,
+    },
 )
 
 # NOTE: the following trybots aren't sensitive to Mac version on which
@@ -173,6 +188,14 @@ try_.builder(
         "ci/Mac11 Tests",
     ],
     builderless = False,
+)
+
+try_.builder(
+    name = "mac12-tests",
+    mirrors = [
+        "ci/Mac Builder",
+        "ci/Mac12 Tests",
+    ],
 )
 
 try_.builder(
@@ -222,7 +245,7 @@ try_.builder(
     name = "mac_chromium_dbg_ng",
     mirrors = [
         "ci/Mac Builder (dbg)",
-        "ci/Mac11 Tests (dbg)",
+        "ci/Mac12 Tests (dbg)",
     ],
 )
 
@@ -251,6 +274,9 @@ ios_builder(
 
 ios_builder(
     name = "ios-catalyst",
+
+    # TODO(crbug.com/1350126): Move ios-catalyst to xcode.x14main when fixed.
+    xcode = xcode.x13main,
     mirrors = [
         "ci/ios-catalyst",
     ],
@@ -264,13 +290,7 @@ ios_builder(
 )
 
 ios_builder(
-    name = "ios-clang-tidy-rel",
-    executable = "recipe:tricium_clang_tidy_wrapper",
-    goma_jobs = goma.jobs.J150,
-)
-
-ios_builder(
-    name = "ios-fieldtrial-fyi-rel",
+    name = "ios-fieldtrial-rel",
     builderless = True,
     mirrors = ["ci/ios-fieldtrial-rel"],
 )
@@ -301,6 +321,9 @@ ios_builder(
     coverage_exclude_sources = "ios_test_files_and_test_utils",
     coverage_test_types = ["overall", "unit"],
     tryjob = try_.job(),
+    experiments = {
+        "enable_weetbix_queries": 100,
+    },
 )
 
 ios_builder(
@@ -355,7 +378,6 @@ ios_builder(
     mirrors = [
         "ci/ios-simulator-noncq",
     ],
-    xcode = xcode.x13main,
     tryjob = try_.job(
         location_regexp = [
             ".+/[+]/third_party/crashpad/crashpad/.+",
@@ -369,7 +391,6 @@ ios_builder(
 
 ios_builder(
     name = "ios15-sdk-simulator",
-    xcode = xcode.x13betabots,
     os = os.MAC_12,
 )
 

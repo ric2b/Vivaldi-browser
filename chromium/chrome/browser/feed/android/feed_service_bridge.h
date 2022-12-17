@@ -20,10 +20,12 @@ class FeedServiceBridge {
   static std::string GetLanguageTag();
   static DisplayMetrics GetDisplayMetrics();
   static bool IsAutoplayEnabled();
+  static TabGroupEnabledState GetTabGroupEnabledState();
   static void ClearAll();
   static bool IsEnabled();
   static void PrefetchImage(const GURL& url);
   static uint64_t GetReliabilityLoggingId();
+  static bool IsSignedIn();
 };
 
 class JavaUnreadContentObserver : public UnreadContentObserver {

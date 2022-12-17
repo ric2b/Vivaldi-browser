@@ -7,6 +7,7 @@
 
 #include "ash/public/cpp/ash_public_export.h"
 #include "ash/public/cpp/in_session_auth_dialog_client.h"
+#include "ash/public/cpp/in_session_auth_token_provider.h"
 #include "base/unguessable_token.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -39,11 +40,15 @@ class ASH_PUBLIC_EXPORT InSessionAuthDialogController {
   // Summons a native UI dialog that authenticates the user, providing a
   // token, timeout and status in return.
   // `reason`: Indicates security context.
-  // `prompt`: UI customization, the string shown to the user (e.g, in
-  // the context of password manager: "please authenticate to see
-  // saved passwords").
   virtual void ShowAuthDialog(Reason reason,
                               OnAuthComplete on_auth_complete) = 0;
+
+  // Must be called with a non null auth_token_provider prior to calling
+  // `ShowAuthDialog`.
+  // Injects a specific implementation of `InSessionAuthTokenProvider`
+  // for generating an `AuthToken` after successful authentication.
+  virtual void SetTokenProvider(
+      InSessionAuthTokenProvider* auth_token_provider) = 0;
 };
 
 }  // namespace ash

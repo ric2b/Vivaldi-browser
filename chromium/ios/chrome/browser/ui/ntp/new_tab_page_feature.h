@@ -14,9 +14,6 @@ extern const base::Feature kEnableDiscoverFeedPreview;
 // Feature flag to show ghost cards when refreshing the discover feed.
 extern const base::Feature kDiscoverFeedGhostCardsEnabled;
 
-// Feature flag to enable shorter cache so that more ghost cards appear.
-extern const base::Feature kEnableDiscoverFeedShorterCache;
-
 // Feature flag to enable static resource serving for the Discover feed.
 extern const base::Feature kEnableDiscoverFeedStaticResourceServing;
 
@@ -28,6 +25,10 @@ extern const base::Feature kEnableDiscoverFeedStaticResourceServing;
 
 // Feature flag to enable the sync promo on top of the discover feed.
 extern const base::Feature kEnableDiscoverFeedTopSyncPromo;
+
+// Flag that disables the feed for users on iOS 14.
+// TODO(crbug.com/1369142): Remove this when the issue is fixed.
+extern const base::Feature kDisableFeediOS14;
 
 // A parameter to indicate whether Reconstructed Templates is enabled for static
 // resource serving.
@@ -57,17 +58,14 @@ extern const base::Feature kEnableFeedAblation;
 // Whether the Discover feed content preview is shown in the context menu.
 bool IsDiscoverFeedPreviewEnabled();
 
-// Whether the Discover feed appflows are enabled.
-bool IsDiscoverFeedAppFlowsEnabled();
-
-// Whether the Discover feed shorter cache is enabled.
-bool IsDiscoverFeedShorterCacheEnabled();
-
 // Whether the NTP view hierarchy repair is enabled.
 bool IsNTPViewHierarchyRepairEnabled();
 
 // Whether the Discover feed top sync promotion is enabled.
 bool IsDiscoverFeedTopSyncPromoEnabled();
+
+// Whether the feed top sync promotion is compact or not.
+bool IsDiscoverFeedTopSyncPromoCompact();
 
 // Whether the Discover feed ablation experiment is enabled.
 bool IsFeedAblationEnabled();

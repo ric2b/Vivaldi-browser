@@ -39,6 +39,12 @@ constexpr char kTabsTypeName[] = "tabs";
 constexpr char kWifiConfigurationsTypeName[] = "wifiConfigurations";
 
 UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
+  static_assert(40 + 1 /* notes */ == syncer::GetNumModelTypes(),
+                "Almost always when adding a new ModelType, you must tie it to "
+                "a UserSelectableType below (new or existing) so the user can "
+                "disable syncing of that data. Today you must also update the "
+                "UI code yourself; crbug.com/1067282 and related bugs will "
+                "improve that");
   // UserSelectableTypeInfo::type_name is used in js code and shouldn't be
   // changed without updating js part.
   switch (type) {
@@ -51,6 +57,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       if (!chromeos::features::IsSyncSettingsCategorizationEnabled()) {
         // SyncSettingsCategorization makes Printers a separate OS setting.
         model_types.Put(PRINTERS);
+        model_types.Put(PRINTERS_AUTHORIZATION_SERVERS);
 
         // Workspace desk template is an OS-only feature. When
         // SyncSettingsCategorization is disabled, WORKSPACE_DESK should be
@@ -130,10 +137,10 @@ UserSelectableTypeInfo GetUserSelectableOsTypeInfo(UserSelectableOsType type) {
               APPS,
               {APP_LIST, APPS, APP_SETTINGS, ARC_PACKAGE, WEB_APPS}};
     case UserSelectableOsType::kOsPreferences:
-      return {
-          kOsPreferencesTypeName,
-          OS_PREFERENCES,
-          {OS_PREFERENCES, OS_PRIORITY_PREFERENCES, PRINTERS, WORKSPACE_DESK}};
+      return {kOsPreferencesTypeName,
+              OS_PREFERENCES,
+              {OS_PREFERENCES, OS_PRIORITY_PREFERENCES, PRINTERS,
+               PRINTERS_AUTHORIZATION_SERVERS, WORKSPACE_DESK}};
     case UserSelectableOsType::kOsWifiConfigurations:
       return {kOsWifiConfigurationsTypeName,
               WIFI_CONFIGURATIONS,

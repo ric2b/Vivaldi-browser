@@ -16,9 +16,9 @@
 #include "net/cert/crl_set.h"
 #include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/internal/system_trust_store.h"
-#include "net/cert/internal/trust_store.h"
-#include "net/cert/internal/trust_store_collection.h"
-#include "net/cert/internal/trust_store_in_memory.h"
+#include "net/cert/pki/trust_store.h"
+#include "net/cert/pki/trust_store_collection.h"
+#include "net/cert/pki/trust_store_in_memory.h"
 #include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/der/encode_values.h"
 #include "net/log/net_log_with_source.h"
@@ -30,6 +30,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/gtest_util.h"
+#include "net/test/revocation_builder.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_test_util.h"
@@ -63,6 +64,31 @@ std::unique_ptr<test_server::HttpResponse> FailRequestAndFailTest(
   return response;
 }
 
+std::unique_ptr<test_server::HttpResponse> ServeResponse(
+    HttpStatusCode status_code,
+    const std::string& content_type,
+    const std::string& content,
+    const test_server::HttpRequest& request) {
+  auto http_response = std::make_unique<test_server::BasicHttpResponse>();
+
+  http_response->set_code(status_code);
+  http_response->set_content_type(content_type);
+  http_response->set_content(content);
+  return http_response;
+}
+
+std::string MakeRandomHexString(size_t num_bytes) {
+  std::vector<char> rand_bytes;
+  rand_bytes.resize(num_bytes);
+
+  base::RandBytes(rand_bytes.data(), rand_bytes.size());
+  return base::HexEncode(rand_bytes.data(), rand_bytes.size());
+}
+
+static std::string MakeRandomPath(base::StringPiece suffix) {
+  return "/" + MakeRandomHexString(12) + std::string(suffix);
+}
+
 int VerifyOnWorkerThread(const scoped_refptr<CertVerifyProc>& verify_proc,
                          scoped_refptr<X509Certificate> cert,
                          const std::string& hostname,
@@ -91,10 +117,14 @@ class MockSystemTrustStore : public SystemTrustStore {
   bool UsesSystemTrustStore() const override { return false; }
 
   bool IsKnownRoot(const ParsedCertificate* trust_anchor) const override {
-    return false;
+    return mock_is_known_root_;
   }
 
   void AddTrustStore(TrustStore* store) { trust_store_.AddTrustStore(store); }
+
+  void SetMockIsKnownRoot(bool is_known_root) {
+    mock_is_known_root_ = is_known_root;
+  }
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   int64_t chrome_root_store_version() override { return 0; }
@@ -102,6 +132,7 @@ class MockSystemTrustStore : public SystemTrustStore {
 
  private:
   TrustStoreCollection trust_store_;
+  bool mock_is_known_root_ = false;
 };
 
 class BlockingTrustStore : public TrustStore {
@@ -164,6 +195,18 @@ class CertVerifyProcBuiltinTest : public ::testing::Test {
   base::test::TaskEnvironment& task_environment() { return task_environment_; }
 
   void CreateChain(std::unique_ptr<CertBuilder>* out_leaf,
+                   std::unique_ptr<CertBuilder>* out_root) {
+    CertBuilder::CreateSimpleChain(out_leaf, out_root);
+    ASSERT_TRUE(*out_leaf && *out_root);
+    // This test uses MOCK_TIME, so need to set the cert validity dates based
+    // on whatever the mock time happens to start at.
+    base::Time not_before = base::Time::Now() - base::Days(1);
+    base::Time not_after = base::Time::Now() + base::Days(10);
+    (*out_leaf)->SetValidity(not_before, not_after);
+    (*out_root)->SetValidity(not_before, not_after);
+  }
+
+  void CreateChain(std::unique_ptr<CertBuilder>* out_leaf,
                    std::unique_ptr<CertBuilder>* out_intermediate,
                    std::unique_ptr<CertBuilder>* out_root) {
     CertBuilder::CreateSimpleChain(out_leaf, out_intermediate, out_root);
@@ -177,8 +220,30 @@ class CertVerifyProcBuiltinTest : public ::testing::Test {
     (*out_root)->SetValidity(not_before, not_after);
   }
 
+  // Creates a CRL issued and signed by |crl_issuer|, marking |revoked_serials|
+  // as revoked, and registers it to be served by the test server.
+  // Returns the full URL to retrieve the CRL from the test server.
+  GURL CreateAndServeCrl(
+      EmbeddedTestServer* test_server,
+      CertBuilder* crl_issuer,
+      const std::vector<uint64_t>& revoked_serials,
+      absl::optional<SignatureAlgorithm> signature_algorithm = absl::nullopt) {
+    std::string crl = BuildCrl(crl_issuer->GetSubject(), crl_issuer->GetKey(),
+                               revoked_serials, signature_algorithm);
+    std::string crl_path = MakeRandomPath(".crl");
+    test_server->RegisterRequestHandler(
+        base::BindRepeating(&test_server::HandlePrefixedRequest, crl_path,
+                            base::BindRepeating(ServeResponse, HTTP_OK,
+                                                "application/pkix-crl", crl)));
+    return test_server->GetURL(crl_path);
+  }
+
   void AddTrustStore(TrustStore* store) {
     mock_system_trust_store_->AddTrustStore(store);
+  }
+
+  void SetMockIsKnownRoot(bool is_known_root) {
+    mock_system_trust_store_->SetMockIsKnownRoot(is_known_root);
   }
 
  private:
@@ -211,6 +276,56 @@ TEST_F(CertVerifyProcBuiltinTest, SimpleSuccess) {
 
   int error = callback.WaitForResult();
   EXPECT_THAT(error, IsOk());
+}
+
+TEST_F(CertVerifyProcBuiltinTest, CRLNotCheckedForKnownRoots) {
+  std::unique_ptr<CertBuilder> leaf, root;
+  CreateChain(&leaf, &root);
+  ASSERT_TRUE(leaf && root);
+
+  EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTP);
+  ASSERT_TRUE(test_server.InitializeAndListen());
+
+  // CRL that marks leaf as revoked.
+  leaf->SetCrlDistributionPointUrl(
+      CreateAndServeCrl(&test_server, root.get(), {leaf->GetSerialNumber()}));
+
+  test_server.StartAcceptingConnections();
+
+  scoped_refptr<X509Certificate> chain = leaf->GetX509CertificateChain();
+  ASSERT_TRUE(chain.get());
+
+  NetLogSource verify_net_log_source;
+
+  {
+    CertVerifyResult verify_result;
+    TestCompletionCallback verify_callback;
+    Verify(chain.get(), "www.example.com",
+           CertVerifyProc::VERIFY_REV_CHECKING_ENABLED,
+           /*additional_trust_anchors=*/{root->GetX509Certificate()},
+           &verify_result, &verify_net_log_source, verify_callback.callback());
+
+    int error = verify_callback.WaitForResult();
+    EXPECT_THAT(error, IsError(ERR_CERT_REVOKED));
+    EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
+  }
+
+  {
+    // Pretend the root is a known root.
+    SetMockIsKnownRoot(true);
+    CertVerifyResult verify_result;
+    TestCompletionCallback verify_callback;
+    Verify(chain.get(), "www.example.com",
+           CertVerifyProc::VERIFY_REV_CHECKING_ENABLED,
+           /*additional_trust_anchors=*/{root->GetX509Certificate()},
+           &verify_result, &verify_net_log_source, verify_callback.callback());
+
+    int error = verify_callback.WaitForResult();
+    // CRLs are not checked for chains issued by known roots, so verification
+    // should be successful.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
+  }
 }
 
 // Tests that if the verification deadline is exceeded during revocation
@@ -360,9 +475,9 @@ TEST_F(CertVerifyProcBuiltinTest, RevocationCheckDeadlineOCSP) {
 }
 
 #if defined(PLATFORM_USES_CHROMIUM_EV_METADATA)
-// Tests that if the verification deadline is exceeded during EV revocation
-// checking, the certificate is verified as non-EV.
-TEST_F(CertVerifyProcBuiltinTest, EVRevocationCheckDeadline) {
+// Tests that if we're doing EV verification, that no OCSP revocation checking
+// is done.
+TEST_F(CertVerifyProcBuiltinTest, EVNoOCSPRevocationChecks) {
   std::unique_ptr<CertBuilder> leaf, intermediate, root;
   CreateChain(&leaf, &intermediate, &root);
   ASSERT_TRUE(leaf && intermediate && root);
@@ -372,31 +487,20 @@ TEST_F(CertVerifyProcBuiltinTest, EVRevocationCheckDeadline) {
   leaf->SetCertificatePolicies({kEVTestCertPolicy});
   intermediate->SetCertificatePolicies({kEVTestCertPolicy});
 
-  const base::TimeDelta timeout_increment =
-      CertNetFetcherURLRequest::GetDefaultTimeoutForTesting() +
-      base::Milliseconds(1);
-  const int expected_request_count =
-      base::ClampFloor(GetCertVerifyProcBuiltinTimeLimitForTesting() /
-                       timeout_increment) +
-      1;
-
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTP);
   ASSERT_TRUE(test_server.InitializeAndListen());
 
-  // Set up the test intermediate to have enough OCSP urls that if all the
-  // requests hang the deadline will be exceeded.
+  // Set up the test intermediate to have an OCSP url that fails the test if
+  // called.
   std::vector<GURL> ocsp_urls;
-  std::vector<base::RunLoop> runloops(expected_request_count);
-  for (int i = 0; i < expected_request_count; ++i) {
-    std::string path = base::StringPrintf("/hung/%i", i);
-    ocsp_urls.emplace_back(test_server.GetURL(path));
-    test_server.RegisterRequestHandler(
-        base::BindRepeating(&test_server::HandlePrefixedRequest, path,
-                            base::BindRepeating(&HangRequestAndCallback,
-                                                runloops[i].QuitClosure())));
-  }
+  std::string path = "/failtest";
+  ocsp_urls.emplace_back(test_server.GetURL(path));
+  test_server.RegisterRequestHandler(base::BindRepeating(
+      &test_server::HandlePrefixedRequest, path,
+      base::BindRepeating(FailRequestAndFailTest,
+                          "no OCSP requests should be sent",
+                          base::SequencedTaskRunnerHandle::Get())));
   intermediate->SetCaIssuersAndOCSPUrls({}, ocsp_urls);
-
   test_server.StartAcceptingConnections();
 
   // Consider the root of the test chain a valid EV root for the test policy.
@@ -417,22 +521,12 @@ TEST_F(CertVerifyProcBuiltinTest, EVRevocationCheckDeadline) {
          /*additional_trust_anchors=*/{root->GetX509Certificate()},
          &verify_result, &verify_net_log_source, verify_callback.callback());
 
-  for (int i = 0; i < expected_request_count; i++) {
-    // Wait for request #|i| to be made.
-    runloops[i].Run();
-    // Advance virtual time to cause the timeout task to become runnable.
-    task_environment().AdvanceClock(timeout_increment);
-  }
-
-  // Once |expected_request_count| requests have been made and timed out, the
-  // overall deadline should be reached, causing the EV verification attempt to
-  // fail.
+  // EV doesn't do revocation checking, therefore verification result
+  // should be OK and EV.
   int error = verify_callback.WaitForResult();
-  // EV uses soft-fail revocation checking, therefore verification result
-  // should be OK but not EV.
   EXPECT_THAT(error, IsOk());
-  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_EV);
-  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_EV);
+  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 
   auto events = net_log_observer.GetEntriesForSource(verify_net_log_source);
 
@@ -443,35 +537,6 @@ TEST_F(CertVerifyProcBuiltinTest, EVRevocationCheckDeadline) {
   EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
   ASSERT_TRUE(event->params.is_dict());
   EXPECT_EQ(true, event->params.FindBoolKey("is_ev_attempt"));
-
-  event = std::find_if(++event, events.end(), [](const auto& e) {
-    return e.type == NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT;
-  });
-  ASSERT_NE(event, events.end());
-  EXPECT_EQ(net::NetLogEventPhase::NONE, event->phase);
-  ASSERT_TRUE(event->params.is_dict());
-  const std::string* errors = event->params.FindStringKey("errors");
-  ASSERT_TRUE(errors);
-  EXPECT_EQ("----- Certificate i=1 (CN=" +
-                intermediate->GetX509Certificate()->subject().common_name +
-                ") -----\nERROR: Unable to check revocation\n\n",
-            *errors);
-
-  event = std::find_if(++event, events.end(), [](const auto& e) {
-    return e.type == NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT;
-  });
-  ASSERT_NE(event, events.end());
-  EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
-  ASSERT_TRUE(event->params.is_dict());
-  EXPECT_EQ(false, event->params.FindBoolKey("has_valid_path"));
-
-  event = std::find_if(++event, events.end(), [](const auto& e) {
-    return e.type == NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT;
-  });
-  ASSERT_NE(event, events.end());
-  EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
-  ASSERT_TRUE(event->params.is_dict());
-  EXPECT_EQ(absl::nullopt, event->params.FindBoolKey("is_ev_attempt"));
 
   event = std::find_if(++event, events.end(), [](const auto& e) {
     return e.type == NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT;
@@ -571,6 +636,112 @@ TEST_F(CertVerifyProcBuiltinTest, DebugData) {
   EXPECT_EQ(
       0,
       (time - der_verification_time_converted_back_to_base_time).InSeconds());
+}
+
+namespace {
+
+// Returns a TLV to use as an invalid signature algorithm when building a cert.
+// This is a SEQUENCE so that it will pass the ParseCertificate code
+// and fail inside ParseSignatureAlgorithm.
+// SEQUENCE {
+//   INTEGER { 42 }
+// }
+std::string InvalidSignatureAlgorithmTLV() {
+  const uint8_t kInvalidSignatureAlgorithmTLV[] = {0x30, 0x03, 0x02, 0x01,
+                                                   0x2a};
+  return std::string(std::begin(kInvalidSignatureAlgorithmTLV),
+                     std::end(kInvalidSignatureAlgorithmTLV));
+}
+
+}  // namespace
+
+TEST_F(CertVerifyProcBuiltinTest,
+       UnparsableMismatchedTBSSignatureAlgorithmTarget) {
+  std::unique_ptr<CertBuilder> leaf, root;
+  CreateChain(&leaf, &root);
+  ASSERT_TRUE(leaf && root);
+  // Set only the tbsCertificate signature to an invalid value.
+  leaf->SetTBSSignatureAlgorithmTLV(InvalidSignatureAlgorithmTLV());
+
+  // Trust the root and build a chain to verify.
+  ScopedTestRoot scoped_root(root->GetX509Certificate().get());
+  scoped_refptr<X509Certificate> chain = leaf->GetX509CertificateChain();
+  ASSERT_TRUE(chain.get());
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(chain.get(), "www.example.com", flags, CertificateList(),
+         &verify_result, &verify_net_log_source, callback.callback());
+  int error = callback.WaitForResult();
+  // Invalid signature algorithm in the leaf cert should result in the
+  // cert being invalid.
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_INVALID);
+  EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+}
+
+TEST_F(CertVerifyProcBuiltinTest,
+       UnparsableMismatchedTBSSignatureAlgorithmIntermediate) {
+  std::unique_ptr<CertBuilder> leaf, intermediate, root;
+  CreateChain(&leaf, &intermediate, &root);
+  ASSERT_TRUE(leaf && intermediate && root);
+  // Set only the tbsCertificate signature to an invalid value.
+  intermediate->SetTBSSignatureAlgorithmTLV(InvalidSignatureAlgorithmTLV());
+
+  // Trust the root and build a chain to verify that includes the intermediate.
+  ScopedTestRoot scoped_root(root->GetX509Certificate().get());
+  scoped_refptr<X509Certificate> chain = leaf->GetX509CertificateChain();
+  ASSERT_TRUE(chain.get());
+  ASSERT_EQ(chain->intermediate_buffers().size(), 1U);
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(chain.get(), "www.example.com", flags, CertificateList(),
+         &verify_result, &verify_net_log_source, callback.callback());
+  int error = callback.WaitForResult();
+  // Invalid signature algorithm in the intermediate cert should result in the
+  // cert being invalid.
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_INVALID);
+  EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+}
+
+// This test is disabled on Android as adding the invalid root through
+// ScopedTestRoot causes it to be parsed by the Java X509 code which barfs. We
+// could re-enable if Chrome on Android has fully switched to the
+// builtin-verifier and ScopedTestRoot no longer has Android-specific code.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_UnparsableMismatchedTBSSignatureAlgorithmRoot \
+  DISABLED_UnparsableMismatchedTBSSignatureAlgorithmRoot
+#else
+#define MAYBE_UnparsableMismatchedTBSSignatureAlgorithmRoot \
+  UnparsableMismatchedTBSSignatureAlgorithmRoot
+#endif
+TEST_F(CertVerifyProcBuiltinTest,
+       MAYBE_UnparsableMismatchedTBSSignatureAlgorithmRoot) {
+  std::unique_ptr<CertBuilder> leaf, intermediate, root;
+  CreateChain(&leaf, &intermediate, &root);
+  ASSERT_TRUE(leaf && intermediate && root);
+  // Set only the tbsCertificate signature to an invalid value.
+  root->SetTBSSignatureAlgorithmTLV(InvalidSignatureAlgorithmTLV());
+
+  // Trust the root and build a chain to verify that includes the intermediate.
+  ScopedTestRoot scoped_root(root->GetX509Certificate().get());
+  scoped_refptr<X509Certificate> chain = leaf->GetX509CertificateChain();
+  ASSERT_TRUE(chain.get());
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(chain.get(), "www.example.com", flags, CertificateList(),
+         &verify_result, &verify_net_log_source, callback.callback());
+  int error = callback.WaitForResult();
+  // Invalid signature algorithm in the root cert should have no effect on
+  // verification.
+  EXPECT_THAT(error, IsOk());
 }
 
 }  // namespace net

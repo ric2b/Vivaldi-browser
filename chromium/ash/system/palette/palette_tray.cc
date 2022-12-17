@@ -40,6 +40,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
@@ -107,7 +108,11 @@ class BatteryView : public views::View {
     label_->SetEnabledColor(stylus_battery_delegate_.GetColorForBatteryLevel());
     TrayPopupUtils::SetLabelFontList(label_,
                                      TrayPopupUtils::FontStyle::kSmallTitle);
+  }
 
+  // views::View:
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
     stylus_battery_delegate_.SetBatteryUpdateCallback(base::BindRepeating(
         &BatteryView::OnBatteryLevelUpdated, base::Unretained(this)));
 
@@ -126,7 +131,8 @@ class BatteryView : public views::View {
     if (stylus_battery_delegate_.ShouldShowBatteryStatus() != GetVisible())
       SetVisible(stylus_battery_delegate_.ShouldShowBatteryStatus());
 
-    icon_->SetImage(stylus_battery_delegate_.GetBatteryImage());
+    icon_->SetImage(
+        stylus_battery_delegate_.GetBatteryImage(GetColorProvider()));
     label_->SetVisible(stylus_battery_delegate_.IsBatteryLevelLow() &&
                        stylus_battery_delegate_.IsBatteryStatusEligible() &&
                        !stylus_battery_delegate_.IsBatteryStatusStale() &&
@@ -165,8 +171,7 @@ class TitleView : public views::View {
 
       auto* separator = AddChildView(std::make_unique<views::Separator>());
       separator->SetPreferredLength(GetPreferredSize().height());
-      separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kSeparatorColor));
+      separator->SetColorId(ui::kColorAshSystemUIMenuSeparator);
     }
 
     help_button_ = AddChildView(std::make_unique<IconButton>(
@@ -636,7 +641,7 @@ void PaletteTray::ShowBubble() {
   DeactivateActiveTool();
 
   TrayBubbleView::InitParams init_params;
-  init_params.delegate = this;
+  init_params.delegate = GetWeakPtr();
   init_params.parent_window = GetBubbleWindowContainer();
   init_params.anchor_view = nullptr;
   init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
@@ -660,6 +665,10 @@ void PaletteTray::ShowBubble() {
       gfx::Insets::TLBR(0, 0, kPaddingBetweenBottomAndLastTrayItem, 0)));
 
   auto setup_layered_view = [](views::View* view) {
+    // In dark light mode, we switch TrayBubbleView to use a textured layer
+    // instead of solid color layer, so no need to create an extra layer here.
+    if (features::IsDarkLightModeEnabled())
+      return;
     view->SetPaintToLayer();
     view->layer()->SetFillsBoundsOpaquely(false);
   };
@@ -673,8 +682,7 @@ void PaletteTray::ShowBubble() {
   auto* separator =
       bubble_view->AddChildView(std::make_unique<views::Separator>());
   setup_layered_view(separator);
-  separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparatorColor));
+  separator->SetColorId(ui::kColorAshSystemUIMenuSeparator);
   separator->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
       kPaddingBetweenTitleAndSeparator, 0, kMenuSeparatorVerticalPadding, 0)));
 

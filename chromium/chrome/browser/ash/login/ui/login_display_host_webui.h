@@ -10,8 +10,6 @@
 #include <memory>
 #include <vector>
 
-#include "ash/components/audio/cras_audio_handler.h"
-#include "ash/public/cpp/multi_user_window_manager_observer.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
@@ -23,9 +21,9 @@
 #include "chrome/browser/ash/login/ui/login_display.h"
 #include "chrome/browser/ash/login/ui/login_display_host_common.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -51,14 +49,13 @@ class WebUILoginView;
 class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
                               public session_manager::SessionManagerObserver,
                               public content::WebContentsObserver,
-                              public chromeos::SessionManagerClient::Observer,
+                              public SessionManagerClient::Observer,
                               public CrasAudioHandler::AudioObserver,
                               public chromeos::OobeConfiguration::Observer,
                               public display::DisplayObserver,
                               public ui::InputDeviceEventObserver,
                               public views::WidgetRemovalsObserver,
                               public views::WidgetObserver,
-                              public MultiUserWindowManagerObserver,
                               public OobeUI::Observer {
  public:
   LoginDisplayHostWebUI();
@@ -88,7 +85,7 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void ShowGaiaDialog(const AccountId& prefilled_account) override;
   void ShowOsInstallScreen() override;
   void ShowGuestTosScreen() override;
-  void HideOobeDialog(bool saml_video_timeout = false) override;
+  void HideOobeDialog(bool saml_page_closed = false) override;
   void SetShelfButtonsEnabled(bool enabled) override;
   void UpdateOobeDialogState(OobeDialogState state) override;
   void HandleDisplayCaptivePortal() override;
@@ -129,7 +126,7 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
 
-  // chromeos::SessionManagerClient::Observer:
+  // SessionManagerClient::Observer:
   void EmitLoginPromptVisibleCalled() override;
 
   // chromeos::OobeConfiguration::Observer:
@@ -153,11 +150,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetBoundsChanged(views::Widget* widget,
                              const gfx::Rect& new_bounds) override;
-
-  // TODO (crbug.com/1168114): remove whole observer hierarchy, it is not needed
-  // anymore.
-  // MultiUserWindowManagerObserver:
-  void OnUserSwitchAnimationFinished() override;
 
   // OobeUI::Observer:
   void OnCurrentScreenChanged(OobeScreenId current_screen,

@@ -73,6 +73,9 @@ void QuicChromiumClientStream::Handle::OnEarlyHintsAvailable() {
 }
 
 void QuicChromiumClientStream::Handle::OnInitialHeadersAvailable() {
+  if (headers_received_start_time_.is_null())
+    headers_received_start_time_ = base::TimeTicks::Now();
+
   if (!read_headers_callback_)
     return;  // Wait for ReadInitialHeaders to be called.
 
@@ -98,6 +101,11 @@ void QuicChromiumClientStream::Handle::OnTrailingHeadersAvailable() {
 void QuicChromiumClientStream::Handle::OnDataAvailable() {
   if (!read_body_callback_)
     return;  // Wait for ReadBody to be called.
+
+  // TODO(https://crbug.com/1335423): Change to DCHECK() or remove after bug is
+  // fixed.
+  CHECK(read_body_buffer_);
+  CHECK_GT(read_body_buffer_len_, 0);
 
   int rv = stream_->Read(read_body_buffer_, read_body_buffer_len_);
   if (rv == ERR_IO_PENDING)
@@ -202,6 +210,11 @@ int QuicChromiumClientStream::Handle::ReadBody(
   int rv = stream_->Read(buffer, buffer_len);
   if (rv != ERR_IO_PENDING)
     return rv;
+
+  // TODO(https://crbug.com/1335423): Change to DCHECK() or remove after bug is
+  // fixed.
+  CHECK(buffer);
+  CHECK_GT(buffer_len, 0);
 
   SetCallback(std::move(callback), &read_body_callback_);
   read_body_buffer_ = buffer;
@@ -665,6 +678,10 @@ void QuicChromiumClientStream::OnError(int error) {
 }
 
 int QuicChromiumClientStream::Read(IOBuffer* buf, int buf_len) {
+  // TODO(https://crbug.com/1335423): Change to DCHECK_GT() or remove after bug
+  // is fixed.
+  CHECK_GT(buf_len, 0);
+
   if (IsDoneReading())
     return 0;  // EOF
 

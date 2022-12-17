@@ -117,8 +117,8 @@ const base::Feature kMdnsResponderGeneratedNameListing{
 //   of CORB's confirmation sniffers (for HTML, XML and JSON).
 // - Blocking is still done by injecting an empty response rather than erroring
 //   out the network request
-// - See other differences in the "ORB v0.1 vs full ORB differences" section in
-//   https://docs.google.com/document/d/1qUbE2ySi6av3arUEw5DNdFJIKKBbWGRGsXz_ew3S7HQ/edit#heading=h.mptmm5bpjtdn
+// - Other differences and more details can be found in
+//   //services/network/public/cpp/corb/README.md
 //
 // Implementing ORB in Chromium is tracked in https://crbug.com/1178928
 const base::Feature kOpaqueResponseBlockingV01{
@@ -230,23 +230,6 @@ uint32_t GetLoaderChunkSize() {
   return kMaxNumConsumedBytesInTask;
 }
 
-// Check disk cache to see if the queued requests (especially those don't need
-// validation) have already been cached. If yes, start them as they may not
-// contend for network.
-const base::Feature kCheckCacheForQueuedRequests{
-    "CheckCacheForQueuedRequests", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// The time interval before checking the cache for queued request.
-constexpr base::FeatureParam<base::TimeDelta> kQueuedRequestsCacheCheckInterval{
-    &kCheckCacheForQueuedRequests, "queued_requests_cache_check_interval",
-    base::Milliseconds(100)};
-
-// Cache check is only valid for requests queued for long than this threshold.
-constexpr base::FeatureParam<base::TimeDelta>
-    kQueuedRequestsCacheCheckTimeThreshold{
-        &kCheckCacheForQueuedRequests,
-        "queued_requests_cache_check_time_threshold", base::Milliseconds(100)};
-
 // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
 const base::Feature kCorsNonWildcardRequestHeadersSupport{
     "CorsNonWildcardRequestHeadersSupport", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -265,6 +248,9 @@ const base::Feature kFasterSetCookie{"FasterSetCookie",
 // inactive.
 const base::Feature kBatchSimpleURLLoader{"BatchSimpleURLLoader",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kNetworkServiceMemoryCache{
+    "NetworkServiceMemoryCache", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Do not send TLS client certificates in CORS preflight. Omit all client certs
 // and continue the handshake without sending one if requested.
@@ -295,6 +281,17 @@ const base::Feature kReduceAcceptLanguage{"ReduceAcceptLanguage",
 // Disable ResourceScheduler.
 const base::Feature kDisableResourceScheduler{
     "DisableResourceScheduler", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Reduce PNA preflight response waiting time to 200ms.
+// See: https://wicg.github.io/private-network-access/#cors-preflight
+const base::Feature kPrivateNetworkAccessPreflightShortTimeout = {
+    "PrivateNetworkAccessPreflightReduceTimeout",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Handle the Link header DNS prefetches and preconnects in the network
+// service instead of through the renderer process.
+const base::Feature kPreconnectInNetworkService = {
+    "PreconnectInNetworkService", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace network

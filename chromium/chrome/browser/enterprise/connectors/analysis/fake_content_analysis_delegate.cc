@@ -4,9 +4,12 @@
 
 #include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_delegate.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/logging.h"
 #include "base/time/time.h"
+#include "chrome/browser/enterprise/connectors/analysis/fake_files_request_handler.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "content/public/browser/browser_thread.h"
@@ -22,6 +25,8 @@ base::TimeDelta response_delay = base::Seconds(0);
 safe_browsing::BinaryUploadService::Result
     FakeContentAnalysisDelegate::result_ =
         safe_browsing::BinaryUploadService::Result::SUCCESS;
+bool FakeContentAnalysisDelegate::dialog_shown_ = false;
+bool FakeContentAnalysisDelegate::dialog_canceled_ = false;
 
 FakeContentAnalysisDelegate::FakeContentAnalysisDelegate(
     base::RepeatingClosure delete_closure,
@@ -50,6 +55,22 @@ void FakeContentAnalysisDelegate::SetResponseResult(
 }
 
 // static
+void FakeContentAnalysisDelegate::ResetDialogFlags() {
+  dialog_shown_ = false;
+  dialog_canceled_ = false;
+}
+
+// static
+bool FakeContentAnalysisDelegate::WasDialogShown() {
+  return dialog_shown_;
+}
+
+// static
+bool FakeContentAnalysisDelegate::WasDialogCanceled() {
+  return dialog_canceled_;
+}
+
+// static
 std::unique_ptr<ContentAnalysisDelegate> FakeContentAnalysisDelegate::Create(
     base::RepeatingClosure delete_closure,
     StatusCallback status_callback,
@@ -60,6 +81,11 @@ std::unique_ptr<ContentAnalysisDelegate> FakeContentAnalysisDelegate::Create(
   auto ret = std::make_unique<FakeContentAnalysisDelegate>(
       delete_closure, status_callback, std::move(dm_token), web_contents,
       std::move(data), std::move(callback));
+  FilesRequestHandler::SetFactoryForTesting(base::BindRepeating(
+      &FakeFilesRequestHandler::Create,
+      base::BindRepeating(
+          &FakeContentAnalysisDelegate::FakeUploadFileForDeepScanning,
+          base::Unretained(ret.get()))));
   return ret;
 }
 
@@ -164,11 +190,14 @@ void FakeContentAnalysisDelegate::Response(
       break;
     case AnalysisConnector::FILE_ATTACHED:
     case AnalysisConnector::FILE_DOWNLOADED:
-      FileRequestCallback(path, result_, response);
+      DCHECK(GetFilesRequestHandlerForTesting());
+      GetFilesRequestHandlerForTesting()->FileRequestCallbackForTesting(
+          path, result_, response);
       break;
     case AnalysisConnector::PRINT:
       PageRequestCallback(result_, response);
       break;
+    case AnalysisConnector::FILE_TRANSFER:
     case AnalysisConnector::ANALYSIS_CONNECTOR_UNSPECIFIED:
       NOTREACHED();
   }
@@ -187,12 +216,15 @@ void FakeContentAnalysisDelegate::UploadTextForDeepScanning(
       response_delay);
 }
 
-void FakeContentAnalysisDelegate::UploadFileForDeepScanning(
+void FakeContentAnalysisDelegate::FakeUploadFileForDeepScanning(
     safe_browsing::BinaryUploadService::Result result,
     const base::FilePath& path,
     std::unique_ptr<safe_browsing::BinaryUploadService::Request> request) {
   DCHECK(!path.empty());
-  DCHECK_EQ(dm_token_, request->device_token());
+  if (GetDataForTesting()
+          .settings.cloud_or_local_settings.is_cloud_analysis()) {
+    DCHECK_EQ(dm_token_, request->device_token());
+  }
 
   // Simulate a response.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -213,6 +245,16 @@ void FakeContentAnalysisDelegate::UploadPageForDeepScanning(
                      weakptr_factory_.GetWeakPtr(), base::FilePath(),
                      std::move(request)),
       response_delay);
+}
+
+bool FakeContentAnalysisDelegate::ShowFinalResultInDialog() {
+  dialog_shown_ = true;
+  return ContentAnalysisDelegate::ShowFinalResultInDialog();
+}
+
+bool FakeContentAnalysisDelegate::CancelDialog() {
+  dialog_canceled_ = true;
+  return ContentAnalysisDelegate::CancelDialog();
 }
 
 }  // namespace enterprise_connectors

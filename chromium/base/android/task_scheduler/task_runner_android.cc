@@ -33,9 +33,10 @@ class AndroidTaskTraits {
       jboolean may_block,
       jbyte extension_id,
       const base::android::JavaParamRef<jbyteArray>& extension_data) {
-    return TaskTraits(static_cast<TaskPriority>(priority), may_block,
-                      TaskTraitsExtensionStorage(
-                          extension_id, GetExtensionData(env, extension_data)));
+    return TaskTraits(
+        static_cast<TaskPriority>(priority), may_block,
+        TaskTraitsExtensionStorage(static_cast<uint8_t>(extension_id),
+                                   GetExtensionData(env, extension_data)));
   }
 
  private:
@@ -91,13 +92,10 @@ void RunJavaTask(base::android::ScopedJavaGlobalRef<jobject> task,
   // JNIEnv is thread specific, but we don't know which thread we'll be run on
   // so we must look it up.
   std::string event_name = base::StrCat({"JniPostTask: ", runnable_class_name});
-  TRACE_EVENT_BEGIN_WITH_FLAGS0(
-      "toplevel", event_name.c_str(),
-      TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+  TRACE_EVENT("toplevel", nullptr, [&](::perfetto::EventContext& ctx) {
+    ctx.event()->set_name(event_name.c_str());
+  });
   JNI_Runnable::Java_Runnable_run(base::android::AttachCurrentThread(), task);
-  TRACE_EVENT_END_WITH_FLAGS0(
-      "toplevel", event_name.c_str(),
-      TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
 }
 
 }  // namespace

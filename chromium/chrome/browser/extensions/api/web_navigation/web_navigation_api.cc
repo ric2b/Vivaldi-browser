@@ -542,9 +542,9 @@ ExtensionFunction::ResponseAction WebNavigationGetFrameFunction::Run() {
         ExtensionApiFrameIdMap::GetDocumentId(parent_frame_host).ToString());
   }
   frame_details.frame_type =
-      ToString(ExtensionApiFrameIdMap::GetFrameType(render_frame_host));
+      ExtensionApiFrameIdMap::GetFrameType(render_frame_host);
   frame_details.document_lifecycle =
-      ToString(ExtensionApiFrameIdMap::GetDocumentLifecycle(render_frame_host));
+      ExtensionApiFrameIdMap::GetDocumentLifecycle(render_frame_host);
 
   return RespondNow(ArgumentList(GetFrame::Results::Create(frame_details)));
 }
@@ -565,10 +565,9 @@ ExtensionFunction::ResponseAction WebNavigationGetAllFramesFunction::Run() {
 
   std::vector<GetAllFrames::Results::DetailsType> result_list;
 
-  // We only iterate the frames in the active page. We currently do not
-  // expose back/forward cached frames or prerender frames in the GetAllFrames
-  // API.
-  web_contents->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+  // We currently do not expose back/forward cached frames in the GetAllFrames
+  // API, but we do explicitly include prerendered frames.
+  web_contents->ForEachRenderFrameHost(
       base::BindRepeating(
           [](content::WebContents* web_contents,
              std::vector<GetAllFrames::Results::DetailsType>& result_list,
@@ -588,6 +587,14 @@ ExtensionFunction::ResponseAction WebNavigationGetAllFramesFunction::Run() {
               return content::RenderFrameHost::FrameIterationAction::kContinue;
             }
 
+            // Skip back/forward cached frames.
+            if (render_frame_host->IsInLifecycleState(
+                    content::RenderFrameHost::LifecycleState::
+                        kInBackForwardCache)) {
+              return content::RenderFrameHost::FrameIterationAction::
+                  kSkipChildren;
+            }
+
             GetAllFrames::Results::DetailsType frame;
             frame.url = navigation_state->GetUrl().spec();
             frame.frame_id =
@@ -604,11 +611,10 @@ ExtensionFunction::ResponseAction WebNavigationGetAllFramesFunction::Run() {
                   ExtensionApiFrameIdMap::GetDocumentId(parent_frame_host)
                       .ToString());
             }
-            frame.frame_type = ToString(
-                ExtensionApiFrameIdMap::GetFrameType(render_frame_host));
+            frame.frame_type =
+                ExtensionApiFrameIdMap::GetFrameType(render_frame_host);
             frame.document_lifecycle =
-                ToString(ExtensionApiFrameIdMap::GetDocumentLifecycle(
-                    render_frame_host));
+                ExtensionApiFrameIdMap::GetDocumentLifecycle(render_frame_host);
             frame.process_id = render_frame_host->GetProcess()->GetID();
             frame.error_occurred = navigation_state->GetErrorOccurredInFrame();
             result_list.push_back(std::move(frame));

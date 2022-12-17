@@ -12,8 +12,8 @@
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/webui/chromeos/in_session_password_change/base_lock_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -35,10 +35,20 @@ class LockScreenStartReauthDialog
   LockScreenStartReauthDialog(LockScreenStartReauthDialog const&) = delete;
   ~LockScreenStartReauthDialog() override;
 
+  // content::WebDialogDelegate
+  void RequestMediaAccessPermission(
+      content::WebContents* web_contents,
+      const content::MediaStreamRequest& request,
+      content::MediaResponseCallback callback) override;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
+                                  const GURL& security_origin,
+                                  blink::mojom::MediaStreamType type) override;
+
   void Show();
   void Dismiss();
   bool IsRunning();
   int GetDialogWidth();
+  content::WebContents* GetWebContents();
 
   void DismissLockScreenNetworkDialog();
   void DismissLockScreenCaptivePortalDialog();
@@ -52,6 +62,9 @@ class LockScreenStartReauthDialog
   bool IsNetworkDialogLoadedForTesting(base::OnceClosure callback);
   bool IsCaptivePortalDialogLoadedForTesting(base::OnceClosure callback);
   void OnNetworkDialogReadyForTesting();
+
+  // NetworkStateInformer::NetworkStateInformerObserver:
+  void UpdateState(NetworkError::ErrorReason reason) override;
 
   LockScreenNetworkDialog* get_network_dialog_for_testing() {
     return lock_screen_network_dialog_.get();
@@ -74,9 +87,6 @@ class LockScreenStartReauthDialog
   // BaseLockDialog:
   void OnDialogShown(content::WebUI* webui) override;
   void OnDialogClosed(const std::string& json_retval) override;
-
-  // NetworkStateInformer::NetworkStateInformerObserver:
-  void UpdateState(NetworkError::ErrorReason reason) override;
 
   // ChromeWebModalDialogManagerDelegate:
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()

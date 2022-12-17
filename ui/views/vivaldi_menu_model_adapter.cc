@@ -39,7 +39,7 @@ void MenuModelAdapter::VivaldiSelectionChanged(MenuItemView* menu) {
 
   const int id = menu->GetCommand();
   ui::MenuModel* model = menu_model_;
-  int index = 0;
+  size_t index = 0;
   if (ui::MenuModel::GetModelAndIndexForCommandId(id, &model, &index)) {
     model->VivaldiHighlightChangedTo(index);
     return;

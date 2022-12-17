@@ -23,6 +23,7 @@
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/sync/base/features.h"
+#include "components/sync/driver/trusted_vault_histograms.h"
 #include "components/sync/trusted_vault/proto_string_bytes_conversion.h"
 #include "components/sync/trusted_vault/securebox.h"
 #include "components/sync/trusted_vault/trusted_vault_connection.h"
@@ -43,6 +44,15 @@ using testing::Mock;
 using testing::Ne;
 using testing::NotNull;
 using testing::SaveArg;
+
+MATCHER_P(DegradedRecoverabilityStateEq, expected_state, "") {
+  const sync_pb::LocalTrustedVaultDegradedRecoverabilityState& given_state =
+      arg;
+  return given_state.is_recoverability_degraded() ==
+             expected_state.is_recoverability_degraded() &&
+         given_state.last_refresh_time_millis_since_unix_epoch() ==
+             expected_state.last_refresh_time_millis_since_unix_epoch();
+}
 
 MATCHER_P(KeyMaterialEq, expected, "") {
   const std::string& key_material = arg.key_material();
@@ -237,6 +247,30 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
   scoped_refptr<StandaloneTrustedVaultBackend> backend_;
 };
 
+TEST_F(StandaloneTrustedVaultBackendTest,
+       ShouldWriteDegradedRecoverabilityState) {
+  backend()->SetPrimaryAccount(MakeAccountInfoWithGaiaId("user"),
+                               /*has_persistent_auth_error=*/false);
+  sync_pb::LocalTrustedVaultDegradedRecoverabilityState
+      degraded_recoverability_state;
+  degraded_recoverability_state.set_is_recoverability_degraded(true);
+  degraded_recoverability_state.set_last_refresh_time_millis_since_unix_epoch(
+      123);
+  backend()->WriteDegradedRecoverabilityState(degraded_recoverability_state);
+
+  // Read the file from disk.
+  std::string ciphertext;
+  std::string decrypted_content;
+  sync_pb::LocalTrustedVault proto;
+  EXPECT_TRUE(base::ReadFileToString(file_path(), &ciphertext));
+  EXPECT_THAT(ciphertext, Ne(""));
+  EXPECT_TRUE(OSCrypt::DecryptString(ciphertext, &decrypted_content));
+  EXPECT_TRUE(proto.ParseFromString(decrypted_content));
+  ASSERT_THAT(proto.user_size(), Eq(1));
+  EXPECT_THAT(proto.user(0).degraded_recoverability_state(),
+              DegradedRecoverabilityStateEq(degraded_recoverability_state));
+}
+
 TEST_F(StandaloneTrustedVaultBackendTest, ShouldFetchEmptyKeys) {
   const CoreAccountInfo account_info = MakeAccountInfoWithGaiaId("user");
   // Callback should be called immediately.
@@ -383,7 +417,36 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   EXPECT_THAT(proto.user(1).vault_key(),
               ElementsAre(KeyMaterialEq(GetConstantTrustedVaultKey()),
                           KeyMaterialEq(kKey2)));
-  EXPECT_THAT(proto.data_version(), Eq(1));
+  EXPECT_THAT(proto.data_version(), testing::Ge(1));
+}
+
+TEST_F(StandaloneTrustedVaultBackendTest,
+       ShouldUpgradeAllUsersDataToVersion2AndResetKeysAreStale) {
+  const CoreAccountInfo account_info_1 = MakeAccountInfoWithGaiaId("user1");
+  const CoreAccountInfo account_info_2 = MakeAccountInfoWithGaiaId("user2");
+
+  sync_pb::LocalTrustedVault initial_data;
+  sync_pb::LocalTrustedVaultPerUser* user_data1 = initial_data.add_user();
+  sync_pb::LocalTrustedVaultPerUser* user_data2 = initial_data.add_user();
+  user_data1->set_gaia_id(account_info_1.gaia);
+  user_data1->set_keys_are_stale(true);
+  user_data2->set_gaia_id(account_info_2.gaia);
+  user_data2->set_keys_are_stale(true);
+  std::string encrypted_data;
+  ASSERT_TRUE(OSCrypt::EncryptString(initial_data.SerializeAsString(),
+                                     &encrypted_data));
+  ASSERT_NE(-1, base::WriteFile(file_path(), encrypted_data.c_str(),
+                                encrypted_data.size()));
+
+  // Backend should reset |keys_are_stale| for both accounts and write new
+  // state.
+  backend()->ReadDataFromDisk();
+
+  sync_pb::LocalTrustedVault new_data = ReadLocalTrustedVaultFile(file_path());
+  ASSERT_THAT(new_data.user_size(), Eq(2));
+  EXPECT_FALSE(new_data.user(0).keys_are_stale());
+  EXPECT_FALSE(new_data.user(1).keys_are_stale());
+  EXPECT_THAT(new_data.data_version(), Eq(2));
 }
 
 // This test ensures that migration logic in ReadDataFromDisk() doesn't create
@@ -909,9 +972,7 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldDownloadNewKeys) {
 
   histogram_tester.ExpectUniqueSample(
       "Sync.TrustedVaultDownloadKeysStatus",
-      /*sample=*/
-      StandaloneTrustedVaultBackend::TrustedVaultDownloadKeysStatusForUMA::
-          kSuccess,
+      /*sample=*/TrustedVaultDownloadKeysStatusForUMA::kSuccess,
       /*expected_bucket_count=*/1);
 }
 
@@ -955,9 +1016,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
            /*last_key_version=*/0);
   histogram_tester.ExpectUniqueSample(
       "Sync.TrustedVaultDownloadKeysStatus",
-      /*sample=*/
-      StandaloneTrustedVaultBackend::TrustedVaultDownloadKeysStatusForUMA::
-          kOtherError,
+      /*sample=*/TrustedVaultDownloadKeysStatusForUMA::kOtherError,
       /*expected_bucket_count=*/1);
 
   download_keys_callback = TrustedVaultConnection::DownloadNewKeysCallback();
@@ -1136,6 +1195,114 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldRedoDeviceRegistration) {
 }
 
 TEST_F(StandaloneTrustedVaultBackendTest,
+       ShouldRedoDeviceRegistrationWithConstantKey) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      kSyncTrustedVaultRedoDeviceRegistration);
+
+  const CoreAccountInfo account_info = MakeAccountInfoWithGaiaId("user");
+  const int kInitialServerConstantKeyVersion = 100;
+
+  TrustedVaultConnection::RegisterDeviceWithoutKeysCallback
+      device_registration_callback;
+  EXPECT_CALL(*connection(), RegisterDeviceWithoutKeys(account_info, _, _))
+      .WillOnce([&](const CoreAccountInfo&, const SecureBoxPublicKey&,
+                    TrustedVaultConnection::RegisterDeviceWithoutKeysCallback
+                        callback) {
+        device_registration_callback = std::move(callback);
+        return std::make_unique<TrustedVaultConnection::Request>();
+      });
+
+  // Setting the primary account will trigger device registration.
+  backend()->SetPrimaryAccount(account_info,
+                               /*has_persistent_auth_error=*/false);
+
+  // Pretend that the registration completed successfully.
+  ASSERT_FALSE(device_registration_callback.is_null());
+  std::move(device_registration_callback)
+      .Run(TrustedVaultRegistrationStatus::kSuccess,
+           TrustedVaultKeyAndVersion{GetConstantTrustedVaultKey(),
+                                     kInitialServerConstantKeyVersion});
+  // Mimic that device was registered before "redo registration" logic was
+  // introduced.
+  backend()->SetDeviceRegisteredVersionForTesting(account_info.gaia,
+                                                  /*version=*/0);
+
+  // Mimic restart to be able to test histogram recording.
+  ResetBackend();
+  backend()->ReadDataFromDisk();
+
+  // Another device registration request should be issued upon setting the
+  // primary account and it should ignore presence of
+  // kInitialServerConstantKeyVersion, e.g. RegisterDeviceWithoutKeys() again.
+  TrustedVaultConnection::RegisterDeviceWithoutKeysCallback
+      device_redo_registration_callback;
+  EXPECT_CALL(*connection(), RegisterDeviceWithoutKeys(account_info, _, _))
+      .WillOnce([&](const CoreAccountInfo&,
+                    const SecureBoxPublicKey& device_public_key,
+                    TrustedVaultConnection::RegisterDeviceWithoutKeysCallback
+                        callback) {
+        device_redo_registration_callback = std::move(callback);
+        return std::make_unique<TrustedVaultConnection::Request>();
+      });
+  {
+    const int kNewServerConstantKeyVersion = 101;
+
+    base::HistogramTester histogram_tester;
+    backend()->SetPrimaryAccount(account_info,
+                                 /*has_persistent_auth_error=*/false);
+    histogram_tester.ExpectUniqueSample(
+        "Sync.TrustedVaultDeviceRegistrationState",
+        /*sample=*/
+        TrustedVaultDeviceRegistrationStateForUMA::
+            kAttemptingRegistrationWithExistingKeyPair,
+        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
+                                        /*sample=*/true,
+                                        /*expected_bucket_count=*/1);
+
+    // Pretend that the registration completed successfully and that constant
+    // key version has changed between device registration requests.
+    ASSERT_FALSE(device_redo_registration_callback.is_null());
+    std::move(device_redo_registration_callback)
+        .Run(TrustedVaultRegistrationStatus::kSuccess,
+             TrustedVaultKeyAndVersion{GetConstantTrustedVaultKey(),
+                                       kNewServerConstantKeyVersion});
+
+    // Now the device reregistration should be completed.
+    sync_pb::LocalDeviceRegistrationInfo registration_info =
+        backend()->GetDeviceRegistrationInfoForTesting(account_info.gaia);
+    EXPECT_TRUE(registration_info.device_registered());
+    EXPECT_THAT(registration_info.device_registered_version(), Eq(1));
+    EXPECT_TRUE(registration_info.has_private_key_material());
+
+    // Read the file from disk and verify that kNewServerConstantKeyVersion is
+    // stored.
+    sync_pb::LocalTrustedVault proto = ReadLocalTrustedVaultFile(file_path());
+    ASSERT_THAT(proto.user_size(), Eq(1));
+    EXPECT_THAT(proto.user(0).last_vault_key_version(),
+                Eq(kNewServerConstantKeyVersion));
+  }
+  {
+    // Mimic the restart and verify that kAlreadyRegisteredV1 is recorded.
+    ResetBackend();
+    backend()->ReadDataFromDisk();
+
+    base::HistogramTester histogram_tester;
+    backend()->SetPrimaryAccount(account_info,
+                                 /*has_persistent_auth_error=*/false);
+    histogram_tester.ExpectUniqueSample(
+        "Sync.TrustedVaultDeviceRegistrationState",
+        /*sample=*/
+        TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1,
+        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
+                                        /*sample=*/true,
+                                        /*expected_bucket_count=*/1);
+  }
+}
+
+TEST_F(StandaloneTrustedVaultBackendTest,
        ShouldNotRedoDeviceRegistrationIfFeatureDisabled) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndDisableFeature(
@@ -1167,7 +1334,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   histogram_tester.ExpectUniqueSample(
       "Sync.TrustedVaultDeviceRegistrationState",
       /*sample=*/
-      TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegistered,
+      TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV0,
       /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
                                       /*sample=*/true,
@@ -1399,9 +1566,7 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldVerifyRegistration) {
 
   histogram_tester.ExpectUniqueSample(
       "Sync.TrustedVaultVerifyDeviceRegistrationState",
-      /*sample=*/
-      StandaloneTrustedVaultBackend::TrustedVaultDownloadKeysStatusForUMA::
-          kNoNewKeys,
+      /*sample=*/TrustedVaultDownloadKeysStatusForUMA::kNoNewKeys,
       /*expected_bucket_count=*/1);
 }
 

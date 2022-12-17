@@ -33,6 +33,7 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
+#include "gpu/command_buffer/service/command_buffer_task_executor.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
@@ -49,21 +50,22 @@
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "gpu/command_buffer/service/shared_image_interface_in_process.h"
+#include "gpu/command_buffer/service/single_task_sequence.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/webgpu_decoder.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
-#include "gpu/ipc/command_buffer_task_executor.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
-#include "gpu/ipc/shared_image_interface_in_process.h"
-#include "gpu/ipc/single_task_sequence.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_share_group.h"
+#include "ui/gl/gl_surface_egl.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/init/create_gr_gl_interface.h"
 #include "ui/gl/init/gl_factory.h"
@@ -95,26 +97,13 @@ class ScopedEvent {
 
 }  // namespace
 
-InProcessCommandBuffer::SharedImageInterfaceHelper::SharedImageInterfaceHelper(
-    InProcessCommandBuffer* command_buffer)
-    : command_buffer_(command_buffer) {}
-
-void InProcessCommandBuffer::SharedImageInterfaceHelper::SetError() {
+void InProcessCommandBuffer::SetError() {
   // Signal errors by losing the command buffer.
-  command_buffer_->command_buffer_->SetParseError(error::kLostContext);
+  command_buffer_->SetParseError(error::kLostContext);
 }
 
-void InProcessCommandBuffer::SharedImageInterfaceHelper::WrapTaskWithGpuCheck(
-    base::OnceClosure task) {
-  command_buffer_->RunTaskOnGpuThread(std::move(task));
-}
-
-bool InProcessCommandBuffer::SharedImageInterfaceHelper::EnableWrappedSkImage()
-    const {
-  // We need WrappedSkImage to support creating a SharedImage with pixel data
-  // when GL is unavailable. This is used in various unit tests.
-  return command_buffer_->context_state_ &&
-         !command_buffer_->context_state_->GrContextIsGL();
+void InProcessCommandBuffer::WrapTaskWithGpuCheck(base::OnceClosure task) {
+  RunTaskOnGpuThread(std::move(task));
 }
 
 InProcessCommandBuffer::InProcessCommandBuffer(
@@ -180,9 +169,10 @@ absl::optional<gles2::ProgramCache::ScopedCacheUse>
 InProcessCommandBuffer::CreateCacheUse() {
   absl::optional<gles2::ProgramCache::ScopedCacheUse> cache_use;
   if (context_group_->has_program_cache()) {
-    cache_use.emplace(context_group_->get_program_cache(),
-                      base::BindRepeating(&DecoderClient::CacheShader,
-                                          base::Unretained(this)));
+    cache_use.emplace(
+        context_group_->get_program_cache(),
+        base::BindRepeating(&DecoderClient::CacheBlob, base::Unretained(this),
+                            gpu::GpuDiskCacheType::kGlShaders));
   }
   return cache_use;
 }
@@ -227,8 +217,7 @@ gpu::ContextResult InProcessCommandBuffer::Initialize(
   if (result == gpu::ContextResult::kSuccess) {
     capabilities_ = capabilities;
     shared_image_interface_ = std::make_unique<SharedImageInterfaceInProcess>(
-        task_sequence_, gpu_dependency_.get(),
-        std::make_unique<SharedImageInterfaceHelper>(this));
+        task_sequence_, gpu_dependency_.get(), this);
   }
 
   return result;
@@ -266,9 +255,9 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       task_executor_->mailbox_manager(), std::move(memory_tracker),
       task_executor_->shader_translator_cache(),
       task_executor_->framebuffer_completeness_cache(), feature_info,
-      params.attribs.bind_generates_resource, task_executor_->image_manager(),
-      params.image_factory, nullptr /* progress_reporter */,
-      task_executor_->gpu_feature_info(), task_executor_->discardable_manager(),
+      params.attribs.bind_generates_resource, params.image_factory,
+      nullptr /* progress_reporter */, task_executor_->gpu_feature_info(),
+      task_executor_->discardable_manager(),
       task_executor_->passthrough_discardable_manager(),
       task_executor_->shared_image_manager());
 
@@ -300,7 +289,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
   } else {
     // TODO(crbug.com/1247756): Is creating an offscreen GL surface needed
     // still?
-    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+    surface_ = gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(),
+                                                  gfx::Size());
     if (!surface_.get()) {
       DestroyOnGpuThread();
       LOG(ERROR) << "ContextResult::kFatalFailure: Failed to create surface.";
@@ -792,6 +782,21 @@ void InProcessCommandBuffer::DestroyTransferBuffer(int32_t id) {
                      gpu_thread_weak_ptr_factory_.GetWeakPtr(), id));
 }
 
+void InProcessCommandBuffer::ForceLostContext(error::ContextLostReason reason) {
+  ScheduleGpuTask(
+      base::BindOnce(&InProcessCommandBuffer::ForceLostContextOnGpuThread,
+                     gpu_thread_weak_ptr_factory_.GetWeakPtr(), reason));
+}
+
+void InProcessCommandBuffer::ForceLostContextOnGpuThread(
+    error::ContextLostReason reason) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
+
+  // Similar implementation to CommandBufferDirect.
+  command_buffer_->SetContextLostReason(reason);
+  command_buffer_->SetParseError(error::kLostContext);
+}
+
 void InProcessCommandBuffer::DestroyTransferBufferOnGpuThread(int32_t id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
   command_buffer_->DestroyTransferBuffer(id);
@@ -815,8 +820,9 @@ void InProcessCommandBuffer::OnConsoleMessage(int32_t id,
   // TODO(piman): implement this.
 }
 
-void InProcessCommandBuffer::CacheShader(const std::string& key,
-                                         const std::string& shader) {}
+void InProcessCommandBuffer::CacheBlob(gpu::GpuDiskCacheType type,
+                                       const std::string& key,
+                                       const std::string& shader) {}
 
 void InProcessCommandBuffer::OnFenceSyncRelease(uint64_t release) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);

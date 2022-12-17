@@ -10,6 +10,7 @@ from __future__ import absolute_import
 import argparse
 import collections
 import contextlib
+import io
 import itertools
 import logging
 import os
@@ -180,6 +181,15 @@ def AddCommonOptions(parser):
       action='store_true',
       help='Whether to archive test output locally and generate '
            'a local results detail page.')
+
+  parser.add_argument('--list-tests',
+                      action='store_true',
+                      help='List available tests and exit.')
+
+  parser.add_argument('--wrapper-script-args',
+                      help='A string of args that were passed to the wrapper '
+                      'script. This should probably not be edited by a '
+                      'user as it is passed by the wrapper itself.')
 
   class FastLocalDevAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -423,6 +433,13 @@ def AddInstrumentationTestOptions(parser):
 
   parser = parser.add_argument_group('instrumentation arguments')
 
+  parser.add_argument('--additional-apex',
+                      action='append',
+                      dest='additional_apexs',
+                      default=[],
+                      type=_RealPath,
+                      help='Additional apex that must be installed on '
+                      'the device when the tests are run')
   parser.add_argument(
       '--additional-apk',
       action='append', dest='additional_apks', default=[],
@@ -436,6 +453,12 @@ def AddInstrumentationTestOptions(parser):
                       type=_RealPath,
                       help='Configures an additional-apk to be forced '
                       'to be queryable by other APKs.')
+  parser.add_argument('--instant-additional-apk',
+                      action='append',
+                      dest='instant_additional_apks',
+                      default=[],
+                      type=_RealPath,
+                      help='Configures an additional-apk to be an instant APK')
   parser.add_argument(
       '-A', '--annotation',
       dest='annotation_str',
@@ -448,6 +471,11 @@ def AddInstrumentationTestOptions(parser):
   parser.add_argument(
       '--apk-under-test',
       help='Path or name of the apk under test.')
+  parser.add_argument(
+      '--store-data-in-app-directory',
+      action='store_true',
+      help='Store test data in the application\'s data directory. By default '
+      'the test data is stored in the external storage folder.')
   parser.add_argument(
       '--module',
       action='append',
@@ -559,9 +587,6 @@ def AddInstrumentationTestOptions(parser):
       help='Install the test apk as an instant app. '
       'Instant apps run in a more restrictive execution environment.')
   parser.add_argument(
-      '--test-jar',
-      help='Path of jar containing test java files.')
-  parser.add_argument(
       '--test-launcher-batch-limit',
       dest='test_launcher_batch_limit',
       type=int,
@@ -573,6 +598,11 @@ def AddInstrumentationTestOptions(parser):
       type=float,
       help='Factor by which timeouts should be scaled.')
   parser.add_argument(
+      '--is-unit-test',
+      action='store_true',
+      help=('Specify the test suite as composed of unit tests, blocking '
+            'certain operations.'))
+  parser.add_argument(
       '-w', '--wait-for-java-debugger', action='store_true',
       help='Wait for java debugger to attach before running any application '
            'code. Also disables test timeouts and sets retries=0.')
@@ -583,6 +613,12 @@ def AddInstrumentationTestOptions(parser):
                       default=False,
                       help='If true, WPR server runs in record mode.'
                       'otherwise, runs in replay mode.')
+
+  parser.add_argument(
+      '--approve-app-links',
+      help='Force enables Digital Asset Link verification for the provided '
+      'package and domain, example usage: --approve-app-links '
+      'com.android.package:www.example.com')
 
   # These arguments are suppressed from the help text because they should
   # only ever be specified by an intermediate script.
@@ -999,6 +1035,9 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
       upload_logcats_file(),
       'upload_logcats_file' in args and args.upload_logcats_file)
 
+  save_detailed_results = (args.local_output or not local_utils.IsOnSwarming()
+                           ) and not args.isolated_script_test_output
+
   ### Set up test objects.
 
   out_manager = output_manager_factory.CreateOutputManager(args)
@@ -1010,8 +1049,24 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
   contexts_to_notify_on_sigterm.append(env)
   contexts_to_notify_on_sigterm.append(test_run)
 
+  if args.list_tests:
+    try:
+      with out_manager, env, test_instance, test_run:
+        test_names = test_run.GetTestsForListing()
+      print('There are {} tests:'.format(len(test_names)))
+      for n in test_names:
+        print(n)
+      return 0
+    except NotImplementedError:
+      sys.stderr.write('Test does not support --list-tests (type={}).\n'.format(
+          args.command))
+      return 1
+
   ### Run.
   with out_manager, json_finalizer():
+    # |raw_logs_fh| is only used by Robolectric tests.
+    raw_logs_fh = io.StringIO() if save_detailed_results else None
+
     with json_writer(), logcats_uploader, env, test_instance, test_run:
 
       repetitions = (range(args.repeat +
@@ -1027,7 +1082,7 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
         raw_results = []
         all_raw_results.append(raw_results)
 
-        test_run.RunTests(raw_results)
+        test_run.RunTests(raw_results, raw_logs_fh=raw_logs_fh)
         if not raw_results:
           all_raw_results.pop()
           continue
@@ -1048,8 +1103,10 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
             annotation=getattr(args, 'annotations', None),
             flakiness_server=getattr(args, 'flakiness_dashboard_server',
                                      None))
+
         if iteration_results.GetNotPass():
-          _LogRerunStatement(iteration_results.GetNotPass())
+          _LogRerunStatement(iteration_results.GetNotPass(),
+                             args.wrapper_script_args)
 
         if args.break_on_failure and not iteration_results.DidRunPass():
           break
@@ -1079,8 +1136,17 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
                          str(tot_tests),
                          str(iteration_count))
 
-    if (args.local_output or not local_utils.IsOnSwarming()
-        ) and not args.isolated_script_test_output:
+    if save_detailed_results:
+      assert raw_logs_fh
+      raw_logs_fh.seek(0)
+      raw_logs = raw_logs_fh.read()
+      if raw_logs:
+        with out_manager.ArchivedTempfile(
+            'raw_logs.txt', 'raw_logs',
+            output_manager.Datatype.TEXT) as raw_logs_file:
+          raw_logs_file.write(raw_logs)
+        logging.critical('RAW LOGS: %s', raw_logs_file.Link())
+
       with out_manager.ArchivedTempfile(
           'test_results_presentation.html',
           'test_results_presentation',
@@ -1108,7 +1174,7 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
           else constants.ERROR_EXIT_CODE)
 
 
-def _LogRerunStatement(failed_tests):
+def _LogRerunStatement(failed_tests, wrapper_arg_str):
   """Logs a message that can rerun the failed tests.
 
   Logs a copy/pasteable message that filters tests so just the failing tests
@@ -1116,6 +1182,8 @@ def _LogRerunStatement(failed_tests):
 
   Args:
     failed_tests: A set of test results that did not pass.
+    wrapper_arg_str: A string of args that were passed to the called wrapper
+        script.
   """
   rerun_arg_list = []
   try:
@@ -1128,9 +1196,10 @@ def _LogRerunStatement(failed_tests):
 
   test_filter_file = os.path.join(os.path.relpath(constants.GetOutDirectory()),
                                   _RERUN_FAILED_TESTS_FILE)
+  arg_list = shlex.split(wrapper_arg_str) if wrapper_arg_str else sys.argv
   index = 0
-  while index < len(sys.argv):
-    arg = sys.argv[index]
+  while index < len(arg_list):
+    arg = arg_list[index]
     # Skip adding the filter=<file> and/or the filter arg as we're replacing
     # it with the new filter arg.
     # This covers --test-filter=, --test-launcher-filter-file=, --gtest-filter=,

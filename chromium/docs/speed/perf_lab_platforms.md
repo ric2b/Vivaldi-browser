@@ -26,6 +26,12 @@
 ## Chromeos
 
  * [lacros-eve-perf](https://ci.chromium.org/p/chrome/builders/ci/lacros-eve-perf): .
+ * [lacros-x86-perf](https://ci.chromium.org/p/chrome/builders/ci/lacros-x86-perf): .
+
+## Fuchsia
+
+ * [fuchsia-perf-ast](https://ci.chromium.org/p/chrome/builders/ci/fuchsia-perf-ast): .
+ * [fuchsia-perf-shk](https://ci.chromium.org/p/chrome/builders/ci/fuchsia-perf-shk): .
 
 ## Linux
 

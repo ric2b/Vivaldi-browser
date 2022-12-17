@@ -4,7 +4,7 @@
 
 import {FakeMethodResolver} from 'chrome://resources/ash/common/fake_method_resolver.js';
 
-import {FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './feedback_types.js';
+import {FeedbackAppExitPath, FeedbackAppPostSubmitAction, FeedbackAppPreSubmitAction, FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './feedback_types.js';
 
 /**
  * @fileoverview
@@ -20,7 +20,6 @@ export class FakeFeedbackServiceProvider {
     this.methods_.register('getFeedbackContext');
     this.methods_.register('getScreenshotPng');
     this.methods_.register('sendReport');
-    this.methods_.register('openDiagnosticsApp');
     // Let sendReport return success by default.
     this.methods_.setResult('sendReport', {status: SendReportStatus.kSuccess});
     // Let getScreenshotPng return an empty array by default.
@@ -39,7 +38,24 @@ export class FakeFeedbackServiceProvider {
       sendReport: 0,
       /** @type {number} */
       openDiagnosticsApp: 0,
+      /** @type {number} */
+      openExploreApp: 0,
+      /** @type {number} */
+      openMetricsDialog: 0,
+      /** @type {number} */
+      openSystemInfoDialog: 0,
+      /** @type {number} */
+      openBluetoothLogsInfoDialog: 0,
     };
+
+    /** @type {?FeedbackAppPostSubmitAction} */
+    this.postSubmitAction_ = null;
+
+    /** @type {?FeedbackAppExitPath} */
+    this.exitPath_ = null;
+
+    /** @type {Map<FeedbackAppPreSubmitAction, number>} */
+    this.preSubmitActionMap_ = new Map();
   }
 
   /**
@@ -127,10 +143,114 @@ export class FakeFeedbackServiceProvider {
   }
 
   /**
-   * @return {!Promise<void>}
+   * @return {void}
    */
   openDiagnosticsApp() {
     this.callCounts_.openDiagnosticsApp++;
-    return this.methods_.resolveMethod('openDiagnosticsApp');
+  }
+
+  /**
+   * @return {number}
+   */
+  getOpenExploreAppCallCount() {
+    return this.callCounts_.openExploreApp;
+  }
+
+  /**
+   * @return {void}
+   */
+  openExploreApp() {
+    this.callCounts_.openExploreApp++;
+  }
+
+  /**
+   * @return {number}
+   */
+  getOpenMetricsDialogCallCount() {
+    return this.callCounts_.openMetricsDialog;
+  }
+
+  /**
+   * @return {void}
+   */
+  openMetricsDialog() {
+    this.callCounts_.openMetricsDialog++;
+  }
+
+  /**
+   * @return {number}
+   */
+  getOpenSystemInfoDialogCallCount() {
+    return this.callCounts_.openSystemInfoDialog;
+  }
+
+  /**
+   * @return {void}
+   */
+  openSystemInfoDialog() {
+    this.callCounts_.openSystemInfoDialog++;
+  }
+
+  /**
+   * @return {number}
+   */
+  getOpenBluetoothLogsInfoDialogCallCount() {
+    return this.callCounts_.openBluetoothLogsInfoDialog;
+  }
+
+  openBluetoothLogsInfoDialog() {
+    this.callCounts_.openBluetoothLogsInfoDialog++;
+  }
+
+  /**
+   * @param {!FeedbackAppPostSubmitAction} action
+   * @return {boolean}
+   */
+  isRecordPostSubmitActionCalled(action) {
+    return this.postSubmitAction_ === action;
+  }
+
+  /**
+   * @param {!FeedbackAppPostSubmitAction} action
+   * @return {void}
+   */
+  recordPostSubmitAction(action) {
+    if (this.postSubmitAction_ === null) {
+      this.postSubmitAction_ = action;
+    }
+  }
+
+  /**
+   * @param {?FeedbackAppExitPath} exitPath
+   * @return {boolean}
+   */
+  isRecordExitPathCalled(exitPath) {
+    return this.exitPath_ === exitPath;
+  }
+
+  /**
+   * @param {?FeedbackAppExitPath} exitPath
+   */
+  recordExitPath(exitPath) {
+    if (this.exitPath_ === null) {
+      this.exitPath_ = exitPath;
+    }
+  }
+
+  /**
+   * @param {!FeedbackAppPreSubmitAction} action
+   * @return {number}
+   */
+  getRecordPreSubmitActionCallCount(action) {
+    return this.preSubmitActionMap_.get(action) || 0;
+  }
+
+  /**
+   * @param {!FeedbackAppPreSubmitAction} action
+   * @return {void}
+   */
+  recordPreSubmitAction(action) {
+    this.preSubmitActionMap_.set(
+        action, this.preSubmitActionMap_.get(action) + 1 || 1);
   }
 }

@@ -44,6 +44,7 @@
 #endif
 #include "build/chromeos_buildflags.h"
 #include "components/page_info/core/features.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
 #include "components/safe_browsing/core/browser/password_protection/metrics_util.h"
@@ -551,6 +552,14 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
       base::RecordAction(
           base::UserMetricsAction("PageInfo.AboutThisSite.MoreAboutClicked"));
       break;
+    case PAGE_INFO_COOKIES_PAGE_OPENED:
+      // TODO(crbug.com/1346305) Add recording action.
+      break;
+    case PAGE_INFO_COOKIES_SETTINGS_OPENED:
+      // TODO(crbug.com/1346305) Add recording action.
+    case PAGE_INFO_ALL_SITES_OPENED:
+      // TODO(crbug.com/1346305) Add recording action.
+      break;
   }
 }
 
@@ -671,6 +680,24 @@ void PageInfo::OpenSiteSettingsView() {
 #else
   RecordPageInfoAction(PAGE_INFO_SITE_SETTINGS_OPENED);
   delegate_->ShowSiteSettings(site_url());
+#endif
+}
+
+void PageInfo::OpenCookiesSettingsView() {
+#if BUILDFLAG(IS_ANDROID)
+  NOTREACHED();
+#else
+  RecordPageInfoAction(PAGE_INFO_COOKIES_SETTINGS_OPENED);
+  delegate_->ShowCookiesSettings();
+#endif
+}
+
+void PageInfo::OpenAllSitesView() {
+#if BUILDFLAG(IS_ANDROID)
+  NOTREACHED();
+#else
+  RecordPageInfoAction(PAGE_INFO_ALL_SITES_OPENED);
+  delegate_->ShowAllSitesSettings();
 #endif
 }
 
@@ -1013,7 +1040,9 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
   // re-enabling).
   DCHECK(web_contents_);
   show_ssl_decision_revoke_button_ =
-      delegate->HasAllowException(url.host(), web_contents_.get()) &&
+      delegate->HasAllowException(
+          url.host(),
+          web_contents_->GetPrimaryMainFrame()->GetStoragePartition()) &&
       visible_security_state.malicious_content_status ==
           security_state::MALICIOUS_CONTENT_STATUS_NONE;
 }
@@ -1064,8 +1093,10 @@ void PageInfo::PresentSitePermissions() {
           CONTENT_SETTING_DEFAULT,
           permissions::PermissionStatusSource::UNSPECIFIED);
       if (permissions::PermissionUtil::IsPermission(permission_info.type)) {
-        permission_result =
-            delegate_->GetPermissionStatus(permission_info.type, site_url_);
+        permission_result = delegate_->GetPermissionResult(
+            permissions::PermissionUtil::ContentSettingTypeToPermissionType(
+                permission_info.type),
+            url::Origin::Create(site_url_));
       } else if (permission_info.type ==
                  ContentSettingsType::FEDERATED_IDENTITY_API) {
         absl::optional<permissions::PermissionResult> embargo_result =
@@ -1118,22 +1149,44 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
   if (!web_contents_ || web_contents_->IsBeingDestroyed())
     return;
 
-  CookieInfoList cookie_info_list;
+  bool is_cookies_subpage_enabled = false;
+#if !BUILDFLAG(IS_ANDROID)
+  is_cookies_subpage_enabled =
+      base::FeatureList::IsEnabled(page_info::kPageInfoCookiesSubpage);
+#endif
 
-  // Add first party cookie and site data counts.
-  PageInfoUI::CookieInfo cookie_info;
-  cookie_info.allowed = GetFirstPartyAllowedCookiesCount(site_url_);
-  cookie_info.blocked = GetFirstPartyBlockedCookiesCount(site_url_);
-  cookie_info.is_first_party = true;
-  cookie_info_list.push_back(cookie_info);
+  if (is_cookies_subpage_enabled) {
+    // Add allowed sites count.
+    PageInfoUI::CookiesNewInfo cookies_info;
+    cookies_info.allowed_sites_count = GetSitesWithAllowedCookiesAccessCount();
+    cookies_info.blocked_sites_count =
+        GetThirdPartySitesWithBlockedCookiesAccessCount(site_url_);
 
-  // Add third party cookie counts.
-  cookie_info.allowed = GetThirdPartyAllowedCookiesCount(site_url_);
-  cookie_info.blocked = GetThirdPartyBlockedCookiesCount(site_url_);
-  cookie_info.is_first_party = false;
-  cookie_info_list.push_back(cookie_info);
+    // TODO(crbug.com/1346305): Add dummy function for FPS information.
+    if (privacy_sandbox::kPrivacySandboxFirstPartySetsUISampleSets.Get() &&
+        site_url_.host() == "example.com") {
+      cookies_info.fps_info.owner_name = u"example.com";
+    }
 
-  ui_->SetCookieInfo(cookie_info_list);
+    ui_->SetCookieInfo(cookies_info);
+  } else {
+    CookieInfoList cookie_info_list;
+
+    // Add first party cookie and site data counts.
+    PageInfoUI::CookieInfo cookie_info;
+    cookie_info.allowed = GetFirstPartyAllowedCookiesCount(site_url_);
+    cookie_info.blocked = GetFirstPartyBlockedCookiesCount(site_url_);
+    cookie_info.is_first_party = true;
+    cookie_info_list.push_back(cookie_info);
+
+    // Add third party cookie counts.
+    cookie_info.allowed = GetThirdPartyAllowedCookiesCount(site_url_);
+    cookie_info.blocked = GetThirdPartyBlockedCookiesCount(site_url_);
+    cookie_info.is_first_party = false;
+    cookie_info_list.push_back(cookie_info);
+
+    ui_->SetCookieInfo(cookie_info_list);
+  }
 
   std::move(done).Run();
 }
@@ -1316,6 +1369,23 @@ int PageInfo::GetFirstPartyAllowedCookiesCount(const GURL& site_url) {
     return 0;
   return settings->allowed_local_shared_objects().GetObjectCountForDomain(
       site_url);
+}
+
+int PageInfo::GetSitesWithAllowedCookiesAccessCount() {
+  auto* settings = GetPageSpecificContentSettings();
+  if (!settings)
+    return 0;
+  return settings->allowed_local_shared_objects().GetHostCount();
+}
+
+int PageInfo::GetThirdPartySitesWithBlockedCookiesAccessCount(
+    const GURL& site_url) {
+  auto* settings = GetPageSpecificContentSettings();
+  if (!settings)
+    return 0;
+  return settings->blocked_local_shared_objects().GetHostCount() -
+         settings->blocked_local_shared_objects().GetHostCountForDomain(
+             site_url);
 }
 
 int PageInfo::GetFirstPartyBlockedCookiesCount(const GURL& site_url) {

@@ -38,8 +38,10 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "base/unguessable_token.h"
 #include "services/network/public/cpp/request_mode.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -543,6 +545,7 @@ ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
       allow_stale_resources_(false),
       image_fetched_(false) {
   InstanceCounters::IncrementCounter(InstanceCounters::kResourceFetcherCounter);
+
   if (IsMainThread())
     MainThreadFetchersSet().insert(this);
 }
@@ -588,7 +591,8 @@ bool ResourceFetcher::ResourceNeedsLoad(Resource* resource,
   // - instructed to defer loading images from network
   if (resource->GetType() == ResourceType::kImage &&
       (ShouldDeferImageLoad(resource->Url()) ||
-       params.GetImageRequestBehavior() == FetchParameters::kDeferImageLoad)) {
+       params.GetImageRequestBehavior() ==
+           FetchParameters::ImageRequestBehavior::kDeferImageLoad)) {
     return false;
   }
   return policy != RevalidationPolicy::kUse || resource->StillNeedsLoad();
@@ -633,8 +637,11 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
             : resource->GetResourceRequest().Url());
     ResourceResponse final_response = resource->GetResponse();
     final_response.SetResourceLoadTiming(nullptr);
+    final_response.SetEncodedDataLength(0);
     info->SetFinalResponse(final_response);
     info->SetLoadResponseEnd(info->InitialTime());
+    if (render_blocking_behavior == RenderBlockingBehavior::kBlocking)
+      info->SetRenderBlockingStatus(/*render_blocking_status=*/true);
     scheduled_resource_timing_reports_.push_back(std::move(info));
     if (!resource_timing_report_timer_.IsActive())
       resource_timing_report_timer_.StartOneShot(base::TimeDelta(), FROM_HERE);
@@ -869,9 +876,8 @@ absl::optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
       redirect_status);
 
   // This may modify params.Url() (via the resource_request argument).
-  Context().PopulateResourceRequest(
-      resource_type, params.GetClientHintsPreferences(),
-      params.GetResourceWidth(), resource_request, options);
+  Context().PopulateResourceRequest(resource_type, params.GetResourceWidth(),
+                                    resource_request, options);
 
   if (!params.Url().IsValid())
     return ResourceRequestBlockedReason::kOther;
@@ -971,10 +977,7 @@ absl::optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
 
 void ResourceFetcher::AttachWebBundleTokenIfNeeded(
     ResourceRequest& resource_request) const {
-  if (!subresource_web_bundles_)
-    return;
-  SubresourceWebBundle* bundle =
-      subresource_web_bundles_->GetMatchingBundle(resource_request.Url());
+  SubresourceWebBundle* bundle = GetMatchingBundle(resource_request.Url());
   if (!bundle)
     return;
   resource_request.SetWebBundleTokenParams(
@@ -994,6 +997,18 @@ ResourceFetcher::GetOrCreateSubresourceWebBundleList() {
     return subresource_web_bundles_;
   subresource_web_bundles_ = MakeGarbageCollected<SubresourceWebBundleList>();
   return subresource_web_bundles_;
+}
+
+ukm::MojoUkmRecorder* ResourceFetcher::UkmRecorder() {
+  if (ukm_recorder_)
+    return ukm_recorder_.get();
+
+  mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
+  Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
+      recorder.InitWithNewPipeAndPassReceiver());
+  ukm_recorder_ = std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
+
+  return ukm_recorder_.get();
 }
 
 Resource* ResourceFetcher::RequestResource(FetchParameters& params,
@@ -1052,8 +1067,15 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   absl::optional<ResourceRequestBlockedReason> blocked_reason =
       PrepareRequest(params, factory, pauser);
   if (blocked_reason) {
-    return ResourceForBlockedRequest(params, factory, blocked_reason.value(),
-                                     client);
+    auto* resource = ResourceForBlockedRequest(params, factory,
+                                               blocked_reason.value(), client);
+    StorePerformanceTimingInitiatorInformation(
+        resource, params.GetRenderBlockingBehavior());
+    if (auto info = resource_timing_info_map_.Take(resource)) {
+      PopulateAndAddResourceTimingInfo(resource, info,
+                                       /*response_end=*/base::TimeTicks::Now());
+    }
+    return resource;
   }
 
   Resource* resource = nullptr;
@@ -1107,16 +1129,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
         }
       }
     }
-  }
-
-  // Vivaldi feature: Check if we should only load images from cache or not.
-  const mojom::FetchCacheMode cachepolicy = resource_request.GetCacheMode();
-  if (factory.GetType() == ResourceType::kImage &&
-      (onlyLoadServeCachedResources_ &&
-    // If a reload image is called.
-    (cachepolicy != mojom::FetchCacheMode::kValidateCache &&
-        cachepolicy != mojom::FetchCacheMode::kBypassCache))) {
-    resource_request.SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
   }
 
   UpdateMemoryCacheStats(resource, policy, params, factory, is_static_data,
@@ -1196,7 +1208,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     image_resources_.insert(resource);
     not_loaded_image_resources_.insert(resource);
     if (params.GetImageRequestBehavior() ==
-        FetchParameters::kNonBlockingImage) {
+        FetchParameters::ImageRequestBehavior::kNonBlockingImage) {
       load_blocking_policy = ImageLoadBlockingPolicy::kForceNonBlockingLoad;
     }
   }
@@ -1288,7 +1300,7 @@ std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
   // that task runner is frame-associated.
   return loader_factory_->CreateURLLoader(
       ResourceRequest(request), options, freezable_task_runner_,
-      request.GetKeepalive() ? Thread::Current()->GetTaskRunner()
+      request.GetKeepalive() ? Thread::Current()->GetDeprecatedTaskRunner()
                              : unfreezable_task_runner_,
       WebBackForwardCacheLoaderHelper(back_forward_cache_loader_helper_));
 }
@@ -1333,7 +1345,8 @@ Resource* ResourceFetcher::CreateResourceForLoading(
 }
 
 void ResourceFetcher::StorePerformanceTimingInitiatorInformation(
-    Resource* resource) {
+    Resource* resource,
+    RenderBlockingBehavior render_blocking_behavior) {
   const AtomicString& fetch_initiator = resource->Options().initiator_info.name;
   if (fetch_initiator == fetch_initiator_type_names::kInternal)
     return;
@@ -1342,6 +1355,9 @@ void ResourceFetcher::StorePerformanceTimingInitiatorInformation(
       fetch_initiator, base::TimeTicks::Now(),
       resource->GetResourceRequest().GetRequestContext(),
       resource->GetResourceRequest().GetRequestDestination());
+
+  if (render_blocking_behavior == RenderBlockingBehavior::kBlocking)
+    info->SetRenderBlockingStatus(/*render_blocking_status=*/true);
 
   resource_timing_info_map_.insert(resource, std::move(info));
 }
@@ -1452,9 +1468,6 @@ void ResourceFetcher::PrintPreloadMismatch(Resource* resource,
       break;
     case Resource::MatchStatus::kRequestMethodDoesNotMatch:
       builder.Append("because the request HTTP method does not match.");
-      break;
-    case Resource::MatchStatus::kRequestHeadersDoNotMatch:
-      builder.Append("because the request headers do not match.");
       break;
     case Resource::MatchStatus::kScriptTypeDoesNotMatch:
       builder.Append("because the script type does not match.");
@@ -1949,13 +1962,8 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
 
   if (scoped_refptr<ResourceTimingInfo> info =
           resource_timing_info_map_.Take(resource)) {
-    if (resource->GetResponse().ShouldPopulateResourceTiming()) {
+    if (resource->GetResponse().ShouldPopulateResourceTiming())
       PopulateAndAddResourceTimingInfo(resource, info, response_end);
-      auto receiver = Context().TakePendingWorkerTimingReceiver(
-          resource->GetResponse().RequestId());
-      info->SetWorkerTimingReceiver(std::move(receiver));
-      Context().AddResourceTiming(*info);
-    }
   }
 
   resource->VirtualTimePauser().UnpauseVirtualTime();
@@ -2008,10 +2016,8 @@ void ResourceFetcher::HandleLoaderError(Resource* resource,
   RemoveResourceLoader(resource->Loader());
 
   if (scoped_refptr<ResourceTimingInfo> info =
-          resource_timing_info_map_.Take(resource)) {
+          resource_timing_info_map_.Take(resource))
     PopulateAndAddResourceTimingInfo(resource, info, finish_time);
-    Context().AddResourceTiming(*info);
-  }
 
   resource->VirtualTimePauser().UnpauseVirtualTime();
   // If the preload was cancelled due to an HTTP error, we don't want to request
@@ -2114,7 +2120,8 @@ bool ResourceFetcher::StartLoad(
     }
     resource->VirtualTimePauser().PauseVirtualTime();
 
-    StorePerformanceTimingInitiatorInformation(resource);
+    StorePerformanceTimingInitiatorInformation(resource,
+                                               render_blocking_behavior);
   }
 
   loader->Start();
@@ -2218,14 +2225,27 @@ String ResourceFetcher::GetCacheIdentifier(const KURL& url) const {
   if (archive_)
     return archive_->GetCacheIdentifier();
 
-  if (subresource_web_bundles_) {
-    SubresourceWebBundle* bundle =
-        subresource_web_bundles_->GetMatchingBundle(url);
-    if (bundle)
-      return bundle->GetCacheIdentifier();
-  }
+  SubresourceWebBundle* bundle = GetMatchingBundle(url);
+  if (bundle)
+    return bundle->GetCacheIdentifier();
 
   return MemoryCache::DefaultCacheIdentifier();
+}
+
+absl::optional<base::UnguessableToken>
+ResourceFetcher::GetSubresourceBundleToken(const KURL& url) const {
+  SubresourceWebBundle* bundle = GetMatchingBundle(url);
+  if (!bundle)
+    return absl::nullopt;
+  return bundle->WebBundleToken();
+}
+
+absl::optional<KURL> ResourceFetcher::GetSubresourceBundleSourceUrl(
+    const KURL& url) const {
+  SubresourceWebBundle* bundle = GetMatchingBundle(url);
+  if (!bundle)
+    return absl::nullopt;
+  return bundle->GetBundleUrl();
 }
 
 void ResourceFetcher::EmulateLoadStartedForInspector(
@@ -2356,6 +2376,9 @@ void ResourceFetcher::PopulateAndAddResourceTimingInfo(
     Resource* resource,
     scoped_refptr<ResourceTimingInfo> info,
     base::TimeTicks response_end) {
+  if (resource->GetResourceRequest().IsFromOriginDirtyStyleSheet())
+    return;
+
   const KURL& initial_url =
       resource->GetResourceRequest().GetRedirectInfo().has_value()
           ? resource->GetResourceRequest().GetRedirectInfo()->original_url
@@ -2375,6 +2398,27 @@ void ResourceFetcher::PopulateAndAddResourceTimingInfo(
   info->SetInitialURL(initial_url);
   info->SetFinalResponse(resource->GetResponse());
   info->SetLoadResponseEnd(response_end);
+  Context().AddResourceTiming(*info);
+}
+
+SubresourceWebBundle* ResourceFetcher::GetMatchingBundle(
+    const KURL& url) const {
+  return subresource_web_bundles_
+             ? subresource_web_bundles_->GetMatchingBundle(url)
+             : nullptr;
+}
+
+void ResourceFetcher::CancelWebBundleSubresourceLoadersFor(
+    const base::UnguessableToken& web_bundle_token) {
+  // Copy to avoid concurrent iteration and modification.
+  auto loaders = loaders_;
+  for (const auto& loader : loaders) {
+    loader->CancelIfWebBundleTokenMatches(web_bundle_token);
+  }
+  auto non_blocking_loaders = non_blocking_loaders_;
+  for (const auto& loader : non_blocking_loaders) {
+    loader->CancelIfWebBundleTokenMatches(web_bundle_token);
+  }
 }
 
 void ResourceFetcher::Trace(Visitor* visitor) const {

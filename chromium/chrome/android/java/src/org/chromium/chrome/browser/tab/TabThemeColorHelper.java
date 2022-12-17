@@ -14,6 +14,7 @@ import org.chromium.ui.base.WindowAndroid;
 // Vivaldi
 import android.graphics.Bitmap;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.url.GURL;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -78,7 +79,7 @@ public class TabThemeColorHelper extends EmptyTabObserver {
 
     /** Vivaldi **/
     @Override
-    public void onFaviconUpdated(Tab tab, Bitmap icon) {
+    public void onFaviconUpdated(Tab tab, Bitmap icon, GURL iconUrl) {
         updateIfNeeded(tab, false);
     }
 }

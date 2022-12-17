@@ -12,6 +12,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/stringize_macros.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -74,7 +75,7 @@ class GLImageTest : public testing::Test {
   void SetUp() override {
     auto prefered_impl = delegate_.GetPreferedGLImplementation();
     display_ = GLImageTestSupport::InitializeGL(prefered_impl);
-    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+    surface_ = gl::init::CreateOffscreenGLSurface(display_, gfx::Size());
     context_ =
         gl::init::CreateGLContext(nullptr, surface_.get(), GLContextAttribs());
     context_->MakeCurrent(surface_.get());
@@ -92,7 +93,7 @@ class GLImageTest : public testing::Test {
   scoped_refptr<GLSurface> surface_;
   scoped_refptr<GLContext> context_;
   GLImageTestDelegate delegate_;
-  GLDisplay* display_ = nullptr;
+  raw_ptr<GLDisplay> display_ = nullptr;
 };
 
 TYPED_TEST_SUITE_P(GLImageTest);

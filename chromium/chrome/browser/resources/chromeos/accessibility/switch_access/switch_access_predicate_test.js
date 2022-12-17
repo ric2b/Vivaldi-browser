@@ -13,6 +13,7 @@ SwitchAccessPredicateTest = class extends SwitchAccessE2ETest {
     await importModule('SACache', '/switch_access/cache.js');
     await importModule(
         'SARootNode', '/switch_access/nodes/switch_access_node.js');
+    await importModule('AutomationTreeWalker', '/common/tree_walker.js');
   }
 };
 
@@ -86,11 +87,11 @@ function getTree(loadedPage) {
     leaf4,
     leaf5,
     leaf6,
-    leaf7
+    leaf7,
   };
 }
 
-TEST_F('SwitchAccessPredicateTest', 'IsInteresting', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'IsInteresting', async function() {
   const loadedPage = await this.runWithLoadedTree(testWebsite());
   const t = getTree(loadedPage);
   const cache = new SACache();
@@ -139,7 +140,7 @@ TEST_F('SwitchAccessPredicateTest', 'IsInteresting', async function() {
       'Leaf7 should not be interesting');
 });
 
-TEST_F('SwitchAccessPredicateTest', 'IsGroup', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'IsGroup', async function() {
   const loadedPage = await this.runWithLoadedTree(testWebsite());
   const t = getTree(loadedPage);
   const cache = new SACache();
@@ -188,53 +189,54 @@ TEST_F('SwitchAccessPredicateTest', 'IsGroup', async function() {
       'Leaf7 should not be a group');
 });
 
-TEST_F('SwitchAccessPredicateTest', 'IsInterestingSubtree', async function() {
-  const loadedPage = await this.runWithLoadedTree(testWebsite());
-  const t = getTree(loadedPage);
-  const cache = new SACache();
+AX_TEST_F(
+    'SwitchAccessPredicateTest', 'IsInterestingSubtree', async function() {
+      const loadedPage = await this.runWithLoadedTree(testWebsite());
+      const t = getTree(loadedPage);
+      const cache = new SACache();
 
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.root, cache),
-      'Root should be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.upper1, cache),
-      'Upper1 should be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.upper2, cache),
-      'Upper2 should be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.lower1, cache),
-      'Lower1 should be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.lower2, cache),
-      'Lower2 should be an interesting subtree');
-  assertFalse(
-      SwitchAccessPredicate.isInterestingSubtree(t.lower3, cache),
-      'Lower3 should not be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf1, cache),
-      'Leaf1 should be an interesting subtree');
-  assertFalse(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf2, cache),
-      'Leaf2 should not be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf3, cache),
-      'Leaf3 should be an interesting subtree');
-  assertFalse(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf4, cache),
-      'Leaf4 should not be an interesting subtree');
-  assertTrue(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf5, cache),
-      'Leaf5 should be an interesting subtree');
-  assertFalse(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf6, cache),
-      'Leaf6 should not be an interesting subtree');
-  assertFalse(
-      SwitchAccessPredicate.isInterestingSubtree(t.leaf7, cache),
-      'Leaf7 should not be an interesting subtree');
-});
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.root, cache),
+          'Root should be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.upper1, cache),
+          'Upper1 should be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.upper2, cache),
+          'Upper2 should be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.lower1, cache),
+          'Lower1 should be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.lower2, cache),
+          'Lower2 should be an interesting subtree');
+      assertFalse(
+          SwitchAccessPredicate.isInterestingSubtree(t.lower3, cache),
+          'Lower3 should not be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf1, cache),
+          'Leaf1 should be an interesting subtree');
+      assertFalse(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf2, cache),
+          'Leaf2 should not be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf3, cache),
+          'Leaf3 should be an interesting subtree');
+      assertFalse(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf4, cache),
+          'Leaf4 should not be an interesting subtree');
+      assertTrue(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf5, cache),
+          'Leaf5 should be an interesting subtree');
+      assertFalse(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf6, cache),
+          'Leaf6 should not be an interesting subtree');
+      assertFalse(
+          SwitchAccessPredicate.isInterestingSubtree(t.leaf7, cache),
+          'Leaf7 should not be an interesting subtree');
+    });
 
-TEST_F('SwitchAccessPredicateTest', 'IsActionable', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'IsActionable', async function() {
   const treeString =
       `<button style="position:absolute; top:-100px;">offscreen</button>
        <button disabled>disabled</button>
@@ -244,7 +246,7 @@ TEST_F('SwitchAccessPredicateTest', 'IsActionable', async function() {
        <input type="range" aria-label="slider" value=5 min=0 max=10>
        <div id="clickable" role="listitem" onclick="2+2"></div>
        <div id="div1"><p>p1</p></div>`;
-  await this.runWithLoadedTree(treeString);
+  const loadedPage = await this.runWithLoadedTree(treeString);
   const cache = new SACache();
 
   const offscreenButton = this.findNodeByNameAndRole('offscreen', 'button');
@@ -297,7 +299,7 @@ TEST_F('SwitchAccessPredicateTest', 'IsActionable', async function() {
       'Static text should not generally be actionable');
 });
 
-TEST_F(
+AX_TEST_F(
     'SwitchAccessPredicateTest', 'IsActionableFocusableElements',
     async function() {
       const treeString = `<div id="noChildren" tabindex=0></div>
@@ -352,7 +354,7 @@ TEST_F(
           'Focusable element with uninteresting children should be actionable');
     });
 
-TEST_F('SwitchAccessPredicateTest', 'LeafPredicate', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'LeafPredicate', async function() {
   const loadedPage = await this.runWithLoadedTree(testWebsite());
   const t = getTree(loadedPage);
   const cache = new SACache();
@@ -378,7 +380,7 @@ TEST_F('SwitchAccessPredicateTest', 'LeafPredicate', async function() {
   assertTrue(leaf(t.leaf3), 'Leaf3 should be a leaf for lower1 tree');
 });
 
-TEST_F('SwitchAccessPredicateTest', 'RootPredicate', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'RootPredicate', async function() {
   const loadedPage = await this.runWithLoadedTree(testWebsite());
   const t = getTree(loadedPage);
 
@@ -402,7 +404,7 @@ TEST_F('SwitchAccessPredicateTest', 'RootPredicate', async function() {
   assertFalse(root(t.leaf3), 'Leaf3 should not be a root of the lower1 tree');
 });
 
-TEST_F('SwitchAccessPredicateTest', 'VisitPredicate', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'VisitPredicate', async function() {
   const loadedPage = await this.runWithLoadedTree(testWebsite());
   const t = getTree(loadedPage);
   const cache = new SACache();
@@ -434,7 +436,7 @@ TEST_F('SwitchAccessPredicateTest', 'VisitPredicate', async function() {
   assertFalse(visit(t.leaf7), 'Leaf7 should not be visited in lower1 tree');
 });
 
-TEST_F('SwitchAccessPredicateTest', 'Cache', async function() {
+AX_TEST_F('SwitchAccessPredicateTest', 'Cache', async function() {
   const loadedPage = await this.runWithLoadedTree(testWebsite());
   const t = getTree(loadedPage);
   const cache = new SACache();

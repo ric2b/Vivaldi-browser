@@ -160,15 +160,16 @@ TEST_F(ReportingDeliveryAgentTest, SuccessfulImmediateUpload) {
     ASSERT_TRUE(value->is_list());
     ASSERT_EQ(1u, value->GetList().size());
 
-    base::Value& report = value->GetList()[0];
+    const base::Value& report = value->GetList()[0];
     ASSERT_TRUE(report.is_dict());
-    EXPECT_EQ(5u, report.GetDict().size());
+    const base::Value::Dict& report_dict = report.GetDict();
+    EXPECT_EQ(5u, report_dict.size());
 
-    ExpectDictIntegerValue(0, report, "age");
-    ExpectDictStringValue(kType_, report, "type");
-    ExpectDictStringValue(kUrl_.spec(), report, "url");
-    ExpectDictStringValue(kUserAgent_, report, "user_agent");
-    const base::Value::Dict* body = report.GetDict().FindDict("body");
+    ExpectDictIntegerValue(0, report_dict, "age");
+    ExpectDictStringValue(kType_, report_dict, "type");
+    ExpectDictStringValue(kUrl_.spec(), report_dict, "url");
+    ExpectDictStringValue(kUserAgent_, report_dict, "user_agent");
+    const base::Value::Dict* body = report_dict.FindDict("body");
     EXPECT_EQ("value", *body->FindString("key"));
   }
   pending_uploads()[0]->Complete(ReportingUploader::Outcome::SUCCESS);
@@ -238,12 +239,13 @@ TEST_F(ReportingDeliveryAgentTest, SuccessfulImmediateUploadDocumentReport) {
 
     const base::Value& report = value->GetList()[0];
     ASSERT_TRUE(report.is_dict());
+    const base::Value::Dict& report_dict = report.GetDict();
 
-    ExpectDictIntegerValue(0, report, "age");
-    ExpectDictStringValue(kType_, report, "type");
-    ExpectDictStringValue(kUrl_.spec(), report, "url");
-    ExpectDictStringValue(kUserAgent_, report, "user_agent");
-    const base::Value::Dict* body = report.GetDict().FindDict("body");
+    ExpectDictIntegerValue(0, report_dict, "age");
+    ExpectDictStringValue(kType_, report_dict, "type");
+    ExpectDictStringValue(kUrl_.spec(), report_dict, "url");
+    ExpectDictStringValue(kUserAgent_, report_dict, "user_agent");
+    const base::Value::Dict* body = report_dict.FindDict("body");
     EXPECT_EQ("value", *body->FindString("key"));
   }
   pending_uploads()[0]->Complete(ReportingUploader::Outcome::SUCCESS);
@@ -314,15 +316,16 @@ TEST_F(ReportingDeliveryAgentTest, SuccessfulImmediateSubdomainUpload) {
     ASSERT_TRUE(value->is_list());
     ASSERT_EQ(1u, value->GetList().size());
 
-    base::Value& report = value->GetList()[0];
+    const base::Value& report = value->GetList()[0];
     ASSERT_TRUE(report.is_dict());
-    EXPECT_EQ(5u, report.GetDict().size());
+    const base::Value::Dict& report_dict = report.GetDict();
+    EXPECT_EQ(5u, report_dict.size());
 
-    ExpectDictIntegerValue(0, report, "age");
-    ExpectDictStringValue(kType_, report, "type");
-    ExpectDictStringValue(kSubdomainUrl_.spec(), report, "url");
-    ExpectDictStringValue(kUserAgent_, report, "user_agent");
-    const base::Value::Dict* body = report.GetDict().FindDict("body");
+    ExpectDictIntegerValue(0, report_dict, "age");
+    ExpectDictStringValue(kType_, report_dict, "type");
+    ExpectDictStringValue(kSubdomainUrl_.spec(), report_dict, "url");
+    ExpectDictStringValue(kUserAgent_, report_dict, "user_agent");
+    const base::Value::Dict* body = report_dict.FindDict("body");
     EXPECT_EQ("value", *body->FindString("key"));
   }
   pending_uploads()[0]->Complete(ReportingUploader::Outcome::SUCCESS);
@@ -393,15 +396,16 @@ TEST_F(ReportingDeliveryAgentTest, SuccessfulDelayedUpload) {
     ASSERT_TRUE(value->is_list());
     ASSERT_EQ(1u, value->GetList().size());
 
-    base::Value& report = value->GetList()[0];
+    const base::Value& report = value->GetList()[0];
     ASSERT_TRUE(report.is_dict());
-    EXPECT_EQ(5u, report.GetDict().size());
+    const base::Value::Dict& report_dict = report.GetDict();
+    EXPECT_EQ(5u, report_dict.size());
 
-    ExpectDictIntegerValue(0, report, "age");
-    ExpectDictStringValue(kType_, report, "type");
-    ExpectDictStringValue(kUrl_.spec(), report, "url");
-    ExpectDictStringValue(kUserAgent_, report, "user_agent");
-    const base::Value::Dict* body = report.GetDict().FindDict("body");
+    ExpectDictIntegerValue(0, report_dict, "age");
+    ExpectDictStringValue(kType_, report_dict, "type");
+    ExpectDictStringValue(kUrl_.spec(), report_dict, "url");
+    ExpectDictStringValue(kUserAgent_, report_dict, "user_agent");
+    const base::Value::Dict* body = report_dict.FindDict("body");
     EXPECT_EQ("value", *body->FindString("key"));
   }
   pending_uploads()[0]->Complete(ReportingUploader::Outcome::SUCCESS);
@@ -559,7 +563,16 @@ TEST_F(ReportingDeliveryAgentTest, ConcurrentRemove) {
   EXPECT_TRUE(reports.empty());
 }
 
-TEST_F(ReportingDeliveryAgentTest, ConcurrentRemoveDuringPermissionsCheck) {
+// Flaky on ChromeOS: https://crbug.com/1348434
+#if defined(CHROMEOS)
+#define MAYBE_ConcurrentRemoveDuringPermissionsCheck \
+  DISABLED_ConcurrentRemoveDuringPermissionsCheck
+#else
+#define MAYBE_ConcurrentRemoveDuringPermissionsCheck \
+  ConcurrentRemoveDuringPermissionsCheck
+#endif
+TEST_F(ReportingDeliveryAgentTest,
+       MAYBE_ConcurrentRemoveDuringPermissionsCheck) {
   // Pause the permissions check, so that we can try to remove some reports
   // while we're in the middle of verifying that we can upload them.  (This is
   // similar to the previous test, but removes the reports during a different

@@ -30,6 +30,7 @@
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/flags_ui/flags_ui_pref_names.h"
@@ -47,6 +48,7 @@
 #include "components/variations/pref_names.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/variations_crash_keys.h"
+#include "components/variations/variations_switches.h"
 #include "content/public/common/content_switch_dependent_feature_overrides.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -56,7 +58,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/settings/about_flags.h"
-#include "chromeos/dbus/dbus_thread_manager.h"  // nogncheck
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"  // nogncheck
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 ChromeFeatureListCreator::ChromeFeatureListCreator() = default;
@@ -64,11 +66,23 @@ ChromeFeatureListCreator::ChromeFeatureListCreator() = default;
 ChromeFeatureListCreator::~ChromeFeatureListCreator() = default;
 
 void ChromeFeatureListCreator::CreateFeatureList() {
+  // Get the variation IDs passed through the command line. This is done early
+  // on because ConvertFlagsToSwitches() will append to the command line
+  // the variation IDs from flags (so that they are visible in about://version).
+  // This will be passed on to `VariationsService::SetUpFieldTrials()`, which
+  // will manually fetch the variation IDs from flags (hence the reason we do
+  // not pass the mutated command line, otherwise the IDs will be duplicated).
+  // It also distinguishes between variation IDs coming from the command line
+  // and from flags, so we cannot rely on simply putting them all in the
+  // command line.
+  const std::string command_line_variation_ids =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          variations::switches::kForceVariationIds);
   CreatePrefService();
   ConvertFlagsToSwitches();
   CreateMetricsServices();
   SetupInitialPrefs();
-  SetUpFieldTrials();
+  SetUpFieldTrials(command_line_variation_ids);
 }
 
 void ChromeFeatureListCreator::SetApplicationLocale(const std::string& locale) {
@@ -197,7 +211,8 @@ void ChromeFeatureListCreator::ConvertFlagsToSwitches() {
                                       flags_ui::kAddSentinels);
 }
 
-void ChromeFeatureListCreator::SetUpFieldTrials() {
+void ChromeFeatureListCreator::SetUpFieldTrials(
+    const std::string& command_line_variation_ids) {
   browser_field_trials_ =
       std::make_unique<ChromeBrowserFieldTrials>(local_state_.get());
 
@@ -219,7 +234,7 @@ void ChromeFeatureListCreator::SetUpFieldTrials() {
   variations::VariationsService* variations_service =
       metrics_services_manager_->GetVariationsService();
   variations_service->SetUpFieldTrials(
-      variation_ids,
+      variation_ids, command_line_variation_ids,
       content::GetSwitchDependentFeatureOverrides(
           *base::CommandLine::ForCurrentProcess()),
       std::move(feature_list), browser_field_trials_.get());
@@ -242,8 +257,19 @@ void ChromeFeatureListCreator::SetupInitialPrefs() {
   // On first run, we need to process the predictor preferences before the
   // browser's profile_manager object is created, but after ResourceBundle
   // is initialized.
+  // If the user specifies an initial preferences file, it is assumed that
+  // they want to reset the preferences regardless of whether it's the
+  // first run.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (!first_run::IsChromeFirstRun() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kInitialPreferencesFile)) {
+    return;
+  }
+#else
   if (!first_run::IsChromeFirstRun())
     return;
+#endif
 
   installer_initial_prefs_ = first_run::LoadInitialPrefs();
   if (!installer_initial_prefs_)

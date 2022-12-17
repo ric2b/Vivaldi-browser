@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_selection_mode.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -190,18 +191,11 @@ bool HTMLInputElement::ShouldAutocomplete() const {
 }
 
 bool HTMLInputElement::IsValidValue(const String& value) const {
-  if (!input_type_->CanSetStringValue()) {
-    NOTREACHED();
+  if (!input_type_->IsValidValue(value)) {
     return false;
   }
-  return !input_type_->TypeMismatchFor(value) &&
-         !input_type_->StepMismatch(value) &&
-         !input_type_->RangeUnderflow(value) &&
-         !input_type_->RangeOverflow(value) &&
-         !TooLong(value, kIgnoreDirtyFlag) &&
-         !TooShort(value, kIgnoreDirtyFlag) &&
-         !input_type_->PatternMismatch(value) &&
-         !input_type_->ValueMissing(value);
+  return !TooLong(value, kIgnoreDirtyFlag) &&
+         !TooShort(value, kIgnoreDirtyFlag);
 }
 
 bool HTMLInputElement::TooLong() const {
@@ -2072,7 +2066,7 @@ void HTMLInputElement::setRangeText(const String& replacement,
 void HTMLInputElement::setRangeText(const String& replacement,
                                     unsigned start,
                                     unsigned end,
-                                    const String& selection_mode,
+                                    const V8SelectionMode& selection_mode,
                                     ExceptionState& exception_state) {
   if (!input_type_->SupportsSelectionAPI()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,

@@ -13,6 +13,7 @@
 #include "chrome/browser/themes/test/theme_service_changed_waiter.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
@@ -38,7 +39,7 @@
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(USE_GTK)
-#include "ui/views/linux_ui/linux_ui.h"
+#include "ui/linux/linux_ui.h"
 #endif
 
 #if defined(USE_AURA)
@@ -188,15 +189,15 @@ class OmniboxPopupContentsViewTest : public InProcessBrowserTest {
   }
 
   SkColor GetSelectedColor(Browser* browser) {
-    return GetOmniboxColor(
-        BrowserView::GetBrowserViewForBrowser(browser)->GetThemeProvider(),
-        OmniboxPart::RESULTS_BACKGROUND, OmniboxPartState::SELECTED);
+    return BrowserView::GetBrowserViewForBrowser(browser)
+        ->GetColorProvider()
+        ->GetColor(kColorOmniboxResultsBackgroundSelected);
   }
 
   SkColor GetNormalColor(Browser* browser) {
-    return GetOmniboxColor(
-        BrowserView::GetBrowserViewForBrowser(browser)->GetThemeProvider(),
-        OmniboxPart::RESULTS_BACKGROUND);
+    return BrowserView::GetBrowserViewForBrowser(browser)
+        ->GetColorProvider()
+        ->GetColor(kColorOmniboxResultsBackground);
   }
 
   void SetUseDarkColor(bool use_dark) {
@@ -218,7 +219,7 @@ class OmniboxPopupContentsViewTest : public InProcessBrowserTest {
     // NativeThemeGtk instance will always be returned.
     // TODO(crbug.com/1304441): Remove this once GTK passthrough is fully
     // supported.
-    views::LinuxUI::instance()->SetUseSystemThemeCallback(
+    ui::LinuxUi::instance()->SetUseSystemThemeCallback(
         base::BindRepeating([](aura::Window* window) { return false; }));
     ui::NativeTheme::GetInstanceForNativeUi()->NotifyOnNativeThemeUpdated();
 
@@ -242,7 +243,7 @@ views::Widget* OmniboxPopupContentsViewTest::CreatePopupForTestQuery() {
   AutocompleteInput input(
       u"foo", metrics::OmniboxEventProto::BLANK,
       ChromeAutocompleteSchemeClassifier(browser()->profile()));
-  input.set_want_asynchronous_matches(false);
+  input.set_omit_asynchronous_matches(true);
   edit_model()->autocomplete_controller()->Start(input);
 
   EXPECT_FALSE(edit_model()->result().empty());
@@ -598,7 +599,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupContentsViewTest,
   AutocompleteInput input(
       u"foo", metrics::OmniboxEventProto::BLANK,
       ChromeAutocompleteSchemeClassifier(browser()->profile()));
-  input.set_want_asynchronous_matches(false);
+  input.set_omit_asynchronous_matches(true);
   edit_model()->autocomplete_controller()->Start(input);
 
   // Create a match to populate the autocomplete.

@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
+#include "net/base/address_list.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -18,9 +19,7 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 
-namespace net {
-
-namespace nqe {
+namespace net::nqe {
 
 namespace {
 
@@ -72,6 +71,4 @@ bool IsPrivateHostForTesting(HostResolver* host_resolver,
 
 }  // namespace internal
 
-}  // namespace nqe
-
-}  // namespace net
+}  // namespace net::nqe

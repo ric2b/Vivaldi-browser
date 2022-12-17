@@ -10,7 +10,7 @@
 #include "android_webview/browser/gfx/task_queue_webview.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "gpu/ipc/gpu_task_scheduler_helper.h"
+#include "gpu/command_buffer/service/gpu_task_scheduler_helper.h"
 #include "ui/gl/gl_surface.h"
 
 namespace android_webview {
@@ -95,9 +95,9 @@ void SkiaOutputSurfaceDependencyWebView::ScheduleGrContextCleanup() {
   // There is no way to access the gpu thread here, so leave it no-op for now.
 }
 
-void SkiaOutputSurfaceDependencyWebView::PostTaskToClientThread(
-    base::OnceClosure closure) {
-  task_queue_->ScheduleClientTask(std::move(closure));
+scoped_refptr<base::TaskRunner>
+SkiaOutputSurfaceDependencyWebView::GetClientTaskRunner() {
+  return task_queue_->GetClientTaskRunner();
 }
 
 gpu::ImageFactory* SkiaOutputSurfaceDependencyWebView::GetGpuImageFactory() {
@@ -123,16 +123,6 @@ base::ScopedClosureRunner SkiaOutputSurfaceDependencyWebView::CacheGLSurface(
     gl::GLSurface* surface) {
   NOTREACHED();
   return base::ScopedClosureRunner();
-}
-
-void SkiaOutputSurfaceDependencyWebView::RegisterDisplayContext(
-    gpu::DisplayContext* display_context) {
-  // No GpuChannelManagerDelegate here, so leave it no-op for now.
-}
-
-void SkiaOutputSurfaceDependencyWebView::UnregisterDisplayContext(
-    gpu::DisplayContext* display_context) {
-  // No GpuChannelManagerDelegate here, so leave it no-op for now.
 }
 
 void SkiaOutputSurfaceDependencyWebView::DidLoseContext(

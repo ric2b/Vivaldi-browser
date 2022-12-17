@@ -56,8 +56,12 @@ FirstWebContentsProfiler::FirstWebContentsProfiler(
   // running. At that time, any visible WebContents should have a pending
   // NavigationEntry, i.e. should have dispatched DidStartNavigation() but not
   // DidFinishNavigation().
-  if (!vivaldi::IsVivaldiRunning())
+  // NOTE(andre@vivaldi.com) : Restored tabs is not loaded until the webview
+  // containing the contents has been attached to the ui-document. See
+  // |WebViewGuest::DidAttachToEmbedder|
+  if (!vivaldi::IsVivaldiRunning()) {
   DCHECK(web_contents->GetController().GetPendingEntry());
+  }
 }
 
 void FirstWebContentsProfiler::RecordFinishReason(

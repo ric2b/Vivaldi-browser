@@ -59,6 +59,7 @@ import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.image_fetcher.ImageFetcher;
+import org.chromium.content.webid.IdentityRequestDialogDismissReason;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -90,6 +91,8 @@ public class AccountSelectionControllerTest {
             JUnitTestGURLs.getGURL(JUnitTestGURLs.RED_1);
     private static final GURL TEST_URL_PRIVACY_POLICY =
             JUnitTestGURLs.getGURL(JUnitTestGURLs.RED_2);
+    private static final GURL TEST_IDP_BRAND_ICON_URL =
+            JUnitTestGURLs.getGURL(JUnitTestGURLs.RED_3);
 
     private static final Account ANA = new Account(
             "Ana", "ana@one.test", "Ana Doe", "Ana", TEST_PROFILE_PIC, /*isSignIn=*/true);
@@ -124,8 +127,8 @@ public class AccountSelectionControllerTest {
 
     public AccountSelectionControllerTest() {
         MockitoAnnotations.initMocks(this);
-        IDP_METADATA =
-                new IdentityProviderMetadata(Color.BLACK, Color.BLACK, "https://icon-url.example");
+        IDP_METADATA = new IdentityProviderMetadata(
+                Color.BLACK, Color.BLACK, TEST_IDP_BRAND_ICON_URL.getSpec());
     }
 
     @Before
@@ -297,7 +300,7 @@ public class AccountSelectionControllerTest {
                 Arrays.asList(ANA, CARL, BOB), IDP_METADATA, CLIENT_ID_METADATA, false);
         verify(mMockBottomSheetController, times(1)).requestShowContent(any(), eq(true));
 
-        assertEquals("Incorrectly hidden", true, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
     }
 
     @Test
@@ -305,7 +308,7 @@ public class AccountSelectionControllerTest {
         when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(true);
         mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, Arrays.asList(ANA),
                 IDP_METADATA, CLIENT_ID_METADATA, false);
-        assertEquals("Incorrectly hidden", true, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
         assertNotNull(mModel.get(ItemProperties.CONTINUE_BUTTON)
                               .get(ContinueButtonProperties.ON_CLICK_LISTENER));
 
@@ -313,9 +316,9 @@ public class AccountSelectionControllerTest {
                 .get(ContinueButtonProperties.ON_CLICK_LISTENER)
                 .onResult(ANA);
         verify(mMockDelegate).onAccountSelected(ANA);
-        assertEquals(true, mMediator.isVisible());
-        mMediator.hideBottomSheet();
-        assertEquals(false, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
+        mMediator.close();
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -323,14 +326,14 @@ public class AccountSelectionControllerTest {
         when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(true);
         mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, Arrays.asList(ANA, CARL),
                 IDP_METADATA, CLIENT_ID_METADATA, false);
-        assertEquals("Incorrectly hidden", true, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
         assertNotNull(mSheetAccountItems.get(0).model.get(AccountProperties.ON_CLICK_LISTENER));
 
         mSheetAccountItems.get(0).model.get(AccountProperties.ON_CLICK_LISTENER).onResult(CARL);
         verify(mMockDelegate).onAccountSelected(CARL);
-        assertEquals(true, mMediator.isVisible());
-        mMediator.hideBottomSheet();
-        assertEquals(false, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
+        mMediator.close();
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -339,8 +342,8 @@ public class AccountSelectionControllerTest {
         mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, Arrays.asList(ANA),
                 IDP_METADATA, CLIENT_ID_METADATA, false);
         pressBack();
-        verify(mMockDelegate).onDismissed(/*shouldEmbargo=*/false);
-        assertEquals(false, mMediator.isVisible());
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.OTHER);
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -349,8 +352,8 @@ public class AccountSelectionControllerTest {
         mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, Arrays.asList(ANA, BOB),
                 IDP_METADATA, CLIENT_ID_METADATA, false);
         pressBack();
-        verify(mMockDelegate).onDismissed(/*shouldEmbargo=*/false);
-        assertEquals("Incorrectly visible", false, mMediator.isVisible());
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.OTHER);
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -360,9 +363,9 @@ public class AccountSelectionControllerTest {
                 IDP_METADATA, CLIENT_ID_METADATA, false);
         mMediator.onAccountSelected(ANA);
         verify(mMockDelegate).onAccountSelected(ANA);
-        assertEquals(true, mMediator.isVisible());
-        mMediator.hideBottomSheet();
-        assertEquals(false, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
+        mMediator.close();
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -372,7 +375,7 @@ public class AccountSelectionControllerTest {
                 Arrays.asList(ANA, NEW_USER), IDP_METADATA, CLIENT_ID_METADATA, false);
         mMediator.onAccountSelected(NEW_USER);
 
-        assertEquals(true, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
         assertTrue(containsItemOfType(mModel, ItemProperties.DATA_SHARING_CONSENT));
         assertEquals(1, mSheetAccountItems.size());
 
@@ -387,12 +390,12 @@ public class AccountSelectionControllerTest {
         mMediator.onAccountSelected(NEW_USER);
 
         pressBack();
-        assertTrue(mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
         assertFalse(containsItemOfType(mModel, ItemProperties.DATA_SHARING_CONSENT));
         assertEquals(2, mSheetAccountItems.size());
 
         pressBack();
-        assertFalse(mMediator.isVisible());
+        assertTrue(mMediator.wasDismissed());
 
         verify(mMockDelegate, never()).onAccountSelected(NEW_USER);
     }
@@ -405,9 +408,9 @@ public class AccountSelectionControllerTest {
         // Auto signs in if no action is taken.
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         verify(mMockDelegate).onAccountSelected(ANA);
-        assertEquals(true, mMediator.isVisible());
-        mMediator.hideBottomSheet();
-        assertEquals(false, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
+        mMediator.close();
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -417,7 +420,7 @@ public class AccountSelectionControllerTest {
                 IDP_METADATA, CLIENT_ID_METADATA, true);
         mMediator.onAutoSignInCancelled();
         verify(mMockDelegate).onAutoSignInCancelled();
-        assertEquals("Incorrectly visible", false, mMediator.isVisible());
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -425,7 +428,7 @@ public class AccountSelectionControllerTest {
         when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(true);
         mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, Arrays.asList(ANA),
                 IDP_METADATA, CLIENT_ID_METADATA, true);
-        assertEquals("Incorrectly hidden", true, mMediator.isVisible());
+        assertFalse(mMediator.wasDismissed());
         assertNotNull(mModel.get(ItemProperties.AUTO_SIGN_IN_CANCEL_BUTTON)
                               .get(AutoSignInCancelButtonProperties.ON_CLICK_LISTENER));
 
@@ -433,7 +436,7 @@ public class AccountSelectionControllerTest {
                 .get(AutoSignInCancelButtonProperties.ON_CLICK_LISTENER)
                 .run();
         verify(mMockDelegate).onAutoSignInCancelled();
-        assertEquals("Incorrectly visible", false, mMediator.isVisible());
+        assertTrue(mMediator.wasDismissed());
     }
 
     @Test
@@ -442,9 +445,9 @@ public class AccountSelectionControllerTest {
         mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, Arrays.asList(ANA),
                 IDP_METADATA, CLIENT_ID_METADATA, true);
         pressBack();
-        verify(mMockDelegate).onDismissed(/*shouldEmbargo=*/false);
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.OTHER);
         verifyNoMoreInteractions(mMockDelegate);
-        assertEquals("Incorrectly visible", false, mMediator.isVisible());
+        assertTrue(mMediator.wasDismissed());
         // The delayed task should not call delegate after user dismissing.
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
@@ -461,9 +464,9 @@ public class AccountSelectionControllerTest {
         DataSharingConsentProperties.Properties dataSharingProperties =
                 mModel.get(ItemProperties.DATA_SHARING_CONSENT)
                         .get(DataSharingConsentProperties.PROPERTIES);
-        assertEquals("Incorrect privacy policy URL", TEST_URL_PRIVACY_POLICY.getSpec(),
+        assertEquals("Incorrect privacy policy URL", TEST_URL_PRIVACY_POLICY,
                 dataSharingProperties.mPrivacyPolicyUrl);
-        assertEquals("Incorrect terms of service URL", TEST_URL_TERMS_OF_SERVICE.getSpec(),
+        assertEquals("Incorrect terms of service URL", TEST_URL_TERMS_OF_SERVICE,
                 dataSharingProperties.mTermsOfServiceUrl);
         assertTrue(containsItemOfType(mModel, ItemProperties.CONTINUE_BUTTON));
         assertEquals("Incorrect provider ETLD+1", TEST_ETLD_PLUS_ONE_2,
@@ -484,7 +487,7 @@ public class AccountSelectionControllerTest {
     private void pressBack() {
         if (mBottomSheetContent.handleBackPress()) return;
 
-        mMediator.onDismissed(/*shouldEmbargo=*/false);
+        mMediator.onDismissed(IdentityRequestDialogDismissReason.OTHER);
     }
 
     private int countAllItems() {

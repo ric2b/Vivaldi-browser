@@ -30,6 +30,7 @@ content::WebUIDataSource* GetWebUIDataSource(const std::string& host) {
       {"details", IDS_CERT_INFO_DETAILS_TAB_LABEL},
       {"close", IDS_CLOSE},
       {"export", IDS_CERT_DETAILS_EXPORT_CERTIFICATE},
+      {"exportA11yLabel", IDS_CERT_DETAILS_EXPORT_CERTIFICATE_A11Y_LABEL},
       {"issuedTo", IDS_CERT_INFO_SUBJECT_GROUP},
       {"issuedBy", IDS_CERT_INFO_ISSUER_GROUP},
       {"cn", IDS_CERT_INFO_COMMON_NAME_LABEL},
@@ -44,6 +45,7 @@ content::WebUIDataSource* GetWebUIDataSource(const std::string& host) {
       {"hierarchy", IDS_CERT_DETAILS_CERTIFICATE_HIERARCHY_LABEL},
       {"certFields", IDS_CERT_DETAILS_CERTIFICATE_FIELDS_LABEL},
       {"certFieldVal", IDS_CERT_DETAILS_CERTIFICATE_FIELD_VALUE_LABEL},
+      {"certError", IDS_CERT_DUMP_ERROR},
   };
   html_source->AddLocalizedStrings(kStrings);
 

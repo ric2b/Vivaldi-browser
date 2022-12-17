@@ -41,10 +41,11 @@ def _CheckForWrongMojomIncludes(input_api, output_api):
         return input_api.FilterSourceFile(
             path,
             files_to_skip=[
-                r'.*_test\.(cc|h)$',
+                r'.*_test.*\.(cc|h)$',
                 r'third_party[\\/]blink[\\/]common[\\/]',
                 r'third_party[\\/]blink[\\/]public[\\/]common[\\/]',
                 r'third_party[\\/]blink[\\/]renderer[\\/]platform[\\/]loader[\\/]fetch[\\/]url_loader[\\/]',
+                r'third_party[\\/]blink[\\/]renderer[\\/]core[\\/]frame[\\/]web.*frame.*\.(cc|h)$',
             ])
 
     pattern = input_api.re.compile(r'#include\s+[<"](.+)\.mojom(.*)\.h[>"]')
@@ -129,6 +130,7 @@ def _CommonChecks(input_api, output_api):
             input_api,
             output_api,
             excluded_paths=_EXCLUDED_PATHS,
+            owners_check=False,
             maxlen=800,
             license_header=license_header,
             global_checks=False))
@@ -142,8 +144,7 @@ def _FilterPaths(input_api):
     for f in input_api.AffectedFiles():
         file_path = f.LocalPath()
         # Filter out changes in web_tests/.
-        if ('web_tests' + input_api.os_path.sep in file_path
-                and 'TestExpectations' not in file_path):
+        if 'web_tests' + input_api.os_path.sep in file_path:
             continue
         if '/PRESUBMIT' in file_path:
             continue
@@ -177,11 +178,11 @@ def _CheckStyle(input_api, output_api):
     #     extension is too long.
     # The latter error comes from CreateProcess hitting its 32768 character
     # limit.
-    files_per_command = 70 if input_api.is_windows else 1000
+    files_per_command = 40 if input_api.is_windows else 1000
     results = []
     for i in range(0, len(files), files_per_command):
         args = [
-            input_api.python_executable, style_checker_path, '--diff-files'
+            input_api.python3_executable, style_checker_path, '--diff-files'
         ]
         args += files[i:i + files_per_command]
 

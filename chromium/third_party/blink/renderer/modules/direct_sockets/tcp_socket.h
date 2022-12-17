@@ -56,25 +56,9 @@ class MODULES_EXPORT TCPSocket final
                            const TCPSocketOptions*,
                            ExceptionState&);
 
-  // Socket:
-  ScriptPromise connection(ScriptState* script_state) const override {
-    return Socket::connection(script_state);
-  }
-  ScriptPromise closed(ScriptState* script_state) const override {
-    return Socket::closed(script_state);
-  }
-  ScriptPromise close(ScriptState* script_state,
-                      const SocketCloseOptions* options,
-                      ExceptionState& exception_state) override {
-    return Socket::close(script_state, options, exception_state);
-  }
-
  public:
   explicit TCPSocket(ScriptState*);
   ~TCPSocket() override;
-
-  TCPSocket(const TCPSocket&) = delete;
-  TCPSocket& operator=(const TCPSocket&) = delete;
 
   // Validates options and calls
   // DirectSocketsServiceMojoRemote::OpenTcpSocket(...) with Init(...) passed as
@@ -84,8 +68,8 @@ class MODULES_EXPORT TCPSocket final
             const TCPSocketOptions*,
             ExceptionState&);
 
-  // On net::OK initializes readable/writable streams and resolves connection
-  // promise. Otherwise rejects the connection promise. Serves as callback for
+  // On net::OK initializes readable/writable streams and resolves opened
+  // promise. Otherwise rejects the opened promise. Serves as callback for
   // Open(...).
   void Init(int32_t result,
             const absl::optional<net::IPEndPoint>& local_addr,
@@ -111,15 +95,14 @@ class MODULES_EXPORT TCPSocket final
   void OnReadError(int32_t net_error) override;
   void OnWriteError(int32_t net_error) override;
 
-  void Close(const SocketCloseOptions*, ExceptionState&) override;
-  void CloseInternal(bool error);
+  void OnBothStreamsClosed(std::vector<ScriptValue> args);
 
   HeapMojoRemote<network::mojom::blink::TCPConnectedSocket> tcp_socket_;
   HeapMojoReceiver<network::mojom::blink::SocketObserver, TCPSocket>
       socket_observer_;
 
   FRIEND_TEST_ALL_PREFIXES(TCPSocketTest, OnSocketObserverConnectionError);
-  FRIEND_TEST_ALL_PREFIXES(TCPSocketTest, OnReadError);
+  FRIEND_TEST_ALL_PREFIXES(TCPSocketCloseTest, OnErrorOrClose);
 };
 
 }  // namespace blink

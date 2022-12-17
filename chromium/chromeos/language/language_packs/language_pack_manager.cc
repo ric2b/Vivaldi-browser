@@ -9,6 +9,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/hash/hash.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
@@ -56,6 +57,8 @@ const base::flat_map<PackSpecPair, std::string>& GetAllLanguagePackDlcIds() {
   // Clients of Language Packs don't need to know the IDs.
   // TODO(b/223250258): We currently only have 10 languages. Add all remaining
   // languages once the infra issue is fixed.
+  // Note: if you add new languages here, make sure to add them to the metrics
+  //       test `LanguagePackMetricsTest.CheckLanguageCodes`.
   static const base::NoDestructor<base::flat_map<PackSpecPair, std::string>>
       all_dlc_ids({
           // Handwriting Recognition.
@@ -77,11 +80,11 @@ const base::flat_map<PackSpecPair, std::string>& GetAllLanguagePackDlcIds() {
   return *all_dlc_ids;
 }
 
-const base::flat_map<std::string, std::string>& GetAllBasePayloadDlcIds() {
-  // Map of all features and corresponding Base Payload DLC IDs.
+const base::flat_map<std::string, std::string>& GetAllBasePackDlcIds() {
+  // Map of all features and corresponding Base Pack DLC IDs.
   static const base::NoDestructor<base::flat_map<std::string, std::string>>
       all_dlc_ids({
-          {kHandwritingFeatureId, "handwriting"},
+          {kHandwritingFeatureId, "handwriting-base"},
       });
 
   return *all_dlc_ids;
@@ -103,15 +106,14 @@ absl::optional<std::string> GetDlcIdForLanguagePack(
   return it->second;
 }
 
-// Finds the ID of the DLC corresponding to the Base Payload for a feature.
-// Returns the DLC ID if the feature has a Base Payload or absl::nullopt
+// Finds the ID of the DLC corresponding to the Base Pack for a feature.
+// Returns the DLC ID if the feature has a Base Pack or absl::nullopt
 // otherwise.
-absl::optional<std::string> GetDlcIdForBasePayload(
-    const std::string& feature_id) {
+absl::optional<std::string> GetDlcIdForBasePack(const std::string& feature_id) {
   // We search in the static list for the given |feature_id|.
-  const auto it = GetAllBasePayloadDlcIds().find(feature_id);
+  const auto it = GetAllBasePackDlcIds().find(feature_id);
 
-  if (it == GetAllBasePayloadDlcIds().end()) {
+  if (it == GetAllBasePackDlcIds().end()) {
     return absl::nullopt;
   }
 
@@ -217,6 +219,9 @@ void LanguagePackManager::GetPackState(const std::string& feature_id,
     return;
   }
 
+  base::UmaHistogramSparse("ChromeOS.LanguagePacks.GetPackState.LanguageCode",
+                           static_cast<int32_t>(base::PersistentHash(locale)));
+
   DlcserviceClient::Get()->GetDlcState(
       *dlc_id, base::BindOnce(&OnGetDlcState, std::move(callback)));
 }
@@ -238,12 +243,12 @@ void LanguagePackManager::RemovePack(const std::string& feature_id,
       *dlc_id, base::BindOnce(&OnUninstallDlcComplete, std::move(callback)));
 }
 
-void LanguagePackManager::InstallBasePayload(
+void LanguagePackManager::InstallBasePack(
     const std::string& feature_id,
-    OnInstallBasePayloadCompleteCallback callback) {
-  const absl::optional<std::string> dlc_id = GetDlcIdForBasePayload(feature_id);
+    OnInstallBasePackCompleteCallback callback) {
+  const absl::optional<std::string> dlc_id = GetDlcIdForBasePack(feature_id);
 
-  // If the given |feature_id| doesn't have a Base Payload, run callback and
+  // If the given |feature_id| doesn't have a Base Pack, run callback and
   // don't reach the DLC Service.
   if (!dlc_id) {
     std::move(callback).Run(CreateInvalidDlcPackResult());

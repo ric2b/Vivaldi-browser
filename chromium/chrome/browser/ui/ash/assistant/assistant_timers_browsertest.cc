@@ -25,8 +25,8 @@
 #include "chrome/browser/ui/ash/assistant/assistant_test_mixin.h"
 #include "chrome/browser/ui/ash/assistant/test_support/test_util.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/cpp/switches.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/cpp/switches.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/window.h"
@@ -195,7 +195,7 @@ class AssistantTimersBrowserTest : public MixinBasedInProcessBrowserTest {
   AssistantTimersBrowserTest() {
     // TODO(b/190633242): enable sandbox in browser tests.
     feature_list_.InitAndDisableFeature(
-        chromeos::assistant::features::kEnableLibAssistantSandbox);
+        ash::assistant::features::kEnableLibAssistantSandbox);
 
     // Do not log to file in test. Otherwise multiple tests may create/delete
     // the log file at the same time. See http://crbug.com/1307868.

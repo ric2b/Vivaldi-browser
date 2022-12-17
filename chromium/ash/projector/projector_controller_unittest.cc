@@ -9,16 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/constants/ash_features.h"
 #include "ash/projector/model/projector_session_impl.h"
 #include "ash/projector/projector_metadata_controller.h"
 #include "ash/projector/projector_metrics.h"
-#include "ash/projector/test/mock_projector_client.h"
 #include "ash/projector/test/mock_projector_metadata_controller.h"
 #include "ash/projector/test/mock_projector_ui_controller.h"
 #include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/public/cpp/projector/projector_session.h"
+#include "ash/public/cpp/test/mock_projector_client.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/bind.h"
@@ -34,8 +33,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chromeos/dbus/audio/audio_node.h"
-#include "chromeos/dbus/audio/fake_cras_audio_client.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/dbus/audio/audio_node.h"
+#include "chromeos/ash/components/dbus/audio/fake_cras_audio_client.h"
 #include "media/mojo/mojom/speech_recognition_result.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -197,13 +197,13 @@ TEST_F(ProjectorControllerTest, OnAudioNodesChanged) {
 
   const AudioNodeInfo kInternalMic[] = {
       {true, 55555, "Fake Mic", "INTERNAL_MIC", "Internal Mic"}};
-  const chromeos::AudioNode audio_node = chromeos::AudioNode(
+  const AudioNode audio_node = AudioNode(
       kInternalMic->is_input, kInternalMic->id,
       /*has_v2_stable_device_id=*/false, kInternalMic->id,
       /*stable_device_id_v2=*/0, kInternalMic->device_name, kInternalMic->type,
       kInternalMic->name, /*active=*/false,
       /*plugged_time=*/0, /*max_supported_channels=*/1, /*audio_effect=*/1);
-  chromeos::FakeCrasAudioClient::Get()->SetAudioNodesForTesting({audio_node});
+  FakeCrasAudioClient::Get()->SetAudioNodesForTesting({audio_node});
 
   CrasAudioHandler::Get()->SetActiveInputNodes({kInternalMic->id});
   EXPECT_CALL(mock_client_,
@@ -257,8 +257,7 @@ TEST_F(ProjectorControllerTest, RecordingStarted) {
 
 TEST_F(ProjectorControllerTest, RecordingEnded) {
   base::FilePath screencast_container_path;
-  ASSERT_TRUE(
-      mock_client_.GetDriveFsMountPointPath(&screencast_container_path));
+  ASSERT_TRUE(mock_client_.GetBaseStoragePath(&screencast_container_path));
   ON_CALL(mock_client_, IsDriveFsMounted())
       .WillByDefault(testing::Return(true));
 
@@ -325,8 +324,7 @@ TEST_P(ProjectorOnDlpRestrictionCheckedAtVideoEndTest, WrapUpRecordingOnce) {
   bool user_deleted_video_file = std::get<1>(GetParam());
 
   base::FilePath screencast_container_path;
-  ASSERT_TRUE(
-      mock_client_.GetDriveFsMountPointPath(&screencast_container_path));
+  ASSERT_TRUE(mock_client_.GetBaseStoragePath(&screencast_container_path));
   ON_CALL(mock_client_, IsDriveFsMounted())
       .WillByDefault(testing::Return(true));
 

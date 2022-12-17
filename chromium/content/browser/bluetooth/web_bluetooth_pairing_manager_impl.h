@@ -29,6 +29,9 @@ class CONTENT_EXPORT WebBluetoothPairingManagerImpl
   // read/write operation.
   static constexpr int kMaxPairAttempts = 10;
 
+  // Passkey/Pin has to be exact 6 digits
+  static constexpr int kPairingPinSize = 6;
+
   explicit WebBluetoothPairingManagerImpl(
       WebBluetoothPairingManagerDelegate* pairing_manager_delegate);
   ~WebBluetoothPairingManagerImpl() override;
@@ -72,6 +75,14 @@ class CONTENT_EXPORT WebBluetoothPairingManagerImpl
                            CredentialPromptPINCancelled);
   FRIEND_TEST_ALL_PREFIXES(BluetoothPairingManagerTest,
                            CredentialPromptPasskeyCancelled);
+  FRIEND_TEST_ALL_PREFIXES(BluetoothPairingManagerTest,
+                           PairConfirmPromptSuccess);
+  FRIEND_TEST_ALL_PREFIXES(BluetoothPairingManagerTest,
+                           PairConfirmPromptCancelled);
+  FRIEND_TEST_ALL_PREFIXES(BluetoothPairingManagerTest,
+                           PairConfirmPinPromptSuccess);
+  FRIEND_TEST_ALL_PREFIXES(BluetoothPairingManagerTest,
+                           PairConfirmPinPromptCancelled);
 
   // Pair the Bluetooth device identified by |device_id|. |num_pair_attempts|
   // represents the number of pairing attempts for the specified device which
@@ -91,10 +102,11 @@ class CONTENT_EXPORT WebBluetoothPairingManagerImpl
       device::BluetoothDevice::ConnectCallback callback,
       absl::optional<device::BluetoothDevice::ConnectErrorCode> error_code);
 
-  void OnPinCodeResult(
-      blink::WebBluetoothDeviceId device_id,
-      WebBluetoothPairingManagerDelegate::CredentialPromptResult status,
-      const std::string& result);
+  void OnPinCodeResult(blink::WebBluetoothDeviceId device_id,
+                       const BluetoothDelegate::PairPromptResult& result);
+
+  void OnPairConfirmResult(blink::WebBluetoothDeviceId device_id,
+                           const BluetoothDelegate::PairPromptResult& result);
 
   // device::BluetoothDevice::PairingDelegate implementation:
   void RequestPinCode(device::BluetoothDevice* device) override;

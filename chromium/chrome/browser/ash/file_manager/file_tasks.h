@@ -120,9 +120,11 @@ namespace file_tasks {
 extern const char kActionIdView[];
 extern const char kActionIdSend[];
 extern const char kActionIdSendMultiple[];
+extern const char kActionIdHandleOffice[];
 extern const char kActionIdWebDriveOfficeWord[];
 extern const char kActionIdWebDriveOfficeExcel[];
 extern const char kActionIdWebDriveOfficePowerPoint[];
+extern const char kActionIdUploadOfficeToDrive[];
 
 // Task types as explained in the comment above. Search for <task-type>.
 enum TaskType {
@@ -165,25 +167,37 @@ enum class WebDriveOfficeTaskResult {
   kMaxValue = UNEXPECTED_ALTERNATE_URL,
 };
 
+// UMA metric name that tracks the result of using a MS Office file outside
+// of Drive.
+constexpr char kUseOutsideDriveMetricName[] =
+    "FileBrowser.OfficeFiles.UseOutsideDrive";
+
+// List of UMA enum values for file system operations that let a user use a
+// MS Office file outside of Drive. The enum values must be kept in sync with
+// OfficeFilesUseOutsideDriveHook in tools/metrics/histograms/enums.xml.
+enum class OfficeFilesUseOutsideDriveHook {
+  FILE_PICKER_SELECTION = 0,
+  COPY = 1,
+  MOVE = 2,
+  ZIP = 3,
+  OPEN_FROM_FILES_APP = 4,
+  kMaxValue = OPEN_FROM_FILES_APP,
+};
+
 // Describes a task.
 // See the comment above for <app-id>, <task-type>, and <action-id>.
 struct TaskDescriptor {
   TaskDescriptor(const std::string& in_app_id,
                  TaskType in_task_type,
                  const std::string& in_action_id)
-      : app_id(in_app_id),
-        task_type(in_task_type),
-        action_id(in_action_id) {
+      : app_id(in_app_id), task_type(in_task_type), action_id(in_action_id) {
     // For web apps, the action_id must be a full valid URL if it exists.
     DCHECK(task_type != TASK_TYPE_WEB_APP || action_id.empty() ||
            GURL(action_id).is_valid());
   }
   TaskDescriptor() = default;
 
-  bool operator<(const TaskDescriptor& other) const {
-    return app_id < other.app_id || task_type < other.task_type ||
-           action_id < other.action_id;
-  }
+  bool operator<(const TaskDescriptor& other) const;
 
   std::string app_id;
   TaskType task_type;
@@ -227,9 +241,12 @@ struct FullTaskDescriptor {
   bool is_file_extension_match;
 };
 
+// Returns true if the `task` is the generic task for Office files handling.
+bool IsHandleOfficeTask(const FullTaskDescriptor& task);
+
 // Update the default file handler for the given sets of suffixes and MIME
 // types.
-void UpdateDefaultTask(PrefService* pref_service,
+void UpdateDefaultTask(Profile* profile,
                        const TaskDescriptor& task_descriptor,
                        const std::set<std::string>& suffixes,
                        const std::set<std::string>& mime_types);
@@ -288,10 +305,9 @@ bool ExecuteFileTask(Profile* profile,
 // Finds the file browser handler tasks (app/extensions declaring
 // "file_browser_handlers" in manifest.json) that can be used with the
 // given files, appending them to the |result_list|.
-void FindFileBrowserHandlerTasks(
-    Profile* profile,
-    const std::vector<GURL>& file_urls,
-    std::vector<FullTaskDescriptor>* result_list);
+void FindFileBrowserHandlerTasks(Profile* profile,
+                                 const std::vector<GURL>& file_urls,
+                                 std::vector<FullTaskDescriptor>* result_list);
 
 // Callback function type for FindAllTypesOfTasks.
 typedef base::OnceCallback<void(
@@ -313,12 +329,15 @@ void FindAllTypesOfTasks(Profile* profile,
 // Chooses the default task in |tasks| and sets it as default, if the default
 // task is found (i.e. the default task may not exist in |tasks|). No tasks
 // should be set as default before calling this function.
-void ChooseAndSetDefaultTask(const PrefService& pref_service,
+void ChooseAndSetDefaultTask(Profile* profile,
                              const std::vector<extensions::EntryInfo>& entries,
                              std::vector<FullTaskDescriptor>* tasks);
 
 // Returns whether |path| is an HTML file according to its extension.
 bool IsHtmlFile(const base::FilePath& path);
+
+// Returns whether |path| is a MS Office file according to its extension.
+bool IsOfficeFile(const base::FilePath& path);
 
 }  // namespace file_tasks
 }  // namespace file_manager

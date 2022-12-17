@@ -75,6 +75,10 @@ import org.chromium.ui.modelutil.PropertyObservable;
 
 import java.util.HashSet;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /**
  * This part of the manual filling component manages the state of the manual filling flow depending
  * on the currently shown tab.
@@ -569,7 +573,16 @@ class ManualFillingMediator
             newControlsHeight += mAccessorySheet.getHeight();
             newControlsOffset += mAccessorySheet.getHeight();
         }
+
+        // Note(david@vivaldi.com): When toolbar is at the bottom we have other offsets.
+        if (!VivaldiUtils.isTopToolbarOn() && VivaldiUtils.isTabStripOn()) {
+            int offset = mActivity.getResources().getDimensionPixelOffset(
+                    org.chromium.chrome.R.dimen.tab_strip_height);
+            if (VivaldiUtils.isTabStackVisible()) offset *= 2;
+            newControlsOffset = offset;
+        }
         mKeyboardAccessory.setBottomOffset(newControlsOffset);
+        if (VivaldiUtils.isTopToolbarOn()) // Only required when toolbar is at the top.
         mViewportInsetSupplier.set(newControlsHeight);
     }
 

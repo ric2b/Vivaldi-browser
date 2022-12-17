@@ -42,8 +42,8 @@
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/shared_image_backing_gl_image.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image/gl_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/ipc/service/shared_image_stub.h"
 #include "media/base/limits.h"
 #include "media/base/mac/color_space_util_mac.h"
@@ -84,6 +84,10 @@ constexpr VideoCodecProfile kSupportedProfiles[] = {
 
     // These are only supported on macOS 11+.
     HEVCPROFILE_MAIN, HEVCPROFILE_MAIN10, HEVCPROFILE_MAIN_STILL_PICTURE,
+    // This is partially supported on macOS 11+, Apple Silicon Mac only supports
+    // 8 ~ 10 bit 400, 420, 422, 444 HW decoding, and Intel Mac supports 8 ~ 12
+    // bit 400, 420, 422 SW decoding, 444 content is decodable but has a green
+    // stripe issue.
     HEVCPROFILE_REXT,
 
     // TODO(sandersd): Hi10p fails during
@@ -1091,8 +1095,8 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
           }
 
           // Record the configuration.
-          DCHECK(seen_pps_.count(slice_hdr.pic_parameter_set_id));
-          DCHECK(seen_sps_.count(pps->seq_parameter_set_id));
+          DCHECK(seen_pps_.contains(slice_hdr.pic_parameter_set_id));
+          DCHECK(seen_sps_.contains(pps->seq_parameter_set_id));
           active_sps_ = seen_sps_[pps->seq_parameter_set_id];
           // Note: SPS extension lookup may create an empty entry.
           active_spsext_ = seen_spsext_[pps->seq_parameter_set_id];
@@ -1340,9 +1344,8 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
 
     // 8.1.2 We only want nuh_layer_id of zero.
     if (nalu.nuh_layer_id) {
-      WriteToMediaLog(MediaLogMessageLevel::kINFO,
-                      "Skipping NALU with nuh_layer_id=");
-      DVLOG(4) << "Skipping NALU with nuh_layer_id=" << nalu.nuh_layer_id;
+      MEDIA_LOG(INFO, media_log_)
+          << "Skipping NALU with nuh_layer_id=" << nalu.nuh_layer_id;
       continue;
     }
 
@@ -1429,6 +1432,22 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
       case H265NALU::RASL_N:
       case H265NALU::RASL_R:
       case H265NALU::CRA_NUT: {
+        // The VT session will report a OsStatus=12909 kVTVideoDecoderBadDataErr
+        // if you send a RASL frame just after a CRA frame, so we wait until the
+        // total output count is enough
+        if (output_count_for_cra_rasl_workaround_ < kMinOutputsBeforeRASL &&
+            (nalu.nal_unit_type == H265NALU::RASL_N ||
+             nalu.nal_unit_type == H265NALU::RASL_R)) {
+          continue;
+        }
+        // Just like H264, only the first slice is examined. Other slices are at
+        // least one of: the same frame, not decoded, invalid so no need to
+        // parse again.
+        if (frame->has_slice) {
+          nalus.push_back(nalu);
+          data_size += kNALUHeaderLength + nalu.size;
+          break;
+        }
         curr_slice_hdr.reset(new H265SliceHeader());
         result = hevc_parser_.ParseSliceHeader(nalu, curr_slice_hdr.get(),
                                                last_slice_hdr.get());
@@ -1448,15 +1467,6 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
                           "Could not parse slice header");
           NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
           return;
-        }
-
-        // The VT session will report a OsStatus=12909 kVTVideoDecoderBadDataErr
-        // if you send a RASL frame just after a CRA frame, so we wait until the
-        // total output count is enough
-        if (output_count_for_cra_rasl_workaround_ < kMinOutputsBeforeRASL &&
-            (nalu.nal_unit_type == H265NALU::RASL_N ||
-             nalu.nal_unit_type == H265NALU::RASL_R)) {
-          continue;
         }
 
         const H265PPS* pps =
@@ -1486,9 +1496,9 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
         }
 
         // Record the configuration.
-        DCHECK(seen_pps_.count(curr_slice_hdr->slice_pic_parameter_set_id));
-        DCHECK(seen_sps_.count(pps->pps_seq_parameter_set_id));
-        DCHECK(seen_vps_.count(sps->sps_video_parameter_set_id));
+        DCHECK(seen_pps_.contains(curr_slice_hdr->slice_pic_parameter_set_id));
+        DCHECK(seen_sps_.contains(pps->pps_seq_parameter_set_id));
+        DCHECK(seen_vps_.contains(sps->sps_video_parameter_set_id));
         active_vps_ = seen_vps_[sps->sps_video_parameter_set_id];
         active_sps_ = seen_sps_[pps->pps_seq_parameter_set_id];
         active_pps_ = seen_pps_[curr_slice_hdr->slice_pic_parameter_set_id];
@@ -1701,7 +1711,7 @@ void VTVideoDecodeAccelerator::DecodeDone(Frame* frame) {
 
   // pending_frames_.erase() will delete |frame|.
   int32_t bitstream_id = frame->bitstream_id;
-  DCHECK_EQ(1u, pending_frames_.count(bitstream_id));
+  DCHECK(pending_frames_.contains(bitstream_id));
 
   if (state_ == STATE_ERROR || state_ == STATE_DESTROYING) {
     // Destroy() handles NotifyEndOfBitstreamBuffer().
@@ -1814,7 +1824,7 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
 
   for (const PictureBuffer& picture : pictures) {
     DVLOG(3) << "AssignPictureBuffer(" << picture.id() << ")";
-    DCHECK(!picture_info_map_.count(picture.id()));
+    DCHECK(!picture_info_map_.contains(picture.id()));
     assigned_picture_ids_.insert(picture.id());
     available_picture_ids_.push_back(picture.id());
     if (picture.client_texture_ids().empty() &&
@@ -2051,9 +2061,9 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
     // Request new pictures.
     picture_size_ = frame.image_size;
 
-    // TODO(https://crbug.com/1210994): Remove XRGB support, and expose only
+    // TODO(https://crbug.com/1210994): Remove RGBAF16 support, and expose only
     // PIXEL_FORMAT_NV12 and PIXEL_FORMAT_YUV420P10.
-    picture_format_ = PIXEL_FORMAT_XRGB;
+    picture_format_ = PIXEL_FORMAT_RGBAF16;
     if (base::FeatureList::IsEnabled(kMultiPlaneVideoToolboxSharedImages)) {
       // TODO(https://crbug.com/1233228): The UV planes of P010 frames cannot
       // be represented in the current gfx::BufferFormat.
@@ -2103,7 +2113,7 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
       planes.push_back(gfx::BufferPlane::Y);
       planes.push_back(gfx::BufferPlane::UV);
       break;
-    case PIXEL_FORMAT_XRGB:
+    case PIXEL_FORMAT_RGBAF16:
       planes.push_back(gfx::BufferPlane::DEFAULT);
       break;
     default:
@@ -2120,8 +2130,8 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
     // TODO(https://crbug.com/1108909): BGRA is not an appropriate value for
     // these parameters.
     const viz::ResourceFormat viz_resource_format =
-        (picture_format_ == PIXEL_FORMAT_XRGB)
-            ? viz::ResourceFormat::BGRA_8888
+        (picture_format_ == PIXEL_FORMAT_RGBAF16)
+            ? viz::ResourceFormat::RGBA_F16
             : viz::GetResourceFormat(plane_buffer_format);
     const GLenum gl_format = viz::GLDataFormat(viz_resource_format);
 
@@ -2145,7 +2155,7 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
           gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
       gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
 
-      gpu::SharedImageBackingGLCommon::InitializeGLTextureParams gl_params;
+      gpu::GLTextureImageBackingHelper::InitializeGLTextureParams gl_params;
       // ANGLE-on-Metal exposes IOSurfaces via GL_TEXTURE_2D. Be robust to that.
       gl_params.target = gl_client_.supports_arb_texture_rectangle
                              ? GL_TEXTURE_RECTANGLE_ARB
@@ -2154,24 +2164,23 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
       gl_params.format = gl_format;
       gl_params.type = GL_UNSIGNED_BYTE;
       gl_params.is_cleared = true;
-      gpu::SharedImageBackingGLCommon::UnpackStateAttribs gl_attribs;
 
-      // A GL texture id is needed to create the legacy mailbox, which requires
-      // that the GL context be made current.
-      const bool kCreateLegacyMailbox = true;
+      // Making the GL context current before performing below shared image
+      // tasks.
+      // TODO(vikassoni) : Remove if making context current is not required.
       if (!gl_client_.make_context_current.Run()) {
         DLOG(ERROR) << "Failed to make context current";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
         return false;
       }
 
-      auto shared_image = std::make_unique<gpu::SharedImageBackingGLImage>(
+      auto shared_image = std::make_unique<gpu::GLImageBacking>(
           gl_image, mailbox, viz_resource_format, plane_size, color_space,
           kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, shared_image_usage,
-          gl_params, gl_attribs, gl_client_.is_passthrough);
+          gl_params, gl_client_.is_passthrough);
 
       const bool success = shared_image_stub->factory()->RegisterBacking(
-          std::move(shared_image), kCreateLegacyMailbox);
+          std::move(shared_image), /*allow_legacy_mailbox=*/false);
       if (!success) {
         DLOG(ERROR) << "Failed to register shared image";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);

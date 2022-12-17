@@ -8,7 +8,8 @@
 #include <memory>
 #include <string>
 
-#include "ui/base/ime/input_method_delegate.h"
+#include "base/memory/raw_ptr.h"
+#include "ui/base/ime/ime_key_event_dispatcher.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -40,7 +41,7 @@ class NativeWidgetMacNSWindowHost;
 
 class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
                                      public FocusChangeListener,
-                                     public ui::internal::InputMethodDelegate {
+                                     public ui::ImeKeyEventDispatcher {
  public:
   explicit NativeWidgetMac(internal::NativeWidgetDelegate* delegate);
   NativeWidgetMac(const NativeWidgetMac&) = delete;
@@ -255,7 +256,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   void OnWillChangeFocus(View* focused_before, View* focused_now) override;
   void OnDidChangeFocus(View* focused_before, View* focused_now) override;
 
-  // ui::internal::InputMethodDelegate:
+  // ui::ImeKeyEventDispatcher:
   ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;
 
  private:
@@ -263,7 +264,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   friend class views::test::NativeWidgetMacTest;
   class ZoomFocusMonitor;
 
-  internal::NativeWidgetDelegate* delegate_;
+  raw_ptr<internal::NativeWidgetDelegate> delegate_;
   std::unique_ptr<NativeWidgetMacNSWindowHost> ns_window_host_;
 
   Widget::InitParams::Ownership ownership_;
@@ -277,7 +278,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
 
   // Weak pointer to the FocusManager with with |zoom_focus_monitor_| and
   // |ns_window_host_| are registered.
-  FocusManager* focus_manager_ = nullptr;
+  raw_ptr<FocusManager> focus_manager_ = nullptr;
   std::unique_ptr<ui::InputMethod> input_method_;
   std::unique_ptr<ZoomFocusMonitor> zoom_focus_monitor_;
   // Held while this widget is active if it's a child.

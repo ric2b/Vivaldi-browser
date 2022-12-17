@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_SCHEDULER_PUBLIC_PAGE_SCHEDULER_H_
 
 #include <memory>
-#include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
@@ -20,6 +19,7 @@ namespace blink {
 
 namespace scheduler {
 class WebAgentGroupScheduler;
+class WidgetScheduler;
 }  // namespace scheduler
 
 class PLATFORM_EXPORT PageScheduler {
@@ -58,11 +58,10 @@ class PLATFORM_EXPORT PageScheduler {
   virtual bool IsInBackForwardCache() const = 0;
 
   // Creates a new FrameScheduler. The caller is responsible for deleting
-  // it. All tasks executed by the frame scheduler will be attributed to
-  // |blame_context|.
+  // it.
   virtual std::unique_ptr<FrameScheduler> CreateFrameScheduler(
       FrameScheduler::Delegate* delegate,
-      BlameContext*,
+      bool is_in_embedded_frame_tree,
       FrameScheduler::FrameType) = 0;
 
   virtual void AudioStateChanged(bool is_audio_playing) = 0;
@@ -85,6 +84,9 @@ class PLATFORM_EXPORT PageScheduler {
   // Guaranteed to be non-null for real PageScheduler implementation, but may
   // be null in unit tests.
   virtual VirtualTimeController* GetVirtualTimeController() = 0;
+
+  // Creates a WebWidgetScheduler implementation.
+  virtual scoped_refptr<scheduler::WidgetScheduler> CreateWidgetScheduler() = 0;
 };
 
 }  // namespace blink

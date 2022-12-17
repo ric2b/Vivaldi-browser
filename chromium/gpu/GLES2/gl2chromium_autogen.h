@@ -354,9 +354,6 @@
   GLES2_GET_FUN(UnlockDiscardableTextureCHROMIUM)
 #define glLockDiscardableTextureCHROMIUM \
   GLES2_GET_FUN(LockDiscardableTextureCHROMIUM)
-#define glTexStorage2DImageCHROMIUM GLES2_GET_FUN(TexStorage2DImageCHROMIUM)
-#define glSetColorSpaceMetadataCHROMIUM \
-  GLES2_GET_FUN(SetColorSpaceMetadataCHROMIUM)
 #define glWindowRectanglesEXT GLES2_GET_FUN(WindowRectanglesEXT)
 #define glCreateGpuFenceCHROMIUM GLES2_GET_FUN(CreateGpuFenceCHROMIUM)
 #define glCreateClientGpuFenceCHROMIUM \
@@ -376,10 +373,6 @@
   GLES2_GET_FUN(BeginSharedImageAccessDirectCHROMIUM)
 #define glEndSharedImageAccessDirectCHROMIUM \
   GLES2_GET_FUN(EndSharedImageAccessDirectCHROMIUM)
-#define glBeginBatchReadAccessSharedImageCHROMIUM \
-  GLES2_GET_FUN(BeginBatchReadAccessSharedImageCHROMIUM)
-#define glEndBatchReadAccessSharedImageCHROMIUM \
-  GLES2_GET_FUN(EndBatchReadAccessSharedImageCHROMIUM)
 #define glEnableiOES GLES2_GET_FUN(EnableiOES)
 #define glDisableiOES GLES2_GET_FUN(DisableiOES)
 #define glBlendEquationiOES GLES2_GET_FUN(BlendEquationiOES)

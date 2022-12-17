@@ -65,8 +65,8 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
   // ash::disks::DiskMountManager::Observer:
   void OnMountEvent(
       ash::disks::DiskMountManager::MountEvent event,
-      chromeos::MountError error_code,
-      const ash::disks::DiskMountManager::MountPointInfo& mount_info) override;
+      ash::MountError error_code,
+      const ash::disks::DiskMountManager::MountPoint& mount_info) override;
 
   // chromeos::settings::calculator::SizeCalculator::Observer:
   void OnSizeCalculated(
@@ -75,11 +75,6 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
 
   // Removes the handler from the list of observers of every observed instances.
   void StopObservingEvents();
-
- protected:
-  // Round a given number of bytes up to the next power of 2.
-  // Ex: 14 => 16, 150 => 256.
-  int64_t RoundByteSize(int64_t bytes);
 
  private:
   // Handlers of JS messages.

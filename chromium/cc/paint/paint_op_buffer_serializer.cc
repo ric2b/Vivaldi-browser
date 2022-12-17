@@ -142,8 +142,7 @@ void PaintOpBufferSerializer::ClearForOpaqueRaster(
                              SkClipOp::kDifference, false);
     SerializeOp(canvas, &inner_clip_op, nullptr, params);
   }
-  DrawColorOp clear_op(SkColor4f::FromColor(preamble.background_color),
-                       SkBlendMode::kSrc);
+  DrawColorOp clear_op(preamble.background_color, SkBlendMode::kSrc);
   SerializeOp(canvas, &clear_op, nullptr, params);
   RestoreToCount(canvas, 1, params);
 }
@@ -321,9 +320,9 @@ bool PaintOpBufferSerializer::SerializeOpWithFlags(
     uint8_t alpha) {
   // We use a null |image_provider| here because images are decoded during
   // serialization.
-  const ScopedRasterFlags scoped_flags(&flags_op->flags, nullptr,
-                                       canvas->getTotalMatrix(),
-                                       options_.max_texture_size, alpha);
+  const ScopedRasterFlags scoped_flags(
+      &flags_op->flags, nullptr, canvas->getTotalMatrix(),
+      options_.max_texture_size, alpha / 255.0f);
   const PaintFlags* flags_to_serialize = scoped_flags.flags();
   if (!flags_to_serialize)
     return true;

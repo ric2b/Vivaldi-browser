@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {SAChildNode, SARootNode} from '/switch_access/nodes/switch_access_node.js';
+import {constants} from '../common/constants.js';
+
+import {SAChildNode, SARootNode} from './nodes/switch_access_node.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 

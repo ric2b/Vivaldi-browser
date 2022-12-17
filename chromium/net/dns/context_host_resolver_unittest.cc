@@ -80,8 +80,7 @@ class ContextHostResolverTest : public ::testing::Test,
   void SetMockDnsRules(MockDnsClientRuleList rules) {
     IPAddress dns_ip(192, 168, 1, 0);
     DnsConfig config;
-    config.nameservers.push_back(
-        IPEndPoint(dns_ip, dns_protocol::kDefaultPort));
+    config.nameservers.emplace_back(dns_ip, dns_protocol::kDefaultPort);
     config.doh_config = *DnsOverHttpsConfig::FromString("https://example.com");
     EXPECT_TRUE(config.IsValid());
 
@@ -100,7 +99,7 @@ class ContextHostResolverTest : public ::testing::Test,
     EXPECT_TRUE(dns_client_->GetEffectiveConfig());
 
     scoped_refptr<HostResolverProc> proc = CreateCatchAllHostResolverProc();
-    manager_->set_proc_params_for_test(ProcTaskParams(proc.get(), 1u));
+    manager_->set_proc_params_for_test(ProcTaskParams(proc, 1u));
   }
 
   raw_ptr<MockDnsClient> dns_client_;
@@ -620,13 +619,14 @@ TEST_F(ContextHostResolverTest, ResolveFromCache) {
   // cache.
   base::SimpleTestTickClock clock;
   clock.Advance(base::Days(62));  // Arbitrary non-zero time.
-  AddressList expected(kEndpoint);
+  std::vector<IPEndPoint> expected({kEndpoint});
   host_cache->Set(
       HostCache::Key("example.com", DnsQueryType::UNSPECIFIED,
                      0 /* host_resolver_flags */, HostResolverSource::ANY,
                      NetworkIsolationKey()),
-      HostCache::Entry(OK, expected, HostCache::Entry::SOURCE_DNS,
-                       base::Days(1)),
+      HostCache::Entry(OK, expected,
+                       /*aliases=*/std::set<std::string>({"example.com"}),
+                       HostCache::Entry::SOURCE_DNS, base::Days(1)),
       clock.NowTicks(), base::Days(1));
   resolver->SetTickClockForTesting(&clock);
 
@@ -773,19 +773,18 @@ TEST_F(ContextHostResolverTest, HostCacheInvalidation) {
 
 class NetworkBoundResolveContext : public ResolveContext {
  public:
-  NetworkBoundResolveContext(
-      URLRequestContext* url_request_context,
-      bool enable_caching,
-      NetworkChangeNotifier::NetworkHandle target_network)
+  NetworkBoundResolveContext(URLRequestContext* url_request_context,
+                             bool enable_caching,
+                             handles::NetworkHandle target_network)
       : ResolveContext(url_request_context, enable_caching),
         target_network_(target_network) {}
 
-  NetworkChangeNotifier::NetworkHandle GetTargetNetwork() const override {
+  handles::NetworkHandle GetTargetNetwork() const override {
     return target_network_;
   }
 
  private:
-  const NetworkChangeNotifier::NetworkHandle target_network_;
+  const handles::NetworkHandle target_network_;
 };
 
 // A mock HostResolverProc which returns different IP addresses based on the
@@ -803,7 +802,7 @@ class NetworkAwareHostResolverProc : public HostResolverProc {
               HostResolverFlags host_resolver_flags,
               AddressList* addrlist,
               int* os_error,
-              NetworkChangeNotifier::NetworkHandle network) override {
+              handles::NetworkHandle network) override {
     // Presume failure
     *os_error = 1;
     const auto* iter = kResults.find(network);
@@ -823,7 +822,7 @@ class NetworkAwareHostResolverProc : public HostResolverProc {
               AddressList* addrlist,
               int* os_error) override {
     return Resolve(host, address_family, host_resolver_flags, addrlist,
-                   os_error, NetworkChangeNotifier::kInvalidNetworkHandle);
+                   os_error, handles::kInvalidNetworkHandle);
   }
 
   struct IPv4 {
@@ -835,7 +834,7 @@ class NetworkAwareHostResolverProc : public HostResolverProc {
 
   static constexpr int kPort = 100;
   static constexpr auto kResults =
-      base::MakeFixedFlatMap<NetworkChangeNotifier::NetworkHandle, IPv4>(
+      base::MakeFixedFlatMap<handles::NetworkHandle, IPv4>(
           {{1, IPv4{1, 2, 3, 4}}, {2, IPv4{8, 8, 8, 8}}});
 
   static IPEndPoint ToIPEndPoint(const IPv4& ipv4) {
@@ -855,8 +854,7 @@ TEST_F(ContextHostResolverTest, ExistingNetworkBoundLookup) {
 
   const url::SchemeHostPort host(url::kHttpsScheme, "example.com",
                                  NetworkAwareHostResolverProc::kPort);
-  scoped_refptr<NetworkAwareHostResolverProc> resolver_proc =
-      new NetworkAwareHostResolverProc();
+  auto resolver_proc = base::MakeRefCounted<NetworkAwareHostResolverProc>();
   ScopedDefaultHostResolverProc scoped_default_host_resolver;
   scoped_default_host_resolver.Init(resolver_proc.get());
 
@@ -896,8 +894,7 @@ TEST_F(ContextHostResolverTest, ExistingNetworkBoundLookup) {
 TEST_F(ContextHostResolverTest, NotExistingNetworkBoundLookup) {
   const url::SchemeHostPort host(url::kHttpsScheme, "example.com",
                                  NetworkAwareHostResolverProc::kPort);
-  scoped_refptr<NetworkAwareHostResolverProc> resolver_proc =
-      new NetworkAwareHostResolverProc();
+  auto resolver_proc = base::MakeRefCounted<NetworkAwareHostResolverProc>();
   ScopedDefaultHostResolverProc scoped_default_host_resolver;
   scoped_default_host_resolver.Init(resolver_proc.get());
 
@@ -932,7 +929,7 @@ TEST_F(ContextHostResolverTest, NetworkBoundResolverCacheInvalidation) {
 
   // The actual network handle doesn't really matter, this test just wants to
   // check that all the pieces are in place and configured correctly.
-  constexpr NetworkChangeNotifier::NetworkHandle network = 2;
+  constexpr handles::NetworkHandle network = 2;
   manager_ = HostResolverManager::CreateNetworkBoundHostResolverManager(
       HostResolver::ManagerOptions(), network, nullptr /* net_log */);
   manager_->SetLastIPv6ProbeResultForTesting(true);

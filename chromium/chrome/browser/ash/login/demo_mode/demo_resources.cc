@@ -4,15 +4,16 @@
 
 #include "chrome/browser/ash/login/demo_mode/demo_resources.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_paths.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check_op.h"
+#include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/image_loader/image_loader_client.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 
 namespace ash {
 namespace {

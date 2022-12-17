@@ -19,17 +19,22 @@
 #include "base/synchronization/lock.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/interest_group/auction_process_manager.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/browser/interest_group/interest_group_storage.h"
+#include "content/browser/private_aggregation/private_aggregation_manager_impl.h"
+#include "content/browser/private_aggregation/private_aggregation_test_utils.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/common/private_aggregation_features.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -519,22 +524,30 @@ class AdAuctionServiceImplTest : public RenderViewHostTestHarness {
     return interest_groups;
   }
 
-  int GetJoinCount(const url::Origin& owner, const std::string& name) {
-    for (const auto& interest_group : GetInterestGroupsForOwner(owner)) {
+  // Returns the specified interest group, if it exists.
+  absl::optional<StorageInterestGroup> GetInterestGroup(
+      const url::Origin& owner,
+      const std::string& name) {
+    for (auto& interest_group : GetInterestGroupsForOwner(owner)) {
       if (interest_group.interest_group.name == name) {
-        return interest_group.bidding_browser_signals->join_count;
+        return std::move(interest_group);
       }
     }
-    return 0;
+    return absl::nullopt;
+  }
+
+  int GetJoinCount(const url::Origin& owner, const std::string& name) {
+    auto interest_group = GetInterestGroup(owner, name);
+    if (!interest_group)
+      return 0;
+    return interest_group->bidding_browser_signals->join_count;
   }
 
   double GetPriority(const url::Origin& owner, const std::string& name) {
-    for (const auto& interest_group : GetInterestGroupsForOwner(owner)) {
-      if (interest_group.interest_group.name == name) {
-        return interest_group.interest_group.priority.value();
-      }
-    }
-    return 0;
+    auto interest_group = GetInterestGroup(owner, name);
+    if (!interest_group)
+      return 0;
+    return interest_group->interest_group.priority;
   }
 
   absl::optional<GURL> ConvertFencedFrameURNToURL(const GURL& urn_url) {
@@ -859,6 +872,42 @@ TEST_F(AdAuctionServiceImplTest, LeaveInterestGroupOriginNotHttps) {
   NavigateAndCommit(kHttpUrl);
   LeaveInterestGroupAndExpectPipeClosed(kOriginA, kInterestGroupName);
   EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
+}
+
+TEST_F(AdAuctionServiceImplTest, FixExpiryOnJoin) {
+  const base::TimeDelta kMaxExpiry = base::Days(30);
+  blink::InterestGroup interest_group = CreateInterestGroup();
+
+  // Join an interest group with an expiry that's exactly the maximum allowed.
+  // The expiry should be stored without modification.
+  interest_group.expiry = base::Time::Now() + kMaxExpiry;
+  JoinInterestGroupAndFlush(interest_group);
+  auto storage_interest_group = GetInterestGroup(kOriginA, kInterestGroupName);
+  ASSERT_TRUE(storage_interest_group);
+  EXPECT_EQ(1, storage_interest_group->bidding_browser_signals->join_count);
+  EXPECT_EQ(interest_group.expiry,
+            storage_interest_group->interest_group.expiry);
+
+  // Rejoin the interest group with a short expiry. The expiry should also be
+  // stored without modification.
+  interest_group.expiry = base::Time::Now() + base::Days(1);
+  JoinInterestGroupAndFlush(interest_group);
+  storage_interest_group = GetInterestGroup(kOriginA, kInterestGroupName);
+  ASSERT_TRUE(storage_interest_group);
+  EXPECT_EQ(2, storage_interest_group->bidding_browser_signals->join_count);
+  EXPECT_EQ(interest_group.expiry,
+            storage_interest_group->interest_group.expiry);
+
+  // Rejoin the interest group with an expiry that exceeds the maximum allowed.
+  // The expiry should be set to kMaxExpiry days from now.
+  interest_group.expiry = base::Time::Now() + base::Days(300);
+  JoinInterestGroupAndFlush(interest_group);
+  storage_interest_group = GetInterestGroup(kOriginA, kInterestGroupName);
+  ASSERT_TRUE(storage_interest_group);
+  EXPECT_EQ(3, storage_interest_group->bidding_browser_signals->join_count);
+  base::Time actual_expiry = storage_interest_group->interest_group.expiry;
+  EXPECT_EQ(base::Time::Now() + kMaxExpiry, actual_expiry);
+  EXPECT_NE(interest_group.expiry, actual_expiry);
 }
 
 // These tests validate the `dailyUpdateUrl` and
@@ -1504,8 +1553,7 @@ TEST_F(AdAuctionServiceImplTest, UpdateInvalidPriorityCancelsAllUpdates) {
       GetInterestGroupsForOwner(kOriginA);
   ASSERT_EQ(groups.size(), 1u);
   const auto& group = groups[0].interest_group;
-  ASSERT_TRUE(group.priority.has_value());
-  EXPECT_EQ(group.priority.value(), 2.0);
+  EXPECT_EQ(group.priority, 2.0);
   EXPECT_EQ(group.bidding_url, kBiddingLogicUrlA);
 }
 
@@ -1947,6 +1995,7 @@ TEST_F(AdAuctionServiceImplTest, UpdateDoesntChangeBrowserSignals) {
 "ads": [{"renderUrl": "https://example.com/new_render"
         }]
 })");
+  blink::InterestGroupKey originA_group_key(kOriginA, kInterestGroupName);
 
   blink::InterestGroup interest_group = CreateInterestGroup();
   interest_group.daily_update_url = kUpdateUrlA;
@@ -1963,9 +2012,9 @@ TEST_F(AdAuctionServiceImplTest, UpdateDoesntChangeBrowserSignals) {
   EXPECT_EQ(1, GetJoinCount(kOriginA, kInterestGroupName));
 
   // Register 2 bids and a win.
-  manager_->RecordInterestGroupBid(kOriginA, kInterestGroupName);
-  manager_->RecordInterestGroupBid(kOriginA, kInterestGroupName);
-  manager_->RecordInterestGroupWin(kOriginA, kInterestGroupName, "{}");
+  manager_->RecordInterestGroupBids(blink::InterestGroupSet{originA_group_key});
+  manager_->RecordInterestGroupBids(blink::InterestGroupSet{originA_group_key});
+  manager_->RecordInterestGroupWin(originA_group_key, "{}");
 
   std::vector<StorageInterestGroup> prev_groups =
       GetInterestGroupsForOwner(kOriginA);
@@ -5394,6 +5443,328 @@ function reportResult(auctionConfig, browserSignals) {
   EXPECT_EQ(network_responder_->ReportCount(), 8u);
   EXPECT_TRUE(network_responder_->ReportSent("/bidder_debug_win_2"));
   EXPECT_TRUE(network_responder_->ReportSent("/seller_debug_win_2"));
+}
+
+class AdAuctionServiceImplPrivateAggregationEnabledTest
+    : public AdAuctionServiceImplTest {
+ public:
+  AdAuctionServiceImplPrivateAggregationEnabledTest() {
+    feature_list_.InitAndEnableFeature(content::kPrivateAggregationApi);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(AdAuctionServiceImplPrivateAggregationEnabledTest,
+       PrivateAggregationReportForwarded) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  class TestPrivateAggregationManagerImpl
+      : public PrivateAggregationManagerImpl {
+   public:
+    TestPrivateAggregationManagerImpl(
+        std::unique_ptr<PrivateAggregationBudgeter> budgeter,
+        std::unique_ptr<PrivateAggregationHost> host)
+        : PrivateAggregationManagerImpl(std::move(budgeter),
+                                        std::move(host),
+                                        /*storage_partition=*/nullptr) {}
+  };
+
+  base::MockRepeatingCallback<void(AggregatableReportRequest,
+                                   PrivateAggregationBudgetKey)>
+      mock_callback;
+
+  auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+  storage_partition_impl->OverridePrivateAggregationManagerForTesting(
+      std::make_unique<TestPrivateAggregationManagerImpl>(
+          std::make_unique<MockPrivateAggregationBudgeter>(),
+          std::make_unique<PrivateAggregationHost>(
+              /*on_report_request_received=*/mock_callback.Get(),
+              /*browser_context=*/storage_partition_impl->browser_context())));
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+
+  EXPECT_CALL(mock_callback, Run)
+      .WillRepeatedly(
+          testing::Invoke([this](AggregatableReportRequest request,
+                                 PrivateAggregationBudgetKey budget_key) {
+            ASSERT_EQ(request.payload_contents().contributions.size(), 1u);
+            EXPECT_EQ(request.payload_contents().contributions[0].bucket, 1);
+            EXPECT_EQ(request.payload_contents().contributions[0].value, 2);
+            EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
+            EXPECT_EQ(budget_key.api(),
+                      PrivateAggregationBudgetKey::Api::kFledge);
+            EXPECT_EQ(budget_key.origin(), kOriginA);
+          }));
+
+  absl::optional<GURL> auction_result =
+      RunAdAuctionAndFlush(std::move(auction_config));
+  EXPECT_NE(auction_result, absl::nullopt);
+}
+
+class PrivateAggregationUseCounterContentBrowserClient
+    : public AllowInterestGroupContentBrowserClient {
+ public:
+  PrivateAggregationUseCounterContentBrowserClient() = default;
+  ~PrivateAggregationUseCounterContentBrowserClient() override = default;
+
+  // ContentBrowserClient:
+  MOCK_METHOD(void,
+              LogWebFeatureForCurrentPage,
+              (content::RenderFrameHost*, blink::mojom::WebFeature),
+              (override));
+};
+
+TEST_F(AdAuctionServiceImplPrivateAggregationEnabledTest,
+       PrivateAggregationUseCounterLogged) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  PrivateAggregationUseCounterContentBrowserClient browser_client;
+  ScopedContentBrowserClientSetting setting(&browser_client);
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          testing::_, blink::mojom::WebFeature::kPrivateAggregationApiAll));
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          testing::_, blink::mojom::WebFeature::kPrivateAggregationApiFledge));
+  absl::optional<GURL> auction_result =
+      RunAdAuctionAndFlush(std::move(auction_config));
+  EXPECT_NE(auction_result, absl::nullopt);
+}
+
+// TODO(crbug.com/1356654): Update when use counter coverage is improved.
+TEST_F(AdAuctionServiceImplPrivateAggregationEnabledTest,
+       PrivateAggregationUseCounterNotLoggedOnFailedInvocation) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.sendHistogramReport({});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  PrivateAggregationUseCounterContentBrowserClient browser_client;
+  ScopedContentBrowserClientSetting setting(&browser_client);
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          testing::_, blink::mojom::WebFeature::kPrivateAggregationApiAll))
+      .Times(0);
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          testing::_, blink::mojom::WebFeature::kPrivateAggregationApiFledge))
+      .Times(0);
+  absl::optional<GURL> auction_result =
+      RunAdAuctionAndFlush(std::move(auction_config));
+
+  // There should've been a sendHistogramReport() error.
+  EXPECT_EQ(auction_result, absl::nullopt);
+}
+
+class AdAuctionServiceImplPrivateAggregationDisabledTest
+    : public AdAuctionServiceImplTest {
+ public:
+  AdAuctionServiceImplPrivateAggregationDisabledTest() {
+    feature_list_.InitAndDisableFeature(content::kPrivateAggregationApi);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(AdAuctionServiceImplPrivateAggregationDisabledTest,
+       PrivateAggregationNotExposed) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+
+  absl::optional<GURL> auction_result =
+      RunAdAuctionAndFlush(std::move(auction_config));
+
+  // privateAggregation should cause a ReferenceError.
+  EXPECT_EQ(auction_result, absl::nullopt);
+}
+
+TEST_F(AdAuctionServiceImplPrivateAggregationDisabledTest,
+       PrivateAggregationUseCounterNotLogged) {
+  constexpr char kBiddingScript[] = R"(
+function generateBid(
+    interestGroup, auctionSignals, perBuyerSignals, trustedBiddingSignals,
+    browserSignals) {
+  privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+  return {'ad': 'example', 'bid': 1, 'render': 'https://example.com/render'};
+}
+)";
+
+  constexpr char kDecisionScript[] = R"(
+function scoreAd(
+    adMetadata, bid, auctionConfig, trustedScoringSignals, browserSignals) {
+  return bid;
+}
+)";
+
+  PrivateAggregationUseCounterContentBrowserClient browser_client;
+  ScopedContentBrowserClientSetting setting(&browser_client);
+
+  network_responder_->RegisterScriptResponse(kBiddingUrlPath, kBiddingScript);
+  network_responder_->RegisterScriptResponse(kDecisionUrlPath, kDecisionScript);
+
+  blink::InterestGroup interest_group = CreateInterestGroup();
+  interest_group.bidding_url = kUrlA.Resolve(kBiddingUrlPath);
+  interest_group.priority = 2;
+  interest_group.ads.emplace();
+  blink::InterestGroup::Ad ad(
+      /*render_url=*/GURL("https://example.com/render"),
+      /*metadata=*/absl::nullopt);
+  interest_group.ads->emplace_back(std::move(ad));
+  JoinInterestGroupAndFlush(interest_group);
+
+  blink::AuctionConfig auction_config;
+  auction_config.seller = kOriginA;
+  auction_config.decision_logic_url = kUrlA.Resolve(kDecisionUrlPath);
+  auction_config.non_shared_params.interest_group_buyers = {kOriginA};
+
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          testing::_, blink::mojom::WebFeature::kPrivateAggregationApiAll))
+      .Times(0);
+  EXPECT_CALL(
+      browser_client,
+      LogWebFeatureForCurrentPage(
+          testing::_, blink::mojom::WebFeature::kPrivateAggregationApiFledge))
+      .Times(0);
+
+  absl::optional<GURL> auction_result =
+      RunAdAuctionAndFlush(std::move(auction_config));
+
+  // privateAggregation should cause a ReferenceError.
+  EXPECT_EQ(auction_result, absl::nullopt);
 }
 
 }  // namespace content

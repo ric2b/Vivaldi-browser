@@ -14,6 +14,16 @@ IntentFile::IntentFile(const GURL& url) : url(url) {}
 
 IntentFile::~IntentFile() = default;
 
+bool IntentFile::operator==(const IntentFile& other) const {
+  return url == other.url && mime_type == other.mime_type &&
+         file_name == other.file_name && file_size == other.file_size &&
+         is_directory == other.is_directory;
+}
+
+bool IntentFile::operator!=(const IntentFile& other) const {
+  return !(*this == other);
+}
+
 std::unique_ptr<IntentFile> IntentFile::Clone() const {
   auto intent_file = std::make_unique<IntentFile>(url);
   if (mime_type.has_value()) {
@@ -29,7 +39,6 @@ std::unique_ptr<IntentFile> IntentFile::Clone() const {
 
 bool IntentFile::MatchConditionValue(const ConditionValuePtr& condition_value) {
   switch (condition_value->match_type) {
-    case PatternMatchType::kNone:
     case PatternMatchType::kLiteral:
     case PatternMatchType::kPrefix:
     case PatternMatchType::kSuffix: {
@@ -71,6 +80,26 @@ Intent::Intent(const std::string& action, std::vector<IntentFilePtr> files)
     : action(action), files(std::move(files)) {}
 
 Intent::~Intent() = default;
+
+bool Intent::operator==(const Intent& other) const {
+  for (int i = 0; i < static_cast<int>(files.size()); i++) {
+    if ((*files[i]) != (*other.files[i])) {
+      return false;
+    }
+  }
+
+  return action == other.action && url == other.url &&
+         mime_type == other.mime_type && activity_name == other.activity_name &&
+         drive_share_url == other.drive_share_url &&
+         share_text == other.share_text && share_title == other.share_title &&
+         start_type == other.start_type && categories == other.categories &&
+         data == other.data && ui_bypassed == other.ui_bypassed &&
+         extras == other.extras;
+}
+
+bool Intent::operator!=(const Intent& other) const {
+  return !(*this == other);
+}
 
 std::unique_ptr<Intent> Intent::Clone() const {
   auto intent = std::make_unique<Intent>(action);
@@ -126,7 +155,7 @@ absl::optional<std::string> Intent::GetIntentConditionValueByType(
       return url.has_value() ? absl::optional<std::string>(url->host())
                              : absl::nullopt;
     }
-    case ConditionType::kPattern: {
+    case ConditionType::kPath: {
       return url.has_value() ? absl::optional<std::string>(url->path())
                              : absl::nullopt;
     }
@@ -181,6 +210,26 @@ bool Intent::MatchFilter(const IntentFilterPtr& filter) {
       return false;
     }
   }
+  return true;
+}
+
+bool Intent::IsShareIntent() {
+  return action == apps_util::kIntentActionSend ||
+         action == apps_util::kIntentActionSendMultiple;
+}
+
+bool Intent::OnlyShareToDrive() {
+  return IsShareIntent() && drive_share_url && !share_text && files.empty();
+}
+
+bool Intent::IsIntentValid() {
+  // TODO(crbug.com/853604):Add more checks here to make this a general intent
+  // validity check. Return false if this is a share intent with no file or
+  // text.
+  if (IsShareIntent()) {
+    return share_text || !files.empty();
+  }
+
   return true;
 }
 

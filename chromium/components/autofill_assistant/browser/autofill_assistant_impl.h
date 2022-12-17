@@ -10,7 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "components/autofill_assistant/browser/public/autofill_assistant.h"
-#include "components/autofill_assistant/browser/public/external_script_controller.h"
+#include "components/autofill_assistant/browser/public/headless_script_controller.h"
 #include "components/autofill_assistant/browser/service/service_request_sender.h"
 
 namespace content {
@@ -21,6 +21,7 @@ class WebContents;
 namespace autofill_assistant {
 
 class CommonDependencies;
+class WebsiteLoginManager;
 
 class AutofillAssistantImpl : public autofill_assistant::AutofillAssistant {
  public:
@@ -43,9 +44,10 @@ class AutofillAssistantImpl : public autofill_assistant::AutofillAssistant {
       const std::string& intent,
       GetCapabilitiesResponseCallback callback) override;
 
-  std::unique_ptr<ExternalScriptController> CreateExternalScriptController(
+  std::unique_ptr<HeadlessScriptController> CreateHeadlessScriptController(
       content::WebContents* web_contents,
-      ExternalActionDelegate* action_extension_delegate) override;
+      ExternalActionDelegate* action_extension_delegate,
+      WebsiteLoginManager* website_login_manager = nullptr) override;
 
  private:
   // The `BrowserContext` for which this `AutofillAssistantImpl` was created

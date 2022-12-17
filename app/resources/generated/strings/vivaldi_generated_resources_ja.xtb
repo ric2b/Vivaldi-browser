@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Idle 状態からの復帰</translation>
 <translation id="119944043368869598">すべてクリア</translation>
 <translation id="1221825588892235038">選択したコンテンツのみ</translation>
+<translation id="1234736487471201993">この画像の QR コードを作成</translation>
 <translation id="1244303850296295656">拡張機能のエラー</translation>
 <translation id="125220115284141797">既定</translation>
 <translation id="1297175357211070620">送信先</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">タブをキャストする</translation>
 <translation id="2150139952286079145">送信先の検索</translation>
 <translation id="215753907730220065">全画面表示を終了</translation>
+<translation id="2158475082070321257">選択箇所へのリンクをコピー</translation>
 <translation id="2177950615300672361">プライベートタブ: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">ネイティブクライアントモジュール: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">プレーンテキストとして貼り付ける</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">サイトは識別子を使用してデバイスを認識する必要がある場合もあります</translation>
 <translation id="2445081178310039857">拡張機能のルートフォルダーを指定してください。</translation>
 <translation id="2470702053775288986">サポートされていない拡張機能が無効になりました</translation>
-<translation id="2476578072172137802">サイトの設定</translation>
+<translation id="2485422356828889247">アンインストール</translation>
 <translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">倍率は 10 ～ 200 の数値で指定してください。</translation>
 <translation id="253557089021624350">キープアライブカウント</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">不正行為を報告</translation>
 <translation id="2941112035454246133">低</translation>
 <translation id="2972581237482394796">やり直し (&amp;R)</translation>
+<translation id="2993517869960930405">アプリ情報</translation>
 <translation id="3003623123441819449">CSS キャッシュ</translation>
 <translation id="3008272652534848354">許可設定をリセット</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">別のユーザーとしてリンクを開く</translation>
 <translation id="3222066309010235055">事前レンダリング: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">パッケージ化する拡張機能のルートフォルダーを選択します。拡張機能を更新するには、再使用する秘密鍵ファイルも選択してください。</translation>
+<translation id="3275778913554317645">ウィンドウとして開く</translation>
 <translation id="3280237271814976245">名前を付けて保存... (&amp;A)</translation>
 <translation id="3285322247471302225">新しいタブ (&amp;T)</translation>
 <translation id="3288047731229977326">デベロッパーモードで実行される拡張機能はパソコンにダメージを与える恐れがあります。デベロッパーでない場合は、安全のため、デベロッパーモードで実行されているこれらの拡張機能を無効にしてください。</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">PDF を既定アプリで開く</translation>
 <translation id="3308134619352333507">ボタンを隠す</translation>
 <translation id="3317459757438853210">両面印刷</translation>
+<translation id="3331974543021145906">アプリ情報</translation>
 <translation id="3341703758641437857">ファイルの URL へのアクセスを許可</translation>
 <translation id="3347086966102161372">画像のアドレスをコピー (&amp;O)</translation>
 <translation id="3360297538363969800">印刷できませんでした。プリンターを確認してもう一度お試しください。</translation>
 <translation id="3378572629723696641">この拡張機能は破損している可能性があります。</translation>
 <translation id="3387614642886316601">拡張スペルチェックを使用する</translation>
+<translation id="3390013585654699824">アプリの詳細</translation>
 <translation id="3393582007140394275">画面をキャストできません。</translation>
 <translation id="3432227430032737297">表示中のサイトをすべて削除</translation>
 <translation id="345693547134384690">新しいタブで画像を開く (&amp;I)</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504"><ph name="SEARCH_ENGINE" /> で画像を検索 (&amp;S)</translation>
 <translation id="3955193568934677022">保護されたコンテンツの再生をサイトに許可する（推奨）</translation>
 <translation id="3979395879372752341">新しい拡張機能が追加されました（<ph name="EXTENSION_NAME" />）</translation>
+<translation id="398477389655464998">選択箇所へのリンクをコピー</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">辞書に追加 (&amp;A)</translation>
 <translation id="407520071244661467">倍率</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">インポートする前にブラウザを終了してください</translation>
 <translation id="4130207949184424187">この拡張機能により、アドレスバーから検索したときに表示されるページが変更されました。</translation>
 <translation id="4131410914670010031">白黒</translation>
+<translation id="4165986682804962316">サイトの設定</translation>
 <translation id="4176463684765177261">無効</translation>
 <translation id="4200983522494130825">新しいタブ (&amp;T)</translation>
 <translation id="4225397296022057997">すべてのサイト</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">設定を復元</translation>
 <translation id="4726710629007580002">この拡張機能をインストールしようとした際、警告がありました:</translation>
 <translation id="479536056609751218">ウェブページ、HTML のみ</translation>
+<translation id="4827904420700932487">この画像の QR コードを作成</translation>
 <translation id="4839303808932127586">名前を付けて動画を保存... (&amp;V)</translation>
 <translation id="4840096453115567876">プライベートモードを終了してもよろしいですか？</translation>
 <translation id="488785315393301722">詳細を表示</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">アクセスする前に確認する（推奨）</translation>
 <translation id="5677928146339483299">ブロック</translation>
 <translation id="5707185214361380026">拡張機能の読み込みに失敗しました:</translation>
+<translation id="5713171467967533494">Vivaldi ブラウザで開く</translation>
 <translation id="5715711091495208045">プラグインブローカー: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF で保存</translation>
 <translation id="5747809636523347288">貼り付けて <ph name="URL" /> に移動 (&amp;S)</translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">オプション</translation>
 <translation id="6579369886355986318">すべてのコントロールを表示(&amp;c)</translation>
 <translation id="6639554308659482635">SQLite メモリー</translation>
+<translation id="666731172850799929"><ph name="APP_NAME" />で開く</translation>
 <translation id="6686817083349815241">パスワードを保存</translation>
 <translation id="6691936601825168937">進む (&amp;F)</translation>
 <translation id="6798954102094737107">プラグイン: <ph name="PLUGIN_NAME" /></translation>
@@ -430,6 +441,7 @@
 <translation id="9003647077635673607">全てのウェブサイトでの実行を許可</translation>
 <translation id="9027459031423301635">新しいタブでリンクを開く (&amp;T)</translation>
 <translation id="9056810968620647706">一致する項目が見つかりません。</translation>
+<translation id="9084064520949870008">ウィンドウとして開く</translation>
 <translation id="9137916601698928395"><ph name="USER" /> としてリンクを開く</translation>
 <translation id="91568222606626347">ショートカットを作成...</translation>
 <translation id="916607977885256133">ピクチャー イン ピクチャー</translation>

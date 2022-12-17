@@ -55,7 +55,10 @@ class RootFrameSink::ChildCompositorFrameSink
                             std::move(resources));
   }
   void OnCompositorFrameTransitionDirectiveProcessed(
-      uint32_t sequence_id) override {}
+      uint32_t sequence_id) override {
+    owner_->OnCompositorFrameTransitionDirectiveProcessed(
+        frame_sink_id_, layer_tree_frame_sink_id_, sequence_id);
+  }
 
   const viz::FrameSinkId frame_sink_id() { return frame_sink_id_; }
 
@@ -208,8 +211,8 @@ void RootFrameSink::RemoveChildFrameSinkId(
 }
 
 void RootFrameSink::SetContainedSurfaces(
-    const std::vector<viz::SurfaceId>& ids) {
-  contained_surfaces_ = base::flat_set<viz::SurfaceId>(ids.begin(), ids.end());
+    const base::flat_set<viz::SurfaceId>& ids) {
+  contained_surfaces_ = ids;
   for (auto it = last_invalidated_frame_id_.begin();
        it != last_invalidated_frame_id_.end();) {
     if (!contained_surfaces_.contains(it->first))
@@ -372,6 +375,16 @@ void RootFrameSink::ReturnResources(
                              std::move(resources));
 }
 
+void RootFrameSink::OnCompositorFrameTransitionDirectiveProcessed(
+    viz::FrameSinkId frame_sink_id,
+    uint32_t layer_tree_frame_sink_id,
+    uint32_t sequence_id) {
+  if (client_) {
+    client_->OnCompositorFrameTransitionDirectiveProcessed(
+        frame_sink_id, layer_tree_frame_sink_id, sequence_id);
+  }
+}
+
 void RootFrameSink::DettachClient() {
   client_ = nullptr;
 }
@@ -417,6 +430,18 @@ gfx::Size RootFrameSink::GetChildFrameSize() {
 void RootFrameSink::EvictChildSurface(const viz::SurfaceId& surface_id) {
   DCHECK(child_sink_support_);
   child_sink_support_->EvictSurface(surface_id);
+}
+
+void RootFrameSink::OnCaptureStarted(const viz::FrameSinkId& frame_sink_id) {
+  auto it = std::find_if(contained_surfaces_.begin(), contained_surfaces_.end(),
+                         [frame_sink_id](const viz::SurfaceId& surface_id) {
+                           return surface_id.frame_sink_id() == frame_sink_id;
+                         });
+  if (it == contained_surfaces_.end())
+    return;
+  // When a capture is started we need to force an invalidate.
+  if (client_)
+    client_->Invalidate();
 }
 
 }  // namespace android_webview

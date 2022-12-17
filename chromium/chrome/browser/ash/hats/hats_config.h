@@ -5,11 +5,8 @@
 #ifndef CHROME_BROWSER_ASH_HATS_HATS_CONFIG_H_
 #define CHROME_BROWSER_ASH_HATS_HATS_CONFIG_H_
 
+#include "base/feature_list.h"
 #include "base/time/time.h"
-
-namespace base {
-struct Feature;
-}  // namespace base
 
 namespace ash {
 
@@ -56,6 +53,9 @@ extern const HatsConfig kHatsAudioSurvey;
 extern const HatsConfig kHatsPersonalizationAvatarSurvey;
 extern const HatsConfig kHatsPersonalizationScreensaverSurvey;
 extern const HatsConfig kHatsPersonalizationWallpaperSurvey;
+extern const HatsConfig kHatsMediaAppPdfSurvey;
+extern const HatsConfig kHatsCameraAppSurvey;
+extern const HatsConfig kHatsPhotosExperienceSurvey;
 
 }  // namespace ash
 

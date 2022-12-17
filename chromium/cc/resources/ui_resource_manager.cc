@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/check.h"
+#include "base/containers/cxx20_erase.h"
 #include "cc/resources/scoped_ui_resource.h"
 
 namespace cc {
@@ -65,10 +67,11 @@ void UIResourceManager::RecreateUIResources() {
 
 base::flat_map<UIResourceId, gfx::Size> UIResourceManager::GetUIResourceSizes()
     const {
-  base::flat_map<UIResourceId, gfx::Size> result;
+  base::flat_map<UIResourceId, gfx::Size>::container_type items(
+      ui_resource_client_map_.size());
   for (const auto pair : ui_resource_client_map_)
-    result.emplace(pair.first, pair.second.size);
-  return result;
+    items.push_back({pair.first, pair.second.size});
+  return base::flat_map<UIResourceId, gfx::Size>(std::move(items));
 }
 
 std::vector<UIResourceRequest> UIResourceManager::TakeUIResourcesRequests() {
@@ -82,6 +85,18 @@ UIResourceId UIResourceManager::GetOrCreateUIResource(const SkBitmap& bitmap) {
   const auto resource = owned_shared_resources_.find(bitmap.pixelRef());
   if (resource != owned_shared_resources_.end())
     return resource->second->id();
+
+  // Evict all UIResources whose bitmaps are no longer referenced outside of the
+  // map.
+  base::EraseIf(owned_shared_resources_,
+                [](auto& pair) { return pair.second->IsUniquelyOwned(); });
+
+  // Max capacity of `owned_shared_resources_`. A DCHECK() would fire if cache
+  // size after eviction does not fall below the limit. 256 is an arbitrarily
+  // chosen number that is greater than the max number of images we expect to
+  // ever use concurrently.
+  constexpr size_t kMaxSkBitmapResources = 256u;
+  DCHECK_LT(owned_shared_resources_.size(), kMaxSkBitmapResources);
 
   auto scoped_resource =
       ScopedUIResource::Create(this, UIResourceBitmap(bitmap));

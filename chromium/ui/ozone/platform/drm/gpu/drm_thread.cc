@@ -91,7 +91,7 @@ void DrmThread::Start(base::OnceClosure receiver_completer,
 
   base::Thread::Options thread_options;
   thread_options.message_pump_type = base::MessagePumpType::IO;
-  thread_options.priority = base::ThreadPriority::DISPLAY;
+  thread_options.thread_type = base::ThreadType::kDisplayCritical;
 
   if (!StartWithOptions(std::move(thread_options)))
     LOG(FATAL) << "Failed to create DRM thread";
@@ -390,10 +390,12 @@ void DrmThread::RefreshNativeDisplays(
 
 void DrmThread::ConfigureNativeDisplays(
     const std::vector<display::DisplayConfigurationParams>& config_requests,
+    uint32_t modeset_flag,
     base::OnceCallback<void(bool)> callback) {
   TRACE_EVENT0("drm", "DrmThread::ConfigureNativeDisplays");
 
-  bool config_success = display_manager_->ConfigureDisplays(config_requests);
+  bool config_success =
+      display_manager_->ConfigureDisplays(config_requests, modeset_flag);
   std::move(callback).Run(config_success);
 }
 

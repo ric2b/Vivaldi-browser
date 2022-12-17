@@ -103,6 +103,7 @@
 #include "chrome/browser/password_manager/android/password_checkup_launcher_helper.h"
 #include "chrome/browser/safe_browsing/android/password_reuse_controller_android.h"
 #include "chrome/browser/safe_browsing/android/safe_browsing_referring_app_bridge_android.h"
+#include "components/password_manager/core/browser/password_check_referrer_android.h"
 #include "ui/android/window_android.h"
 #else
 #include "chrome/browser/ui/browser_list.h"
@@ -199,13 +200,11 @@ void OpenUrl(content::WebContents* current_web_contents,
 
 int64_t GetNavigationIDFromPrefsByOrigin(PrefService* prefs,
                                          const Origin& origin) {
-  const base::Value* unhandled_sync_password_reuses =
-      prefs->GetDictionary(prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
-  if (!unhandled_sync_password_reuses)
-    return 0;
+  const base::Value::Dict& unhandled_sync_password_reuses =
+      prefs->GetValueDict(prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
 
   const base::Value* navigation_id_value =
-      unhandled_sync_password_reuses->FindKey(origin.Serialize());
+      unhandled_sync_password_reuses.Find(origin.Serialize());
 
   int64_t navigation_id;
   return navigation_id_value &&
@@ -374,14 +373,12 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
          password_type == PasswordType::OTHER_GAIA_PASSWORD);
   // Otherwise, checks if there's any unhandled sync password reuses matches
   // this origin.
-  auto* unhandled_sync_password_reuses = profile->GetPrefs()->GetDictionary(
-      prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
-  return unhandled_sync_password_reuses
-             ? (unhandled_sync_password_reuses->FindKey(
-                    web_contents->GetPrimaryMainFrame()
-                        ->GetLastCommittedOrigin()
-                        .Serialize()) != nullptr)
-             : false;
+  const auto& unhandled_sync_password_reuses =
+      profile->GetPrefs()->GetValueDict(
+          prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
+  return unhandled_sync_password_reuses.Find(web_contents->GetPrimaryMainFrame()
+                                                 ->GetLastCommittedOrigin()
+                                                 .Serialize());
 }
 
 safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
@@ -1027,9 +1024,9 @@ void ChromePasswordProtectionService::OpenChangePasswordUrl(
   } else {
 #if BUILDFLAG(IS_ANDROID)
     JNIEnv* env = base::android::AttachCurrentThread();
-    PasswordCheckupLauncherHelper::
-        LaunchLocalCheckupFromPhishGuardWarningDialog(
-            env, web_contents->GetTopLevelNativeWindow()->GetJavaObject());
+    PasswordCheckupLauncherHelper::LaunchLocalCheckup(
+        env, web_contents->GetTopLevelNativeWindow()->GetJavaObject(),
+        password_manager::PasswordCheckReferrerAndroid::kPhishedWarningDialog);
 #endif
 #if BUILDFLAG(FULL_SAFE_BROWSING)
     // Opens chrome://settings/passwords/check in a new tab.
@@ -1213,10 +1210,10 @@ bool ChromePasswordProtectionService::HasUnhandledEnterprisePasswordReuse(
 }
 
 void ChromePasswordProtectionService::OnWarningTriggerChanged() {
-  const base::Value* pref_value = pref_change_registrar_->prefs()->Get(
+  const base::Value& pref_value = pref_change_registrar_->prefs()->GetValue(
       prefs::kPasswordProtectionWarningTrigger);
   // If password protection is not turned off, do nothing.
-  if (static_cast<PasswordProtectionTrigger>(pref_value->GetInt()) !=
+  if (static_cast<PasswordProtectionTrigger>(pref_value.GetInt()) !=
       PASSWORD_PROTECTION_OFF) {
     return;
   }

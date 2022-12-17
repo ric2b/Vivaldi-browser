@@ -29,7 +29,7 @@ var EduCoexistenceAppTest = class extends EduCoexistenceTest {
   /** @override */
   get browsePreload() {
     return 'chrome://chrome-signin/test_loader.html?module=' +
-        'chromeos/edu_coexistence/edu_coexistence_app_test.js';
+        'chromeos/edu_coexistence/edu_coexistence_app_test.js&host=test';
   }
 
   /** @override */
@@ -70,7 +70,7 @@ TEST_F(
                             .ShowErrorScreenImmediatelyOnLoadAbort);
     });
 
-// TODO(crbug.com/1275568): Merge this test suite with the test above after the
+// TODO(crbug.com/1347746): Merge this test suite with the test above after the
 // feature is launched.
 // eslint-disable-next-line no-var
 var EduCoexistenceAppTestWithArcAccountRestrictionsEnabled =
@@ -79,9 +79,8 @@ var EduCoexistenceAppTestWithArcAccountRestrictionsEnabled =
   get featureList() {
     return {
       enabled: [
-        'chromeos::features::kArcAccountRestrictions',
-        'chromeos::features::kLacrosSupport'
-      ]
+        'chromeos::features::kLacrosSupport',
+      ],
     };
   }
 };
@@ -103,7 +102,7 @@ var EduCoexistenceControllerTest = class extends EduCoexistenceTest {
   /** @override */
   get browsePreload() {
     return 'chrome://chrome-signin/test_loader.html?module=' +
-        'chromeos/edu_coexistence/edu_coexistence_controller_test.js';
+        'chromeos/edu_coexistence/edu_coexistence_controller_test.js&host=test';
   }
 
   /** @override */
@@ -121,7 +120,7 @@ var EduCoexistenceUiTest = class extends EduCoexistenceTest {
   /** @override */
   get browsePreload() {
     return 'chrome://chrome-signin/test_loader.html?module=' +
-        'chromeos/edu_coexistence/edu_coexistence_ui_test.js';
+        'chromeos/edu_coexistence/edu_coexistence_ui_test.js&host=test';
   }
 
   /** @override */

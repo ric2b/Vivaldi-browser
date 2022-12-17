@@ -72,6 +72,7 @@ chrome.developerPrivate.Location = {
   FROM_STORE: 'FROM_STORE',
   UNPACKED: 'UNPACKED',
   THIRD_PARTY: 'THIRD_PARTY',
+  INSTALLED_BY_DEFAULT: 'INSTALLED_BY_DEFAULT',
   UNKNOWN: 'UNKNOWN',
 };
 
@@ -88,6 +89,7 @@ chrome.developerPrivate.ViewType = {
   EXTENSION_POPUP: 'EXTENSION_POPUP',
   EXTENSION_SERVICE_WORKER_BACKGROUND: 'EXTENSION_SERVICE_WORKER_BACKGROUND',
   TAB_CONTENTS: 'TAB_CONTENTS',
+  OFFSCREEN_DOCUMENT: 'OFFSCREEN_DOCUMENT',
 };
 
 /**
@@ -448,6 +450,32 @@ chrome.developerPrivate.UserSiteSettingsOptions;
  * }}
  */
 chrome.developerPrivate.UserSiteSettings;
+
+/**
+ * @typedef {{
+ *   siteList: (!chrome.developerPrivate.UserSiteSet|undefined),
+ *   numExtensions: number,
+ *   site: string
+ * }}
+ */
+chrome.developerPrivate.SiteInfo;
+
+/**
+ * @typedef {{
+ *   etldPlusOne: string,
+ *   numExtensions: number,
+ *   sites: !Array<!chrome.developerPrivate.SiteInfo>
+ * }}
+ */
+chrome.developerPrivate.SiteGroup;
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   siteAccess: !chrome.developerPrivate.HostAccess
+ * }}
+ */
+chrome.developerPrivate.MatchingExtensionInfo;
 
 /**
  * @enum {string}
@@ -824,8 +852,21 @@ chrome.developerPrivate.addUserSpecifiedSites = function(options, callback) {};
  * @param {!chrome.developerPrivate.UserSiteSettingsOptions} options
  * @param {function(): void=} callback
  */
-chrome.developerPrivate.removeUserSpecifiedSites = function(
-    options, callback) {};
+chrome.developerPrivate.removeUserSpecifiedSites = function(options, callback) {};
+
+/**
+ * Returns all hosts specified by user site settings, grouped by each host's
+ * eTLD+1.
+ * @param {function(!Array<!chrome.developerPrivate.SiteGroup>): void=} callback
+ */
+chrome.developerPrivate.getUserAndExtensionSitesByEtld = function(callback) {};
+
+/**
+ * @param {string} site
+ * @param {function(!Array<!chrome.developerPrivate.MatchingExtensionInfo>): void=}
+ *     callback
+ */
+chrome.developerPrivate.getMatchingExtensionsForSite = function(site, callback) {};
 
 /**
  * @param {string} id

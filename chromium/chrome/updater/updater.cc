@@ -8,6 +8,8 @@
 #include <iterator>
 
 #include "base/at_exit.h"
+#include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -15,6 +17,7 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/process/memory.h"
 #include "base/task/single_thread_task_executor.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 #include "chrome/updater/app/app.h"
@@ -104,6 +107,7 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
   // Make the process more resilient to memory allocation issues.
   base::EnableTerminationOnHeapCorruption();
   base::EnableTerminationOnOutOfMemory();
+
 #if BUILDFLAG(IS_WIN)
   base::win::ScopedCOMInitializer com_initializer(
       base::win::ScopedCOMInitializer::kMTA);
@@ -121,6 +125,9 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
   VLOG(1) << GetUACState();
 #endif
 
+  InitializeThreadPool("updater");
+  const base::ScopedClosureRunner shutdown_thread_pool(
+      base::BindOnce([]() { base::ThreadPoolInstance::Get()->Shutdown(); }));
   base::SingleThreadTaskExecutor main_task_executor(base::MessagePumpType::UI);
 
   if (command_line->HasSwitch(kCrashMeSwitch)) {
@@ -152,6 +159,7 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
 
   if (command_line->HasSwitch(kInstallSwitch) ||
       command_line->HasSwitch(kTagSwitch) ||
+      command_line->HasSwitch(kRuntimeSwitch) ||
       command_line->HasSwitch(kHandoffSwitch)) {
     return MakeAppInstall()->Run();
   }
@@ -181,20 +189,14 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
 const char* GetUpdaterCommand(const base::CommandLine* command_line) {
   // Contains the literals which are associated with specific updater commands.
   const char* commands[] = {
-      kWindowsServiceSwitch,
-      kCrashHandlerSwitch,
-      kInstallSwitch,
-      kRecoverSwitch,
-      kServerSwitch,
-      kTagSwitch,
-      kTestSwitch,
-      kUninstallIfUnusedSwitch,
-      kUninstallSelfSwitch,
-      kUninstallSwitch,
-      kUpdateSwitch,
-      kWakeSwitch,
-      kHealthCheckSwitch,
-      kHandoffSwitch,
+      kWindowsServiceSwitch, kCrashHandlerSwitch,
+      kInstallSwitch,        kRecoverSwitch,
+      kServerSwitch,         kTagSwitch,
+      kTestSwitch,           kUninstallIfUnusedSwitch,
+      kUninstallSelfSwitch,  kUninstallSwitch,
+      kUpdateSwitch,         kWakeSwitch,
+      kHealthCheckSwitch,    kHandoffSwitch,
+      kRuntimeSwitch,
   };
   const char** it = std::find_if(
       std::begin(commands), std::end(commands),
@@ -228,6 +230,11 @@ constexpr const char* BuildArch() {
 }  // namespace
 
 int UpdaterMain(int argc, const char* const* argv) {
+#if BUILDFLAG(IS_WIN)
+  CHECK(EnableSecureDllLoading());
+  EnableProcessHeapMetadataProtection();
+#endif
+
   base::PlatformThread::SetName("UpdaterMain");
   base::AtExitManager exit_manager;
 

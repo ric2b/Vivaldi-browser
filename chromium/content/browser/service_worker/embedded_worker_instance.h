@@ -40,6 +40,10 @@
 #include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
 #include "url/gurl.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "third_party/blink/public/mojom/hid/hid.mojom-forward.h"
+#endif
+
 namespace content {
 
 class CrossOriginEmbedderPolicyReporter;
@@ -94,8 +98,9 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
     virtual void OnRegisteredToDevToolsManager() {}
     virtual void OnStartWorkerMessageSent() {}
     virtual void OnScriptEvaluationStart() {}
-    virtual void OnStarted(blink::mojom::ServiceWorkerStartStatus status,
-                           bool has_fetch_handler) {}
+    virtual void OnStarted(
+        blink::mojom::ServiceWorkerStartStatus status,
+        blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type) {}
 
     // Called when status changed to STOPPING. The renderer has been sent a Stop
     // IPC message and OnStopped() will be called upon successful completion.
@@ -225,6 +230,11 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   void BindCacheStorage(
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver);
 
+#if !BUILDFLAG(IS_ANDROID)
+  void BindHidService(const url::Origin& origin,
+                      mojo::PendingReceiver<blink::mojom::HidService> receiver);
+#endif  // !BUILDFLAG(IS_ANDROID)
+
   base::WeakPtr<EmbeddedWorkerInstance> AsWeakPtr();
 
   // The below can only be called on the UI thread. The returned factory may be
@@ -280,7 +290,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Changes the internal worker status from STARTING to RUNNING.
   void OnStarted(
       blink::mojom::ServiceWorkerStartStatus status,
-      bool has_fetch_handler,
+      blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type,
       int thread_id,
       blink::mojom::EmbeddedWorkerStartTimingPtr start_timing) override;
   // Resets the embedded worker instance to the initial state. Changes

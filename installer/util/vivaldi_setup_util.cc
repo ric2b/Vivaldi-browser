@@ -47,6 +47,8 @@
 
 #pragma comment(lib, "comctl32.lib")
 
+using vivaldi_installer::GetLocalizedStringF;
+
 namespace vivaldi {
 
 namespace {

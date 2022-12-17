@@ -12,6 +12,8 @@ cipd_pick_list = [
   "tools/clang/dsymutil",
   "third_party/devtools-frontend/src/third_party/esbuild",
   "buildtools/reclient",
+  "third_party/lzma_sdk/bin/host_platform",
+  "third_party/lzma_sdk/bin/win64",
   ]
 
 exclude_cipd = [
@@ -38,7 +40,7 @@ def main():
   only_cipd = True
   pick_list = cipd_pick_list
 
-  if variables.get("checkout_android", False):
+  if variables.get("checkout_android", False) or variables.get("checkout_ios", False):
     only_cipd = False
     pick_list = None
 

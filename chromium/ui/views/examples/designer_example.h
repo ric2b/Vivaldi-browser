@@ -139,14 +139,14 @@ class VIEWS_EXAMPLES_EXPORT DesignerExample : public ExampleBase,
   void CreateView(const ui::Event& event);
 
   // ui::TableModel overrides
-  int RowCount() override;
-  std::u16string GetText(int row, int column_id) override;
+  size_t RowCount() override;
+  std::u16string GetText(size_t row, int column_id) override;
   void SetObserver(ui::TableModelObserver* observer) override;
 
   // ui::ComboboxModel overrides
-  int GetItemCount() const override;
-  std::u16string GetItemAt(int index) const override;
-  int GetDefaultIndex() const override;
+  size_t GetItemCount() const override;
+  std::u16string GetItemAt(size_t index) const override;
+  absl::optional<size_t> GetDefaultIndex() const override;
 
   BoxLayoutView* designer_container_ = nullptr;
   DesignerSurface* designer_panel_ = nullptr;

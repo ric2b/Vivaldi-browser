@@ -304,6 +304,9 @@ void MediaSessionImpl::WebContentsDestroyed() {
   one_shot_players_.clear();
 
   AbandonSystemAudioFocusIfNeeded();
+
+  content::GetContentClient()->browser()->RemovePresentationObserver(
+      this, web_contents());
 }
 
 void MediaSessionImpl::RenderFrameDeleted(RenderFrameHost* rfh) {
@@ -984,9 +987,9 @@ MediaSessionImpl::MediaSessionImpl(WebContents* web_contents)
   session_android_ = std::make_unique<MediaSessionAndroid>(this);
   should_throttle_duration_update_ = true;
 #endif  // BUILDFLAG(IS_ANDROID)
-  if (web_contents && web_contents->GetMainFrame() &&
-      web_contents->GetMainFrame()->GetView()) {
-    focused_ = web_contents->GetMainFrame()->GetView()->HasFocus();
+  if (web_contents && web_contents->GetPrimaryMainFrame() &&
+      web_contents->GetPrimaryMainFrame()->GetView()) {
+    focused_ = web_contents->GetPrimaryMainFrame()->GetView()->HasFocus();
   }
 
   RebuildAndNotifyMetadataChanged();
@@ -997,8 +1000,16 @@ void MediaSessionImpl::Initialize() {
   delegate_->MediaSessionInfoChanged(GetMediaSessionInfoSync());
 
   DCHECK(web_contents());
-  DidUpdateFaviconURL(web_contents()->GetMainFrame(),
+  DidUpdateFaviconURL(web_contents()->GetPrimaryMainFrame(),
                       web_contents()->GetFaviconURLs());
+
+  content::GetContentClient()->browser()->AddPresentationObserver(
+      this, web_contents());
+}
+
+void MediaSessionImpl::OnPresentationsChanged(bool has_presentation) {
+  has_presentation_ = has_presentation;
+  RebuildAndNotifyMediaSessionInfoChanged();
 }
 
 AudioFocusDelegate::AudioFocusResult MediaSessionImpl::RequestSystemAudioFocus(
@@ -1107,6 +1118,7 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
   }
 
   info->muted = is_muted_;
+  info->has_presentation = has_presentation_;
 
   return info;
 }

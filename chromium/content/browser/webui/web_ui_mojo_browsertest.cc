@@ -24,6 +24,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
+#include "content/public/browser/web_ui_controller_interface_binder.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_client.h"
@@ -125,11 +126,15 @@ class CacheTestWebUIController : public TestWebUIController {
       : TestWebUIController(web_ui) {}
   ~CacheTestWebUIController() override = default;
 
-  void CreateHandler(
+  void BindInterface(
       mojo::PendingReceiver<mojom::WebUIMojoTestCache> receiver) {
     cache_ = std::make_unique<WebUIMojoTestCacheImpl>(std::move(receiver));
   }
+
+  WEB_UI_CONTROLLER_TYPE_DECL();
 };
+
+WEB_UI_CONTROLLER_TYPE_IMPL(CacheTestWebUIController)
 
 // WebUIControllerFactory that creates TestWebUIController.
 class TestWebUIControllerFactory : public WebUIControllerFactory {
@@ -213,16 +218,8 @@ class TestWebUIContentBrowserClient : public ContentBrowserClient {
   void RegisterBrowserInterfaceBindersForFrame(
       RenderFrameHost* render_frame_host,
       mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override {
-    map->Add<mojom::WebUIMojoTestCache>(base::BindRepeating(
-        &TestWebUIContentBrowserClient::BindTestCache, base::Unretained(this)));
-  }
-  void BindTestCache(
-      content::RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<mojom::WebUIMojoTestCache> receiver) {
-    auto* contents = WebContents::FromRenderFrameHost(render_frame_host);
-    static_cast<CacheTestWebUIController*>(
-        contents->GetWebUI()->GetController())
-        ->CreateHandler(std::move(receiver));
+    RegisterWebUIControllerInterfaceBinder<mojom::WebUIMojoTestCache,
+                                           CacheTestWebUIController>(map);
   }
 };
 
@@ -283,12 +280,12 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, EndToEndCommunication) {
 
   // We expect two independent chrome://foo tabs/shells to use a separate
   // process.
-  EXPECT_NE(shell()->web_contents()->GetMainFrame()->GetProcess(),
-            other_shell->web_contents()->GetMainFrame()->GetProcess());
+  EXPECT_NE(shell()->web_contents()->GetPrimaryMainFrame()->GetProcess(),
+            other_shell->web_contents()->GetPrimaryMainFrame()->GetProcess());
 
   // Close the second shell and wait until its process exits.
   RenderProcessHostWatcher process_watcher(
-      other_shell->web_contents()->GetMainFrame()->GetProcess(),
+      other_shell->web_contents()->GetPrimaryMainFrame()->GetProcess(),
       RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   other_shell->Close();
   process_watcher.Wait();
@@ -300,8 +297,8 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, EndToEndCommunication) {
 
   other_shell = CreateBrowser();
   EXPECT_TRUE(NavigateToURL(other_shell, kTestUrl));
-  EXPECT_EQ(shell()->web_contents()->GetMainFrame()->GetProcess(),
-            other_shell->web_contents()->GetMainFrame()->GetProcess());
+  EXPECT_EQ(shell()->web_contents()->GetPrimaryMainFrame()->GetProcess(),
+            other_shell->web_contents()->GetPrimaryMainFrame()->GetProcess());
   EXPECT_EQ(true, EvalJs(other_shell->web_contents(), kTestScript,
                          EXECUTE_SCRIPT_USE_MANUAL_REPLY));
 }
@@ -371,7 +368,7 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, ChromeSendAvailable_AfterCrash) {
   EXPECT_TRUE(EvalJs(shell(), "isChromeSendAvailable()").ExtractBool());
 
   WebUIImpl* web_ui = static_cast<WebUIImpl*>(
-      shell()->web_contents()->GetMainFrame()->GetWebUI());
+      shell()->web_contents()->GetPrimaryMainFrame()->GetWebUI());
 
   // Simulate a crash on the page.
   content::ScopedAllowRendererCrashes allow_renderer_crashes(shell());
@@ -390,7 +387,7 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, ChromeSendAvailable_AfterCrash) {
   EXPECT_TRUE(EvalJs(shell(), "isChromeSendAvailable()").ExtractBool());
   // The RenderFrameHost has been replaced after the crash, so get web_ui again.
   web_ui = static_cast<WebUIImpl*>(
-      shell()->web_contents()->GetMainFrame()->GetWebUI());
+      shell()->web_contents()->GetPrimaryMainFrame()->GetWebUI());
   EXPECT_TRUE(web_ui->GetRemoteForTest().is_bound());
 }
 

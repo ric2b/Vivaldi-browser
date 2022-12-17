@@ -18,7 +18,6 @@
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/disabled_tab_view_controller.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
@@ -48,6 +47,13 @@
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
 #include "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -102,10 +108,25 @@ TabGridPage GetPageFromScrollView(UIScrollView* scrollView) {
   // Fence `page` to valid values; page values of 3 (rounded up from 2.5) are
   // possible, as are large int values if `pageWidth` is somehow very small.
   page = page < TabGridPageIncognitoTabs ? TabGridPageIncognitoTabs : page;
-  page = page > TabGridPageRemoteTabs ? TabGridPageRemoteTabs : page;
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    page = page > TabGridPageClosedTabs ? TabGridPageClosedTabs : page;
+  } else {
+    page = page > TabGridPageRemoteTabs ? TabGridPageRemoteTabs : page;
+  }
+  // End Vivaldi
+
   if (UseRTLLayout()) {
     // In RTL, page indexes are inverted, so subtract `page` from the highest-
     // index TabGridPage value.
+
+    // Vivaldi
+    if (IsVivaldiRunning()) {
+      return static_cast<TabGridPage>(TabGridPageClosedTabs - page);
+    }
+    // End Vivaldi
+
     return static_cast<TabGridPage>(TabGridPageRemoteTabs - page);
   }
   return static_cast<TabGridPage>(page);
@@ -115,6 +136,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (UseRTLLayout()) {
     // In RTL, page indexes are inverted, so subtract `page` from the highest-
     // index TabGridPage value.
+
+    // Vivaldi
+    if (IsVivaldiRunning()) {
+      return static_cast<NSUInteger>(TabGridPageClosedTabs - page);
+    }
+    // End Vivaldi
+
     return static_cast<NSUInteger>(TabGridPageRemoteTabs - page);
   }
   return static_cast<NSUInteger>(page);
@@ -143,6 +171,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     DisabledTabViewController* regularDisabledTabViewController;
 @property(nonatomic, strong)
     DisabledTabViewController* recentDisabledTabViewController;
+
+// Vivaldi
+@property(nonatomic, strong)
+    DisabledTabViewController* closedDisabledTabViewController;
+// End Vivaldi
+
 // Array holding the child page view controllers.
 @property(nonatomic, strong) NSArray<UIViewController*>* pageViewControllers;
 // Other UI components.
@@ -213,6 +247,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           _incognitoTabsViewController, _regularTabsViewController,
           _remoteTabsViewController
         ];
+
+        // Vivaldi
+        // Add recently closed tab view controller to the collection
+        [self addRecentlyClosedTabToPages];
+        // End Vivaldi
+
         break;
       case TabGridPageConfiguration::kIncognitoPageDisabled:
         _incognitoDisabledTabViewController = [[DisabledTabViewController alloc]
@@ -224,6 +264,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           _incognitoDisabledTabViewController, _regularTabsViewController,
           _remoteTabsViewController
         ];
+
+        // Vivaldi
+        // Add recently closed tab view controller to the collection
+        [self addRecentlyClosedTabToPages];
+        // End Vivaldi
+
         break;
       case TabGridPageConfiguration::kIncognitoPageOnly:
         _incognitoTabsViewController = [[GridViewController alloc] init];
@@ -235,6 +281,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           _incognitoTabsViewController, _regularDisabledTabViewController,
           _recentDisabledTabViewController
         ];
+
+        // Vivaldi
+        // Add recently closed tab disabled view controller to the collection
+        [self addRecentlyClosedDisabledTabToPages];
+        // End Vivaldi
+
         break;
     }
   }
@@ -253,16 +305,31 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       [self setupIncognitoTabsViewController];
       [self setupRegularTabsViewController];
       [self setupRemoteTabsViewController];
+
+      // Vivaldi
+      [self setupClosedTabsViewController];
+      // End Vivaldi
+
       break;
     case TabGridPageConfiguration::kIncognitoPageDisabled:
       [self setupDisabledTabViewForPageType:TabGridPageIncognitoTabs];
       [self setupRegularTabsViewController];
       [self setupRemoteTabsViewController];
+
+      // Vivaldi
+      [self setupClosedTabsViewController];
+      // End Vivaldi
+
       break;
     case TabGridPageConfiguration::kIncognitoPageOnly:
       [self setupIncognitoTabsViewController];
       [self setupDisabledTabViewForPageType:TabGridPageRegularTabs];
       [self setupDisabledTabViewForPageType:TabGridPageRemoteTabs];
+
+      // Vivaldi
+      [self setupDisabledTabViewForPageType:TabGridPageClosedTabs];
+      // End Vivaldi
+
       break;
   }
 
@@ -312,7 +379,15 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self setInsetForGridViews];
 }
 
+// Vivaldi: - Status bar support for both light and dark mode
 - (UIStatusBarStyle)preferredStatusBarStyle {
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    return UIStatusBarStyleDefault;
+  }
+  // End Vivaldi
+
   return UIStatusBarStyleLightContent;
 }
 
@@ -392,6 +467,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (NSString*)accessibilityScrollStatusForScrollView:(UIScrollView*)scrollView {
   // This reads the new page whenever the user scrolls in VoiceOver.
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    return [self accessibilityStringForPage:self.currentPage];
+  }
+  // End Vivaldi
+
   int stringID;
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
@@ -403,6 +485,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       stringID = IDS_IOS_TAB_GRID_REMOTE_TABS_TITLE;
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      stringID = 0;
+      break;
+    // End Vivaldi
+
   }
   return l10n_util::GetNSString(stringID);
 }
@@ -453,6 +542,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // Nothing to do.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -477,6 +572,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.remoteTabsViewController.session = self.view.window.windowScene.session;
 
   self.remoteTabsViewController.preventUpdates = NO;
+
+  // Vivaldi
+  self.closedTabsViewController.session = self.view.window.windowScene.session;
+  self.closedTabsViewController.preventUpdates = NO;
+  // End Vivaldi
+
 }
 
 - (void)contentDidAppear {
@@ -485,6 +586,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (self.remoteTabsViewController) {
     [self setInsetForRemoteTabs];
   }
+
+  // Vivaldi
+  // Modify Recent Tabs Insets when page appears and during rotation.
+  if (self.closedTabsViewController) {
+    [self setInsetForClosedTabs];
+  }
+  // End Vivaldi
 
   // Let image sources know the initial appearance is done.
   [self.regularTabsImageDataSource clearPreloadedSnapshots];
@@ -512,12 +620,22 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self.incognitoTabsViewController contentWillDisappear];
   [self.regularTabsViewController contentWillDisappear];
   self.remoteTabsViewController.preventUpdates = YES;
+
+  // Vivaldi
+  self.closedTabsViewController.preventUpdates = YES;
+  // End Vivaldi
+
 }
 
 - (void)dismissModals {
   [self.regularTabsConsumer dismissModals];
   [self.incognitoTabsConsumer dismissModals];
   [self.remoteTabsViewController dismissModals];
+
+  // Vivaldi
+  [self.closedTabsViewController dismissModals];
+  // End Vivaldi
+
 }
 
 - (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated {
@@ -539,6 +657,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // incognito page.
     return;
   }
+
+  // Vivaldi
+  [self vivaldiUpdatePageWithCurrentSearchTerms:page];
+  // End Vivaldi
 
   NSString* searchTerms = nil;
   if (self.currentPage == TabGridPageRegularTabs) {
@@ -590,6 +712,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (id<RecentTabsConsumer>)remoteTabsConsumer {
   return self.remoteTabsViewController;
 }
+
+// Vivaldi
+- (id<RecentTabsConsumer>)closedTabsConsumer {
+  return self.closedTabsViewController;
+}
+// End Vivaldi
 
 - (void)setRegularTabsShareableItemsProvider:
     (id<GridShareableItemsProvider>)provider {
@@ -678,8 +806,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // Resetting search state when leaving the search mode should happen before
   // changing the mode in the controllers so when they do the cleanup for the
   // new mode they will have the correct items (tabs).
-  if (IsTabsSearchEnabled() && previousMode == TabGridModeSearch) {
+  if (previousMode == TabGridModeSearch) {
     self.remoteTabsViewController.searchTerms = nil;
+
+    // Vivaldi
+    self.closedTabsViewController.searchTerms = nil;
+    // End Vivaldi
+
     self.regularTabsViewController.searchText = nil;
     self.incognitoTabsViewController.searchText = nil;
     [self.regularTabsDelegate resetToAllItems];
@@ -1022,6 +1155,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       return self.regularTabsViewController;
     case TabGridPageRemoteTabs:
       return nil;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      return nil;
+    // End Vivaldi
+
   }
 }
 
@@ -1118,9 +1257,20 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // removes entries, the remote tabs page in the tab grid are not updated. This
   // ensures that the table is updated whenever scrolling to it.
   if (targetPage == TabGridPageRemoteTabs && (changed || scrolled)) {
+
+    // Vivaldi
+    if (IsVivaldiRunning())
+        self.remoteTabsViewController.page = TabGridPageRemoteTabs;
+    // End Vivaldi
+
     [self.remoteTabsViewController loadModel];
     [self.remoteTabsViewController.tableView reloadData];
   }
+
+  // Vivaldi
+  [self reloadRecentlyClosedTab:targetPage scrolled:scrolled changed:changed];
+  // End Vivaldi
+
 }
 
 - (UIViewController*)currentPageViewController {
@@ -1137,6 +1287,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       return self.remoteTabsViewController
                  ? self.remoteTabsViewController
                  : self.recentDisabledTabViewController;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      return self.closedTabsViewController
+                 ? self.closedTabsViewController
+                 : self.closedDisabledTabViewController;
+    // End Vivaldi
+
   }
 }
 
@@ -1259,6 +1417,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   styler.cellHighlightColor = [UIColor colorNamed:kTableViewRowHighlightColor];
   self.remoteTabsViewController.overrideUserInterfaceStyle =
       UIUserInterfaceStyleDark;
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    self.remoteTabsViewController.overrideUserInterfaceStyle =
+          UIUserInterfaceStyleUnspecified;
+  }
+  // End Vivaldi
+
   self.remoteTabsViewController.styler = styler;
 
   UIView* contentView = self.scrollContentView;
@@ -1267,6 +1433,38 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self addChildViewController:viewController];
   [contentView addSubview:viewController.view];
   [viewController didMoveToParentViewController:self];
+
+  // Vivaldi
+  // Chromium doesn't have empty state for synced tabs
+  // But vivaldi has it. Hence, the remote tabs styles are modified as followed.
+  if (IsVivaldiRunning()) {
+    self.remoteTabsViewController.overrideUserInterfaceStyle =
+        UIUserInterfaceStyleUnspecified;
+    viewController.emptyStateView =
+        [[TabGridEmptyStateView alloc] initWithPage:TabGridPageRemoteTabs];
+    viewController.emptyStateView.accessibilityIdentifier =
+        vTabGridSyncedTabsEmptyStateIdentifier;
+  }
+  // Activate constraints set within the next block and return
+  // So that the default chromium constraints are not applied and create
+  // conflicts
+  if (IsVivaldiRunning()) {
+    NSArray* constraints = @[
+      [viewController.view.topAnchor
+          constraintEqualToAnchor:contentView.topAnchor],
+      [viewController.view.bottomAnchor
+          constraintEqualToAnchor:contentView.bottomAnchor],
+      [viewController.view.leadingAnchor
+          constraintEqualToAnchor:self.regularTabsViewController.view
+                                      .trailingAnchor],
+      [viewController.view.widthAnchor
+          constraintEqualToAnchor:self.view.widthAnchor],
+    ];
+    [NSLayoutConstraint activateConstraints:constraints];
+    return;
+  }
+  // End Vivaldi
+
   NSArray* constraints = @[
     [viewController.view.topAnchor
         constraintEqualToAnchor:contentView.topAnchor],
@@ -1308,6 +1506,16 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           constraintEqualToAnchor:self.regularDisabledTabViewController.view
                                       .trailingAnchor];
       break;
+
+    // Vivaldi
+    case TabGridPage::TabGridPageClosedTabs:
+      viewController = self.closedDisabledTabViewController;
+      leadingAnchorConstraint = [viewController.view.leadingAnchor
+          constraintEqualToAnchor:self.recentDisabledTabViewController.view
+                                      .trailingAnchor];
+      break;
+    // End Vivaldi
+
   }
 
   viewController.view.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1326,6 +1534,20 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         constraintEqualToAnchor:self.view.widthAnchor]
   ];
   [NSLayoutConstraint activateConstraints:constraints];
+
+  // Vivaldi
+  // Activate the trailing constraint respecting the recently closed tab
+  // instead of synced tab from chromium
+  if (IsVivaldiRunning()) {
+    if (pageType == TabGridPage::TabGridPageClosedTabs) {
+      NSLayoutConstraint* trailingConstraint = [
+          viewController.view.trailingAnchor
+            constraintEqualToAnchor:contentView.trailingAnchor];
+      trailingConstraint.active = YES;
+    }
+    return;
+  }
+  // End Vivaldi
 
   if (pageType == TabGridPage::TabGridPageRemoteTabs) {
     NSLayoutConstraint* trailingConstraint = [viewController.view.trailingAnchor
@@ -1353,6 +1575,16 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Adds the top toolbar and sets constraints.
 - (void)setupTopToolbar {
+  bool dynamic_island_toolbar_blur_fix = ShouldUseToolbarBlurFix();
+  UIVisualEffectView* topToolbarBlurView;
+  if (dynamic_island_toolbar_blur_fix) {
+    UIBlurEffect* blurEffect =
+        [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+    topToolbarBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    topToolbarBlurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:topToolbarBlurView];
+  }
+
   // In iOS 13+, constraints break if the UIToolbar is initialized with a null
   // or zero rect frame. An arbitrary non-zero frame fixes this issue.
   TabGridTopToolbar* topToolbar =
@@ -1369,15 +1601,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [topToolbar setNewTabButtonTarget:self action:@selector(newTabButtonTapped:)];
   [topToolbar setSelectAllButtonTarget:self
                                 action:@selector(selectAllButtonTapped:)];
-  if (IsTabsSearchEnabled()) {
-    [topToolbar setSearchButtonTarget:self
-                               action:@selector(searchButtonTapped:)];
-    [topToolbar
-        setCancelSearchButtonTarget:self
-                             action:@selector(cancelSearchButtonTapped:)];
+  [topToolbar setSearchButtonTarget:self action:@selector(searchButtonTapped:)];
+  [topToolbar setCancelSearchButtonTarget:self
+                                   action:@selector(cancelSearchButtonTapped:)];
+  [topToolbar setSearchBarDelegate:self];
 
-    [topToolbar setSearchBarDelegate:self];
-  }
   // Configure and initialize the page control.
   [topToolbar.pageControl addTarget:self
                              action:@selector(pageControlChangedValue:)
@@ -1392,6 +1620,19 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [topToolbar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
     [topToolbar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor]
   ]];
+
+  if (dynamic_island_toolbar_blur_fix) {
+    [NSLayoutConstraint activateConstraints:@[
+      [topToolbarBlurView.topAnchor
+          constraintEqualToAnchor:self.view.topAnchor],
+      [topToolbarBlurView.bottomAnchor
+          constraintEqualToAnchor:topToolbar.bottomAnchor],
+      [topToolbarBlurView.leadingAnchor
+          constraintEqualToAnchor:topToolbar.leadingAnchor],
+      [topToolbarBlurView.trailingAnchor
+          constraintEqualToAnchor:topToolbar.trailingAnchor],
+    ]];
+  }
 }
 
 // Adds the bottom toolbar and sets constraints.
@@ -1500,6 +1741,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // No-op, Add To button inaccessible in remote tabs page.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      // No-op, Add To button inaccessible in recently closed tabs page.
+      break;
+    // End Vivaldi
+
   }
   [self.bottomToolbar setAddToButtonMenu:menu];
   BOOL incognitoTabsNeedsAuth =
@@ -1520,6 +1768,22 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
     return;
   }
+
+  // Vivaldi
+  // When current page is a recently closed tabs page.
+  if (self.currentPage == TabGridPageClosedTabs) {
+    if (self.pageConfiguration ==
+        TabGridPageConfiguration::kIncognitoPageOnly) {
+      // Disable done button if showing a disabled tab view for recent tab.
+      [self configureDoneButtonOnDisabledPage];
+    } else {
+      [self configureDoneButtonBasedOnPage:self.activePage];
+    }
+    // Configure the "Close All" button on the recently closed tabs page.
+    [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
+    return;
+  }
+  // End Vivaldi
 
   // When current page is a disabled tab page.
   if ((self.currentPage == TabGridPageIncognitoTabs &&
@@ -1546,6 +1810,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)configureNewTabButtonBasedOnContentPermissions {
   BOOL isRecentTabPage = self.currentPage == TabGridPageRemoteTabs;
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    isRecentTabPage = (self.currentPage == TabGridPageRemoteTabs) ||
+                      (self.currentPage == TabGridPageClosedTabs);
+  }
+  // End Vivaldi
+
   BOOL allowedByContentAuthentication =
       !((self.currentPage == TabGridPageIncognitoTabs) &&
         self.incognitoTabsViewController.contentNeedsAuthentication);
@@ -1764,6 +2036,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
           base::UserMetricsAction("MobileTabGridSelectRemotePanel"));
       LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeAllTabs);
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
   switch (self.pageChangeInteraction) {
     case PageChangeInteractionNone:
@@ -1803,6 +2081,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       NOTREACHED() << "It is invalid to have an active tab in remote tabs.";
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      NOTREACHED() << "It is invalid to have an active tab in recently closed tabs.";
+      break;
+    // End Vivaldi
+
   }
   self.activePage = page;
   [self.tabPresentationDelegate showActiveTabInPage:page
@@ -1838,6 +2123,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // Tabs cannot be opened with ⌘-t from the remote tabs page.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      // Tabs cannot be opened with ⌘-t from the recently closed tabs page.
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -1980,6 +2272,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       self.remoteTabsViewController.searchTerms = searchText;
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      self.closedTabsViewController.searchTerms = searchText;
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -2111,7 +2410,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   alreadySelected = [tabsDelegate isItemWithIDSelected:itemID];
   [tabsDelegate selectItemWithID:itemID];
 
-  if (IsTabsSearchEnabled() && self.tabGridMode == TabGridModeSearch) {
+  if (self.tabGridMode == TabGridModeSearch) {
     if (![tabsDelegate isItemWithIDSelected:itemID]) {
       // That can happen when the search result that was selected is from
       // another window. In that case don't change the active page for this
@@ -2264,6 +2563,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (self.currentPage == TabGridPageRemoteTabs) {
     newActivePage = self.activePage;
   }
+
+  // Vivaldi
+  if (self.currentPage == TabGridPageClosedTabs) {
+    newActivePage = self.activePage;
+  }
+  // End Vivaldi
+
   self.activePage = newActivePage;
   // Holding the done button down when it is enabled could result in done tap
   // being triggered on release after tabs have been closed and the button
@@ -2321,6 +2627,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       NOTREACHED() << "It is invalid to call close all tabs on remote tabs.";
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      NOTREACHED() << "It is invalid to call close all tabs on recently closed tabs.";
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -2353,6 +2666,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // No-op.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -2381,6 +2700,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // No-op.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -2404,6 +2729,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       NOTREACHED()
           << "It is invalid to call close selected tabs on remote tabs.";
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      NOTREACHED()
+      << "It is invalid to call close selected tabs on recently closed tabs.";
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -2423,6 +2756,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       NOTREACHED() << "Multiple tab selection invalid on remote tabs.";
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      NOTREACHED() << "Multiple tab selection invalid on recently closed tabs.";
+      break;
+    // End Vivaldi
+
   }
 }
 
@@ -2502,4 +2842,144 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return @[ newWindowShortcut, newIncognitoWindowShortcut, newTabShortcut ];
 }
 
+#pragma mark - Vivaldi
+
+- (void)addRecentlyClosedTabToPages {
+  _closedTabsViewController = [[RecentTabsTableViewController alloc] init];
+  [_pageViewControllers arrayByAddingObject:_closedTabsViewController];
+}
+
+- (void)addRecentlyClosedDisabledTabToPages {
+  _closedDisabledTabViewController = [[DisabledTabViewController alloc]
+                                          initWithPage:TabGridPageClosedTabs];
+  [_pageViewControllers arrayByAddingObject:_closedDisabledTabViewController];
+}
+
+// Update pages with correct search terms
+- (void)vivaldiUpdatePageWithCurrentSearchTerms:(TabGridPage)page {
+
+  NSString* searchTerms = nil;
+  if (self.currentPage == TabGridPageRegularTabs) {
+    searchTerms = self.regularTabsViewController.searchText;
+  } else if (self.currentPage == TabGridPageRemoteTabs) {
+    searchTerms = self.remoteTabsViewController.searchTerms;
+  } else {
+    searchTerms = self.closedTabsViewController.searchTerms;
+  }
+
+  if (page == TabGridPageRegularTabs) {
+    DCHECK(searchTerms.length);
+    self.regularTabsViewController.searchText = searchTerms;
+    [self.regularTabsDelegate searchItemsWithText:searchTerms];
+  } else if (page == TabGridPageRemoteTabs) {
+    self.remoteTabsViewController.searchTerms = searchTerms;
+  } else {
+    self.closedTabsViewController.searchTerms = searchTerms;
+  }
+
+  return;
+}
+
+// Sets the proper insets for the Recently Closed Tabs ViewController to
+// accomodate for the safe area, toolbar, and status bar.
+- (void)setInsetForClosedTabs {
+  // Sync the scroll view offset to the current page value if the scroll view
+  // isn't scrolling. Don't animate this.
+  if (!self.scrollView.dragging && !self.scrollView.decelerating) {
+    [self scrollToPage:self.currentPage animated:NO];
+  }
+  // The content inset of the tab grids must be modified so that the toolbars
+  // do not obscure the tabs. This may change depending on orientation.
+  CGFloat bottomInset = self.bottomToolbar.intrinsicContentSize.height;
+  UIEdgeInsets inset = UIEdgeInsetsMake(
+      self.topToolbar.intrinsicContentSize.height, 0, bottomInset, 0);
+  // Left and right side could be missing correct safe area
+  // inset upon rotation. Manually correct it.
+  self.closedTabsViewController.additionalSafeAreaInsets = UIEdgeInsetsZero;
+  UIEdgeInsets additionalSafeArea = inset;
+  UIEdgeInsets safeArea = self.scrollView.safeAreaInsets;
+  // If Remote Tabs isn't on the screen, it will not have the right safe area
+  // insets. Pass down the safe area insets of the scroll view.
+  if (self.currentPage != TabGridPageClosedTabs) {
+    additionalSafeArea.right = safeArea.right;
+    additionalSafeArea.left = safeArea.left;
+  }
+
+  // Ensure that the View Controller doesn't have safe area inset that already
+  // covers the view's bounds. This can happen in tests.
+  if (!CGRectIsEmpty(UIEdgeInsetsInsetRect(
+        self.closedTabsViewController.tableView.bounds,
+        self.closedTabsViewController.tableView.safeAreaInsets))) {
+        self.closedTabsViewController.additionalSafeAreaInsets =
+            additionalSafeArea;
+  }
+}
+
+- (void)reloadRecentlyClosedTab:(TabGridPage)targetPage
+                        scrolled:(BOOL)scrolled
+                        changed:(BOOL)changed {
+  if (targetPage == TabGridPageClosedTabs &&
+      (changed || scrolled)) {
+    self.closedTabsViewController.page = TabGridPageClosedTabs;
+    [self.closedTabsViewController loadModel];
+    [self.closedTabsViewController.tableView reloadData];
+  }
+}
+
+// Adds the recently closed tabs view controller as a contained view controller,
+// and sets constraints.
+- (void)setupClosedTabsViewController {
+  // TODO(crbug.com/804589) : Dark style on remote tabs.
+  // The styler must be set before the view controller is loaded.
+  ChromeTableViewStyler* styler = [[ChromeTableViewStyler alloc] init];
+  styler.tableViewBackgroundColor = [UIColor colorNamed:kGridBackgroundColor];
+  styler.cellHighlightColor = [UIColor colorNamed:kTableViewRowHighlightColor];
+  self.closedTabsViewController.styler = styler;
+
+  UIView* contentView = self.scrollContentView;
+  RecentTabsTableViewController* viewController = self.closedTabsViewController;
+  viewController.view.translatesAutoresizingMaskIntoConstraints = NO;
+  [self addChildViewController:viewController];
+  [contentView addSubview:viewController.view];
+  [viewController didMoveToParentViewController:self];
+
+  viewController.emptyStateView =
+      [[TabGridEmptyStateView alloc] initWithPage:TabGridPageClosedTabs];
+  viewController.emptyStateView.accessibilityIdentifier =
+      vTabGridRecentlyClosedTabsEmptyStateIdentifier;
+
+  NSArray* constraints = @[
+    [viewController.view.topAnchor
+        constraintEqualToAnchor:contentView.topAnchor],
+    [viewController.view.bottomAnchor
+        constraintEqualToAnchor:contentView.bottomAnchor],
+    [viewController.view.leadingAnchor
+        constraintEqualToAnchor:self.remoteTabsViewController.view
+                                    .trailingAnchor],
+    [viewController.view.trailingAnchor
+        constraintEqualToAnchor:contentView.trailingAnchor],
+    [viewController.view.widthAnchor
+        constraintEqualToAnchor:self.view.widthAnchor],
+  ];
+  [NSLayoutConstraint activateConstraints:constraints];
+}
+
+- (NSString*)accessibilityStringForPage:(TabGridPage)currentPage {
+  int stringID;
+  switch (currentPage) {
+    case TabGridPageIncognitoTabs:
+      stringID = IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_TITLE;
+      break;
+    case TabGridPageRegularTabs:
+      stringID = IDS_VIVALDI_TAB_GRID_REGULAR_TABS_TITLE;
+      break;
+    case TabGridPageRemoteTabs:
+      stringID = IDS_VIVALDI_TAB_GRID_REMOTE_TABS_TITLE;
+      break;
+    case TabGridPageClosedTabs:
+      stringID = IDS_VIVALDI_TAB_GRID_RECENTLY_CLOSED_TABS_TITLE;
+      break;
+  }
+  return l10n_util::GetNSString(stringID);
+}
 @end

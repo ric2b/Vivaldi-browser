@@ -6,6 +6,7 @@
 
 #include "ash/constants/app_types.h"
 #include "base/bind.h"
+#include "base/containers/adapters.h"
 #include "base/files/file_path.h"
 #include "base/no_destructor.h"
 #include "components/app_restore/app_launch_info.h"
@@ -165,6 +166,10 @@ int32_t DeskTemplateReadHandler::GetArcRestoreWindowIdForSessionId(
   return handler ? handler->GetArcRestoreWindowIdForSessionId(session_id) : 0;
 }
 
+bool DeskTemplateReadHandler::IsKnownArcSessionId(int32_t session_id) const {
+  return session_id_to_launch_id_.contains(session_id);
+}
+
 void DeskTemplateReadHandler::OnWindowInitialized(aura::Window* window) {
   // If there isn't restore data for ARC apps, we don't need to handle ARC app
   // windows restoration.
@@ -220,6 +225,9 @@ void DeskTemplateReadHandler::OnTaskCreated(const std::string& app_id,
                                             int32_t task_id,
                                             int32_t session_id) {
   int32_t launch_id = GetLaunchIdForArcSessionId(session_id);
+  // If the task's `session_id` isn't one we are tracking, then this task has
+  // not been created from a desk template launch. When this is the case, we
+  // don't track the task id.
   if (launch_id == 0)
     return;
 
@@ -259,13 +267,12 @@ ArcReadHandler* DeskTemplateReadHandler::GetArcReadHandlerForLaunch(
 RestoreData* DeskTemplateReadHandler::GetMostRecentRestoreDataForApp(
     const std::string& app_id) {
   // Go from newest to oldest.
-  for (auto it = restore_data_.rbegin(); it != restore_data_.rend(); ++it) {
-    auto& restore_data = it->second;
+  for (const auto& entry : base::Reversed(restore_data_)) {
+    const std::unique_ptr<RestoreData>& restore_data = entry.second;
     if (restore_data->app_id_to_launch_list().count(app_id)) {
       return restore_data.get();
     }
   }
   return nullptr;
 }
-
 }  // namespace app_restore

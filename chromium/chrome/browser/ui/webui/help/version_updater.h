@@ -12,7 +12,7 @@
 #include "build/chromeos_buildflags.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/update_engine/dbus-constants.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -37,7 +37,8 @@ class VersionUpdater {
     FAILED_HTTP,
     FAILED_DOWNLOAD,
     DISABLED,
-    DISABLED_BY_ADMIN
+    DISABLED_BY_ADMIN,
+    DEFERRED
   };
 
   // Promotion state (Mac-only).
@@ -53,7 +54,7 @@ class VersionUpdater {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   typedef base::OnceCallback<void(const std::string&)> ChannelCallback;
   using EolInfoCallback =
-      base::OnceCallback<void(chromeos::UpdateEngineClient::EolInfo eol_info)>;
+      base::OnceCallback<void(ash::UpdateEngineClient::EolInfo eol_info)>;
   using IsFeatureEnabledCallback =
       base::OnceCallback<void(absl::optional<bool>)>;
 #endif
@@ -127,6 +128,9 @@ class VersionUpdater {
       StatusCallback callback,
       const std::string& update_version,
       int64_t update_size) = 0;
+
+  // If an update is downloaded but deferred, apply the deferred update.
+  virtual void ApplyDeferredUpdate() = 0;
 #endif
 };
 

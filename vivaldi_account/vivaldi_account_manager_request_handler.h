@@ -17,6 +17,7 @@ class Profile;
 
 namespace network {
 class SimpleURLLoader;
+class SharedURLLoaderFactory;
 }
 
 namespace vivaldi {
@@ -26,11 +27,12 @@ class VivaldiAccountManagerRequestHandler {
   using RequestDoneCallback =
       base::RepeatingCallback<void(std::unique_ptr<network::SimpleURLLoader>,
                                    std::unique_ptr<std::string>)>;
-  VivaldiAccountManagerRequestHandler(Profile* profile,
-                                      const GURL& request_url,
-                                      const std::string& body,
-                                      const net::HttpRequestHeaders& headers,
-                                      RequestDoneCallback callback);
+  VivaldiAccountManagerRequestHandler(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      const GURL& request_url,
+      const std::string& body,
+      const net::HttpRequestHeaders& headers,
+      RequestDoneCallback callback);
   ~VivaldiAccountManagerRequestHandler();
   VivaldiAccountManagerRequestHandler(
       const VivaldiAccountManagerRequestHandler&) = delete;
@@ -48,7 +50,7 @@ class VivaldiAccountManagerRequestHandler {
 
   void HandleRequest();
 
-  Profile* profile_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   GURL request_url_;
   net::HttpRequestHeaders headers_;
   std::string body_;

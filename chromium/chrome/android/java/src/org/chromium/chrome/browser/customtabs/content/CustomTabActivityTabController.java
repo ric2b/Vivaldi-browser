@@ -8,6 +8,7 @@ import static org.chromium.chrome.browser.dependency_injection.ChromeCommonQuali
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Point;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Window;
@@ -17,6 +18,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 
+import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -39,15 +41,19 @@ import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.FirstMeaningfulPaintObserver;
 import org.chromium.chrome.browser.customtabs.PageLoadMetricsObserver;
 import org.chromium.chrome.browser.customtabs.ReparentingTaskProvider;
+import org.chromium.chrome.browser.customtabs.features.TabInteractionRecorder;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.RedirectHandlerTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAssociatedApp;
 import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParams;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
@@ -57,7 +63,12 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorBase;
 import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
 import org.chromium.chrome.browser.translate.TranslateBridge;
+import org.chromium.content_public.browser.GestureListenerManager;
+import org.chromium.content_public.browser.GestureStateListener;
+import org.chromium.content_public.browser.LoadCommittedDetails;
+import org.chromium.content_public.browser.RenderCoordinates;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.ActivityWindowAndroid;
 
 import java.lang.annotation.Retention;
@@ -110,6 +121,10 @@ public class CustomTabActivityTabController implements InflationObserver {
     @Nullable
     private final CustomTabsSessionToken mSession;
     private final Intent mIntent;
+
+    private GestureStateListener mGestureStateListener;
+    private ScrollState mScrollState;
+    private WebContentsObserver mWebContentsObserver;
 
     @Inject
     public CustomTabActivityTabController(AppCompatActivity activity,
@@ -264,6 +279,11 @@ public class CustomTabActivityTabController implements InflationObserver {
                     mIntent.getIntExtra(ServiceTabLauncher.LAUNCH_REQUEST_ID_EXTRA, 0),
                     tab.getWebContents());
         }
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+            mConnection.setGreatestScrollPercentageSupplier(
+                    () -> mScrollState != null ? mScrollState.mMaxReportedScrollPercentage : null);
+        }
     }
 
     // Creates the tab on native init, if it hasn't been created yet, and does all the additional
@@ -411,6 +431,37 @@ public class CustomTabActivityTabController implements InflationObserver {
                 public void onContentChanged(Tab tab) {
                     if (tab.getWebContents() != null) {
                         mConnection.setClientDataHeaderForNewTab(mSession, tab.getWebContents());
+
+                        if (ChromeFeatureList.isEnabled(
+                                    ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                            maybeStartSendingRealTimeEngagementSignals(tab);
+                        }
+                    }
+                }
+
+                @Override
+                public void webContentsWillSwap(Tab tab) {
+                    if (ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                        removeObserversFromWebContents(tab.getWebContents());
+                    }
+                }
+
+                @Override
+                public void onHidden(Tab tab, int reason) {
+                    if (reason == TabHidingType.ACTIVITY_HIDDEN
+                            && ChromeFeatureList.isEnabled(
+                                    ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                        collectUserInteraction(tab);
+                    }
+                }
+
+                @Override
+                public void onDestroyed(Tab tab) {
+                    if (ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                        collectUserInteraction(tab);
+                        removeObserversFromWebContents(tab.getWebContents());
                     }
                 }
             };
@@ -432,6 +483,22 @@ public class CustomTabActivityTabController implements InflationObserver {
         // be generated in the middle of tab initialization.
         mTabObserverRegistrar.addObserversForTab(tab);
         prepareTabBackground(tab);
+    }
+
+    public void registerTabObserver(TabObserver observer) {
+        mTabObserverRegistrar.registerTabObserver(observer);
+    }
+
+    private void removeObserversFromWebContents(@Nullable WebContents webContents) {
+        if (webContents == null) return;
+
+        if (mGestureStateListener != null) {
+            GestureListenerManager.fromWebContents(webContents)
+                    .removeListener(mGestureStateListener);
+        }
+        if (mWebContentsObserver != null) {
+            webContents.removeObserver(mWebContentsObserver);
+        }
     }
 
     /** Sets the initial background color for the Tab, shown before the page content is ready. */
@@ -463,5 +530,127 @@ public class CustomTabActivityTabController implements InflationObserver {
         };
 
         tab.addObserver(mediaObserver);
+    }
+
+    /**
+     * Create |mScrollState| and |mGestureStateListener| and start sending real-time engagement
+     * signals through {@link androidx.browser.customtabs.CustomTabsCallback}.
+     */
+    private void maybeStartSendingRealTimeEngagementSignals(Tab tab) {
+        assert tab.getWebContents() != null;
+        // Do not report engagement signals if user does not consent to report usage.
+        if (!PrivacyPreferencesManagerImpl.getInstance().isUsageAndCrashReportingPermitted()) {
+            return;
+        }
+        if (mScrollState == null) mScrollState = new ScrollState();
+        if (mGestureStateListener == null) {
+            mGestureStateListener = new GestureStateListener() {
+                @Override
+                public void onScrollStarted(
+                        int scrollOffsetY, int scrollExtentY, boolean isDirectionUp) {
+                    mScrollState.onScrollStarted(isDirectionUp);
+                }
+
+                @Override
+                public void onScrollUpdateGestureConsumed(@Nullable Point rootScrollOffset) {
+                    if (rootScrollOffset != null) {
+                        RenderCoordinates renderCoordinates =
+                                RenderCoordinates.fromWebContents(tab.getWebContents());
+                        mScrollState.onScrollUpdate(
+                                rootScrollOffset.y, renderCoordinates.getMaxVerticalScrollPixInt());
+                    }
+                }
+
+                @Override
+                public void onVerticalScrollDirectionChanged(
+                        boolean directionUp, float currentScrollRatio) {
+                    mScrollState.onScrollDirectionChanged(directionUp);
+                }
+
+                @Override
+                public void onScrollEnded(int scrollOffsetY, int scrollExtentY) {
+                    mScrollState.onScrollEnded();
+                }
+            };
+        }
+        if (mWebContentsObserver == null) {
+            mWebContentsObserver = new WebContentsObserver() {
+                @Override
+                public void navigationEntryCommitted(LoadCommittedDetails details) {
+                    // TODO(https://crbug.com/1351026): Look into back navigation/scroll
+                    // restoration to see if we need any changes to match PRD specs.
+                    if (details.isMainFrame() && !details.isSameDocument()) {
+                        mScrollState.resetMaxScrollPercentage();
+                    }
+                }
+            };
+        }
+
+        GestureListenerManager gestureListenerManager =
+                GestureListenerManager.fromWebContents(tab.getWebContents());
+        if (!gestureListenerManager.hasListener(mGestureStateListener)) {
+            gestureListenerManager.addListener(mGestureStateListener);
+        }
+        tab.getWebContents().addObserver(mWebContentsObserver);
+    }
+
+    private void collectUserInteraction(Tab tab) {
+        assert tab.getWebContents() != null;
+        // Do not report engagement signals if user does not consent to report usage.
+        if (!PrivacyPreferencesManagerImpl.getInstance().isUsageAndCrashReportingPermitted()) {
+            return;
+        }
+        TabInteractionRecorder recorder = TabInteractionRecorder.getFromTab(tab);
+        if (recorder == null) return;
+
+        mConnection.notifyDidGetUserInteraction(mSession, recorder.didGetUserInteraction());
+    }
+
+    private class ScrollState {
+        boolean mIsScrollActive;
+        boolean mIsDirectionUp;
+        int mMaxScrollPercentage;
+        int mMaxReportedScrollPercentage;
+
+        void onScrollStarted(boolean isDirectionUp) {
+            assert !mIsScrollActive;
+            mIsScrollActive = true;
+            mIsDirectionUp = isDirectionUp;
+            mConnection.notifyVerticalScrollEvent(mSession, mIsDirectionUp);
+        }
+
+        void onScrollUpdate(int verticalScrollOffset, int maxVerticalScrollOffset) {
+            if (mIsScrollActive) {
+                int scrollPercentage =
+                        Math.round(((float) verticalScrollOffset / maxVerticalScrollOffset) * 100);
+                scrollPercentage = MathUtils.clamp(scrollPercentage, 0, 100);
+                if (scrollPercentage > mMaxScrollPercentage) {
+                    mMaxScrollPercentage = scrollPercentage;
+                }
+            }
+        }
+
+        void onScrollDirectionChanged(boolean isDirectionUp) {
+            if (mIsScrollActive && isDirectionUp != mIsDirectionUp) {
+                mIsDirectionUp = isDirectionUp;
+                mConnection.notifyVerticalScrollEvent(mSession, mIsDirectionUp);
+            }
+        }
+
+        void onScrollEnded() {
+            int maxScrollPercentageFivesMultiple =
+                    mMaxScrollPercentage - (mMaxScrollPercentage % 5);
+            if (maxScrollPercentageFivesMultiple > mMaxReportedScrollPercentage) {
+                mMaxReportedScrollPercentage = maxScrollPercentageFivesMultiple;
+                mConnection.notifyGreatestScrollPercentageIncreased(
+                        mSession, mMaxReportedScrollPercentage);
+            }
+            mIsScrollActive = false;
+        }
+
+        void resetMaxScrollPercentage() {
+            mMaxScrollPercentage = 0;
+            mMaxReportedScrollPercentage = 0;
+        }
     }
 }

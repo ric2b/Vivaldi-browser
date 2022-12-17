@@ -9,7 +9,7 @@
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/ad_blocker/adblock_metadata.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
 
 namespace flatbuffers {

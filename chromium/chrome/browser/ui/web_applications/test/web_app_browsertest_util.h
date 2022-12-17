@@ -65,6 +65,11 @@ Browser* LaunchWebAppBrowserAndWait(
 // Launches a new tab for |app| in |profile|.
 Browser* LaunchBrowserForWebAppInTab(Profile*, const AppId&);
 
+// Launches the web app to the given URL.
+Browser* LaunchWebAppToURL(Profile* profile,
+                           const AppId& app_id,
+                           const GURL& url);
+
 // Return |ExternalInstallOptions| with OS shortcut creation disabled.
 ExternalInstallOptions CreateInstallOptions(
     const GURL& url,
@@ -135,7 +140,9 @@ class BrowserWaiter : public BrowserListObserver {
   raw_ptr<Browser> added_browser_ = nullptr;
 
   base::RunLoop removed_run_loop_;
-  raw_ptr<Browser> removed_browser_ = nullptr;
+  // TODO(crbug.com/1298696): browser_tests breaks with MTECheckedPtr
+  // enabled. Triage.
+  raw_ptr<Browser, DegradeToNoOpWhenMTE> removed_browser_ = nullptr;
 };
 
 class UpdateAwaiter : public WebAppInstallManagerObserver {

@@ -5,6 +5,7 @@
 #include "ui/views/controls/prefix_selector.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "base/i18n/case_conversion.h"
 #include "base/time/default_tick_clock.h"
@@ -43,8 +44,8 @@ bool PrefixSelector::ShouldContinueSelection() const {
 void PrefixSelector::SetCompositionText(
     const ui::CompositionText& composition) {}
 
-uint32_t PrefixSelector::ConfirmCompositionText(bool keep_selection) {
-  return UINT32_MAX;
+size_t PrefixSelector::ConfirmCompositionText(bool keep_selection) {
+  return std::numeric_limits<size_t>::max();
 }
 
 void PrefixSelector::ClearCompositionText() {}
@@ -92,7 +93,7 @@ gfx::Rect PrefixSelector::GetSelectionBoundingBox() const {
   return gfx::Rect();
 }
 
-bool PrefixSelector::GetCompositionCharacterBounds(uint32_t index,
+bool PrefixSelector::GetCompositionCharacterBounds(size_t index,
                                                    gfx::Rect* rect) const {
   // TextInputClient::GetCompositionCharacterBounds is expected to fill |rect|
   // in screen coordinates and GetCaretBounds returns screen coordinates.
@@ -129,9 +130,11 @@ bool PrefixSelector::SetEditableSelectionRange(const gfx::Range& range) {
   return false;
 }
 
+#if BUILDFLAG(IS_MAC)
 bool PrefixSelector::DeleteRange(const gfx::Range& range) {
   return false;
 }
+#endif
 
 bool PrefixSelector::GetTextFromRange(const gfx::Range& range,
                                       std::u16string* text) const {
@@ -220,7 +223,7 @@ void PrefixSelector::OnTextInput(const std::u16string& text) {
       (text[0] == L'\t' || text[0] == L'\r' || text[0] == L'\n'))
     return;
 
-  const int row_count = prefix_delegate_->GetRowCount();
+  const size_t row_count = prefix_delegate_->GetRowCount();
   if (row_count == 0)
     return;
 
@@ -228,17 +231,17 @@ void PrefixSelector::OnTextInput(const std::u16string& text) {
   // append |text| to |current_text_| and search for that. If it has been a
   // while search after the current row, otherwise search starting from the
   // current row.
-  int row = std::max(0, prefix_delegate_->GetSelectedRow());
+  size_t row = prefix_delegate_->GetSelectedRow().value_or(0);
   if (ShouldContinueSelection()) {
     current_text_ += text;
   } else {
     current_text_ = text;
-    if (prefix_delegate_->GetSelectedRow() >= 0)
+    if (prefix_delegate_->GetSelectedRow().has_value())
       row = (row + 1) % row_count;
   }
   time_of_last_key_ = tick_clock_->NowTicks();
 
-  const int start_row = row;
+  const size_t start_row = row;
   const std::u16string lower_text(base::i18n::ToLower(current_text_));
   do {
     if (TextAtRowMatchesText(row, lower_text)) {
@@ -249,7 +252,7 @@ void PrefixSelector::OnTextInput(const std::u16string& text) {
   } while (row != start_row);
 }
 
-bool PrefixSelector::TextAtRowMatchesText(int row,
+bool PrefixSelector::TextAtRowMatchesText(size_t row,
                                           const std::u16string& lower_text) {
   const std::u16string model_text(
       base::i18n::ToLower(prefix_delegate_->GetTextForRow(row)));

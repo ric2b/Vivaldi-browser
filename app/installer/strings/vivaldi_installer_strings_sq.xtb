@@ -6,7 +6,7 @@
 <translation id="1974060860693918893">E avancuar</translation>
 <translation id="2134216661302048561">Nuk ka përfunduar instalimi i shfletuesit Vivaldi. E konfirmoni daljen që tani?</translation>
 <translation id="2286454467119466181">E thjeshtë</translation>
-<translation id="237789874664518125">Kopirajti <ph name="YEAR" /> Vivaldi Technologies AS. Gjithë të drejtat janë rezervuar. &lt;a&gt;Politika e konfidencialitetit&lt;/a&gt;</translation>
+<translation id="237789874664518125">Kopirajti <ph name="YEAR" /> Vivaldi Technologies AS. Gjithë të drejtat janë rezervuar. &lt;a&gt;Politika e privatësisë&lt;/a&gt;</translation>
 <translation id="3004507951429848293">Duke klikuar butonin 'Pranoj dhe përditësoj' po shprehni miratimin për &lt;a&gt;Kushtet e shërbimit&lt;/a&gt; të Vivaldit</translation>
 <translation id="335985608243443814">Shfletoj...</translation>
 <translation id="3485073444286678268">Dosja e destinacionit është e pasaktë. Lutemi të zgjidhni një tjetër.</translation>
@@ -24,6 +24,6 @@
 <translation id="5302048478445481009">Gjuha</translation>
 <translation id="694714344624446243">Instaluesi i Vivaldit</translation>
 <translation id="7658239707568436148">Anuloj</translation>
-<translation id="8773751185824654197">Vëreni: Nëse Vivaldi instalohet ndërkohë që shfletuesi i internetit është ende në punë, dritarja do të mbyllet dhe rihapet</translation>
+<translation id="8773751185824654197">Vëreni: Nëse Vivaldi instalohet ndërkohë që shfletuesi i internetit është ende në punë, dritarja do të mbyllet e hapet vetë</translation>
 <translation id="933060950687965486">Lloji i instalimit</translation>
 </translationbundle>

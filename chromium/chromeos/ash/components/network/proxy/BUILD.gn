@@ -7,14 +7,15 @@ import("//build/config/chromeos/ui_mode.gni")
 assert(is_chromeos_ash, "Non-ChromeOS builds cannot depend on //chromeos/ash")
 
 source_set("proxy") {
-  # Due to circular dependency, others should depend on via chromeos/network.
-  visibility = [ "//chromeos/network" ]
+  # Due to circular dependency, others should depend on via
+  # chromeos/ash/components/network.
+  visibility = [ "//chromeos/ash/components/network" ]
 
-  configs += [ "//chromeos/network:network_config" ]
+  configs += [ "//chromeos/ash/components/network:network_config" ]
   deps = [
     "//base",
+    "//chromeos/ash/components/dbus/shill",
     "//chromeos/ash/components/network/onc",
-    "//chromeos/dbus/shill",
     "//components/onc",
     "//components/pref_registry",
     "//components/prefs",
@@ -37,9 +38,9 @@ source_set("unit_tests") {
   testonly = true
   deps = [
     "//base",
-    "//chromeos/dbus/shill",
-    "//chromeos/network",
-    "//chromeos/network:test_support",
+    "//chromeos/ash/components/dbus/shill",
+    "//chromeos/ash/components/network",
+    "//chromeos/ash/components/network:test_support",
     "//components/onc",
     "//components/prefs",
     "//components/prefs:test_support",

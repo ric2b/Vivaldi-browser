@@ -8,8 +8,8 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/ipc/common/gpu_disk_cache_type.h"
 #include "gpu/ipc/common/surface_handle.h"
-#include "gpu/ipc/service/display_context.h"
 
 class GURL;
 
@@ -19,11 +19,6 @@ namespace gpu {
 // functionality to multiple classes in src/gpu/ so delegate is inaccurate.
 class GpuChannelManagerDelegate {
  public:
-  // Registers/unregistered display compositor contexts that don't have a GPU
-  // channel and aren't tracked by GpuChannelManager.
-  virtual void RegisterDisplayContext(DisplayContext* display_context) = 0;
-  virtual void UnregisterDisplayContext(DisplayContext* display_context) = 0;
-
   // Force the loss of all GL contexts.
   virtual void LoseAllContexts() = 0;
 
@@ -51,12 +46,12 @@ class GpuChannelManagerDelegate {
                               error::ContextLostReason reason,
                               const GURL& active_url) = 0;
 
-  // Tells the delegate to cache the given shader information in persistent
+  // Tells the delegate to cache the given blob information in persistent
   // storage. The embedder is expected to repopulate the in-memory cache through
   // the respective GpuChannelManager API.
-  virtual void StoreShaderToDisk(int32_t client_id,
-                                 const std::string& key,
-                                 const std::string& shader) = 0;
+  virtual void StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
+                               const std::string& key,
+                               const std::string& shader) = 0;
 
   // Cleanly exits the GPU process in response to an error. This will not exit
   // with in-process GPU as that would also exit the browser. This can only be

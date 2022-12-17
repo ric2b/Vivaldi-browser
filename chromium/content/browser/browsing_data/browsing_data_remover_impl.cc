@@ -36,7 +36,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "storage/browser/quota/special_storage_policy.h"
@@ -67,35 +66,36 @@ base::OnceClosure RunsOrPostOnCurrentTaskRunner(base::OnceClosure closure) {
       std::move(closure), base::ThreadTaskRunnerHandle::Get());
 }
 
-// Returns whether |origin| matches |origin_type_mask| given the special
-// storage |policy|; and if |predicate| is not null, then also whether
-// it matches |predicate|. If |origin_type_mask| contains embedder-specific
-// datatypes, |embedder_matcher| must not be null; the decision for those
+// Returns whether `storage_key` matches `origin_type_mask` given the special
+// storage `policy`; and if `predicate` is not null, then also whether
+// it matches `predicate`. If `origin_type_mask` contains embedder-specific
+// datatypes, `embedder_matcher` must not be null; the decision for those
 // datatypes will be delegated to it.
-bool DoesOriginMatchMaskAndPredicate(
+bool DoesStorageKeyMatchMaskAndPredicate(
     uint64_t origin_type_mask,
-    base::OnceCallback<bool(const url::Origin&)> predicate,
+    content::StoragePartition::StorageKeyMatcherFunction predicate,
     const BrowsingDataRemoverDelegate::EmbedderOriginTypeMatcher&
         embedder_matcher,
-    const url::Origin& origin,
+    const blink::StorageKey& storage_key,
     storage::SpecialStoragePolicy* policy) {
-  if (predicate && !std::move(predicate).Run(origin))
+  if (predicate && !std::move(predicate).Run(storage_key))
     return false;
 
   const std::vector<std::string>& schemes = url::GetWebStorageSchemes();
-  bool is_web_scheme = base::Contains(schemes, origin.scheme());
+  bool is_web_scheme = base::Contains(schemes, storage_key.origin().scheme());
 
   // If a websafe origin is unprotected, it matches iff UNPROTECTED_WEB.
   if ((origin_type_mask & BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB) &&
       is_web_scheme &&
-      (!policy || !policy->IsStorageProtected(origin.GetURL()))) {
+      (!policy || !policy->IsStorageProtected(storage_key.origin().GetURL()))) {
     return true;
   }
   origin_type_mask &= ~BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB;
 
   // Hosted applications (protected and websafe origins) iff PROTECTED_WEB.
   if ((origin_type_mask & BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB) &&
-      is_web_scheme && policy && policy->IsStorageProtected(origin.GetURL())) {
+      is_web_scheme && policy &&
+      policy->IsStorageProtected(storage_key.origin().GetURL())) {
     return true;
   }
   origin_type_mask &= ~BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
@@ -105,7 +105,7 @@ bool DoesOriginMatchMaskAndPredicate(
       << "embedder delegate matcher to process them.";
 
   if (!embedder_matcher.is_null())
-    return embedder_matcher.Run(origin_type_mask, origin, policy);
+    return embedder_matcher.Run(origin_type_mask, storage_key.origin(), policy);
 
   return false;
 }
@@ -170,9 +170,9 @@ bool BrowsingDataRemoverImpl::DoesOriginMatchMaskForTesting(
   if (embedder_delegate_)
     embedder_matcher = embedder_delegate_->GetOriginTypeMatcher();
 
-  return DoesOriginMatchMaskAndPredicate(origin_type_mask, base::NullCallback(),
-                                         std::move(embedder_matcher), origin,
-                                         policy);
+  return DoesStorageKeyMatchMaskAndPredicate(
+      origin_type_mask, base::NullCallback(), std::move(embedder_matcher),
+      blink::StorageKey(origin), policy);
 }
 
 void BrowsingDataRemoverImpl::Remove(const base::Time& delete_begin,
@@ -336,9 +336,9 @@ void BrowsingDataRemoverImpl::RemoveImpl(
   // INITIALIZATION
   base::RepeatingCallback<bool(const GURL&)> url_filter =
       filter_builder->BuildUrlFilter();
-  base::RepeatingCallback<bool(const url::Origin&)> origin_filter =
+  content::StoragePartition::StorageKeyMatcherFunction storage_key_filter =
       static_cast<BrowsingDataFilterBuilderImpl*>(filter_builder)
-          ->BuildOriginFilter();
+          ->BuildStorageKeyFilter();
 
   // Some backends support a filter that |is_null()| to make complete deletion
   // more efficient.
@@ -413,12 +413,9 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
   }
-  // Content Decryption Modules used by Encrypted Media store licenses in a
-  // private filesystem. These are different than content licenses used by
-  // Flash (which are deleted father down in this method).
   if (remove_mask & DATA_TYPE_MEDIA_LICENSES) {
     storage_partition_remove_mask |=
-        StoragePartition::REMOVE_DATA_MASK_PLUGIN_PRIVATE_DATA;
+        StoragePartition::REMOVE_DATA_MASK_MEDIA_LICENSES;
   }
   if (remove_mask & DATA_TYPE_ATTRIBUTION_REPORTING_SITE_CREATED) {
     storage_partition_remove_mask |=
@@ -431,6 +428,10 @@ void BrowsingDataRemoverImpl::RemoveImpl(
   if (remove_mask & DATA_TYPE_AGGREGATION_SERVICE) {
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_AGGREGATION_SERVICE;
+  }
+  if (remove_mask & DATA_TYPE_PRIVATE_AGGREGATION_INTERNAL) {
+    storage_partition_remove_mask |=
+        StoragePartition::REMOVE_DATA_MASK_PRIVATE_AGGREGATION_INTERNAL;
   }
   if (remove_mask & DATA_TYPE_INTEREST_GROUPS) {
     storage_partition_remove_mask |=
@@ -488,8 +489,9 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
     storage_partition->ClearData(
         storage_partition_remove_mask, quota_storage_remove_mask,
-        base::BindRepeating(&DoesOriginMatchMaskAndPredicate, origin_type_mask_,
-                            origin_filter, std::move(embedder_matcher)),
+        base::BindRepeating(&DoesStorageKeyMatchMaskAndPredicate,
+                            origin_type_mask_, storage_key_filter,
+                            std::move(embedder_matcher)),
         std::move(deletion_filter), perform_storage_cleanup, delete_begin_,
         delete_end_,
         CreateTaskCompletionClosure(TracingDataType::kStoragePartition));

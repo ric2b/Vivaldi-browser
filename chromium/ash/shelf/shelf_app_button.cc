@@ -9,12 +9,14 @@
 
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/shelf/scrollable_shelf_view.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button_delegate.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/default_color_constants.h"
 #include "ash/style/default_colors.h"
+#include "ash/style/dot_indicator.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
 #include "base/i18n/rtl.h"
@@ -23,7 +25,10 @@
 #include "skia/ext/image_operations.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -39,7 +44,6 @@
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
-#include "ui/views/controls/dot_indicator.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
@@ -53,8 +57,12 @@ constexpr int kStatusIndicatorActiveSize = 8;
 constexpr int kStatusIndicatorRunningSize = 4;
 constexpr int kStatusIndicatorThickness = 2;
 
-constexpr int kNotificationIndicatorRadiusDip = 6;
-constexpr int kNotificationIndicatorPadding = 1;
+// The size of the notification indicator circle over the size of the icon.
+constexpr float kNotificationIndicatorWidthRatio = 14.0f / 64.0f;
+
+// The size of the notification indicator circle padding over the size of the
+// icon.
+constexpr float kNotificationIndicatorPaddingRatio = 5.0f / 64.0f;
 
 constexpr SkColor kDefaultIndicatorColor = SK_ColorWHITE;
 constexpr SkAlpha kInactiveIndicatorOpacity = 0x80;
@@ -152,6 +160,8 @@ class ShelfAppButton::AppStatusIndicatorView
       public views::View,
       public ShelfAppButtonAnimation::Observer {
  public:
+  METADATA_HEADER(AppStatusIndicatorView);
+
   AppStatusIndicatorView() {
     // Make sure the events reach the parent view for handling.
     SetCanProcessEventsWithinSubtree(false);
@@ -290,6 +300,9 @@ class ShelfAppButton::AppStatusIndicatorView
   base::TimeTicks animation_end_time_;  // For attention throbbing underline.
 };
 
+BEGIN_METADATA(ShelfAppButton, AppStatusIndicatorView, views::View)
+END_METADATA
+
 ////////////////////////////////////////////////////////////////////////////////
 // ShelfAppButton
 
@@ -361,8 +374,8 @@ ShelfAppButton::ShelfAppButton(ShelfView* shelf_view,
 
   AddChildView(indicator_);
   AddChildView(icon_view_);
-  notification_indicator_ = views::DotIndicator::Install(this);
-  SetNotificationBadgeColor(kDefaultIndicatorColor);
+  notification_indicator_ =
+      AddChildView(std::make_unique<DotIndicator>(kDefaultIndicatorColor));
 
   views::InkDrop::Get(this)->GetInkDrop()->AddObserver(this);
 
@@ -370,6 +383,7 @@ ShelfAppButton::ShelfAppButton(ShelfView* shelf_view,
   views::InstallEmptyHighlightPathGenerator(this);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetInstallFocusRingOnFocus(true);
+  views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
   // The focus ring should have an inset of half the focus border thickness, so
   // the parent view won't clip it.
   views::FocusRing::Get(this)->SetPathGenerator(
@@ -395,20 +409,7 @@ void ShelfAppButton::SetImage(const gfx::ImageSkia& image) {
   }
   icon_image_ = image;
 
-  const int icon_size = shelf_view_->GetButtonIconSize() * icon_scale_;
-
-  // Resize the image maintaining our aspect ratio.
-  float aspect_ratio = static_cast<float>(icon_image_.width()) /
-                       static_cast<float>(icon_image_.height());
-  int height = icon_size;
-  int width = static_cast<int>(aspect_ratio * height);
-  if (width > icon_size) {
-    width = icon_size;
-    height = static_cast<int>(width / aspect_ratio);
-  }
-
-  const gfx::Size preferred_size(width, height);
-
+  gfx::Size preferred_size = GetPreferredIconSize();
   if (image.size() == preferred_size) {
     SetShadowedImage(image);
     return;
@@ -422,6 +423,15 @@ gfx::ImageSkia ShelfAppButton::GetImage() const {
   return icon_view_->GetImage();
 }
 
+gfx::ImageSkia ShelfAppButton::GetIconImage() const {
+  const gfx::Size preferred_size = GetPreferredSize();
+  if (icon_image_.size() == preferred_size)
+    return icon_image_;
+
+  return gfx::ImageSkiaOperations::CreateResizedImage(
+      icon_image_, skia::ImageOperations::RESIZE_BEST, GetPreferredIconSize());
+}
+
 void ShelfAppButton::AddState(State state) {
   if (!(state_ & state)) {
     state_ |= state;
@@ -433,7 +443,7 @@ void ShelfAppButton::AddState(State state) {
       indicator_->ShowActiveStatus(true);
 
     if (state & STATE_NOTIFICATION)
-      notification_indicator_->Show();
+      notification_indicator_->SetVisible(true);
 
     if (state & STATE_DRAGGING)
       ScaleAppIcon(true);
@@ -450,7 +460,7 @@ void ShelfAppButton::ClearState(State state) {
       indicator_->ShowActiveStatus(false);
 
     if (state & STATE_NOTIFICATION)
-      notification_indicator_->Hide();
+      notification_indicator_->SetVisible(false);
 
     if (state & STATE_DRAGGING)
       ScaleAppIcon(false);
@@ -556,6 +566,9 @@ void ShelfAppButton::ReflectItemStatus(const ShelfItem& item) {
     AddState(ShelfAppButton::STATE_ACTIVE);
     ClearState(ShelfAppButton::STATE_RUNNING);
     ClearState(ShelfAppButton::STATE_ATTENTION);
+
+    // Notify the parent scrollable shelf view to show the current active app.
+    shelf_button_delegate()->OnAppButtonActivated(this);
     return;
   }
 
@@ -611,7 +624,8 @@ gfx::Rect ShelfAppButton::CalculateSmallRippleArea() const {
   // the shelf when there is a non-zero padding between the app icon and the
   // end of scrollable shelf.
   if (TabletModeController::Get()->InTabletMode() && padding > 0) {
-    const int current_index = shelf_view_->view_model()->GetIndexOfView(this);
+    const size_t current_index =
+        shelf_view_->view_model()->GetIndexOfView(this).value();
     int left_padding =
         (shelf_view_->visible_views_indices().front() == current_index)
             ? padding
@@ -705,7 +719,6 @@ gfx::Rect ShelfAppButton::GetIconViewBounds(const gfx::Rect& button_bounds,
 
   // Expand bounds to include shadows.
   gfx::Insets insets_shadows = gfx::ShadowValue::GetMargin(icon_shadows_);
-  // insets_shadows = insets_shadows.Scale(icon_scale);
   // Center icon with respect to the secondary axis.
   if (is_horizontal_shelf)
     x_offset = std::max(0.0f, button_bounds.width() - icon_width + 1) / 2;
@@ -728,11 +741,12 @@ gfx::Rect ShelfAppButton::GetNotificationIndicatorBounds(float icon_scale) {
   gfx::Rect scaled_icon_view_bounds =
       GetIconViewBounds(GetContentsBounds(), icon_scale);
   float diameter =
-      std::floor(kNotificationIndicatorRadiusDip * icon_scale * 2.0f);
-  return gfx::Rect(scaled_icon_view_bounds.right() - diameter -
-                       kNotificationIndicatorPadding,
-                   scaled_icon_view_bounds.y() + kNotificationIndicatorPadding,
-                   diameter, diameter);
+      kNotificationIndicatorWidthRatio * scaled_icon_view_bounds.width();
+  float padding =
+      kNotificationIndicatorPaddingRatio * scaled_icon_view_bounds.width();
+  return gfx::ToRoundedRect(
+      gfx::RectF(scaled_icon_view_bounds.right() - diameter - padding,
+                 scaled_icon_view_bounds.y() + padding, diameter, diameter));
 }
 
 void ShelfAppButton::Layout() {
@@ -745,7 +759,7 @@ void ShelfAppButton::Layout() {
 
   icon_view_->SetBoundsRect(icon_view_bounds);
 
-  notification_indicator_->SetBoundsRect(
+  notification_indicator_->SetIndicatorBounds(
       GetNotificationIndicatorBounds(icon_scale_));
 
   // The indicators should be aligned with the icon, not the icon + shadow.
@@ -934,6 +948,22 @@ gfx::Transform ShelfAppButton::GetScaleTransform(float icon_scale) {
   return gfx::TransformBetweenRects(target_bounds, pre_scaling_bounds);
 }
 
+gfx::Size ShelfAppButton::GetPreferredIconSize() const {
+  const int icon_size = shelf_view_->GetButtonIconSize() * icon_scale_;
+
+  // Resize the image maintaining our aspect ratio.
+  float aspect_ratio = static_cast<float>(icon_image_.width()) /
+                       static_cast<float>(icon_image_.height());
+  int height = icon_size;
+  int width = static_cast<int>(aspect_ratio * height);
+  if (width > icon_size) {
+    width = icon_size;
+    height = static_cast<int>(width / aspect_ratio);
+  }
+
+  return gfx::Size(width, height);
+}
+
 void ShelfAppButton::ScaleAppIcon(bool scale_up) {
   StopObservingImplicitAnimations();
 
@@ -996,8 +1026,7 @@ void ShelfAppButton::SetInkDropAnimationStarted(bool started) {
 
 void ShelfAppButton::SetNotificationBadgeColor(SkColor color) {
   if (notification_indicator_)
-    notification_indicator_->SetColor(
-        /*dot_color=*/color, /*border_color=*/SkColorSetA(SK_ColorBLACK, 0x4D));
+    notification_indicator_->SetColor(color);
 }
 
 void ShelfAppButton::MaybeHideInkDropWhenGestureEnds() {
@@ -1011,13 +1040,6 @@ void ShelfAppButton::MaybeHideInkDropWhenGestureEnds() {
 
   views::InkDrop::Get(this)->GetInkDrop()->AnimateToState(
       views::InkDropState::HIDDEN);
-}
-
-void ShelfAppButton::OnThemeChanged() {
-  ShelfButton::OnThemeChanged();
-  views::FocusRing::Get(this)->SetColor(
-      AshColorProvider::Get()->GetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kFocusRingColor));
 }
 
 }  // namespace ash

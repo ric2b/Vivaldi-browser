@@ -16,11 +16,15 @@ import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FileOperationManager} from '../../externs/background/file_operation_manager.js';
 import {EntriesChangedEvent} from '../../externs/entries_changed_event.js';
 import {FakeEntry, FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
+import {PropStatus, State} from '../../externs/ts/state.js';
+import {Store} from '../../externs/ts/store.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
+import {changeDirectory, searchAction} from '../../state/actions.js';
+import {getStore} from '../../state/store.js';
 
 import {constants} from './constants.js';
-import {ContentScanner, CrostiniMounter, DirectoryContents, DirectoryContentScanner, DriveMetadataSearchContentScanner, DriveSearchContentScanner, FileFilter, FileListContext, GuestOsMounter, LocalSearchContentScanner, MediaViewContentScanner, RecentContentScanner} from './directory_contents.js';
+import {ContentScanner, CrostiniMounter, DirectoryContents, DirectoryContentScanner, DriveMetadataSearchContentScanner, DriveSearchContentScanner, FileFilter, FileListContext, GuestOsMounter, LocalSearchContentScanner, MediaViewContentScanner, RecentContentScanner, TrashContentScanner} from './directory_contents.js';
 import {FileListModel} from './file_list_model.js';
 import {FileWatcher} from './file_watcher.js';
 import {MetadataModel} from './metadata/metadata_model.js';
@@ -63,8 +67,6 @@ export class DirectoryModel extends EventTarget {
 
     /** @private {?function(Event): void} */
     this.onSearchCompleted_ = null;
-    /** @private {?Function} */
-    this.onClearSearch_ = null;
 
     /**
      * @private {boolean}
@@ -116,7 +118,7 @@ export class DirectoryModel extends EventTarget {
         this.onWatcherDirectoryChanged_.bind(this));
     // For non-watchable directory (e.g. FakeEntry), we need to subscribe to
     // the IOTask and manually refresh.
-    if (util.isRecentsFilterV2Enabled()) {
+    if (util.isRecentsFilterV2Enabled() || util.isTrashEnabled()) {
       chrome.fileManagerPrivate.onIOTaskProgressStatus.addListener(
           this.updateFileListAfterIOTask_.bind(this));
     }
@@ -129,6 +131,46 @@ export class DirectoryModel extends EventTarget {
 
     /** @private {FilesAppDirEntry} */
     this.myFilesEntry_ = null;
+
+    /** @private {!Store} */
+    this.store_ = getStore();
+    this.store_.subscribe(this);
+  }
+
+  /** @param {!State} state latest state from the store. */
+  onStateChanged(state) {
+    const currentEntry = this.getCurrentDirEntry();
+    const currentURL = currentEntry ? currentEntry.toURL() : null;
+    let newURL = state.currentDirectory ? state.currentDirectory.key : null;
+
+    // If the directory is the same, ignore it.
+    if (currentURL === newURL) {
+      return;
+    }
+
+    // When something changed the current directory status to STARTED, Here we
+    // initiate the actual change and will update to SUCCESS at the end.
+    if (state.currentDirectory.status == PropStatus.STARTED) {
+      newURL = /** @type {string} */ (newURL);
+      const entry =
+          state.allEntries[newURL] ? state.allEntries[newURL].entry : null;
+
+      if (!entry) {
+        // TODO(lucmult): Fix potential race condition in this await/then.
+        util.urlToEntry(newURL).then((entry) => {
+          if (!entry) {
+            console.error(`Failed to find the new directory key ${newURL}`);
+            return;
+          }
+          // Initiate the directory change.
+          this.changeDirectoryEntry(/** @type {!DirectoryEntry} */ (entry));
+        });
+        return;
+      }
+
+      // Initiate the directory change.
+      this.changeDirectoryEntry(/** @type {!DirectoryEntry} */ (entry));
+    }
   }
 
   /**
@@ -691,22 +733,42 @@ export class DirectoryModel extends EventTarget {
 
     // Retrieve metadata information for the newly selected directory.
     const currentEntry = this.currentDirContents_.getDirectoryEntry();
-    if (this.volumeManager_.getLocationInfo(assert(currentEntry))
-            .isDriveBased) {
-      chrome.fileManagerPrivate.pollDriveHostedFilePinStates();
-    }
-    if (currentEntry && !util.isFakeEntry(assert(currentEntry))) {
-      this.metadataModel_.get(
-          [currentEntry],
-          constants.LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES);
+    if (currentEntry) {
+      const locationInfo = this.volumeManager_.getLocationInfo(currentEntry);
+      if (locationInfo && locationInfo.isDriveBased) {
+        chrome.fileManagerPrivate.pollDriveHostedFilePinStates();
+      }
+      if (!util.isFakeEntry(currentEntry)) {
+        this.metadataModel_.get(
+            [currentEntry],
+            constants.LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES.concat(
+                constants.DLP_METADATA_PREFETCH_PROPERTY_NAMES));
+      }
     }
 
     // Clear the table, and start scanning.
-    dispatchSimpleEvent(this, 'scan-started');
     fileList.splice(0, fileList.length);
+    dispatchSimpleEvent(this, 'scan-started');
     this.scan_(
         this.currentDirContents_, false, true, onDone, onFailed, onUpdated,
         onCancelled);
+  }
+
+  /**
+   * Similar to clearAndScan_() but instead of passing a `newDirContents`, it
+   * uses the `currentDirContents_`.
+   */
+  clearCurrentDirAndScan() {
+    const sequence = ++this.changeDirectorySequence_;
+    this.directoryChangeQueue_.run(callback => {
+      if (this.changeDirectorySequence_ !== sequence) {
+        callback();
+        return;
+      }
+      const newDirContents = this.createDirectoryContents_(
+          this.currentFileListContext_, assert(this.getCurrentDirEntry()));
+      this.clearAndScan_(newDirContents, callback);
+    });
   }
 
   /**
@@ -1174,6 +1236,9 @@ export class DirectoryModel extends EventTarget {
       event.newDirEntry = dirEntry;
       event.volumeChanged = previousVolumeInfo !== currentVolumeInfo;
       this.dispatchEvent(event);
+      // Notify the Store that the new directory has successfully changed.
+      this.store_.dispatch(
+          changeDirectory({to: dirEntry, status: PropStatus.SUCCESS}));
     });
   }
 
@@ -1243,7 +1308,7 @@ export class DirectoryModel extends EventTarget {
       onDirectoryChange_: function(event) {
         tracker.stop();
         tracker.hasChanged = true;
-      }
+      },
     };
     return tracker;
   }
@@ -1349,8 +1414,7 @@ export class DirectoryModel extends EventTarget {
          this.getCurrentRootType() === VolumeManagerCommon.RootType.CROSTINI) ||
         // TODO(crbug/1293229): Don't redirect if the user is looking at a
         // different Guest OS folder.
-        (event.added[0].volumeType ===
-             VolumeManagerCommon.VolumeType.GUEST_OS &&
+        (util.isGuestOs(event.added[0].volumeType) &&
          this.getCurrentRootType() === VolumeManagerCommon.RootType.GUEST_OS)) {
       // Resolving a display root on FSP volumes is instant, despite the
       // asynchronous call.
@@ -1449,7 +1513,11 @@ export class DirectoryModel extends EventTarget {
       return () => {
         const fakeEntry = /** @type {!FakeEntry} */ (entry);
         return new RecentContentScanner(
-            query, fakeEntry.sourceRestriction, fakeEntry.recentFileType);
+            query,
+            this.volumeManager_,
+            fakeEntry.sourceRestriction,
+            fakeEntry.recentFileType,
+        );
       };
     }
     if (entry.rootType == VolumeManagerCommon.RootType.CROSTINI) {
@@ -1472,6 +1540,12 @@ export class DirectoryModel extends EventTarget {
     if (entry.rootType == VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT) {
       return () => {
         return new ContentScanner();
+      };
+    }
+    if (util.isTrashEnabled() &&
+        entry.rootType == VolumeManagerCommon.RootType.TRASH) {
+      return () => {
+        return new TrashContentScanner(this.volumeManager_);
       };
     }
     if (query && canUseDriveSearch) {
@@ -1562,11 +1636,8 @@ export class DirectoryModel extends EventTarget {
    * @param {string} query Query that will be searched for.
    * @param {function(Event)} onSearchRescan Function that will be called when
    *     the search directory is rescanned (i.e. search results are displayed).
-   * @param {function()} onClearSearch Function to be called when search state
-   *     gets cleared.
-   * TODO(olege): Change callbacks to events.
    */
-  search(query, onSearchRescan, onClearSearch) {
+  search(query, onSearchRescan) {
     this.lastSearchQuery_ = query;
     this.clearSearch_();
     const currentDirEntry = this.getCurrentDirEntry();
@@ -1600,8 +1671,14 @@ export class DirectoryModel extends EventTarget {
         return;
       }
 
-      this.onSearchCompleted_ = onSearchRescan;
-      this.onClearSearch_ = onClearSearch;
+      this.onSearchCompleted_ = (...args) => {
+        // Notify the caller via callback, for non-store based callers.
+        onSearchRescan(...args);
+
+        // Notify the store-aware parts.
+        this.store_.dispatch(
+            searchAction({query: query, status: PropStatus.SUCCESS}));
+      };
       this.addEventListener('scan-completed', this.onSearchCompleted_);
       this.clearAndScan_(newDirContents, callback);
     });
@@ -1622,9 +1699,8 @@ export class DirectoryModel extends EventTarget {
       this.onSearchCompleted_ = null;
     }
 
-    if (this.onClearSearch_) {
-      this.onClearSearch_();
-      this.onClearSearch_ = null;
+    if (this.store_.getState()?.search?.query) {
+      this.store_.dispatch(searchAction({}));
     }
   }
 
@@ -1640,12 +1716,16 @@ export class DirectoryModel extends EventTarget {
     /** @type {!Set<!chrome.fileManagerPrivate.IOTaskType>} */
     const eventTypesRequireRefresh = new Set([
       chrome.fileManagerPrivate.IOTaskType.DELETE,
+      chrome.fileManagerPrivate.IOTaskType.EMPTY_TRASH,
       chrome.fileManagerPrivate.IOTaskType.MOVE,
+      chrome.fileManagerPrivate.IOTaskType.RESTORE,
+      chrome.fileManagerPrivate.IOTaskType.TRASH,
     ]);
     /** @type {!Set<?VolumeManagerCommon.RootType>} */
-    const rootTypesRequireRefresh =
-        new Set([VolumeManagerCommon.RootType.RECENT]);
-
+    const rootTypesRequireRefresh = new Set([
+      VolumeManagerCommon.RootType.RECENT,
+      VolumeManagerCommon.RootType.TRASH,
+    ]);
     const currentRootType = this.getCurrentRootType();
     if (!rootTypesRequireRefresh.has(currentRootType)) {
       return;

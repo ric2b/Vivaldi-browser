@@ -42,6 +42,9 @@
 - (BOOL)isTabMatch {
   return NO;
 }
+- (BOOL)isClipboardMatch {
+  return NO;
+}
 - (BOOL)isTailSuggestion {
   return NO;
 }
@@ -57,7 +60,10 @@
       initWithString:self.innerPedal.title
           attributes:@{
             NSForegroundColorAttributeName :
-                [UIColor colorNamed:kTextPrimaryColor]
+                [UIColor colorNamed:kTextPrimaryColor],
+            NSFontAttributeName :
+                [UIFont preferredFontForTextStyle:UIFontTextStyleBody],
+
           }];
 }
 
@@ -66,12 +72,31 @@
       initWithString:self.innerPedal.subtitle
           attributes:@{
             NSForegroundColorAttributeName :
-                [UIColor colorNamed:kTextSecondaryColor]
+                [UIColor colorNamed:kTextSecondaryColor],
+            NSFontAttributeName :
+                [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote]
+
           }];
 }
 
 - (id<OmniboxIcon>)icon {
   return self.innerPedal;
+}
+
+- (UIImage*)matchTypeIcon {
+  return nil;
+}
+
+- (BOOL)isMatchTypeSearch {
+  return true;
+}
+
+- (CrURL*)destinationUrl {
+  return nil;
+}
+
+- (NSAttributedString*)omniboxPreviewText {
+  return self.text;
 }
 
 @end

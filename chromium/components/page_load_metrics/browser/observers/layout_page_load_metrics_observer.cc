@@ -29,21 +29,38 @@ LayoutPageLoadMetricsObserver::LayoutPageLoadMetricsObserver() = default;
 
 LayoutPageLoadMetricsObserver::~LayoutPageLoadMetricsObserver() = default;
 
-// TODO(https://crbug.com/1317494): Audit and use appropriate policy.
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 LayoutPageLoadMetricsObserver::OnFencedFramesStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url) {
+  // Observed events are forwarded at PageLoadTracker,
+  // and no needs to forward here.
   return STOP_OBSERVING;
 }
 
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+LayoutPageLoadMetricsObserver::OnPrerenderStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // This class works as same as non prerendering case.
+  return CONTINUE_OBSERVING;
+}
+
 void LayoutPageLoadMetricsObserver::OnComplete(const mojom::PageLoadTiming&) {
+  if (GetDelegate().IsInPrerenderingBeforeActivationStart()) {
+    return;
+  }
+
   Record(GetDelegate().GetPageRenderData());
 }
 
 PageLoadMetricsObserver::ObservePolicy
 LayoutPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
     const mojom::PageLoadTiming&) {
+  if (GetDelegate().IsInPrerenderingBeforeActivationStart()) {
+    return STOP_OBSERVING;
+  }
+
   Record(GetDelegate().GetPageRenderData());
   // Record() should be called once per page.
   return STOP_OBSERVING;

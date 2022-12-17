@@ -104,6 +104,8 @@ class UIControlsDesktopOzone : public UIControlsAura {
     DCHECK_EQ(screen, display::Screen::GetScreen());
     screen->set_cursor_screen_point(gfx::Point(screen_x, screen_y));
 
+    bool moved_cursor = false;
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
     if (root_location != root_current_location &&
         ozone_ui_controls_test_helper_->ButtonDownMask() == 0 &&
         !ozone_ui_controls_test_helper_->MustUseUiControlsForMoveCursorTo()) {
@@ -112,7 +114,11 @@ class UIControlsDesktopOzone : public UIControlsAura {
       root_window->MoveCursorTo(root_location);
       ozone_ui_controls_test_helper_->RunClosureAfterAllPendingUIEvents(
           std::move(closure));
-    } else {
+      moved_cursor = true;
+    }
+#endif
+
+    if (!moved_cursor) {
       gfx::Point screen_point(root_location);
       host->ConvertDIPToScreenInPixels(&screen_point);
       ozone_ui_controls_test_helper_->SendMouseMotionNotifyEvent(
@@ -151,6 +157,33 @@ class UIControlsDesktopOzone : public UIControlsAura {
     return SendMouseEvents(type, UP | DOWN, ui_controls::kNoAccelerator);
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
+  bool SendTouchEvents(int action, int id, int x, int y) override {
+    return SendTouchEventsNotifyWhenDone(action, id, x, y, base::OnceClosure());
+  }
+  bool SendTouchEventsNotifyWhenDone(int action,
+                                     int id,
+                                     int x,
+                                     int y,
+                                     base::OnceClosure closure) override {
+    gfx::Point screen_location(x, y);
+    aura::Window* root_window;
+
+    // Touch release events might not have coordinates that match any window, so
+    // just use whichever window is on top.
+    if (action & ui_controls::RELEASE)
+      root_window = TopRootWindow();
+    else
+      root_window = RootWindowForPoint(screen_location);
+
+    ozone_ui_controls_test_helper_->SendTouchEvent(
+        root_window->GetHost()->GetAcceleratedWidget(), action, id,
+        screen_location, std::move(closure));
+
+    return true;
+  }
+#endif
+
  private:
   aura::Window* RootWindowForPoint(const gfx::Point& point) {
     // Most interactive_ui_tests run inside of the aura_test_helper
@@ -168,6 +201,13 @@ class UIControlsDesktopOzone : public UIControlsAura {
     DCHECK(i != windows.cend()) << "Couldn't find RW for " << point.ToString()
                                 << " among " << windows.size() << " RWs.";
     return (*i)->GetRootWindow();
+  }
+
+  aura::Window* TopRootWindow() {
+    std::vector<aura::Window*> windows =
+        DesktopWindowTreeHostPlatform::GetAllOpenWindows();
+    DCHECK(!windows.empty());
+    return windows[0]->GetRootWindow();
   }
 
   std::unique_ptr<ui::OzoneUIControlsTestHelper> ozone_ui_controls_test_helper_;

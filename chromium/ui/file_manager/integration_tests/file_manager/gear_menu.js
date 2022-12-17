@@ -288,8 +288,7 @@ testcase.showPasteIntoCurrentFolder = async () => {
   await remoteCall.waitForElement(appId, '#gear-menu[hidden]');
 
   // 2. Selecting a single regular file
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'selectFile', appId, [ENTRIES.hello.nameText]));
+  await remoteCall.waitUntilSelected(appId, ENTRIES.hello.nameText);
 
   chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
       'fakeMouseClick', appId, ['#gear-button']));
@@ -307,8 +306,7 @@ testcase.showPasteIntoCurrentFolder = async () => {
   await remoteCall.waitForElement(appId, '#gear-menu[hidden]');
 
   // 3. When ready to paste a file
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'selectFile', appId, [ENTRIES.hello.nameText]));
+  await remoteCall.waitUntilSelected(appId, ENTRIES.hello.nameText);
 
   // Ctrl-C to copy the selected file
   await remoteCall.fakeKeyDown(appId, '#file-list', 'c', true, false, false);
@@ -575,7 +573,7 @@ testcase.showAvailableStorageMyFiles = async () => {
 };
 
 /**
- * Tests that the "xGB available message appears in the gear menu for
+ * Tests that the "xGB available" message appears in the gear menu for
  * the "Google Drive" volume.
  */
 testcase.showAvailableStorageDrive = async () => {
@@ -589,17 +587,19 @@ testcase.showAvailableStorageDrive = async () => {
   // Wait for the gear menu to appear.
   await remoteCall.waitForElement(appId, '#gear-menu:not([hidden])');
 
-  // Check #volume-storage is shown and disabled (can't manage Drive
-  // storage).
-  await remoteCall.waitForElement(
+  // Check #volume-storage is displayed and get a reference to it.
+  const driveMenuEntry = await remoteCall.waitForElement(
       appId,
       '#gear-menu:not([hidden]) cr-menu-item' +
           '[command=\'#volume-storage\']' +
           ':not([hidden])');
+
+  // Check that it correctly indicates the available storage.
+  chrome.test.assertTrue(driveMenuEntry.text.trim() === '1 MB available');
 };
 
 /**
- * Tests that the "xGB available message appears in the gear menu for
+ * Tests that the "xGB available" message appears in the gear menu for
  * an SMB volume.
  */
 testcase.showAvailableStorageSmbfs = async () => {
@@ -676,4 +676,52 @@ testcase.showAvailableStorageDocProvider = async () => {
       '#gear-menu:not([hidden]) cr-menu-item' +
           '[command=\'#volume-storage\']' +
           ':not([hidden])');
+};
+
+/**
+ * Test that the "Mange synced folders" gear menu item is hidden and is also
+ * disabled when the DriveFsMirroring flag is disabled.
+ */
+testcase.showManageMirrorSyncShowsOnlyInLocalRoot = async () => {
+  // Open Files app on Downloads containing ENTRIES.photos.
+  const appId =
+      await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.photos], []);
+
+  // Wait for the gear menu button to appear and click it.
+  await remoteCall.waitAndClickElement(appId, '#gear-button');
+
+  // Wait for the gear menu to appear.
+  await remoteCall.waitForElement(appId, '#gear-menu:not([hidden])');
+
+  // If the flag is disabled, the "Manage synced folders" menu item should be
+  // hidden and disabled.
+  if ((await sendTestMessage({name: 'isMirrorSyncEnabled'})) === 'false') {
+    await remoteCall.waitForElement(
+        appId,
+        '#gear-menu:not([hidden]) cr-menu-item' +
+            '[command=\'#manage-mirrorsync\'][disabled][hidden]');
+    return;
+  }
+
+  // The "Manage synced folders" item should be visible and enabled.
+  await remoteCall.waitForElement(
+      appId,
+      '#gear-menu:not([hidden]) cr-menu-item' +
+          '[command=\'#manage-mirrorsync\']:not([disabled][hidden])');
+
+  // Navigate to the Google Drive root.
+  await navigateWithDirectoryTree(appId, '/My Drive');
+
+  // Wait for the gear menu button to appear and click it.
+  await remoteCall.waitAndClickElement(appId, '#gear-button');
+
+  // Wait for the gear menu to appear.
+  await remoteCall.waitForElement(appId, '#gear-menu:not([hidden])');
+
+  // The "Manage synced folders" item should not be visible and should be
+  // disabled.
+  await remoteCall.waitForElement(
+      appId,
+      '#gear-menu:not([hidden]) cr-menu-item' +
+          '[command=\'#manage-mirrorsync\'][disabled][hidden]');
 };

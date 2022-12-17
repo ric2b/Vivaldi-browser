@@ -22,6 +22,7 @@ namespace views {
 class ImageView;
 class Label;
 class MdTextButton;
+class ImageButton;
 class ProgressBar;
 class FlexLayoutView;
 }  // namespace views
@@ -31,7 +32,8 @@ class DownloadBubbleUIController;
 
 class DownloadBubbleRowView : public views::View,
                               public views::ContextMenuController,
-                              public DownloadUIModel::Observer {
+                              public DownloadUIModel::Delegate,
+                              public views::FocusChangeListener {
  public:
   METADATA_HEADER(DownloadBubbleRowView);
 
@@ -39,21 +41,36 @@ class DownloadBubbleRowView : public views::View,
       DownloadUIModel::DownloadUIModelPtr model,
       DownloadBubbleRowListView* row_list_view,
       DownloadBubbleUIController* bubble_controller,
-      DownloadBubbleNavigationHandler* navigation_handler);
+      DownloadBubbleNavigationHandler* navigation_handler,
+      Browser* browser);
   DownloadBubbleRowView(const DownloadBubbleRowView&) = delete;
   DownloadBubbleRowView& operator=(const DownloadBubbleRowView&) = delete;
   ~DownloadBubbleRowView() override;
 
   // Overrides views::View:
   void AddedToWidget() override;
+  void RemovedFromWidget() override;
   void OnThemeChanged() override;
   void Layout() override;
   Views GetChildrenInZOrder() override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseCaptureLost() override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
+  gfx::Size CalculatePreferredSize() const override;
 
-  // Overrides DownloadUIModel::Observer:
+  // Overrides views::FocusChangeListener
+  void OnWillChangeFocus(views::View* before, views::View* now) override;
+  void OnDidChangeFocus(views::View* before, views::View* now) override {}
+
+  // Update the row and its elements for hover and focus events.
+  void UpdateRowForHover(bool hovered);
+  void UpdateRowForFocus(bool visible, bool request_focus_on_last_quick_action);
+
+  // Overrides DownloadUIModel::Delegate:
   void OnDownloadOpened() override;
   void OnDownloadUpdated() override;
-  void OnDownloadDestroyed() override;
+  void OnDownloadDestroyed(const ContentId& id) override;
 
   // Overrides views::ContextMenuController:
   void ShowContextMenuForViewImpl(View* source,
@@ -70,22 +87,33 @@ class DownloadBubbleRowView : public views::View,
                                   float new_device_scale_factor) override;
 
  private:
-  raw_ptr<views::MdTextButton> AddMainPageButton(
-      DownloadCommands::Command command,
-      const std::u16string& button_string);
+  views::MdTextButton* AddMainPageButton(DownloadCommands::Command command,
+                                         const std::u16string& button_string);
+  views::ImageButton* AddQuickAction(DownloadCommands::Command command);
+  views::ImageButton* GetActionButtonForCommand(
+      DownloadCommands::Command command);
 
   // If there is any change in state, update UI info.
-  void UpdateBubbleUIInfo();
-  void UpdateButtonsForItems();
+  // Returns whether the ui info was changed.
+  bool UpdateBubbleUIInfo(bool initial_setup);
+
+  // Update the DownloadBubbleRowView's members.
+  void UpdateRow(bool initial_setup);
+
+  void UpdateButtons();
   void UpdateProgressBar();
   void UpdateLabels();
+  void RecordMetricsOnUpdate();
+  void RecordDownloadDisplayed();
 
   // Load the icon, from the cache or from IconManager::LoadIcon.
   void LoadIcon();
 
   // Called when icon has been loaded by IconManager::LoadIcon.
-  void SetIconFromImage(gfx::Image icon);
-  void SetIconFromImageModel(ui::ImageModel icon);
+  // |use_over_last_override| controls whether icon should be set if
+  // the current icon is an override_icon.
+  void SetIconFromImage(bool use_over_last_override, gfx::Image icon);
+  void SetIconFromImageModel(bool use_over_last_override, ui::ImageModel icon);
 
   void OnCancelButtonPressed();
   void OnDiscardButtonPressed();
@@ -110,7 +138,20 @@ class DownloadBubbleRowView : public views::View,
   raw_ptr<views::MdTextButton> scan_button_ = nullptr;
   raw_ptr<views::MdTextButton> open_now_button_ = nullptr;
   raw_ptr<views::MdTextButton> resume_button_ = nullptr;
+  raw_ptr<views::MdTextButton> review_button_ = nullptr;
+  raw_ptr<views::MdTextButton> retry_button_ = nullptr;
+
+  // Quick Actions on the main page.
+  raw_ptr<views::ImageButton> resume_action_ = nullptr;
+  raw_ptr<views::ImageButton> pause_action_ = nullptr;
+  raw_ptr<views::ImageButton> open_when_complete_action_ = nullptr;
+  raw_ptr<views::ImageButton> cancel_action_ = nullptr;
+  raw_ptr<views::ImageButton> show_in_folder_action_ = nullptr;
+
+  // Holder for the main button.
   raw_ptr<views::FlexLayoutView> main_button_holder_ = nullptr;
+  // Holder for the quick actions.
+  raw_ptr<views::FlexLayoutView> quick_action_holder_ = nullptr;
 
   // The progress bar for in-progress downloads.
   raw_ptr<views::ProgressBar> progress_bar_ = nullptr;
@@ -136,6 +177,8 @@ class DownloadBubbleRowView : public views::View,
 
   raw_ptr<DownloadBubbleNavigationHandler> navigation_handler_ = nullptr;
 
+  raw_ptr<Browser> browser_ = nullptr;
+
   download::DownloadItemMode mode_;
   download::DownloadItem::DownloadState state_;
   DownloadUIModel::BubbleUIInfo ui_info_;
@@ -144,8 +187,19 @@ class DownloadBubbleRowView : public views::View,
   raw_ptr<const gfx::VectorIcon> last_overriden_icon_ = nullptr;
   bool already_set_default_icon_ = false;
 
-  // HoverButton for main button click and inkdrop animations.
-  raw_ptr<HoverButton> hover_button_ = nullptr;
+  // Button for transparent button click, inkdrop animations and drag and drop
+  // events.
+  raw_ptr<views::Button> transparent_button_ = nullptr;
+
+  // Drag and drop:
+  // Whether we are dragging the download bubble row.
+  bool dragging_ = false;
+  // Position that a possible drag started at.
+  absl::optional<gfx::Point> drag_start_point_;
+
+  // Whether the download's completion has already been logged. This is used to
+  // avoid inaccurate repeated logging.
+  bool has_download_completion_been_logged_ = false;
 
   base::WeakPtrFactory<DownloadBubbleRowView> weak_factory_{this};
 };

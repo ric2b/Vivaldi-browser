@@ -50,7 +50,6 @@ class Element;
 class Interpolation;
 class MatchResult;
 class PropertyHandle;
-class RuleSet;
 class StyleCascade;
 class StyleRecalcContext;
 class StyleRuleUsageTracker;
@@ -167,8 +166,6 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
 
   static bool CanReuseBaseComputedStyle(const StyleResolverState& state);
 
-  static bool UsesHighlightPseudoInheritance(PseudoId);
-
   static const CSSValue* ComputeValue(Element* element,
                                       const CSSPropertyName&,
                                       const CSSValue&);
@@ -194,6 +191,10 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       Element& element,
       const ComputedStyle& base_style,
       ActiveInterpolationsMap& transition_interpolations);
+
+  scoped_refptr<const ComputedStyle> ResolvePositionFallbackStyle(
+      Element&,
+      unsigned index);
 
   // Check if the BODY or HTML element's display or containment stops
   // propagation of BODY style to HTML and viewport.
@@ -233,7 +234,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                                     PseudoId,
                                     const AtomicString& document_transition_tag,
                                     unsigned rules_to_include);
-  void MatchRuleSet(ElementRuleCollector&, RuleSet*);
+  void MatchRuleSets(ElementRuleCollector&, const MatchRequest&);
   void MatchUARules(const Element&, ElementRuleCollector&);
   void MatchUserRules(ElementRuleCollector&);
   void MatchPresentationalHints(StyleResolverState&, ElementRuleCollector&);

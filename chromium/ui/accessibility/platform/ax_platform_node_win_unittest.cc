@@ -3485,19 +3485,6 @@ TEST_F(AXPlatformNodeWinTest, IAccessibleTextTextFieldGetCaretOffsetNoCaret) {
   EXPECT_EQ(0, offset);
 }
 
-TEST_F(AXPlatformNodeWinTest, IAccessibleTextTextFieldGetCaretOffsetHasCaret) {
-  Init(BuildTextFieldWithSelectionRange(1, 2));
-
-  ComPtr<IAccessible2> ia2_text_field = ToIAccessible2(GetRootIAccessible());
-  ComPtr<IAccessibleText> text_field;
-  ia2_text_field.As(&text_field);
-  ASSERT_NE(nullptr, text_field.Get());
-
-  LONG offset;
-  EXPECT_HRESULT_SUCCEEDED(text_field->get_caretOffset(&offset));
-  EXPECT_EQ(2, offset);
-}
-
 TEST_F(AXPlatformNodeWinTest,
        IAccessibleTextContextEditableGetCaretOffsetNoCaret) {
   Init(BuildContentEditable());
@@ -4387,7 +4374,7 @@ TEST_F(AXPlatformNodeWinTest, UIAGetControllerForPropertyId) {
   AXNodeData root;
   root.id = 1;
   root.role = ax::mojom::Role::kRootWebArea;
-  root.child_ids = {2, 3, 4};
+  root.child_ids = {2, 3, 4, 5, 6};
 
   AXNodeData tab;
   tab.id = 2;
@@ -4407,7 +4394,17 @@ TEST_F(AXPlatformNodeWinTest, UIAGetControllerForPropertyId) {
   panel2.role = ax::mojom::Role::kTabPanel;
   panel2.SetName("panel2");
 
-  Init(root, tab, panel1, panel2);
+  AXNodeData group1;
+  group1.id = 5;
+  group1.role = ax::mojom::Role::kGenericContainer;
+  group1.AddIntAttribute(ax::mojom::IntAttribute::kErrormessageId, 6);
+
+  AXNodeData text1;
+  text1.id = 6;
+  text1.role = ax::mojom::Role::kStaticText;
+  text1.SetName("text1");
+
+  Init(root, tab, panel1, panel2, group1, text1);
   TestAXNodeWrapper* root_wrapper =
       TestAXNodeWrapper::GetOrCreate(GetTree(), GetRootAsAXNode());
   root_wrapper->BuildAllWrappers(GetTree(), GetRootAsAXNode());
@@ -4429,6 +4426,17 @@ TEST_F(AXPlatformNodeWinTest, UIAGetControllerForPropertyId) {
   EXPECT_UIA_PROPERTY_ELEMENT_ARRAY_BSTR_EQ(
       tab_node, UIA_ControllerForPropertyId, UIA_NamePropertyId,
       expected_names_2);
+
+  // The aria-errormessage attribute should be exposed through the ControllerFor
+  // UIA property.
+  ComPtr<IRawElementProviderSimple> group1_node =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(
+          GetRootAsAXNode()->children()[3]);
+
+  std::vector<std::wstring> expected_names_3 = {L"text1"};
+  EXPECT_UIA_PROPERTY_ELEMENT_ARRAY_BSTR_EQ(
+      group1_node, UIA_ControllerForPropertyId, UIA_NamePropertyId,
+      expected_names_3);
 }
 
 TEST_F(AXPlatformNodeWinTest, UIAGetDescribedByPropertyId) {
@@ -5785,7 +5793,12 @@ TEST_F(AXPlatformNodeWinTest, ComputeUIAControlType) {
   child6.role = ax::mojom::Role::kDialog;
   root.child_ids.push_back(child6.id);
 
-  Init(root, child1, child2, child3, child4, child5, child6);
+  AXNodeData child7;
+  child7.id = 8;
+  child7.role = ax::mojom::Role::kGraphicsObject;
+  root.child_ids.push_back(child7.id);
+
+  Init(root, child1, child2, child3, child4, child5, child6, child7);
 
   EXPECT_UIA_INT_EQ(
       QueryInterfaceFromNodeId<IRawElementProviderSimple>(child1.id),
@@ -5805,6 +5818,9 @@ TEST_F(AXPlatformNodeWinTest, ComputeUIAControlType) {
   EXPECT_UIA_INT_EQ(
       QueryInterfaceFromNodeId<IRawElementProviderSimple>(child6.id),
       UIA_ControlTypePropertyId, int{UIA_WindowControlTypeId});
+  EXPECT_UIA_INT_EQ(
+      QueryInterfaceFromNodeId<IRawElementProviderSimple>(child7.id),
+      UIA_ControlTypePropertyId, int{UIA_GroupControlTypeId});
 }
 
 TEST_F(AXPlatformNodeWinTest, UIALandmarkType) {

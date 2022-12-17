@@ -46,11 +46,14 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/hit_test_region_observer.h"
+#include "content/public/test/test_frame_navigation_observer.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/text_input_test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/common/switches.h"
 #include "ui/base/buildflags.h"
@@ -134,8 +137,8 @@ class WebViewInteractiveTest : public extensions::PlatformAppBrowserTest {
   TestGuestViewManager* GetGuestViewManager() {
     TestGuestViewManager* manager = static_cast<TestGuestViewManager*>(
         TestGuestViewManager::FromBrowserContext(browser()->profile()));
-    // TestGuestViewManager::WaitForSingleGuestCreated may and will get called
-    // before a guest is created.
+    // Test code may access the TestGuestViewManager before it would be created
+    // during creation of the first guest.
     if (!manager) {
       manager = static_cast<TestGuestViewManager*>(
           GuestViewManager::CreateWithDelegate(
@@ -297,7 +300,8 @@ class WebViewInteractiveTest : public extensions::PlatformAppBrowserTest {
     ASSERT_TRUE(done_listener->WaitUntilSatisfied());
 
     embedder_web_contents_ = embedder_web_contents;
-    guest_web_contents_ = GetGuestViewManager()->WaitForSingleGuestCreated();
+    guest_web_contents_ =
+        GetGuestViewManager()->DeprecatedWaitForSingleGuestCreated();
   }
 
   void SendMessageToEmbedder(const std::string& message) {
@@ -752,7 +756,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
 
     // In oopif-webview, the click it directly routed to the guest.
     content::WebContents* guest =
-        GetGuestViewManager()->WaitForSingleGuestCreated();
+        GetGuestViewManager()->DeprecatedWaitForSingleGuestCreated();
 
     SimulateRWHMouseClick(
         guest->GetPrimaryMainFrame()->GetRenderViewHost()->GetWidget(),
@@ -790,7 +794,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest,
 
   content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
   content::WebContents* guest_web_contents =
-      GetGuestViewManager()->WaitForSingleGuestCreated();
+      GetGuestViewManager()->DeprecatedWaitForSingleGuestCreated();
 
   content::MainThreadFrameObserver embedder_observer(
       embedder_web_contents->GetPrimaryMainFrame()
@@ -1493,6 +1497,38 @@ IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest, MAYBE_KeyboardFocusWindowCycle) {
   ASSERT_TRUE(next_step_listener.WaitUntilSatisfied());
 }
 
+// Ensure that destroying a <webview> with a pending mouse lock request doesn't
+// leave a stale mouse lock widget pointer in the embedder WebContents. See
+// https://crbug.com/1346245.
+IN_PROC_BROWSER_TEST_F(WebViewInteractiveTest,
+                       DestroyGuestWithPendingPointerLock) {
+  LoadAndLaunchPlatformApp("web_view/pointer_lock_pending",
+                           "WebViewTest.LAUNCHED");
+
+  content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
+  content::RenderFrameHost* guest_rfh =
+      GetGuestViewManager()->WaitForSingleGuestRenderFrameHostCreated();
+
+  // The embedder is configured to remove the <webview> as soon as it receives
+  // the pointer lock permission request from the guest, without responding to
+  // it.  Hence, have the guest request pointer lock and wait for its
+  // destruction.
+  content::RenderFrameDeletedObserver observer(guest_rfh);
+  EXPECT_TRUE(content::ExecuteScript(
+      guest_rfh, "document.querySelector('div').requestPointerLock()"));
+  observer.WaitUntilDeleted();
+
+  // The embedder WebContents shouldn't have a mouse lock widget.
+  EXPECT_FALSE(GetMouseLockWidget(embedder_web_contents));
+
+  // Close the embedder app and ensure that this doesn't crash, which used to
+  // be the case if the mouse lock widget (now destroyed) hadn't been cleared
+  // in the embedder.
+  content::WebContentsDestroyedWatcher destroyed_watcher(embedder_web_contents);
+  CloseAppWindow(GetFirstAppWindow());
+  destroyed_watcher.Wait();
+}
+
 #if BUILDFLAG(IS_MAC)
 // This test verifies that replacement range for IME works with <webview>s. To
 // verify this, a <webview> with an <input> inside is loaded. Then the <input>
@@ -1508,7 +1544,7 @@ IN_PROC_BROWSER_TEST_F(WebViewImeInteractiveTest,
   content::RunAllPendingInMessageLoop();
 
   content::WebContents* guest_web_contents =
-      GetGuestViewManager()->GetLastGuestCreated();
+      GetGuestViewManager()->DeprecatedGetLastGuestCreated();
 
   // Click the <input> element inside the <webview>. In its focus handle, the
   // <input> inside the <webview> initializes its value to "A B X D".
@@ -1565,7 +1601,7 @@ IN_PROC_BROWSER_TEST_F(WebViewImeInteractiveTest, CompositionRangeUpdates) {
   content::RunAllPendingInMessageLoop();
 
   content::WebContents* guest_web_contents =
-      GetGuestViewManager()->GetLastGuestCreated();
+      GetGuestViewManager()->DeprecatedGetLastGuestCreated();
 
   // Click the <input> element inside the <webview>. In its focus handle, the
   // <input> inside the <webview> initializes its value to "A B X D".
@@ -1655,3 +1691,81 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest,
       << popup_observer.view_bounds_in_screen().ToString();
 }
 #endif
+
+// Base class for interactive tests that enable site isolation in <webview>
+// guests.
+class SitePerProcessWebViewInteractiveTest : public WebViewInteractiveTest {
+ public:
+  SitePerProcessWebViewInteractiveTest() = default;
+  ~SitePerProcessWebViewInteractiveTest() override = default;
+  SitePerProcessWebViewInteractiveTest(
+      const SitePerProcessWebViewInteractiveTest&) = delete;
+  SitePerProcessWebViewInteractiveTest& operator=(
+      const SitePerProcessWebViewInteractiveTest&) = delete;
+
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(features::kSiteIsolationForGuests);
+    WebViewInteractiveTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    WebViewInteractiveTest::SetUpOnMainThread();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Check that when a focused <webview> navigates cross-process, the focus
+// is preserved in the new page. See https://crbug.com/1358210.
+IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewInteractiveTest,
+                       FocusPreservedAfterCrossProcessNavigation) {
+  // Load and show a platform app with a <webview> on a data: URL.
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  LoadAndLaunchPlatformApp("web_view/simple", "WebViewTest.LAUNCHED");
+  ASSERT_TRUE(ui_test_utils::ShowAndFocusNativeWindow(GetPlatformAppWindow()));
+  content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
+  embedder_web_contents->Focus();
+
+  // Ensure that the guest is focused before the next navigation.  To do so,
+  // have the embedder focus the <webview> element.
+  content::RenderFrameHost* guest_rfh =
+      GetGuestViewManager()->WaitForSingleGuestRenderFrameHostCreated();
+  content::FrameFocusedObserver focus_observer(guest_rfh);
+  EXPECT_TRUE(content::ExecuteScript(
+      embedder_web_contents, "document.querySelector('webview').focus()"));
+  focus_observer.Wait();
+  ASSERT_TRUE(
+      content::IsRenderWidgetHostFocused(guest_rfh->GetRenderWidgetHost()));
+  EXPECT_EQ(guest_rfh, embedder_web_contents->GetFocusedFrame());
+
+  // Wait for guest's document to consider itself focused. This avoids
+  // flakiness on some platforms.
+  while (!content::EvalJs(guest_rfh, "document.hasFocus()").ExtractBool()) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+
+  // Perform a cross-process navigation in the <webview> and verify that the
+  // new RenderFrameHost's RenderWidgetHost remains focused.
+  const GURL guest_url =
+      embedded_test_server()->GetURL("a.test", "/title1.html");
+  content::TestFrameNavigationObserver observer(guest_rfh);
+  EXPECT_TRUE(
+      ExecuteScript(guest_rfh, "location.href = '" + guest_url.spec() + "';"));
+  observer.Wait();
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+
+  content::RenderFrameHost* guest_rfh2 =
+      GetGuestViewManager()->GetLastGuestRenderFrameHostCreated();
+  EXPECT_NE(guest_rfh, guest_rfh2);
+  EXPECT_EQ(guest_url, guest_rfh2->GetLastCommittedURL());
+
+  EXPECT_TRUE(
+      content::IsRenderWidgetHostFocused(guest_rfh2->GetRenderWidgetHost()));
+  EXPECT_EQ(true, content::EvalJs(guest_rfh2, "document.hasFocus()"));
+  EXPECT_EQ(guest_rfh2, embedder_web_contents->GetFocusedFrame());
+}

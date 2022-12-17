@@ -42,10 +42,6 @@
 #include "media/filters/mac/audio_toolbox_audio_decoder.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/vivaldi_decoder_config.h"
-#endif
-
 #define EXPECT_HASH_EQ(a, b) EXPECT_EQ(a, b)
 #define EXPECT_VIDEO_FORMAT_EQ(a, b) EXPECT_EQ(a, b)
 #define EXPECT_COLOR_SPACE_EQ(a, b) EXPECT_EQ(a, b)
@@ -200,23 +196,21 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
   }
 
   std::unique_ptr<SimpleCdmPromise> CreatePromise(PromiseResult expected) {
-    std::unique_ptr<media::SimpleCdmPromise> promise(
-        new media::CdmCallbackPromise<>(
-            base::BindOnce(&KeyProvidingApp::OnResolve, base::Unretained(this),
-                           expected),
-            base::BindOnce(&KeyProvidingApp::OnReject, base::Unretained(this),
-                           expected)));
+    auto promise = std::make_unique<media::CdmCallbackPromise<>>(
+        base::BindOnce(&KeyProvidingApp::OnResolve, base::Unretained(this),
+                       expected),
+        base::BindOnce(&KeyProvidingApp::OnReject, base::Unretained(this),
+                       expected));
     return promise;
   }
 
   std::unique_ptr<NewSessionCdmPromise> CreateSessionPromise(
       PromiseResult expected) {
-    std::unique_ptr<media::NewSessionCdmPromise> promise(
-        new media::CdmCallbackPromise<std::string>(
-            base::BindOnce(&KeyProvidingApp::OnResolveWithSession,
-                           base::Unretained(this), expected),
-            base::BindOnce(&KeyProvidingApp::OnReject, base::Unretained(this),
-                           expected)));
+    auto promise = std::make_unique<media::CdmCallbackPromise<std::string>>(
+        base::BindOnce(&KeyProvidingApp::OnResolveWithSession,
+                       base::Unretained(this), expected),
+        base::BindOnce(&KeyProvidingApp::OnReject, base::Unretained(this),
+                       expected));
     return promise;
   }
 
@@ -2059,17 +2053,11 @@ TEST_F(PipelineIntegrationTest, MSE_ADTS_TimestampOffset) {
 
   // TODO(wdzierzanowski): Clarify decoder delay differences (DNA-44158).
   // Verify preroll is stripped.
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   // NOTE(igor@vivaldi.com): Adjust the hash to account for the decoder
   // differences.
   EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
   return;
-#endif
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_MAC)
-  if (VivaldiDecoderConfig::OnlyFFmpegAudio()) {
-    EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
-    return;
-  }
 #endif
   EXPECT_HASH_EQ("-1.76,-1.35,-0.72,0.70,1.24,0.52,", GetAudioHash());
 }

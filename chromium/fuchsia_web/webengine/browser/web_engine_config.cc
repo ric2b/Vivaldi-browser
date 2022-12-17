@@ -47,7 +47,8 @@ void AppendToSwitch(base::StringPiece switch_name,
 
 bool AddCommandLineArgsFromConfig(const base::Value& config,
                                   base::CommandLine* command_line) {
-  const base::Value* args = config.FindDictKey("command-line-args");
+  const base::Value::Dict* args =
+      config.GetDict().FindDict("command-line-args");
   if (!args)
     return true;
 
@@ -84,7 +85,7 @@ bool AddCommandLineArgsFromConfig(const base::Value& config,
       switches::kWebglMSAASampleCount,
   };
 
-  for (const auto arg : args->DictItems()) {
+  for (const auto arg : *args) {
     if (!base::Contains(kAllowedArgs, arg.first)) {
       // TODO(https://crbug.com/1032439): Increase severity and return false
       // once we have a mechanism for soft transitions of supported arguments.
@@ -93,27 +94,34 @@ bool AddCommandLineArgsFromConfig(const base::Value& config,
       continue;
     }
 
-    if (arg.second.is_none()) {
-      DCHECK(!command_line->HasSwitch(arg.first));
-      command_line->AppendSwitch(arg.first);
-    } else if (arg.second.is_string()) {
-      if (arg.first == switches::kEnableFeatures ||
-          arg.first == switches::kDisableFeatures) {
-        AppendToSwitch(arg.first, arg.second.GetString(), command_line);
-      } else {
-        DCHECK(!command_line->HasSwitch(arg.first)) << " " << arg.first;
-        command_line->AppendSwitchNative(arg.first, arg.second.GetString());
+    if (arg.first == switches::kEnableFeatures ||
+        arg.first == switches::kDisableFeatures) {
+      if (!arg.second.is_string()) {
+        LOG(ERROR) << "Config command-line arg must be a string: " << arg.first;
+        return false;
       }
-    } else {
-      LOG(ERROR) << "Config command-line arg must be a string: " << arg.first;
-      return false;
+      // Merge the features.
+      AppendToSwitch(arg.first, arg.second.GetString(), command_line);
+      continue;
     }
 
-    // TODO(https://crbug.com/1023012): enable-low-end-device-mode currently
-    // fakes 512MB total physical memory, which triggers RGB4444 textures,
-    // which we don't yet support.
-    if (arg.first == switches::kEnableLowEndDeviceMode)
-      command_line->AppendSwitch(blink::switches::kDisableRGBA4444Textures);
+    if (command_line->HasSwitch(arg.first)) {
+      // Use the existing command line value rather than override it.
+      continue;
+    }
+
+    if (arg.second.is_none()) {
+      command_line->AppendSwitch(arg.first);
+      continue;
+    }
+
+    if (arg.second.is_string()) {
+      command_line->AppendSwitchNative(arg.first, arg.second.GetString());
+      continue;
+    }
+
+    LOG(ERROR) << "Config command-line arg must be a string: " << arg.first;
+    return false;
   }
 
   return true;
@@ -124,7 +132,7 @@ bool AddCommandLineArgsFromConfig(const base::Value& config,
 bool UpdateCommandLineFromConfigFile(const base::Value& config,
                                      base::CommandLine* command_line) {
   // The FieldTrialList should be initialized only after config is loaded.
-  DCHECK(base::FieldTrialList::GetInstance());
+  CHECK(!base::FieldTrialList::GetInstance());
 
   if (!AddCommandLineArgsFromConfig(config, command_line))
     return false;
@@ -136,21 +144,22 @@ bool UpdateCommandLineFromConfigFile(const base::Value& config,
   const bool widevine_enabled =
       command_line->HasSwitch(switches::kEnableWidevine);
 
+  const base::Value::Dict& dict = config.GetDict();
   const bool allow_protected_graphics =
-      config.FindBoolPath("allow-protected-graphics").value_or(false);
+      dict.FindBool("allow-protected-graphics").value_or(false);
   const bool force_protected_graphics =
-      config.FindBoolPath("force-protected-graphics").value_or(false);
+      dict.FindBool("force-protected-graphics").value_or(false);
   const bool enable_protected_graphics =
       ((playready_enabled || widevine_enabled) && allow_protected_graphics) ||
       force_protected_graphics;
   const bool use_overlays_for_video =
-      config.FindBoolPath("use-overlays-for-video").value_or(false);
+      dict.FindBool("use-overlays-for-video").value_or(false);
 
   if (enable_protected_graphics) {
     command_line->AppendSwitch(switches::kEnableVulkanProtectedMemory);
     command_line->AppendSwitch(switches::kEnableProtectedVideoBuffers);
     const bool force_protected_video_buffers =
-        config.FindBoolPath("force-protected-video-buffers").value_or(false);
+        dict.FindBool("force-protected-video-buffers").value_or(false);
     if (force_protected_video_buffers) {
       command_line->AppendSwitch(switches::kForceProtectedVideoOutputBuffers);
     }

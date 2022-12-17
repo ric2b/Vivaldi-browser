@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import shutil
+import shlex
 import sys
 import tempfile
 import zipfile
@@ -30,8 +31,6 @@ _IGNORE_WARNINGS = (
     r'Type `sun.misc.SharedSecrets` was not found',
     # Caused by jacoco code coverage:
     r'Type `java.lang.management.ManagementFactory` was not found',
-    # TODO(wnwen): Remove this after R8 version 3.0.26-dev:
-    r'Missing class sun.misc.Unsafe',
     # Caused when the test apk and the apk under test do not having native libs.
     r'Missing class org.chromium.build.NativeLibraries',
     # Caused by internal annotation: https://crbug.com/1180222
@@ -180,7 +179,7 @@ def CreateStderrFilter(show_desugar_default_interface_warnings):
     # }
     output = re.sub(
         r'Rule matches the static final field `java\.lang\.String '
-        'com\.google\.protobuf.*\{\n.*?\n\}\n?',
+        r'com\.google\.protobuf.*\{\n.*?\n\}\n?',
         '',
         output,
         flags=re.DOTALL)
@@ -202,6 +201,7 @@ def _RunD8(dex_cmd, input_paths, output_path, warnings_as_errors,
   with tempfile.NamedTemporaryFile(mode='w', delete=not is_debug) as flag_file:
     # Chosen arbitrarily. Needed to avoid command-line length limits.
     MAX_ARGS = 50
+    orig_dex_cmd = dex_cmd
     if len(dex_cmd) > MAX_ARGS:
       # Add all flags to D8 (anything after the first --) as well as all
       # positional args at the end to the flag file.
@@ -215,9 +215,14 @@ def _RunD8(dex_cmd, input_paths, output_path, warnings_as_errors,
 
     # stdout sometimes spams with things like:
     # Stripped invalid locals information from 1 method.
-    build_utils.CheckOutput(dex_cmd,
-                            stderr_filter=stderr_filter,
-                            fail_on_output=warnings_as_errors)
+    try:
+      build_utils.CheckOutput(dex_cmd,
+                              stderr_filter=stderr_filter,
+                              fail_on_output=warnings_as_errors)
+    except Exception:
+      if orig_dex_cmd is not dex_cmd:
+        sys.stderr.write('Full command: ' + shlex.join(orig_dex_cmd) + '\n')
+      raise
 
 
 def _ZipAligned(dex_files, output_path):
@@ -522,7 +527,7 @@ def main(args):
       lambda changes: _OnStaleMd5(changes, options, final_dex_inputs, dex_cmd),
       options,
       input_paths=input_paths,
-      input_strings=dex_cmd + [bool(options.incremental_dir)],
+      input_strings=dex_cmd + [str(bool(options.incremental_dir))],
       output_paths=output_paths,
       pass_changes=True,
       track_subpaths_allowlist=track_subpaths_allowlist,

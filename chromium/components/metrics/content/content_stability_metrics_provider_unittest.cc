@@ -4,6 +4,7 @@
 
 #include "components/metrics/content/content_stability_metrics_provider.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "components/metrics/content/extensions_helper.h"
@@ -48,7 +49,7 @@ class MockExtensionsHelper : public ExtensionsHelper {
   }
 
  private:
-  content::RenderProcessHost* host_ = nullptr;
+  raw_ptr<content::RenderProcessHost> host_ = nullptr;
 };
 
 }  // namespace
@@ -124,24 +125,36 @@ TEST_F(ContentStabilityMetricsProviderTest, NotificationObserver) {
   content::ChildProcessTerminationInfo crash_details;
   crash_details.status = base::TERMINATION_STATUS_PROCESS_CRASHED;
   crash_details.exit_code = 1;
-  provider.RenderProcessExited(host, crash_details);
+  provider.Observe(
+      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+      content::Source<content::RenderProcessHost>(host),
+      content::Details<content::ChildProcessTerminationInfo>(&crash_details));
 
   content::ChildProcessTerminationInfo term_details;
   term_details.status = base::TERMINATION_STATUS_ABNORMAL_TERMINATION;
   term_details.exit_code = 1;
-  provider.RenderProcessExited(host, term_details);
+  provider.Observe(
+      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+      content::Source<content::RenderProcessHost>(host),
+      content::Details<content::ChildProcessTerminationInfo>(&term_details));
 
   // Kill does not increment renderer crash count.
   content::ChildProcessTerminationInfo kill_details;
   kill_details.status = base::TERMINATION_STATUS_PROCESS_WAS_KILLED;
   kill_details.exit_code = 1;
-  provider.RenderProcessExited(host, kill_details);
+  provider.Observe(
+      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+      content::Source<content::RenderProcessHost>(host),
+      content::Details<content::ChildProcessTerminationInfo>(&kill_details));
 
   // Failed launch increments failed launch count.
   content::ChildProcessTerminationInfo failed_launch_details;
   failed_launch_details.status = base::TERMINATION_STATUS_LAUNCH_FAILED;
   failed_launch_details.exit_code = 1;
-  provider.RenderProcessExited(host, failed_launch_details);
+  provider.Observe(content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                   content::Source<content::RenderProcessHost>(host),
+                   content::Details<content::ChildProcessTerminationInfo>(
+                       &failed_launch_details));
 
   // Verify metrics.
   histogram_tester.ExpectBucketCount("Stability.Counts2",
@@ -150,13 +163,6 @@ TEST_F(ContentStabilityMetricsProviderTest, NotificationObserver) {
       "Stability.Counts2", StabilityEventType::kRendererFailedLaunch, 1);
   histogram_tester.ExpectBucketCount("Stability.Counts2",
                                      StabilityEventType::kExtensionCrash, 0);
-
-  // Verify that |system_profile| is populated with the Local State stability
-  // pref counts.
-  metrics::SystemProfileProto system_profile;
-  provider.ProvideStabilityMetrics(&system_profile);
-  EXPECT_EQ(2, system_profile.stability().renderer_crash_count());
-  EXPECT_EQ(0, system_profile.stability().extension_renderer_crash_count());
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -186,13 +192,19 @@ TEST_F(ContentStabilityMetricsProviderTest, ExtensionsNotificationObserver) {
   content::ChildProcessTerminationInfo crash_details;
   crash_details.status = base::TERMINATION_STATUS_PROCESS_CRASHED;
   crash_details.exit_code = 1;
-  provider.RenderProcessExited(extension_host, crash_details);
+  provider.Observe(
+      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+      content::Source<content::RenderProcessHost>(extension_host),
+      content::Details<content::ChildProcessTerminationInfo>(&crash_details));
 
   // Failed launch increments failed launch count.
   content::ChildProcessTerminationInfo failed_launch_details;
   failed_launch_details.status = base::TERMINATION_STATUS_LAUNCH_FAILED;
   failed_launch_details.exit_code = 1;
-  provider.RenderProcessExited(extension_host, failed_launch_details);
+  provider.Observe(content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                   content::Source<content::RenderProcessHost>(extension_host),
+                   content::Details<content::ChildProcessTerminationInfo>(
+                       &failed_launch_details));
 
   // Verify metrics.
   histogram_tester.ExpectBucketCount("Stability.Counts2",
@@ -202,13 +214,6 @@ TEST_F(ContentStabilityMetricsProviderTest, ExtensionsNotificationObserver) {
   histogram_tester.ExpectBucketCount(
       "Stability.Counts2", StabilityEventType::kExtensionRendererFailedLaunch,
       1);
-
-  // Verify that |system_profile| is populated with the Local State stability
-  // pref counts.
-  metrics::SystemProfileProto system_profile;
-  provider.ProvideStabilityMetrics(&system_profile);
-  EXPECT_EQ(0, system_profile.stability().renderer_crash_count());
-  EXPECT_EQ(1, system_profile.stability().extension_renderer_crash_count());
 }
 #endif
 

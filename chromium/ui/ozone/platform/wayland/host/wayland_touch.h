@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "ui/events/pointer_details.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
@@ -14,6 +15,10 @@
 namespace gfx {
 class PointF;
 }  // namespace gfx
+
+namespace wl {
+enum class EventDispatchPolicy;
+}
 
 namespace ui {
 
@@ -78,28 +83,24 @@ class WaylandTouch {
 
   wl::Object<wl_touch> obj_;
   wl::Object<zcr_touch_stylus_v2> zcr_touch_stylus_v2_;
-  WaylandConnection* const connection_;
-  Delegate* const delegate_;
+  const raw_ptr<WaylandConnection> connection_;
+  const raw_ptr<Delegate> delegate_;
 };
 
 class WaylandTouch::Delegate {
  public:
-  enum class EventDispatchPolicy {
-    kImmediate,
-    kOnFrame,
-  };
   virtual void OnTouchPressEvent(WaylandWindow* window,
                                  const gfx::PointF& location,
                                  base::TimeTicks timestamp,
                                  PointerId id,
-                                 EventDispatchPolicy dispatch_policy) = 0;
+                                 wl::EventDispatchPolicy dispatch_policy) = 0;
   virtual void OnTouchReleaseEvent(base::TimeTicks timestamp,
                                    PointerId id,
-                                   EventDispatchPolicy dispatch_policy) = 0;
+                                   wl::EventDispatchPolicy dispatch_policy) = 0;
   virtual void OnTouchMotionEvent(const gfx::PointF& location,
                                   base::TimeTicks timestamp,
                                   PointerId id,
-                                  EventDispatchPolicy dispatch_policy) = 0;
+                                  wl::EventDispatchPolicy dispatch_policy) = 0;
   virtual void OnTouchCancelEvent() = 0;
   virtual void OnTouchFrame() = 0;
   virtual void OnTouchFocusChanged(WaylandWindow* window) = 0;
@@ -107,6 +108,9 @@ class WaylandTouch::Delegate {
   virtual const WaylandWindow* GetTouchTarget(PointerId id) const = 0;
   virtual void OnTouchStylusToolChanged(PointerId pointer_id,
                                         EventPointerType pointer_type) = 0;
+  virtual void OnTouchStylusForceChanged(PointerId pointer_id, float force) = 0;
+  virtual void OnTouchStylusTiltChanged(PointerId pointer_id,
+                                        const gfx::Vector2dF& tilt) = 0;
 };
 
 }  // namespace ui

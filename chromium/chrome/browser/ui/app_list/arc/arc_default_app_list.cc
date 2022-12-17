@@ -117,14 +117,12 @@ std::unique_ptr<ArcDefaultAppList::AppInfoMap> ReadAppsFromFileThread(
 
 // Returns true if default app |app_id| is marked as hidden in the prefs.
 bool IsAppHidden(const PrefService* prefs, const std::string& app_id) {
-  const base::Value* apps_dict = prefs->GetDictionary(kDefaultApps);
-  if (!apps_dict)
-    return false;
+  const base::Value::Dict& apps_dict = prefs->GetValueDict(kDefaultApps);
 
-  const base::Value* app_dict = apps_dict->FindDictKey(app_id);
+  const base::Value::Dict* app_dict = apps_dict.FindDict(app_id);
   if (!app_dict)
     return false;
-  return app_dict->FindBoolPath(kHidden).value_or(false);
+  return app_dict->FindBool(kHidden).value_or(false);
 }
 
 std::string GetBoardName(const base::FilePath& build_prop_path) {
@@ -330,17 +328,6 @@ void ArcDefaultAppList::SetAppHidden(const std::string& app_id, bool hidden) {
       .Get()
       ->GetDict()
       .Set(kHidden, hidden);
-}
-
-void ArcDefaultAppList::SetAppsHiddenForPackage(
-    const std::string& package_name) {
-  std::unordered_set<std::string> apps_to_hide;
-  for (const auto& app : visible_apps_) {
-    if (app.second->package_name == package_name)
-      apps_to_hide.insert(app.first);
-  }
-  for (const auto& app : apps_to_hide)
-    SetAppHidden(app, true);
 }
 
 std::map<std::string, const ArcDefaultAppList::AppInfo*>

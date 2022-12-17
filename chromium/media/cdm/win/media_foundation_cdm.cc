@@ -34,18 +34,6 @@ using Microsoft::WRL::RuntimeClass;
 using Microsoft::WRL::RuntimeClassFlags;
 using Exception = CdmPromise::Exception;
 
-// GUID is little endian. The byte array in network order is big endian.
-std::vector<uint8_t> ByteArrayFromGUID(REFGUID guid) {
-  std::vector<uint8_t> byte_array(sizeof(GUID));
-  GUID* reversed_guid = reinterpret_cast<GUID*>(byte_array.data());
-  *reversed_guid = guid;
-  reversed_guid->Data1 = _byteswap_ulong(guid.Data1);
-  reversed_guid->Data2 = _byteswap_ushort(guid.Data2);
-  reversed_guid->Data3 = _byteswap_ushort(guid.Data3);
-  // Data4 is already a byte array so no need to byte swap.
-  return byte_array;
-}
-
 HRESULT CreatePolicySetEvent(ComPtr<IMFMediaEvent>& policy_set_event) {
   base::win::ScopedPropVariant policy_set_prop;
   PROPVARIANT* var_to_set = policy_set_prop.Receive();
@@ -231,11 +219,11 @@ class CdmProxyImpl : public MediaFoundationCdmProxy {
   }
 
   void OnSignificantPlayback() override {
-    cdm_event_cb_.Run(CdmEvent::kSignificantPlayback);
+    cdm_event_cb_.Run(CdmEvent::kSignificantPlayback, S_OK);
   }
 
-  void OnPlaybackError() override {
-    cdm_event_cb_.Run(CdmEvent::kPlaybackError);
+  void OnPlaybackError(HRESULT hresult) override {
+    cdm_event_cb_.Run(CdmEvent::kPlaybackError, hresult);
   }
 
  private:
@@ -326,7 +314,7 @@ HRESULT MediaFoundationCdm::Initialize() {
     // Only report CdmEvent::kCdmError here as this is where most failures
     // happen, and other errors can be easily triggered by sites, e.g. a bad
     // server certificate or a bad license.
-    OnCdmEvent(CdmEvent::kCdmError);
+    OnCdmEvent(CdmEvent::kCdmError, hresult);
     return hresult;
   }
 
@@ -630,9 +618,9 @@ void MediaFoundationCdm::OnHardwareContextReset() {
   }
 }
 
-void MediaFoundationCdm::OnCdmEvent(CdmEvent event) {
+void MediaFoundationCdm::OnCdmEvent(CdmEvent event, HRESULT hresult) {
   DVLOG_FUNC(1);
-  cdm_event_cb_.Run(event);
+  cdm_event_cb_.Run(event, hresult);
 }
 
 void MediaFoundationCdm::OnIsTypeSupportedResult(

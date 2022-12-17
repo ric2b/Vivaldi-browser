@@ -1392,16 +1392,6 @@ RTCD_EXTERN void (*aom_hadamard_8x8)(const int16_t* src_diff,
                                      ptrdiff_t src_stride,
                                      tran_low_t* coeff);
 
-void aom_hadamard_8x8_dual_c(const int16_t* src_diff,
-                             ptrdiff_t src_stride,
-                             int16_t* coeff);
-void aom_hadamard_8x8_dual_neon(const int16_t* src_diff,
-                                ptrdiff_t src_stride,
-                                int16_t* coeff);
-RTCD_EXTERN void (*aom_hadamard_8x8_dual)(const int16_t* src_diff,
-                                          ptrdiff_t src_stride,
-                                          int16_t* coeff);
-
 void aom_hadamard_lp_16x16_c(const int16_t* src_diff,
                              ptrdiff_t src_stride,
                              int16_t* coeff);
@@ -1421,6 +1411,16 @@ void aom_hadamard_lp_8x8_neon(const int16_t* src_diff,
 RTCD_EXTERN void (*aom_hadamard_lp_8x8)(const int16_t* src_diff,
                                         ptrdiff_t src_stride,
                                         int16_t* coeff);
+
+void aom_hadamard_lp_8x8_dual_c(const int16_t* src_diff,
+                                ptrdiff_t src_stride,
+                                int16_t* coeff);
+void aom_hadamard_lp_8x8_dual_neon(const int16_t* src_diff,
+                                   ptrdiff_t src_stride,
+                                   int16_t* coeff);
+RTCD_EXTERN void (*aom_hadamard_lp_8x8_dual)(const int16_t* src_diff,
+                                             ptrdiff_t src_stride,
+                                             int16_t* coeff);
 
 void aom_ifft16x16_float_c(const float* input, float* temp, float* output);
 #define aom_ifft16x16_float aom_ifft16x16_float_c
@@ -2879,20 +2879,6 @@ RTCD_EXTERN void (*aom_quantize_b_32x32)(const tran_low_t* coeff_ptr,
                                          const int16_t* scan,
                                          const int16_t* iscan);
 
-void aom_quantize_b_32x32_adaptive_c(const tran_low_t* coeff_ptr,
-                                     intptr_t n_coeffs,
-                                     const int16_t* zbin_ptr,
-                                     const int16_t* round_ptr,
-                                     const int16_t* quant_ptr,
-                                     const int16_t* quant_shift_ptr,
-                                     tran_low_t* qcoeff_ptr,
-                                     tran_low_t* dqcoeff_ptr,
-                                     const int16_t* dequant_ptr,
-                                     uint16_t* eob_ptr,
-                                     const int16_t* scan,
-                                     const int16_t* iscan);
-#define aom_quantize_b_32x32_adaptive aom_quantize_b_32x32_adaptive_c
-
 void aom_quantize_b_64x64_c(const tran_low_t* coeff_ptr,
                             intptr_t n_coeffs,
                             const int16_t* zbin_ptr,
@@ -2929,34 +2915,6 @@ RTCD_EXTERN void (*aom_quantize_b_64x64)(const tran_low_t* coeff_ptr,
                                          uint16_t* eob_ptr,
                                          const int16_t* scan,
                                          const int16_t* iscan);
-
-void aom_quantize_b_64x64_adaptive_c(const tran_low_t* coeff_ptr,
-                                     intptr_t n_coeffs,
-                                     const int16_t* zbin_ptr,
-                                     const int16_t* round_ptr,
-                                     const int16_t* quant_ptr,
-                                     const int16_t* quant_shift_ptr,
-                                     tran_low_t* qcoeff_ptr,
-                                     tran_low_t* dqcoeff_ptr,
-                                     const int16_t* dequant_ptr,
-                                     uint16_t* eob_ptr,
-                                     const int16_t* scan,
-                                     const int16_t* iscan);
-#define aom_quantize_b_64x64_adaptive aom_quantize_b_64x64_adaptive_c
-
-void aom_quantize_b_adaptive_c(const tran_low_t* coeff_ptr,
-                               intptr_t n_coeffs,
-                               const int16_t* zbin_ptr,
-                               const int16_t* round_ptr,
-                               const int16_t* quant_ptr,
-                               const int16_t* quant_shift_ptr,
-                               tran_low_t* qcoeff_ptr,
-                               tran_low_t* dqcoeff_ptr,
-                               const int16_t* dequant_ptr,
-                               uint16_t* eob_ptr,
-                               const int16_t* scan,
-                               const int16_t* iscan);
-#define aom_quantize_b_adaptive aom_quantize_b_adaptive_c
 
 unsigned int aom_sad128x128_c(const uint8_t* src_ptr,
                               int src_stride,
@@ -5889,15 +5847,15 @@ static void setup_rtcd_internal(void) {
   aom_hadamard_8x8 = aom_hadamard_8x8_c;
   if (flags & HAS_NEON)
     aom_hadamard_8x8 = aom_hadamard_8x8_neon;
-  aom_hadamard_8x8_dual = aom_hadamard_8x8_dual_c;
-  if (flags & HAS_NEON)
-    aom_hadamard_8x8_dual = aom_hadamard_8x8_dual_neon;
   aom_hadamard_lp_16x16 = aom_hadamard_lp_16x16_c;
   if (flags & HAS_NEON)
     aom_hadamard_lp_16x16 = aom_hadamard_lp_16x16_neon;
   aom_hadamard_lp_8x8 = aom_hadamard_lp_8x8_c;
   if (flags & HAS_NEON)
     aom_hadamard_lp_8x8 = aom_hadamard_lp_8x8_neon;
+  aom_hadamard_lp_8x8_dual = aom_hadamard_lp_8x8_dual_c;
+  if (flags & HAS_NEON)
+    aom_hadamard_lp_8x8_dual = aom_hadamard_lp_8x8_dual_neon;
   aom_int_pro_col = aom_int_pro_col_c;
   if (flags & HAS_NEON)
     aom_int_pro_col = aom_int_pro_col_neon;

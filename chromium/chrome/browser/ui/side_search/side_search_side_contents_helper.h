@@ -49,6 +49,9 @@ class SideSearchSideContentsHelper
     virtual content::WebContents* OpenURLFromTab(
         content::WebContents* source,
         const content::OpenURLParams& params);
+
+    // Get the WebContents of the associated tab.
+    virtual content::WebContents* GetTabWebContents() = 0;
   };
 
   // Will call MaybeRecordMetricsPerJourney().
@@ -81,10 +84,17 @@ class SideSearchSideContentsHelper
   // necessary. Also calls MaybeRecordMetricsPerJourney().
   void LoadURL(const GURL& url);
 
+  // Get the WebContents of the associated tab.
+  content::WebContents* GetTabWebContents();
+
   // Called to set the tab contents associated with this side panel contents.
   // The tab contents will always outlive this helper and its associated side
   // contents.
   void SetDelegate(Delegate* delegate);
+
+  void set_auto_triggered(bool auto_triggered) {
+    auto_triggered_ = auto_triggered;
+  }
 
  private:
   friend class content::WebContentsUserData<SideSearchSideContentsHelper>;
@@ -100,10 +110,17 @@ class SideSearchSideContentsHelper
 
   WebuiLoadTimer webui_load_timer_;
 
-  // Only used for metrics.
+  // Tracks the number of times a navigation was committed within the side
+  // panel.
   int navigation_within_side_search_count_ = 0;
+
+  // Tracks the number of times a navigation was redirected to the tab's web
+  // contents.
   int redirection_to_tab_count_ = 0;
-  bool has_loaded_url_ = false;
+
+  // Tracks whether or not the current search journey was automatically
+  // triggered (i.e. the user did not explicitly open the side panel).
+  bool auto_triggered_ = false;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

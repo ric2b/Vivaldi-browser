@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_driver.h"
+#include "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
@@ -492,7 +493,7 @@ void CreditCardAccessManager::Authenticate() {
       // authentication flow since the card unmask prompt will pop up.
       client_->CloseWebauthnDialog();
 #endif
-      GetOrCreateCVCAuthenticator()->Authenticate(
+      client_->GetCVCAuthenticator()->Authenticate(
           card_.get(), weak_ptr_factory_.GetWeakPtr(), personal_data_manager_);
       break;
     }
@@ -521,7 +522,7 @@ void CreditCardAccessManager::Authenticate() {
       // Delegate the task to CreditCardOtpAuthenticator.
       CardUnmaskChallengeOption selected_challenge_option =
           *card_unmask_challenge_options_it;
-      GetOrCreateOtpAuthenticator()->OnChallengeOptionSelected(
+      client_->GetOtpAuthenticator()->OnChallengeOptionSelected(
           card_.get(), selected_challenge_option,
           weak_ptr_factory_.GetWeakPtr(),
           virtual_card_unmask_response_details_.context_token,
@@ -536,13 +537,6 @@ void CreditCardAccessManager::Authenticate() {
   }
 }
 
-CreditCardCVCAuthenticator*
-CreditCardAccessManager::GetOrCreateCVCAuthenticator() {
-  if (!cvc_authenticator_)
-    cvc_authenticator_ = std::make_unique<CreditCardCVCAuthenticator>(client_);
-  return cvc_authenticator_.get();
-}
-
 #if !BUILDFLAG(IS_IOS)
 CreditCardFIDOAuthenticator*
 CreditCardAccessManager::GetOrCreateFIDOAuthenticator() {
@@ -552,13 +546,6 @@ CreditCardAccessManager::GetOrCreateFIDOAuthenticator() {
   return fido_authenticator_.get();
 }
 #endif
-
-CreditCardOtpAuthenticator*
-CreditCardAccessManager::GetOrCreateOtpAuthenticator() {
-  if (!otp_authenticator_)
-    otp_authenticator_ = std::make_unique<CreditCardOtpAuthenticator>(client_);
-  return otp_authenticator_.get();
-}
 
 void CreditCardAccessManager::OnCVCAuthenticationComplete(
     const CreditCardCVCAuthenticator::CVCAuthenticationResponse& response) {
@@ -636,7 +623,15 @@ bool CreditCardAccessManager::UserOptedInToFidoFromSettingsPageOnMobile()
 #if !BUILDFLAG(IS_IOS)
 void CreditCardAccessManager::OnFIDOAuthenticationComplete(
     const CreditCardFIDOAuthenticator::FidoAuthenticationResponse& response) {
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableFIDOProgressDialog)) {
+    // Close the progress dialog when the authentication for getting the full
+    // card completes.
+    client_->CloseAutofillProgressDialog(
+        /*show_confirmation_before_closing=*/true);
+  }
+#else
   // Close the Webauthn verify pending dialog. If FIDO authentication succeeded,
   // card is filled to the form, otherwise fall back to CVC authentication which
   // does not need the verify pending dialog either.
@@ -969,6 +964,7 @@ void CreditCardAccessManager::FetchMaskedServerCard() {
 void CreditCardAccessManager::FetchVirtualCard() {
   is_authentication_in_progress_ = true;
   client_->ShowAutofillProgressDialog(
+      AutofillProgressDialogType::kVirtualCardUnmaskProgressDialog,
       base::BindOnce(&CreditCardAccessManager::OnVirtualCardUnmaskCancelled,
                      weak_ptr_factory_.GetWeakPtr()));
 
@@ -1117,7 +1113,7 @@ void CreditCardAccessManager::OnVirtualCardUnmaskCancelled() {
     // Virtual Card Unmask request, so we need to reset the state of the
     // CreditCardOtpAuthenticator as well to ensure the flow does not continue,
     // as continuing the flow can cause a crash.
-    GetOrCreateOtpAuthenticator()->Reset();
+    client_->GetOtpAuthenticator()->Reset();
   }
 
   AutofillMetrics::VirtualCardUnmaskFlowType flow_type;

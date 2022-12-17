@@ -63,6 +63,7 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/mock_cert_verifier.h"
+#include "net/cert/test_root_certs.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/transport_security_state.h"
@@ -169,10 +170,6 @@ class SignedExchangeRequestHandlerBrowserTestBase
     : public CertVerifierBrowserTest {
  public:
   SignedExchangeRequestHandlerBrowserTestBase() {
-    // This installs "root_ca_cert.pem" from which our test certificates are
-    // created. (Needed for the tests that use real certificate, i.e.
-    // RealCertVerifier)
-    net::EmbeddedTestServer::RegisterTestCerts();
     feature_list_.InitWithFeatures({features::kSignedHTTPExchange}, {});
   }
 
@@ -326,7 +323,7 @@ class SignedExchangeRequestHandlerBrowserTest
   void WaitUntilSXGIsCached(const GURL& url) {
     scoped_refptr<PrefetchedSignedExchangeCache> cache =
         static_cast<RenderFrameHostImpl*>(
-            shell()->web_contents()->GetMainFrame())
+            shell()->web_contents()->GetPrimaryMainFrame())
             ->EnsurePrefetchedSignedExchangeCache();
 
     if (cache->GetExchanges().find(url) != cache->GetExchanges().end())
@@ -914,6 +911,10 @@ class SignedExchangeRequestHandlerRealCertVerifierBrowserTest
   SignedExchangeRequestHandlerRealCertVerifierBrowserTest() {
     // Use "real" CertVerifier.
     disable_mock_cert_verifier();
+    // This installs "root_ca_cert.pem" from which our test certificates are
+    // created. (Needed for the tests that use real certificate, i.e.
+    // RealCertVerifier)
+    scoped_test_root_ = net::EmbeddedTestServer::RegisterTestCerts();
   }
   void SetUp() override {
     SignedExchangeHandler::SetShouldIgnoreCertValidityPeriodErrorForTesting(
@@ -925,6 +926,9 @@ class SignedExchangeRequestHandlerRealCertVerifierBrowserTest
     SignedExchangeHandler::SetShouldIgnoreCertValidityPeriodErrorForTesting(
         false);
   }
+
+ private:
+  net::ScopedTestRoot scoped_test_root_;
 };
 
 // If this fails with ERR_CERT_DATE_INVALID, try to regenerate test data

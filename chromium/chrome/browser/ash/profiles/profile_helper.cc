@@ -19,14 +19,14 @@
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/base/file_flusher.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
+#include "chrome/browser/ash/profiles/browser_context_helper_delegate_impl.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -35,19 +35,8 @@
 namespace ash {
 namespace {
 
-// As defined in /chromeos/dbus/cryptohome/cryptohome_client.cc.
+// As defined in /chromeos/ash/components/dbus/cryptohome/cryptohome_client.cc.
 static const char kUserIdHashSuffix[] = "-hash";
-
-bool ShouldAddProfileDirPrefix(const std::string& user_id_hash) {
-  // Do not add profile dir prefix for legacy profile dir and test
-  // user profile. The reason of not adding prefix for test user profile
-  // is to keep the promise that TestingProfile::kTestUserProfileDir and
-  // chrome::kTestUserProfileDir are always in sync. Otherwise,
-  // TestingProfile::kTestUserProfileDir needs to be dynamically calculated
-  // based on whether multi profile is enabled or not.
-  return user_id_hash != chrome::kLegacyProfileDir &&
-         user_id_hash != chrome::kTestUserProfileDir;
-}
 
 class UsernameHashMatcher {
  public:
@@ -59,13 +48,6 @@ class UsernameHashMatcher {
  private:
   const std::string& username_hash;
 };
-
-// Internal helper to get an already-loaded user profile by user id hash. Return
-// nullptr if the user profile is not yet loaded.
-Profile* GetProfileByUserIdHash(const std::string& user_id_hash) {
-  return g_browser_process->profile_manager()->GetProfileByPath(
-      ProfileHelper::GetProfilePathByUserIdHash(user_id_hash));
-}
 
 bool IsSigninProfilePath(const base::FilePath& profile_path) {
   return profile_path.value() == chrome::kInitialProfile;
@@ -79,28 +61,6 @@ bool IsLockScreenProfilePath(const base::FilePath& profile_path) {
   return profile_path.value() == chrome::kLockScreenProfile;
 }
 
-// Returns the path that corresponds to the passed profile.
-base::FilePath GetProfileDir(base::StringPiece profile) {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  // profile_manager can be null in unit tests.
-  if (!profile_manager)
-    return base::FilePath();
-  base::FilePath user_data_dir = profile_manager->user_data_dir();
-  return user_data_dir.AppendASCII(profile);
-}
-
-// Returns an incognito profile that corresponds to the passed path.
-Profile* GetIncognitoProfile(base::FilePath profile_dir) {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  // |profile_manager| could be null in tests.
-  if (!profile_manager) {
-    return nullptr;
-  }
-
-  return profile_manager->GetProfile(profile_dir)
-      ->GetPrimaryOTRProfile(/*create_if_needed=*/true);
-}
-
 }  // anonymous namespace
 
 // static
@@ -109,9 +69,24 @@ bool ProfileHelper::always_return_primary_user_for_testing = false;
 
 class ProfileHelperImpl : public ProfileHelper {
  public:
-  ProfileHelperImpl();
+  explicit ProfileHelperImpl(
+      std::unique_ptr<BrowserContextHelper::Delegate> delegate);
   ~ProfileHelperImpl() override;
 
+  // Returns the path that corresponds to the passed profile.
+  base::FilePath GetProfileDir(base::StringPiece profile);
+
+  // Returns true if the signin profile has been initialized.
+  bool IsSigninProfileInitialized();
+
+  // Returns OffTheRecord profile for use during signing phase.
+  Profile* GetSigninProfile();
+
+  // Returns OffTheRecord profile for use during online authentication on the
+  // lock screen.
+  Profile* GetLockScreenProfile();
+
+  // ProfileHelper overrides
   base::FilePath GetActiveUserProfileDir() override;
   void Initialize() override;
 
@@ -135,6 +110,8 @@ class ProfileHelperImpl : public ProfileHelper {
   // user_manager::UserManager::UserSessionStateObserver implementation:
   void ActiveUserHashChanged(const std::string& hash) override;
 
+  std::unique_ptr<BrowserContextHelper> browser_context_helper_;
+
   // Identifies path to active user profile on Chrome OS.
   std::string active_user_id_hash_;
 
@@ -147,6 +124,17 @@ class ProfileHelperImpl : public ProfileHelper {
 
   std::unique_ptr<FileFlusher> profile_flusher_;
 };
+
+namespace {
+// Convenient utility to obtain ProfileHelperImpl.
+// Currently ProfileHelper interface is implemented by only ProfileHelperImpl,
+// so safe to cast.
+// TODO(crbug.com/1325210): Remove this after ProfileHelper is moved out from
+// chrome/browser.
+ProfileHelperImpl* GetImpl() {
+  return static_cast<ProfileHelperImpl*>(ProfileHelper::Get());
+}
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // ProfileHelper, public
@@ -162,7 +150,8 @@ ProfileHelper::~ProfileHelper() {
 
 // static
 std::unique_ptr<ProfileHelper> ProfileHelper::CreateInstance() {
-  return std::make_unique<ProfileHelperImpl>();
+  return std::make_unique<ProfileHelperImpl>(
+      std::make_unique<BrowserContextHelperDelegateImpl>());
 }
 
 // static
@@ -173,58 +162,31 @@ ProfileHelper* ProfileHelper::Get() {
 // static
 base::FilePath ProfileHelper::GetProfilePathByUserIdHash(
     const std::string& user_id_hash) {
-  // Fails if Chrome runs with "--login-manager", but not "--login-profile", and
-  // needs to restart. This might happen if you test Chrome OS on Linux and
-  // you start a guest session or Chrome crashes. Be sure to add
-  //   "--login-profile=user@example.com-hash"
-  // to the command line flags.
-  DCHECK(!user_id_hash.empty())
-      << "user_id_hash is empty, probably need to add "
-         "--login-profile=user@example.com-hash to command line parameters";
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  base::FilePath profile_path = profile_manager->user_data_dir();
-
-  return profile_path.Append(GetUserProfileDir(user_id_hash));
+  return BrowserContextHelper::Get()->GetBrowserContextPathByUserIdHash(
+      user_id_hash);
 }
 
 // static
 base::FilePath ProfileHelper::GetSigninProfileDir() {
-  return GetProfileDir(chrome::kInitialProfile);
+  return GetImpl()->GetProfileDir(chrome::kInitialProfile);
 }
 
 // static
 Profile* ProfileHelper::GetSigninProfile() {
-  return GetIncognitoProfile(GetSigninProfileDir());
+  return GetImpl()->GetSigninProfile();
 }
 
 // static
 std::string ProfileHelper::GetUserIdHashFromProfile(const Profile* profile) {
-  if (!profile)
-    return std::string();
-
-  std::string profile_dir = profile->GetBaseName().value();
-
-  // Don't strip prefix if the dir is not supposed to be prefixed.
-  if (!ShouldAddProfileDirPrefix(profile_dir))
-    return profile_dir;
-
-  // Check that profile directory starts with the correct prefix.
-  std::string prefix(chrome::kProfileDirPrefix);
-  if (!base::StartsWith(profile_dir, prefix, base::CompareCase::SENSITIVE)) {
-    // This happens when creating a TestingProfile in browser tests.
-    return std::string();
-  }
-
-  return profile_dir.substr(prefix.length());
+  return BrowserContextHelper::GetUserIdHashFromBrowserContext(
+      const_cast<Profile*>(profile));
 }
 
 // static
 base::FilePath ProfileHelper::GetUserProfileDir(
     const std::string& user_id_hash) {
-  CHECK(!user_id_hash.empty());
-  return ShouldAddProfileDirPrefix(user_id_hash)
-             ? base::FilePath(chrome::kProfileDirPrefix + user_id_hash)
-             : base::FilePath(user_id_hash);
+  return base::FilePath(
+      BrowserContextHelper::GetUserBrowserContextDirName(user_id_hash));
 }
 
 // static
@@ -234,9 +196,7 @@ bool ProfileHelper::IsSigninProfile(const Profile* profile) {
 
 // static
 bool ProfileHelper::IsSigninProfileInitialized() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  return profile_manager &&
-         profile_manager->GetProfileByPath(GetSigninProfileDir());
+  return GetImpl()->IsSigninProfileInitialized();
 }
 
 // static
@@ -246,7 +206,7 @@ bool ProfileHelper::IsLockScreenAppProfile(const Profile* profile) {
 
 // static
 base::FilePath ProfileHelper::GetLockScreenAppProfilePath() {
-  return GetProfileDir(chrome::kLockScreenAppProfile);
+  return GetImpl()->GetProfileDir(chrome::kLockScreenAppProfile);
 }
 
 // static
@@ -256,7 +216,12 @@ std::string ProfileHelper::GetLockScreenAppProfileName() {
 
 // static
 base::FilePath ProfileHelper::GetLockScreenProfileDir() {
-  return GetProfileDir(chrome::kLockScreenProfile);
+  return GetImpl()->GetProfileDir(chrome::kLockScreenProfile);
+}
+
+// static
+Profile* ProfileHelper::GetLockScreenProfile() {
+  return GetImpl()->GetLockScreenProfile();
 }
 
 // static
@@ -309,7 +274,7 @@ bool ProfileHelper::IsEphemeralUserProfile(const Profile* profile) {
   }
 
   // Otherwise, users are ephemeral when the policy is enabled.
-  return ChromeUserManager::Get()->AreEphemeralUsersEnabled();
+  return user_manager::UserManager::Get()->AreEphemeralUsersEnabled();
 }
 
 // static
@@ -343,9 +308,44 @@ std::string ProfileHelper::GetUserIdHashByUserIdForTesting(
   return user_id + kUserIdHashSuffix;
 }
 
-ProfileHelperImpl::ProfileHelperImpl() = default;
+ProfileHelperImpl::ProfileHelperImpl(
+    std::unique_ptr<BrowserContextHelper::Delegate> delegate)
+    : browser_context_helper_(
+          std::make_unique<BrowserContextHelper>(std::move(delegate))) {}
 
 ProfileHelperImpl::~ProfileHelperImpl() = default;
+
+base::FilePath ProfileHelperImpl::GetProfileDir(base::StringPiece profile) {
+  const base::FilePath* user_data_dir =
+      browser_context_helper_->delegate()->GetUserDataDir();
+  if (!user_data_dir)
+    return base::FilePath();
+  return user_data_dir->AppendASCII(profile);
+}
+
+bool ProfileHelperImpl::IsSigninProfileInitialized() {
+  return browser_context_helper_->delegate()->GetBrowserContextByPath(
+      GetSigninProfileDir());
+}
+
+Profile* ProfileHelperImpl::GetSigninProfile() {
+  Profile* profile = Profile::FromBrowserContext(
+      browser_context_helper_->delegate()->DeprecatedGetBrowserContext(
+          GetSigninProfileDir()));
+  if (!profile)
+    return nullptr;
+  return profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+}
+
+Profile* ProfileHelperImpl::GetLockScreenProfile() {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  DCHECK(profile_manager);
+  Profile* profile =
+      profile_manager->GetProfileByPath(GetLockScreenProfileDir());
+  if (!profile)
+    return nullptr;
+  return profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+}
 
 base::FilePath ProfileHelperImpl::GetActiveUserProfileDir() {
   return ProfileHelper::GetUserProfileDir(active_user_id_hash_);
@@ -378,7 +378,11 @@ Profile* ProfileHelperImpl::GetProfileByUser(const user_manager::User* user) {
 
   if (!user->is_profile_created())
     return NULL;
-  Profile* profile = GetProfileByUserIdHash(user->username_hash());
+
+  Profile* profile = Profile::FromBrowserContext(
+      browser_context_helper_->delegate()->GetBrowserContextByPath(
+          browser_context_helper_->GetBrowserContextPathByUserIdHash(
+              user->username_hash())));
 
   // GetActiveUserProfile() or GetProfileByUserIdHash() returns a new instance
   // of ProfileImpl(), but actually its off-the-record profile should be used.
@@ -441,8 +445,9 @@ const user_manager::User* ProfileHelperImpl::GetUserByProfile(
   // Many tests do not have their users registered with UserManager and
   // runs here. If |active_user_| matches |profile|, returns it.
   const user_manager::User* active_user = user_manager->GetActiveUser();
-  return active_user && ProfileHelper::GetProfilePathByUserIdHash(
-                            active_user->username_hash()) == profile->GetPath()
+  return active_user &&
+                 browser_context_helper_->GetBrowserContextPathByUserIdHash(
+                     active_user->username_hash()) == profile->GetPath()
              ? active_user
              : NULL;
 }

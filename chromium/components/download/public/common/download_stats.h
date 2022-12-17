@@ -145,7 +145,7 @@ enum DownloadCountTypes {
 
 // Enum for in-progress download DB, used in histogram
 // "Download.InProgressDB.Counts".
-enum InProgressDBCountTypes {
+enum InProgressDBCountTypes : uint8_t {
   // Count of initialization attempts.
   kInitializationCount = 0,
 
@@ -223,6 +223,10 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDangerousDownloadAccept(
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadResumption(
     DownloadInterruptReason reason,
     bool user_resume);
+
+// Records the interrupt reason when a download is retried.
+COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadRetry(
+    DownloadInterruptReason reason);
 
 // Records whenever a download hits max auto-resumption limit.
 COMPONENTS_DOWNLOAD_EXPORT void RecordAutoResumeCountLimitReached(

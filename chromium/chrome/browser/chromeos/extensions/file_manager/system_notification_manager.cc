@@ -21,7 +21,6 @@
 #include "chrome/browser/chromeos/extensions/file_manager/drivefs_event_router.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
@@ -213,6 +212,7 @@ SystemNotificationManager::CreateProgressNotification(
     int progress) {
   message_center::RichNotificationData rich_data;
   rich_data.progress = progress;
+  rich_data.progress_status = message;
 
   return ash::CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_PROGRESS, notification_id, title,
@@ -232,6 +232,7 @@ SystemNotificationManager::CreateIOTaskProgressNotification(
     int progress) {
   message_center::RichNotificationData rich_data;
   rich_data.progress = progress;
+  rich_data.progress_status = message;
 
   auto notification = ash::CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_PROGRESS, notification_id, title,
@@ -367,7 +368,7 @@ namespace file_manager_private = extensions::api::file_manager_private;
 std::unique_ptr<message_center::Notification>
 SystemNotificationManager::MakeDriveSyncErrorNotification(
     const extensions::Event& event,
-    base::Value::ListView& event_arguments) {
+    const base::Value::List& event_arguments) {
   std::unique_ptr<message_center::Notification> notification;
   file_manager_private::DriveSyncErrorEvent sync_error;
   const char* id;
@@ -392,9 +393,14 @@ SystemNotificationManager::MakeDriveSyncErrorNotification(
                                IDS_FILE_BROWSER_SYNC_SERVICE_UNAVAILABLE_ERROR);
         break;
       case file_manager_private::DRIVE_SYNC_ERROR_TYPE_NO_SERVER_SPACE:
-        message = l10n_util::GetStringFUTF16(
-            IDS_FILE_BROWSER_SYNC_NO_SERVER_SPACE,
-            util::GetDisplayableFileName16(file_url));
+        message =
+            l10n_util::GetStringUTF16(IDS_FILE_BROWSER_SYNC_NO_SERVER_SPACE);
+        notification = CreateNotification(id, title, message);
+        break;
+      case file_manager_private::
+          DRIVE_SYNC_ERROR_TYPE_NO_SERVER_SPACE_ORGANIZATION:
+        message = l10n_util::GetStringUTF16(
+            IDS_FILE_BROWSER_SYNC_NO_SERVER_SPACE_ORGANIZATION);
         notification = CreateNotification(id, title, message);
         break;
       case file_manager_private::DRIVE_SYNC_ERROR_TYPE_NO_LOCAL_SPACE:
@@ -440,7 +446,7 @@ void SystemNotificationManager::HandleDriveDialogClick(
 std::unique_ptr<message_center::Notification>
 SystemNotificationManager::MakeDriveConfirmDialogNotification(
     const extensions::Event& event,
-    base::Value::ListView& event_arguments) {
+    const base::Value::List& event_arguments) {
   std::unique_ptr<message_center::Notification> notification;
   file_manager_private::DriveConfirmDialogEvent dialog_event;
   std::u16string title =
@@ -473,7 +479,7 @@ constexpr char kDrivePinId[] = "swa-drive-pin";
 std::unique_ptr<message_center::Notification>
 SystemNotificationManager::UpdateDriveSyncNotification(
     const extensions::Event& event,
-    base::Value::ListView& event_arguments) {
+    const base::Value::List& event_arguments) {
   std::unique_ptr<message_center::Notification> notification;
   file_manager_private::FileTransferStatus transfer_status;
   if (!file_manager_private::FileTransferStatus::Populate(event_arguments[0],
@@ -529,9 +535,7 @@ void SystemNotificationManager::HandleEvent(const extensions::Event& event) {
   if (!swa_enabled_) {
     return;
   }
-  base::Value::ListView event_arguments;
-
-  event_arguments = event.event_args->GetListDeprecated();
+  const base::Value::List& event_arguments = event.event_args;
   if (event_arguments.size() < 1) {
     return;
   }
@@ -932,7 +936,7 @@ SystemNotificationManager::MakeRemovableNotification(
     DCHECK_EQ(notification_buttons.size(), uma_types_for_buttons.size());
     notification->set_buttons(notification_buttons);
   }
-  if (volume.device_type() != chromeos::DEVICE_TYPE_UNKNOWN &&
+  if (volume.device_type() != ash::DeviceType::kUnknown &&
       !volume.storage_device_path().empty()) {
     if (UpdateDeviceMountStatus(event, volume) != MOUNT_STATUS_SUCCESS) {
       notification = MakeMountErrorNotification(event, volume);
@@ -960,7 +964,7 @@ void SystemNotificationManager::HandleMountCompletedEvent(
       GetNotificationDisplayService()->Close(
           NotificationHandler::Type::TRANSIENT, kRemovableNotificationId);
 
-      if (volume.device_type() != chromeos::DEVICE_TYPE_UNKNOWN &&
+      if (volume.device_type() != ash::DeviceType::kUnknown &&
           !volume.storage_device_path().empty()) {
         UpdateDeviceMountStatus(event, volume);
       }

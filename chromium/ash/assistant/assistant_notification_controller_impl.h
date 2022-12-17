@@ -12,7 +12,7 @@
 #include "ash/assistant/model/assistant_notification_model.h"
 #include "ash/assistant/model/assistant_notification_model_observer.h"
 #include "ash/public/cpp/assistant/controller/assistant_notification_controller.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/libassistant/public/cpp/assistant_notification.h"
 #include "chromeos/services/libassistant/public/mojom/notification_delegate.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -44,7 +44,7 @@ class ASH_EXPORT AssistantNotificationControllerImpl
   const AssistantNotificationModel* model() const { return &model_; }
 
   // Provides a pointer to the |assistant| owned by AssistantController.
-  void SetAssistant(chromeos::assistant::Assistant* assistant);
+  void SetAssistant(assistant::Assistant* assistant);
 
   // AssistantNotificationController:
   void RemoveNotificationById(const std::string& id, bool from_server) override;
@@ -79,7 +79,7 @@ class ASH_EXPORT AssistantNotificationControllerImpl
   AssistantNotificationExpiryMonitor expiry_monitor_;
 
   // Owned by AssistantService
-  chromeos::assistant::Assistant* assistant_ = nullptr;
+  assistant::Assistant* assistant_ = nullptr;
 
   const message_center::NotifierId notifier_id_;
 

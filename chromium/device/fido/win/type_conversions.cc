@@ -161,7 +161,7 @@ static uint32_t ToWinTransportsMask(
       case FidoTransportProtocol::kBluetoothLowEnergy:
         result |= WEBAUTHN_CTAP_TRANSPORT_BLE;
         break;
-      case FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy:
+      case FidoTransportProtocol::kHybrid:
       case FidoTransportProtocol::kAndroidAccessory:
         // caBLE is unsupported by the Windows API.
         break;
@@ -307,7 +307,9 @@ WinCredentialDetailsListToCredentialMetadata(
     WEBAUTHN_CREDENTIAL_DETAILS* credential =
         credentials.ppCredentialDetails[i];
     WEBAUTHN_USER_ENTITY_INFORMATION* user = credential->pUserInformation;
+    WEBAUTHN_RP_ENTITY_INFORMATION* rp = credential->pRpInformation;
     DiscoverableCredentialMetadata metadata(
+        base::WideToUTF8(rp->pwszId),
         std::vector<uint8_t>(
             credential->pbCredentialID,
             credential->pbCredentialID + credential->cbCredentialID),
@@ -322,6 +324,7 @@ WinCredentialDetailsListToCredentialMetadata(
             user->pwszIcon
                 ? absl::make_optional(GURL(base::WideToUTF8(user->pwszIcon)))
                 : absl::nullopt));
+    metadata.system_created = !credential->bRemovable;
     result.push_back(std::move(metadata));
   }
   return result;

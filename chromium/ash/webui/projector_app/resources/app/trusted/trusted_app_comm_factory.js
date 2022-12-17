@@ -59,6 +59,15 @@ export class UntrustedAppClient extends PostMessageAPIClient {
   onScreencastsStateChange(pendingScreencasts) {
     return this.callApiFn('onScreencastsStateChange', pendingScreencasts);
   }
+
+  /**
+   * Notifies the untrusted context when a new video file is available.
+   * @param {?File} videoFile to provide to the untrusted context
+   * @param {?DOMException} error if retrieving the video file failed
+   */
+  onFileLoaded(videoFile, error) {
+    return this.callApiFn('onFileLoaded', [videoFile, error]);
+  }
 }
 
 /**
@@ -88,24 +97,24 @@ export class TrustedAppRequestHandler extends RequestHandler {
       }
       return this.browserProxy_.startProjectorSession(storageDir[0]);
     });
-    this.registerMethod('getOAuthTokenForAccount', (account) => {
-      if (!account || account.length != 1) {
-        return {};
+    this.registerMethod('getOAuthTokenForAccount', (args) => {
+      if (!args || args.length != 1) {
+        return Promise.reject('Incorrect args for getOAuthTokenForAccount');
       }
-      return this.browserProxy_.getOAuthTokenForAccount(account[0]);
+      return this.browserProxy_.getOAuthTokenForAccount(args[0]);
     });
     this.registerMethod('onError', (msg) => {
       this.browserProxy_.onError(msg);
     });
     this.registerMethod('sendXhr', (values) => {
-      if (!values || values.length != 4) {
+      if (!values || values.length != 5) {
         return {
           success: false,
-          error: 'INVALID_ARGUMENTS'
+          error: 'INVALID_ARGUMENTS',
         };
       }
       return this.browserProxy_.sendXhr(
-          values[0], values[1], values[2], values[3]);
+          values[0], values[1], values[2], values[3], values[4]);
     });
     this.registerMethod('shouldDownloadSoda', (args) => {
       return this.browserProxy_.shouldDownloadSoda();
@@ -130,6 +139,12 @@ export class TrustedAppRequestHandler extends RequestHandler {
     });
     this.registerMethod('openFeedbackDialog', (args) => {
       return this.browserProxy_.openFeedbackDialog();
+    });
+    this.registerMethod('getVideo', (args) => {
+      if (!args || args.length != 2) {
+        return Promise.reject('Incorrect args for getVideo');
+      }
+      return this.browserProxy_.getVideo(args[0], args[1]);
     });
   }
 }

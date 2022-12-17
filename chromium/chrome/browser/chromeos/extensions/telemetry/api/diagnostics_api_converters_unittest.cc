@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/extensions/telemetry/api/diagnostics_api_converters.h"
-#include "ash/webui/telemetry_extension_ui/mojom/diagnostics_service.mojom.h"
 #include "chrome/common/chromeos/extensions/api/diagnostics.h"
+#include "chromeos/crosapi/mojom/diagnostics_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -12,12 +12,14 @@ namespace converters {
 
 namespace {
 
-using MojoRoutineCommandType = ash::health::mojom::DiagnosticRoutineCommandEnum;
-using MojoRoutineStatus = ::ash::health::mojom::DiagnosticRoutineStatusEnum;
-using MojoRoutineType = ::ash::health::mojom::DiagnosticRoutineEnum;
+using MojoRoutineCommandType = crosapi::mojom::DiagnosticsRoutineCommandEnum;
+using MojoRoutineStatus = ::crosapi::mojom::DiagnosticsRoutineStatusEnum;
+using MojoRoutineType = ::crosapi::mojom::DiagnosticsRoutineEnum;
 using MojoRoutineUserMessageType =
-    ash::health::mojom::DiagnosticRoutineUserMessageEnum;
-using MojoDiskReadRoutineType = ash::health::mojom::DiskReadRoutineTypeEnum;
+    crosapi::mojom::DiagnosticsRoutineUserMessageEnum;
+using MojoDiskReadRoutineType =
+    crosapi::mojom::DiagnosticsDiskReadRoutineTypeEnum;
+using MojoAcPowerStatusType = crosapi::mojom::DiagnosticsAcPowerStatusEnum;
 
 using RoutineCommandType = ::chromeos::api::os_diagnostics::RoutineCommandType;
 using RoutineStatus = ::chromeos::api::os_diagnostics::RoutineStatus;
@@ -25,6 +27,8 @@ using RoutineType = ::chromeos::api::os_diagnostics::RoutineType;
 using RoutineUserMessageType = ::chromeos::api::os_diagnostics::UserMessageType;
 using RoutineDiskReadRoutineType =
     ::chromeos::api::os_diagnostics::DiskReadRoutineType;
+using RoutineAcPowerStatusRoutineType =
+    ::chromeos::api::os_diagnostics::AcPowerStatus;
 
 }  // namespace
 
@@ -34,6 +38,11 @@ using RoutineDiskReadRoutineType =
 TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
      ConvertMojoRoutineTest) {
   // Tests for supported routines.
+  {
+    RoutineType out;
+    EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kAcPower, &out));
+    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_AC_POWER);
+  }
   {
     RoutineType out;
     EXPECT_TRUE(ConvertMojoRoutine(MojoRoutineType::kBatteryCapacity, &out));
@@ -99,11 +108,6 @@ TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
   // Tests for unsupported routines.
   // Note: If an unsupported routine becomes supported, the respective test
   // should be changed.
-  {
-    RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
-    EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kAcPower, &out));
-    EXPECT_EQ(out, RoutineType::ROUTINE_TYPE_NONE);
-  }
   {
     RoutineType out = RoutineType::ROUTINE_TYPE_NONE;
     EXPECT_FALSE(ConvertMojoRoutine(MojoRoutineType::kNvmeSelfTest, &out));
@@ -172,6 +176,16 @@ TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
   EXPECT_EQ(ConvertDiskReadRoutineType(
                 RoutineDiskReadRoutineType::DISK_READ_ROUTINE_TYPE_RANDOM),
             MojoDiskReadRoutineType::kRandomRead);
+}
+
+TEST(TelemetryExtensionDiagnosticsApiConvertersUnitTest,
+     ConvertAcPowerStatusRoutineType) {
+  EXPECT_EQ(ConvertAcPowerStatusRoutineType(
+                RoutineAcPowerStatusRoutineType::AC_POWER_STATUS_CONNECTED),
+            MojoAcPowerStatusType::kConnected);
+  EXPECT_EQ(ConvertAcPowerStatusRoutineType(
+                RoutineAcPowerStatusRoutineType::AC_POWER_STATUS_DISCONNECTED),
+            MojoAcPowerStatusType::kDisconnected);
 }
 
 }  // namespace converters

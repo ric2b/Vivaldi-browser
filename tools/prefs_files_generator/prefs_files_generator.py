@@ -136,7 +136,7 @@ def main():
     prefs_definitions = json.load(args.prefs_definitions)
     prefs_list = generate_prefs_list('vivaldi', prefs_definitions['vivaldi'])
     prefs_list.sort(key=lambda i: i["name"])
-    if not re.match('^(android|linux|mac|win)$', args.target_os):
+    if not re.match('^(android|linux|mac|win|ios)$', args.target_os):
         raise TypeError('unsupported target-os - ' + args.target_os)
 
     mergeable_lists = [

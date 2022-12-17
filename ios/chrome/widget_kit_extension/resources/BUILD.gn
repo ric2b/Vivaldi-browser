@@ -1,0 +1,53 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("widget_vivaldi_logo") {
+  sources = [
+    "widget_vivaldi_logo.imageset/Contents.json",
+    "widget_vivaldi_logo.imageset/widget_vivaldi_logo.png",
+    "widget_vivaldi_logo.imageset/widget_vivaldi_logo@2x.png",
+    "widget_vivaldi_logo.imageset/widget_vivaldi_logo@3x.png",
+  ]
+}
+
+imageset("widget_incognito_icon") {
+  sources = [
+    "widget_incognito_icon.imageset/Contents.json",
+    "widget_incognito_icon.imageset/widget_incognito_icon.pdf",
+  ]
+}
+
+imageset("widget_qr_icon") {
+  sources = [
+    "widget_qr_icon.imageset/Contents.json",
+    "widget_qr_icon.imageset/widget_qr_icon.pdf",
+  ]
+}
+
+imageset("widget_voice_search_icon") {
+  sources = [
+    "widget_voice_search_icon.imageset/Contents.json",
+    "widget_voice_search_icon.imageset/widget_voice_search_icon.pdf",
+  ]
+}
+
+colorset("widget_search_bar_color") {
+  sources = [ "widget_search_bar_color.colorset/Contents.json" ]
+}
+
+colorset("widget_separator_color") {
+  sources = [ "widget_separator_color.colorset/Contents.json" ]
+}
+
+colorset("widget_text_color") {
+  sources = [ "widget_text_color.colorset/Contents.json" ]
+}
+
+colorset("widget_background_color") {
+  sources = [ "widget_background_color.colorset/Contents.json" ]
+}
+
+colorset("widget_button_background_color") {
+  sources = [ "widget_button_background_color.colorset/Contents.json" ]
+}

@@ -32,7 +32,7 @@ class ContactEventRouter : public ContactModelObserver {
  private:
   // Helper to actually dispatch an event to extension listeners.
   void DispatchEvent(const std::string& event_name,
-                     std::vector<base::Value> event_args);
+                     base::Value::List event_args);
 
   content::BrowserContext* browser_context_;
   ContactService* model_;

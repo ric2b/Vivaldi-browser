@@ -69,10 +69,10 @@ SignedExchangeLoader::SignedExchangeLoader(
     : outer_request_(outer_request),
       outer_response_head_(std::move(outer_response_head)),
       forwarding_client_(std::move(forwarding_client)),
+      reporter_(std::move(reporter)),
       url_loader_options_(url_loader_options),
       should_redirect_on_failure_(should_redirect_on_failure),
       devtools_proxy_(std::move(devtools_proxy)),
-      reporter_(std::move(reporter)),
       url_loader_factory_(std::move(url_loader_factory)),
       url_loader_throttles_getter_(std::move(url_loader_throttles_getter)),
       network_isolation_key_(network_isolation_key),
@@ -159,12 +159,20 @@ void SignedExchangeLoader::OnStartLoadingResponseBody(
       outer_request_.throttling_profile_id,
       (outer_request_.trusted_params &&
        !outer_request_.trusted_params->isolation_info.IsEmpty())
-          ? net::IsolationInfo::Create(
-                net::IsolationInfo::RequestType::kOther,
-                *outer_request_.trusted_params->isolation_info
-                     .top_frame_origin(),
-                *outer_request_.trusted_params->isolation_info.frame_origin(),
-                net::SiteForCookies())
+          ? outer_request_.trusted_params->isolation_info.frame_origin()
+                    .has_value()
+                ? net::IsolationInfo::Create(
+                      net::IsolationInfo::RequestType::kOther,
+                      *outer_request_.trusted_params->isolation_info
+                           .top_frame_origin(),
+                      *outer_request_.trusted_params->isolation_info
+                           .frame_origin(),
+                      net::SiteForCookies())
+                : net::IsolationInfo::CreateDoubleKey(
+                      net::IsolationInfo::RequestType::kOther,
+                      *outer_request_.trusted_params->isolation_info
+                           .top_frame_origin(),
+                      net::SiteForCookies())
           : net::IsolationInfo());
 
   if (g_signed_exchange_factory_for_testing_) {

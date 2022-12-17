@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
-#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
+#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
 #include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/image_fetcher/core/image_fetcher.h"
@@ -162,26 +162,15 @@ bool SharingHubBubbleControllerDesktopImpl::ShouldUsePreview() {
          share::DesktopSharePreviewVariant::kDisabled;
 }
 
-std::u16string SharingHubBubbleControllerDesktopImpl::GetPreviewTitle() {
-  // TODO(https://crbug.com/1312524): get passed this state from the omnibox
-  // instead.
-  return GetWebContents().GetTitle();
-}
-
-GURL SharingHubBubbleControllerDesktopImpl::GetPreviewUrl() {
-  // TODO(https://crbug.com/1312524): get passed this state from the omnibox
-  // instead.
-  return GetWebContents().GetVisibleURL();
-}
-
-ui::ImageModel SharingHubBubbleControllerDesktopImpl::GetPreviewImage() {
-  return ui::ImageModel::FromImage(favicon::GetDefaultFavicon());
-}
-
 base::CallbackListSubscription
 SharingHubBubbleControllerDesktopImpl::RegisterPreviewImageChangedCallback(
     PreviewImageChangedCallback callback) {
   return preview_image_changed_callbacks_.Add(callback);
+}
+
+base::WeakPtr<SharingHubBubbleController>
+SharingHubBubbleControllerDesktopImpl::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 void SharingHubBubbleControllerDesktopImpl::OnActionSelected(
@@ -204,11 +193,8 @@ void SharingHubBubbleControllerDesktopImpl::OnActionSelected(
       qrcode_controller->ShowBubble(GetWebContents().GetLastCommittedURL(),
                                     true);
     } else if (command_id == IDC_SEND_TAB_TO_SELF) {
-      send_tab_to_self::SendTabToSelfBubbleController*
-          send_tab_to_self_controller =
-              send_tab_to_self::SendTabToSelfBubbleController::
-                  CreateOrGetFromWebContents(&GetWebContents());
-      send_tab_to_self_controller->ShowBubble(true);
+      send_tab_to_self::ShowBubble(&GetWebContents(),
+                                   /*show_back_button=*/true);
     } else if (command_id == IDC_ROUTE_MEDIA) {
       media_router::MediaRouterDialogController* dialog_controller =
           media_router::MediaRouterDialogController::GetOrCreateForWebContents(
@@ -217,7 +203,7 @@ void SharingHubBubbleControllerDesktopImpl::OnActionSelected(
         return;
 
       dialog_controller->ShowMediaRouterDialog(
-          media_router::MediaRouterDialogOpenOrigin::SHARING_HUB);
+          media_router::MediaRouterDialogActivationLocation::SHARING_HUB);
     } else {
       chrome::ExecuteCommand(browser, command_id);
     }
@@ -261,7 +247,7 @@ void SharingHubBubbleControllerDesktopImpl::FetchHQImageForPreview() {
       GetWebContents().GetPrimaryPage().GetMainDocument();
   main_frame.GetOpenGraphMetadata(base::BindOnce(
       &SharingHubBubbleControllerDesktopImpl::OnGetOpenGraphMetadata,
-      AsWeakPtr()));
+      internal_weak_factory_.GetWeakPtr()));
 }
 
 void SharingHubBubbleControllerDesktopImpl::OnGetOpenGraphMetadata(
@@ -288,7 +274,7 @@ void SharingHubBubbleControllerDesktopImpl::OnGetOpenGraphMetadata(
   image_fetcher_->FetchImage(
       *metadata->image,
       base::BindOnce(&SharingHubBubbleControllerDesktopImpl::OnGetHQImage,
-                     AsWeakPtr()),
+                     internal_weak_factory_.GetWeakPtr()),
       image_fetcher::ImageFetcherParams(kPreviewImageNetworkAnnotationTag,
                                         kPreviewUmaClient));
 }

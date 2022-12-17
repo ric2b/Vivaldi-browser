@@ -188,6 +188,7 @@ FrameTreeNode::FrameTreeNode(
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
+      attributes_(blink::mojom::IframeAttributes::New()),
       fenced_frame_status_(
           ComputeFencedFrameStatus(frame_tree_, parent_, frame_policy)),
       render_manager_(this, frame_tree->manager_delegate()) {
@@ -505,19 +506,14 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
   }
 }
 
-void FrameTreeNode::SetAnonymous(bool anonymous) {
-  if (anonymous) {
-    if (!parent_) {
-      bad_message::ReceivedBadMessage(current_frame_host()->GetProcess(),
-                                      bad_message::FTN_ANONYMOUS);
-      return;
-    }
-
+void FrameTreeNode::SetAttributes(
+    blink::mojom::IframeAttributesPtr attributes) {
+  if (!anonymous() && attributes->anonymous) {
+    // Log this only when anonymous is changed to true.
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         parent_, blink::mojom::WebFeature::kAnonymousIframe);
   }
-
-  anonymous_ = anonymous;
+  attributes_ = std::move(attributes);
 }
 
 bool FrameTreeNode::IsLoading() const {
@@ -569,7 +565,8 @@ void FrameTreeNode::CreatedNavigationRequest(
   DCHECK(!navigation_request->common_params().url.SchemeIs(
       url::kJavaScriptScheme));
 
-  bool was_previously_loading = frame_tree()->LoadingTree()->IsLoading();
+  bool was_previously_loading =
+      frame_tree()->LoadingTree()->IsLoadingIncludingInnerFrameTrees();
 
   // There's no need to reset the state: there's still an ongoing load, and the
   // RenderFrameHostManager will take care of updates to the speculative
@@ -634,7 +631,7 @@ void FrameTreeNode::DidStartLoading(bool should_show_loading_ui,
   current_frame_host()->browsing_context_state()->OnDidStartLoading();
   base::UmaHistogramTimes(
       base::StrCat({"Navigation.DidStartLoading.",
-                    IsMainFrame() ? "MainFrame" : "Subframe"}),
+                    IsOutermostMainFrame() ? "MainFrame" : "Subframe"}),
       timer.Elapsed());
 }
 
@@ -720,8 +717,7 @@ bool FrameTreeNode::NotifyUserActivation(
   // enforced by default.
   // https://docs.google.com/document/d/1WnIhXOFycoje_sEoZR3Mo0YNSR2Ki7LABIC_HEWFaog
   bool shadow_dom_fenced_frame_enabled =
-      blink::features::IsFencedFramesEnabled() &&
-      blink::features::IsFencedFramesShadowDOMBased();
+      frame_tree()->IsFencedFramesShadowDOMBased();
 
   // User Activation V2 requires activating all ancestor frames in addition to
   // the current frame. See
@@ -777,8 +773,7 @@ bool FrameTreeNode::ConsumeTransientUserActivation() {
   // enforced by default.
   // https://docs.google.com/document/d/1WnIhXOFycoje_sEoZR3Mo0YNSR2Ki7LABIC_HEWFaog
   bool shadow_dom_fenced_frame_enabled =
-      blink::features::IsFencedFramesEnabled() &&
-      blink::features::IsFencedFramesShadowDOMBased();
+      frame_tree()->IsFencedFramesShadowDOMBased();
   absl::optional<base::UnguessableToken> originator_nonce =
       fenced_frame_nonce();
 
@@ -879,8 +874,6 @@ void FrameTreeNode::SetPopupCreatorOrigin(
 void FrameTreeNode::WriteIntoTrace(
     perfetto::TracedProto<TraceProto> proto) const {
   proto->set_frame_tree_node_id(frame_tree_node_id());
-  // TODO(crbug.com/1314749): we should also capture the concept of outermost
-  // main frame here.
   proto->set_is_main_frame(IsMainFrame());
   proto.Set(TraceProto::kCurrentFrameHost, current_frame_host());
   proto.Set(TraceProto::kSpeculativeFrameHost,
@@ -933,19 +926,29 @@ void FrameTreeNode::SetFencedFrameNonceIfNeeded() {
 
 absl::optional<blink::mojom::FencedFrameMode>
 FrameTreeNode::GetFencedFrameMode() {
-  if (!IsFencedFrameRoot())
+  if (!IsInFencedFrameTree()) {
     return absl::nullopt;
+  }
 
-  if (blink::features::IsFencedFramesShadowDOMBased())
-    return pending_frame_policy_.fenced_frame_mode;
+  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+    case blink::features::FencedFramesImplementationType::kMPArch: {
+      FrameTreeNode* outer_delegate_node =
+          render_manager()->GetOuterDelegateNode();
+      DCHECK(outer_delegate_node);
 
-  FrameTreeNode* outer_delegate = render_manager()->GetOuterDelegateNode();
-  DCHECK(outer_delegate);
+      FencedFrame* fenced_frame = FindFencedFrame(outer_delegate_node);
+      DCHECK(fenced_frame);
 
-  FencedFrame* fenced_frame = FindFencedFrame(outer_delegate);
-  DCHECK(fenced_frame);
-
-  return fenced_frame->mode();
+      return fenced_frame->mode();
+    }
+    case blink::features::FencedFramesImplementationType::kShadowDOM: {
+      FrameTreeNode* node = this;
+      while (!node->IsFencedFrameRoot()) {
+        node = node->parent()->frame_tree_node();
+      }
+      return node->pending_frame_policy_.fenced_frame_mode;
+    }
+  }
 }
 
 bool FrameTreeNode::IsErrorPageIsolationEnabled() const {
@@ -994,6 +997,11 @@ void FrameTreeNode::ClearOpenerReferences() {
   // that manually.
   for (auto& observer : observers_)
     observer.OnFrameTreeNodeDisownedOpenee(this);
+}
+
+bool FrameTreeNode::AncestorOrSelfHasCSPEE() const {
+  // Check if CSPEE is set in this frame or any ancestor frames.
+  return csp_attribute() || (parent() && parent()->required_csp());
 }
 
 }  // namespace content

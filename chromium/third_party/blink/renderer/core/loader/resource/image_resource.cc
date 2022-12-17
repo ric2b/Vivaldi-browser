@@ -173,6 +173,17 @@ ImageResource* ImageResource::Fetch(FetchParameters& params,
         network::mojom::CSPDisposition::DO_NOT_CHECK);
   }
 
+  // Vivaldi feature: Check if we should only load images from cache or not.
+  const mojom::FetchCacheMode cachepolicy =
+      params.GetResourceRequest().GetCacheMode();
+  if ((fetcher->getServeOnlyCachedResources() &&
+       // If a reload image is called.
+       (cachepolicy != mojom::FetchCacheMode::kValidateCache &&
+        cachepolicy != mojom::FetchCacheMode::kBypassCache))) {
+    params.MutableResourceRequest().SetCacheMode(
+        mojom::FetchCacheMode::kOnlyIfCached);
+  }
+
   auto* resource = To<ImageResource>(
       fetcher->RequestResource(params, ImageResourceFactory(), nullptr));
 
@@ -303,7 +314,7 @@ scoped_refptr<const SharedBuffer> ImageResource::ResourceBuffer() const {
 void ImageResource::AppendData(const char* data, size_t length) {
   v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(length);
   if (multipart_parser_) {
-    multipart_parser_->AppendData(data, SafeCast<wtf_size_t>(length));
+    multipart_parser_->AppendData(data, base::checked_cast<wtf_size_t>(length));
   } else {
     Resource::AppendData(data, length);
 

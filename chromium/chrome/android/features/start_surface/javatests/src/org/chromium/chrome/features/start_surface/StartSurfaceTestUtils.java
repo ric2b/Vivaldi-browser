@@ -98,10 +98,12 @@ import java.util.concurrent.atomic.AtomicReference;
 public class StartSurfaceTestUtils {
     public static final String INSTANT_START_TEST_BASE_PARAMS =
             "force-fieldtrial-params=Study.Group:"
-            + ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0"
-            + "/start_surface_variation/single";
+            + ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0";
+    public static final String START_SURFACE_TEST_SINGLE_ENABLED_PARAMS =
+            "force-fieldtrial-params=Study.Group:"
+            + "show_last_active_tab_only/false/open_ntp_instead_of_start/false";
     public static final String START_SURFACE_TEST_BASE_PARAMS =
-            "force-fieldtrial-params=Study.Group:start_surface_variation/single";
+            "force-fieldtrial-params=Study.Group:";
     public static List<ParameterSet> sClassParamsForStartSurfaceTest =
             Arrays.asList(new ParameterSet().value(false, false).name("NoInstant_NoReturn"),
                     new ParameterSet().value(true, false).name("Instant_NoReturn"),
@@ -194,12 +196,17 @@ public class StartSurfaceTestUtils {
      * @param layoutChangedCallbackHelper The call back function to help check whether layout is
      *         changed.
      * @param currentlyActiveLayout The current active layout.
+     * @param cta The ChromeTabbedActivity under test.
      */
-    public static void waitForOverviewVisible(
-            CallbackHelper layoutChangedCallbackHelper, @LayoutType int currentlyActiveLayout) {
-        if (currentlyActiveLayout == LayoutType.TAB_SWITCHER) return;
+    public static void waitForOverviewVisible(CallbackHelper layoutChangedCallbackHelper,
+            @LayoutType int currentlyActiveLayout, ChromeTabbedActivity cta) {
+        if (currentlyActiveLayout == LayoutType.TAB_SWITCHER) {
+            StartSurfaceTestUtils.waitForTabModel(cta);
+            return;
+        }
         try {
             layoutChangedCallbackHelper.waitForNext(30L, TimeUnit.SECONDS);
+            StartSurfaceTestUtils.waitForTabModel(cta);
         } catch (TimeoutException ex) {
             assert false : "Timeout waiting for browser to enter tab switcher / start surface.";
         }
@@ -220,16 +227,6 @@ public class StartSurfaceTestUtils {
      */
     public static void createTabStateFile(int[] tabIds) throws IOException {
         createTabStateFile(tabIds, null, 0);
-    }
-
-    /**
-     * Create all the files so that tab models can be restored.
-     * @param tabIds all the Tab IDs in the normal tab model.
-     * @param urls all of the URLs in the normal tab model.
-     */
-    public static void createTabStateFile(int[] tabIds, @Nullable String[] urls)
-            throws IOException {
-        createTabStateFile(tabIds, urls, 0);
     }
 
     /**

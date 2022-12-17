@@ -9,8 +9,14 @@ import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.url.GURL;
+
+import java.io.Serializable;
+import java.util.List;
 
 /**
  * Provider of functionality that the HistoryClusters component can't or shouldn't implement
@@ -31,11 +37,77 @@ public interface HistoryClustersDelegate {
     @Nullable
     Intent getHistoryActivityIntent();
 
-    /** Returns an intent that opens the given url in the correct main browsing activity. */
+    /**
+     * Returns an intent that opens the given url in the correct main browsing activity, optionally
+     * specifying a list of additional urls to open with the same options.
+     */
     @Nullable
-    Intent getOpenUrlIntent(GURL gurl);
+    <SerializableList extends List<String> & Serializable> Intent getOpenUrlIntent(GURL gurl,
+            boolean inIncognito, boolean createNewTab, boolean inTabGroup,
+            @Nullable SerializableList additionalUrls);
 
     /** Returns a toggle view that swaps between the Journeys UI and the "normal" History UI. */
     @Nullable
     ViewGroup getToggleView(ViewGroup parent);
+
+    /** Returns an object that can create new tabs. */
+    @Nullable
+    default TabCreator getTabCreator(boolean isIncognito) {
+        return null;
+    }
+
+    /**
+     * Returns a view containing a disclaimer about the presence of other forms of browsing
+     * history.
+     */
+    @Nullable
+    default ViewGroup getPrivacyDisclaimerView(ViewGroup parent) {
+        return null;
+    }
+
+    /** Returns an updatable indicator of whether the privacy disclaimer should be shown. */
+    default ObservableSupplier<Boolean> shouldShowPrivacyDisclaimerSupplier() {
+        return new ObservableSupplierImpl<>();
+    }
+
+    /** Called when the info header's visibility should be toggled. */
+    default void toggleInfoHeaderVisibility() {}
+
+    /**
+     * Returns whether the user has other forms of browsing history, indicating the need to show a
+     * disclaimer.
+     */
+    default boolean hasOtherFormsOfBrowsingHistory() {
+        return false;
+    }
+
+    /** Returns a view containing a link to a UI where the user can clear their browsing data. */
+    @Nullable
+    default ViewGroup getClearBrowsingDataView(ViewGroup parent) {
+        return null;
+    }
+
+    /** Returns an updatable indicator of whether the clear browsing data link should be shown. */
+    default ObservableSupplier<Boolean> shouldShowClearBrowsingDataSupplier() {
+        return new ObservableSupplierImpl<>();
+    }
+
+    default void markVisitForRemoval(ClusterVisit clusterVisit) {}
+
+    default void removeMarkedItems() {}
+
+    /** Returns the user-facing string that should be displayed when a search has no matches. */
+    default String getSearchEmptyString() {
+        return "";
+    }
+    /**
+     * Called when the user opts out of the Journeys feature to signal to the embedding component
+     * that it should remove the HistoryClusters UI.
+     */
+    default void onOptOut() {}
+
+    /** Whether tab group creation is enabled. */
+    default boolean areTabGroupsEnabled() {
+        return true;
+    }
 }

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_SEARCH_FILES_ITEM_SUGGEST_CACHE_H_
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_FILES_ITEM_SUGGEST_CACHE_H_
 
+#include "base/callback_list.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -56,15 +57,20 @@ class ItemSuggestCache {
 
   ItemSuggestCache(
       Profile* profile,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      base::RepeatingCallback<void()> on_results_updated,
-      base::TimeDelta min_time_between_updates);
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   ~ItemSuggestCache();
 
   ItemSuggestCache(const ItemSuggestCache&) = delete;
   ItemSuggestCache& operator=(const ItemSuggestCache&) = delete;
 
-  // Returns the results currently in the cache.
+  using OnResultsCallback = base::RepeatingCallback<void()>;
+  using OnResultsCallbackList = base::RepeatingCallbackList<void()>;
+
+  // Registers a callback to be run whenever the results are updated.
+  base::CallbackListSubscription RegisterCallback(OnResultsCallback callback);
+
+  // Returns the results currently in the cache. A null result indicates that
+  // the cache has not been successfully updated.
   absl::optional<ItemSuggestCache::Results> GetResults();
 
   // Updates the cache by calling ItemSuggest.
@@ -119,8 +125,19 @@ class ItemSuggestCache {
   static constexpr base::FeatureParam<bool> kMultipleQueriesPerSession{
       &kExperiment, "multiple_queries_per_session", true};
 
+  // The minimum time between queries if a short delay is being used.
+  static constexpr int kShortDelayMinutes = 10;
+  // The minimum time between queries if a long delay is being used. If not set,
+  // the short delay value is used as a default instead.
+  static constexpr base::FeatureParam<int> kLongDelayMinutes{
+      &kExperiment, "long_delay_minutes", kShortDelayMinutes};
+
   // Returns the body for the itemsuggest request. Affected by |kExperiment|.
   std::string GetRequestBody();
+
+  // Calculates the minimum time required to wait after the previous request.
+  // Affected by |kExperiment|.
+  base::TimeDelta GetDelay();
 
   void OnTokenReceived(GoogleServiceAuthError error,
                        signin::AccessTokenInfo token_info);
@@ -131,10 +148,6 @@ class ItemSuggestCache {
 
   absl::optional<Results> results_;
 
-  // Records the time of the last call to UpdateResults(), used to limit the
-  // number of queries to the ItemSuggest backend.
-  base::Time time_of_last_update_;
-
   // Start time for latency metrics.
   base::TimeTicks update_start_time_;
 
@@ -144,11 +157,11 @@ class ItemSuggestCache {
 
   const bool enabled_;
   const GURL server_url_;
-  const base::TimeDelta min_time_between_updates_;
   // Whether we should query item suggest more than once per session.
   const bool multiple_queries_per_session_;
 
-  base::RepeatingCallback<void()> on_results_updated_;
+  // List of callbacks to run when results are updated.
+  OnResultsCallbackList on_results_callback_list_;
 
   Profile* profile_;
   std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher> token_fetcher_;

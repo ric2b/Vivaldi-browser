@@ -60,7 +60,7 @@ void VivaldiLocationBar::UpdateContentSettingsIcons() {
   if (active_contents) {
     auto* content_settings =
         content_settings::PageSpecificContentSettings::GetForFrame(
-            active_contents->GetMainFrame());
+            active_contents->GetPrimaryMainFrame());
     extensions::VivaldiPrivateTabObserver* private_tab =
         extensions::VivaldiPrivateTabObserver::FromWebContents(active_contents);
     if (private_tab && content_settings) {

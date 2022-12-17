@@ -39,11 +39,11 @@ constexpr char kCastSource[] =
     "\"mobile\"}";
 static constexpr char kPresentationId[] = "presentationId";
 static constexpr char kOrigin[] = "https://www.youtube.com";
-static constexpr int kTabId = 1;
+static constexpr int kFrameTreeNodeId = 1;
 static constexpr base::TimeDelta kRouteTimeout = base::Seconds(30);
 
-base::Value MakeReceiverStatus() {
-  return base::test::ParseJson(R"({
+base::Value::Dict MakeReceiverStatus() {
+  return base::test::ParseJsonDict(R"({
         "applications": [{
           "appId": "ABCDEFGH",
           "displayName": "theDisplayName",
@@ -96,20 +96,20 @@ class CastMediaRouteProviderTest : public testing::Test {
       const absl::optional<MediaRoute>& route,
       mojom::RoutePresentationConnectionPtr presentation_connections,
       const absl::optional<std::string>& error,
-      RouteRequestResult::ResultCode result) {
+      mojom::RouteRequestResultCode result) {
     EXPECT_TRUE(route);
     EXPECT_TRUE(presentation_connections);
     EXPECT_FALSE(error);
-    EXPECT_EQ(RouteRequestResult::ResultCode::OK, result);
+    EXPECT_EQ(mojom::RouteRequestResultCode::OK, result);
     route_ = std::make_unique<MediaRoute>(*route);
   }
 
   void ExpectCreateRouteFailure(
-      RouteRequestResult::ResultCode expected_result,
+      mojom::RouteRequestResultCode expected_result,
       const absl::optional<MediaRoute>& route,
       mojom::RoutePresentationConnectionPtr presentation_connections,
       const absl::optional<std::string>& error,
-      RouteRequestResult::ResultCode result) {
+      mojom::RouteRequestResultCode result) {
     EXPECT_FALSE(route);
     EXPECT_FALSE(presentation_connections);
     EXPECT_TRUE(error);
@@ -117,9 +117,9 @@ class CastMediaRouteProviderTest : public testing::Test {
   }
 
   void ExpectTerminateRouteSuccess(const absl::optional<std::string>& error,
-                                   RouteRequestResult::ResultCode result) {
+                                   mojom::RouteRequestResultCode result) {
     EXPECT_FALSE(error);
-    EXPECT_EQ(RouteRequestResult::ResultCode::OK, result);
+    EXPECT_EQ(mojom::RouteRequestResultCode::OK, result);
     route_.reset();
   }
 
@@ -194,11 +194,12 @@ TEST_F(CastMediaRouteProviderTest, BroadcastRequest) {
 TEST_F(CastMediaRouteProviderTest, CreateRouteFailsInvalidSink) {
   // Sink does not exist.
   provider_->CreateRoute(
-      kCastSource, "sinkId", kPresentationId, origin_, kTabId, kRouteTimeout,
+      kCastSource, "sinkId", kPresentationId, origin_, kFrameTreeNodeId,
+      kRouteTimeout,
       /* incognito */ false,
       base::BindOnce(&CastMediaRouteProviderTest::ExpectCreateRouteFailure,
                      base::Unretained(this),
-                     RouteRequestResult::ResultCode::SINK_NOT_FOUND));
+                     mojom::RouteRequestResultCode::SINK_NOT_FOUND));
 }
 
 TEST_F(CastMediaRouteProviderTest, CreateRouteFailsInvalidSource) {
@@ -206,11 +207,11 @@ TEST_F(CastMediaRouteProviderTest, CreateRouteFailsInvalidSource) {
   media_sink_service_.AddOrUpdateSink(sink);
 
   provider_->CreateRoute(
-      "invalidSource", sink.sink().id(), kPresentationId, origin_, kTabId,
-      kRouteTimeout, /* incognito */ false,
+      "invalidSource", sink.sink().id(), kPresentationId, origin_,
+      kFrameTreeNodeId, kRouteTimeout, /* incognito */ false,
       base::BindOnce(&CastMediaRouteProviderTest::ExpectCreateRouteFailure,
                      base::Unretained(this),
-                     RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER));
+                     mojom::RouteRequestResultCode::NO_SUPPORTED_PROVIDER));
 }
 
 TEST_F(CastMediaRouteProviderTest, CreateRoute) {
@@ -226,7 +227,7 @@ TEST_F(CastMediaRouteProviderTest, CreateRoute) {
         launch_session_callback_ = std::move(callback);
       }));
   provider_->CreateRoute(
-      kCastSource, sink.sink().id(), kPresentationId, origin_, kTabId,
+      kCastSource, sink.sink().id(), kPresentationId, origin_, kFrameTreeNodeId,
       kRouteTimeout, /* incognito */ false,
       base::BindOnce(
           &CastMediaRouteProviderTest::ExpectCreateRouteSuccessAndSetRoute,
@@ -245,7 +246,7 @@ TEST_F(CastMediaRouteProviderTest, TerminateRoute) {
         launch_session_callback_ = std::move(callback);
       }));
   provider_->CreateRoute(
-      kCastSource, sink.sink().id(), kPresentationId, origin_, kTabId,
+      kCastSource, sink.sink().id(), kPresentationId, origin_, kFrameTreeNodeId,
       kRouteTimeout, /* incognito */ false,
       base::BindOnce(
           &CastMediaRouteProviderTest::ExpectCreateRouteSuccessAndSetRoute,
@@ -268,7 +269,8 @@ TEST_F(CastMediaRouteProviderTest, TerminateRoute) {
 TEST_F(CastMediaRouteProviderTest, GetState) {
   MediaSinkInternal sink = CreateCastSink(1);
   media_sink_service_.AddOrUpdateSink(sink);
-  session_tracker_->HandleReceiverStatusMessage(sink, base::test::ParseJson(R"({
+  session_tracker_->HandleReceiverStatusMessage(sink,
+                                                base::test::ParseJsonDict(R"({
     "status": {
       "applications": [{
         "appId": "ABCDEFGH",

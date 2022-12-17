@@ -37,6 +37,16 @@ class MockDlpRulesManager : public DlpRulesManager {
                            Restriction restriction,
                            std::string* out_source_pattern));
 
+  MOCK_METHOD(AggregatedDestinations,
+              GetAggregatedDestinations,
+              (const GURL& source, Restriction restriction),
+              (override, const));
+
+  MOCK_METHOD(AggregatedComponents,
+              GetAggregatedComponents,
+              (const GURL& source, Restriction restriction),
+              (override, const));
+
   MOCK_CONST_METHOD0(IsReportingEnabled, bool());
 
   MOCK_CONST_METHOD0(GetReportingManager, DlpReportingManager*());
@@ -47,6 +57,8 @@ class MockDlpRulesManager : public DlpRulesManager {
                                  Level level));
 
   MOCK_CONST_METHOD0(GetClipboardCheckSizeLimitInBytes, size_t());
+
+  MOCK_METHOD(bool, IsFilesPolicyEnabled, (), (override, const));
 
   MOCK_CONST_METHOD2(
       GetDisallowedFileTransfers,

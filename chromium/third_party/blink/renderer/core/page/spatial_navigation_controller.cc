@@ -195,7 +195,7 @@ bool SpatialNavigationController::HandleArrowKeyboardEvent(
   // suggestions.
   if (RuntimeEnabledFeatures::FocuslessSpatialNavigationEnabled()) {
     if (focused) {
-      if (HasEditableStyle(*focused) || focused->IsTextControl())
+      if (IsEditable(*focused) || focused->IsTextControl())
         return true;
     }
   }
@@ -554,7 +554,7 @@ bool SpatialNavigationController::IsValidCandidate(
   // almost certainly don't want to actually interest it. Doing so leads to
   // issues since the document/body will likely contain most of the other
   // content on the page.
-  if (frame->IsMainFrame()) {
+  if (frame->IsOutermostMainFrame()) {
     if (IsA<HTMLHtmlElement>(element) || IsA<HTMLBodyElement>(element))
       return false;
   }

@@ -4,6 +4,7 @@
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 
+import {startIOTask} from '../../common/js/api.js';
 import {FileOperationProgressEvent} from '../../common/js/file_operation_common.js';
 import {ProgressCenterItem, ProgressItemState, ProgressItemType} from '../../common/js/progress_center_common.js';
 import {str, strf, util} from '../../common/js/util.js';
@@ -34,6 +35,13 @@ export class FileOperationHandler {
     this.progressCenter_ = progressCenter;
 
     /**
+     * Toast element to emit notifications.
+     * @type {Object|null}
+     * @private
+     */
+    this.toast_ = null;
+
+    /**
      * Pending items of delete operation.
      *
      * Delete operations are usually complete quickly.
@@ -62,6 +70,20 @@ export class FileOperationHandler {
    * @private
    */
   async onIOTaskProgressStatus_(event) {
+    if (event.type === chrome.fileManagerPrivate.IOTaskType.TRASH) {
+      if (event.state === chrome.fileManagerPrivate.IOTaskState.SUCCESS) {
+        this.showRestoreTrashToast_(event);
+        return;
+      }
+      // Trash operations occur intra filesystem and so to avoid a flash on the
+      // UI with progress then the undo toast, do not show any visual signals
+      // for anything other than an error, cancelled and success.
+      if (event.state === chrome.fileManagerPrivate.IOTaskState.QUEUED ||
+          event.state === chrome.fileManagerPrivate.IOTaskState.IN_PROGRESS) {
+        return;
+      }
+    }
+
     const taskId = String(event.taskId);
     let newItem = false;
     /** @type {ProgressCenterItem} */
@@ -125,6 +147,43 @@ export class FileOperationHandler {
         console.error(`Invalid IOTaskState: ${event.state}`);
     }
     this.progressCenter_.updateItem(item);
+  }
+
+  get toast() {
+    if (!this.toast_) {
+      // The background page does not contain the requisite types to include the
+      // FilesToast type without type checking the Polymer element.
+      this.toast_ = /** @type {!Object} */ (document.getElementById('toast'));
+    }
+
+    return this.toast_;
+  }
+
+  /**
+   * On a successful trash operation, show a toast notification on Files app
+   * with an undo action to restore the files that were just trashed.
+   * @param {!chrome.fileManagerPrivate.ProgressStatus} event
+   * @private
+   */
+  showRestoreTrashToast_(event) {
+    if (event.type !== chrome.fileManagerPrivate.IOTaskType.TRASH ||
+        event.state !== chrome.fileManagerPrivate.IOTaskState.SUCCESS) {
+      return;
+    }
+
+    const message = (event.itemCount === 1) ?
+        strf('UNDO_DELETE_ONE', event.sourceName) :
+        strf('UNDO_DELETE_SOME', event.itemCount);
+    const infoEntries =
+        event.outputs.filter(o => o.name.endsWith('.trashinfo'));
+    this.toast.show(message, {
+      text: str('UNDO_DELETE_ACTION_LABEL'),
+      callback: () => {
+        startIOTask(
+            chrome.fileManagerPrivate.IOTaskType.RESTORE, infoEntries,
+            /*params=*/ {});
+      },
+    });
   }
 
   /**
@@ -441,10 +500,16 @@ function getTypeFromIOTaskType_(type) {
       return ProgressItemType.COPY;
     case chrome.fileManagerPrivate.IOTaskType.DELETE:
       return ProgressItemType.DELETE;
+    case chrome.fileManagerPrivate.IOTaskType.EMPTY_TRASH:
+      return ProgressItemType.EMPTY_TRASH;
     case chrome.fileManagerPrivate.IOTaskType.EXTRACT:
       return ProgressItemType.EXTRACT;
     case chrome.fileManagerPrivate.IOTaskType.MOVE:
       return ProgressItemType.MOVE;
+    case chrome.fileManagerPrivate.IOTaskType.RESTORE:
+      return ProgressItemType.RESTORE;
+    case chrome.fileManagerPrivate.IOTaskType.TRASH:
+      return ProgressItemType.TRASH;
     case chrome.fileManagerPrivate.IOTaskType.ZIP:
       return ProgressItemType.ZIP;
     default:
@@ -467,6 +532,8 @@ function getMessageFromProgressEvent_(event) {
     switch (event.type) {
       case chrome.fileManagerPrivate.IOTaskType.COPY:
         return strf('COPY_FILESYSTEM_ERROR', detail);
+      case chrome.fileManagerPrivate.IOTaskType.EMPTY_TRASH:
+        return str('EMPTY_TRASH_UNEXPECTED_ERROR');
       case chrome.fileManagerPrivate.IOTaskType.EXTRACT:
         return strf('EXTRACT_FILESYSTEM_ERROR', detail);
       case chrome.fileManagerPrivate.IOTaskType.MOVE:
@@ -475,8 +542,8 @@ function getMessageFromProgressEvent_(event) {
         return strf('ZIP_FILESYSTEM_ERROR', detail);
       case chrome.fileManagerPrivate.IOTaskType.DELETE:
         return str('DELETE_ERROR');
-      // case chrome.fileManagerPrivate.IOTaskType.RESTORE:
-      //  return str('RESTORE_FROM_TRASH_ERROR');
+      case chrome.fileManagerPrivate.IOTaskType.RESTORE:
+        return str('RESTORE_FROM_TRASH_ERROR');
       default:
         console.warn(
             `Unexpected operation type: ${event.status.operationType}`);

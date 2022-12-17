@@ -1699,8 +1699,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, SHA1IsDefaultDisabled) {
   // TODO(https://crbug.com/977767): Remove this when CertVerifyProcMac is
   // removed.
   if (base::mac::IsAtLeastOS10_15() &&
-      !base::FeatureList::IsEnabled(
-          net::features::kCertVerifierBuiltinFeature)) {
+      !ssl_test_util::UsingBuiltinCertVerifier()) {
     expected_error |= net::CERT_STATUS_INVALID;
   }
 #endif
@@ -1836,7 +1835,7 @@ class SSLUITestWithClientCert : public SSLUITestBase {
     loop->Quit();
   }
 
-  net::NSSCertDatabase* cert_db_;
+  raw_ptr<net::NSSCertDatabase> cert_db_;
 };
 
 // SSL client certificate tests are only enabled when using NSS for private key
@@ -2780,8 +2779,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestRefNavigation) {
 
 // Tests that closing a page that opened a pop-up with an interstitial does not
 // crash the browser (crbug.com/1966).
-// TODO(crbug.com/1119359): Test is flaky on Linux.
-#if BUILDFLAG(IS_LINUX)
+// TODO(crbug.com/1119359, crbug.com/1338068): Test is flaky on Linux and Chrome
+// OS.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_TestCloseTabWithUnsafePopup DISABLED_TestCloseTabWithUnsafePopup
 #else
 #define MAYBE_TestCloseTabWithUnsafePopup TestCloseTabWithUnsafePopup
@@ -4238,7 +4238,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, InterstitialNotAffectedByHideShow) {
   EXPECT_FALSE(tab->GetRenderWidgetHostView()->IsShowing());
 
   browser()->tab_strip_model()->ActivateTabAt(
-      1, {TabStripModel::GestureType::kOther});
+      1, TabStripUserGestureDetails(
+             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_TRUE(tab->GetRenderWidgetHostView()->IsShowing());
 }
 
@@ -4246,7 +4247,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, InterstitialNotAffectedByHideShow) {
 // through the interstitial, the decision to proceed is initially remembered.
 // However, if this is followed by another visit, and a good certificate
 // is seen for the same host, the original exception is forgotten.
-IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByGoodCert) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByGoodCertNavigation) {
   // It is necessary to use |https_server_expired_| rather than
   // |https_server_mismatched| because the former shares a host with
   // |https_server_| and cert exceptions are per host.
@@ -4271,27 +4272,47 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByGoodCert) {
       browser(), https_server_expired_.GetURL("/ssl/google.html")));
 
   ProceedThroughInterstitial(tab);
-  EXPECT_TRUE(state->HasAllowException(https_server_host, tab));
+  EXPECT_TRUE(state->HasAllowException(
+      https_server_host, tab->GetPrimaryMainFrame()->GetStoragePartition()));
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_.GetURL("/ssl/google.html")));
-  EXPECT_FALSE(state->HasAllowException(https_server_host, tab));
-  // Rarely, an open connection with the bad cert might be reused for the next
-  // navigation, which is supposed to show an interstitial. Close open
-  // connections to ensure a fresh connection (and certificate validation) for
-  // the next navigation. See https://crbug.com/1150592. A deeper fix for this
-  // issue would be to unify certificate bypass logic which is currently split
-  // between the net stack and content layer; see https://crbug.com/488043.
-  state->RevokeUserAllowExceptionsHard(https_server_host);
+  EXPECT_FALSE(state->HasAllowException(
+      https_server_host, tab->GetPrimaryMainFrame()->GetStoragePartition()));
+}
 
-  // Now check that subresource requests revoke the decision.
+// Verifies that if a bad certificate is seen for a host and the user proceeds
+// through the interstitial, the decision to proceed is initially remembered.
+// However, if this is followed by a subresource load, and a good certificate
+// is seen for the same host via the subresource load, the original exception
+// is forgotten.
+IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByGoodCertSubresource) {
+  // As in SSLUITest.BadCertFollowedByGoodCertNavigation, it is necessary to use
+  // |https_server_expired_| rather than |https_server_mismatched| because the
+  // former shares a host with |https_server_| and cert exceptions are per host.
+  ASSERT_TRUE(https_server_expired_.Start());
+  ASSERT_TRUE(https_server_.Start());
+
+  std::string https_server_expired_host =
+      https_server_expired_.GetURL("/ssl/google.html").host();
+  std::string https_server_host =
+      https_server_.GetURL("/ssl/google.html").host();
+  ASSERT_EQ(https_server_expired_host, https_server_host);
+
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_expired_.GetURL("/ssl/google.html")));
+
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  Profile* profile = Profile::FromBrowserContext(tab->GetBrowserContext());
+  StatefulSSLHostStateDelegate* state =
+      static_cast<StatefulSSLHostStateDelegate*>(
+          profile->GetSSLHostStateDelegate());
 
   ASSERT_TRUE(chrome_browser_interstitials::IsShowingInterstitial(tab));
 
   ProceedThroughInterstitial(tab);
-  EXPECT_TRUE(state->HasAllowException(https_server_host, tab));
+  EXPECT_TRUE(state->HasAllowException(
+      https_server_host, tab->GetPrimaryMainFrame()->GetStoragePartition()));
 
   GURL image = https_server_.GetURL("/ssl/google_files/logo.gif");
   bool result = false;
@@ -4304,7 +4325,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByGoodCert) {
           "document.body.appendChild(img);",
       &result));
   EXPECT_TRUE(result);
-  EXPECT_FALSE(state->HasAllowException(https_server_host, tab));
+  EXPECT_FALSE(state->HasAllowException(
+      https_server_host, tab->GetPrimaryMainFrame()->GetStoragePartition()));
 }
 
 // Verifies that if a bad certificate is seen for a host and the user proceeds
@@ -4326,7 +4348,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByBlobUrl) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_expired_.GetURL("/ssl/google.html")));
   ProceedThroughInterstitial(tab);
-  ASSERT_TRUE(state->HasAllowException(https_server_host, tab));
+  ASSERT_TRUE(state->HasAllowException(
+      https_server_host, tab->GetPrimaryMainFrame()->GetStoragePartition()));
 
   // Load a blob URL.
   content::WebContentsConsoleObserver console_observer(tab);
@@ -4349,7 +4372,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, BadCertFollowedByBlobUrl) {
 
   // Verify that the decision to accept the broken cert has not been revoked
   // (this is a regression test for https://crbug.com/1049625).
-  EXPECT_TRUE(state->HasAllowException(https_server_host, tab));
+  EXPECT_TRUE(state->HasAllowException(
+      https_server_host, tab->GetPrimaryMainFrame()->GetStoragePartition()));
 }
 
 // Tests that the SSLStatus of a navigation entry for an SSL

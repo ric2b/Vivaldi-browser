@@ -391,9 +391,7 @@ PasswordForm MakeNormalizedBlocklistedForm(
 
 bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator,
                          device_reauth::BiometricAuthRequester requester) {
-  return authenticator &&
-         authenticator->CanAuthenticate(requester) ==
-             device_reauth::BiometricsAvailability::kAvailable &&
+  return authenticator && authenticator->CanAuthenticate(requester) &&
          base::FeatureList::IsEnabled(
              password_manager::features::kBiometricTouchToFill);
 }
@@ -443,5 +441,17 @@ bool UsesPasswordManagerGoogleBranding(bool is_syncing) {
   return is_syncing;
 #endif  // GOOGLE_CHROME_BRANDING
 }
+
+#if BUILDFLAG(IS_IOS)
+bool IsCredentialProviderEnabledOnStartup(const PrefService* prefs) {
+  return prefs->GetBoolean(
+      password_manager::prefs::kCredentialProviderEnabledOnStartup);
+}
+
+void SetCredentialProviderEnabledOnStartup(PrefService* prefs, bool enabled) {
+  prefs->SetBoolean(
+      password_manager::prefs::kCredentialProviderEnabledOnStartup, enabled);
+}
+#endif
 
 }  // namespace password_manager_util

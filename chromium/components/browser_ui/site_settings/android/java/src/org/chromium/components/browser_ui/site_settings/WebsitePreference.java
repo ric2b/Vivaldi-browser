@@ -5,18 +5,19 @@
 package org.chromium.components.browser_ui.site_settings;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.text.format.Formatter;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
+import org.chromium.components.browser_ui.settings.FaviconViewUtils;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.url.GURL;
 
@@ -84,9 +85,7 @@ class WebsitePreference extends ChromeImageViewPreference {
         setTitle(mSite.getTitle());
 
         if (mSite.getEmbedder() == null) {
-            PermissionInfo permissionInfo =
-                    mSite.getPermissionInfo(mCategory.getContentSettingsType());
-            if (permissionInfo != null && permissionInfo.isEmbargoed()) {
+            if (mSite.isEmbargoed(mCategory.getContentSettingsType())) {
                 setSummary(getContext().getString(R.string.automatically_blocked));
             }
             return;
@@ -110,7 +109,7 @@ class WebsitePreference extends ChromeImageViewPreference {
             return super.compareTo(preference);
         }
         WebsitePreference other = (WebsitePreference) preference;
-        if (mCategory.showSites(SiteSettingsCategory.Type.USE_STORAGE)) {
+        if (mCategory.getType() == SiteSettingsCategory.Type.USE_STORAGE) {
             return mSite.compareByStorageTo(other.mSite);
         }
 
@@ -120,10 +119,9 @@ class WebsitePreference extends ChromeImageViewPreference {
     @Override
     public void onBindViewHolder(PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
-
         TextView usageText = (TextView) holder.findViewById(R.id.usage_text);
         usageText.setVisibility(View.GONE);
-        if (mCategory.showSites(SiteSettingsCategory.Type.USE_STORAGE)) {
+        if (mCategory.getType() == SiteSettingsCategory.Type.USE_STORAGE) {
             long totalUsage = mSite.getTotalUsage();
             if (totalUsage > 0) {
                 usageText.setText(Formatter.formatShortFileSize(getContext(), totalUsage));
@@ -132,21 +130,20 @@ class WebsitePreference extends ChromeImageViewPreference {
             }
         }
 
+        // Manually apply ListItemStartIcon style to draw the outer circle in the right size.
+        ImageView icon = (ImageView) holder.findViewById(android.R.id.icon);
+        FaviconViewUtils.formatIconForFavicon(getContext().getResources(), icon);
+
         if (!mFaviconFetched) {
             // Start the favicon fetching. Will respond in onFaviconAvailable.
             mSiteSettingsDelegate.getFaviconImageForURL(faviconUrl(), this::onFaviconAvailable);
             mFaviconFetched = true;
         }
-
-        float density = getContext().getResources().getDisplayMetrics().density;
-        int iconPadding = Math.round(FAVICON_PADDING_DP * density);
-        View iconView = holder.findViewById(android.R.id.icon);
-        iconView.setPadding(iconPadding, iconPadding, iconPadding, iconPadding);
     }
 
-    private void onFaviconAvailable(Bitmap image) {
-        if (image != null) {
-            setIcon(new BitmapDrawable(getContext().getResources(), image));
+    private void onFaviconAvailable(Drawable drawable) {
+        if (drawable != null) {
+            setIcon(drawable);
         }
     }
 }

@@ -841,13 +841,6 @@ virtual GLint GetFragDataIndexEXT(GLuint program, const char* name) = 0;
 virtual void InitializeDiscardableTextureCHROMIUM(GLuint texture_id) = 0;
 virtual void UnlockDiscardableTextureCHROMIUM(GLuint texture_id) = 0;
 virtual bool LockDiscardableTextureCHROMIUM(GLuint texture_id) = 0;
-virtual void TexStorage2DImageCHROMIUM(GLenum target,
-                                       GLenum internalFormat,
-                                       GLenum bufferUsage,
-                                       GLsizei width,
-                                       GLsizei height) = 0;
-virtual void SetColorSpaceMetadataCHROMIUM(GLuint texture_id,
-                                           GLcolorSpace color_space) = 0;
 virtual void WindowRectanglesEXT(GLenum mode,
                                  GLsizei count,
                                  const GLint* box) = 0;
@@ -871,8 +864,6 @@ virtual GLuint CreateAndTexStorage2DSharedImageWithInternalFormatCHROMIUM(
 virtual void BeginSharedImageAccessDirectCHROMIUM(GLuint texture,
                                                   GLenum mode) = 0;
 virtual void EndSharedImageAccessDirectCHROMIUM(GLuint texture) = 0;
-virtual void BeginBatchReadAccessSharedImageCHROMIUM() = 0;
-virtual void EndBatchReadAccessSharedImageCHROMIUM() = 0;
 virtual void EnableiOES(GLenum target, GLuint index) = 0;
 virtual void DisableiOES(GLenum target, GLuint index) = 0;
 virtual void BlendEquationiOES(GLuint buf, GLenum mode) = 0;

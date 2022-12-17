@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
-<translation id="1127811143501539442">{DAYS, plural, =1 {преди 1 ден} one {преди # ден} other {преди # дни}}</translation>
+<translation id="1127811143501539442">{DAYS, plural, =1 {1 ден} one {# ден} other {# дни}}</translation>
 <translation id="1156623771253174079">{SECONDS, plural, =1 {преди 1 минута} one {преди # минута} other {преди # минути}}</translation>
 <translation id="1368832886055348810">Отляво надясно</translation>
 <translation id="1591184457164800433">{MINUTES, plural, =1 {1 минута и } one {# минута и } other {# минути и }}</translation>

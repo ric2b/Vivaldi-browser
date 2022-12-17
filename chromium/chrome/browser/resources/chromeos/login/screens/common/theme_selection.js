@@ -13,8 +13,19 @@
  * @implements {OobeI18nBehaviorInterface}
  */
 const ThemeSelectionScreenElementBase = Polymer.mixinBehaviors(
-    [OobeDialogHostBehavior, OobeI18nBehavior, LoginScreenBehavior],
+    [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior],
     Polymer.Element);
+
+/**
+ * Enum to represent steps on the theme selection screen.
+ * Currently there is only one step, but we still use
+ * MultiStepBehavior because it provides implementation of
+ * things like processing 'focus-on-show' class
+ * @enum {string}
+ */
+const ThemeSelectionStep = {
+  OVERVIEW: 'overview',
+};
 
 /**
  * Available themes. The values should be in sync with the enum
@@ -52,9 +63,16 @@ class ThemeSelectionScreen extends ThemeSelectionScreenElementBase {
        * Indicates selected theme
        * @private
        */
-      selectedTheme: {
-        type: String,
-      }
+      selectedTheme: {type: String, value: 'auto', observer: 'onThemeChanged_'},
+
+      /**
+       * Indicates if the device is used in tablet mode
+       * @private
+       */
+      isInTabletMode_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -62,14 +80,35 @@ class ThemeSelectionScreen extends ThemeSelectionScreenElementBase {
     super();
   }
 
+  get UI_STEPS() {
+    return ThemeSelectionStep;
+  }
+
+  defaultUIStep() {
+    return ThemeSelectionStep.OVERVIEW;
+  }
+
   get EXTERNAL_API() {
     return [];
+  }
+
+  /**
+   * Updates "device in tablet mode" state when tablet mode is changed.
+   * Overridden from LoginScreenBehavior.
+   * @param {boolean} isInTabletMode True when in tablet mode.
+   */
+  setTabletModeState(isInTabletMode) {
+    this.isInTabletMode_ = isInTabletMode;
   }
 
   ready() {
     super.ready();
     this.initializeLoginScreen('ThemeSelectionScreen');
     this.selectedTheme = 'auto';
+  }
+
+  onBeforeShow(data) {
+    this.selectedTheme = 'selectedTheme' in data && data.selectedTheme;
   }
 
   getOobeUIInitialState() {
@@ -80,16 +119,19 @@ class ThemeSelectionScreen extends ThemeSelectionScreenElementBase {
     this.userActed(UserAction.NEXT);
   }
 
-  setDarkTheme_() {
-    this.userActed([UserAction.SELECT, SelectedTheme.DARK]);
-  }
-
-  setLightTheme_() {
-    this.userActed([UserAction.SELECT, SelectedTheme.LIGHT]);
-  }
-
-  setAutoTheme_() {
-    this.userActed([UserAction.SELECT, SelectedTheme.AUTO]);
+  onThemeChanged_(themeSelect, oldTheme) {
+    if (oldTheme === undefined) {
+      return;
+    }
+    if (themeSelect === 'auto') {
+      this.userActed([UserAction.SELECT, SelectedTheme.AUTO]);
+    }
+    if (themeSelect === 'light') {
+      this.userActed([UserAction.SELECT, SelectedTheme.LIGHT]);
+    }
+    if (themeSelect === 'dark') {
+      this.userActed([UserAction.SELECT, SelectedTheme.DARK]);
+    }
   }
 }
 customElements.define(ThemeSelectionScreen.is, ThemeSelectionScreen);

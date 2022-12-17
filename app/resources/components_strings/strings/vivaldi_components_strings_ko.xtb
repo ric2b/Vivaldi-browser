@@ -170,6 +170,7 @@
 <translation id="7113310725918019676"><ph name="DOMAIN" />에서 <ph name="BLOCKED_TYPE" /> 허용</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />에서 보안 기준을 준수하지 않습니다.</translation>
 <translation id="7219179957768738017"><ph name="SSL_VERSION" /> 연결입니다.</translation>
+<translation id="7221855153210829124">알림 표시</translation>
 <translation id="7260504762447901703">액세스 취소</translation>
 <translation id="7353601530677266744">명령줄</translation>
 <translation id="7364115444476960850">접근하려는 페이지는 Vivaldi의 <ph name="BLOCKER_NAME" />에 의해 차단되었습니다</translation>

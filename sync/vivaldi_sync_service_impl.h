@@ -11,8 +11,6 @@
 #include "net/http/http_response_headers.h"
 #include "sync/vivaldi_sync_ui_helper.h"
 
-class Profile;
-
 namespace base {
 class CommandLine;
 }
@@ -26,9 +24,10 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
  public:
   // invalidation_service as parameter to work around possible effects of
   // immedatiate move of init_params
-  VivaldiSyncServiceImpl(syncer::SyncServiceImpl::InitParams* init_params,
-                         Profile* profile,
-                         VivaldiAccountManager* account_manager);
+  VivaldiSyncServiceImpl(
+      syncer::SyncServiceImpl::InitParams init_params,
+      PrefService* prefs,
+      VivaldiAccountManager* account_manager);
   ~VivaldiSyncServiceImpl() override;
   VivaldiSyncServiceImpl(const VivaldiSyncServiceImpl&) = delete;
   VivaldiSyncServiceImpl& operator=(const VivaldiSyncServiceImpl&) = delete;
@@ -62,8 +61,6 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
 
   bool is_clearing_sync_data_ = false;
   std::unique_ptr<network::SimpleURLLoader> clear_data_url_loader_;
-
-  Profile* profile_;
 
   VivaldiSyncUIHelper ui_helper_;
 

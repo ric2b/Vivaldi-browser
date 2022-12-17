@@ -28,22 +28,22 @@
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/context_result.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
+#include "gpu/command_buffer/service/command_buffer_task_executor.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/decoder_client.h"
 #include "gpu/command_buffer/service/decoder_context.h"
+#include "gpu/command_buffer/service/display_compositor_memory_and_task_controller_on_gpu.h"
+#include "gpu/command_buffer/service/gpu_task_scheduler_helper.h"
 #include "gpu/command_buffer/service/gr_cache_controller.h"
 #include "gpu/command_buffer/service/program_cache.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/service_transfer_cache.h"
+#include "gpu/command_buffer/service/shared_image_interface_in_process.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
-#include "gpu/ipc/command_buffer_task_executor.h"
 #include "gpu/ipc/common/surface_handle.h"
-#include "gpu/ipc/display_compositor_memory_and_task_controller_on_gpu.h"
 #include "gpu/ipc/gl_in_process_context_export.h"
-#include "gpu/ipc/gpu_task_scheduler_helper.h"
 #include "gpu/ipc/service/context_url.h"
-#include "gpu/ipc/service/display_context.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_widget_types.h"
@@ -68,7 +68,6 @@ class SharedContextState;
 class GpuProcessActivityFlags;
 class ImageFactory;
 class SharedImageInterface;
-class SharedImageInterfaceInProcess;
 class SyncPointClientState;
 struct ContextCreationAttribs;
 
@@ -90,7 +89,8 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
     : public CommandBuffer,
       public GpuControl,
       public CommandBufferServiceClient,
-      public DecoderClient {
+      public DecoderClient,
+      public SharedImageInterfaceInProcess::CommandBufferHelper {
  public:
   InProcessCommandBuffer(CommandBufferTaskExecutor* task_executor,
                          const GURL& active_url);
@@ -122,6 +122,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
       TransferBufferAllocationOption option =
           TransferBufferAllocationOption::kLoseContextOnOOM) override;
   void DestroyTransferBuffer(int32_t id) override;
+  void ForceLostContext(error::ContextLostReason reason) override;
 
   // GpuControl implementation (called on client thread):
   void SetGpuControlClient(GpuControlClient*) override;
@@ -150,7 +151,9 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
 
   // DecoderClient implementation (called on gpu thread):
   void OnConsoleMessage(int32_t id, const std::string& message) override;
-  void CacheShader(const std::string& key, const std::string& shader) override;
+  void CacheBlob(gpu::GpuDiskCacheType type,
+                 const std::string& key,
+                 const std::string& shader) override;
   void OnFenceSyncRelease(uint64_t release) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
@@ -174,21 +177,9 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
 
   gpu::SharedImageInterface* GetSharedImageInterface() const;
 
-  // This is wrapper for VizSharedImageInterface implementation that is only
-  // used in InProcessCommandBuffer.
-  class SharedImageInterfaceHelper {
-   public:
-    explicit SharedImageInterfaceHelper(InProcessCommandBuffer* command_buffer);
-    ~SharedImageInterfaceHelper() = default;
-
-    void SetError();
-    void WrapTaskWithGpuCheck(base::OnceClosure task);
-
-    bool EnableWrappedSkImage() const;
-
-   private:
-    raw_ptr<InProcessCommandBuffer> command_buffer_;
-  };
+  // SharedImageInterfaceInProcess::CommandBufferHelper implementation:
+  void SetError() override;
+  void WrapTaskWithGpuCheck(base::OnceClosure task) override;
 
  private:
   struct InitializeOnGpuThreadParams {
@@ -252,6 +243,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
   void RegisterTransferBufferOnGpuThread(int32_t id,
                                          scoped_refptr<Buffer> buffer);
   void DestroyTransferBufferOnGpuThread(int32_t id);
+  void ForceLostContextOnGpuThread(error::ContextLostReason reason);
 
   void SetGetBufferOnGpuThread(int32_t shm_id, base::WaitableEvent* completion);
 

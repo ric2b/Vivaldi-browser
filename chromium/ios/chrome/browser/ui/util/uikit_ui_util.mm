@@ -29,6 +29,9 @@
 #include "ui/gfx/ios/uikit_util.h"
 #include "ui/gfx/scoped_cg_context_save_gstate_mac.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -329,6 +332,11 @@ void TriggerHapticFeedbackForNotification(UINotificationFeedbackType type) {
 }
 
 NSString* TextForTabCount(long count) {
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+    if (count <= 0)
+      return @"0";
+  }
   if (count <= 0)
     return @"";
   if (count > 99)

@@ -53,7 +53,7 @@ class MockMediaFoundationCdmProxy : public MediaFoundationCdmProxy {
                HRESULT(IUnknown* request, IMFAsyncResult* result));
   MOCK_METHOD0(OnHardwareContextReset, void());
   MOCK_METHOD0(OnSignificantPlayback, void());
-  MOCK_METHOD0(OnPlaybackError, void());
+  MOCK_METHOD1(OnPlaybackError, void(HRESULT));
 
  protected:
   ~MockMediaFoundationCdmProxy() override;
@@ -107,9 +107,10 @@ class MediaFoundationRendererTest : public testing::Test {
     MockMediaProtectionPMPServer::MakeMockMediaProtectionPMPServer(
         &pmp_server_);
 
+    LUID empty_luid{0, 0};
     mf_renderer_ = std::make_unique<MediaFoundationRenderer>(
         task_environment_.GetMainThreadTaskRunner(),
-        std::make_unique<NullMediaLog>());
+        std::make_unique<NullMediaLog>(), empty_luid);
 
     // Some default actions.
     ON_CALL(cdm_context_, GetMediaFoundationCdmProxy())
@@ -153,7 +154,11 @@ class MediaFoundationRendererTest : public testing::Test {
   }
 
  protected:
-  base::win::ScopedCOMInitializer com_initializer_;
+  // IMF* interfaces (e.g. IMediaProtectionPMPServer or
+  // IMFContentDecryptionModule) may require an MTA to run successfully.
+  base::win::ScopedCOMInitializer com_initializer_{
+      base::win::ScopedCOMInitializer::kMTA};
+
   base::test::TaskEnvironment task_environment_;
   base::MockOnceCallback<void(bool)> set_cdm_cb_;
   base::MockOnceCallback<void(PipelineStatus)> renderer_init_cb_;

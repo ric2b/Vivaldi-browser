@@ -250,7 +250,6 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   // These switches are forwarded to plugin pocesses.
   static const char* const kCommonForwardSwitches[] = {
     switches::kVModule
-    , switches::kDebugVivaldi,
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kCommonForwardSwitches,
                              std::size(kCommonForwardSwitches));

@@ -182,10 +182,9 @@ class MEDIA_EXPORT AudioDecoderConfig {
   // be manually set in `SetChannelsForDiscrete()`;
   int channels_ = 0;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 public:
   bool platform_media_pass_through_ = false;
-  bool platform_media_ffmpeg_demuxer_ = false;
 #endif
 
   // Not using DISALLOW_COPY_AND_ASSIGN here intentionally to allow the compiler

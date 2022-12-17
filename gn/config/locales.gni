@@ -17,6 +17,7 @@ vivaldi_pending_locales = [
 ]
 
 vivaldi_pending_mobile_locales = []
+vivaldi_pending_ios_locales = []
 if (!is_android) {
   vivaldi_pending_mobile_locales += [
     "az",
@@ -31,4 +32,23 @@ if (!is_android) {
     "sq",
     "sr-Latn",
   ]
+  if (is_ios) {
+    vivaldi_pending_ios_locales += [
+      "af",
+      "am",
+      "bn",
+      "et",
+      "fil",
+      "gu",
+      "kn",
+      "lv",
+      "ml",
+      "mr",
+      "sl",
+      "sw",
+      "ta",
+      "te",
+      "ur",
+    ]
+  }
 }

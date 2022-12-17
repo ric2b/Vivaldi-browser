@@ -1,7 +1,5 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
-from __future__ import print_function
-
 import sys, os
 import argparse
 import polib
@@ -75,7 +73,15 @@ def main():
 
   options = argparser.parse_args()
 
-  resources = grd_reader.Parse(options.grd_file)
+  defines = dict(
+    vivaldi_chromium_file=False,
+    use_titlecase=False,
+    is_macosx=False,
+    is_android=False,
+    is_win=True,
+  )
+
+  resources = grd_reader.Parse(options.grd_file, defines=defines)
   resources.SetOutputLanguage('en')
   resources.UberClique().keep_additional_translations_ = True
   resources.RunGatherers()

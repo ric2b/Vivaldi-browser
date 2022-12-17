@@ -160,15 +160,14 @@ base::TimeDelta PasswordConfirmationFrequencyToTimeDelta(
 }
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  base::Value::ListStorage quick_unlock_modes_default;
-  quick_unlock_modes_default.emplace_back(kFactorsOptionAll);
-  base::Value::ListStorage webauthn_factors_default;
-  webauthn_factors_default.emplace_back(kFactorsOptionAll);
-  registry->RegisterListPref(
-      prefs::kQuickUnlockModeAllowlist,
-      base::Value(std::move(quick_unlock_modes_default)));
+  base::Value::List quick_unlock_modes_default;
+  quick_unlock_modes_default.Append(kFactorsOptionAll);
+  base::Value::List webauthn_factors_default;
+  webauthn_factors_default.Append(kFactorsOptionAll);
+  registry->RegisterListPref(prefs::kQuickUnlockModeAllowlist,
+                             std::move(quick_unlock_modes_default));
   registry->RegisterListPref(prefs::kWebAuthnFactors,
-                             base::Value(std::move(webauthn_factors_default)));
+                             std::move(webauthn_factors_default));
   registry->RegisterIntegerPref(
       prefs::kQuickUnlockTimeout,
       static_cast<int>(PasswordConfirmationFrequency::TWO_DAYS));
@@ -224,6 +223,8 @@ FingerprintLocation GetFingerprintLocation() {
     return FingerprintLocation::RIGHT_SIDE;
   if (location_info == "left-side")
     return FingerprintLocation::LEFT_SIDE;
+  if (location_info == "left-of-power-button-top-right")
+    return FingerprintLocation::LEFT_OF_POWER_BUTTON_TOP_RIGHT;
   NOTREACHED() << "Not handled value: " << location_info;
   return default_location;
 }
@@ -237,6 +238,11 @@ bool IsFingerprintSupported() {
       base::CommandLine::ForCurrentProcess();
   return base::FeatureList::IsEnabled(features::kQuickUnlockFingerprint) &&
          command_line->HasSwitch(switches::kFingerprintSensorLocation);
+}
+
+bool IsLeftOfPowerButtonTopRightFingerprint() {
+  return GetFingerprintLocation() ==
+         FingerprintLocation::LEFT_OF_POWER_BUTTON_TOP_RIGHT;
 }
 
 bool IsFingerprintEnabled(Profile* profile, Purpose purpose) {
@@ -274,6 +280,12 @@ void AddFingerprintResources(content::WebUIDataSource* html_source) {
     case FingerprintLocation::KEYBOARD_BOTTOM_LEFT:
       resource_id_dark = IDR_FINGERPRINT_LAPTOP_BOTTOM_LEFT_ANIMATION_DARK;
       resource_id_light = IDR_FINGERPRINT_LAPTOP_BOTTOM_LEFT_ANIMATION_LIGHT;
+      break;
+    case FingerprintLocation::LEFT_OF_POWER_BUTTON_TOP_RIGHT:
+      resource_id_dark =
+          IDR_FINGERPRINT_LAPTOP_LEFT_OF_POWER_BUTTON_TOP_RIGHT_ANIMATION_DARK;
+      resource_id_light =
+          IDR_FINGERPRINT_LAPTOP_LEFT_OF_POWER_BUTTON_TOP_RIGHT_ANIMATION_LIGHT;
       break;
     case FingerprintLocation::KEYBOARD_TOP_RIGHT:
     case FingerprintLocation::RIGHT_SIDE:

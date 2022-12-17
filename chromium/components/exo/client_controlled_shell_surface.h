@@ -83,7 +83,7 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
   void SetBounds(int64_t display_id, const gfx::Rect& bounds);
 
   // Set origin of bounds for surface while preserving the size.
-  void SetBoundsOrigin(const gfx::Point& origin);
+  void SetBoundsOrigin(int64_t display_id, const gfx::Point& origin);
 
   // Set size of bounds for surface while preserving the origin.
   void SetBoundsSize(const gfx::Size& size);
@@ -253,7 +253,8 @@ class ClientControlledShellSurface : public ShellSurfaceBase,
   class ScopedLockedToRoot;
 
   // Overridden from ShellSurfaceBase:
-  void SetWidgetBounds(const gfx::Rect& bounds) override;
+  void SetWidgetBounds(const gfx::Rect& bounds,
+                       bool adjusted_by_server) override;
   gfx::Rect GetShadowBounds() const override;
   void InitializeWindowState(ash::WindowState* window_state) override;
   absl::optional<gfx::Rect> GetWidgetBounds() const override;

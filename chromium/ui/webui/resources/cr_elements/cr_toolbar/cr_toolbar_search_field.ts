@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../cr_icon_button/cr_icon_button.m.js';
+import '../cr_icon_button/cr_icon_button.js';
 import '../cr_icons_css.m.js';
 import '../icons.m.js';
 import '../shared_style_css.m.js';
@@ -62,7 +62,7 @@ export class CrToolbarSearchFieldElement extends
 
       isSpinnerShown_: {
         type: Boolean,
-        computed: 'computeIsSpinnerShown_(spinnerActive, showingSearch)'
+        computed: 'computeIsSpinnerShown_(spinnerActive, showingSearch)',
       },
 
       searchFocused_: {type: Boolean, value: false},

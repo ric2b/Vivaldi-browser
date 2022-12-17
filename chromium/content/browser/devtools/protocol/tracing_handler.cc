@@ -16,6 +16,7 @@
 #include "base/format_macros.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -64,6 +65,7 @@ namespace {
 const double kMinimumReportingInterval = 250.0;
 
 const char kRecordModeParam[] = "record_mode";
+const char kTraceBufferSizeInKb[] = "trace_buffer_size_in_kb";
 
 // Frames need to be at least 1x1, otherwise nothing would be captured.
 constexpr gfx::Size kMinFrameSize = gfx::Size(1, 1);
@@ -234,6 +236,11 @@ void AddPidsToProcessFilter(
   }
 }
 
+bool IsChromeDataSource(const std::string& data_source_name) {
+  return base::StartsWith(data_source_name, "org.chromium.") ||
+         data_source_name == "track_event";
+}
+
 absl::optional<perfetto::BackendType> GetBackendTypeFromParameters(
     const std::string& tracing_backend,
     perfetto::TraceConfig& perfetto_config) {
@@ -246,7 +253,7 @@ absl::optional<perfetto::BackendType> GetBackendTypeFromParameters(
     // sources specified in the config.
     for (auto& data_source : *(perfetto_config.mutable_data_sources())) {
       auto* source_config = data_source.mutable_config();
-      if (!base::StartsWith(source_config->name(), "org.chromium."))
+      if (!IsChromeDataSource(source_config->name()))
         return perfetto::BackendType::kSystemBackend;
     }
     return perfetto::BackendType::kCustomBackend;
@@ -511,17 +518,8 @@ TracingHandler::TracingHandler(DevToolsIOContext* io_context)
       return_as_stream_(false),
       gzip_compression_(false),
       buffer_usage_reporting_interval_(0) {
-  bool use_video_capture_api = true;
-#if BUILDFLAG(IS_ANDROID)
-  // Video capture API cannot be used on Android WebView.
-  if (!CompositorImpl::IsInitialized())
-    use_video_capture_api = false;
-#endif
-  if (use_video_capture_api) {
-    video_consumer_ =
-        std::make_unique<DevToolsVideoConsumer>(base::BindRepeating(
-            &TracingHandler::OnFrameFromVideoConsumer, base::Unretained(this)));
-  }
+  video_consumer_ = std::make_unique<DevToolsVideoConsumer>(base::BindRepeating(
+      &TracingHandler::OnFrameFromVideoConsumer, base::Unretained(this)));
 }
 
 TracingHandler::~TracingHandler() = default;
@@ -535,7 +533,7 @@ std::vector<TracingHandler*> TracingHandler::ForAgentHost(
 void TracingHandler::SetRenderer(int process_host_id,
                                  RenderFrameHostImpl* frame_host) {
   frame_host_ = frame_host;
-  if (!video_consumer_ || !frame_host)
+  if (!frame_host)
     return;
   video_consumer_->SetFrameSinkId(
       frame_host->GetRenderWidgetHost()->GetFrameSinkId());
@@ -722,7 +720,7 @@ void TracingHandler::Start(Maybe<std::string> categories,
     base::trace_event::TraceConfig browser_config =
         base::trace_event::TraceConfig();
     if (config.isJust()) {
-      base::flat_map<std::string, base::Value> dict;
+      base::Value::Dict dict;
       CHECK(crdtp::ConvertProtocolValue(*config.fromJust(), &dict));
       browser_config =
           GetTraceConfigFromDevToolsConfig(base::Value(std::move(dict)));
@@ -782,6 +780,7 @@ void TracingHandler::Start(Maybe<std::string> categories,
       buffer_usage_reporting_interval.fromMaybe(0);
   did_initiate_recording_ = true;
   trace_config_ = std::move(trace_config);
+  pids_being_traced_.clear();
 
   GpuProcessHost* gpu_process_host =
       GpuProcessHost::Get(GPU_PROCESS_KIND_SANDBOXED,
@@ -820,21 +819,21 @@ void TracingHandler::SetupProcessFilter(
     return;
 
   base::ProcessId browser_pid = base::Process::Current().Pid();
-  std::unordered_set<base::ProcessId> included_process_ids({browser_pid});
+  pids_being_traced_.insert(browser_pid);
 
   if (gpu_pid != base::kNullProcessId)
-    included_process_ids.insert(gpu_pid);
+    pids_being_traced_.insert(gpu_pid);
 
   if (new_render_frame_host)
-    AppendProcessId(new_render_frame_host, &included_process_ids);
+    AppendProcessId(new_render_frame_host, &pids_being_traced_);
 
   DCHECK(!frame_host_->GetParent());
   for (FrameTreeNode* node : frame_host_->frame_tree()->Nodes()) {
     if (RenderFrameHost* frame_host = node->current_frame_host())
-      AppendProcessId(frame_host, &included_process_ids);
+      AppendProcessId(frame_host, &pids_being_traced_);
   }
 
-  AddPidsToProcessFilter(included_process_ids, trace_config_);
+  AddPidsToProcessFilter(pids_being_traced_, trace_config_);
 }
 
 void TracingHandler::AppendProcessId(
@@ -851,13 +850,17 @@ void TracingHandler::AppendProcessId(
 }
 
 void TracingHandler::OnProcessReady(RenderProcessHost* process_host) {
+  AddProcess(process_host->GetProcess().Pid());
+}
+
+void TracingHandler::AddProcess(base::ProcessId pid) {
   if (!did_initiate_recording_)
     return;
-  std::unordered_set<base::ProcessId> included_process_ids(
-      {process_host->GetProcess().Pid()});
-
-  AddPidsToProcessFilter(included_process_ids, trace_config_);
-  session_->ChangeTraceConfig(trace_config_);
+  if (!pids_being_traced_.insert(pid).second)
+    return;
+  AddPidsToProcessFilter({pid}, trace_config_);
+  if (session_)
+    session_->ChangeTraceConfig(trace_config_);
 }
 
 void TracingHandler::AttemptAdoptStartupSession(
@@ -947,7 +950,7 @@ void TracingHandler::OnRecordingEnabled(std::unique_ptr<StartCallback> callback,
   bool screenshot_enabled;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED(
       TRACE_DISABLED_BY_DEFAULT("devtools.screenshot"), &screenshot_enabled);
-  if (video_consumer_ && screenshot_enabled) {
+  if (screenshot_enabled) {
     // Reset number of screenshots received, each time tracing begins.
     number_of_screenshots_from_video_consumer_ = 0;
     video_consumer_->SetMinAndMaxFrameSize(kMinFrameSize, kMaxFrameSize);
@@ -1075,8 +1078,7 @@ void TracingHandler::StopTracing(
   }
   did_initiate_recording_ = false;
   g_any_agent_tracing = false;
-  if (video_consumer_)
-    video_consumer_->StopCapture();
+  video_consumer_->StopCapture();
 }
 
 bool TracingHandler::IsTracing() const {
@@ -1144,6 +1146,11 @@ base::trace_event::TraceConfig TracingHandler::GetTraceConfigFromDevToolsConfig(
   base::Value config = ConvertDictKeyStyle(devtools_config);
   if (std::string* mode = config.FindStringPath(kRecordModeParam))
     config.SetStringPath(kRecordModeParam, ConvertFromCamelCase(*mode, '-'));
+  if (absl::optional<double> buffer_size =
+          config.FindDoublePath(kTraceBufferSizeInKb)) {
+    config.SetIntKey(kTraceBufferSizeInKb,
+                     base::saturated_cast<size_t>(buffer_size.value()));
+  }
   return base::trace_event::TraceConfig(config);
 }
 

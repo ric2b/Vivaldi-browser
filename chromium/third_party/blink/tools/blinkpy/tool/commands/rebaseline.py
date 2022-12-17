@@ -32,10 +32,12 @@ import logging
 import optparse
 import re
 
+from collections import defaultdict
+
 from blinkpy.common.path_finder import WEB_TESTS_LAST_COMPONENT
 from blinkpy.common.memoized import memoized
 from blinkpy.common.net.results_fetcher import Build
-from blinkpy.tool.commands.command import Command
+from blinkpy.tool.commands.command import Command, check_dir_option
 from blinkpy.web_tests.models import test_failures
 from blinkpy.web_tests.models.test_expectations import SystemConfigurationRemover, TestExpectations
 from blinkpy.web_tests.port import base, factory
@@ -65,8 +67,18 @@ class AbstractRebaseliningCommand(Command):
         ('Do not optimize (de-duplicate) the expectations after rebaselining '
          '(default is to de-dupe automatically). You can use "blink_tool.py '
          'optimize-baselines" to optimize separately.'))
+    dry_run_option = optparse.make_option(
+        '--dry-run',
+        action='store_true',
+        default=False,
+        help=('Dry run mode. List actions that would be performed '
+              'but do not actually write to disk.'))
     results_directory_option = optparse.make_option(
-        '--results-directory', help='Local results directory to use.')
+        '--results-directory',
+        action='callback',
+        callback=check_dir_option,
+        type='string',
+        help='Local results directory to use.')
     suffixes_option = optparse.make_option(
         '--suffixes',
         default=','.join(BASELINE_SUFFIX_LIST),
@@ -127,6 +139,7 @@ class AbstractRebaseliningCommand(Command):
         self._baseline_suffix_list = BASELINE_SUFFIX_LIST
         self.expectation_line_changes = ChangeSet()
         self._tool = None
+        self._dry_run = False
 
     def baseline_directory(self, builder_name):
         port = self._tool.port_factory.get_from_builder_name(builder_name)
@@ -336,23 +349,28 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             else:
                 debug_build_steps.add((builder, step))
 
-        build_steps_to_fallback_paths = {}
+        build_steps_to_fallback_paths = defaultdict(dict)
         wpt_build_steps = set()
+        #TODO: we should make the selection of (builder, step) deterministic
         for builder, step in list(release_build_steps) + list(
                 debug_build_steps):
             if not self._tool.builders.is_wpt_builder(builder):
+                # Some result db related unit tests set step to None
+                is_legacy_step = step is None or 'blink_web_tests' in step
                 flag_spec_option = self._tool.builders.flag_specific_option(
                     builder, step)
                 port = self._tool.port_factory.get_from_builder_name(builder)
                 port.set_option_default('flag_specific', flag_spec_option)
                 fallback_path = port.baseline_search_path()
                 if fallback_path not in list(
-                        build_steps_to_fallback_paths.values()):
-                    build_steps_to_fallback_paths[builder,
-                                                  step] = fallback_path
+                        build_steps_to_fallback_paths[is_legacy_step].values()):
+                    build_steps_to_fallback_paths[
+                        is_legacy_step][builder, step] = fallback_path
             else:
                 wpt_build_steps.add((builder, step))
-        return set(build_steps_to_fallback_paths) | wpt_build_steps
+        return (set(build_steps_to_fallback_paths[True]) |
+                set(build_steps_to_fallback_paths[False]) |
+                wpt_build_steps)
 
     def baseline_fetch_url_resultdb(self, test_name, build):
         # TODO(preethim): Consider doing QueryArtifacts do a walk of that list for
@@ -527,12 +545,24 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 test_flag_pairs_to_suffixes[test, flag_spec].update(
                     self._suffixes_for_actual_failures(test, build, step_name))
 
-        optimize_commands = []
+        suffixes_flag_spec = collections.defaultdict(set)
+        test_list = collections.defaultdict(list)
         for (test, flag_spec), suffixes in test_flag_pairs_to_suffixes.items():
-            # No need to optimize baselines for a test with no failures.
             if not suffixes:
                 continue
-            path_to_blink_tool = self._tool.path()
+            if flag_spec is None:
+                flag_spec = 'default'
+
+            suffixes_flag_spec[flag_spec].update(suffixes)
+            test_list[flag_spec].append(test)
+
+        optimize_commands = collections.defaultdict(lambda: ([], ''))
+        cwd = self._tool.git().checkout_root
+        path_to_blink_tool = self._tool.path()
+
+        # Build one optimize-baselines invocation command for each flag_spec.
+        # All the tests in the test list will be optimized iteratively.
+        for flag_spec, test_list_flag in test_list.items():
             command = [
                 self._tool.executable,
                 path_to_blink_tool,
@@ -544,11 +574,15 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             ]
             if verbose:
                 command.append('--verbose')
-            if flag_spec:
+            if flag_spec != 'default':
                 command.extend(['--flag-specific', flag_spec])
-            command.extend(['--suffixes', ','.join(sorted(suffixes)), test])
-            cwd = self._tool.git().checkout_root
-            optimize_commands.append((command, cwd))
+            command.extend([
+                '--suffixes', ','.join(sorted(suffixes_flag_spec[flag_spec]))
+            ])
+            for test in test_list_flag:
+                command.append(test)
+
+            optimize_commands[flag_spec] = (command, cwd)
 
         return optimize_commands
 
@@ -578,6 +612,13 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 if port.test_configuration().version.lower() in all_versions:
                     to_remove[test].add(
                         port.test_configuration().version.lower())
+
+        if self._dry_run:
+            for test, versions in to_remove.items():
+                _log.debug('Would have removed expectations for %s: %s', test,
+                           ', '.join(sorted(versions)))
+            return
+
         port = self._tool.port_factory.get()
         path = port.path_to_generic_test_expectations_file()
         test_expectations = TestExpectations(
@@ -592,16 +633,22 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
 
     def _run_in_parallel(self, commands):
         if not commands:
-            return {}
+            return []
+
+        if self._dry_run:
+            for command, _ in commands:
+                _log.debug('Would have run: "%s"',
+                           self._tool.executive.command_for_printing(command))
+            return [(0, '', '')] * len(commands)
 
         command_results = self._tool.executive.run_in_parallel(commands)
         for _, _, stderr in command_results:
             if stderr:
-                _log.error(stderr)
+                lines = stderr.decode("utf-8", "ignore").splitlines()
+                for line in lines:
+                    print(line)
 
-        change_set = self._extract_expectation_line_changes(command_results)
-
-        return change_set.lines_to_remove
+        return command_results
 
     def rebaseline(self, options, test_baseline_set):
         """Fetches new baselines and removes related test expectation lines.
@@ -611,8 +658,8 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             test_baseline_set: A TestBaselineSet instance, which represents
                 a set of tests/platform combinations to rebaseline.
         """
-        if self._tool.git().has_working_directory_changes(
-                pathspec=self._web_tests_dir()):
+        if not self._dry_run and self._tool.git(
+        ).has_working_directory_changes(pathspec=self._web_tests_dir()):
             _log.error(
                 'There are uncommitted changes in the web tests directory; aborting.'
             )
@@ -627,7 +674,10 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             test_baseline_set, options)
         lines_to_remove = {}
         self._run_in_parallel(copy_baseline_commands)
-        lines_to_remove = self._run_in_parallel(rebaseline_commands)
+
+        command_results = self._run_in_parallel(rebaseline_commands)
+        change_set = self._extract_expectation_line_changes(command_results)
+        lines_to_remove = change_set.lines_to_remove
         for test in extra_lines_to_remove:
             if test in lines_to_remove:
                 lines_to_remove[test] = (
@@ -639,11 +689,19 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             self._update_expectations_files(lines_to_remove)
 
         if options.optimize:
-            self._run_in_parallel(
-                self._optimize_commands(test_baseline_set, options.verbose,
-                                        options.resultDB))
+            # No point in optimizing during a dry run where no files were
+            # downloaded.
+            if self._dry_run:
+                _log.info('Skipping optimization during dry run.')
+            else:
+                optimize_commands = self._optimize_commands(
+                    test_baseline_set, options.verbose, options.resultDB)
+                for _, (cmd, cwd) in optimize_commands.items():
+                    output = self._tool.executive.run_command(cmd, cwd)
+                    print(output)
 
-        self._tool.git().add_list(self.unstaged_baselines())
+        if not self._dry_run:
+            self._tool.git().add_list(self.unstaged_baselines())
 
     def unstaged_baselines(self):
         """Returns absolute paths for unstaged (including untracked) baselines."""
@@ -763,6 +821,7 @@ class Rebaseline(AbstractParallelRebaselineCommand):
     def __init__(self):
         super(Rebaseline, self).__init__(options=[
             self.no_optimize_option,
+            self.dry_run_option,
             # FIXME: should we support the platform options in addition to (or instead of) --builders?
             self.results_directory_option,
             optparse.make_option(
@@ -782,6 +841,7 @@ class Rebaseline(AbstractParallelRebaselineCommand):
 
     def execute(self, options, args, tool):
         self._tool = tool
+        self._dry_run = options.dry_run
         if not args:
             _log.error('Must list tests to rebaseline.')
             return

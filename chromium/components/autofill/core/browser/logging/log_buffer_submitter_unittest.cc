@@ -20,21 +20,21 @@ namespace autofill {
 
 class MockLogReceiver : public LogReceiver {
  public:
-  MOCK_METHOD(void, LogEntry, (const base::Value&), (override));
+  MOCK_METHOD(void, LogEntry, (const base::Value::Dict&), (override));
 };
 
 TEST(LogBufferSubmitter, VerifySubmissionOnDestruction) {
   LogBuffer buffer;
   buffer << 42;
-  base::Value expected = buffer.RetrieveResult();
+  absl::optional<base::Value::Dict> expected = buffer.RetrieveResult();
 
   MockLogReceiver receiver;
   LogRouter router;
-  std::ignore = router.RegisterReceiver(&receiver);
+  router.RegisterReceiver(&receiver);
   std::unique_ptr<LogManager> log_manager =
       LogManager::Create(&router, base::NullCallback());
 
-  EXPECT_CALL(receiver, LogEntry(testing::Eq(testing::ByRef(expected))));
+  EXPECT_CALL(receiver, LogEntry(testing::Eq(testing::ByRef(*expected))));
   log_manager->Log() << 42;
   log_manager.reset();
   router.UnregisterReceiver(&receiver);
@@ -43,7 +43,7 @@ TEST(LogBufferSubmitter, VerifySubmissionOnDestruction) {
 TEST(LogBufferSubmitter, NoEmptySubmission) {
   MockLogReceiver receiver;
   LogRouter router;
-  std::ignore = router.RegisterReceiver(&receiver);
+  router.RegisterReceiver(&receiver);
   std::unique_ptr<LogManager> log_manager =
       LogManager::Create(&router, base::NullCallback());
 
@@ -60,7 +60,7 @@ TEST(LogBufferSubmitter, CorrectActivation) {
 
   LogRouter router;
   MockLogReceiver receiver;
-  std::ignore = router.RegisterReceiver(&receiver);
+  router.RegisterReceiver(&receiver);
   std::unique_ptr<LogManager> log_manager_2 =
       LogManager::Create(&router, base::NullCallback());
   EXPECT_TRUE(log_manager_2->Log().buffer().active());

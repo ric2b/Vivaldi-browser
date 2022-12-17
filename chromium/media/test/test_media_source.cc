@@ -48,14 +48,14 @@ TestMediaSource::TestMediaSource(const std::string& filename,
                                  const std::string& mimetype,
                                  size_t initial_append_size,
                                  bool initial_sequence_mode
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
                                  , const base::FilePath& full_filename
 #endif
                                  )
     : current_position_(0),
       initial_append_size_(initial_append_size),
       initial_sequence_mode_(initial_sequence_mode),
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
       file_path_(full_filename.empty() ? GetTestDataFilePath(filename)
                                        : full_filename),
 #endif
@@ -69,7 +69,7 @@ TestMediaSource::TestMediaSource(const std::string& filename,
           &media_log_)),
       owned_chunk_demuxer_(chunk_demuxer_) {
   file_data_ = ReadTestDataFile(filename
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
                                 , file_path_
 #endif
   );

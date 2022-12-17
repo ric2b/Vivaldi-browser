@@ -122,7 +122,8 @@ class PaintPreviewCaptureState {
                            CapturePage::BitmapCallback callback) {
     VLOG(2) << "Capture start, clip=(" << clip_rect.x() << " " << clip_rect.y()
             << " " << clip_rect.width() << " " << clip_rect.height() << ")";
-    content::RenderFrameHost* render_frame_host = web_contents->GetMainFrame();
+    content::RenderFrameHost* render_frame_host =
+        web_contents->GetPrimaryMainFrame();
 
     paint_preview::PaintPreviewClient::CreateForWebContents(web_contents);
     auto* client =
@@ -373,8 +374,8 @@ void CapturePage::CaptureImpl(content::WebContents* web_contents,
 
   WebContentsObserver::Observe(web_contents);
 
-  auto* rfhi =
-      static_cast<content::RenderFrameHostImpl*>(web_contents->GetMainFrame());
+  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
+      web_contents->GetPrimaryMainFrame());
   rfhi->GetVivaldiFrameService()->RequestThumbnailForFrame(
       input_params.rect, input_params.full_page, input_params.target_size,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(

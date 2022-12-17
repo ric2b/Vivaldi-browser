@@ -190,7 +190,7 @@ bool UseNewWarnings() {
 int GetFilenameStyle(const views::Label& label) {
 #if !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
   if (UseNewWarnings())
-    return STYLE_EMPHASIZED;
+    return views::style::STYLE_EMPHASIZED;
 #endif
   return label.GetTextStyle();
 }
@@ -198,7 +198,7 @@ int GetFilenameStyle(const views::Label& label) {
 int GetFilenameStyle(const views::StyledLabel& label) {
 #if !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
   if (UseNewWarnings())
-    return STYLE_EMPHASIZED;
+    return views::style::STYLE_EMPHASIZED;
 #endif
   return label.GetDefaultTextStyle();
 }
@@ -300,7 +300,7 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr model,
                               base::Unretained(this))),
       current_scale_(/*AddedToWidget() set the right DPI*/ 1.0f) {
   views::InstallRectHighlightPathGenerator(this);
-  observation_.Observe(this->model());
+  model_->SetDelegate(this);
 
   // TODO(pkasting): Use bespoke file-scope subclasses for some of these child
   // views to localize functionality and simplify this class.
@@ -437,15 +437,15 @@ bool DownloadItemView::OnMouseDragged(const ui::MouseEvent& event) {
   if (!dragging_) {
     dragging_ = ExceededDragThreshold(event.location() - *drag_start_point_);
   } else if ((model_->GetState() == download::DownloadItem::COMPLETE) &&
-             model_->download()) {
+             model_->GetDownloadItem()) {
     const gfx::Image* const file_icon =
         g_browser_process->icon_manager()->LookupIconFromFilepath(
             model_->GetTargetFilePath(), IconLoader::SMALL, current_scale_);
     const views::Widget* const widget = GetWidget();
     // TODO(shaktisahu): Make DragDownloadItem work with a model.
-    DragDownloadItem(model_->download(), file_icon,
+    DragDownloadItem(model_->GetDownloadItem(), file_icon,
                      widget ? widget->GetNativeView() : nullptr);
-    RecordDownloadShelfDragInfo(DownloadShelfDragInfo::DRAG_STARTED);
+    RecordDownloadShelfDragInfo(DownloadDragInfo::DRAG_STARTED);
   }
   return true;
 }
@@ -467,8 +467,8 @@ std::u16string DownloadItemView::GetTooltipText(const gfx::Point& p) const {
 }
 
 void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(accessible_name_);
   node_data->role = ax::mojom::Role::kGroup;
+  node_data->SetName(accessible_name_);
 
   // Set the description to the empty string, otherwise the tooltip will be
   // used, which is redundant with the accessible name.
@@ -508,7 +508,7 @@ void DownloadItemView::OnDownloadUpdated() {
   // One example of this is if the file gets removed.
   if (!has_download_completion_been_logged_ &&
       model_->GetState() == download::DownloadItem::COMPLETE) {
-    RecordDownloadShelfDragInfo(DownloadShelfDragInfo::DOWNLOAD_COMPLETE);
+    RecordDownloadShelfDragInfo(DownloadDragInfo::DOWNLOAD_COMPLETE);
     has_download_completion_been_logged_ = true;
   }
 }
@@ -540,7 +540,8 @@ void DownloadItemView::OnDownloadOpened() {
   shelf_->AutoClose();
 }
 
-void DownloadItemView::OnDownloadDestroyed() {
+void DownloadItemView::OnDownloadDestroyed(const ContentId& id) {
+  context_menu_.OnDownloadDestroyed();
   shelf_->RemoveDownloadView(this);  // This will delete us!
 }
 
@@ -837,9 +838,9 @@ void DownloadItemView::UpdateLabels() {
   deep_scanning_label_->SetVisible(mode_ ==
                                    download::DownloadItemMode::kDeepScanning);
   if (deep_scanning_label_->GetVisible()) {
-    const int id = (model_->download() &&
+    const int id = (model_->GetDownloadItem() &&
                     safe_browsing::DeepScanningRequest::ShouldUploadBinary(
-                        model_->download()))
+                        model_->GetDownloadItem()))
                        ? IDS_PROMPT_DEEP_SCANNING_DOWNLOAD
                        : IDS_PROMPT_DEEP_SCANNING_APP_DOWNLOAD;
     const std::u16string filename = ElidedFilename(*deep_scanning_label_);
@@ -964,7 +965,8 @@ void DownloadItemView::UpdateAccessibleAlert(
     const std::u16string& accessible_alert_text) {
   views::ViewAccessibility& ax = accessible_alert_->GetViewAccessibility();
   ax.OverrideRole(ax::mojom::Role::kAlert);
-  ax.OverrideName(accessible_alert_text);
+  if (!accessible_alert_text.empty())
+    ax.OverrideName(accessible_alert_text);
   if (announce_accessible_alert_soon_ || !accessible_alert_timer_.IsRunning()) {
     AnnounceAccessibleAlert();
     accessible_alert_timer_.Reset();
@@ -1293,7 +1295,8 @@ void DownloadItemView::ReviewButtonPressed() {
   dropdown_button_->SetEnabled(false);
 
   enterprise_connectors::ShowDownloadReviewDialog(
-      ElidedFilename(*file_name_label_), model_->profile(), model_->download(),
+      ElidedFilename(*file_name_label_), model_->profile(),
+      model_->GetDownloadItem(),
       shelf_->browser()->tab_strip_model()->GetActiveWebContents(),
       model_->GetDangerType(),
       base::BindOnce(&DownloadItemView::ExecuteCommand, base::Unretained(this),
@@ -1377,9 +1380,9 @@ bool DownloadItemView::SubmitDownloadToFeedbackService(
   if (!dp_service)
     return false;
   // TODO(shaktisahu): Enable feedback service for offline item.
-  return !model_->download() ||
-         dp_service->MaybeBeginFeedbackForDownload(shelf_->browser()->profile(),
-                                                   model_->download(), command);
+  return !model_->GetDownloadItem() ||
+         dp_service->MaybeBeginFeedbackForDownload(
+             shelf_->browser()->profile(), model_->GetDownloadItem(), command);
 #else
   NOTREACHED();
   return false;

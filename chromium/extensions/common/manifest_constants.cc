@@ -161,8 +161,6 @@ const char kWebviewPartitions[] = "partitions";
 #if BUILDFLAG(IS_CHROMEOS)
 const char kFileSystemProviderCapabilities[] =
     "file_system_provider_capabilities";
-#endif
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kActionHandlers[] = "action_handlers";
 const char kActionHandlerActionKey[] = "action";
 const char kActionHandlerEnabledOnLockScreenKey[] = "enabled_on_lock_screen";
@@ -601,6 +599,7 @@ const char kInvalidWebAccessibleResourcesList[] =
     "Invalid value for 'web_accessible_resources'.";
 const char kInvalidWebAccessibleResource[] =
     "Invalid value for 'web_accessible_resources[*]'. *";
+const char kInvalidSidePanel[] = "Invalid value for 'side_panel'. *";
 const char16_t kInvalidWebview[] = u"Invalid value for 'webview'.";
 const char16_t kInvalidWebviewAccessibleResourcesList[] =
     u"Invalid value for'webview.accessible_resources'.";
@@ -690,6 +689,8 @@ const char kRulesetCountExceeded[] =
 const char kEnabledRulesetCountExceeded[] =
     "Invalid value for key '*.*': The number of enabled rulesets must be less "
     "than or equal to *.";
+const char kSidePanelManifestDefaultPathError[] =
+    "Side panel file path must exist.";
 const char16_t kTransientBackgroundConflictsWithPersistentBackground[] =
     u"The 'transientBackground' permission cannot be used with a persistent "
     "background page.";
@@ -709,8 +710,6 @@ const char16_t kInvalidFileSystemProviderMissingCapabilities[] =
 const char kInvalidFileSystemProviderMissingPermission[] =
     "The 'file_system_provider_capabilities' section requires the "
     "'fileSystemProvider' permission to be specified in the manifest.";
-#endif
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kDuplicateActionHandlerFound[] =
     "'action_handlers' list contains duplicate entries for the action: \"*\".";
 const char kIllegalPlugins[] =
@@ -724,7 +723,7 @@ const char16_t kInvalidActionHandlersType[] =
     u"Invalid value for 'action_handlers'. Value must be a list of strings or "
     u"a "
     "dictionary with 'action' key.";
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace manifest_errors
 

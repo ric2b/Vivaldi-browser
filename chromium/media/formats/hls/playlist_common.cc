@@ -6,14 +6,16 @@
 
 #include "base/notreached.h"
 #include "media/formats/hls/playlist.h"
+#include "media/formats/hls/types.h"
 
 namespace media::hls {
 
-types::DecimalInteger CommonParserState::GetVersion() const {
+bool CommonParserState::CheckVersion(
+    types::DecimalInteger expected_version) const {
   if (version_tag.has_value()) {
-    return version_tag.value().version;
+    return expected_version == version_tag->version;
   } else {
-    return Playlist::kDefaultVersion;
+    return expected_version == Playlist::kDefaultVersion;
   }
 }
 
@@ -56,26 +58,12 @@ absl::optional<ParseStatus> ParseCommonTag(TagItem tag,
   DCHECK(tag.GetName() && GetTagKind(*tag.GetName()) == TagKind::kCommonTag);
 
   switch (static_cast<CommonTagName>(*tag.GetName())) {
-    case CommonTagName::kM3u:
+    case CommonTagName::kM3u: {
       // This tag is meant to occur on the first line (which we've already
       // checked), however the spec does not explicitly regard this as an
       // error if it appears elsewhere as well.
       DCHECK(tag.GetLineNumber() != 1);
       break;
-    case CommonTagName::kXVersion: {
-      auto error = ParseUniqueTag(tag, state->version_tag);
-      if (error.has_value()) {
-        return error;
-      }
-
-      // Max supported playlist version is 10
-      if (state->version_tag->version > 10) {
-        return ParseStatusCode::kPlaylistHasUnsupportedVersion;
-      }
-      break;
-    }
-    case CommonTagName::kXIndependentSegments: {
-      return ParseUniqueTag(tag, state->independent_segments_tag);
     }
     case CommonTagName::kXDefine: {
       auto tag_result = XDefineTag::Parse(tag);
@@ -104,7 +92,22 @@ absl::optional<ParseStatus> ParseCommonTag(TagItem tag,
                                        std::string{*tag_value.value})) {
         return ParseStatusCode::kVariableDefinedMultipleTimes;
       }
-    } break;
+      break;
+    }
+    case CommonTagName::kXIndependentSegments: {
+      return ParseUniqueTag(tag, state->independent_segments_tag);
+    }
+    case CommonTagName::kXStart: {
+      // TODO(crbug.com/1266991): Implement the EXT-X-START tag.
+      break;
+    }
+    case CommonTagName::kXVersion: {
+      auto error = ParseUniqueTag(tag, state->version_tag);
+      if (error.has_value()) {
+        return error;
+      }
+      break;
+    }
   }
 
   return absl::nullopt;
@@ -122,7 +125,8 @@ ParseStatus::Or<GURL> ParseUri(
   }
 
   // URIs may be relative to the playlist URI, resolve it against that.
-  auto resolved_uri = playlist_uri.Resolve(std::move(uri_str_result).value());
+  auto resolved_uri =
+      playlist_uri.Resolve(std::move(uri_str_result).value().Str());
   if (!resolved_uri.is_valid()) {
     return ParseStatusCode::kInvalidUri;
   }

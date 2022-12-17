@@ -19,10 +19,13 @@
 #include "components/autofill_assistant/browser/android/assistant_header_delegate.h"
 #include "components/autofill_assistant/browser/android/assistant_header_model.h"
 #include "components/autofill_assistant/browser/android/assistant_overlay_delegate.h"
+#include "components/autofill_assistant/browser/android/assistant_qr_code_camera_scan_model_wrapper.h"
+#include "components/autofill_assistant/browser/android/assistant_qr_code_image_picker_model_wrapper.h"
+#include "components/autofill_assistant/browser/android/assistant_qr_code_native_delegate.h"
 #include "components/autofill_assistant/browser/android/dependencies_android.h"
 #include "components/autofill_assistant/browser/chip.h"
-#include "components/autofill_assistant/browser/controller_observer.h"
 #include "components/autofill_assistant/browser/details.h"
+#include "components/autofill_assistant/browser/empty_controller_observer.h"
 #include "components/autofill_assistant/browser/execution_delegate.h"
 #include "components/autofill_assistant/browser/info_box.h"
 #include "components/autofill_assistant/browser/metrics.h"
@@ -45,7 +48,8 @@ class ClientAndroid;
 // TODO(crbug.com/806868): This class should be renamed to
 // AssistantMediator(Android) and listen for state changes to forward those
 // changes to the UI model.
-class UiControllerAndroid : public ControllerObserver, UiControllerObserver {
+class UiControllerAndroid : public EmptyControllerObserver,
+                            UiControllerObserver {
  public:
   static std::unique_ptr<UiControllerAndroid> CreateFromWebContents(
       content::WebContents* web_contents,
@@ -101,8 +105,6 @@ class UiControllerAndroid : public ControllerObserver, UiControllerObserver {
   void OnKeyboardSuppressionStateChanged(
       bool should_suppress_keyboard) override;
   void CloseCustomTab() override;
-  void OnError(const std::string& error_message,
-               Metrics::DropOutReason reason) override;
   void OnUserDataChanged(const UserData& user_data,
                          UserDataFieldChange field_change) override;
   void OnTouchableAreaChanged(
@@ -114,11 +116,6 @@ class UiControllerAndroid : public ControllerObserver, UiControllerObserver {
       const ExecutionDelegate::OverlayColors& colors) override;
   void OnClientSettingsChanged(const ClientSettings& settings) override;
   void OnShouldShowOverlayChanged(bool should_show) override;
-  void OnExecuteScript(const std::string& start_message) override;
-  void OnStart(const TriggerContext& trigger_context) override;
-  void OnStop() override;
-  void OnResetState() override;
-  void OnUiShownChanged(bool shown) override;
 
   // Overrides UiControllerObserver:
   void OnStatusMessageChanged(const std::string& message) override;
@@ -142,6 +139,8 @@ class UiControllerAndroid : public ControllerObserver, UiControllerObserver {
   void OnCollapseBottomSheet() override;
   void OnFormChanged(const FormProto* form,
                      const FormProto::Result* result) override;
+  void OnQrCodeScanUiChanged(
+      const PromptQrCodeScanProto* qr_code_scan) override;
   void OnGenericUserInterfaceChanged(
       const GenericUserInterfaceProto* generic_ui) override;
   void OnPersistentGenericUserInterfaceChanged(
@@ -156,6 +155,10 @@ class UiControllerAndroid : public ControllerObserver, UiControllerObserver {
   // Called by AssistantHeaderDelegate:
   void OnHeaderFeedbackButtonClicked();
   void OnTtsButtonClicked();
+
+  // Called by AssistantQrCodeDelegate.
+  void OnQrCodeScanFinished(const ClientStatus& status,
+                            const absl::optional<ValueProto>& value);
 
   // Called by AssistantGenericUiDelegate:
   void OnViewEvent(const EventHandler::EventKey& key);
@@ -325,6 +328,12 @@ class UiControllerAndroid : public ControllerObserver, UiControllerObserver {
   OverlayState overlay_state_ = OverlayState::FULL;
 
   std::unique_ptr<AssistantHeaderModel> header_model_;
+
+  std::unique_ptr<AssistantQrCodeNativeDelegate> qr_code_native_delegate_;
+  std::unique_ptr<AssistantQrCodeCameraScanModelWrapper>
+      qr_code_camera_scan_model_wrapper_;
+  std::unique_ptr<AssistantQrCodeImagePickerModelWrapper>
+      qr_code_image_picker_model_wrapper_;
 
   base::WeakPtrFactory<UiControllerAndroid> weak_ptr_factory_{this};
 };

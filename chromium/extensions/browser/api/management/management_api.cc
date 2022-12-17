@@ -349,8 +349,8 @@ ManagementGetPermissionWarningsByManifestFunction::Run() {
 }
 void ManagementGetPermissionWarningsByManifestFunction::OnParse(
     data_decoder::DataDecoder::ValueOrError result) {
-  if (!result.value) {
-    Respond(Error(*result.error));
+  if (!result.has_value()) {
+    Respond(Error(result.error()));
 
     // Matched with AddRef() in Run().
     Release();
@@ -358,7 +358,7 @@ void ManagementGetPermissionWarningsByManifestFunction::OnParse(
   }
 
   const base::DictionaryValue* parsed_manifest;
-  if (!result.value->GetAsDictionary(&parsed_manifest)) {
+  if (!result->GetAsDictionary(&parsed_manifest)) {
     Respond(Error(keys::kManifestParseError));
     Release();
     return;
@@ -1104,11 +1104,11 @@ void ManagementEventRouter::BroadcastEvent(
     const char* event_name) {
   if (!extension->ShouldExposeViaManagementAPI())
     return;
-  std::vector<base::Value> args;
+  base::Value::List args;
   if (event_name == management::OnUninstalled::kEventName) {
-    args.push_back(base::Value(extension->id()));
+    args.Append(extension->id());
   } else {
-    args.push_back(base::Value::FromUniquePtrValue(
+    args.Append(base::Value::FromUniquePtrValue(
         CreateExtensionInfo(nullptr, *extension, browser_context_).ToValue()));
   }
 

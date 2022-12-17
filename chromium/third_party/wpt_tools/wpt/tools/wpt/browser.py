@@ -1,5 +1,4 @@
 # mypy: allow-untyped-defs
-
 import os
 import platform
 import re
@@ -10,11 +9,21 @@ import tempfile
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from distutils.spawn import find_executable
-
 from urllib.parse import urlsplit
-import requests
 
-from .utils import call, get, rmtree, untar, unzip, get_download_to_descriptor, sha256sum
+import html5lib
+import requests
+from packaging.specifiers import SpecifierSet
+
+from .utils import (
+    call,
+    get,
+    get_download_to_descriptor,
+    rmtree,
+    sha256sum,
+    untar,
+    unzip,
+)
 from .wpt import venv_dir
 
 uname = platform.uname()
@@ -39,6 +48,22 @@ def get_ext(filename):
     if name.endswith(".tar"):
         ext = ".tar%s" % ext
     return ext
+
+
+def get_download_filename(resp, default=None):
+    """Get the filename from a requests.Response, or default"""
+    filename = None
+
+    content_disposition = resp.headers.get("content-disposition")
+    if content_disposition:
+        filenames = re.findall("filename=(.+)", content_disposition)
+        if filenames:
+            filename = filenames[0]
+
+    if not filename:
+        filename = urlsplit(resp.url).path.rsplit("/", 1)[1]
+
+    return filename or default
 
 
 def get_taskcluster_artifact(index, path):
@@ -156,6 +181,8 @@ class Firefox(Browser):
 
         if self.platform in ("linux", "win"):
             bits = "64" if uname[4] == "x86_64" else "32"
+        elif self.platform == "macos" and uname.machine == "arm64":
+            bits = "-aarch64"
         else:
             bits = ""
 
@@ -191,19 +218,7 @@ class Firefox(Browser):
         self.logger.info("Downloading Firefox from %s" % url)
         resp = get(url)
 
-        filename = None
-
-        content_disposition = resp.headers.get('content-disposition')
-        if content_disposition:
-            filenames = re.findall("filename=(.+)", content_disposition)
-            if filenames:
-                filename = filenames[0]
-
-        if not filename:
-            filename = urlsplit(resp.url).path.rsplit("/", 1)[1]
-
-        if not filename:
-            filename = "firefox.tar.bz2"
+        filename = get_download_filename(resp, "firefox.tar.bz2")
 
         if rename:
             filename = "%s%s" % (rename, get_ext(filename))
@@ -620,6 +635,8 @@ class ChromeChromiumBase(Browser):
         """Returns a string that is used for the platform directory in Chromium Snapshots"""
         if (self.platform == "Linux" or self.platform == "Win") and uname[4] == "x86_64":
             return f"{self.platform}_x64"
+        if self.platform == "Mac" and uname.machine == "arm64":
+            return "Mac_Arm"
         return self.platform
 
     def find_webdriver(self, venv_path=None, channel=None, browser_binary=None):
@@ -746,8 +763,6 @@ class ChromeChromiumBase(Browser):
         if webdriver_binary is None:
             self.logger.warning("No valid webdriver supplied to detect version.")
             return None
-        if uname[0] == "Windows":
-            return _get_fileversion(webdriver_binary, self.logger)
 
         try:
             version_string = call(webdriver_binary, "--version").strip()
@@ -864,11 +879,19 @@ class Chrome(ChromeChromiumBase):
 
     product = "chrome"
 
+    @property
+    def _chromedriver_api_platform_string(self):
+        """chromedriver.storage.googleapis.com has a different filename for M1 binary,
+        while the snapshot URL has a different directory but the same filename."""
+        if self.platform == "Mac" and uname.machine == "arm64":
+            return "mac64_m1"
+        return self._chromedriver_platform_string
+
     def _get_webdriver_url(self, version):
         """Get a ChromeDriver API URL to download a version of ChromeDriver that matches
         the browser binary version. Version selection is described here:
         https://chromedriver.chromium.org/downloads/version-selection"""
-        filename = f"chromedriver_{self._chromedriver_platform_string}.zip"
+        filename = f"chromedriver_{self._chromedriver_api_platform_string}.zip"
 
         version = self._remove_version_suffix(version)
 
@@ -886,6 +909,7 @@ class Chrome(ChromeChromiumBase):
                 # We currently use the latest Chromium revision to get a compatible Chromedriver
                 # version for Chrome Dev, since it is not available through the ChromeDriver API.
                 # If we've gotten to this point, it is assumed that this is Chrome Dev.
+                filename = f"chromedriver_{self._chromedriver_platform_string}.zip"
                 revision = self._get_chromium_revision(filename, version)
                 return self._build_snapshots_url(revision, filename)
         return f"https://chromedriver.storage.googleapis.com/{latest}/{filename}"
@@ -910,9 +934,14 @@ class Chrome(ChromeChromiumBase):
                 suffix = " " + channel.capitalize()
             return f"/Applications/Google Chrome{suffix}.app/Contents/MacOS/Google Chrome{suffix}"
         if uname[0] == "Windows":
-            path = os.path.expandvars(r"$SYSTEMDRIVE\Program Files (x86)\Google\Chrome\Application\chrome.exe")
-            if not os.path.exists(path):
-                path = os.path.expandvars(r"$SYSTEMDRIVE\Program Files\Google\Chrome\Application\chrome.exe")
+            name = "Chrome"
+            if channel == "beta":
+                name += " Beta"
+            elif channel == "dev":
+                name += " Dev"
+            path = os.path.expandvars(fr"$PROGRAMFILES\Google\{name}\Application\chrome.exe")
+            if channel == "canary":
+                path = os.path.expandvars(r"$LOCALAPPDATA\Google\Chrome SxS\Application\chrome.exe")
             return path
         self.logger.warning("Unable to find the browser binary.")
         return None
@@ -1421,10 +1450,200 @@ class Safari(Browser):
     product = "safari"
     requirements = "requirements_safari.txt"
 
-    def download(self, dest=None, channel=None, rename=None):
-        raise NotImplementedError
+    def _find_downloads(self):
+        def text_content(e, __output=None):
+            # this doesn't use etree.tostring so that we can add spaces for p and br
+            if __output is None:
+                __output = []
+
+            if e.tag == "p":
+                __output.append("\n\n")
+
+            if e.tag == "br":
+                __output.append("\n")
+
+            if e.text is not None:
+                __output.append(e.text)
+
+            for child in e:
+                text_content(child, __output)
+                if child.tail is not None:
+                    __output.append(child.tail)
+
+            return "".join(__output)
+
+        self.logger.info("Finding STP download URLs")
+        resp = get("https://developer.apple.com/safari/download/")
+
+        doc = html5lib.parse(
+            resp.content,
+            "etree",
+            namespaceHTMLElements=False,
+            transport_encoding=resp.encoding,
+        )
+        ascii_ws = re.compile(r"[\x09\x0A\x0C\x0D\x20]+")
+
+        downloads = []
+        for candidate in doc.iterfind(".//li[@class]"):
+            class_names = set(ascii_ws.split(candidate.attrib["class"]))
+            if {"download", "dmg", "zip"} & class_names:
+                downloads.append(candidate)
+
+        # Note we use \s throughout for space as we don't care what form the whitespace takes
+        stp_link_text = re.compile(
+            r"^\s*Safari\s+Technology\s+Preview\s+(?:[0-9]+\s+)?for\s+macOS"
+        )
+        requirement = re.compile(
+            r"""(?x)  # (extended regexp syntax for comments)
+            ^\s*Requires\s+macOS\s+  # Starting with the magic string
+            ([0-9\.]+)  # A macOS version number of numbers and dots
+            (?:\s+beta(?:\s+[0-9]+)?)?  # Optionally a beta, itself optionally with a number (no dots!)
+            (?:\s+or\s+later)?  # Optionally an 'or later'
+            \.\s*$  # Ending with a literal dot
+            """
+        )
+
+        stp_downloads = []
+        for download in downloads:
+            for link in download.iterfind(".//a[@href]"):
+                if stp_link_text.search(text_content(link)):
+                    break
+                else:
+                    self.logger.debug("non-matching anchor: " + text_content(link))
+            else:
+                continue
+
+            for el in download.iter():
+                # avoid assuming any given element here, just assume it is a single element
+                m = requirement.search(text_content(el))
+                if m:
+                    version = m.group(1)
+
+                    # This assumes the current macOS numbering, whereby X.Y is compatible
+                    # with X.(Y+1), e.g. 12.4 is compatible with 12.3, but 13.0 isn't
+                    # compatible with 12.3.
+                    if version.count(".") >= (2 if version.startswith("10.") else 1):
+                        spec = SpecifierSet(f"~={version}")
+                    else:
+                        spec = SpecifierSet(f"=={version}.*")
+
+                    stp_downloads.append((spec, link.attrib["href"]))
+                    break
+            else:
+                self.logger.debug(
+                    "Found a link but no requirement: " + text_content(download)
+                )
+
+        if stp_downloads:
+            self.logger.info(
+                "Found STP URLs for macOS " +
+                ", ".join(str(dl[0]) for dl in stp_downloads)
+            )
+        else:
+            self.logger.warning("Did not find any STP URLs")
+
+        return stp_downloads
+
+    def _download_image(self, downloads, dest, system_version=None):
+        if system_version is None:
+            system_version, _, _ = platform.mac_ver()
+
+        chosen_url = None
+        for version_spec, url in downloads:
+            if system_version in version_spec:
+                self.logger.debug(f"Will download Safari for {version_spec}")
+                chosen_url = url
+                break
+
+        if chosen_url is None:
+            raise ValueError(f"no download for {system_version}")
+
+        self.logger.info(f"Downloading Safari from {chosen_url}")
+        resp = get(chosen_url)
+
+        filename = get_download_filename(resp, "SafariTechnologyPreview.dmg")
+        installer_path = os.path.join(dest, filename)
+        with open(installer_path, "wb") as f:
+            f.write(resp.content)
+
+        return installer_path
+
+    def _download_extract(self, image_path, dest, rename=None):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.logger.debug(f"Mounting {image_path}")
+            r = subprocess.run(
+                [
+                    "hdiutil",
+                    "attach",
+                    "-readonly",
+                    "-mountpoint",
+                    tmpdir,
+                    "-nobrowse",
+                    "-verify",
+                    "-noignorebadchecksums",
+                    "-autofsck",
+                    image_path,
+                ],
+                encoding="utf-8",
+                capture_output=True,
+                check=True,
+            )
+
+            mountpoint = None
+            for line in r.stdout.splitlines():
+                if not line.startswith("/dev/"):
+                    continue
+
+                _, _, mountpoint = line.split("\t", 2)
+                if mountpoint:
+                    break
+
+            if mountpoint is None:
+                raise ValueError("no volume mounted from image")
+
+            pkgs = [p for p in os.listdir(mountpoint) if p.endswith((".pkg", ".mpkg"))]
+            if len(pkgs) != 1:
+                raise ValueError(
+                    f"Expected a single .pkg/.mpkg, found {len(pkgs)}: {', '.join(pkgs)}"
+                )
+
+            source_path = os.path.join(mountpoint, pkgs[0])
+            dest_path = os.path.join(
+                dest, (rename + get_ext(pkgs[0])) if rename is not None else pkgs[0]
+            )
+
+            self.logger.debug(f"Copying {source_path} to {dest_path}")
+            shutil.copy2(
+                source_path,
+                dest_path,
+            )
+
+            self.logger.debug(f"Unmounting {mountpoint}")
+            subprocess.run(
+                ["hdiutil", "detach", mountpoint],
+                encoding="utf-8",
+                capture_output=True,
+                check=True,
+            )
+
+        return dest_path
+
+    def download(self, dest=None, channel="preview", rename=None, system_version=None):
+        if channel != "preview":
+            raise ValueError(f"can only install 'preview', not '{channel}'")
+
+        if dest is None:
+            dest = self._get_browser_binary_dir(None, channel)
+
+        stp_downloads = self._find_downloads()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            image_path = self._download_image(stp_downloads, tmpdir, system_version)
+            return self._download_extract(image_path, dest, rename)
 
     def install(self, dest=None, channel=None):
+        # We can't do this because stable/beta releases are system components and STP
+        # requires admin permissions to install.
         raise NotImplementedError
 
     def find_binary(self, venv_path=None, channel=None):

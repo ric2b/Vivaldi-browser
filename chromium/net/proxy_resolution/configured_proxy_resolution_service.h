@@ -34,7 +34,6 @@
 #include "url/gurl.h"
 
 namespace base {
-class SequencedTaskRunner;
 class TimeDelta;
 }  // namespace base
 
@@ -88,7 +87,7 @@ class NET_EXPORT ConfiguredProxyResolutionService
       MODE_START_AFTER_ACTIVITY,
     };
 
-    virtual ~PacPollPolicy() {}
+    virtual ~PacPollPolicy() = default;
 
     // Decides the next poll delay. |current_delay| is the delay used
     // by the preceding poll, or a negative TimeDelta value if determining
@@ -202,9 +201,9 @@ class NET_EXPORT ConfiguredProxyResolutionService
 
   // Convenience methods that creates a proxy service using the
   // specified fixed settings.
-  static std::unique_ptr<ConfiguredProxyResolutionService> CreateFixed(
+  static std::unique_ptr<ConfiguredProxyResolutionService> CreateFixedForTest(
       const ProxyConfigWithAnnotation& pc);
-  static std::unique_ptr<ConfiguredProxyResolutionService> CreateFixed(
+  static std::unique_ptr<ConfiguredProxyResolutionService> CreateFixedForTest(
       const std::string& proxy,
       const NetworkTrafficAnnotationTag& traffic_annotation);
 
@@ -217,26 +216,16 @@ class NET_EXPORT ConfiguredProxyResolutionService
   // |pac_string| is a list of proxy servers, in the format that a PAC script
   // would return it. For example, "PROXY foobar:99; SOCKS fml:2; DIRECT"
   static std::unique_ptr<ConfiguredProxyResolutionService>
-  CreateFixedFromPacResult(
+  CreateFixedFromPacResultForTest(
       const std::string& pac_string,
       const NetworkTrafficAnnotationTag& traffic_annotation);
 
-  // Same as CreateFixedFromPacResult(), except the resulting ProxyInfo from
-  // resolutions will be tagged as having been auto-detected.
+  // Same as CreateFixedFromPacResultForTest(), except the resulting ProxyInfo
+  // from resolutions will be tagged as having been auto-detected.
   static std::unique_ptr<ConfiguredProxyResolutionService>
-  CreateFixedFromAutoDetectedPacResult(
+  CreateFixedFromAutoDetectedPacResultForTest(
       const std::string& pac_string,
       const NetworkTrafficAnnotationTag& traffic_annotation);
-
-  // Creates a config service appropriate for this platform that fetches the
-  // system proxy settings. |main_task_runner| is the thread where the consumer
-  // of the ProxyConfigService will live.
-  //
-  // TODO(mmenke): Should this be a member of ProxyConfigService?
-  // The ConfiguredProxyResolutionService may not even be in the same process as
-  // the system ProxyConfigService.
-  static std::unique_ptr<ProxyConfigService> CreateSystemProxyConfigService(
-      const scoped_refptr<base::SequencedTaskRunner>& main_task_runner);
 
   // This method should only be used by unit tests.
   void set_stall_proxy_auto_config_delay(base::TimeDelta delay) {

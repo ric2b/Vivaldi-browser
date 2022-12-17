@@ -11,7 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
-#include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/services/assistant/public/shared/constants.h"
 #include "net/base/url_util.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
@@ -83,14 +83,14 @@ void SearchAndAssistantEnabledChecker::OnSimpleURLLoaderComplete(
 
 void SearchAndAssistantEnabledChecker::OnJsonParsed(
     data_decoder::DataDecoder::ValueOrError response) {
-  if (!response.value) {
-    LOG(ERROR) << "JSON parsing failed: " << *response.error;
+  if (!response.has_value()) {
+    LOG(ERROR) << "JSON parsing failed: " << response.error();
     delegate_->OnError();
     return;
   }
 
   // |result| is true if the Search and Assistant bit is disabled.
-  auto is_disabled = response.value->FindBoolPath("result");
+  auto is_disabled = response->FindBoolPath("result");
 
   delegate_->OnSearchAndAssistantStateReceived(is_disabled.value());
 }

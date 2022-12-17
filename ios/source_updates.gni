@@ -1,0 +1,46 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+update_template_instance("//ios/chrome/app/resources:launchscreen_xib") {
+  source = "//vivaldi/ios/app/resources/LaunchScreen.xib"
+}
+
+update_target("//ios/chrome/browser/ui/bookmarks:bookmarks_ui") {
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller+vivaldi.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller+vivaldi.mm",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/browser_view:browser_view") {
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h",
+    "//vivaldi/ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.mm",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants") {
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h",
+    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.mm",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui") {
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h",
+    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.mm",
+  ]
+}
+
+update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension_swift") {
+  sources -= [
+    "main.swift",
+    "search_widget.swift",
+    "quick_actions_widget.swift"
+  ]
+  sources += [
+    "//vivaldi/ios/chrome/widget_kit_extension/main.swift",
+    "//vivaldi/ios/chrome/widget_kit_extension/search_widget.swift",
+    "//vivaldi/ios/chrome/widget_kit_extension/quick_actions_widget.swift",
+  ]
+}

@@ -27,10 +27,10 @@
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "components/favicon/core/large_icon_service.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -101,9 +101,8 @@ AppServiceAppResult::~AppServiceAppResult() = default;
 
 void AppServiceAppResult::Open(int event_flags) {
   Launch(event_flags,
-         (is_recommendation()
-              ? apps::mojom::LaunchSource::kFromAppListRecommendation
-              : apps::mojom::LaunchSource::kFromAppListQuery));
+         (is_recommendation() ? apps::LaunchSource::kFromAppListRecommendation
+                              : apps::LaunchSource::kFromAppListQuery));
 }
 
 void AppServiceAppResult::GetContextMenuModel(GetMenuModelCallback callback) {
@@ -155,11 +154,11 @@ AppContextMenu* AppServiceAppResult::GetAppContextMenu() {
 }
 
 void AppServiceAppResult::ExecuteLaunchCommand(int event_flags) {
-  Launch(event_flags, apps::mojom::LaunchSource::kFromAppListQueryContextMenu);
+  Launch(event_flags, apps::LaunchSource::kFromAppListQueryContextMenu);
 }
 
 void AppServiceAppResult::Launch(int event_flags,
-                                 apps::mojom::LaunchSource launch_source) {
+                                 apps::LaunchSource launch_source) {
   if (id() == ash::kInternalAppIdContinueReading &&
       url_for_continuous_reading_.is_valid()) {
     apps::RecordAppLaunch(id(), launch_source);
@@ -209,8 +208,15 @@ void AppServiceAppResult::Launch(int event_flags,
     }
   }
 
-  proxy->Launch(app_id(), event_flags, launch_source,
-                apps::MakeWindowInfo(controller()->GetAppListDisplayId()));
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    proxy->Launch(app_id(), event_flags, launch_source,
+                  std::make_unique<apps::WindowInfo>(
+                      controller()->GetAppListDisplayId()));
+  } else {
+    proxy->Launch(app_id(), event_flags,
+                  apps::ConvertLaunchSourceToMojomLaunchSource(launch_source),
+                  apps::MakeWindowInfo(controller()->GetAppListDisplayId()));
+  }
 }
 
 // TODO(crbug.com/1258415): Remove this method when the productivity launcher is
@@ -233,21 +239,11 @@ void AppServiceAppResult::CallLoadIcon(bool chip, bool allow_placeholder_icon) {
   // If |icon_loader_releaser_| is non-null, assigning to it will signal to
   // |icon_loader_| that the previous icon is no longer being used, as a hint
   // that it could be flushed from any caches.
-  const int dimension = GetIconDimension(chip);
-  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    icon_loader_releaser_ = icon_loader_->LoadIcon(
-        app_type_, app_id(), apps::IconType::kStandard, dimension,
-        allow_placeholder_icon,
-        base::BindOnce(&AppServiceAppResult::OnLoadIcon,
-                       weak_ptr_factory_.GetWeakPtr(), chip));
-  } else {
-    icon_loader_releaser_ = icon_loader_->LoadIcon(
-        apps::ConvertAppTypeToMojomAppType(app_type_), app_id(),
-        apps::mojom::IconType::kStandard, dimension, allow_placeholder_icon,
-        apps::MojomIconValueToIconValueCallback(
-            base::BindOnce(&AppServiceAppResult::OnLoadIcon,
-                           weak_ptr_factory_.GetWeakPtr(), chip)));
-  }
+  icon_loader_releaser_ = icon_loader_->LoadIcon(
+      app_type_, app_id(), apps::IconType::kStandard, GetIconDimension(chip),
+      allow_placeholder_icon,
+      base::BindOnce(&AppServiceAppResult::OnLoadIcon,
+                     weak_ptr_factory_.GetWeakPtr(), chip));
 }
 
 void AppServiceAppResult::OnLoadIcon(bool chip, apps::IconValuePtr icon_value) {

@@ -24,7 +24,6 @@ constexpr char kEmailId[] = "test@example.com";
 constexpr char kGaiaId[] = "12345";
 
 constexpr char kExampleUrl[] = "https://example.com";
-constexpr char kExampleUrl2[] = "https://example2.com";
 }  // namespace
 
 class DlpFilesPolicyServiceProviderTest
@@ -99,6 +98,8 @@ class DlpFilesPolicyServiceProviderTest
     auto dlp_rules_manager =
         std::make_unique<testing::StrictMock<policy::MockDlpRulesManager>>();
     mock_rules_manager_ = dlp_rules_manager.get();
+    ON_CALL(*mock_rules_manager_, IsFilesPolicyEnabled)
+        .WillByDefault(testing::Return(true));
     return dlp_rules_manager;
   }
 
@@ -119,27 +120,6 @@ INSTANTIATE_TEST_SUITE_P(
     DlpFilesPolicyServiceProviderTest,
     ::testing::Values(policy::DlpRulesManager::Level::kAllow,
                       policy::DlpRulesManager::Level::kBlock));
-
-TEST_P(DlpFilesPolicyServiceProviderTest, IsRestricted) {
-  dlp::IsRestrictedRequest request;
-  request.add_source_urls(kExampleUrl);
-  request.set_destination_url(kExampleUrl2);
-
-  policy::DlpRulesManager::Level level = GetParam();
-  EXPECT_CALL(
-      *mock_rules_manager_,
-      IsRestrictedDestination(GURL(kExampleUrl), GURL(kExampleUrl2),
-                              policy::DlpRulesManager::Restriction::kFiles,
-                              testing::_, testing::_))
-      .WillOnce(testing::Return(level));
-
-  auto response = CallDlpFilesPolicyServiceMethod<dlp::IsRestrictedResponse>(
-      dlp::kDlpFilesPolicyServiceIsRestrictedMethod, request);
-  ASSERT_TRUE(response.has_value());
-  ASSERT_TRUE(response->has_restricted());
-  EXPECT_EQ(response->restricted(),
-            (level == policy::DlpRulesManager::Level::kBlock));
-}
 
 TEST_P(DlpFilesPolicyServiceProviderTest, IsDlpPolicyMatched) {
   dlp::IsDlpPolicyMatchedRequest request;

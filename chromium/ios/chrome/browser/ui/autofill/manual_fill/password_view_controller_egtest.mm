@@ -127,6 +127,11 @@ id<GREYMatcher> CancelUsingOtherPasswordButton() {
 // Tests that the passwords view controller contains the "Manage Passwords..."
 // action.
 - (void)testPasswordsViewControllerContainsManagePasswordsAction {
+  // TODO(crbug.com/1352059): Re-enable when flake fixed.
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Test flaky failing on iPad.")
+  }
+
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:TapWebElementWithId(kFormElementUsername)];
@@ -141,7 +146,8 @@ id<GREYMatcher> CancelUsingOtherPasswordButton() {
 }
 
 // Tests that the "Manage Passwords..." action works.
-- (void)testManagePasswordsActionOpensPasswordSettings {
+// TODO(crbug.com/1350308): Test is flaky.
+- (void)DISABLED_testManagePasswordsActionOpensPasswordSettings {
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:TapWebElementWithId(kFormElementUsername)];
@@ -154,16 +160,11 @@ id<GREYMatcher> CancelUsingOtherPasswordButton() {
   [[EarlGrey selectElementWithMatcher:ManualFallbackManagePasswordsMatcher()]
       performAction:grey_tap()];
 
-  if ([ChromeEarlGrey isAddCredentialsInSettingsEnabled]) {
-    // Verify the password settings opened.
-    // Changed minimum visible percentage to 70% for Passwords table view in
-    // settings because subviews cover > 25% in smaller screens(eg. iPhone 6s).
-    [[EarlGrey selectElementWithMatcher:SettingsPasswordMatcher()]
-        assertWithMatcher:grey_minimumVisiblePercent(0.7)];
-  } else {
-    [[EarlGrey selectElementWithMatcher:SettingsPasswordMatcher()]
-        assertWithMatcher:grey_sufficientlyVisible()];
-  }
+  // Verify the password settings opened.
+  // Changed minimum visible percentage to 70% for Passwords table view in
+  // settings because subviews cover > 25% in smaller screens(eg. iPhone 6s).
+  [[EarlGrey selectElementWithMatcher:SettingsPasswordMatcher()]
+      assertWithMatcher:grey_minimumVisiblePercent(0.7)];
 }
 
 // Tests that returning from "Manage Passwords..." leaves the keyboard and the
@@ -308,7 +309,8 @@ id<GREYMatcher> CancelUsingOtherPasswordButton() {
 }
 
 // Tests that the Password View Controller is not present when presenting UI.
-- (void)testPasswordControllerPauses {
+// TODO(crbug.com/1350323): Test is flaky.
+- (void)DISABLED_testPasswordControllerPauses {
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:TapWebElementWithId(kFormElementUsername)];

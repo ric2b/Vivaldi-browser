@@ -57,8 +57,9 @@ bool NodesMatch(const NoteNode* node_a, const NoteNode* node_b) {
   DCHECK(node_b->parent());
   if (node_a->parent()->GetIndexOf(node_a) !=
       node_b->parent()->GetIndexOf(node_b)) {
-    LOG(ERROR) << "Index mismatch: " << node_a->parent()->GetIndexOf(node_a)
-               << " vs. " << node_b->parent()->GetIndexOf(node_b);
+    LOG(ERROR) << "Index mismatch: "
+               << node_a->parent()->GetIndexOf(node_a).value()
+               << " vs. " << node_b->parent()->GetIndexOf(node_b).value();
     return false;
   }
   return true;
@@ -93,7 +94,7 @@ void FindNodeInVerifier(NotesModel* foreign_model,
   std::stack<size_t> path;
   const NoteNode* walker = foreign_node;
   while (walker != foreign_model->root_node()) {
-    path.push(walker->parent()->GetIndexOf(walker));
+    path.push(walker->parent()->GetIndexOf(walker).value());
     walker = walker->parent();
   }
 

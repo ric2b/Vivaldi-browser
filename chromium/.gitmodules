@@ -159,7 +159,7 @@
 	url = ../deps/libjpeg_turbo.git
 [submodule "third_party/libjxl/src"]
 	path = third_party/libjxl/src
-	url = ../../external/gitlab.com/wg1/jpeg-xl.git
+	url = ../../external/github.com/libjxl/libjxl.git
 [submodule "third_party/liblouis/src"]
 	path = third_party/liblouis/src
 	url = ../../external/liblouis-github.git
@@ -178,6 +178,9 @@
 [submodule "third_party/libwebm/source"]
 	path = third_party/libwebm/source
 	url = ../../webm/libwebm.git
+[submodule "third_party/libwebp/src"]
+	path = third_party/libwebp/src
+	url = ../../webm/libwebp.git
 [submodule "third_party/libyuv"]
 	path = third_party/libyuv
 	url = ../../libyuv/libyuv.git

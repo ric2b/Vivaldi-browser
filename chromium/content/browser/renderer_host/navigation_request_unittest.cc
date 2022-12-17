@@ -76,7 +76,7 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
     CreateNavigationHandle();
-    contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
+    contents()->GetPrimaryMainFrame()->InitializeRenderFrameIfNeeded();
   }
 
   void TearDown() override {
@@ -210,7 +210,7 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
         false /* was_opener_suppressed */, nullptr /* initiator_frame_token */,
         ChildProcessHost::kInvalidUniqueID /* initiator_process_id */,
         std::string() /* extra_headers */, nullptr /* frame_entry */,
-        nullptr /* entry */, nullptr /* post_body */,
+        nullptr /* entry */, false /* is_form_submission */,
         nullptr /* navigation_ui_data */, absl::nullopt /* impression */,
         false /* is_pdf */);
     main_test_rfh()->frame_tree_node()->CreatedNavigationRequest(
@@ -229,6 +229,7 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
         TestRenderFrameHost::CreateStubFrameRemote(),
         TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
         TestRenderFrameHost::CreateStubPolicyContainerBindParams(),
+        TestRenderFrameHost::CreateStubAssociatedInterfaceProviderReceiver(),
         blink::mojom::TreeScopeType::kDocument, std::string(), "uniqueName0",
         false, blink::LocalFrameToken(), base::UnguessableToken::Create(),
         frame_policy, blink::mojom::FrameOwnerProperties(), false, owner_type,
@@ -702,7 +703,10 @@ TEST_F(NavigationRequestTest, NoDnsAliases) {
 TEST_F(NavigationRequestTest, StorageKeyToCommit) {
   TestRenderFrameHost* child_document = static_cast<TestRenderFrameHost*>(
       content::RenderFrameHostTester::For(main_rfh())->AppendChild(""));
-  child_document->frame_tree_node()->SetAnonymous(true);
+  auto attributes = child_document->frame_tree_node()->attributes_->Clone();
+  // Set |anonymous| to true.
+  attributes->anonymous = true;
+  child_document->frame_tree_node()->SetAttributes(std::move(attributes));
 
   const GURL kUrl = GURL("http://chromium.org");
   auto navigation =
@@ -711,18 +715,17 @@ TEST_F(NavigationRequestTest, StorageKeyToCommit) {
   NavigationRequest* request =
       NavigationRequest::From(navigation->GetNavigationHandle());
   EXPECT_TRUE(request->commit_params().storage_key.nonce().has_value());
-  EXPECT_EQ(child_document->GetMainFrame()->GetPage().anonymous_iframes_nonce(),
+  EXPECT_EQ(child_document->GetMainFrame()->anonymous_iframes_nonce(),
             request->commit_params().storage_key.nonce().value());
 
   navigation->Commit();
   child_document =
       static_cast<TestRenderFrameHost*>(navigation->GetFinalRenderFrameHost());
-  EXPECT_TRUE(child_document->anonymous());
-  EXPECT_EQ(
-      blink::StorageKey::CreateWithNonce(
-          url::Origin::Create(kUrl),
-          child_document->GetMainFrame()->GetPage().anonymous_iframes_nonce()),
-      child_document->storage_key());
+  EXPECT_TRUE(child_document->IsAnonymous());
+  EXPECT_EQ(blink::StorageKey::CreateWithNonce(
+                url::Origin::Create(kUrl),
+                child_document->GetMainFrame()->anonymous_iframes_nonce()),
+            child_document->storage_key());
 }
 
 TEST_F(NavigationRequestTest,
@@ -730,19 +733,22 @@ TEST_F(NavigationRequestTest,
   auto* child_frame = static_cast<TestRenderFrameHost*>(
       content::RenderFrameHostTester::For(main_test_rfh())
           ->AppendChild("child"));
-  child_frame->frame_tree_node()->SetAnonymous(true);
+  auto attributes = child_frame->frame_tree_node()->attributes_->Clone();
+  // Set |anonymous| to true.
+  attributes->anonymous = true;
+  child_frame->frame_tree_node()->SetAttributes(std::move(attributes));
 
   std::unique_ptr<NavigationSimulator> navigation =
       NavigationSimulator::CreateRendererInitiated(
           GURL("https://example.com/navigation.html"), child_frame);
   navigation->ReadyToCommit();
 
-  EXPECT_EQ(main_test_rfh()->GetPage().anonymous_iframes_nonce(),
+  EXPECT_EQ(main_test_rfh()->anonymous_iframes_nonce(),
             static_cast<NavigationRequest*>(navigation->GetNavigationHandle())
                 ->isolation_info_for_subresources()
                 .network_isolation_key()
                 .GetNonce());
-  EXPECT_EQ(main_test_rfh()->GetPage().anonymous_iframes_nonce(),
+  EXPECT_EQ(main_test_rfh()->anonymous_iframes_nonce(),
             static_cast<NavigationRequest*>(navigation->GetNavigationHandle())
                 ->GetIsolationInfo()
                 .network_isolation_key()
@@ -790,13 +796,15 @@ TEST_F(NavigationRequestTest, IsolatedAppPolicyInjection) {
   // Validate CSP.
   EXPECT_EQ(1UL, policies.content_security_policies.size());
   const auto& csp = policies.content_security_policies[0];
-  EXPECT_EQ(6UL, csp->raw_directives.size());
+  EXPECT_EQ(7UL, csp->raw_directives.size());
   using Directive = network::mojom::CSPDirectiveName;
   EXPECT_EQ("'none'", csp->raw_directives[Directive::BaseURI]);
   EXPECT_EQ("'none'", csp->raw_directives[Directive::ObjectSrc]);
   EXPECT_EQ("'self'", csp->raw_directives[Directive::DefaultSrc]);
   EXPECT_EQ("'self' https:", csp->raw_directives[Directive::FrameSrc]);
   EXPECT_EQ("'self' https:", csp->raw_directives[Directive::ConnectSrc]);
+  EXPECT_EQ("'self' 'wasm-unsafe-eval'",
+            csp->raw_directives[Directive::ScriptSrc]);
   EXPECT_EQ("'script'", csp->raw_directives[Directive::RequireTrustedTypesFor]);
 }
 
@@ -821,7 +829,10 @@ class CSPEmbeddedEnforcementUnitTest : public NavigationRequestTest {
       std::vector<network::mojom::ContentSecurityPolicyPtr> policies;
       network::AddContentSecurityPolicyFromHeaders(
           *headers, GURL("https://example.com/"), &policies);
-      document->frame_tree_node()->set_csp_attribute(std::move(policies[0]));
+      auto attributes = document->frame_tree_node()->attributes_->Clone();
+      // Set csp value.
+      attributes->parsed_csp_attribute = std::move(policies[0]);
+      document->frame_tree_node()->SetAttributes(std::move(attributes));
     }
 
     // Chrome blocks a document navigating to a URL if more than one of its

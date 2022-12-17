@@ -68,9 +68,6 @@ std::string GLImplementationParts::ToString() const {
     case GLImplementation::kGLImplementationDesktopGLCoreProfile:
       s << "desktop-gl-core-profile";
       break;
-    case GLImplementation::kGLImplementationAppleGL:
-      s << "apple-gl";
-      break;
     case GLImplementation::kGLImplementationEGLGLES2:
       s << "egl-gles2";
       break;
@@ -133,10 +130,6 @@ const struct {
 } kGLImplementationNamePairs[] = {
     {kGLImplementationDesktopName, kANGLEImplementationNoneName,
      GLImplementationParts(kGLImplementationDesktopGL)},
-#if BUILDFLAG(IS_APPLE)
-    {kGLImplementationAppleName, kANGLEImplementationNoneName,
-     GLImplementationParts(kGLImplementationAppleGL)},
-#endif
     {kGLImplementationEGLName, kANGLEImplementationNoneName,
      GLImplementationParts(kGLImplementationEGLGLES2)},
     {kGLImplementationANGLEName, kANGLEImplementationNoneName,
@@ -193,6 +186,12 @@ GLGetProcAddressProc g_get_proc_address;
 
 void CleanupNativeLibraries(void* due_to_fallback) {
   if (g_libraries) {
+#if BUILDFLAG(IS_MAC)
+    // Mac `NativeLibrary` is heap-allocated, so always unload to ensure they're
+    // freed.
+    for (auto* library : *g_libraries)
+      base::UnloadNativeLibrary(library);
+#else
     // We do not call base::UnloadNativeLibrary() for these libraries as
     // unloading libGL without closing X display is not allowed. See
     // https://crbug.com/250813 for details.
@@ -207,6 +206,7 @@ void CleanupNativeLibraries(void* due_to_fallback) {
       for (auto* library : *g_libraries)
         base::UnloadNativeLibrary(library);
     }
+#endif  // BUILDFLAG(IS_MAC)
     delete g_libraries;
     g_libraries = nullptr;
   }
@@ -365,8 +365,7 @@ ANGLEImplementation GetANGLEImplementation() {
 
 bool HasDesktopGLFeatures() {
   return kGLImplementationDesktopGL == g_gl_implementation.gl ||
-         kGLImplementationDesktopGLCoreProfile == g_gl_implementation.gl ||
-         kGLImplementationAppleGL == g_gl_implementation.gl;
+         kGLImplementationDesktopGLCoreProfile == g_gl_implementation.gl;
 }
 
 void AddGLNativeLibrary(base::NativeLibrary library) {

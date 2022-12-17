@@ -6,10 +6,13 @@
 
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -30,11 +33,15 @@
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/navigation_handle.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -74,6 +81,7 @@ constexpr int kGridItemTopInset = 12;
 constexpr int kGridItemInset = 2;
 constexpr int kGridItemInteriorPadding = 8;
 constexpr int kGridItemBorderRadius = 4;
+constexpr int kGridItemGroupId = 1;
 
 bool IsKeyboardCodeArrow(ui::KeyboardCode key_code) {
   return key_code == ui::VKEY_UP || key_code == ui::VKEY_DOWN ||
@@ -88,7 +96,8 @@ bool IsDoubleClick(const ui::Event& event) {
 
 // Callback for when an app is selected in the app list. First parameter is the
 // index, second parameter is true if the dialog should be immediately accepted.
-using AppSelectedCallback = base::RepeatingCallback<void(size_t, bool)>;
+using AppSelectedCallback =
+    base::RepeatingCallback<void(absl::optional<size_t>, bool)>;
 
 // Grid view:
 
@@ -96,12 +105,18 @@ using AppSelectedCallback = base::RepeatingCallback<void(size_t, bool)>;
 // apps.
 class IntentPickerAppGridButton : public views::Button {
  public:
+  // Callback for when this app is selected. Parameter is true if the dialog
+  // should be immediately accepted.
+  using ButtonSelectedCallback = base::RepeatingCallback<void(bool)>;
+
   METADATA_HEADER(IntentPickerAppGridButton);
 
-  IntentPickerAppGridButton(PressedCallback callback,
+  IntentPickerAppGridButton(ButtonSelectedCallback selected_callback,
                             const ui::ImageModel& icon_model,
                             const std::string& display_name)
-      : views::Button(std::move(callback)) {
+      : views::Button(base::BindRepeating(&IntentPickerAppGridButton::OnPressed,
+                                          base::Unretained(this))),
+        selected_callback_(std::move(selected_callback)) {
     auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical,
         gfx::Insets::TLBR(kGridItemTopInset, kGridItemInset, kGridItemInset,
@@ -127,6 +142,8 @@ class IntentPickerAppGridButton : public views::Button {
     SetFocusBehavior(FocusBehavior::ALWAYS);
     SetAccessibleName(name_label->GetText());
     SetPreferredSize(gfx::Size(kGridItemPreferredSize, kGridItemPreferredSize));
+
+    SetGroup(kGridItemGroupId);
   }
   IntentPickerAppGridButton(const IntentPickerAppGridButton&) = delete;
   IntentPickerAppGridButton& operator=(const IntentPickerAppGridButton&) =
@@ -136,10 +153,42 @@ class IntentPickerAppGridButton : public views::Button {
   void SetSelected(bool selected) {
     selected_ = selected;
     UpdateBackground();
+    NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged, true);
   }
 
   // views::Button:
   void StateChanged(ButtonState old_state) override { UpdateBackground(); }
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    Button::GetAccessibleNodeData(node_data);
+    node_data->role = ax::mojom::Role::kRadioButton;
+    node_data->SetCheckedState(selected_ ? ax::mojom::CheckedState::kTrue
+                                         : ax::mojom::CheckedState::kFalse);
+  }
+  bool IsGroupFocusTraversable() const override { return false; }
+  views::View* GetSelectedViewForGroup(int group) override {
+    if (group != kGridItemGroupId)
+      return nullptr;
+
+    Views siblings = parent()->children();
+    auto it = base::ranges::find_if(siblings, [](auto* v) {
+      return static_cast<IntentPickerAppGridButton*>(v)->selected_;
+    });
+
+    return it != siblings.end() ? *it : nullptr;
+  }
+  void OnFocus() override {
+    Button::OnFocus();
+    if (select_on_focus_)
+      selected_callback_.Run(false);
+  }
+  bool HandleAccessibleAction(const ui::AXActionData& action_data) override {
+    if (action_data.action == ax::mojom::Action::kFocus) {
+      base::AutoReset<bool> reset(&select_on_focus_, false);
+      RequestFocus();
+      return true;
+    }
+    return Button::HandleAccessibleAction(action_data);
+  }
 
  private:
   void UpdateBackground() {
@@ -157,7 +206,16 @@ class IntentPickerAppGridButton : public views::Button {
         views::CreateThemedRoundedRectBackground(color, kGridItemBorderRadius));
   }
 
+  void OnPressed(const ui::Event& event) {
+    bool should_open = IsDoubleClick(event) ||
+                       (event.IsKeyEvent() &&
+                        event.AsKeyEvent()->key_code() == ui::VKEY_RETURN);
+    selected_callback_.Run(should_open);
+  }
+
   bool selected_ = false;
+  bool select_on_focus_ = true;
+  ButtonSelectedCallback selected_callback_;
 };
 
 BEGIN_METADATA(IntentPickerAppGridButton, views::Button)
@@ -212,8 +270,9 @@ class IntentPickerAppGridView
 
     for (size_t i = 0; i < apps.size(); i++) {
       auto app_button = std::make_unique<IntentPickerAppGridButton>(
-          base::BindRepeating(&IntentPickerAppGridView::OnAppPressed,
-                              base::Unretained(this), i),
+          base::BindRepeating(
+              &IntentPickerAppGridView::SetSelectedIndexInternal,
+              base::Unretained(this), i),
           apps[i].icon_model, apps[i].display_name);
       table_view->AddChildView(std::move(app_button));
     }
@@ -224,22 +283,32 @@ class IntentPickerAppGridView
     ClipHeightTo(kGridItemPreferredSize, kGridItemPreferredSize * 2.5f);
   }
 
-  void SetSelectedIndex(size_t index) override {
+  void SetSelectedIndex(absl::optional<size_t> index) override {
     SetSelectedIndexInternal(index, false);
   }
 
-  size_t GetSelectedIndex() const override { return selected_app_index_; }
-
- private:
-  void OnAppPressed(size_t index, const ui::Event& event) {
-    SetSelectedIndexInternal(index, IsDoubleClick(event));
+  absl::optional<size_t> GetSelectedIndex() const override {
+    return selected_app_index_;
   }
 
-  void SetSelectedIndexInternal(size_t index, bool accepted) {
-    GetButtonAtIndex(selected_app_index_)->SetSelected(false);
-    selected_app_index_ = index;
-    GetButtonAtIndex(selected_app_index_)->SetSelected(true);
-    selected_callback_.Run(index, accepted);
+ private:
+  void SetSelectedIndexInternal(absl::optional<size_t> new_index,
+                                bool accepted) {
+    if (selected_app_index_.has_value()) {
+      GetButtonAtIndex(selected_app_index_.value())->SetSelected(false);
+    }
+    if (new_index.has_value()) {
+      GetButtonAtIndex(new_index.value())->SetSelected(true);
+    }
+
+    if (selected_app_index_.has_value() && new_index.has_value() &&
+        GetButtonAtIndex(selected_app_index_.value())->HasFocus()) {
+      GetButtonAtIndex(new_index.value())->RequestFocus();
+    }
+
+    selected_app_index_ = new_index;
+
+    selected_callback_.Run(new_index, accepted);
   }
 
   IntentPickerAppGridButton* GetButtonAtIndex(size_t index) {
@@ -249,11 +318,11 @@ class IntentPickerAppGridView
 
   AppSelectedCallback selected_callback_;
 
-  size_t selected_app_index_ = 0;
+  absl::optional<size_t> selected_app_index_ = 0;
 };
 
 BEGIN_METADATA(IntentPickerAppGridView, views::ScrollView)
-ADD_PROPERTY_METADATA(size_t, SelectedIndex)
+ADD_PROPERTY_METADATA(absl::optional<size_t>, SelectedIndex)
 END_METADATA
 
 // List view:
@@ -333,11 +402,15 @@ class IntentPickerAppListView
 
   ~IntentPickerAppListView() override = default;
 
-  void SetSelectedIndex(size_t index) override {
-    SetSelectedAppIndex(index, nullptr);
+  void SetSelectedIndex(absl::optional<size_t> index) override {
+    DCHECK(index.has_value());  // List-style intent picker does not support
+                                // having no selection.
+    SetSelectedAppIndex(index.value(), nullptr);
   }
 
-  size_t GetSelectedIndex() const override { return selected_app_index_; }
+  absl::optional<size_t> GetSelectedIndex() const override {
+    return selected_app_index_;
+  }
 
   void OnKeyEvent(ui::KeyEvent* event) override {
     if (!IsKeyboardCodeArrow(event->key_code()) ||
@@ -414,7 +487,7 @@ class IntentPickerAppListView
 };
 
 BEGIN_METADATA(IntentPickerAppListView, views::ScrollView)
-ADD_PROPERTY_METADATA(size_t, SelectedIndex)
+ADD_PROPERTY_METADATA(absl::optional<size_t>, SelectedIndex)
 END_METADATA
 
 }  // namespace
@@ -452,8 +525,9 @@ views::Widget* IntentPickerBubbleView::ShowBubble(
   }
 
   DCHECK(intent_picker_bubble_->HasCandidates());
-  widget->Show();
-  intent_picker_bubble_->SetSelectedIndex(0);
+  intent_picker_bubble_->ShowForReason(DisplayReason::USER_GESTURE);
+
+  intent_picker_bubble_->SelectDefaultItem();
   return widget;
 }
 
@@ -472,9 +546,12 @@ void IntentPickerBubbleView::OnDialogAccepted() {
   bool should_persist = remember_selection_checkbox_ &&
                         remember_selection_checkbox_->GetChecked();
   auto selected_index = GetSelectedIndex();
-  RunCallbackAndCloseBubble(
-      app_info_[selected_index].launch_name, app_info_[selected_index].type,
-      apps::IntentPickerCloseReason::OPEN_APP, should_persist);
+  // Dialog cannot be accepted when there is no selection.
+  DCHECK(selected_index.has_value());
+  RunCallbackAndCloseBubble(app_info_[selected_index.value()].launch_name,
+                            app_info_[selected_index.value()].type,
+                            apps::IntentPickerCloseReason::OPEN_APP,
+                            should_persist);
 }
 
 void IntentPickerBubbleView::OnDialogCancelled() {
@@ -498,12 +575,19 @@ bool IntentPickerBubbleView::ShouldShowCloseButton() const {
   return true;
 }
 
-void IntentPickerBubbleView::SetSelectedIndex(size_t index) {
-  DCHECK_LT(index, app_info_.size());
-  apps_view_->SetSelectedIndex(index);
+void IntentPickerBubbleView::SelectDefaultItem() {
+  if (use_grid_view_ && app_info_.size() > 1) {
+    apps_view_->SetSelectedIndex(absl::nullopt);
+    // The default button is disabled in this case. Clear the focus so it
+    // returns to the window, as if there was no default button in the first
+    // place.
+    GetWidget()->GetFocusManager()->ClearFocus();
+  } else {
+    apps_view_->SetSelectedIndex(0);
+  }
 }
 
-size_t IntentPickerBubbleView::GetSelectedIndex() const {
+absl::optional<size_t> IntentPickerBubbleView::GetSelectedIndex() const {
   return apps_view_->GetSelectedIndex();
 }
 
@@ -576,10 +660,16 @@ void IntentPickerBubbleView::OnWidgetDestroying(views::Widget* widget) {
                             false);
 }
 
-void IntentPickerBubbleView::OnAppSelected(size_t index, bool accepted) {
-  UpdateCheckboxState(index);
+void IntentPickerBubbleView::OnAppSelected(absl::optional<size_t> index,
+                                           bool accepted) {
+  SetButtonEnabled(ui::DIALOG_BUTTON_OK, index.has_value());
+
+  if (index.has_value()) {
+    UpdateCheckboxState(index.value());
+  }
 
   if (accepted) {
+    DCHECK(index.has_value());
     AcceptDialog();
   }
 }
@@ -679,11 +769,7 @@ void IntentPickerBubbleView::RunCallbackAndCloseBubble(
   ClearIntentPickerBubbleView();
   if (!intent_picker_cb_.is_null()) {
     // Calling Run() will make |intent_picker_cb_| null.
-    // TODO(https://crbug.com/853604): Remove this and convert to a DCHECK
-    // after finding out the root cause.
-    if (should_persist && launch_name.empty()) {
-      base::debug::DumpWithoutCrashing();
-    }
+    DCHECK(!should_persist || !launch_name.empty());
     std::move(intent_picker_cb_)
         .Run(launch_name, entry_type, close_reason, should_persist);
   }

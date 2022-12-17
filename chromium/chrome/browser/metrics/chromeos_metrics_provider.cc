@@ -40,6 +40,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/metrics/metrics_service.h"
@@ -308,6 +309,17 @@ void ChromeOSMetricsProvider::WriteDemoModeDimensionMetrics(
   PrefService* pref = g_browser_process->local_state();
   std::string demo_country = pref->GetString(prefs::kDemoModeCountry);
   demo_mode_dimensions->set_country(demo_country);
+
+  metrics::SystemProfileProto_DemoModeDimensions_Retailer* retailer =
+      demo_mode_dimensions->mutable_retailer();
+  retailer->set_retailer_id(pref->GetString(prefs::kDemoModeRetailerId));
+  retailer->set_store_id(pref->GetString(prefs::kDemoModeStoreId));
+
+  if (chromeos::features::IsCloudGamingDeviceEnabled()) {
+    demo_mode_dimensions->add_customization_facet(
+        metrics::
+            SystemProfileProto_DemoModeDimensions_CustomizationFacet_CLOUD_GAMING_DEVICE);
+  }
 }
 
 void ChromeOSMetricsProvider::WriteLinkedAndroidPhoneProto(
@@ -384,7 +396,8 @@ void ChromeOSMetricsProvider::OnMachineStatisticsLoaded(
   // Structured metrics needs to know when full hardware class is available
   // since events should have full hardware class populated. Notify structured
   // metrics recorder that HWID is available to start sending events.
-  metrics::structured::Recorder::GetInstance()->OnHardwareClassInitialized();
+  metrics::structured::Recorder::GetInstance()->OnHardwareClassInitialized(
+      full_hardware_class_);
   std::move(callback).Run();
 }
 

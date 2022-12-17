@@ -17,6 +17,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_goog_media_constraints.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/peerconnection/media_stream_track_metrics.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver_impl.h"
@@ -152,23 +153,11 @@ class MODULES_EXPORT LocalRTCStatsRequest : public rtc::RefCountInterface {
 // the main render thread.
 class MODULES_EXPORT RTCPeerConnectionHandler {
  public:
-  enum class IceConnectionStateVersion {
-    // Only applicable in Unified Plan when the JavaScript-exposed
-    // iceConnectionState is calculated in blink. In this case, kLegacy is used
-    // to report the webrtc::PeerConnectionInterface implementation which is not
-    // visible in JavaScript, but still useful to track for debugging purposes.
-    kLegacy,
-    // The JavaScript-visible iceConnectionState. In Plan B, this is the same as
-    // the webrtc::PeerConnectionInterface implementation.
-    kDefault,
-  };
-
   RTCPeerConnectionHandler(
       RTCPeerConnectionHandlerClient* client,
       blink::PeerConnectionDependencyFactory* dependency_factory,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      bool force_encoded_audio_insertable_streams,
-      bool force_encoded_video_insertable_streams);
+      bool encoded_insertable_streams);
 
   RTCPeerConnectionHandler(const RTCPeerConnectionHandler&) = delete;
   RTCPeerConnectionHandler& operator=(const RTCPeerConnectionHandler&) = delete;
@@ -179,15 +168,14 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   bool InitializeForTest(
       const webrtc::PeerConnectionInterface::RTCConfiguration&
           server_configuration,
-      const MediaConstraints& options,
       PeerConnectionTracker* peer_connection_tracker,
       ExceptionState& exception_state);
 
-  // RTCPeerConnectionHandlerPlatform implementation
   virtual bool Initialize(
+      ExecutionContext* context,
       const webrtc::PeerConnectionInterface::RTCConfiguration&
           server_configuration,
-      const MediaConstraints& options,
+      GoogMediaConstraints* media_constraints,
       WebLocalFrame* web_frame,
       ExceptionState& exception_state);
 
@@ -245,7 +233,6 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
       const char* trace_event_name);
 
   virtual void TrackIceConnectionStateChange(
-      RTCPeerConnectionHandler::IceConnectionStateVersion version,
       webrtc::PeerConnectionInterface::IceConnectionState state);
 
   // Delegate functions to allow for mocking of WebKit interfaces.
@@ -281,13 +268,7 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   // Virtual for testing purposes.
   virtual scoped_refptr<base::SingleThreadTaskRunner> signaling_thread() const;
 
-  bool force_encoded_audio_insertable_streams() {
-    return force_encoded_audio_insertable_streams_;
-  }
-
-  bool force_encoded_video_insertable_streams() {
-    return force_encoded_video_insertable_streams_;
-  }
+  bool encoded_insertable_streams() { return encoded_insertable_streams_; }
 
  protected:
   // Constructor to be used for constructing mocks only.
@@ -513,8 +494,7 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   // used when constructing the PeerConnection carry over when
   // SetConfiguration is called.
   webrtc::PeerConnectionInterface::RTCConfiguration configuration_;
-  bool force_encoded_audio_insertable_streams_ = false;
-  bool force_encoded_video_insertable_streams_ = false;
+  bool encoded_insertable_streams_ = false;
 
   // Resources for Adaptation.
   // The Thermal Resource is lazily instantiated on platforms where thermal

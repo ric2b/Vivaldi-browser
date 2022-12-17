@@ -154,7 +154,7 @@ class BackendIO : public BackgroundIO {
   void ExecuteBackendOperation();
   void ExecuteEntryOperation();
 
-  raw_ptr<BackendImpl> backend_;
+  raw_ptr<BackendImpl, DanglingUntriaged> backend_;
   net::CompletionOnceCallback callback_;
   Operation operation_ = OP_NONE;
 

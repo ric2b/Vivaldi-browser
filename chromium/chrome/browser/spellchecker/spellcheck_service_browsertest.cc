@@ -85,14 +85,6 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
     InProcessBrowserTest::SetUp();
   }
 #endif  // BUILDFLAG(IS_WIN)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  void SetUp() override {
-    // On CrOS, Language Settings Update 2 will be the norm going forward.
-    // Forcibly enable it here in case it is disabled in the future.
-    feature_list_.InitAndEnableFeature(ash::features::kLanguageSettingsUpdate2);
-    InProcessBrowserTest::SetUp();
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   void SetUpOnMainThread() override {
     renderer_ = std::make_unique<content::MockRenderProcessHost>(GetContext());
@@ -184,10 +176,10 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
   }
 
   std::string GetMultilingualDictionaries() {
-    const base::Value* list_value =
-        prefs_->GetList(spellcheck::prefs::kSpellCheckDictionaries);
+    const base::Value::List& list_value =
+        prefs_->GetValueList(spellcheck::prefs::kSpellCheckDictionaries);
     std::vector<base::StringPiece> dictionaries;
-    for (const auto& item_value : list_value->GetListDeprecated()) {
+    for (const auto& item_value : list_value) {
       EXPECT_TRUE(item_value.is_string());
       dictionaries.push_back(item_value.GetString());
     }
@@ -367,37 +359,13 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
 #endif  // !BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// Tests related to CrOS Language Settings Update 2.
-// Spell check languages and accept languages are decoupled with Update 2.
-// All tests which rely on the coupling should use the below class.
-// TODO(crbug.com/1177519): Remove this once Update 2 is fully launched.
-class SpellcheckServiceLanguageSettingsUpdate2DisabledBrowserTest
-    : public SpellcheckServiceBrowserTest {
-  void SetUp() override {
-    feature_list_.InitAndDisableFeature(
-        ash::features::kLanguageSettingsUpdate2);
-    InProcessBrowserTest::SetUp();
-  }
-};
-
 // Removing a spellcheck language from accept languages should not remove it
-// from spellcheck languages list with Update 2 enabled.
+// from spellcheck languages list on CrOS.
 IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
                        RemoveSpellcheckLanguageFromAcceptLanguages) {
   InitSpellcheck(true, "", "en-US,fr");
   SetAcceptLanguages("en-US,es,ru");
   EXPECT_EQ("en-US,fr", GetMultilingualDictionaries());
-}
-
-// Removing a spellcheck language from accept languages should remove it from
-// spellcheck languages list as well with Update 2 disabled.
-// TODO(crbug.com/1177519): Remove this once Update 2 is fully launched.
-IN_PROC_BROWSER_TEST_F(
-    SpellcheckServiceLanguageSettingsUpdate2DisabledBrowserTest,
-    RemoveSpellcheckLanguageFromAcceptLanguages) {
-  InitSpellcheck(true, "", "en-US,fr");
-  SetAcceptLanguages("en-US,es,ru");
-  EXPECT_EQ("en-US", GetMultilingualDictionaries());
 }
 #else
 // Removing a spellcheck language from accept languages should remove it from
@@ -632,17 +600,15 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, PreferencesMigrated) {
 
   // Make sure the preferences have been migrated.
   ASSERT_EQ(1u, GetPrefs()
-                    ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                    ->GetListDeprecated()
+                    ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)
                     .size());
   ASSERT_TRUE(GetPrefs()
-                  ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                  ->GetListDeprecated()[0]
+                  ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[0]
                   .is_string());
-  EXPECT_EQ("en-US", GetPrefs()
-                         ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                         ->GetListDeprecated()[0]
-                         .GetString());
+  EXPECT_EQ("en-US",
+            GetPrefs()
+                ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[0]
+                .GetString());
   EXPECT_TRUE(
       GetPrefs()->GetString(spellcheck::prefs::kSpellCheckDictionary).empty());
 }
@@ -659,17 +625,15 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, PreferencesNotMigrated) {
 
   // Make sure the preferences have not been migrated.
   ASSERT_EQ(1u, GetPrefs()
-                    ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                    ->GetListDeprecated()
+                    ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)
                     .size());
   ASSERT_TRUE(GetPrefs()
-                  ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                  ->GetListDeprecated()[0]
+                  ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[0]
                   .is_string());
-  EXPECT_EQ("en-US", GetPrefs()
-                         ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                         ->GetListDeprecated()[0]
-                         .GetString());
+  EXPECT_EQ("en-US",
+            GetPrefs()
+                ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[0]
+                .GetString());
   EXPECT_TRUE(
       GetPrefs()->GetString(spellcheck::prefs::kSpellCheckDictionary).empty());
 }
@@ -688,8 +652,7 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
 
   EXPECT_FALSE(GetPrefs()->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
   EXPECT_EQ(1U, GetPrefs()
-                    ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                    ->GetListDeprecated()
+                    ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)
                     .size());
 }
 
@@ -707,25 +670,22 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
 
   EXPECT_TRUE(GetPrefs()->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
   EXPECT_EQ(2U, GetPrefs()
-                    ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                    ->GetListDeprecated()
+                    ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)
                     .size());
   ASSERT_TRUE(GetPrefs()
-                  ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                  ->GetListDeprecated()[0]
+                  ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[0]
                   .is_string());
-  EXPECT_EQ("en-US", GetPrefs()
-                         ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                         ->GetListDeprecated()[0]
-                         .GetString());
+  EXPECT_EQ("en-US",
+            GetPrefs()
+                ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[0]
+                .GetString());
   ASSERT_TRUE(GetPrefs()
-                  ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                  ->GetListDeprecated()[1]
+                  ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[1]
                   .is_string());
-  EXPECT_EQ("fr", GetPrefs()
-                      ->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-                      ->GetListDeprecated()[1]
-                      .GetString());
+  EXPECT_EQ("fr",
+            GetPrefs()
+                ->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)[1]
+                .GetString());
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -914,10 +874,10 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceWindowsHybridBrowserTestDelayInit,
   // that languages with no spellcheck support have spellchecking disabled.
   EXPECT_EQ(kAcceptLanguages,
             GetPrefs()->GetString(language::prefs::kAcceptLanguages));
-  const base::Value* dictionaries_list =
-      GetPrefs()->Get(spellcheck::prefs::kSpellCheckDictionaries);
+  const base::Value::List& dictionaries_list =
+      GetPrefs()->GetValueList(spellcheck::prefs::kSpellCheckDictionaries);
   std::vector<std::string> actual_dictionaries;
-  for (const auto& dictionary : dictionaries_list->GetListDeprecated()) {
+  for (const auto& dictionary : dictionaries_list) {
     actual_dictionaries.push_back(dictionary.GetString());
   }
   EXPECT_EQ(kSpellcheckDictionariesAfter, actual_dictionaries);

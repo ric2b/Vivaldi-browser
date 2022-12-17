@@ -205,6 +205,23 @@ bool HasMutedCredentials(const std::vector<const PasswordForm*>& credentials,
   });
 }
 
+// Returns true iff a password field is absent or hidden.
+bool IsSingleUsernameSubmission(const PasswordForm& submitted_form) {
+  if (submitted_form.IsSingleUsername())
+    return true;
+
+  for (auto const& field : submitted_form.form_data.fields) {
+    if (submitted_form.password_element_renderer_id ==
+            field.unique_renderer_id ||
+        submitted_form.new_password_element_renderer_id ==
+            field.unique_renderer_id) {
+      if (field.is_focusable)
+        return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 // static
@@ -213,6 +230,10 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kCredentialsEnableService, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+#if BUILDFLAG(IS_IOS)
+  registry->RegisterBooleanPref(prefs::kCredentialProviderEnabledOnStartup,
+                                false);
+#endif
   registry->RegisterBooleanPref(
       prefs::kCredentialsEnableAutosignin, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
@@ -265,6 +286,8 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kPasswordsPrefWithNewLabelUsed, false);
   registry->RegisterBooleanPref(
       prefs::kUnenrolledFromGoogleMobileServicesDueToErrors, false);
+  registry->RegisterIntegerPref(
+      prefs::kUnenrolledFromGoogleMobileServicesAfterApiErrorCode, 0);
 #endif
   // Preferences for |PasswordChangeSuccessTracker|.
   registry->RegisterIntegerPref(prefs::kPasswordChangeSuccessTrackerVersion, 0);
@@ -431,7 +454,7 @@ void PasswordManager::UpdateFormManagers() {
   for (PasswordManagerDriver* driver : drivers) {
     // GetPasswordAutofillManager() is returning nullptr in iOS Chrome, since
     // PasswordAutofillManager is not instantiated on iOS Chrome.
-    // See //ios/chrome/browser/passwords/ios_chrome_password_manager_driver.mm
+    // See //components/password_manager/ios/ios_password_manager_driver.mm
     if (driver->GetPasswordAutofillManager()) {
       driver->GetPasswordAutofillManager()->DeleteFillData();
     }
@@ -879,8 +902,7 @@ bool PasswordManager::ShouldBlockPasswordForSameOriginButDifferentScheme(
 
 void PasswordManager::OnPasswordFormsRendered(
     password_manager::PasswordManagerDriver* driver,
-    const std::vector<FormData>& visible_forms_data,
-    bool did_stop_loading) {
+    const std::vector<FormData>& visible_forms_data) {
   CreatePendingLoginManagers(driver, visible_forms_data);
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client_)) {
@@ -917,16 +939,6 @@ void PasswordManager::OnPasswordFormsRendered(
   visible_forms_data_.insert(visible_forms_data_.end(),
                              visible_forms_data.begin(),
                              visible_forms_data.end());
-  if (!did_stop_loading &&
-      !submitted_manager->GetSubmittedForm()
-           ->form_data.is_gaia_with_skip_save_password_form) {
-    // |form_data.is_gaia_with_skip_save_password_form| = true means that this
-    // is a Chrome sign-in page. Chrome sign-in pages are redirected to an empty
-    // pages, and for some reasons |did_stop_loading| might be false. So
-    // |did_stop_loading| is ignored for them.
-    return;
-  }
-
   if (!driver->IsInPrimaryMainFrame() &&
       submitted_manager->driver_id() != driver->GetId()) {
     // Frames different from the main frame and the frame of the submitted form
@@ -996,10 +1008,13 @@ void PasswordManager::OnLoginSuccessful() {
     return;
 
   client_->GetStoreResultFilter()->ReportFormLoginSuccess(*submitted_manager);
-  // Check for leaks only if there are no muted credentials.
+  // Check for leaks only if there are no muted credentials and it is not a
+  // single username submission (a leak warning may offer an automated password
+  // change, which requires a user to be logged in).
   if (!HasMutedCredentials(
           submitted_manager->GetInsecureCredentials(),
-          submitted_manager->GetSubmittedForm()->username_value)) {
+          submitted_manager->GetSubmittedForm()->username_value) &&
+      !IsSingleUsernameSubmission(*submitted_manager->GetSubmittedForm())) {
     leak_delegate_.StartLeakCheck(submitted_manager->GetPendingCredentials(),
                                   submitted_form->IsLikelySignupForm());
   }

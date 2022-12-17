@@ -101,6 +101,26 @@ public final class Fido2Api {
     // Parcel.
     private static final int OBJECT_MAGIC = 20293;
 
+    // VAL_PARCELABLE is the tag value for a Parcelable, as used by `Parcel.writeValue`.
+    private static final int VAL_PARCELABLE = 4;
+
+    // parcelUsesLengthPrefixes will be true if `Parcel.writeValue` uses length
+    // prefixes. This was added in Android 13 and there's one case where an
+    // array is sent directly as a Parcel, rather than as a SafeParcel. We
+    // sadly need to care about this because the Parcel class supplied by the
+    // system doesn't provide any way of reading arrays that isn't coupled to
+    // ClassLoader-based assumptions.
+    private static final boolean sParcelUsesLengthPrefixes = doesParcelUseLengthPrefix();
+
+    private static boolean doesParcelUseLengthPrefix() {
+        // See comment for `sParcelUsesLengthPrefixes`.
+        Parcel parcel = Parcel.obtain();
+        parcel.writeValue(new ArrayList());
+        final boolean ret = parcel.dataPosition() == 12;
+        parcel.recycle();
+        return ret;
+    }
+
     /**
      * Serialize a browser's makeCredential request to a {@link Parcel}.
      *
@@ -1030,8 +1050,11 @@ public final class Fido2Api {
             // by the class name of that element. The class names will be
             // "com.google.android.gms.fido.fido2.api.common.DiscoverableCredentialInfo" but that
             // isn't checked here to avoid depending on the name of the class.
-            if (parcel.readInt() != 4 /* VAL_PARCELABLE */) {
+            if (parcel.readInt() != VAL_PARCELABLE) {
                 throw new IllegalArgumentException();
+            }
+            if (sParcelUsesLengthPrefixes) {
+                parcel.readInt(); // discard length prefix.
             }
             parcel.readString(); // ignore class name
             Pair<Integer, Integer> header = readHeader(parcel);
@@ -1039,6 +1062,11 @@ public final class Fido2Api {
                 throw new IllegalArgumentException();
             }
             final int endPosition = addLengthToParcelPosition(header.second, parcel);
+
+            // The original version of this API returned only discoverable credentials, not usable
+            // for Secure Payment Confirmation. If the tags are missing, this is the default.
+            details.mIsDiscoverable = true;
+            details.mIsPayment = false;
 
             while (parcel.dataPosition() < endPosition) {
                 header = readHeader(parcel);
@@ -1055,13 +1083,23 @@ public final class Fido2Api {
                     case 4:
                         details.mCredentialId = parcel.createByteArray();
                         break;
+                    case 5:
+                        details.mIsDiscoverable = parcel.readInt() != 0;
+                        break;
+                    case 6:
+                        details.mIsPayment = parcel.readInt() != 0;
+                        break;
                     default:
                         // unknown tag. Skip over it.
                         parcel.setDataPosition(addLengthToParcelPosition(header.second, parcel));
                 }
             }
-            if (details.mUserName == null || details.mUserDisplayName == null
-                    || details.mUserId == null || details.mCredentialId == null) {
+            if (details.mCredentialId == null) {
+                throw new IllegalArgumentException();
+            }
+            if (details.mIsDiscoverable
+                    && (details.mUserName == null || details.mUserDisplayName == null
+                            || details.mUserId == null)) {
                 throw new IllegalArgumentException();
             }
             credentials.add(details);

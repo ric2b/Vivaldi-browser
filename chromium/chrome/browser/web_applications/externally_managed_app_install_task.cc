@@ -12,16 +12,18 @@
 #include "base/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/web_applications/commands/externally_managed_install_command.h"
 #include "chrome/browser/web_applications/commands/install_from_info_command.h"
-#include "chrome/browser/web_applications/commands/install_web_app_with_params_command.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
@@ -36,6 +38,12 @@
 #include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+
+namespace {
+// How often we retry to download a custom icon, not counting the first attempt.
+const int MAX_ICON_DOWNLOAD_RETRIES = 1;
+const base::TimeDelta ICON_DOWNLOAD_RETRY_DELAY = base::Seconds(5);
+}  // namespace
 
 namespace web_app {
 
@@ -222,23 +230,19 @@ void ExternallyManagedAppInstallTask::OnPlaceholderUninstalled(
 void ExternallyManagedAppInstallTask::ContinueWebAppInstall(
     content::WebContents* web_contents,
     ResultCallback result_callback) {
-  auto install_params = ConvertExternalInstallOptionsToParams(install_options_);
-  auto install_source = ConvertExternalInstallSourceToInstallSource(
-      install_options_.install_source);
-
   if (!data_retriever_factory_) {
     data_retriever_factory_ = base::BindRepeating(
         []() { return std::make_unique<WebAppDataRetriever>(); });
   }
 
   command_manager_->ScheduleCommand(
-      std::make_unique<InstallWebAppWithParamsCommand>(
-          web_contents->GetWeakPtr(), install_params, install_source,
-          install_finalizer_, registrar_,
+      std::make_unique<ExternallyManagedInstallCommand>(
+          install_options_,
           base::BindOnce(&ExternallyManagedAppInstallTask::OnWebAppInstalled,
                          weak_ptr_factory_.GetWeakPtr(),
                          /*is_placeholder=*/false,
                          /*offline_install=*/false, std::move(result_callback)),
+          web_contents->GetWeakPtr(), install_finalizer_,
           data_retriever_factory_.Run()));
 }
 
@@ -263,20 +267,32 @@ void ExternallyManagedAppInstallTask::InstallPlaceholder(
   }
 
   if (install_options_.override_icon_url) {
-    web_contents->DownloadImage(
-        install_options_.override_icon_url.value(),
-        /*is_favicon, whether to not sent/accept cookies*/ true, gfx::Size(),
-        /*max_bitmap_size, 0=unlimited*/ 0,
-        /*bypass_cache*/ false,
-        base::BindOnce(&ExternallyManagedAppInstallTask::OnCustomIconFetched,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    FetchCustomIcon(install_options_.override_icon_url.value(), web_contents,
+                    MAX_ICON_DOWNLOAD_RETRIES, std::move(callback));
     return;
   }
 
   FinalizePlaceholderInstall(std::move(callback), absl::nullopt);
 }
 
+void ExternallyManagedAppInstallTask::FetchCustomIcon(
+    const GURL& url,
+    content::WebContents* web_contents,
+    int retries_left,
+    ResultCallback callback) {
+  web_contents->DownloadImage(
+      url,
+      /*is_favicon, whether to not sent/accept cookies*/ true, gfx::Size(),
+      /*max_bitmap_size, 0=unlimited*/ 0,
+      /*bypass_cache*/ false,
+      base::BindOnce(&ExternallyManagedAppInstallTask::OnCustomIconFetched,
+                     weak_ptr_factory_.GetWeakPtr(), retries_left, web_contents,
+                     std::move(callback)));
+}
+
 void ExternallyManagedAppInstallTask::OnCustomIconFetched(
+    int retries_left,
+    content::WebContents* web_contents,
     ResultCallback callback,
     int id,
     int http_status_code,
@@ -284,10 +300,22 @@ void ExternallyManagedAppInstallTask::OnCustomIconFetched(
     const std::vector<SkBitmap>& bitmaps,
     const std::vector<gfx::Size>& sizes) {
   if (bitmaps.size() > 0) {
+    // Download succeeded.
     FinalizePlaceholderInstall(std::move(callback), bitmaps);
-  } else {
-    FinalizePlaceholderInstall(std::move(callback), absl::nullopt);
+    return;
   }
+  if (retries_left <= 0) {
+    // Download failed.
+    FinalizePlaceholderInstall(std::move(callback), absl::nullopt);
+    return;
+  }
+  // Retry download.
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ExternallyManagedAppInstallTask::FetchCustomIcon,
+                     weak_ptr_factory_.GetWeakPtr(), image_url, web_contents,
+                     retries_left - 1, std::move(callback)),
+      ICON_DOWNLOAD_RETRY_DELAY);
 }
 
 void ExternallyManagedAppInstallTask::FinalizePlaceholderInstall(

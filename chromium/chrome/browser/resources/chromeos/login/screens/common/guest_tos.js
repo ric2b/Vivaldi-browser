@@ -140,12 +140,10 @@ class GuestTos extends GuestTosScreenElementBase {
 
   onGoogleEulaLinkClick_() {
     this.setUIStep(GuestTosScreenState.GOOGLE_EULA);
-    this.$.googleEulaOkButton.focus();
   }
 
   onCrosEulaLinkClick_() {
     this.setUIStep(GuestTosScreenState.CROS_EULA);
-    this.$.crosEulaOkButton.focus();
   }
 
   onGoogleEulaContentLoad_() {
@@ -160,11 +158,10 @@ class GuestTos extends GuestTosScreenElementBase {
 
   onTermsStepOkClick_() {
     this.setUIStep(GuestTosScreenState.LOADED);
-    this.$.acceptButton.focus();
   }
 
   onAcceptClick_() {
-    chrome.send('GuestToSAccept', [this.usageChecked]);
+    this.userActed(['guest-tos-accept', this.usageChecked]);
   }
 
   onBackClick_() {

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac_cocoa.h"
+#include "base/memory/raw_ptr.h"
 
 #include <utility>
 
@@ -37,7 +38,7 @@ NSMutableArray* g_filtered_entries_array = nil;
 NSMenuItem* GetMenuItemByID(ui::MenuModel* model,
                             NSMenu* menu,
                             int command_id) {
-  for (int i = 0; i < model->GetItemCount(); ++i) {
+  for (size_t i = 0; i < model->GetItemCount(); ++i) {
     NSMenuItem* item = [menu itemAtIndex:i];
     if (model->GetCommandIdAt(i) == command_id)
       return item;
@@ -181,7 +182,7 @@ class ToolkitDelegateMacCocoa : public RenderViewContextMenu::ToolkitDelegate {
     context_menu_->UpdateToolkitMenuItem(command_id, enabled, hidden, title);
   }
 
-  RenderViewContextMenuMacCocoa* context_menu_;
+  raw_ptr<RenderViewContextMenuMacCocoa> context_menu_;
 };
 
 // Obj-C bridge class that is the target of all items in the context menu.

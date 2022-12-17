@@ -20,18 +20,18 @@
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/ev_root_ca_metadata.h"
-#include "net/cert/internal/cert_errors.h"
 #include "net/cert/internal/cert_issuer_source_aia.h"
-#include "net/cert/internal/cert_issuer_source_static.h"
-#include "net/cert/internal/common_cert_errors.h"
-#include "net/cert/internal/parsed_certificate.h"
-#include "net/cert/internal/path_builder.h"
 #include "net/cert/internal/revocation_checker.h"
-#include "net/cert/internal/simple_path_builder_delegate.h"
 #include "net/cert/internal/system_trust_store.h"
-#include "net/cert/internal/trust_store_collection.h"
-#include "net/cert/internal/trust_store_in_memory.h"
 #include "net/cert/known_roots.h"
+#include "net/cert/pki/cert_errors.h"
+#include "net/cert/pki/cert_issuer_source_static.h"
+#include "net/cert/pki/common_cert_errors.h"
+#include "net/cert/pki/parsed_certificate.h"
+#include "net/cert/pki/path_builder.h"
+#include "net/cert/pki/simple_path_builder_delegate.h"
+#include "net/cert/pki/trust_store_collection.h"
+#include "net/cert/pki/trust_store_in_memory.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
@@ -58,19 +58,19 @@ const void* kResultDebugDataKey = &kResultDebugDataKey;
 
 base::Value NetLogCertParams(const CRYPTO_BUFFER* cert_handle,
                              const CertErrors& errors) {
-  base::Value results(base::Value::Type::DICTIONARY);
+  base::Value::Dict results;
 
   std::string pem_encoded;
   if (X509Certificate::GetPEMEncodedFromDER(
           x509_util::CryptoBufferAsStringPiece(cert_handle), &pem_encoded)) {
-    results.GetDict().Set("certificate", pem_encoded);
+    results.Set("certificate", pem_encoded);
   }
 
   std::string errors_string = errors.ToDebugString();
   if (!errors_string.empty())
-    results.GetDict().Set("errors", errors_string);
+    results.Set("errors", errors_string);
 
-  return results;
+  return base::Value(std::move(results));
 }
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
@@ -124,6 +124,7 @@ RevocationPolicy NoRevocationChecking() {
   RevocationPolicy policy;
   policy.check_revocation = false;
   policy.networking_allowed = false;
+  policy.crl_allowed = false;
   policy.allow_missing_info = true;
   policy.allow_unable_to_check = true;
   return policy;
@@ -275,11 +276,8 @@ class PathBuilderDelegateImpl : public SimplePathBuilderDelegate {
     }
 
     // Select an appropriate revocation policy for this chain based on the
-    // verifier flags and root, and whether this is an EV or DV path building
-    // attempt.
-    bool crlset_leaf_coverage_sufficient;
-    RevocationPolicy policy =
-        ChooseRevocationPolicy(path->certs, &crlset_leaf_coverage_sufficient);
+    // verifier flags and root.
+    RevocationPolicy policy = ChooseRevocationPolicy(path->certs);
 
     // Check for revocations using the CRLSet.
     switch (
@@ -287,12 +285,6 @@ class PathBuilderDelegateImpl : public SimplePathBuilderDelegate {
       case CRLSet::Result::REVOKED:
         return;
       case CRLSet::Result::GOOD:
-        if (crlset_leaf_coverage_sufficient) {
-          // Weaken the revocation checking requirement as it has been
-          // satisfied. (Don't early-return, since still want to consult
-          // cached OCSP/CRL if available).
-          policy = NoRevocationChecking();
-        }
         break;
       case CRLSet::Result::UNKNOWN:
         // CRLSet was inconclusive.
@@ -316,12 +308,7 @@ class PathBuilderDelegateImpl : public SimplePathBuilderDelegate {
  private:
   // Selects a revocation policy based on the CertVerifier flags and the given
   // certificate chain.
-  RevocationPolicy ChooseRevocationPolicy(
-      const ParsedCertificateList& certs,
-      bool* crlset_leaf_coverage_sufficient) {
-    // The only case this is set to true is for EV.
-    *crlset_leaf_coverage_sufficient = false;
-
+  RevocationPolicy ChooseRevocationPolicy(const ParsedCertificateList& certs) {
     // Use hard-fail revocation checking for local trust anchors, if requested
     // by the load flag and the chain uses a non-public root.
     if ((flags_ & CertVerifyProc::VERIFY_REV_CHECKING_REQUIRED_LOCAL_ANCHORS) &&
@@ -329,19 +316,7 @@ class PathBuilderDelegateImpl : public SimplePathBuilderDelegate {
       RevocationPolicy policy;
       policy.check_revocation = true;
       policy.networking_allowed = true;
-      policy.allow_missing_info = false;
-      policy.allow_unable_to_check = false;
-      return policy;
-    }
-
-    // Use hard-fail revocation checking for EV certificates.
-    if (verification_type_ == VerificationType::kEV) {
-      // For EV verification leaf coverage is considered sufficient.
-      *crlset_leaf_coverage_sufficient = true;
-
-      RevocationPolicy policy;
-      policy.check_revocation = true;
-      policy.networking_allowed = true;
+      policy.crl_allowed = true;
       policy.allow_missing_info = false;
       policy.allow_unable_to_check = false;
       return policy;
@@ -352,6 +327,11 @@ class PathBuilderDelegateImpl : public SimplePathBuilderDelegate {
       RevocationPolicy policy;
       policy.check_revocation = true;
       policy.networking_allowed = true;
+      // Publicly trusted certs are required to have OCSP by the Baseline
+      // Requirements and CRLs can be quite large, so disable the fallback to
+      // CRLs for chains to known roots.
+      policy.crl_allowed =
+          !certs.empty() && !trust_store_->IsKnownRoot(certs.back().get());
       policy.allow_missing_info = true;
       policy.allow_unable_to_check = true;
       return policy;
@@ -734,6 +714,7 @@ int CertVerifyProcBuiltin::VerifyInternal(
     verify_result->cert_status |= CERT_STATUS_AUTHORITY_INVALID;
     return ERR_CERT_AUTHORITY_INVALID;
   }
+  absl::optional<int64_t> chrome_root_store_version_opt = absl::nullopt;
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   int64_t chrome_root_store_version =
       system_trust_store_->chrome_root_store_version();
@@ -742,11 +723,13 @@ int CertVerifyProcBuiltin::VerifyInternal(
         NetLogEventType::CERT_VERIFY_PROC_CHROME_ROOT_STORE_VERSION, [&] {
           return NetLogChromeRootStoreVersion(chrome_root_store_version);
         });
+    chrome_root_store_version_opt = chrome_root_store_version;
   }
 #endif
 
   CertVerifyProcBuiltinResultDebugData::Create(verify_result, verification_time,
-                                               der_verification_time);
+                                               der_verification_time,
+                                               chrome_root_store_version_opt);
 
   // Parse the target certificate.
   scoped_refptr<ParsedCertificate> target;
@@ -820,12 +803,12 @@ int CertVerifyProcBuiltin::VerifyInternal(
     verification_type = cur_attempt.verification_type;
     net_log.BeginEvent(
         NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT, [&] {
-          base::Value results(base::Value::Type::DICTIONARY);
+          base::Value::Dict results;
           if (verification_type == VerificationType::kEV)
-            results.GetDict().Set("is_ev_attempt", true);
-          results.GetDict().Set("digest_policy",
-                                static_cast<int>(cur_attempt.digest_policy));
-          return results;
+            results.Set("is_ev_attempt", true);
+          results.Set("digest_policy",
+                      static_cast<int>(cur_attempt.digest_policy));
+          return base::Value(std::move(results));
         });
 
     // If a previous attempt used up most/all of the deadline, extend the
@@ -855,16 +838,7 @@ int CertVerifyProcBuiltin::VerifyInternal(
       break;
 
     if (result.exceeded_deadline) {
-      if (verification_type == VerificationType::kEV &&
-          result.AnyPathContainsError(cert_errors::kUnableToCheckRevocation)) {
-        // EV verification failed due to deadline exceeded and unable to check
-        // revocation. Try the non-EV attempt even though the deadline has been
-        // reached, since a revocation checking failure on EV should be a
-        // soft-fail. (Since the non-EV attempt generally will not be using
-        // revocation checking it hopefully won't hit the deadline too.)
-        continue;
-      }
-      // Otherwise, stop immediately if an attempt exceeds the deadline.
+      // Stop immediately if an attempt exceeds the deadline.
       break;
     }
 
@@ -903,9 +877,11 @@ int CertVerifyProcBuiltin::VerifyInternal(
 
 CertVerifyProcBuiltinResultDebugData::CertVerifyProcBuiltinResultDebugData(
     base::Time verification_time,
-    const der::GeneralizedTime& der_verification_time)
+    const der::GeneralizedTime& der_verification_time,
+    absl::optional<int64_t> chrome_root_store_version)
     : verification_time_(verification_time),
-      der_verification_time_(der_verification_time) {}
+      der_verification_time_(der_verification_time),
+      chrome_root_store_version_(chrome_root_store_version) {}
 
 // static
 const CertVerifyProcBuiltinResultDebugData*
@@ -919,11 +895,12 @@ CertVerifyProcBuiltinResultDebugData::Get(
 void CertVerifyProcBuiltinResultDebugData::Create(
     base::SupportsUserData* debug_data,
     base::Time verification_time,
-    const der::GeneralizedTime& der_verification_time) {
+    const der::GeneralizedTime& der_verification_time,
+    absl::optional<int64_t> chrome_root_store_version) {
   debug_data->SetUserData(
       kResultDebugDataKey,
       std::make_unique<CertVerifyProcBuiltinResultDebugData>(
-          verification_time, der_verification_time));
+          verification_time, der_verification_time, chrome_root_store_version));
 }
 
 std::unique_ptr<base::SupportsUserData::Data>

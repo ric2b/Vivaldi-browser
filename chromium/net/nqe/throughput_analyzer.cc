@@ -38,9 +38,7 @@ bool ShouldDiscardRequest(const URLRequest& request) {
 
 }  // namespace
 
-namespace nqe {
-
-namespace internal {
+namespace nqe::internal {
 // The default content size of a HTML response body. It is set to the median
 // HTML response content size, i.e. 1.8kB.
 constexpr int64_t kDefaultContentSizeBytes = 1800;
@@ -267,6 +265,9 @@ bool ThroughputAnalyzer::IsHangingWindow(int64_t bits_received,
   if (params_->use_small_responses())
     return false;
 
+  if (!duration.is_positive())
+    return false;
+
   // Initial congestion window size for TCP connections.
   static constexpr size_t kCwndSizeKilobytes = 10 * 1.5;
   static constexpr size_t kCwndSizeBits = kCwndSizeKilobytes * 1000 * 8;
@@ -358,8 +359,8 @@ void ThroughputAnalyzer::OnConnectionTypeChanged() {
   // computation are now spanning a connection change event. These requests
   // would now degrade the throughput computation accuracy. So, move them to
   // |accuracy_degrading_requests_|.
-  for (auto it = requests_.begin(); it != requests_.end(); ++it) {
-    accuracy_degrading_requests_.insert(it->first);
+  for (const auto& request : requests_) {
+    accuracy_degrading_requests_.insert(request.first);
   }
   requests_.clear();
   BoundRequestsSize();
@@ -486,8 +487,6 @@ void ThroughputAnalyzer::EraseHangingRequests(const URLRequest& request) {
   }
 }
 
-}  // namespace internal
-
-}  // namespace nqe
+}  // namespace nqe::internal
 
 }  // namespace net

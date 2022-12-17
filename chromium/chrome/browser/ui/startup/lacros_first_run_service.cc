@@ -12,9 +12,9 @@
 #include "base/callback_forward.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/browser_process.h"
@@ -36,7 +36,6 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/core_account_id.h"
 
@@ -103,29 +102,44 @@ class SilentSyncEnablerDelegate : public TurnSyncOnHelper::Delegate {
         ProfileMetrics::ProfileSignedInFlowOutcome::kSkippedByPolicies);
   }
 
+  bool ShouldAbortBeforeShowSyncDisabledConfirmation() override {
+    ProfileMetrics::LogLacrosPrimaryProfileFirstRunOutcome(
+        ProfileMetrics::ProfileSignedInFlowOutcome::kSkippedByPolicies);
+    return true;
+  }
+
   void ShowSyncDisabledConfirmation(
       bool is_managed_account,
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override {
-    // `SYNC_WITH_DEFAULT_SETTINGS` for the sync disable confirmation means
-    // "stay signed in". See https://crbug.com/1141341.
-    std::move(callback).Run(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
-
-    ProfileMetrics::LogLacrosPrimaryProfileFirstRunOutcome(
-        ProfileMetrics::ProfileSignedInFlowOutcome::kSkippedByPolicies);
+    LOG(WARNING) << "crbug.com/1340791 | Unexpected Sync disabled prompt.";
+    // If Sync is disabled, the `TurnSyncOnHelper` should quit earlier due to
+    // `ShouldAbortBeforeShowSyncDisabledConfirmation()`.
+    NOTREACHED();
   }
 
-  void ShowLoginError(const SigninUIError& error) override { NOTREACHED(); }
+  void ShowLoginError(const SigninUIError& error) override {
+    LOG(WARNING) << "crbug.com/1340791 | Login error: "
+                 << static_cast<int>(error.type());
+    NOTREACHED();
+  }
 
   void ShowMergeSyncDataConfirmation(const std::string&,
                                      const std::string&,
                                      signin::SigninChoiceCallback) override {
+    LOG(WARNING) << "crbug.com/1340791 | Unexpected data merge prompt";
     NOTREACHED();
   }
 
-  void ShowSyncSettings() override { NOTREACHED(); }
+  void ShowSyncSettings() override {
+    LOG(WARNING) << "crbug.com/1340791 | Unexpected Sync settings prompt";
+    NOTREACHED();
+  }
 
-  void SwitchToProfile(Profile*) override { NOTREACHED(); }
+  void SwitchToProfile(Profile*) override {
+    LOG(WARNING) << "crbug.com/1340791 | Unexpected profile switch";
+    NOTREACHED();
+  }
 };
 
 bool IsFirstRunEligibleProfile(Profile* profile) {
@@ -184,6 +198,8 @@ void OnFirstRunHasExited(ResumeTaskCallback original_intent_callback,
   }
 
   bool proceed = status == ProfilePicker::FirstRunExitStatus::kCompleted;
+  LOG_IF(ERROR, !proceed) << "Not proceeding FirstRun: "
+                          << static_cast<int>(status);
   std::move(original_intent_callback).Run(proceed);
 
   if (proceed && post_first_run_callback)
@@ -200,12 +216,6 @@ LacrosFirstRunService::~LacrosFirstRunService() = default;
 
 bool LacrosFirstRunService::ShouldOpenFirstRun() const {
   DCHECK(IsFirstRunEligibleProfile(profile_));
-
-  if (!base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles)) {
-    // Sync is already always forced, no point showing the FRE to ask the user
-    // to sync.
-    return false;
-  }
 
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
@@ -301,19 +311,24 @@ void LacrosFirstRunService::TryEnableSyncSilentlyWithToken(
       std::make_unique<SilentSyncEnablerDelegate>(), std::move(callback));
 }
 
-void LacrosFirstRunService::OpenFirstRunIfNeeded(ResumeTaskCallback callback) {
-  TryMarkFirstRunAlreadyFinished(
-      base::BindOnce(&LacrosFirstRunService::OpenFirstRunInternal,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+void LacrosFirstRunService::OpenFirstRunIfNeeded(EntryPoint entry_point,
+                                                 ResumeTaskCallback callback) {
+  TryMarkFirstRunAlreadyFinished(base::BindOnce(
+      &LacrosFirstRunService::OpenFirstRunInternal,
+      weak_ptr_factory_.GetWeakPtr(), entry_point, std::move(callback)));
 }
 
-void LacrosFirstRunService::OpenFirstRunInternal(ResumeTaskCallback callback) {
+void LacrosFirstRunService::OpenFirstRunInternal(EntryPoint entry_point,
+                                                 ResumeTaskCallback callback) {
   if (!ShouldOpenFirstRun()) {
     // Opening the First Run is not needed, it might have been marked finished
     // silently for example.
     std::move(callback).Run(/*proceed=*/true);
     return;
   }
+
+  base::UmaHistogramEnumeration(
+      "Profile.LacrosPrimaryProfileFirstRunEntryPoint", entry_point);
 
   ProfilePicker::Show(ProfilePicker::Params::ForLacrosPrimaryProfileFirstRun(
       base::BindOnce(&OnFirstRunHasExited, std::move(callback))));

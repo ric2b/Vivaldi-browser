@@ -97,35 +97,38 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
       : WithTaskEnvironment(base::test::TaskEnvironment::TimeSource::MOCK_TIME),
         proxy_resolution_service_(
             ConfiguredProxyResolutionService::CreateDirect()),
-        ssl_config_service_(new SSLConfigServiceDefaults),
+        ssl_config_service_(std::make_unique<SSLConfigServiceDefaults>()),
         http_auth_handler_factory_(HttpAuthHandlerFactory::CreateDefault()),
         session_(CreateNetworkSession()),
-        direct_transport_socket_params_(new TransportSocketParams(
-            url::SchemeHostPort(url::kHttpsScheme, "host", 443),
-            NetworkIsolationKey(),
-            SecureDnsPolicy::kAllow,
-            OnHostResolutionCallback(),
-            /*supported_alpns=*/{"h2", "http/1.1"})),
+        direct_transport_socket_params_(
+            base::MakeRefCounted<TransportSocketParams>(
+                url::SchemeHostPort(url::kHttpsScheme, "host", 443),
+                NetworkIsolationKey(),
+                SecureDnsPolicy::kAllow,
+                OnHostResolutionCallback(),
+                /*supported_alpns=*/
+                base::flat_set<std::string>({"h2", "http/1.1"}))),
         proxy_transport_socket_params_(
-            new TransportSocketParams(HostPortPair("proxy", 443),
-                                      NetworkIsolationKey(),
-                                      SecureDnsPolicy::kAllow,
-                                      OnHostResolutionCallback(),
-                                      /*supported_alpns=*/{})),
-        socks_socket_params_(
-            new SOCKSSocketParams(proxy_transport_socket_params_,
-                                  true,
-                                  HostPortPair("sockshost", 443),
-                                  NetworkIsolationKey(),
-                                  TRAFFIC_ANNOTATION_FOR_TESTS)),
-        http_proxy_socket_params_(
-            new HttpProxySocketParams(proxy_transport_socket_params_,
-                                      nullptr /* ssl_params */,
-                                      false /* is_quic */,
-                                      HostPortPair("host", 80),
-                                      /*tunnel=*/true,
-                                      TRAFFIC_ANNOTATION_FOR_TESTS,
-                                      NetworkIsolationKey())),
+            base::MakeRefCounted<TransportSocketParams>(
+                HostPortPair("proxy", 443),
+                NetworkIsolationKey(),
+                SecureDnsPolicy::kAllow,
+                OnHostResolutionCallback(),
+                /*supported_alpns=*/base::flat_set<std::string>({}))),
+        socks_socket_params_(base::MakeRefCounted<SOCKSSocketParams>(
+            proxy_transport_socket_params_,
+            true,
+            HostPortPair("sockshost", 443),
+            NetworkIsolationKey(),
+            TRAFFIC_ANNOTATION_FOR_TESTS)),
+        http_proxy_socket_params_(base::MakeRefCounted<HttpProxySocketParams>(
+            proxy_transport_socket_params_,
+            nullptr /* ssl_params */,
+            false /* is_quic */,
+            HostPortPair("host", 80),
+            /*tunnel=*/true,
+            TRAFFIC_ANNOTATION_FOR_TESTS,
+            NetworkIsolationKey())),
         common_connect_job_params_(session_->CreateCommonConnectJobParams()) {}
 
   ~SSLConnectJobTest() override = default;
@@ -158,7 +161,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
         "Basic realm=MyRealm1", AuthCredentials(kFoo, kBar), "/");
   }
 
-  HttpNetworkSession* CreateNetworkSession() {
+  std::unique_ptr<HttpNetworkSession> CreateNetworkSession() {
     HttpNetworkSessionContext session_context;
     session_context.host_resolver = &host_resolver_;
     session_context.cert_verifier = &cert_verifier_;
@@ -171,7 +174,8 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
         http_auth_handler_factory_.get();
     session_context.http_server_properties = &http_server_properties_;
     session_context.quic_context = &quic_context_;
-    return new HttpNetworkSession(HttpNetworkSessionParams(), session_context);
+    return std::make_unique<HttpNetworkSession>(HttpNetworkSessionParams(),
+                                                session_context);
   }
 
  protected:
@@ -655,7 +659,7 @@ TEST_F(SSLConnectJobTest, LegacyCryptoFallbackHistograms) {
     test_delegate.StartJobExpectingResult(ssl_connect_job.get(), OK,
                                           /*expect_sync_result=*/false);
 
-    tester.ExpectUniqueSample("Net.SSLLegacyCryptoFallback", test.expected, 1);
+    tester.ExpectUniqueSample("Net.SSLLegacyCryptoFallback2", test.expected, 1);
   }
 }
 
@@ -1263,7 +1267,9 @@ TEST_F(SSLConnectJobTest, EncryptedClientHello) {
   endpoint2.ip_endpoints = {IPEndPoint(ParseIP("2::"), 8442)};
   endpoint2.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint2.metadata.ech_config_list = ech_config_list2;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint1, endpoint2});
+  host_resolver_.rules()->AddRule(
+      "host", MockHostResolverBase::RuleResolver::RuleResult(
+                  std::vector{endpoint1, endpoint2}));
 
   for (bool feature_enabled : {true, false}) {
     SCOPED_TRACE(feature_enabled);
@@ -1336,7 +1342,9 @@ TEST_F(SSLConnectJobTest, ECHStaleConfig) {
   endpoint2.ip_endpoints = {IPEndPoint(ParseIP("2::"), 8442)};
   endpoint2.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint2.metadata.ech_config_list = ech_config_list2;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint1, endpoint2});
+  host_resolver_.rules()->AddRule(
+      "host", MockHostResolverBase::RuleResolver::RuleResult(
+                  std::vector{endpoint1, endpoint2}));
 
   // The first connection attempt will be to `endpoint1`, which will fail.
   StaticSocketDataProvider data1;
@@ -1396,7 +1404,9 @@ TEST_F(SSLConnectJobTest, ECHRollback) {
   endpoint2.ip_endpoints = {IPEndPoint(ParseIP("2::"), 8442)};
   endpoint2.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint2.metadata.ech_config_list = ech_config_list2;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint1, endpoint2});
+  host_resolver_.rules()->AddRule(
+      "host", MockHostResolverBase::RuleResolver::RuleResult(
+                  std::vector{endpoint1, endpoint2}));
 
   // The first connection attempt will be to `endpoint1`, which will fail.
   StaticSocketDataProvider data1;
@@ -1453,7 +1463,9 @@ TEST_F(SSLConnectJobTest, ECHTooManyRetries) {
   endpoint.ip_endpoints = {IPEndPoint(ParseIP("1::"), 8441)};
   endpoint.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint.metadata.ech_config_list = ech_config_list1;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint});
+  host_resolver_.rules()->AddRule(
+      "host",
+      MockHostResolverBase::RuleResolver::RuleResult(std::vector{endpoint}));
 
   // The first connection attempt will succeed.
   StaticSocketDataProvider data1;
@@ -1502,7 +1514,9 @@ TEST_F(SSLConnectJobTest, ECHWrongRetryError) {
   endpoint.ip_endpoints = {IPEndPoint(ParseIP("1::"), 8441)};
   endpoint.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint.metadata.ech_config_list = ech_config_list1;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint});
+  host_resolver_.rules()->AddRule(
+      "host",
+      MockHostResolverBase::RuleResolver::RuleResult(std::vector{endpoint}));
 
   // The first connection attempt will succeed.
   StaticSocketDataProvider data1;
@@ -1547,7 +1561,9 @@ TEST_F(SSLConnectJobTest, ECHRecoveryThenLegacyCrypto) {
   endpoint2.ip_endpoints = {IPEndPoint(ParseIP("2::"), 8442)};
   endpoint2.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint2.metadata.ech_config_list = ech_config_list2;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint1, endpoint2});
+  host_resolver_.rules()->AddRule(
+      "host", MockHostResolverBase::RuleResolver::RuleResult(
+                  std::vector{endpoint1, endpoint2}));
 
   // The first connection attempt will be to `endpoint1`, which will fail.
   StaticSocketDataProvider data1;
@@ -1623,7 +1639,9 @@ TEST_F(SSLConnectJobTest, LegacyCryptoThenECHRecovery) {
   endpoint2.ip_endpoints = {IPEndPoint(ParseIP("2::"), 8442)};
   endpoint2.metadata.supported_protocol_alpns = {"http/1.1"};
   endpoint2.metadata.ech_config_list = ech_config_list2;
-  host_resolver_.rules()->AddRule("host", std::vector{endpoint1, endpoint2});
+  host_resolver_.rules()->AddRule(
+      "host", MockHostResolverBase::RuleResolver::RuleResult(
+                  std::vector{endpoint1, endpoint2}));
 
   // The first connection attempt will be to `endpoint1`, which will fail.
   StaticSocketDataProvider data1;

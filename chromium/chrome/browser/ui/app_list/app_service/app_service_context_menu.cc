@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/app_list/app_service/app_service_context_menu.h"
 
 #include "ash/constants/ash_features.h"
-#include "ash/public/cpp/app_list/app_list_controller.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/app_menu_constants.h"
 #include "ash/public/cpp/new_window_delegate.h"
@@ -19,8 +18,8 @@
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
-#include "chrome/browser/ash/crostini/crostini_terminal.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_terminal.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
@@ -205,8 +204,8 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
 
     case ash::SETTINGS:
-      if (app_id() == crostini::kCrostiniTerminalSystemAppId) {
-        crostini::LaunchTerminalSettings(profile(),
+      if (app_id() == guest_os::kTerminalSystemAppId) {
+        guest_os::LaunchTerminalSettings(profile(),
                                          controller()->GetAppListDisplayId());
         ash::full_restore::FullRestoreService::MaybeCloseNotification(
             profile());
@@ -229,7 +228,7 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
     }
     case ash::SHUTDOWN_GUEST_OS:
-      if (app_id() == crostini::kCrostiniTerminalSystemAppId) {
+      if (app_id() == guest_os::kTerminalSystemAppId) {
         crostini::CrostiniManager::GetForProfile(profile())->StopVm(
             crostini::kCrostiniDefaultVmName, base::DoNothing());
       } else if (app_id() == plugin_vm::kPluginVmShelfAppId) {
@@ -252,10 +251,6 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
 
     case ash::REORDER_BY_COLOR:
       RequestAppListSort(profile(), ash::AppListSortOrder::kColor);
-      break;
-
-    case ash::HIDE_CONTINUE_SECTION:
-      ash::AppListController::Get()->HideContinueSection();
       break;
 
     default:
@@ -427,17 +422,6 @@ void AppServiceContextMenu::OnGetMenuModel(
         reorder_submenu_.get(),
         ui::ImageModel::FromVectorIcon(
             GetMenuItemVectorIcon(ash::REORDER_SUBMENU, /*string_id=*/-1),
-            color_id));
-  }
-
-  if (item_context_ == ash::AppListItemContext::kRecentApps &&
-      ash::features::IsLauncherHideContinueSectionEnabled()) {
-    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-    menu_model->AddItemWithIcon(
-        ash::HIDE_CONTINUE_SECTION,
-        l10n_util::GetStringUTF16(IDS_ASH_LAUNCHER_HIDE_CONTINUE_SECTION),
-        ui::ImageModel::FromVectorIcon(
-            GetMenuItemVectorIcon(ash::HIDE_CONTINUE_SECTION, /*string_id=*/-1),
             color_id));
   }
 

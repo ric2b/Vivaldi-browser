@@ -7,9 +7,11 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/style_util.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/feature_pod_controller_base.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -59,9 +61,8 @@ FeaturePodIconButton::FeaturePodIconButton(PressedCallback callback,
 
 FeaturePodIconButton::~FeaturePodIconButton() = default;
 
-const char* FeaturePodIconButton::GetClassName() const {
-  return "FeaturePodIconButton";
-}
+BEGIN_METADATA(FeaturePodIconButton, IconButton)
+END_METADATA
 
 FeaturePodLabelButton::FeaturePodLabelButton(PressedCallback callback)
     : Button(std::move(callback)),
@@ -87,13 +88,15 @@ FeaturePodLabelButton::FeaturePodLabelButton(PressedCallback callback)
   AddChildView(detailed_view_arrow_);
   AddChildView(sub_label_);
 
-  TrayPopupUtils::ConfigureTrayPopupButton(this);
+  StyleUtil::SetUpInkDropForButton(this);
 
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
   views::InstallRoundRectHighlightPathGenerator(
       this, gfx::Insets(), kUnifiedFeaturePodHoverCornerRadius);
+
+  views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
 }
 
 FeaturePodLabelButton::~FeaturePodLabelButton() = default;
@@ -146,17 +149,9 @@ gfx::Size FeaturePodLabelButton::CalculatePreferredSize() const {
   return gfx::Size(width, height);
 }
 
-const char* FeaturePodLabelButton::GetClassName() const {
-  return "FeaturePodLabelButton";
-}
-
 void FeaturePodLabelButton::OnThemeChanged() {
   views::Button::OnThemeChanged();
   OnEnabledChanged();
-
-  views::FocusRing::Get(this)->SetColor(
-      AshColorProvider::Get()->GetControlsLayerColor(
-          ControlsLayerType::kFocusRingColor));
 }
 
 void FeaturePodLabelButton::SetLabel(const std::u16string& label) {
@@ -214,6 +209,9 @@ void FeaturePodLabelButton::LayoutInCenter(views::View* child, int y) {
       contents_bounds.x() + (contents_bounds.width() - child_width) / 2, y,
       child_width, preferred_size.height());
 }
+
+BEGIN_METADATA(FeaturePodLabelButton, views::Button)
+END_METADATA
 
 FeaturePodButton::FeaturePodButton(FeaturePodControllerBase* controller,
                                    bool is_togglable)
@@ -322,13 +320,12 @@ void FeaturePodButton::RequestFocus() {
   label_button_->RequestFocus();
 }
 
-const char* FeaturePodButton::GetClassName() const {
-  return "FeaturePodButton";
-}
-
 void FeaturePodButton::OnEnabledChanged() {
   icon_button_->SetEnabled(GetEnabled());
   label_button_->SetEnabled(GetEnabled());
 }
+
+BEGIN_METADATA(FeaturePodButton, views::View)
+END_METADATA
 
 }  // namespace ash

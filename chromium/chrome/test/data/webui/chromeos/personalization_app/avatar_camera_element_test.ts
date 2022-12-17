@@ -5,8 +5,8 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {AvatarCamera, AvatarCameraMode, GetUserMediaProxy, setWebcamUtilsForTesting} from 'chrome://personalization/trusted/personalization_app.js';
-import * as webcamUtils from 'chrome://resources/cr_elements/chromeos/cr_picture/webcam_utils.js';
+import {AvatarCamera, AvatarCameraMode, GetUserMediaProxy, setWebcamUtilsForTesting} from 'chrome://personalization/js/personalization_app.js';
+import * as webcamUtils from 'chrome://resources/ash/common/cr_picture/webcam_utils.js';
 import {assertDeepEquals, assertEquals, assertNotReached, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {waitAfterNextRender} from 'chrome://webui-test/test_util.js';
@@ -33,20 +33,19 @@ class MockWebcamUtils extends TestBrowserProxy implements WebcamUtilsInterface {
     this.pngUint8Array.fill(17);
   }
 
-  convertFramesToPngBinary(frames: Array<HTMLCanvasElement>): Uint8Array {
+  convertFramesToPngBinary(frames: HTMLCanvasElement[]): Uint8Array {
     this.methodCalled('convertFramesToPngBinary', frames);
     return this.pngUint8Array;
   }
 
-  convertFramesToPng(_: Array<HTMLCanvasElement>): string {
+  convertFramesToPng(_: HTMLCanvasElement[]): string {
     assertNotReached('This function should never be called');
     return '';
   }
 
   async captureFrames(
       video: HTMLVideoElement, captureSize: typeof webcamUtils.CAPTURE_SIZE,
-      intervalMs: number,
-      numFrames: number): Promise<Array<HTMLCanvasElement>> {
+      intervalMs: number, numFrames: number): Promise<HTMLCanvasElement[]> {
     this.methodCalled(
         'captureFrames', video, captureSize, intervalMs, numFrames);
     return Promise.resolve(this.captureFramesResponse);

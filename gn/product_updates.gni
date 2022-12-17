@@ -13,7 +13,7 @@ if (chrome_pgo_phase > 0) {
   _pgo_suffix = ".pgo"
 }
 
-if (!is_android && !is_mac) {
+if (!is_android && !is_mac && !is_ios) {
   update_target("//chrome:chrome_initial") {
     if (is_win) {
       output_name = "initialexe/vivaldi"
@@ -162,12 +162,14 @@ if (is_android) {
   }
 }
 
-update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
-  sources -= ["${branding_path_component}/product.icon"]
-  sources += ["//vivaldi/app/resources/vector_icons/product.icon"]
-}
+if(!is_ios) {
+  update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
+    sources -= ["${branding_path_component}/product.icon"]
+    sources += ["//vivaldi/app/resources/vector_icons/product.icon"]
+  }
 
-update_template_instance("//ui/message_center:message_center_vector_icons") {
-  sources -= ["product.icon"]
-  sources += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
+  update_template_instance("//ui/message_center:message_center_vector_icons") {
+    sources -= ["product.icon"]
+    sources += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
+  }
 }

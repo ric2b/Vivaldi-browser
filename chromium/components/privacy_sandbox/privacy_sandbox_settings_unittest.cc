@@ -70,8 +70,7 @@ class PrivacySandboxSettingsTest : public testing::TestWithParam<bool> {
   }
 
   virtual void InitializeDelegateBeforeStart() {
-    mock_delegate()->SetupDefaultResponse(/*restricted=*/false,
-                                          /*confirmed=*/true);
+    mock_delegate()->SetUpDefaultResponse(/*restricted=*/false);
   }
 
   virtual bool IsIncognitoProfile() { return false; }
@@ -132,6 +131,10 @@ TEST_P(PrivacySandboxSettingsTest, DefaultContentSettingBlockOverridePref) {
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -181,6 +184,10 @@ TEST_P(PrivacySandboxSettingsTest, DefaultContentSettingBlockOverridePref) {
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -224,6 +231,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -264,6 +275,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
   EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
@@ -319,6 +334,13 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       url::Origin::Create(GURL("https://unrelated-c.com")),
       url::Origin::Create(GURL("https://unrelated-d.com")),
       url::Origin::Create(GURL("https://unrelated-e.com"))));
+
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+  EXPECT_TRUE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://unrelated-a.com")),
+      url::Origin::Create(GURL("https://unrelated-b.com"))));
 
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://test.com")),
@@ -388,6 +410,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       url::Origin::Create(GURL("https://yet-another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
+  EXPECT_TRUE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://another-test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
   EXPECT_TRUE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -428,6 +454,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -466,6 +496,10 @@ TEST_P(PrivacySandboxSettingsTest, ThirdPartyCookies) {
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -500,6 +534,10 @@ TEST_P(PrivacySandboxSettingsTest, ThirdPartyCookies) {
   EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
@@ -541,6 +579,10 @@ TEST_P(PrivacySandboxSettingsTest, ThirdPartyCookies) {
   EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
+      url::Origin::Create(GURL("https://embedded.com"))));
+
+  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivateAggregationAllowed(
+      url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
 
   EXPECT_FALSE(privacy_sandbox_settings()->IsFledgeAllowed(
@@ -906,9 +948,6 @@ class PrivacySandboxSettingsMockDelegateTest
 TEST_P(PrivacySandboxSettingsMockDelegateTest, IsPrivacySandboxRestricted) {
   // When the sandbox is otherwise enabled, the delegate returning true for
   // IsPrivacySandboxRestricted() should disable the sandbox.
-  ON_CALL(*mock_delegate(), IsPrivacySandboxConfirmed).WillByDefault([=]() {
-    return true;
-  });
   privacy_sandbox_settings()->SetPrivacySandboxEnabled(true);
   EXPECT_CALL(*mock_delegate(), IsPrivacySandboxRestricted())
       .Times(1)
@@ -925,32 +964,6 @@ TEST_P(PrivacySandboxSettingsMockDelegateTest, IsPrivacySandboxRestricted) {
   EXPECT_CALL(*mock_delegate(), IsPrivacySandboxRestricted())
       .Times(1)
       .WillOnce(testing::Return(false));
-  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivacySandboxEnabled());
-}
-
-TEST_P(PrivacySandboxSettingsMockDelegateTest, IsPrivacySandboxConfirmed) {
-  // When the sandbox is otherwise enabled, the delegate returning false for
-  // IsPrivacySandboxConfirmed() should disable the sandbox.
-  ON_CALL(*mock_delegate(), IsPrivacySandboxRestricted).WillByDefault([=]() {
-    return false;
-  });
-  privacy_sandbox_settings()->SetPrivacySandboxEnabled(true);
-  EXPECT_CALL(*mock_delegate(), IsPrivacySandboxConfirmed())
-      .Times(1)
-      .WillOnce(testing::Return(false));
-  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivacySandboxEnabled());
-
-  privacy_sandbox_settings()->SetPrivacySandboxEnabled(true);
-  EXPECT_CALL(*mock_delegate(), IsPrivacySandboxConfirmed())
-      .Times(1)
-      .WillOnce(testing::Return(true));
-  EXPECT_TRUE(privacy_sandbox_settings()->IsPrivacySandboxEnabled());
-
-  // The delegate should not override a disabled sandbox.
-  privacy_sandbox_settings()->SetPrivacySandboxEnabled(false);
-  EXPECT_CALL(*mock_delegate(), IsPrivacySandboxConfirmed())
-      .Times(1)
-      .WillOnce(testing::Return(true));
   EXPECT_FALSE(privacy_sandbox_settings()->IsPrivacySandboxEnabled());
 }
 

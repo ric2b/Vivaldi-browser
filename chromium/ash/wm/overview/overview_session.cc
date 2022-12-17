@@ -221,7 +221,9 @@ void OverviewSession::Init(const WindowList& windows,
 
     // Do not animate if there is any window that is being dragged in the
     // grid.
-    if (enter_exit_overview_type_ == OverviewEnterExitType::kImmediateEnter) {
+    if (enter_exit_overview_type_ == OverviewEnterExitType::kImmediateEnter ||
+        enter_exit_overview_type_ ==
+            OverviewEnterExitType::kImmediateEnterWithoutFocus) {
       overview_grid->PositionWindows(/*animate=*/false);
     } else {
       // Exit only types should not appear here:
@@ -368,7 +370,7 @@ void OverviewSession::OnGridEmpty() {
   if (SplitViewController::Get(Shell::GetPrimaryRootWindow())
           ->InTabletSplitViewMode()) {
     UpdateNoWindowsWidgetOnEachGrid();
-  } else {
+  } else if (!allow_empty_desk_without_exiting_) {
     EndOverview(OverviewEndAction::kLastWindowRemoved);
   }
 }
@@ -522,6 +524,9 @@ void OverviewSession::AppendItem(aura::Window* window,
   OverviewGrid* grid = GetGridWithRootWindow(window->GetRootWindow());
   if (!grid || grid->GetOverviewItemContaining(window))
     return;
+
+  if (IsShowingDesksTemplatesGrid())
+    animate = false;
 
   grid->AppendItem(window, reposition, animate, /*use_spawn_animation=*/true);
   OnItemAdded(window);
@@ -870,15 +875,8 @@ void OverviewSession::OnWindowActivating(
 
   auto* grid = GetGridWithRootWindow(gained_active->GetRootWindow());
   DCHECK(grid);
-  const auto& windows = grid->window_list();
-  auto iter = std::find_if(
-      windows.begin(), windows.end(),
-      [gained_active](const std::unique_ptr<OverviewItem>& window) {
-        return window->Contains(gained_active);
-      });
-
-  if (iter != windows.end())
-    selected_item_ = iter->get();
+  if (OverviewItem* item = grid->GetOverviewItemContaining(gained_active))
+    selected_item_ = item;
 
   // Don't restore window activation on exit if a window was just activated.
   RestoreWindowActivation(false);
@@ -1017,9 +1015,11 @@ bool OverviewSession::IsWindowActiveWindowBeforeOverview(
   return window == active_window_before_overview_;
 }
 
-void OverviewSession::ShowDesksTemplatesGrids(bool was_zero_state,
-                                              const base::GUID& item_to_focus,
-                                              aura::Window* const root_window) {
+void OverviewSession::ShowDesksTemplatesGrids(
+    bool was_zero_state,
+    const base::GUID& item_to_focus,
+    const std::u16string& saved_desk_name,
+    aura::Window* const root_window) {
   if (Shell::Get()->tablet_mode_controller()->InTabletMode() ||
       IsShowingDesksTemplatesGrid()) {
     return;
@@ -1036,8 +1036,10 @@ void OverviewSession::ShowDesksTemplatesGrids(bool was_zero_state,
     grid->ShowDesksTemplatesGrid(was_zero_state);
   // Only ask for all entries if it is the first time creating the grid widgets.
   // Otherwise, add or update the entries one at a time.
-  if (created_grid_widgets)
-    saved_desk_presenter_->GetAllEntries(item_to_focus, root_window);
+  if (created_grid_widgets) {
+    saved_desk_presenter_->GetAllEntries(item_to_focus, saved_desk_name,
+                                         root_window);
+  }
   UpdateNoWindowsWidgetOnEachGrid();
 
   UpdateAccessibilityFocus();
@@ -1140,6 +1142,9 @@ void OverviewSession::OnDeskActivationChanged(const Desk* activated,
   for (auto* root : Shell::GetAllRootWindows()) {
     activated->GetDeskContainerForRoot(root)->AddObserver(this);
     deactivated->GetDeskContainerForRoot(root)->RemoveObserver(this);
+
+    if (auto* overview_grid = GetGridWithRootWindow(root))
+      overview_grid->UpdateSaveDeskButtons();
   }
 }
 
@@ -1308,7 +1313,8 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
 
       DCHECK(!grid_list_.empty());
       ShowDesksTemplatesGrids(grid_list_[0]->desks_bar_view()->IsZeroState(),
-                              base::GUID(), Shell::GetPrimaryRootWindow());
+                              base::GUID(), /*saved_desk_name=*/u"",
+                              Shell::GetPrimaryRootWindow());
       break;
 #else
       return;

@@ -12,11 +12,16 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/observer_list.h"
 #include "base/threading/sequence_bound.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
-#include "content/browser/aggregation_service/aggregation_service_key_storage.h"
+#include "content/browser/aggregation_service/aggregation_service.h"
+#include "content/browser/aggregation_service/aggregation_service_observer.h"
+#include "content/browser/aggregation_service/aggregation_service_storage.h"
 #include "content/browser/aggregation_service/aggregation_service_storage_context.h"
 #include "content/browser/aggregation_service/public_key.h"
+#include "content/common/aggregatable_report.mojom.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/boringssl/src/include/openssl/hpke.h"
@@ -28,6 +33,8 @@ class Time;
 }  // namespace base
 
 namespace content {
+
+class AggregationServiceStorage;
 
 namespace aggregation_service {
 
@@ -59,8 +66,13 @@ testing::AssertionResult SharedInfoEqual(
 
 // Returns an example report request, using the given parameters.
 AggregatableReportRequest CreateExampleRequest(
-    AggregationServicePayloadContents::AggregationMode aggregation_mode =
-        AggregationServicePayloadContents::AggregationMode::kDefault);
+    mojom::AggregationServiceMode aggregation_mode =
+        mojom::AggregationServiceMode::kDefault);
+
+AggregatableReportRequest CreateExampleRequestWithReportTime(
+    base::Time report_time,
+    mojom::AggregationServiceMode aggregation_mode =
+        mojom::AggregationServiceMode::kDefault);
 
 AggregatableReportRequest CloneReportRequest(
     const AggregatableReportRequest& request);
@@ -81,6 +93,10 @@ std::vector<uint8_t> DecryptPayloadWithHpke(
     const EVP_HPKE_KEY& key,
     const std::string& expected_serialized_shared_info);
 
+MATCHER_P(RequestIdIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.id, result_listener);
+}
+
 }  // namespace aggregation_service
 
 // The strings "ABCD1234" and "EFGH5678", Base64-decoded to bytes. Note that
@@ -99,20 +115,103 @@ class TestAggregationServiceStorageContext
   ~TestAggregationServiceStorageContext() override;
 
   // AggregationServiceStorageContext:
-  const base::SequenceBound<content::AggregationServiceKeyStorage>&
-  GetKeyStorage() override;
+  const base::SequenceBound<content::AggregationServiceStorage>& GetStorage()
+      override;
 
  private:
-  base::SequenceBound<content::AggregationServiceKeyStorage> storage_;
+  base::SequenceBound<content::AggregationServiceStorage> storage_;
+};
+
+class MockAggregationService : public AggregationService {
+ public:
+  MockAggregationService();
+  ~MockAggregationService() override;
+
+  // AggregationService:
+  MOCK_METHOD(void,
+              AssembleReport,
+              (AggregatableReportRequest request,
+               AggregationService::AssemblyCallback callback),
+              (override));
+
+  MOCK_METHOD(void,
+              SendReport,
+              (const GURL& url,
+               const AggregatableReport& report,
+               AggregationService::SendCallback callback),
+              (override));
+
+  MOCK_METHOD(void,
+              SendReport,
+              (const GURL& url,
+               const base::Value& value,
+               AggregationService::SendCallback callback),
+              (override));
+
+  MOCK_METHOD(void,
+              ClearData,
+              (base::Time delete_begin,
+               base::Time delete_end,
+               StoragePartition::StorageKeyMatcherFunction filter,
+               base::OnceClosure done),
+              (override));
+
+  MOCK_METHOD(void,
+              ScheduleReport,
+              (AggregatableReportRequest report_request),
+              (override));
+
+  MOCK_METHOD(
+      void,
+      GetPendingReportRequestsForWebUI,
+      (base::OnceCallback<
+          void(std::vector<AggregationServiceStorage::RequestAndId>)> callback),
+      (override));
+
+  MOCK_METHOD(void,
+              SendReportsForWebUI,
+              (const std::vector<AggregationServiceStorage::RequestId>& ids,
+               base::OnceClosure reports_sent_callback),
+              (override));
+
+  void AddObserver(AggregationServiceObserver* observer) override;
+
+  void RemoveObserver(AggregationServiceObserver* observer) override;
+
+  void NotifyRequestStorageModified();
+
+  // `report_handled_time` indicates when the report has been handled.
+  void NotifyReportHandled(AggregationServiceStorage::RequestAndId request,
+                           absl::optional<AggregatableReport> report,
+                           base::Time report_handled_time,
+                           AggregationServiceObserver::ReportStatus status);
+
+ private:
+  base::ObserverList<AggregationServiceObserver, /*check_empty=*/true>
+      observers_;
+};
+
+class AggregatableReportRequestsAndIdsBuilder {
+ public:
+  AggregatableReportRequestsAndIdsBuilder();
+  ~AggregatableReportRequestsAndIdsBuilder();
+
+  AggregatableReportRequestsAndIdsBuilder&& AddRequestWithID(
+      AggregatableReportRequest request,
+      AggregationServiceStorage::RequestId id) &&;
+
+  std::vector<AggregationServiceStorage::RequestAndId> Build() &&;
+
+ private:
+  std::vector<AggregationServiceStorage::RequestAndId> requests_;
 };
 
 // Only used for logging in tests.
 std::ostream& operator<<(
     std::ostream& out,
     AggregationServicePayloadContents::Operation operation);
-std::ostream& operator<<(
-    std::ostream& out,
-    AggregationServicePayloadContents::AggregationMode aggregation_mode);
+std::ostream& operator<<(std::ostream& out,
+                         mojom::AggregationServiceMode aggregation_mode);
 std::ostream& operator<<(std::ostream& out,
                          AggregatableReportSharedInfo::DebugMode debug_mode);
 

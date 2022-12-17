@@ -611,7 +611,8 @@ ImageBitmap::ImageBitmap(OffscreenCanvas* offscreen_canvas,
 }
 
 ImageBitmap::ImageBitmap(const SkPixmap& pixmap,
-                         bool is_image_bitmap_origin_clean) {
+                         bool is_image_bitmap_origin_clean,
+                         ImageOrientationEnum image_orientation) {
   sk_sp<SkImage> raster_copy = SkImage::MakeRasterCopy(pixmap);
   if (!raster_copy)
     return;
@@ -619,6 +620,7 @@ ImageBitmap::ImageBitmap(const SkPixmap& pixmap,
   if (!image_)
     return;
   image_->SetOriginClean(is_image_bitmap_origin_clean);
+  image_->SetOrientation(image_orientation);
   UpdateImageBitmapMemoryUsage();
 }
 
@@ -943,13 +945,14 @@ ScriptPromise ImageBitmap::CreateAsync(
   ScriptPromise promise = resolver->Promise();
 
   worker_pool::PostTask(
-      FROM_HERE, CrossThreadBindOnce(
-                     &RasterizeImageOnBackgroundThread, std::move(paint_record),
-                     draw_dst_rect, Thread::MainThread()->GetTaskRunner(),
-                     CrossThreadBindOnce(&ResolvePromiseOnOriginalThread,
-                                         WrapCrossThreadPersistent(resolver),
-                                         !image->WouldTaintOrigin(),
-                                         std::move(passed_parsed_options))));
+      FROM_HERE,
+      CrossThreadBindOnce(
+          &RasterizeImageOnBackgroundThread, std::move(paint_record),
+          draw_dst_rect, Thread::MainThread()->GetDeprecatedTaskRunner(),
+          CrossThreadBindOnce(&ResolvePromiseOnOriginalThread,
+                              WrapCrossThreadPersistent(resolver),
+                              !image->WouldTaintOrigin(),
+                              std::move(passed_parsed_options))));
   return promise;
 }
 

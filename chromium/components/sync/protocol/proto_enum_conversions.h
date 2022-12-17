@@ -8,10 +8,12 @@
 #include "components/sync/protocol/app_list_specifics.pb.h"
 #include "components/sync/protocol/app_specifics.pb.h"
 #include "components/sync/protocol/autofill_specifics.pb.h"
+#include "components/sync/protocol/contact_info_specifics.pb.h"
 #include "components/sync/protocol/gaia_password_reuse.pb.h"
 #include "components/sync/protocol/get_updates_caller_info.pb.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/reading_list_specifics.pb.h"
+#include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/protocol/sync_enums.pb.h"
@@ -45,6 +47,9 @@ const char* ProtoEnumToString(
     sync_pb::CommitResponse::ResponseType response_type);
 
 const char* ProtoEnumToString(
+    sync_pb::ContactInfoSpecifics::VerificationStatus verification_status);
+
+const char* ProtoEnumToString(
     sync_pb::GetUpdatesCallerInfo::GetUpdatesSource updates_source);
 
 const char* ProtoEnumToString(sync_pb::NigoriSpecifics::PassphraseType type);
@@ -52,12 +57,14 @@ const char* ProtoEnumToString(sync_pb::NigoriSpecifics::PassphraseType type);
 const char* ProtoEnumToString(
     sync_pb::ReadingListSpecifics::ReadingListEntryStatus status);
 
+const char* ProtoEnumToString(sync_pb::SavedTabGroup::SavedTabGroupColor color);
+
 const char* ProtoEnumToString(
     sync_pb::SearchEngineSpecifics::ActiveStatus is_active);
 
 const char* ProtoEnumToString(sync_pb::SessionTab::FaviconType favicon_type);
 
-const char* ProtoEnumToString(sync_pb::SessionWindow::BrowserType browser_type);
+const char* ProtoEnumToString(sync_pb::SyncEnums::BrowserType browser_type);
 
 const char* ProtoEnumToString(sync_pb::SyncEnums::Action action);
 
@@ -77,7 +84,7 @@ const char* ProtoEnumToString(sync_pb::SyncEnums::SingletonDebugEventType type);
 
 const char* ProtoEnumToString(sync_pb::TabNavigation::BlockedState state);
 
-const char* ProtoEnumToString(sync_pb::TabNavigation::PasswordState state);
+const char* ProtoEnumToString(sync_pb::SyncEnums::PasswordState state);
 
 const char* ProtoEnumToString(sync_pb::UserConsentTypes::ConsentStatus status);
 
@@ -158,9 +165,6 @@ const char* ProtoEnumToString(
 const char* ProtoEnumToString(
     sync_pb::UserConsentTypes::AssistantActivityControlConsent::SettingType
         setting_type);
-
-const char* ProtoEnumToString(
-    sync_pb::WebauthnCredentialSpecifics::PaymentsSupport payments_support);
 
 const char* ProtoEnumToString(sync_pb::WorkspaceDeskSpecifics::DeskType type);
 

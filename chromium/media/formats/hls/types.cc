@@ -4,12 +4,15 @@
 
 #include "media/formats/hls/types.h"
 
-#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 
+#include "base/containers/contains.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "media/formats/hls/parse_status.h"
 #include "media/formats/hls/source_string.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -25,6 +28,10 @@ re2::StringPiece to_re2(SourceString str) {
   return to_re2(str.Str());
 }
 
+bool IsOneOf(char c, base::StringPiece set) {
+  return base::Contains(set, c);
+}
+
 // Returns the substring matching a valid AttributeName, advancing `source_str`
 // to the following character. If no such substring exists, returns
 // `absl::nullopt` and leaves `source_str` untouched. This is like matching the
@@ -34,22 +41,11 @@ absl::optional<SourceString> ExtractAttributeName(SourceString* source_str) {
 
   // Returns whether the given char is permitted in an AttributeName
   const auto is_char_valid = [](char c) -> bool {
-    if (c >= 'A' && c <= 'Z') {
-      return true;
-    }
-    if (c >= '0' && c <= '9') {
-      return true;
-    }
-    if (c == '-') {
-      return true;
-    }
-
-    return false;
+    return base::IsAsciiUpper(c) || base::IsAsciiDigit(c) || c == '-';
   };
 
   // Extract the substring where `is_char_valid` succeeds
-  const char* end =
-      std::find_if_not(str.Str().cbegin(), str.Str().cend(), is_char_valid);
+  const char* end = base::ranges::find_if_not(str.Str(), is_char_valid);
   const auto name = str.Consume(end - str.Str().cbegin());
 
   // At least one character must have matched
@@ -63,8 +59,12 @@ absl::optional<SourceString> ExtractAttributeName(SourceString* source_str) {
 
 // Returns the substring matching a valid AttributeValue, advancing `source_str`
 // to the following character. If no such substring exists, returns
-// `absl::nullopt` and leaves `source_str` untouched. This like like matching
-// the regex `^[a-zA-Z0-9_.-]+|"[^"\r\n]*"`.
+// `absl::nullopt` and leaves `source_str` untouched.
+// Attribute values may either be quoted or unquoted.
+// Quoted attribute values begin and end with a double-quote ("), and may
+// contain internal whitespace and commas. Unquoted attribute values must not
+// begin with a double-quote, but may contain any character excluding whitespace
+// and commas.
 absl::optional<SourceString> ExtractAttributeValue(SourceString* source_str) {
   // Cache string to stack so we don't modify it unless its valid
   auto str = *source_str;
@@ -77,15 +77,10 @@ absl::optional<SourceString> ExtractAttributeValue(SourceString* source_str) {
   // If this is a quoted attribute value, get everything between the matching
   // quotes
   if (*str.Str().begin() == '"') {
-    const auto matching_quote = str.Str().find_first_of("\"\r\n", 1);
+    const auto matching_quote = str.Str().find('"', 1);
 
     // If match wasn't found, value isn't valid
     if (matching_quote == base::StringPiece::npos) {
-      return absl::nullopt;
-    }
-
-    // If match was not '"', value isn't valid
-    if (str.Str().at(matching_quote) != '"') {
       return absl::nullopt;
     }
 
@@ -94,31 +89,10 @@ absl::optional<SourceString> ExtractAttributeValue(SourceString* source_str) {
     return result;
   }
 
-  // Otherwise, extract valid unquoted chars.
-  // This returns whether a given char is permitted in an unquoted attribute
-  // value.
-  const auto is_char_valid = [](char c) -> bool {
-    if (c >= 'a' && c <= 'z') {
-      return true;
-    }
-    if (c >= 'A' && c <= 'Z') {
-      return true;
-    }
-    if (c >= '0' && c <= '9') {
-      return true;
-    }
-    if (c == '-' || c == '_' || c == '.') {
-      return true;
-    }
-
-    return false;
-  };
-
-  const char* end =
-      std::find_if_not(str.Str().cbegin(), str.Str().cend(), is_char_valid);
-  const auto result = str.Consume(end - str.Str().cbegin());
-
-  // At least one character must have matched
+  // Otherwise, extract characters up to the next comma or whitespace. This must
+  // not be empty.
+  const auto end = str.Str().find_first_of(", \t");
+  const auto result = str.Consume(end);
   if (result.Empty()) {
     return absl::nullopt;
   }
@@ -127,19 +101,10 @@ absl::optional<SourceString> ExtractAttributeValue(SourceString* source_str) {
   return result;
 }
 
-struct AttributeMapComparator {
-  bool operator()(const AttributeMap::Item& left,
-                  const AttributeMap::Item& right) {
-    return left.first < right.first;
-  }
-  bool operator()(const AttributeMap::Item& left, SourceString right) {
-    return left.first < right.Str();
-  }
-};
-
 }  // namespace
 
-ParseStatus::Or<DecimalInteger> ParseDecimalInteger(SourceString source_str) {
+ParseStatus::Or<DecimalInteger> ParseDecimalInteger(
+    ResolvedSourceString source_str) {
   static const base::NoDestructor<re2::RE2> decimal_integer_regex("\\d{1,20}");
 
   const auto str = source_str.Str();
@@ -161,7 +126,7 @@ ParseStatus::Or<DecimalInteger> ParseDecimalInteger(SourceString source_str) {
 }
 
 ParseStatus::Or<DecimalFloatingPoint> ParseDecimalFloatingPoint(
-    SourceString source_str) {
+    ResolvedSourceString source_str) {
   // Utilize signed parsing function
   auto result = ParseSignedDecimalFloatingPoint(source_str);
   if (result.has_error()) {
@@ -178,7 +143,7 @@ ParseStatus::Or<DecimalFloatingPoint> ParseDecimalFloatingPoint(
 }
 
 ParseStatus::Or<SignedDecimalFloatingPoint> ParseSignedDecimalFloatingPoint(
-    SourceString source_str) {
+    ResolvedSourceString source_str) {
   // Accept no decimal point, decimal point with leading digits, trailing
   // digits, or both
   static const base::NoDestructor<re2::RE2> decimal_floating_point_regex(
@@ -201,8 +166,9 @@ ParseStatus::Or<SignedDecimalFloatingPoint> ParseSignedDecimalFloatingPoint(
   return result;
 }
 
+// static
 ParseStatus::Or<DecimalResolution> DecimalResolution::Parse(
-    SourceString source_str) {
+    ResolvedSourceString source_str) {
   // decimal-resolution values are in the format: DecimalInteger 'x'
   // DecimalInteger
   const auto x_index = source_str.Str().find_first_of('x');
@@ -228,8 +194,9 @@ ParseStatus::Or<DecimalResolution> DecimalResolution::Parse(
                            .height = std::move(height).value()};
 }
 
+// static
 ParseStatus::Or<ByteRangeExpression> ByteRangeExpression::Parse(
-    SourceString source_str) {
+    ResolvedSourceString source_str) {
   // If this ByteRange has an offset, it will be separated from the length by
   // '@'.
   const auto at_index = source_str.Str().find_first_of('@');
@@ -257,6 +224,7 @@ ParseStatus::Or<ByteRangeExpression> ByteRangeExpression::Parse(
                              .offset = offset};
 }
 
+// static
 absl::optional<ByteRange> ByteRange::Validate(DecimalInteger length,
                                               DecimalInteger offset) {
   if (length == 0) {
@@ -271,18 +239,28 @@ absl::optional<ByteRange> ByteRange::Validate(DecimalInteger length,
   return ByteRange(length, offset);
 }
 
-ParseStatus::Or<base::StringPiece> ParseQuotedString(
+ParseStatus::Or<ResolvedSourceString> ParseQuotedString(
     SourceString source_str,
     const VariableDictionary& variable_dict,
-    VariableDictionary::SubstitutionBuffer& sub_buffer) {
-  return ParseQuotedStringWithoutSubstitution(source_str)
+    VariableDictionary::SubstitutionBuffer& sub_buffer,
+    bool allow_empty) {
+  return ParseQuotedStringWithoutSubstitution(source_str, allow_empty)
       .MapValue([&variable_dict, &sub_buffer](auto str) {
         return variable_dict.Resolve(str, sub_buffer);
-      });
+      })
+      .MapValue(
+          [allow_empty](auto str) -> ParseStatus::Or<ResolvedSourceString> {
+            if (!allow_empty && str.Empty()) {
+              return ParseStatusCode::kFailedToParseQuotedString;
+            } else {
+              return str;
+            }
+          });
 }
 
 ParseStatus::Or<SourceString> ParseQuotedStringWithoutSubstitution(
-    SourceString source_str) {
+    SourceString source_str,
+    bool allow_empty) {
   if (source_str.Size() < 2) {
     return ParseStatusCode::kFailedToParseQuotedString;
   }
@@ -293,7 +271,12 @@ ParseStatus::Or<SourceString> ParseQuotedStringWithoutSubstitution(
     return ParseStatusCode::kFailedToParseQuotedString;
   }
 
-  return source_str.Substr(1, source_str.Size() - 2);
+  auto str = source_str.Substr(1, source_str.Size() - 2);
+  if (!allow_empty && str.Empty()) {
+    return ParseStatusCode::kFailedToParseQuotedString;
+  }
+
+  return str;
 }
 
 AttributeListIterator::AttributeListIterator(SourceString content)
@@ -304,13 +287,16 @@ ParseStatus::Or<AttributeListIterator::Item> AttributeListIterator::Next() {
   // we'll continue returning the same error.
   auto content = remaining_content_;
 
+  // Whitespace is allowed preceding the attribute name
+  content.TrimStart();
+
   // Empty string is tolerated, but caller must handle this case.
   if (content.Empty()) {
     return ParseStatusCode::kReachedEOF;
   }
 
   // The remainder of the function expects a string matching
-  // {AttributeName}={AttributeValue}[,][...]
+  // {AttributeName}[ ]=[ ]{AttributeValue}[ ][,[...]]
 
   // Extract attribute name
   const auto name = ExtractAttributeName(&content);
@@ -318,10 +304,16 @@ ParseStatus::Or<AttributeListIterator::Item> AttributeListIterator::Next() {
     return ParseStatusCode::kMalformedAttributeList;
   }
 
+  // Whitespace is allowed following the attribute name
+  content.TrimStart();
+
   // Next character must be '='
   if (content.Consume(1).Str() != "=") {
     return ParseStatusCode::kMalformedAttributeList;
   }
+
+  // Whitespace is allowed preceding the attribute value
+  content.TrimStart();
 
   // Extract attribute value
   const auto value = ExtractAttributeValue(&content);
@@ -329,10 +321,12 @@ ParseStatus::Or<AttributeListIterator::Item> AttributeListIterator::Next() {
     return ParseStatusCode::kMalformedAttributeList;
   }
 
+  // Whitespace is allowed following attribute value
+  content.TrimStart();
+
   // Following character must either be a comma, or the end of the string
-  // The wording of the spec doesn't explicitly allow or reject trailing
-  // commas. Since they appear in other contexts (and they're great) I'm going
-  // to support them.
+  // Trailing commas are allowed (not explicitly by the spec, but supported by
+  // Safari).
   if (!content.Empty() && content.Consume(1).Str() != ",") {
     return ParseStatusCode::kMalformedAttributeList;
   }
@@ -350,7 +344,7 @@ AttributeMap::AttributeMap(base::span<Item> sorted_items)
   // tries to access the stored value after filling by the index of a subsequent
   // duplicate key, rather than the first.
   DCHECK(
-      std::is_sorted(items_.begin(), items_.end(), AttributeMapComparator()));
+      base::ranges::is_sorted(items_, std::less(), &AttributeMap::Item::first));
 }
 
 ParseStatus::Or<AttributeListIterator::Item> AttributeMap::Fill(
@@ -366,10 +360,11 @@ ParseStatus::Or<AttributeListIterator::Item> AttributeMap::Fill(
 
     auto item = std::move(result).value();
 
-    // Look up the item. std::lower_bound performs a binary search to find the
-    // first item where the name comparison function fails.
-    auto entry = std::lower_bound(items_.begin(), items_.end(), item.name,
-                                  AttributeMapComparator());
+    // Look up the item. `base::ranges::lower_bound` performs a binary search to
+    // find the first entry where the name does not compare less than the given
+    // value.
+    auto entry = base::ranges::lower_bound(items_, item.name.Str(), std::less(),
+                                           &AttributeMap::Item::first);
     if (entry == items_.end()) {
       return item;
     }
@@ -400,6 +395,7 @@ ParseStatus AttributeMap::FillUntilError(AttributeListIterator* iter) {
   }
 }
 
+// static
 ParseStatus::Or<VariableName> VariableName::Parse(SourceString source_str) {
   static const base::NoDestructor<re2::RE2> variable_name_regex(
       "[a-zA-Z0-9_-]+");
@@ -409,7 +405,104 @@ ParseStatus::Or<VariableName> VariableName::Parse(SourceString source_str) {
     return ParseStatusCode::kMalformedVariableName;
   }
 
-  return VariableName{source_str.Str()};
+  return VariableName(source_str.Str());
+}
+
+// static
+ParseStatus::Or<StableId> StableId::Parse(ResolvedSourceString str) {
+  const auto is_char_valid = [](char c) -> bool {
+    return base::IsAsciiAlphaNumeric(c) || IsOneOf(c, "+/=.-_");
+  };
+
+  if (str.Empty() || !base::ranges::all_of(str.Str(), is_char_valid)) {
+    return ParseStatusCode::kFailedToParseStableId;
+  }
+
+  return StableId(std::string{str.Str()});
+}
+
+// static
+ParseStatus::Or<InstreamId> InstreamId::Parse(ResolvedSourceString str) {
+  constexpr base::StringPiece kCcStr = "CC";
+  constexpr base::StringPiece kServiceStr = "SERVICE";
+
+  // Parse the type (one of 'CC' or 'SERVICE')
+  Type type;
+  uint8_t max;
+  if (base::StartsWith(str.Str(), kCcStr)) {
+    type = Type::kCc;
+    max = 4;
+    str.Consume(kCcStr.size());
+  } else if (base::StartsWith(str.Str(), kServiceStr)) {
+    type = Type::kService;
+    max = 63;
+    str.Consume(kServiceStr.size());
+  } else {
+    return ParseStatusCode::kFailedToParseInstreamId;
+  }
+
+  // Parse the number, max allowed value depends on the type
+  auto number_result = ParseDecimalInteger(str);
+  if (number_result.has_error()) {
+    return ParseStatusCode::kFailedToParseInstreamId;
+  }
+  auto number = std::move(number_result).value();
+  if (number < 1 || number > max) {
+    return ParseStatusCode::kFailedToParseInstreamId;
+  }
+
+  return InstreamId(type, static_cast<uint8_t>(number));
+}
+
+AudioChannels::AudioChannels(DecimalInteger max_channels,
+                             std::vector<std::string> audio_coding_identifiers)
+    : max_channels_(max_channels),
+      audio_coding_identifiers_(std::move(audio_coding_identifiers)) {}
+
+AudioChannels::AudioChannels(const AudioChannels&) = default;
+
+AudioChannels::AudioChannels(AudioChannels&&) = default;
+
+AudioChannels& AudioChannels::operator=(const AudioChannels&) = default;
+
+AudioChannels& AudioChannels::operator=(AudioChannels&&) = default;
+
+AudioChannels::~AudioChannels() = default;
+
+// static
+ParseStatus::Or<AudioChannels> AudioChannels::Parse(ResolvedSourceString str) {
+  // First parameter is a decimal-integer indicating the number of channels
+  const auto max_channels_str = str.ConsumeDelimiter('/');
+  auto max_channels_result = ParseDecimalInteger(max_channels_str);
+  if (max_channels_result.has_error()) {
+    return ParseStatus(ParseStatusCode::kFailedToParseAudioChannels)
+        .AddCause(std::move(max_channels_result).error());
+  }
+  const auto max_channels = std::move(max_channels_result).value();
+
+  // Second parameter (optional) is a comma-seperated list of audio coding
+  // identifiers.
+  auto audio_coding_identifiers_str = str.ConsumeDelimiter('/');
+  std::vector<std::string> audio_coding_identifiers;
+  while (!audio_coding_identifiers_str.Empty()) {
+    const auto identifier = audio_coding_identifiers_str.ConsumeDelimiter(',');
+
+    constexpr auto is_valid_coding_identifier_char = [](char c) -> bool {
+      return base::IsAsciiUpper(c) || base::IsAsciiDigit(c) || c == '-';
+    };
+
+    // Each string must be non-empty and consist only of the allowed characters
+    if (identifier.Empty() ||
+        !base::ranges::all_of(identifier.Str(),
+                              is_valid_coding_identifier_char)) {
+      return ParseStatusCode::kFailedToParseAudioChannels;
+    }
+
+    audio_coding_identifiers.emplace_back(identifier.Str());
+  }
+
+  // Ignore any remaining parameters for forward-compatibility
+  return AudioChannels(max_channels, std::move(audio_coding_identifiers));
 }
 
 }  // namespace media::hls::types

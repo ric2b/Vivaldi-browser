@@ -279,6 +279,10 @@ void FrameHeader::OnShowStateChanged(ui::WindowShowState show_state) {
   LayoutHeaderInternal();
 }
 
+void FrameHeader::OnFloatStateChanged() {
+  LayoutHeaderInternal();
+}
+
 void FrameHeader::SetLeftHeaderView(views::View* left_header_view) {
   left_header_view_ = left_header_view;
 }
@@ -415,6 +419,7 @@ void FrameHeader::LayoutHeaderInternal() {
   caption_button_container()->SetButtonImage(
       views::CAPTION_BUTTON_ICON_MAXIMIZE_RESTORE,
       use_restore_frame ? maximize_icon : restore_icon);
+  caption_button_container()->UpdateFloatButton();
   UpdateSnapIcons();
 
   caption_button_container()->UpdateSizeButtonTooltip(use_restore_frame);
@@ -452,19 +457,20 @@ void FrameHeader::LayoutHeaderInternal() {
 
   if (center_button_) {
     constexpr int kCenterButtonSpacing = 5;
-    int full_width = center_button_->GetPreferredSize().width();
-    const gfx::Range range(
-        std::max((view_->width() - full_width) / 2,
-                 origin + kCenterButtonSpacing),
-        std::min((view_->width() + full_width) / 2,
-                 caption_button_container_->x() - kCenterButtonSpacing));
-    center_button_->SetBounds(range.start(), 0, range.end() - range.start(),
+    const int full_width = center_button_->GetPreferredSize().width();
+    const int begin = std::max((view_->width() - full_width) / 2,
+                               origin + kCenterButtonSpacing);
+    const int end = std::max(
+        begin, std::min((view_->width() + full_width) / 2,
+                        caption_button_container_->x() - kCenterButtonSpacing));
+    center_button_->SetBounds(begin, 0, end - begin,
                               caption_button_container_size.height());
   }
 }
 
 gfx::Rect FrameHeader::GetTitleBounds() const {
-  views::View* left_view = left_header_view_ ? left_header_view_ : back_button_;
+  views::View* left_view =
+      left_header_view_ ? left_header_view_.get() : back_button_.get();
   return GetAvailableTitleBounds(left_view, caption_button_container_,
                                  GetHeaderHeight());
 }
@@ -473,16 +479,14 @@ void FrameHeader::UpdateSnapIcons() {
   const bool is_horizontal_display = chromeos::IsDisplayLayoutHorizontal(
       display::Screen::GetScreen()->GetDisplayNearestWindow(
           target_widget_->GetNativeWindow()));
-  const bool is_horizontal_snap =
-      is_horizontal_display || !chromeos::wm::features::IsVerticalSnapEnabled();
   caption_button_container()->SetButtonImage(
       views::CAPTION_BUTTON_ICON_LEFT_TOP_SNAPPED,
-      is_horizontal_snap ? chromeos::kWindowControlLeftSnappedIcon
-                         : chromeos::kWindowControlTopSnappedIcon);
+      is_horizontal_display ? chromeos::kWindowControlLeftSnappedIcon
+                            : chromeos::kWindowControlTopSnappedIcon);
   caption_button_container()->SetButtonImage(
       views::CAPTION_BUTTON_ICON_RIGHT_BOTTOM_SNAPPED,
-      is_horizontal_snap ? chromeos::kWindowControlRightSnappedIcon
-                         : chromeos::kWindowControlBottomSnappedIcon);
+      is_horizontal_display ? chromeos::kWindowControlRightSnappedIcon
+                            : chromeos::kWindowControlBottomSnappedIcon);
 }
 
 }  // namespace chromeos

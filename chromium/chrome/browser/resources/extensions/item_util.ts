@@ -12,6 +12,7 @@ export enum SourceType {
   POLICY = 'policy',
   SIDELOADED = 'sideloaded',
   UNPACKED = 'unpacked',
+  INSTALLED_BY_DEFAULT = 'installed-by-default',
   UNKNOWN = 'unknown',
 }
 
@@ -93,6 +94,8 @@ export function getItemSource(item: chrome.developerPrivate.ExtensionInfo):
       return SourceType.UNKNOWN;
     case chrome.developerPrivate.Location.FROM_STORE:
       return SourceType.WEBSTORE;
+    case chrome.developerPrivate.Location.INSTALLED_BY_DEFAULT:
+      return SourceType.INSTALLED_BY_DEFAULT;
     default:
       assertNotReached(item.location);
   }
@@ -108,6 +111,8 @@ export function getItemSourceString(source: SourceType): string {
       return loadTimeData.getString('itemSourceUnpacked');
     case SourceType.WEBSTORE:
       return loadTimeData.getString('itemSourceWebstore');
+    case SourceType.INSTALLED_BY_DEFAULT:
+      return loadTimeData.getString('itemSourceInstalledByDefault');
     case SourceType.UNKNOWN:
       // Nothing to return. Calling code should use
       // chrome.developerPrivate.ExtensionInfo's |locationText| instead.
@@ -146,6 +151,27 @@ export function computeInspectableViewLabel(
   }
 
   return label;
+}
+
+/**
+ * Clones the array and returns a new array with background pages and service
+ * workers sorted before other views.
+ * @returns Sorted array.
+ */
+export function sortViews(views: chrome.developerPrivate.ExtensionView[]):
+    chrome.developerPrivate.ExtensionView[] {
+  function getSortValue(view: chrome.developerPrivate.ExtensionView): number {
+    switch (view.type) {
+      case chrome.developerPrivate.ViewType.EXTENSION_SERVICE_WORKER_BACKGROUND:
+        return 2;
+      case chrome.developerPrivate.ViewType.EXTENSION_BACKGROUND_PAGE:
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  return [...views].sort((a, b) => getSortValue(b) - getSortValue(a));
 }
 
 /**

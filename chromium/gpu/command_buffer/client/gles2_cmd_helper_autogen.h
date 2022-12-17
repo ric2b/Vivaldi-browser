@@ -3075,28 +3075,6 @@ void LockDiscardableTextureCHROMIUM(GLuint texture_id) {
   }
 }
 
-void TexStorage2DImageCHROMIUM(GLenum target,
-                               GLenum internalFormat,
-                               GLsizei width,
-                               GLsizei height) {
-  gles2::cmds::TexStorage2DImageCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::TexStorage2DImageCHROMIUM>();
-  if (c) {
-    c->Init(target, internalFormat, width, height);
-  }
-}
-
-void SetColorSpaceMetadataCHROMIUM(GLuint texture_id,
-                                   GLuint shm_id,
-                                   GLuint shm_offset,
-                                   GLsizei color_space_size) {
-  gles2::cmds::SetColorSpaceMetadataCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::SetColorSpaceMetadataCHROMIUM>();
-  if (c) {
-    c->Init(texture_id, shm_id, shm_offset, color_space_size);
-  }
-}
-
 void WindowRectanglesEXTImmediate(GLenum mode,
                                   GLsizei count,
                                   const GLint* box) {
@@ -3192,22 +3170,6 @@ void EndSharedImageAccessDirectCHROMIUM(GLuint texture) {
       GetCmdSpace<gles2::cmds::EndSharedImageAccessDirectCHROMIUM>();
   if (c) {
     c->Init(texture);
-  }
-}
-
-void BeginBatchReadAccessSharedImageCHROMIUM() {
-  gles2::cmds::BeginBatchReadAccessSharedImageCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::BeginBatchReadAccessSharedImageCHROMIUM>();
-  if (c) {
-    c->Init();
-  }
-}
-
-void EndBatchReadAccessSharedImageCHROMIUM() {
-  gles2::cmds::EndBatchReadAccessSharedImageCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::EndBatchReadAccessSharedImageCHROMIUM>();
-  if (c) {
-    c->Init();
   }
 }
 

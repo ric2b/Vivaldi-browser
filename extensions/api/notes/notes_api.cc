@@ -163,7 +163,7 @@ NoteTreeNode MakeTreeNode(NoteNode* node) {
   if (parent) {
     notes_tree_node.parent_id.reset(
         new std::string(base::NumberToString(parent->id())));
-    notes_tree_node.index.reset(new int(parent->GetIndexOf(node)));
+    notes_tree_node.index.reset(new int(parent->GetIndexOf(node).value()));
   }
   notes_tree_node.trash.reset(new bool(node->is_trash()));
 
@@ -487,12 +487,12 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
     }
   }
 
-  int indexofdeleted = parent->GetIndexOf(node);
+  int indexofdeleted = parent->GetIndexOf(node).value();
   // TODO(pettern): Event notifications should be handled in the observer
   // for the model.
   if (move_to_trash) {
     NoteNode* old_parent = node->parent();
-    int oldIndex = old_parent->GetIndexOf(node);
+    int oldIndex = old_parent->GetIndexOf(node).value();
 
     // Move to trash
     if (!model->Move(node, trash_node, 0)) {
@@ -600,7 +600,7 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
 
   NoteNode* old_parent = node->parent();
   int64_t old_parent_id = old_parent->id();
-  int old_index = old_parent->GetIndexOf(node);
+  int old_index = old_parent->GetIndexOf(node).value();
 
   bool moved = model->Move(node, parent, index);
   if (!moved) {

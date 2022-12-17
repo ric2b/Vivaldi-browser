@@ -28,6 +28,8 @@
 #include "chrome/browser/content_settings/generated_cookie_prefs.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
+#include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -98,15 +100,21 @@
 #include "ui/vivaldi_ui_utils.h"
 
 #if BUILDFLAG(IS_WIN)
+
+#include <Windows.h>
+
 #if !defined(NTDDI_WIN10_19H1)
 #error Windows 10.0.18362.0 SDK or higher required.
 #endif
+
 #include <mfapi.h>
-#include <windows.h>
 #include "base/win/windows_version.h"
 #include "chrome/browser/password_manager/password_manager_util_win.h"
+
 #elif BUILDFLAG(IS_MAC)
+
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
+
 #endif
 
 using content_settings::CookieControlsMode;
@@ -146,6 +154,8 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
     : browser_context_(context),
       password_access_authenticator_(
           base::BindRepeating(&VivaldiUtilitiesAPI::OsReauthCall,
+                              base::Unretained(this)),
+          base::BindRepeating(&VivaldiUtilitiesAPI::TimeoutCall,
                               base::Unretained(this))) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
@@ -346,6 +356,14 @@ void VivaldiUtilitiesAPI::OsReauthCall(
 #else
   std::move(callback).Run(true);
 #endif
+}
+
+void VivaldiUtilitiesAPI::TimeoutCall() {
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
+  PasswordsPrivateEventRouter* router =
+      PasswordsPrivateEventRouterFactory::GetForProfile(profile);
+  if (router)
+    router->OnPasswordManagerAuthTimeout();
 }
 
 bool VivaldiUtilitiesAPI::IsRazerChromaAvailable() {
@@ -1667,7 +1685,7 @@ ExtensionFunction::ResponseAction UtilitiesStartChromecastFunction::Run() {
             current_tab);
     if (dialog_controller) {
       dialog_controller->ShowMediaRouterDialog(
-          media_router::MediaRouterDialogOpenOrigin::PAGE);
+          media_router::MediaRouterDialogActivationLocation::PAGE);
     }
   }
   return RespondNow(NoArguments());

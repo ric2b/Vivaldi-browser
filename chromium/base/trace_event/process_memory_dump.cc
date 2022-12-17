@@ -30,7 +30,7 @@
 #include <mach/vm_page_size.h>
 #endif
 
-#if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_POSIX)
 #include <sys/mman.h>
 #endif
 
@@ -38,6 +38,12 @@
 #include <windows.h>  // Must be in front of other Windows header files
 
 #include <Psapi.h>
+#endif
+
+#if BUILDFLAG(IS_FUCHSIA)
+#include <tuple>
+
+#include "base/notreached.h"
 #endif
 
 using ProcessSnapshot =
@@ -113,12 +119,9 @@ absl::optional<size_t> ProcessMemoryDump::CountResidentBytes(
 #endif
 
   while (offset < mapped_size) {
-    // TODO(fuchsia): Port and remove [[maybe_unused]], see
-    // https://crbug.com/706592.
-    [[maybe_unused]] uintptr_t chunk_start = (start_pointer + offset);
+    uintptr_t chunk_start = (start_pointer + offset);
     const size_t chunk_size = std::min(mapped_size - offset, kMaxChunkSize);
-    [[maybe_unused]] const size_t page_count =
-        GetSystemPageCount(chunk_size, page_size);
+    const size_t page_count = GetSystemPageCount(chunk_size, page_size);
     size_t resident_page_count = 0;
 #if BUILDFLAG(IS_WIN)
     for (size_t i = 0; i < page_count; i++) {
@@ -132,7 +135,11 @@ absl::optional<size_t> ProcessMemoryDump::CountResidentBytes(
     for (size_t i = 0; i < page_count; i++)
       resident_page_count += vec[i].VirtualAttributes.Valid;
 #elif BUILDFLAG(IS_FUCHSIA)
-    // TODO(fuchsia): Port, see https://crbug.com/706592.
+    // TODO(crbug.com/851760): Implement counting resident bytes.
+    // For now, log and avoid unused variable warnings.
+    NOTIMPLEMENTED_LOG_ONCE();
+    std::ignore = chunk_start;
+    std::ignore = page_count;
 #elif BUILDFLAG(IS_APPLE)
     // mincore in MAC does not fail with EAGAIN.
     failure =
@@ -187,7 +194,8 @@ absl::optional<size_t> ProcessMemoryDump::CountResidentBytesInSharedMemory(
   // thing...
   uint8_t* aligned_start_address = base::bits::AlignDown(
       static_cast<uint8_t*>(start_address), GetSystemPageSize());
-  size_t adjusted_size = mapped_size + (static_cast<uint8_t*>(start_address) -
+  size_t adjusted_size =
+      mapped_size + static_cast<size_t>(static_cast<uint8_t*>(start_address) -
                                         aligned_start_address);
 
 #if BUILDFLAG(IS_MAC)
@@ -432,7 +440,8 @@ void ProcessMemoryDump::SerializeAllocatorDumpsInto(
 
     memory_edge->set_source_id(edge.source.ToUint64());
     memory_edge->set_target_id(edge.target.ToUint64());
-    memory_edge->set_importance(edge.importance);
+    // TODO(crbug.com/1333557): Fix .proto and remove this cast.
+    memory_edge->set_importance(static_cast<uint32_t>(edge.importance));
   }
 }
 

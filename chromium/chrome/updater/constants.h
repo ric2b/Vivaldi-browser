@@ -5,6 +5,7 @@
 #ifndef CHROME_UPDATER_CONSTANTS_H_
 #define CHROME_UPDATER_CONSTANTS_H_
 
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/update_client/update_client_errors.h"
 
@@ -15,6 +16,9 @@ extern const char kUpdaterAppId[];
 
 // The app ID used to qualify the updater.
 extern const char kQualificationAppId[];
+
+// The name of the updater program image, typically, "updater.exe" or "updater".
+extern const char kExecutableName[];
 
 // A suffix appended to the updater executable name before any file extension.
 extern const char kExecutableSuffix[];
@@ -75,6 +79,7 @@ extern const char kUpdateSwitch[];
 
 // Installs the updater.
 extern const char kInstallSwitch[];
+extern const char kRuntimeSwitch[];
 
 // Contains the meta installer tag. The tag is a string of arguments, separated
 // by a delimiter (in this case, the delimiter is =). The tag is typically
@@ -149,6 +154,11 @@ extern const char kAppVersionSwitch[];
 // to Omaha 4.
 extern const char kHealthCheckSwitch[];
 
+// Specifies the enterprise request argument. On Windows, the request may
+// be from legacy updaters which pass the argument in the format of
+// `/enterprise`. Manual argument parsing is needed for that scenario.
+extern const char kEnterpriseSwitch[];
+
 // Specifies the handoff request argument. On Windows, the request may
 // be from legacy updaters which pass the argument in the format of
 // `/handoff <install-args-details>`. Manual argument parsing is needed for that
@@ -186,16 +196,21 @@ extern const char kDevOverrideKeyInitialDelay[];
 extern const char kDevOverrideKeyServerKeepAliveSeconds[];
 extern const char kDevOverrideKeyCrxVerifierFormat[];
 extern const char kDevOverrideKeyGroupPolicies[];
+extern const char kDevOverrideKeyOverinstallTimeout[];
 
 // File name of developer overrides file.
 extern const char kDevOverrideFileName[];
 
 // Timing constants.
-#if BUILDFLAG(IS_WIN)
-// How long to wait for an application installer (such as
-// chrome_installer.exe) to complete.
-constexpr int kWaitForAppInstallerSec = 60;
+// How long to wait for an application installer (such as chrome_installer.exe)
+// to complete.
+constexpr base::TimeDelta kWaitForAppInstaller = base::Minutes(15);
 
+// The default last check period is 4.5 hours.
+constexpr base::TimeDelta kDefaultLastCheckPeriod =
+    base::Hours(4) + base::Minutes(30);
+
+#if BUILDFLAG(IS_WIN)
 // How often the installer progress from registry is sampled. This value may
 // be changed to provide a smoother progress experience (crbug.com/1067475).
 constexpr int kWaitForInstallerProgressSec = 1;
@@ -265,7 +280,7 @@ constexpr int kErrorFailedToDeleteFolder = 16;
 constexpr int kErrorFailedToDeleteDataFolder = 17;
 
 // Failed to get versioned updater folder path.
-constexpr int kErrorFailedToGetVersionedUpdaterFolderPath = 18;
+constexpr int kErrorFailedToGetVersionedInstallDirectory = 18;
 
 // Failed to get the installed app bundle path.
 constexpr int kErrorFailedToGetAppBundlePath = 19;
@@ -341,6 +356,8 @@ constexpr int kPolicyEnabled = 1;
 constexpr int kPolicyEnabledMachineOnly = 4;
 constexpr int kPolicyManualUpdatesOnly = 2;
 constexpr int kPolicyAutomaticUpdatesOnly = 3;
+constexpr int kPolicyForceInstallMachine = 5;
+constexpr int kPolicyForceInstallUser = 6;
 
 constexpr bool kInstallPolicyDefault = kPolicyEnabled;
 constexpr bool kUpdatePolicyDefault = kPolicyEnabled;

@@ -32,9 +32,7 @@ void SegmentationPlatformTabHelper::PrimaryPageChanged(content::Page& page) {
   if (GetWebContents().GetVisibility() == content::Visibility::HIDDEN)
     return;
 
-  PageLoadTriggerContext trigger_context(&GetWebContents());
-  segmentation_platform_service_->OnTrigger(TriggerType::kPageLoad,
-                                            trigger_context);
+  // This class will be deleted soon.
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(SegmentationPlatformTabHelper);

@@ -42,7 +42,6 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/scheduler.h"
@@ -232,7 +231,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
 
   // Vivaldi additions
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   void VivaldiCreateMediaPipelineFactory(
       mojo::GenericPendingReceiver receiver) override;
 #endif
@@ -538,7 +537,7 @@ void GpuChannelMessageFilter::WaitForGetOffsetInRange(
                                         std::move(callback))));
 }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 // Due to linking dependency limitations we cannot reference IPCMediaPipeline
 // from this code. So we indirect via a function pointer.  The pointer is
 // initialized in the GpuServiceImpl constructor.
@@ -577,7 +576,6 @@ GpuChannel::GpuChannel(
       task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       share_group_(share_group),
-      image_manager_(new gles2::ImageManager()),
       is_gpu_host_(is_gpu_host),
       filter_(base::MakeRefCounted<GpuChannelMessageFilter>(
           this,
@@ -788,7 +786,8 @@ mojom::GpuChannel& GpuChannel::GetGpuChannelForTesting() {
   return *filter_;
 }
 
-ImageDecodeAcceleratorStub* GpuChannel::GetImageDecodeAcceleratorStub() const {
+ImageDecodeAcceleratorStub*
+GpuChannel::GetImageDecodeAcceleratorStubForTesting() const {
   DCHECK(filter_);
   return filter_->image_decode_accelerator_stub();
 }
@@ -1061,9 +1060,28 @@ void GpuChannel::ReleaseSysmemBufferCollection(
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
-void GpuChannel::CacheShader(const std::string& key,
-                             const std::string& shader) {
-  gpu_channel_manager_->delegate()->StoreShaderToDisk(client_id_, key, shader);
+void GpuChannel::RegisterCacheHandle(const gpu::GpuDiskCacheHandle& handle) {
+  gpu::GpuDiskCacheType type = gpu::GetHandleType(handle);
+
+  // We should never be registering multiple different caches of the same type.
+  const auto it = caches_.find(type);
+  if (it != caches_.end() && it->second != handle) {
+    LOG(ERROR) << "GpuChannel cannot register multiple different caches of the "
+                  "same type.";
+    return;
+  }
+
+  caches_[gpu::GetHandleType(handle)] = handle;
+}
+
+void GpuChannel::CacheBlob(gpu::GpuDiskCacheType type,
+                           const std::string& key,
+                           const std::string& shader) {
+  auto it = caches_.find(type);
+  if (it == caches_.end()) {
+    return;
+  }
+  gpu_channel_manager_->delegate()->StoreBlobToDisk(it->second, key, shader);
 }
 
 uint64_t GpuChannel::GetMemoryUsage() const {
@@ -1095,8 +1113,6 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
     case gfx::SHARED_MEMORY_BUFFER: {
       if (plane != gfx::BufferPlane::DEFAULT)
         return nullptr;
-      if (!base::IsValueInRangeForNumericType<size_t>(handle.stride))
-        return nullptr;
       auto image = base::MakeRefCounted<gl::GLImageSharedMemory>(size);
       if (!image->Initialize(handle.region, handle.id, format, handle.offset,
                              handle.stride)) {
@@ -1110,10 +1126,12 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
       if (!manager->gpu_memory_buffer_factory())
         return nullptr;
 
+      // TODO(b/220336463): plumb the right color space.
       return manager->gpu_memory_buffer_factory()
           ->AsImageFactory()
           ->CreateImageForGpuMemoryBuffer(std::move(handle), size, format,
-                                          plane, client_id_, surface_handle);
+                                          gfx::ColorSpace(), plane, client_id_,
+                                          surface_handle);
     }
   }
 }

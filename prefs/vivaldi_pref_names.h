@@ -52,6 +52,12 @@ extern const char kOldVivaldiTabZoom[];
 extern const char kOldVivaldiTabsToLinks[];
 extern const char kOldVivaldiUseNativeWindowDecoration[];
 
+#if BUILDFLAG(IS_IOS)
+extern const char kIosNoteFolderDefault[];
+extern const char kIosNoteCachedTopMostRow[];
+extern const char kIosNoteCachedFolderId[];
+#endif
+
 }  // namespace vivaldiprefs
 
 #endif  // PREFS_VIVALDI_PREF_NAMES_H_

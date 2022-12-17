@@ -6,6 +6,7 @@ import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/polymer/html_to_wrapper.gni")
 import("//tools/typescript/ts_library.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
+import("//ui/webui/webui_features.gni")
 import("most_visited.gni")
 
 assert(!is_android && !is_ios)
@@ -25,6 +26,7 @@ mojom("mojom") {
 
 html_to_wrapper("html_wrapper_files") {
   in_files = html_files
+  minify = optimize_webui
 }
 
 copy("copy_mojom") {
@@ -36,15 +38,6 @@ copy("copy_mojom") {
 copy("copy_src") {
   sources = ts_files
   outputs = [ "$target_gen_dir/{{source_file_part}}" ]
-}
-
-generate_grd("build_grdp") {
-  grd_prefix = "cr_components_most_visited"
-  out_grd = "$target_gen_dir/resources.grdp"
-
-  public_deps = [ ":build_ts" ]
-  manifest_files = [ "$target_gen_dir/tsconfig.manifest" ]
-  resource_path_prefix = "cr_components/most_visited"
 }
 
 ts_library("build_ts") {
@@ -63,4 +56,14 @@ ts_library("build_ts") {
     ":copy_src",
     ":html_wrapper_files",
   ]
+}
+
+generate_grd("build_grdp") {
+  grd_prefix = "cr_components_most_visited"
+  out_grd = "$target_gen_dir/resources.grdp"
+
+  public_deps = [ ":build_ts" ]
+  manifest_files =
+      filter_include(get_target_outputs(":build_ts"), [ "*.manifest" ])
+  resource_path_prefix = "cr_components/most_visited"
 }

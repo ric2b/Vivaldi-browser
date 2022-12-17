@@ -313,6 +313,10 @@ class PageLoadMetricsObserverInterface {
   virtual void OnTimingUpdate(content::RenderFrameHost* subframe_rfh,
                               const mojom::PageLoadTiming& timing) = 0;
 
+  // The callback is invoked when a soft navigation is detected.
+  // See https://bit.ly/soft-navigation for more details.
+  virtual void OnSoftNavigationCountUpdated() = 0;
+
   virtual void OnMobileFriendlinessUpdate(
       const blink::MobileFriendliness& mobile_friendliness) = 0;
 
@@ -322,6 +326,10 @@ class PageLoadMetricsObserverInterface {
   virtual void OnInputTimingUpdate(
       content::RenderFrameHost* subframe_rfh,
       const mojom::InputTiming& input_timing_delta) = 0;
+
+  // OnPageInputTimingUpdate is triggered when an updated InputTiming is
+  // available at the page level.
+  virtual void OnPageInputTimingUpdate(uint64_t num_input_events) = 0;
 
   // OnRenderDataUpdate is triggered when an updated PageRenderData is available
   // at the subframe level. This method may be called multiple times over the
@@ -346,7 +354,6 @@ class PageLoadMetricsObserverInterface {
   virtual void OnDomContentLoadedEventStart(
       const mojom::PageLoadTiming& timing) = 0;
   virtual void OnLoadEventStart(const mojom::PageLoadTiming& timing) = 0;
-  virtual void OnFirstLayout(const mojom::PageLoadTiming& timing) = 0;
   virtual void OnParseStart(const mojom::PageLoadTiming& timing) = 0;
   virtual void OnParseStop(const mojom::PageLoadTiming& timing) = 0;
 
@@ -448,24 +455,23 @@ class PageLoadMetricsObserverInterface {
   virtual ObservePolicy FlushMetricsOnAppEnterBackground(
       const mojom::PageLoadTiming& timing) = 0;
 
-  // One of OnComplete or OnFailedProvisionalLoad is invoked for tracked page
-  // loads, immediately before the observer is deleted. These callbacks will not
-  // be invoked for page loads that did not meet the criteria for being tracked
-  // at the time the navigation completed. The PageLoadTiming struct contains
-  // timing data. Other useful data collected over the course of the page load
-  // is exposed by the observer delegate API. Most observers should not need
-  // to implement these callbacks, and should implement the On* timing callbacks
-  // instead.
-
-  // OnComplete is invoked for tracked page loads that committed, immediately
-  // before the observer is deleted. Observers that implement OnComplete may
-  // also want to implement FlushMetricsOnAppEnterBackground, to avoid loss of
-  // data if the application is killed while in the background (this happens
-  // frequently on Android).
+  // A destructor of observer is invoked in the following mutually exclusive
+  // paths:
+  //
+  // - (If an ovserver doesn't override OnEnterBackForwardCache) When
+  //   OnEnterBackForwardCache is invoked, it calls OnComplete and returns
+  //   STOP_OBSERVING, then the ovserver is pruned.
+  // - When some callback returned STOP_OBSERVING, the observer is pruned with
+  //   no more callback.
+  // - When PageLoadTracker destructed, OnComplete is invoked just before
+  //   destruction if the load is committed.
+  // - When PageLoadTracker destructed, OnFailedProvisionalLoad is invoked just
+  //   before destruction if the load is not committed.
+  //
+  // Observers that implement OnComplete may also want to implement
+  // FlushMetricsOnAppEnterBackground, to avoid loss of data if the application
+  // is killed while in the background (this happens frequently on Android).
   virtual void OnComplete(const mojom::PageLoadTiming& timing) = 0;
-
-  // OnFailedProvisionalLoad is invoked for tracked page loads that did not
-  // commit, immediately before the observer is deleted.
   virtual void OnFailedProvisionalLoad(
       const FailedProvisionalLoadInfo& failed_provisional_load_info) = 0;
 
@@ -486,6 +492,21 @@ class PageLoadMetricsObserverInterface {
   virtual void FrameSizeChanged(content::RenderFrameHost* render_frame_host,
                                 const gfx::Size& frame_size) = 0;
 
+  // OnRenderFrameDeleted is called when RenderFrameHost for a frame is deleted.
+  // OnSubFrameDeleted is called when FrameTreeNode for a subframe is deleted.
+  // The differences are:
+  //
+  // - OnRenderFrameDeleted is called for all frames. OnSubFrameDeleted is not
+  //   called for main frames. This is because PageLoadTracker is bound with
+  //   RenderFrameHost of the main frame and destruction of PageLoadTracker is
+  //   earlier than one of FrameTreeNode.
+  // - OnRenderFrameDeleted can be called in navigation commit to discard the
+  //   previous RenderFrameHost. At that timing, there are two RenderFrameHost
+  //   that have the same RenderFrameHost::GetFrameNodeId.
+  //
+  // Note that navigation may not trigger deletion of RenderFrameHost, e.g. in
+  // the case of the page entered to Back/Forward cache. If observer only wants
+  // to observe deletion of node, OnSubFrameDeleted is more relevant.
   virtual void OnRenderFrameDeleted(
       content::RenderFrameHost* render_frame_host) = 0;
   virtual void OnSubFrameDeleted(int frame_tree_node_id) = 0;

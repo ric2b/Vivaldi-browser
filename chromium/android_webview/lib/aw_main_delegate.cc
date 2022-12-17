@@ -33,6 +33,8 @@
 #include "base/posix/global_descriptors.h"
 #include "base/scoped_add_feature_flags.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
@@ -62,7 +64,9 @@
 #include "gpu/config/gpu_finch_features.h"
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
+#include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
@@ -83,7 +87,7 @@ AwMainDelegate::AwMainDelegate() = default;
 
 AwMainDelegate::~AwMainDelegate() = default;
 
-bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
+absl::optional<int> AwMainDelegate::BasicStartupComplete() {
   TRACE_EVENT0("startup", "AwMainDelegate::BasicStartupComplete");
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
 
@@ -178,17 +182,32 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     base::android::RegisterApkAssetWithFileDescriptorStore(
         content::kV8Snapshot64DataDescriptor,
         gin::V8Initializer::GetSnapshotFilePath(false, file_type));
+
+    {
+      // Disable origin trial features on WebView unless the flag was explicitly
+      // specified via command-line.
+      std::string disabled_origin_trials_switch_value = cl->GetSwitchValueASCII(
+          embedder_support::kOriginTrialDisabledFeatures);
+      base::flat_set<std::string> disabled_origin_trials(
+          base::SplitString(disabled_origin_trials_switch_value, "|",
+                            base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
+
+      // Disable origin trials for the FedCM API on WebView because the FedCM
+      // API is not implemented on WebView. The inserted feature string should
+      // match a name in
+      // third_party/blink/renderer/platform/runtime_enabled_features.json5.
+      // Currently, there is no method to obtain these strings directly so it is
+      // hard coded.
+      disabled_origin_trials.insert("FedCM");
+
+      cl->AppendSwitchASCII(
+          embedder_support::kOriginTrialDisabledFeatures,
+          base::JoinString(std::move(disabled_origin_trials).extract(), "|"));
+    }
   }
 
   if (cl->HasSwitch(switches::kWebViewSandboxedRenderer)) {
     cl->AppendSwitch(switches::kInProcessGPU);
-  }
-
-  // Disable origin trial features on Webview unless the flag was
-  // explicitly provided via command-line.
-  if (!cl->HasSwitch(embedder_support::kOriginTrialDisabledFeatures)) {
-    cl->AppendSwitchASCII(embedder_support::kOriginTrialDisabledFeatures,
-                          "DocumentTransitionV2");
   }
 
   {
@@ -282,6 +301,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // WebView.
     features.DisableIfNotSet(blink::features::kUserAgentClientHint);
 
+    // Disable Reducing User Agent minor version on WebView.
+    features.DisableIfNotSet(blink::features::kReduceUserAgentMinorVersion);
+
     // Disabled until viz scheduling can be improved.
     features.DisableIfNotSet(::features::kUseSurfaceLayerForVideoDefault);
 
@@ -302,6 +324,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // TODO(crbug.com/1292622): Enable the feature on Webview.
     features.DisableIfNotSet(::translate::kTFLiteLanguageDetectionEnabled);
 
+    // Disable key pinning enforcement on webview.
+    features.DisableIfNotSet(net::features::kStaticKeyPinningEnforcement);
+
     // Have the network service in the browser process even if we have separate
     // renderer processes. See also: switches::kInProcessGPU above.
     features.EnableIfNotSet(::features::kNetworkServiceInProcess);
@@ -310,6 +335,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // See crbug.com/1277431 for more details.
     if (version_info::android::GetChannel() < version_info::Channel::BETA)
       features.DisableIfNotSet(blink::features::kEventPath);
+
+    // FedCM is not yet supported on WebView.
+    features.DisableIfNotSet(::features::kFedCm);
   }
 
   android_webview::RegisterPathProvider();
@@ -330,7 +358,7 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // partially-initialized, which the TLS object is supposed to protect again.
   heap_profiling::InitTLSSlot();
 
-  return false;
+  return absl::nullopt;
 }
 
 void AwMainDelegate::PreSandboxStartup() {
@@ -398,7 +426,7 @@ void AwMainDelegate::ProcessExiting(const std::string& process_type) {
 bool AwMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
   // In the browser process the FeatureList is created in
   // AwMainDelegate::PostEarlyInitialization().
-  return invoked_in == InvokedIn::kChildProcess;
+  return absl::holds_alternative<InvokedInChildProcess>(invoked_in);
 }
 
 variations::VariationsIdsProvider*
@@ -407,8 +435,10 @@ AwMainDelegate::CreateVariationsIdsProvider() {
       variations::VariationsIdsProvider::Mode::kDontSendSignedInVariations);
 }
 
-void AwMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
-  const bool is_browser_process = invoked_in != InvokedIn::kChildProcess;
+absl::optional<int> AwMainDelegate::PostEarlyInitialization(
+    InvokedIn invoked_in) {
+  const bool is_browser_process =
+      absl::holds_alternative<InvokedInBrowserProcess>(invoked_in);
   if (is_browser_process) {
     InitIcuAndResourceBundleBrowserSide();
     aw_feature_list_creator_->CreateFeatureListAndFieldTrials();
@@ -431,6 +461,7 @@ void AwMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
   gwp_asan::EnableForPartitionAlloc(is_canary_dev || is_browser_process,
                                     process_type.c_str());
 #endif
+  return absl::nullopt;
 }
 
 content::ContentClient* AwMainDelegate::CreateContentClient() {

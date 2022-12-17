@@ -309,7 +309,8 @@ void PasswordGenerationPopupViewViews::OnPaint(gfx::Canvas* canvas) {
   // will overwrite the divider.
   gfx::Rect divider_bounds(0, password_view_->bounds().bottom(),
                            password_view_->width(), 1);
-  canvas->FillRect(divider_bounds, GetSeparatorColor());
+  canvas->FillRect(divider_bounds,
+                   GetColorProvider()->GetColor(GetSeparatorColorId()));
 }
 
 void PasswordGenerationPopupViewViews::GetAccessibleNodeData(
@@ -317,10 +318,10 @@ void PasswordGenerationPopupViewViews::GetAccessibleNodeData(
   if (!controller_) {
     return;
   }
+  node_data->role = ax::mojom::Role::kMenuItem;
   node_data->SetName(base::JoinString(
       {controller_->SuggestedText(), controller_->password()}, u" "));
   node_data->SetDescription(controller_->HelpText());
-  node_data->role = ax::mojom::Role::kMenuItem;
 }
 
 gfx::Size PasswordGenerationPopupViewViews::CalculatePreferredSize() const {

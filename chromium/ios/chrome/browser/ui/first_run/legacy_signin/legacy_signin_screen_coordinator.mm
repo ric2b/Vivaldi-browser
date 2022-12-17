@@ -119,7 +119,7 @@
     // Don't show sign in screen if there is already an account signed in (for
     // example going through the FRE then killing the app and restarting the
     // FRE). Don't record any metric as the user didn't take any action.
-    [self.delegate willFinishPresenting];
+    [self.delegate screenWillFinishPresenting];
     return;
   }
 
@@ -276,7 +276,7 @@
 
 #pragma mark - Private
 
-// Dismisses the Signed Out modal if it is still present and |skipScreens|.
+// Dismisses the Signed Out modal if it is still present and `skipScreens`.
 - (void)dismissSignedOutModalAndSkipScreens:(BOOL)skipScreens {
   [self.enterprisePromptCoordinator stop];
   self.enterprisePromptCoordinator = nil;
@@ -295,7 +295,7 @@
 }
 
 // Completes the presentation of the screen, recording the metrics and notifying
-// the delegate to skip the rest of the FRE if |skipRemainingScreens| is YES, or
+// the delegate to skip the rest of the FRE if `skipRemainingScreens` is YES, or
 // to continue the FRE.
 - (void)finishPresentingAndSkipRemainingScreens:(BOOL)skipRemainingScreens {
   if (self.firstRun) {
@@ -306,9 +306,9 @@
                                 self.hadIdentitiesAtStartup);
   }
   if (skipRemainingScreens) {
-    [self.delegate skipAll];
+    [self.delegate skipAllScreens];
   } else {
-    [self.delegate willFinishPresenting];
+    [self.delegate screenWillFinishPresenting];
   }
 }
 

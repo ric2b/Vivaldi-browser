@@ -17,7 +17,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/profiles/profile.h"
 #include "importer/imported_notes_entry.h"
 #include "notes/note_load_details.h"
 #include "notes/note_node.h"
@@ -499,7 +498,7 @@ void NotesModel::Remove(const NoteNode* node) {
 
   const NoteNode* parent = node->parent();
   DCHECK(parent);
-  int index = parent->GetIndexOf(node);
+  int index = parent->GetIndexOf(node).value();
 
   RemoveAndDeleteNode(AsMutable(parent), index, AsMutable(node));
 }
@@ -637,7 +636,7 @@ bool NotesModel::Move(const NoteNode* node,
   }
 
   const NoteNode* old_parent = node->parent();
-  size_t old_index = old_parent->GetIndexOf(node);
+  size_t old_index = old_parent->GetIndexOf(node).value();
 
   if (old_parent == new_parent &&
       (index == old_index || index == old_index + 1)) {

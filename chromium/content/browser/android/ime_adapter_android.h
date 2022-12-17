@@ -97,6 +97,10 @@ class CONTENT_EXPORT ImeAdapterAndroid : public RenderWidgetHostConnector {
                            bool monitorRequest);
   bool RequestTextInputStateUpdate(JNIEnv*,
                                    const base::android::JavaParamRef<jobject>&);
+  void HandleStylusWritingGestureAction(
+      JNIEnv*,
+      const base::android::JavaParamRef<jobject>&,
+      const base::android::JavaParamRef<jobject>&);
 
   // RendetWidgetHostConnector implementation.
   void UpdateRenderProcessConnection(
@@ -110,8 +114,15 @@ class CONTENT_EXPORT ImeAdapterAndroid : public RenderWidgetHostConnector {
 
   // Called from native -> java
   void CancelComposition();
-  void FocusedNodeChanged(bool is_editable_node);
+  void FocusedNodeChanged(bool is_editable_node,
+                          const gfx::Rect& node_bounds_in_screen);
   void SetCharacterBounds(const std::vector<gfx::RectF>& rects);
+  // Requests to start stylus writing and returns true if successful.
+  bool RequestStartStylusWriting();
+
+  void OnEditElementFocusedForStylusWriting(
+      const gfx::Rect& focused_edit_bounds,
+      const gfx::Rect& caret_bounds);
 
   base::android::ScopedJavaLocalRef<jobject> java_ime_adapter_for_testing(
       JNIEnv* env) {

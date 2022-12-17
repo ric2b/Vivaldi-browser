@@ -5,7 +5,7 @@
 // Include test fixture.
 GEN_INCLUDE([
   '../select_to_speak/select_to_speak_e2e_test_base.js',
-  'repeated_tree_change_handler.js'
+  'repeated_tree_change_handler.js',
 ]);
 
 /** Test fixture for array_util.js. */
@@ -39,8 +39,7 @@ TEST_F('RepeatedTreeChangeHandlerTest', 'Predicate', function() {
     const handler = () => this.handlerCallCount++;
 
     const repeatedHandler = new RepeatedTreeChangeHandler(
-        'allTreeChanges', handler,
-        {predicate: (c) => c.type === 'nodeRemoved'});
+        'allTreeChanges', handler, {predicate: c => c.type === 'nodeRemoved'});
 
     // Simulate events being fired.
     repeatedHandler.onChange_({type: 'nodeAdded'});

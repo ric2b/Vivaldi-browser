@@ -176,9 +176,12 @@ void Length::DecrementCalculatedRef() const {
   CalcHandles().DecrementRef(CalculationHandle());
 }
 
-float Length::NonNanCalculatedValue(LayoutUnit max_value) const {
+float Length::NonNanCalculatedValue(
+    LayoutUnit max_value,
+    const AnchorEvaluator* anchor_evaluator) const {
   DCHECK(IsCalculated());
-  float result = GetCalculationValue().Evaluate(max_value.ToFloat());
+  float result =
+      GetCalculationValue().Evaluate(max_value.ToFloat(), anchor_evaluator);
   if (std::isnan(result))
     return 0;
   return result;
@@ -188,6 +191,22 @@ bool Length::IsCalculatedEqual(const Length& o) const {
   return IsCalculated() &&
          (&GetCalculationValue() == &o.GetCalculationValue() ||
           GetCalculationValue() == o.GetCalculationValue());
+}
+
+absl::optional<LayoutUnit> Length::AnchorEvaluator::EvaluateAnchor(
+    const AtomicString& anchor_name,
+    AnchorValue anchor_value) const {
+  return absl::nullopt;
+}
+
+absl::optional<LayoutUnit> Length::AnchorEvaluator::EvaluateAnchorSize(
+    const AtomicString& anchor_name,
+    AnchorSizeValue anchor_size_value) const {
+  return absl::nullopt;
+}
+
+bool Length::HasAnchorQueries() const {
+  return IsCalculated() && GetCalculationValue().HasAnchorQueries();
 }
 
 String Length::ToString() const {

@@ -45,8 +45,7 @@ void PasswordsPrivateEventRouter::SendSavedPasswordListToListeners() {
   auto extension_event = std::make_unique<Event>(
       events::PASSWORDS_PRIVATE_ON_SAVED_PASSWORDS_LIST_CHANGED,
       api::passwords_private::OnSavedPasswordsListChanged::kEventName,
-      base::Value(cached_saved_password_parameters_.value())
-          .TakeListDeprecated());
+      std::move(cached_saved_password_parameters_).value());
   event_router_->BroadcastEvent(std::move(extension_event));
 }
 
@@ -66,8 +65,7 @@ void PasswordsPrivateEventRouter::SendPasswordExceptionListToListeners() {
   auto extension_event = std::make_unique<Event>(
       events::PASSWORDS_PRIVATE_ON_PASSWORD_EXCEPTIONS_LIST_CHANGED,
       api::passwords_private::OnPasswordExceptionsListChanged::kEventName,
-      base::Value(cached_password_exception_parameters_.value())
-          .TakeListDeprecated());
+      std::move(cached_password_exception_parameters_).value());
   event_router_->BroadcastEvent(std::move(extension_event));
 }
 
@@ -78,8 +76,8 @@ void PasswordsPrivateEventRouter::OnPasswordsExportProgress(
   params.status = status;
   params.folder_name = std::make_unique<std::string>(std::move(folder_name));
 
-  std::vector<base::Value> event_value;
-  event_value.push_back(base::Value::FromUniquePtrValue(params.ToValue()));
+  base::Value::List event_value;
+  event_value.Append(base::Value::FromUniquePtrValue(params.ToValue()));
 
   auto extension_event = std::make_unique<Event>(
       events::PASSWORDS_PRIVATE_ON_PASSWORDS_FILE_EXPORT_PROGRESS,
@@ -99,7 +97,7 @@ void PasswordsPrivateEventRouter::OnAccountStorageOptInStateChanged(
 }
 
 void PasswordsPrivateEventRouter::OnCompromisedCredentialsChanged(
-    std::vector<api::passwords_private::InsecureCredential>
+    std::vector<api::passwords_private::PasswordUiEntry>
         compromised_credentials) {
   auto extension_event = std::make_unique<Event>(
       events::PASSWORDS_PRIVATE_ON_COMPROMISED_CREDENTIALS_INFO_CHANGED,
@@ -110,7 +108,7 @@ void PasswordsPrivateEventRouter::OnCompromisedCredentialsChanged(
 }
 
 void PasswordsPrivateEventRouter::OnWeakCredentialsChanged(
-    std::vector<api::passwords_private::InsecureCredential> weak_credentials) {
+    std::vector<api::passwords_private::PasswordUiEntry> weak_credentials) {
   auto extension_event = std::make_unique<Event>(
       events::PASSWORDS_PRIVATE_ON_WEAK_CREDENTIALS_CHANGED,
       api::passwords_private::OnWeakCredentialsChanged::kEventName,
@@ -126,6 +124,13 @@ void PasswordsPrivateEventRouter::OnPasswordCheckStatusChanged(
       api::passwords_private::OnPasswordCheckStatusChanged::kEventName,
       api::passwords_private::OnPasswordCheckStatusChanged::Create(status));
   event_router_->BroadcastEvent(std::move(extension_event));
+}
+
+void PasswordsPrivateEventRouter::OnPasswordManagerAuthTimeout() {
+  event_router_->BroadcastEvent(std::make_unique<Event>(
+      events::PASSWORDS_PRIVATE_ON_PASSWORD_MANAGER_AUTH_TIMEOUT,
+      api::passwords_private::OnPasswordManagerAuthTimeout::kEventName,
+      api::passwords_private::OnPasswordManagerAuthTimeout::Create()));
 }
 
 PasswordsPrivateEventRouter* PasswordsPrivateEventRouter::Create(

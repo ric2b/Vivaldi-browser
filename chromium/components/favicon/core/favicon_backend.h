@@ -214,6 +214,8 @@ class FaviconBackend {
                                  favicon_base::IconType icon_type,
                                  favicon_base::FaviconID icon_id);
 
+  void SetVivaldiPreloadedFavicons();
+
   std::unique_ptr<FaviconDatabase> db_;
   raw_ptr<FaviconBackendDelegate> delegate_;
 };

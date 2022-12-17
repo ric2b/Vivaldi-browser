@@ -20,9 +20,9 @@ var<private> quadUV : array<vec2<f32>, 4> = array<vec2<f32>, 4>(
     vec2<f32>(1.0, 1.0));
 
 struct VertexOutput {
-  @builtin(position) Position : vec4<f32>;
-  @location(0) fragUV : vec2<f32>;
-};
+  @builtin(position) Position : vec4<f32>,
+  @location(0) fragUV : vec2<f32>,
+}
 
 @vertex
 fn main(@builtin(vertex_index) VertexIndex : u32) -> VertexOutput {
@@ -62,7 +62,7 @@ fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
   };
 
   return {
-    init: async function(gpuCanvas) {
+    init: async function(gpuCanvas, has_alpha = true) {
       const adapter = navigator.gpu && await navigator.gpu.requestAdapter();
       if (!adapter) {
         console.error('navigator.gpu && navigator.gpu.requestAdapter failed');
@@ -85,6 +85,7 @@ fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
         device: device,
         format: outputFormat,
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+        alphaMode: has_alpha ? "premultiplied" : "opaque",
       });
 
       return [device, context];

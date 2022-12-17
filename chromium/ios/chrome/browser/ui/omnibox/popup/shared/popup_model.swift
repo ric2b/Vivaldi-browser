@@ -22,20 +22,28 @@ import UIKit
   @Published var highlightedMatchIndexPath: IndexPath?
   @Published var rtlContentAttribute: UISemanticContentAttribute = .forceLeftToRight
 
+  /// Number of suggestions that can be visible in the `popup_view`.
+  /// This variable is modified by an observer and should NOT be published.
+  var visibleSuggestionCount: Int
+
   /// Index of the preselected section when no row is highlighted.
   var preselectedSectionIndex: Int
 
   weak var delegate: AutocompleteResultConsumerDelegate?
+  weak var dataSource: AutocompleteResultDataSource?
 
   public init(
-    matches: [[PopupMatch]], headers: [String], delegate: AutocompleteResultConsumerDelegate?
+    matches: [[PopupMatch]], headers: [String], dataSource: AutocompleteResultDataSource?,
+    delegate: AutocompleteResultConsumerDelegate?
   ) {
     assert(headers.count == matches.count)
     self.sections = zip(headers, matches).map { tuple in
       PopupMatchSection(header: tuple.0, matches: tuple.1)
     }
+    self.dataSource = dataSource
     self.delegate = delegate
     preselectedSectionIndex = 0
+    visibleSuggestionCount = 0
   }
 
   // MARK: AutocompleteResultConsumer
@@ -60,12 +68,16 @@ import UIKit
   public func setSemanticContentAttribute(_ semanticContentAttribute: UISemanticContentAttribute) {
     rtlContentAttribute = semanticContentAttribute
   }
+
+  public func newResultsAvailable() {
+    dataSource?.requestResults(visibleSuggestionCount: visibleSuggestionCount)
+  }
 }
 
 // MARK: OmniboxSuggestionCommands
 
 extension PopupModel: OmniboxSuggestionCommands {
-  public func highlightNextSuggestion() {
+  public func highlightPreviousSuggestion() {
     // Pressing Up Arrow when there are no suggestions does nothing.
     if sections.isEmpty || sections.first!.matches.isEmpty {
       return
@@ -108,7 +120,7 @@ extension PopupModel: OmniboxSuggestionCommands {
       self, didHighlightRow: UInt(indexPath.row), inSection: UInt(indexPath.section))
   }
 
-  public func highlightPreviousSuggestion() {
+  public func highlightNextSuggestion() {
     // Pressing Down Arrow when there are no suggestions does nothing.
     if sections.isEmpty || sections.first!.matches.isEmpty {
       return

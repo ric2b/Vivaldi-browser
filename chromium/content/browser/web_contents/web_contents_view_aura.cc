@@ -31,6 +31,7 @@
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_aura.h"
 #include "content/browser/renderer_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -127,10 +128,18 @@ RenderWidgetHostViewAura* ToRenderWidgetHostViewAura(
 
 // Listens to all mouse drag events during a drag and drop and sends them to
 // the renderer.
-class WebDragSourceAura : public content::WebContentsObserver {
+class WebDragSourceAura : public content::WebContentsObserver,
+                          public aura::WindowObserver {
  public:
   WebDragSourceAura(aura::Window* window, WebContentsImpl* contents)
-      : WebContentsObserver(contents), window_(window) {}
+      : WebContentsObserver(contents), window_(window) {
+    window_->AddObserver(this);
+  }
+
+  ~WebDragSourceAura() override {
+    if (window_)
+      window_->RemoveObserver(this);
+  }
 
   WebDragSourceAura(const WebDragSourceAura&) = delete;
   WebDragSourceAura& operator=(const WebDragSourceAura&) = delete;
@@ -143,6 +152,15 @@ class WebDragSourceAura : public content::WebContentsObserver {
 
   void WebContentsDestroyed() override { CancelDrag(); }
 
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override {
+    window_->RemoveObserver(this);
+    window_ = nullptr;
+  }
+
+  aura::Window* window() const { return window_; }
+
+ private:
   void CancelDrag() {
     if (!window_)
       return;
@@ -150,15 +168,14 @@ class WebDragSourceAura : public content::WebContentsObserver {
     // Cancel the drag if it is still in progress.
     aura::client::DragDropClient* dnd_client =
         aura::client::GetDragDropClient(window_->GetRootWindow());
+
+    window_->RemoveObserver(this);
+    window_ = nullptr;
+
     if (dnd_client && dnd_client->IsDragDropInProgress())
       dnd_client->DragCancel();
-
-    window_ = nullptr;
   }
 
-  aura::Window* window() const { return window_; }
-
- private:
   raw_ptr<aura::Window> window_;
 };
 
@@ -459,6 +476,7 @@ WebContentsViewAura::AsyncDropNavigationObserver::AsyncDropNavigationObserver(
 
 void WebContentsViewAura::AsyncDropNavigationObserver::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
+  auto* navigation_request = NavigationRequest::From(navigation_handle);
   // This method is called every time any navigation completes in the observed
   // web contents, including subframe navigations. In the case of a subframe
   // navigation, we can't readily determine on the browser process side if the
@@ -468,10 +486,10 @@ void WebContentsViewAura::AsyncDropNavigationObserver::DidFinishNavigation(
   // prerendering starts and the document is created and starts loading and one
   // when the prerendered document has been activated and shown to the user.
   // We should not disallow the drop for the former prerendering state.
-  if (navigation_handle->HasCommitted() &&
-      (navigation_handle->GetURL() !=
-       navigation_handle->GetPreviousMainFrameURL()) &&
-      navigation_handle->GetRenderFrameHost()->GetLifecycleState() !=
+  if (navigation_request->HasCommitted() &&
+      (navigation_request->GetURL() !=
+       navigation_request->GetPreviousMainFrameURL()) &&
+      navigation_request->GetRenderFrameHost()->GetLifecycleState() !=
           RenderFrameHost::LifecycleState::kPrerendering) {
     drop_allowed_ = false;
   }
@@ -618,8 +636,7 @@ class WebContentsViewAura::WindowObserver
     pending_window_changes_.reset();
   }
 
-  void OnHostMovedInPixels(aura::WindowTreeHost* host,
-                           const gfx::Point& new_origin_in_pixels) override {
+  void OnHostMovedInPixels(aura::WindowTreeHost* host) override {
     if (!ShouldNotifyOfBoundsChanges())
       return;
 
@@ -1197,7 +1214,7 @@ void WebContentsViewAura::StartDragging(
       web_contents_->GetBrowserContext()->IsOffTheRecord()
           ? nullptr
           : std::make_unique<ui::DataTransferEndpoint>(
-                web_contents_->GetMainFrame()->GetLastCommittedURL()));
+                web_contents_->GetPrimaryMainFrame()->GetLastCommittedURL()));
   WebContentsDelegate* delegate = web_contents_->GetDelegate();
   if (delegate && delegate->IsPrivileged())
     data->MarkAsFromPrivileged();
@@ -1540,7 +1557,7 @@ aura::client::DragUpdateInfo WebContentsViewAura::OnDragUpdated(
   auto* focused_frame = web_contents_->GetFocusedFrame();
   if (focused_frame && !web_contents_->GetBrowserContext()->IsOffTheRecord()) {
     drag_info.data_endpoint = ui::DataTransferEndpoint(
-        web_contents_->GetMainFrame()->GetLastCommittedURL());
+        web_contents_->GetPrimaryMainFrame()->GetLastCommittedURL());
   }
 
   std::unique_ptr<DropData> drop_data = std::make_unique<DropData>();

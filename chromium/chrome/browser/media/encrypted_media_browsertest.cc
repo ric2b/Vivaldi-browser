@@ -140,9 +140,6 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
                                  const std::string& key_system,
                                  const base::StringPairs& query_params,
                                  const std::string& expected_title) {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    base::ScopedAllowBlockingForTesting allow_blocking;
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
     base::StringPairs new_query_params = query_params;
     StartLicenseServerIfNeeded(key_system, &new_query_params);
     RunMediaTestPage(html_page, new_query_params, expected_title, true);

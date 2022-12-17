@@ -65,4 +65,13 @@ const char kOldVivaldiTabsToLinks[] = "vivaldi.tabs_to_links";
 const char kOldVivaldiUseNativeWindowDecoration[] =
     "vivaldi.use_native_window_decoration";
 
+#if BUILDFLAG(IS_IOS)
+// Caches the folder id of user's position in the note hierarchy navigator.
+const char kIosNoteCachedFolderId[] = "ios.note.cached_folder_id";
+
+// Caches the scroll position of Notes.
+const char kIosNoteCachedTopMostRow[] = "ios.note.cached_top_most_row";
+
+const char kIosNoteFolderDefault[] = "ios.note.default_folder";
+#endif
 }  // namespace vivaldiprefs

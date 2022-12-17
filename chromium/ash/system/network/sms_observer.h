@@ -6,13 +6,13 @@
 #define ASH_SYSTEM_NETWORK_SMS_OBSERVER_H_
 
 #include "ash/ash_export.h"
-#include "chromeos/network/network_sms_handler.h"
+#include "chromeos/ash/components/network/network_sms_handler.h"
 
 namespace ash {
 
 // SmsObserver is called when a new sms message is received. Then it shows the
 // sms message to the user in the notification center.
-class ASH_EXPORT SmsObserver : public chromeos::NetworkSmsHandler::Observer {
+class ASH_EXPORT SmsObserver : public NetworkSmsHandler::Observer {
  public:
   // The prefix of all SMS notifications.
   static const char kNotificationPrefix[];
@@ -24,7 +24,7 @@ class ASH_EXPORT SmsObserver : public chromeos::NetworkSmsHandler::Observer {
 
   ~SmsObserver() override;
 
-  // chromeos::NetworkSmsHandler::Observer:
+  // NetworkSmsHandler::Observer:
   void MessageReceived(const base::Value& message) override;
 
  private:

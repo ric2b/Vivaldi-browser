@@ -75,8 +75,7 @@ enum class RendererReloadAction {
 
 bool IsPlayableTrack(MediaStreamComponent* component) {
   return component && component->Source() &&
-         component->Source()->GetReadyState() !=
-             MediaStreamSource::kReadyStateEnded;
+         component->GetReadyState() != MediaStreamSource::kReadyStateEnded;
 }
 
 const char* LoadTypeToString(WebMediaPlayer::LoadType type) {
@@ -530,7 +529,7 @@ WebMediaPlayer::LoadTiming WebMediaPlayerMS::Load(
         client_->AddAudioTrack(
             blink::WebString::FromUTF8(component->Id().Utf8()),
             blink::WebMediaPlayerClient::kAudioTrackKindMain,
-            blink::WebString::FromUTF8(component->Source()->GetName().Utf8()),
+            blink::WebString::FromUTF8(component->GetSourceName().Utf8()),
             /*language=*/"", is_first_audio_track);
         is_first_audio_track = false;
       }
@@ -555,7 +554,7 @@ WebMediaPlayer::LoadTiming WebMediaPlayerMS::Load(
         client_->AddVideoTrack(
             blink::WebString::FromUTF8(component->Id().Utf8()),
             blink::WebMediaPlayerClient::kVideoTrackKindMain,
-            blink::WebString::FromUTF8(component->Source()->GetName().Utf8()),
+            blink::WebString::FromUTF8(component->GetSourceName().Utf8()),
             /*language=*/"", is_first_video_track);
         is_first_video_track = false;
       }
@@ -1084,13 +1083,16 @@ bool WebMediaPlayerMS::HasAvailableVideoFrame() const {
 void WebMediaPlayerMS::OnFrameHidden() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (watch_time_reporter_)
+  bool in_picture_in_picture =
+      client_->GetDisplayType() == DisplayType::kPictureInPicture;
+
+  if (watch_time_reporter_ && !in_picture_in_picture)
     watch_time_reporter_->OnHidden();
 
   // This method is called when the RenderFrame is sent to background or
   // suspended. During undoable tab closures OnHidden() may be called back to
   // back, so we can't rely on |render_frame_suspended_| being false here.
-  if (frame_deliverer_) {
+  if (frame_deliverer_ && !in_picture_in_picture) {
     PostCrossThreadTask(
         *io_task_runner_, FROM_HERE,
         CrossThreadBindOnce(&FrameDeliverer::SetRenderFrameSuspended,
@@ -1355,7 +1357,6 @@ WebMediaPlayerMS::GetVideoFramePresentationMetadata() {
 }
 
 void WebMediaPlayerMS::RequestVideoFrameCallback() {
-  DCHECK(RuntimeEnabledFeatures::RequestVideoFrameCallbackEnabled());
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (!compositor_) {
@@ -1549,6 +1550,7 @@ WebMediaPlayerMS::GetMediaStreamType() {
     case mojom::blink::MediaStreamType::DISPLAY_AUDIO_CAPTURE:
     case mojom::blink::MediaStreamType::DISPLAY_VIDEO_CAPTURE:
     case mojom::blink::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB:
+    case mojom::blink::MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET:
       return media::mojom::MediaStreamType::kLocalDisplayCapture;
     case mojom::blink::MediaStreamType::NUM_MEDIA_TYPES:
       NOTREACHED();

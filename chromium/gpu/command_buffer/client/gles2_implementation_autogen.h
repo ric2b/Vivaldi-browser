@@ -1136,15 +1136,6 @@ void UnlockDiscardableTextureCHROMIUM(GLuint texture_id) override;
 
 bool LockDiscardableTextureCHROMIUM(GLuint texture_id) override;
 
-void TexStorage2DImageCHROMIUM(GLenum target,
-                               GLenum internalFormat,
-                               GLenum bufferUsage,
-                               GLsizei width,
-                               GLsizei height) override;
-
-void SetColorSpaceMetadataCHROMIUM(GLuint texture_id,
-                                   GLcolorSpace color_space) override;
-
 void WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint* box) override;
 
 GLuint CreateGpuFenceCHROMIUM() override;
@@ -1175,10 +1166,6 @@ GLuint CreateAndTexStorage2DSharedImageWithInternalFormatCHROMIUM(
 void BeginSharedImageAccessDirectCHROMIUM(GLuint texture, GLenum mode) override;
 
 void EndSharedImageAccessDirectCHROMIUM(GLuint texture) override;
-
-void BeginBatchReadAccessSharedImageCHROMIUM() override;
-
-void EndBatchReadAccessSharedImageCHROMIUM() override;
 
 void EnableiOES(GLenum target, GLuint index) override;
 

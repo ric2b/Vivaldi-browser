@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
 import {ShimlessRma} from 'chrome://shimless-rma/shimless_rma.js';
-import {ShutdownMethod} from 'chrome://shimless-rma/shimless_rma_types.js';
+import {RmadErrorCode, ShutdownMethod} from 'chrome://shimless-rma/shimless_rma_types.js';
 import {WrapupRepairCompletePage} from 'chrome://shimless-rma/wrapup_repair_complete_page.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {flushTasks} from '../../test_util.js';
+import {flushTasks, isVisible} from '../../test_util.js';
 
 export function wrapupRepairCompletePageTest() {
   /**
@@ -26,13 +27,10 @@ export function wrapupRepairCompletePageTest() {
   /** @type {?FakeShimlessRmaService} */
   let service = null;
 
-  suiteSetup(() => {
-    service = new FakeShimlessRmaService();
-    setShimlessRmaServiceForTesting(service);
-  });
-
   setup(() => {
     document.body.innerHTML = '';
+    service = new FakeShimlessRmaService();
+    setShimlessRmaServiceForTesting(service);
   });
 
   teardown(() => {
@@ -254,7 +252,7 @@ export function wrapupRepairCompletePageTest() {
     assertTrue(powerwashDialog.open);
   });
 
-  test('CutoffBatteryButtonOpensCountdownDialogAndCutsOffBattery', async () => {
+  test('CutoffBatteryButtonCutsOffBattery', async () => {
     const resolver = new PromiseResolver();
     await initializeRepairCompletePage();
     let callCount = 0;
@@ -277,11 +275,11 @@ export function wrapupRepairCompletePageTest() {
     // Cut off the battery.
     assertEquals(1, callCount);
     assertEquals(ShutdownMethod.kBatteryCutoff, shutdownMethod);
-    // Show the dialog.
+    // When the countdown is done, the battery cutoff dialog will be closed.
     const batteryCutoffDialog =
         component.shadowRoot.querySelector('#batteryCutoffDialog');
     assertTrue(!!batteryCutoffDialog);
-    assertTrue(batteryCutoffDialog.open);
+    assertFalse(batteryCutoffDialog.open);
   });
 
   test('PowerCableConnectCancelsBatteryCutoff', async () => {
@@ -311,11 +309,20 @@ export function wrapupRepairCompletePageTest() {
     };
     await flushTasks();
 
+    // Force the battery cutoff dialog to open, to make sure that the shutdown
+    // button closes it.
+    const batteryCutoffDialog =
+        component.shadowRoot.querySelector('#batteryCutoffDialog');
+    assertTrue(!!batteryCutoffDialog);
+    batteryCutoffDialog.showModal();
+    assertTrue(batteryCutoffDialog.open);
+
     await clickButton('#batteryCutoffShutdownButton');
     await flushTasks();
 
     assertEquals(1, callCount);
     assertEquals(ShutdownMethod.kBatteryCutoff, shutdownMethod);
+    assertFalse(batteryCutoffDialog.open);
   });
 
   test('OpensRmaLogDialog', async () => {
@@ -337,10 +344,73 @@ export function wrapupRepairCompletePageTest() {
       return resolver.promise;
     };
 
+    // Open the logs dialog.
+    await clickButton('#rmaLogButton');
+    assertTrue(
+        isVisible(component.shadowRoot.querySelector('#saveLogDialogButton')));
+
+    // Attempt to save the logs.
     await clickButton('#saveLogDialogButton');
+    const savePath = 'save/path';
+    resolver.resolve({savePath: {path: savePath}, error: RmadErrorCode.kOk});
     await flushTasks();
 
     assertEquals(1, callCount);
+
+    // The save log button should be replaced by the done button.
+    assertFalse(
+        isVisible(component.shadowRoot.querySelector('#saveLogDialogButton')));
+    assertTrue(isVisible(
+        component.shadowRoot.querySelector('#logSaveDoneDialogButton')));
+    assertEquals(
+        loadTimeData.getStringF('rmaLogsSaveSuccessText', savePath),
+        component.shadowRoot.querySelector('#logSavedStatusText')
+            .textContent.trim());
+
+    // Close the logs dialog.
+    await clickButton('#logSaveDoneDialogButton');
+    await flushTasks();
+
+    // Open the logs dialog and verify we are at the original state with the
+    // Save Log button displayed.
+    await clickButton('#rmaLogButton');
+    resolver.resolve({savePath: 'save/path', error: RmadErrorCode.kOk});
+    assertTrue(
+        isVisible(component.shadowRoot.querySelector('#saveLogDialogButton')));
+  });
+
+  test('SaveLogFails', async () => {
+    const resolver = new PromiseResolver();
+    await initializeRepairCompletePage();
+
+    let callCount = 0;
+    service.saveLog = () => {
+      callCount++;
+      return resolver.promise;
+    };
+
+    // Open the logs dialog.
+    await clickButton('#rmaLogButton');
+    assertTrue(
+        isVisible(component.shadowRoot.querySelector('#saveLogDialogButton')));
+
+    // Attempt to save the logs but it fails.
+    await clickButton('#saveLogDialogButton');
+    resolver.resolve(
+        {savePath: 'save/path', error: RmadErrorCode.kCannotSaveLog});
+    await flushTasks();
+
+    assertEquals(1, callCount);
+
+    // The save log button should be replaced by the done button.
+    assertFalse(
+        isVisible(component.shadowRoot.querySelector('#saveLogDialogButton')));
+    assertTrue(isVisible(
+        component.shadowRoot.querySelector('#logSaveDoneDialogButton')));
+    assertEquals(
+        loadTimeData.getString('rmaLogsSaveFailText'),
+        component.shadowRoot.querySelector('#logSavedStatusText')
+            .textContent.trim());
   });
 
   test('BatteryCutButtonDisabledByDefault', async () => {

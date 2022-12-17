@@ -4,14 +4,25 @@
 
 #include "test/multinode_test.h"
 
+#include <map>
+#include <string>
 #include <thread>
 
 #include "ipcz/ipcz.h"
-#include "reference_drivers/single_process_reference_driver.h"
+#include "reference_drivers/async_reference_driver.h"
+#include "reference_drivers/blob.h"
+#include "reference_drivers/sync_reference_driver.h"
 #include "third_party/abseil-cpp/absl/base/macros.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
-#include "util/log.h"
+#include "third_party/ipcz/src/test_buildflags.h"
+
+#if BUILDFLAG(ENABLE_IPCZ_MULTIPROCESS_TESTS)
+#include "reference_drivers/file_descriptor.h"
+#include "reference_drivers/multiprocess_reference_driver.h"
+#include "reference_drivers/socket_transport.h"
+#include "test/test_child_launcher.h"
+#endif
 
 namespace ipcz::test {
 
@@ -59,6 +70,30 @@ class InProcessTestNodeController : public TestNode::TestNodeController {
   absl::optional<std::thread> client_thread_;
 };
 
+#if BUILDFLAG(ENABLE_IPCZ_MULTIPROCESS_TESTS)
+// Controls a node running within an isolated child process.
+class ChildProcessTestNodeController : public TestNode::TestNodeController {
+ public:
+  explicit ChildProcessTestNodeController(pid_t pid) : pid_(pid) {}
+  ~ChildProcessTestNodeController() override {
+    ABSL_ASSERT(result_.has_value());
+  }
+
+  // TestNode::TestNodeController:
+  bool WaitForShutdown() override {
+    if (result_.has_value()) {
+      return *result_;
+    }
+
+    result_ = TestChildLauncher::WaitForSuccessfulProcessTermination(pid_);
+    return *result_;
+  }
+
+  const pid_t pid_;
+  absl::optional<bool> result_;
+};
+#endif
+
 }  // namespace
 
 TestNode::~TestNode() {
@@ -78,7 +113,24 @@ const IpczDriver& TestNode::GetDriver() const {
   static IpczDriver kInvalidDriver = {};
   switch (driver_mode_) {
     case DriverMode::kSync:
-      return reference_drivers::kSingleProcessReferenceDriver;
+      return reference_drivers::kSyncReferenceDriver;
+
+    case DriverMode::kAsync:
+      return reference_drivers::kAsyncReferenceDriver;
+
+    case DriverMode::kAsyncDelegatedAlloc:
+      return reference_drivers::kAsyncReferenceDriver;
+
+    case DriverMode::kAsyncObjectBrokering:
+      return reference_drivers::kAsyncReferenceDriverWithForcedBrokering;
+
+    case DriverMode::kAsyncObjectBrokeringAndDelegatedAlloc:
+      return reference_drivers::kAsyncReferenceDriverWithForcedBrokering;
+
+#if BUILDFLAG(ENABLE_IPCZ_MULTIPROCESS_TESTS)
+    case DriverMode::kMultiprocess:
+      return reference_drivers::kMultiprocessReferenceDriver;
+#endif
 
     default:
       // Other modes not yet supported.
@@ -98,24 +150,55 @@ void TestNode::Initialize(DriverMode driver_mode,
   ABSL_ASSERT(result == IPCZ_RESULT_OK);
 }
 
-void TestNode::ConnectToBroker(absl::Span<IpczHandle> portals) {
+void TestNode::ConnectToParent(absl::Span<IpczHandle> portals,
+                               IpczConnectNodeFlags flags) {
+  if (driver_mode_ == DriverMode::kAsyncDelegatedAlloc ||
+      driver_mode_ == DriverMode::kAsyncObjectBrokeringAndDelegatedAlloc) {
+    flags |= IPCZ_CONNECT_NODE_TO_ALLOCATION_DELEGATE;
+  }
   IpczDriverHandle transport =
       std::exchange(transport_, IPCZ_INVALID_DRIVER_HANDLE);
   ABSL_ASSERT(transport != IPCZ_INVALID_DRIVER_HANDLE);
-  const IpczResult result =
-      ipcz().ConnectNode(node(), transport, portals.size(),
-                         IPCZ_CONNECT_NODE_TO_BROKER, nullptr, portals.data());
+  const IpczResult result = ipcz().ConnectNode(
+      node(), transport, portals.size(), flags, nullptr, portals.data());
   ASSERT_EQ(IPCZ_RESULT_OK, result);
 }
 
-IpczHandle TestNode::ConnectToBroker() {
+void TestNode::ConnectToBroker(absl::Span<IpczHandle> portals) {
+  ConnectToParent(portals, IPCZ_CONNECT_NODE_TO_BROKER);
+}
+
+IpczHandle TestNode::ConnectToParent(IpczConnectNodeFlags flags) {
   IpczHandle portal;
-  ConnectToBroker({&portal, 1});
+  ConnectToParent({&portal, 1}, flags);
   return portal;
+}
+
+IpczHandle TestNode::ConnectToBroker() {
+  return ConnectToParent(IPCZ_CONNECT_NODE_TO_BROKER);
 }
 
 std::pair<IpczHandle, IpczHandle> TestNode::OpenPortals() {
   return TestBase::OpenPortals(node_);
+}
+
+IpczHandle TestNode::BoxBlob(std::string_view contents) {
+  auto blob = MakeRefCounted<reference_drivers::Blob>(contents);
+  IpczHandle box;
+  const IpczResult result = ipcz().Box(
+      node_, reference_drivers::Blob::ReleaseAsHandle(std::move(blob)),
+      IPCZ_NO_FLAGS, nullptr, &box);
+  ABSL_ASSERT(result == IPCZ_RESULT_OK);
+  return box;
+}
+
+// Extracts the string contents of a boxed test driver blob.
+std::string TestNode::UnboxBlob(IpczHandle box) {
+  IpczDriverHandle handle;
+  const IpczResult result = ipcz().Unbox(box, IPCZ_NO_FLAGS, nullptr, &handle);
+  ABSL_ASSERT(result == IPCZ_RESULT_OK);
+  auto blob = reference_drivers::Blob::TakeFromHandle(handle);
+  return blob->message();
 }
 
 void TestNode::CloseThisNode() {
@@ -128,15 +211,17 @@ void TestNode::CloseThisNode() {
 Ref<TestNode::TestNodeController> TestNode::SpawnTestNodeImpl(
     IpczHandle from_node,
     const internal::TestNodeDetails& details,
-    PortalsOrTransport portals_or_transport) {
+    PortalsOrTransport portals_or_transport,
+    IpczConnectNodeFlags flags) {
   struct Connect {
-    explicit Connect(TestNode& test) : test(test) {}
+    Connect(TestNode& test, IpczConnectNodeFlags flags)
+        : test(test), flags(flags) {}
 
     IpczDriverHandle operator()(absl::Span<IpczHandle> portals) {
       TransportPair transports = test.CreateTransports();
       const IpczResult result =
           test.ipcz().ConnectNode(test.node(), transports.ours, portals.size(),
-                                  IPCZ_NO_FLAGS, nullptr, portals.data());
+                                  flags, nullptr, portals.data());
       ABSL_ASSERT(result == IPCZ_RESULT_OK);
       return transports.theirs;
     }
@@ -146,45 +231,75 @@ Ref<TestNode::TestNodeController> TestNode::SpawnTestNodeImpl(
     }
 
     TestNode& test;
+    const IpczConnectNodeFlags flags;
   };
 
-  Connect connect(*this);
+  Connect connect(*this, flags);
   IpczDriverHandle their_transport = absl::visit(connect, portals_or_transport);
 
-  // TODO: Support a multiprocess mode which launches the new node in a child
-  // child process, passing the transport there.
-  std::unique_ptr<TestNode> test_node = details.factory();
-  test_node->SetTransport(their_transport);
-  Ref<TestNodeController> controller =
-      MakeRefCounted<InProcessTestNodeController>(driver_mode_,
-                                                  std::move(test_node));
+  Ref<TestNodeController> controller;
+#if BUILDFLAG(ENABLE_IPCZ_MULTIPROCESS_TESTS)
+  if (driver_mode_ == DriverMode::kMultiprocess) {
+    reference_drivers::FileDescriptor socket =
+        reference_drivers::TakeMultiprocessTransportDescriptor(their_transport);
+    controller = MakeRefCounted<ChildProcessTestNodeController>(
+        child_launcher_.Launch(details.name, std::move(socket)));
+  }
+#endif
+
+  if (!controller) {
+    std::unique_ptr<TestNode> test_node = details.factory();
+    test_node->SetTransport(their_transport);
+    controller = MakeRefCounted<InProcessTestNodeController>(
+        driver_mode_, std::move(test_node));
+  }
+
   spawned_nodes_.push_back(controller);
   return controller;
 }
 
 TestNode::TransportPair TestNode::CreateTransports() {
-  TransportPair transports;
-  switch (driver_mode_) {
-    case DriverMode::kSync: {
-      const IpczResult result =
-          reference_drivers::kSingleProcessReferenceDriver.CreateTransports(
-              IPCZ_INVALID_DRIVER_HANDLE, IPCZ_INVALID_DRIVER_HANDLE,
-              IPCZ_NO_FLAGS, nullptr, &transports.ours, &transports.theirs);
-      ABSL_ASSERT(result == IPCZ_RESULT_OK);
-      break;
-    }
-
-    default:
-      LOG(FATAL) << "DriverMode not yet supported.";
-      return {};
+  if (driver_mode_ == DriverMode::kAsync ||
+      driver_mode_ == DriverMode::kAsyncDelegatedAlloc ||
+      driver_mode_ == DriverMode::kAsyncObjectBrokering ||
+      driver_mode_ == DriverMode::kAsyncObjectBrokeringAndDelegatedAlloc) {
+    reference_drivers::AsyncTransportPair transports =
+        reference_drivers::CreateAsyncTransportPair();
+    return {
+        .ours = transports.broker,
+        .theirs = transports.non_broker,
+    };
   }
 
+  TransportPair transports;
+  const IpczResult result = GetDriver().CreateTransports(
+      IPCZ_INVALID_DRIVER_HANDLE, IPCZ_INVALID_DRIVER_HANDLE, IPCZ_NO_FLAGS,
+      nullptr, &transports.ours, &transports.theirs);
+  ABSL_ASSERT(result == IPCZ_RESULT_OK);
   return transports;
 }
 
 void TestNode::SetTransport(IpczDriverHandle transport) {
   ABSL_ASSERT(transport_ == IPCZ_INVALID_DRIVER_HANDLE);
   transport_ = transport;
+}
+
+int TestNode::RunAsChild() {
+#if BUILDFLAG(ENABLE_IPCZ_MULTIPROCESS_TESTS)
+  auto transport = MakeRefCounted<reference_drivers::SocketTransport>(
+      TestChildLauncher::TakeChildSocketDescriptor());
+  SetTransport(
+      reference_drivers::CreateMultiprocessTransport(std::move(transport)));
+  Initialize(DriverMode::kMultiprocess, IPCZ_NO_FLAGS);
+  NodeBody();
+
+  const int exit_code = ::testing::Test::HasFailure() ? 1 : 0;
+  return exit_code;
+#else
+  // Not supported outside of Linux.
+  ABSL_ASSERT(false);
+  return 0;
+#endif
 }
 
 }  // namespace ipcz::test

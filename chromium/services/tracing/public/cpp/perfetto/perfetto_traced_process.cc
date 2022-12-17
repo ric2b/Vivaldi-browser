@@ -14,6 +14,7 @@
 #include "base/trace_event/trace_log.h"
 #include "base/tracing/perfetto_platform.h"
 #include "build/build_config.h"
+#include "services/tracing/public/cpp/perfetto/custom_event_recorder.h"
 #include "services/tracing/public/cpp/perfetto/dummy_producer.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_tracing_backend.h"
 #include "services/tracing/public/cpp/perfetto/producer_client.h"
@@ -206,13 +207,12 @@ void PerfettoTracedProcess::SetConsumerConnectionFactory(
 
 void PerfettoTracedProcess::ConnectProducer(
     mojo::PendingRemote<mojom::PerfettoService> perfetto_service) {
-  if (base::FeatureList::IsEnabled(
-          features::kEnablePerfettoClientApiProducer)) {
-    DCHECK(pending_producer_callback_);
-    std::move(pending_producer_callback_).Run(std::move(perfetto_service));
-  } else {
-    producer_client_->Connect(std::move(perfetto_service));
-  }
+#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+  DCHECK(pending_producer_callback_);
+  std::move(pending_producer_callback_).Run(std::move(perfetto_service));
+#else   // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+  producer_client_->Connect(std::move(perfetto_service));
+#endif  // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 }
 
 void PerfettoTracedProcess::ClearDataSourcesForTesting() {
@@ -384,6 +384,18 @@ bool PerfettoTracedProcess::SetupStartupTracing(
   return true;
 }
 
+void PerfettoTracedProcess::RequestStartupTracing(
+    const perfetto::TraceConfig& config,
+    const perfetto::Tracing::SetupStartupTracingOpts& opts) {
+  if (platform_->did_start_task_runner()) {
+    perfetto::Tracing::SetupStartupTracing(config, opts);
+  } else {
+    saved_config_ = config;
+    saved_opts_ = opts;
+    startup_tracing_needed_ = true;
+  }
+}
+
 void PerfettoTracedProcess::SetupClientLibrary(bool enable_consumer) {
   perfetto::TracingInitArgs init_args;
   init_args.platform = platform_.get();
@@ -410,8 +422,15 @@ void PerfettoTracedProcess::SetupClientLibrary(bool enable_consumer) {
 
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
   perfetto::TrackEvent::Register();
+  tracing::TracingSamplerProfiler::RegisterDataSource();
   SetTrackDescriptors();
+  CustomEventRecorder::GetInstance();
 #endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+
+  if (startup_tracing_needed_) {
+    perfetto::Tracing::SetupStartupTracing(saved_config_, saved_opts_);
+    startup_tracing_needed_ = false;
+  }
 }
 
 void PerfettoTracedProcess::OnThreadPoolAvailable(bool enable_consumer) {

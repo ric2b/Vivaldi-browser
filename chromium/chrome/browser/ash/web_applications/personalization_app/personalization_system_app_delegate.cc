@@ -92,7 +92,7 @@ gfx::Rect PersonalizationSystemAppDelegate::GetDefaultBounds(
     Browser* browser) const {
   gfx::Rect bounds =
       display::Screen::GetScreen()->GetDisplayForNewWindows().work_area();
-  bounds.ClampToCenteredSize({826, 608});
+  bounds.ClampToCenteredSize({826, 745});
   return bounds;
 }
 
@@ -101,7 +101,7 @@ bool PersonalizationSystemAppDelegate::ShouldCaptureNavigations() const {
 }
 
 bool PersonalizationSystemAppDelegate::IsAppEnabled() const {
-  return chromeos::features::IsWallpaperWebUIEnabled();
+  return true;
 }
 
 bool PersonalizationSystemAppDelegate::ShouldShowInLauncher() const {

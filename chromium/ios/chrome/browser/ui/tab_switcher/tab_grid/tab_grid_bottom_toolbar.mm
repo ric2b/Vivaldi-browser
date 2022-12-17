@@ -14,6 +14,12 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -229,6 +235,14 @@
   _toolbar.translatesAutoresizingMaskIntoConstraints = NO;
   _toolbar.barStyle = UIBarStyleBlack;
   _toolbar.translucent = YES;
+
+  // Vivaldi: - Bottom tool bar support for both light and dark mode
+  if (IsVivaldiRunning()) {
+    _toolbar.barStyle = UIBarStyleDefault;
+    _toolbar.translucent = NO;
+  }
+  // End Vivaldi
+
   // Remove the border of UIToolbar.
   [_toolbar setShadowImage:[[UIImage alloc] init]
         forToolbarPosition:UIBarPositionAny];
@@ -284,6 +298,18 @@
   _closeTabsButton.accessibilityIdentifier =
       kTabGridEditCloseTabsButtonIdentifier;
   [self updateCloseTabsButtonTitle];
+
+  // Vivaldi
+  // Setting up button tint colors
+  if (IsVivaldiRunning()) {
+    _closeAllOrUndoButton.tintColor =
+        [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _doneButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _editButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _addToButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _shareButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+  }
+  // End Vivaldi
 
   _compactConstraints = @[
     [_toolbar.topAnchor constraintEqualToAnchor:self.topAnchor],
@@ -379,6 +405,14 @@
       ]];
     }
 
+    // Vivaldi
+    if (IsVivaldiRunning()) {
+      if (self.page == TabGridPageClosedTabs) {
+        [_toolbar setItems:@[ _spaceItem, trailingButton ]];
+      }
+    }
+    // End Vivaldi
+
     [self addSubview:_toolbar];
     [NSLayoutConstraint activateConstraints:_compactConstraints];
   } else {
@@ -395,6 +429,17 @@
       [self addSubview:_largeNewTabButton];
       [NSLayoutConstraint activateConstraints:_floatingConstraints];
     }
+
+    // Vivaldi
+    if (IsVivaldiRunning()) {
+      if (ShowThumbStripInTraitCollection(self.traitCollection) ||
+          self.page == TabGridPageClosedTabs) {
+        [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
+        [_largeNewTabButton removeFromSuperview];
+      }
+    }
+    // End Vivaldi
+
   }
   self.hidden = !self.subviews.count;
 }

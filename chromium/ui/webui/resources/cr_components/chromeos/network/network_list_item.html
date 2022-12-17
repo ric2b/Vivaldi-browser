@@ -132,7 +132,6 @@
            selectable
            aria-label$="[[rowLabel]]"
            aria-live="[[getLiveStatus_(isFocused)]]"
-           role="button"
            focus-type="rowWrapper"
            on-keydown="onKeydown_"
            on-click="onSelected_">
@@ -228,6 +227,7 @@
     </div>
     <template is="dom-if" if="[[isCellularUnlockDialogOpen_]]" restamp>
       <sim-lock-dialogs
+          global-policy="[[globalPolicy]]"
           is-dialog-open="{{isCellularUnlockDialogOpen_}}"
           device-state="[[deviceState]]">
       </sim-lock-dialogs>

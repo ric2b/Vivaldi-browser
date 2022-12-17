@@ -25,6 +25,20 @@
 
 namespace blink {
 
+namespace {
+ImagePaintTimingInfo ComputeImagePaintTimingInfo(
+    const LayoutSVGImage& layout_image,
+    const Image& image,
+    const ImageResourceContent* image_content,
+    const GraphicsContext& context,
+    const gfx::Rect& image_border) {
+  return ImagePaintTimingInfo(PaintTimingDetector::NotifyImagePaint(
+      layout_image, image.Size(), *image_content,
+      context.GetPaintController().CurrentPaintChunkProperties(),
+      image_border));
+}
+}  // namespace
+
 void SVGImagePainter::Paint(const PaintInfo& paint_info) {
   if (paint_info.phase != PaintPhase::kForeground ||
       layout_svg_image_.StyleRef().Visibility() != EVisibility::kVisible ||
@@ -85,18 +99,6 @@ void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
         dest_rect, src_rect);
   }
 
-  ScopedInterpolationQuality interpolation_quality_scope(
-      paint_info.context,
-      layout_svg_image_.StyleRef().GetInterpolationQuality());
-  Image::ImageDecodingMode decode_mode =
-      image_element->GetDecodingModeForPainting(image->paint_image_id());
-  auto image_auto_dark_mode = ImageClassifierHelper::GetImageAutoDarkMode(
-      *layout_svg_image_.GetFrame(), layout_svg_image_.StyleRef(), dest_rect,
-      src_rect);
-  paint_info.context.DrawImage(image.get(), decode_mode, image_auto_dark_mode,
-                               dest_rect, &src_rect, SkBlendMode::kSrcOver,
-                               respect_orientation);
-
   ImageResourceContent* image_content = image_resource.CachedImage();
   if (image_content->IsLoaded()) {
     LocalDOMWindow* window = layout_svg_image_.GetDocument().domWindow();
@@ -106,12 +108,23 @@ void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
         paint_info.context.GetPaintController().CurrentPaintChunkProperties(),
         gfx::ToEnclosingRect(dest_rect));
   }
-  PaintTimingDetector::NotifyImagePaint(
-      layout_svg_image_, image->Size(), *image_content,
-      paint_info.context.GetPaintController().CurrentPaintChunkProperties(),
-      gfx::ToEnclosingRect(dest_rect));
   PaintTiming& timing = PaintTiming::From(layout_svg_image_.GetDocument());
   timing.MarkFirstContentfulPaint();
+
+  ScopedInterpolationQuality interpolation_quality_scope(
+      paint_info.context,
+      layout_svg_image_.StyleRef().GetInterpolationQuality());
+  Image::ImageDecodingMode decode_mode =
+      image_element->GetDecodingModeForPainting(image->paint_image_id());
+  auto image_auto_dark_mode = ImageClassifierHelper::GetImageAutoDarkMode(
+      *layout_svg_image_.GetFrame(), layout_svg_image_.StyleRef(), dest_rect,
+      src_rect);
+  paint_info.context.DrawImage(
+      image.get(), decode_mode, image_auto_dark_mode,
+      ComputeImagePaintTimingInfo(layout_svg_image_, *image, image_content,
+                                  paint_info.context,
+                                  gfx::ToEnclosingRect(dest_rect)),
+      dest_rect, &src_rect, SkBlendMode::kSrcOver, respect_orientation);
 }
 
 gfx::SizeF SVGImagePainter::ComputeImageViewportSize() const {

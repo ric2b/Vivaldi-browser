@@ -20,7 +20,7 @@ export {CustomizeBackgroundsElement} from './customize_backgrounds.js';
 export {CustomizeDialogElement} from './customize_dialog.js';
 export {CustomizeModulesElement} from './customize_modules.js';
 export {CustomizeShortcutsElement} from './customize_shortcuts.js';
-export {MiddleSlotPromoElement} from './middle_slot_promo.js';
+export {MiddleSlotPromoElement, PromoDismissAction} from './middle_slot_promo.js';
 export {ChromeCartProxy} from './modules/cart/chrome_cart_proxy.js';
 export {DiscountConsentCard, DiscountConsentVariation} from './modules/cart/discount_consent_card.js';
 export {DiscountConsentDialog} from './modules/cart/discount_consent_dialog.js';
@@ -33,6 +33,8 @@ export {driveDescriptor as driveV2Descriptor, DriveModuleElement as DriveV2Modul
 export {FooProxy} from './modules/dummy_v2/foo_proxy.js';
 export {DummyModuleElement, dummyV2Descriptor} from './modules/dummy_v2/module.js';
 // </if>
+export {FeedProxy} from './modules/feed/feed_module_proxy.js';
+export {feedDescriptor, FeedModuleElement, feedV2Descriptor} from './modules/feed/module.js';
 export {InfoDialogElement} from './modules/info_dialog.js';
 export {InitializeModuleCallback, Module, ModuleDescriptor, ModuleDescriptorV2, ModuleHeight} from './modules/module_descriptor.js';
 export {counterfactualLoad} from './modules/module_descriptors.js';
@@ -42,7 +44,7 @@ export {ModuleWrapperElement} from './modules/module_wrapper.js';
 export {DisableModuleEvent, DismissModuleEvent, ModulesElement} from './modules/modules.js';
 export {photosDescriptor, PhotosModuleElement} from './modules/photos/module.js';
 export {PhotosProxy} from './modules/photos/photos_module_proxy.js';
-export {RecipeModuleElement, recipeTasksDescriptor as recipeTasksV2Descriptor} from './modules/recipes_v2/module.js';
-export {recipeTasksDescriptor, TaskModuleElement} from './modules/task_module/module.js';
-export {TaskModuleHandlerProxy} from './modules/task_module/task_module_handler_proxy.js';
+export {RecipesModuleElement, recipeTasksDescriptor} from './modules/recipes/module.js';
+export {RecipesHandlerProxy} from './modules/recipes/recipes_handler_proxy.js';
+export {RecipesModuleElement as RecipesModuleElementV2, recipeTasksDescriptor as recipeTasksV2Descriptor} from './modules/recipes_v2/module.js';
 export {VoiceSearchOverlayElement} from './voice_search_overlay.js';

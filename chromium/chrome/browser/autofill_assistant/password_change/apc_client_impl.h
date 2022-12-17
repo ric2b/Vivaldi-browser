@@ -9,19 +9,28 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/autofill_assistant/password_change/apc_onboarding_coordinator.h"
 #include "chrome/browser/ui/autofill_assistant/password_change/assistant_side_panel_coordinator.h"
-#include "components/autofill_assistant/browser/public/external_script_controller.h"
+#include "components/autofill_assistant/browser/public/headless_script_controller.h"
+#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 class ApcExternalActionDelegate;
+class ApcScrimManager;
 
-// TODO(crbug.com/1322419): Observe the SidePanel so that we can destruct
-// Onboarding, ScriptExecution, etc. on close.
+namespace autofill_assistant {
+class WebsiteLoginManager;
+}  // namespace autofill_assistant
+
+namespace password_manager {
+class PasswordManagerClient;
+}  // namespace password_manager
 
 // Implementation of the ApcClient interface that attaches itself to a
 // `WebContents`.
@@ -35,22 +44,54 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
   ApcClientImpl& operator=(const ApcClientImpl&) = delete;
 
   // ApcClient:
-  bool Start(const GURL& url,
-             const std::string& username,
-             bool skip_login) override;
-  void Stop() override;
+  void Start(
+      const GURL& url,
+      const std::string& username,
+      bool skip_login,
+      ResultCallback callback,
+      absl::optional<DebugRunInformation> debug_run_information) override;
+  void Stop(bool success) override;
   bool IsRunning() const override;
+  void PromptForConsent(OnboardingResultCallback callback) override;
+  void RevokeConsent(const std::vector<int>& description_grd_ids) override;
 
  protected:
-  // Creates an onboarding coordinator. Protected to allow for overrides
-  // by test classes.
+  // The following protected methods are factory functions that may be
+  // overridden in tests.
+
+  // Creates an onboarding coordinator.
   virtual std::unique_ptr<ApcOnboardingCoordinator>
   CreateOnboardingCoordinator();
 
-  // Creates an external script controller. Protected to allow for overrides
-  // by test classes.
-  virtual std::unique_ptr<autofill_assistant::ExternalScriptController>
-  CreateExternalScriptController();
+  // Creates a side panel coordinator.
+  virtual std::unique_ptr<AssistantSidePanelCoordinator> CreateSidePanel();
+
+  // Creates an external script controller.
+  virtual std::unique_ptr<autofill_assistant::HeadlessScriptController>
+  CreateHeadlessScriptController();
+
+  // Gets the RunTimeManager used to disable dialogs and prompts, such as
+  // password manager, translation dialogs and permissions. Protected to allow
+  // for overrides by test classes.
+  virtual autofill_assistant::RuntimeManager* GetRuntimeManager();
+
+  // Creates the ApcScrimManager used to apply a scrim over the webcontent
+  // during script runs.
+  virtual std::unique_ptr<ApcScrimManager> CreateApcScrimManager();
+
+  // Creates the external action delegate responsible for receiving and handling
+  // action protos.
+  virtual std::unique_ptr<ApcExternalActionDelegate>
+  CreateApcExternalActionDelegate();
+
+  // Creates the website login manager to handle interactions with the password
+  // manager.
+  virtual std::unique_ptr<autofill_assistant::WebsiteLoginManager>
+  CreateWebsiteLoginManager();
+
+  // Get the `PasswordManagerClient` so that we can initialize
+  // `website_login_manager_`.
+  virtual password_manager::PasswordManagerClient* GetPasswordManagerClient();
 
   explicit ApcClientImpl(content::WebContents* web_contents);
 
@@ -63,10 +104,12 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
 
   // Registers when a run is complete. Used in callbacks.
   void OnRunComplete(
-      autofill_assistant::ExternalScriptController::ScriptResult result);
+      autofill_assistant::HeadlessScriptController::ScriptResult result);
 
   // AssistantSidePanelCoordinator::Observer:
   void OnHidden() override;
+
+  void CloseSidePanel();
 
   // The delegate is responsible for handling protos received from backend DSL
   // actions and UI updates.
@@ -75,7 +118,7 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
   // Controls a script run triggered by the headless API. This class is
   // responsible for handling the forwarding of action to
   // `apc_external_action_delegate_` and managing the run lifetime.
-  std::unique_ptr<autofill_assistant::ExternalScriptController>
+  std::unique_ptr<autofill_assistant::HeadlessScriptController>
       external_script_controller_;
 
   // The username for which `Start()` was triggered.
@@ -88,9 +131,15 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
   // This is used during triggers from the leak warning.
   bool skip_login_;
 
+  // If set, contains the parameters for a debug run.
+  absl::optional<DebugRunInformation> debug_run_information_;
+
   // The state of the `ApcClient` to avoid that a run is started while
   // another is already ongoing in the tab.
   bool is_running_ = false;
+
+  // The callback that signals the end of the run.
+  ResultCallback result_callback_;
 
   // Orchestrates prompting the user for consent if it has not been given
   // previously.
@@ -98,6 +147,14 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
 
   // The coordinator for the side panel.
   std::unique_ptr<AssistantSidePanelCoordinator> side_panel_coordinator_;
+
+  // Manages the scrim shown during a password change run.
+  std::unique_ptr<ApcScrimManager> scrim_manager_;
+
+  // The website login manager used to handle iteractions with the password
+  // manager.
+  std::unique_ptr<autofill_assistant::WebsiteLoginManager>
+      website_login_manager_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

@@ -164,8 +164,8 @@ void InfoBarView::Layout() {
 }
 
 void InfoBarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR));
   node_data->role = ax::mojom::Role::kAlertDialog;
+  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR));
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
                                 "Alt+Shift+A");
 }
@@ -194,7 +194,7 @@ void InfoBarView::ViewHierarchyChanged(
   // Anything that needs to happen once after all subclasses add their children.
   if (details.is_add && (details.child == this)) {
     if (close_button_)
-      ReorderChildView(close_button_, -1);
+      ReorderChildView(close_button_, children().size());
     RecalculateHeight();
   }
 }
@@ -202,8 +202,8 @@ void InfoBarView::ViewHierarchyChanged(
 void InfoBarView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
 
-  const SkColor color = GetThemeProvider()->GetColor(
-      ThemeProperties::COLOR_INFOBAR_CONTENT_AREA_SEPARATOR);
+  const SkColor color =
+      GetColorProvider()->GetColor(kColorInfoBarContentAreaSeparator);
   const gfx::RectF local_bounds(GetLocalBounds());
   const gfx::Vector2d separator_offset(0, kSeparatorHeightDip);
   canvas->DrawSharpLine(local_bounds.bottom_left() - separator_offset,

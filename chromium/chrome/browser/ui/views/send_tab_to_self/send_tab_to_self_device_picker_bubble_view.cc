@@ -7,12 +7,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/share/share_features.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/send_tab_to_self/manage_account_devices_link_view.h"
+#include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_bubble_device_button.h"
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_bubble_util.h"
 #include "chrome/grit/generated_resources.h"
@@ -22,8 +22,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/color/color_id.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view_class_properties.h"
@@ -48,7 +51,7 @@ constexpr int kDeviceButtonGroup = 0;
 SendTabToSelfDevicePickerBubbleView::SendTabToSelfDevicePickerBubbleView(
     views::View* anchor_view,
     content::WebContents* web_contents)
-    : LocationBarBubbleDelegateView(anchor_view, web_contents),
+    : SendTabToSelfBubbleView(anchor_view, web_contents),
       controller_(SendTabToSelfBubbleController::CreateOrGetFromWebContents(
                       web_contents)
                       ->AsWeakPtr()) {
@@ -122,7 +125,11 @@ void SendTabToSelfDevicePickerBubbleView::Init() {
   CreateHintTextLabel();
   CreateDevicesScrollView();
 
-  AddChildView(BuildManageAccountDevicesLinkView(controller_));
+  AddChildView(std::make_unique<views::Separator>());
+  views::View* footer = AddChildView(
+      BuildManageAccountDevicesLinkView(/*show_link=*/true, controller_));
+  footer->SetBackground(views::CreateThemedSolidBackground(
+      ui::kColorMenuItemBackgroundHighlighted));
 }
 
 void SendTabToSelfDevicePickerBubbleView::AddedToWidget() {

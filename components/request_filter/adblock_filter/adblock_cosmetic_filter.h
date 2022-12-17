@@ -4,7 +4,7 @@
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_COSMETIC_FILTER_H_
 
 #include "base/memory/weak_ptr.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/ad_blocker/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 

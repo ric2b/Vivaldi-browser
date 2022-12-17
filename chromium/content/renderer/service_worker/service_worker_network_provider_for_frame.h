@@ -55,11 +55,9 @@ class ServiceWorkerNetworkProviderForFrame final
       override;
   blink::mojom::ControllerServiceWorkerMode GetControllerServiceWorkerMode()
       override;
+  blink::mojom::ServiceWorkerFetchHandlerType GetFetchHandlerType() override;
   int64_t ControllerServiceWorkerID() override;
   void DispatchNetworkQuiet() override;
-  blink::CrossVariantMojoReceiver<
-      blink::mojom::WorkerTimingContainerInterfaceBase>
-  TakePendingWorkerTimingReceiver(int request_id) override;
 
   ServiceWorkerProviderContext* context() { return context_.get(); }
 

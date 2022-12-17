@@ -195,7 +195,7 @@ class CORE_EXPORT CSSAnimations final {
     scoped_refptr<const ComputedStyle> before_change_style;
     scoped_refptr<const ComputedStyle> cloned_style;
     const TransitionMap* active_transitions;
-    HashSet<PropertyHandle>& listed_properties;
+    HashSet<PropertyHandle>* listed_properties;
     const CSSTransitionData* transition_data;
   };
 
@@ -303,7 +303,6 @@ class CORE_EXPORT CSSAnimations final {
 
     const Element& TransitionTarget() const { return *transition_target_; }
     EventTarget* GetEventTarget() const;
-    PseudoId GetPseudoId() const { return transition_target_->GetPseudoId(); }
     Document& GetDocument() const { return transition_target_->GetDocument(); }
 
     Member<Element> transition_target_;

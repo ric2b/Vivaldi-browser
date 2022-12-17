@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AutoScanManager} from '/switch_access/auto_scan_manager.js';
-import {SAConstants} from '/switch_access/switch_access_constants.js';
+import {AutoScanManager} from './auto_scan_manager.js';
+import {SAConstants} from './switch_access_constants.js';
 
 /**
  * Class to manage user preferences.
@@ -81,9 +81,9 @@ export class PreferenceManager {
   /** @private */
   init_() {
     chrome.settingsPrivate.onPrefsChanged.addListener(
-        (prefs) => this.updateFromSettings_(prefs));
+        prefs => this.updateFromSettings_(prefs));
     chrome.settingsPrivate.getAllPrefs(
-        (prefs) => this.updateFromSettings_(prefs, true /* isFirstLoad */));
+        prefs => this.updateFromSettings_(prefs, true /* isFirstLoad */));
   }
 
   /**

@@ -135,7 +135,9 @@ class FileBrowserBackgroundImpl extends BackgroundBaseImpl {
     // Initialize string and volume manager related stuffs.
     this.initializationPromise_.then(strings => {
       this.stringData = strings;
-      this.initContextMenu_();
+      if (!window.isSWA) {
+        this.initContextMenu_();
+      }
       this.crostini.initEnabled();
 
       // Force disable of system notifications if the SWA feature flag is on.
@@ -458,7 +460,7 @@ class FileBrowserBackgroundImpl extends BackgroundBaseImpl {
               // Do not clone the selection url, only the current directory.
               currentDirectoryURL:
                   window.appWindows[key]
-                      .contentWindow.appState.currentDirectoryURL
+                      .contentWindow.appState.currentDirectoryURL,
             };
             launcher.launchFileManager(appState);
           })
@@ -551,7 +553,7 @@ class FileBrowserBackgroundImpl extends BackgroundBaseImpl {
     chrome.contextMenus.create({
       id: 'new-window',
       contexts: ['launcher'],
-      title: str('NEW_WINDOW_BUTTON_LABEL')
+      title: str('NEW_WINDOW_BUTTON_LABEL'),
     });
   }
 }

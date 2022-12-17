@@ -46,15 +46,13 @@ FakeLibLouis.prototype = {
     const tables = this.translatorManager.getTablesForTest();
     let result = null;
     if (tables != null) {
-      const found = tables.filter(function(table) {
-        return table.fileNames === fileNames;
-      })[0];
+      const found = tables.filter(table => table.fileNames === fileNames)[0];
       if (found) {
         result = new FakeTranslator(found);
       }
     }
     callback(result);
-  }
+  },
 };
 
 FakeTranslator = class {

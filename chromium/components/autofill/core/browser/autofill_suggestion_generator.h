@@ -26,6 +26,7 @@ class AutofillType;
 class CreditCard;
 struct FormFieldData;
 class FormStructure;
+class IBAN;
 class PersonalDataManager;
 struct Suggestion;
 
@@ -56,6 +57,10 @@ class AutofillSuggestionGenerator {
       const AutofillType& type,
       const std::string& app_locale,
       bool* should_display_gpay_logo);
+
+  // Generates suggestions for all available IBANs.
+  static std::vector<Suggestion> GetSuggestionsForIBANs(
+      const std::vector<IBAN*>& ibans);
 
   // Converts the vector of promo code offers that is passed in to a vector of
   // suggestions that can be displayed to the user for a promo code field.
@@ -89,6 +94,18 @@ class AutofillSuggestionGenerator {
                            CreateCreditCardSuggestion_LocalCard);
   FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
                            CreateCreditCardSuggestion_ServerCard);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillSuggestionGeneratorTest,
+      CreateCreditCardSuggestion_PopupWithMetadata_VirtualCardNameField);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillSuggestionGeneratorTest,
+      CreateCreditCardSuggestion_PopupWithMetadata_VirtualCardNumberField);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillSuggestionGeneratorTest,
+      CreateCreditCardSuggestion_PopupWithMetadata_NonVirtualCardNameField);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillSuggestionGeneratorTest,
+      CreateCreditCardSuggestion_PopupWithMetadata_NonVirtualCardNumberField);
   FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,
                            GetServerCardForLocalCard);
   FRIEND_TEST_ALL_PREFIXES(AutofillSuggestionGeneratorTest,

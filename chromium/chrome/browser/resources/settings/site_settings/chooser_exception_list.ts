@@ -10,7 +10,7 @@
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../i18n_setup.js';
 import './chooser_exception_list_entry.js';
 
@@ -19,8 +19,8 @@ import {ListPropertyUpdateMixin} from 'chrome://resources/js/list_property_updat
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {PaperTooltipElement} from 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {getTemplate} from './chooser_exception_list.html.js';
 
+import {getTemplate} from './chooser_exception_list.html.js';
 import {ChooserType, ContentSettingsTypes} from './constants.js';
 import {SiteSettingsMixin} from './site_settings_mixin.js';
 import {ChooserException, RawChooserException, SiteException} from './site_settings_prefs_browser_proxy.js';
@@ -77,7 +77,7 @@ export class ChooserExceptionListElement extends
     };
   }
 
-  chooserExceptions: Array<ChooserException>;
+  chooserExceptions: ChooserException[];
   chooserType: ChooserType;
   private emptyListMessage_: string;
   private hasIncognito_: boolean;
@@ -195,7 +195,7 @@ export class ChooserExceptionListElement extends
   /**
    * Process the chooser exception list returned from the native layer.
    */
-  private processExceptions_(exceptionList: Array<RawChooserException>) {
+  private processExceptions_(exceptionList: RawChooserException[]) {
     const exceptions = exceptionList.map(exception => {
       const sites = exception.sites.map(site => this.expandSiteException(site));
       return Object.assign(exception, {sites});

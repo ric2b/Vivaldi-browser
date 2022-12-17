@@ -10,6 +10,7 @@
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/strings/string_piece.h"
 #include "components/access_code_cast/common/access_code_cast_metrics.h"
+#include "components/version_info/channel.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -78,6 +79,9 @@ class ASH_PUBLIC_EXPORT SystemTrayClient {
   // Shows the about chrome OS page and checks for updates after the page is
   // loaded.
   virtual void ShowAboutChromeOS() = 0;
+
+  // Shows the about chrome OS additional details page.
+  virtual void ShowAboutChromeOSDetails() = 0;
 
   // Shows accessibility help.
   virtual void ShowAccessibilityHelp() = 0;
@@ -157,6 +161,18 @@ class ASH_PUBLIC_EXPORT SystemTrayClient {
                                  const base::Time& date,
                                  bool& opened_pwa,
                                  GURL& finalized_event_url) = 0;
+
+  // Shown when the device is on a non-stable release track and the user clicks
+  // the channel/version button from quick settings.
+  virtual void ShowChannelInfoAdditionalDetails() = 0;
+
+  // Shown when the device is on a non-stable release track and the user clicks
+  // the "send feedback" button.
+  virtual void ShowChannelInfoGiveFeedback() = 0;
+
+  // Returns 'true' if the user preference is set to allow users to submit
+  // feedback, 'false' otherwise.
+  virtual bool IsUserFeedbackEnabled() = 0;
 
  protected:
   SystemTrayClient() {}

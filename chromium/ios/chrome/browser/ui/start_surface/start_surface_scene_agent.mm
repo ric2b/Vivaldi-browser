@@ -8,6 +8,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#import "components/url_param_filter/core/url_param_filterer.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
@@ -35,10 +36,16 @@ namespace {
 const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
 }  // namespace
 
-@interface StartSurfaceSceneAgent ()
+@interface StartSurfaceSceneAgent () <AppStateObserver>
 
 // Caches the previous activation level.
 @property(nonatomic, assign) SceneActivationLevel previousActivationLevel;
+
+// YES if The AppState was not ready before the SceneState reached a valid
+// activation level, so therefore this agent needs to wait for the AppState's
+// initStage to reach a valid stage before checking whether the Start Surface
+// should be shown.
+@property(nonatomic, assign) BOOL waitingForAppStateAfterSceneStateReady;
 
 @end
 
@@ -52,7 +59,32 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
   return self;
 }
 
+#pragma mark - ObservingSceneAgent
+
+- (void)setSceneState:(SceneState*)sceneState {
+  [super setSceneState:sceneState];
+
+  [self.sceneState.appState addObserver:self];
+}
+
+#pragma mark - AppStateObserver
+
+- (void)appState:(AppState*)appState
+    didTransitionFromInitStage:(InitStage)previousInitStage {
+  if (appState.initStage >= InitStageFirstRun &&
+      self.waitingForAppStateAfterSceneStateReady) {
+    self.waitingForAppStateAfterSceneStateReady = NO;
+    [self showStartSurfaceIfNecessary];
+  }
+}
+
 #pragma mark - SceneStateObserver
+
+- (void)sceneStateDidDisableUI:(SceneState*)sceneState {
+  // Tear down objects tied to the scene state before it is deleted.
+  [self.sceneState.appState removeObserver:self];
+  self.waitingForAppStateAfterSceneStateReady = NO;
+}
 
 - (void)sceneState:(SceneState*)sceneState
     transitionedToActivationLevel:(SceneActivationLevel)level {
@@ -67,10 +99,14 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
       self.previousActivationLevel > SceneActivationLevelBackground) {
     if (base::FeatureList::IsEnabled(kRemoveExcessNTPs)) {
       // Remove duplicate NTP pages upon background event.
-      [self removeExcessNTPsInBrowser:self.sceneState.interfaceProvider
-                                          .mainInterface.browser];
-      [self removeExcessNTPsInBrowser:self.sceneState.interfaceProvider
-                                          .incognitoInterface.browser];
+      if (self.sceneState.interfaceProvider.mainInterface.browser) {
+        [self removeExcessNTPsInBrowser:self.sceneState.interfaceProvider
+                                            .mainInterface.browser];
+      }
+      if (self.sceneState.interfaceProvider.incognitoInterface.browser) {
+        [self removeExcessNTPsInBrowser:self.sceneState.interfaceProvider
+                                            .incognitoInterface.browser];
+      }
     }
   }
   if (level >= SceneActivationLevelForegroundInactive &&
@@ -84,6 +120,13 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
 }
 
 - (void)showStartSurfaceIfNecessary {
+  if (self.sceneState.appState.initStage <= InitStageFirstRun) {
+    // NO if the app is not yet ready to present normal UI that is required by
+    // Start Surface.
+    self.waitingForAppStateAfterSceneStateReady = YES;
+    return;
+  }
+
   if (!ShouldShowStartSurfaceForSceneState(self.sceneState)) {
     return;
   }
@@ -130,7 +173,7 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
       params, nullptr, /*opened_by_dom=*/false,
       TabInsertion::kPositionAutomatically, /*in_background=*/false,
       /*inherit_opener=*/false, /*should_show_start_surface=*/true,
-      /*filtered_param_count=*/0);
+      url_param_filter::FilterResult());
 }
 
 // Removes duplicate NTP tabs in `browser`'s WebStateList.
@@ -206,15 +249,13 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
   BOOL isColdStart = (level > SceneActivationLevelBackground &&
                       self.sceneState.appState.startupInformation.isColdStart);
   if (isColdStart) {
-    base::UmaHistogramCustomTimes("IOS.ColdStartBackgroundTime",
-                                  base::Minutes(timeSinceBackgroundInMinutes),
-                                  base::Seconds(0),
-                                  base::Seconds(12 * 60 /* 12 hours */), 24);
+    UMA_HISTOGRAM_CUSTOM_COUNTS("IOS.BackgroundTimeBeforeColdStart",
+                                timeSinceBackgroundInMinutes, 1,
+                                60 * 12 /* 12 hours */, 24);
   } else {
-    base::UmaHistogramCustomTimes("IOS.WarmStartBackgroundTime",
-                                  base::Minutes(timeSinceBackgroundInMinutes),
-                                  base::Seconds(0),
-                                  base::Seconds(12 * 60 /* 12 hours */), 24);
+    UMA_HISTOGRAM_CUSTOM_COUNTS("IOS.BackgroundTimeBeforeWarmStart",
+                                timeSinceBackgroundInMinutes, 1,
+                                60 * 12 /* 12 hours */, 24);
   }
 }
 

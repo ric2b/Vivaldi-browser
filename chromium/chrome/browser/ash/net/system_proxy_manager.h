@@ -12,9 +12,11 @@
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/extensions/api/settings_private/prefs_util.h"
 #include "chromeos/ash/components/dbus/system_proxy/system_proxy_service.pb.h"
-#include "chromeos/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/content_browser_client.h"
 #include "net/base/auth.h"
@@ -274,6 +276,9 @@ class SystemProxyManager : public NetworkStateHandlerObserver {
   // Observer for Kerberos-related prefs.
   std::unique_ptr<PrefChangeRegistrar> local_state_pref_change_registrar_;
   std::unique_ptr<PrefChangeRegistrar> profile_pref_change_registrar_;
+
+  base::ScopedObservation<NetworkStateHandler, NetworkStateHandlerObserver>
+      network_state_handler_observer_{this};
 
   base::RepeatingClosure send_auth_details_closure_for_test_;
 

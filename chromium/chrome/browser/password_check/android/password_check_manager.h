@@ -7,10 +7,12 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_piece_forward.h"
 #include "chrome/browser/password_check/android/password_check_ui_status.h"
 #include "chrome/browser/password_entry_edit/android/credential_edit_bridge.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/bulk_leak_check_service_factory.h"
 #include "chrome/browser/password_manager/password_scripts_fetcher_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -19,6 +21,7 @@
 #include "components/password_manager/core/browser/bulk_leak_check_service_interface.h"
 #include "components/password_manager/core/browser/password_scripts_fetcher.h"
 #include "components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.h"
+#include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -39,9 +42,9 @@ class PasswordCheckManager
                                                 int remaining_in_queue) = 0;
   };
 
-  struct CompromisedCredentialForUI : password_manager::CredentialWithPassword {
+  struct CompromisedCredentialForUI : password_manager::CredentialUIEntry {
     explicit CompromisedCredentialForUI(
-        const password_manager::CredentialWithPassword& credential);
+        const password_manager::CredentialUIEntry& credential_entry);
 
     CompromisedCredentialForUI(const CompromisedCredentialForUI& other);
     CompromisedCredentialForUI(CompromisedCredentialForUI&& other);
@@ -84,18 +87,18 @@ class PasswordCheckManager
 
   // Called by java to update the given compromised `credential` and set its
   // password to `new_password`.
-  void UpdateCredential(const password_manager::CredentialView& credential,
+  void UpdateCredential(const password_manager::CredentialUIEntry& credential,
                         base::StringPiece new_password);
 
   // Called by java to launch the edit credential UI for `credential`.
   void OnEditCredential(
-      const password_manager::CredentialView& credential,
+      const password_manager::CredentialUIEntry& credential,
       const base::android::JavaParamRef<jobject>& context,
       const base::android::JavaParamRef<jobject>& settings_launcher);
 
   // Called by java to remove the given compromised `credential` and trigger a
   // UI update on completion.
-  void RemoveCredential(const password_manager::CredentialView& credential);
+  void RemoveCredential(const password_manager::CredentialUIEntry& credential);
 
   // Invokes `PasswordScriptsFetcher`'s scripts refreshment.
   void RefreshScripts();
@@ -165,9 +168,7 @@ class PasswordCheckManager
       override;
 
   // InsecureCredentialsManager::Observer
-  void OnInsecureCredentialsChanged(
-      password_manager::InsecureCredentialsManager::CredentialsView credentials)
-      override;
+  void OnInsecureCredentialsChanged() override;
 
   // BulkLeakCheckServiceInterface::Observer
   void OnStateChanged(
@@ -176,11 +177,11 @@ class PasswordCheckManager
                         password_manager::IsLeaked is_leaked) override;
   void OnBulkCheckServiceShutDown() override;
 
-  // Turns a `CredentialWithPassword` into a `CompromisedCredentialForUI`,
+  // Turns a `CredentialUIEntry` into a `CompromisedCredentialForUI`,
   // getting suitable strings for all display elements (e.g. url, app name,
   // app package, username, etc.).
   CompromisedCredentialForUI MakeUICredential(
-      const password_manager::CredentialWithPassword& credential) const;
+      const password_manager::CredentialUIEntry& credential) const;
 
   // Converts the state retrieved from the check service into a state that
   // can be used by the UI to display appropriate messages.
@@ -223,12 +224,6 @@ class PasswordCheckManager
   // Object storing the progress of a running password check.
   std::unique_ptr<PasswordCheckProgress> progress_;
 
-  // Handle to the password store, powering both `saved_passwords_presenter_`
-  // and `insecure_credentials_manager_`.
-  scoped_refptr<password_manager::PasswordStoreInterface> password_store_ =
-      PasswordStoreFactory::GetForProfile(profile_,
-                                          ServiceAccessType::EXPLICIT_ACCESS);
-
   // Used to check whether autofill assistant scripts are available for
   // the specified domain.
   raw_ptr<password_manager::PasswordScriptsFetcher> password_script_fetcher_ =
@@ -238,11 +233,20 @@ class PasswordCheckManager
   // Used by `insecure_credentials_manager_` to obtain the list of saved
   // passwords.
   password_manager::SavedPasswordsPresenter saved_passwords_presenter_{
-      password_store_};
+      PasswordStoreFactory::GetForProfile(profile_,
+                                          ServiceAccessType::EXPLICIT_ACCESS),
+      AccountPasswordStoreFactory::GetForProfile(
+          profile_,
+          ServiceAccessType::EXPLICIT_ACCESS)};
 
   // Used to obtain the list of insecure credentials.
   password_manager::InsecureCredentialsManager insecure_credentials_manager_{
-      &saved_passwords_presenter_, password_store_};
+      &saved_passwords_presenter_,
+      PasswordStoreFactory::GetForProfile(profile_,
+                                          ServiceAccessType::EXPLICIT_ACCESS),
+      AccountPasswordStoreFactory::GetForProfile(
+          profile_,
+          ServiceAccessType::EXPLICIT_ACCESS)};
 
   // Adapter used to start, monitor and stop a bulk leak check.
   password_manager::BulkLeakCheckServiceAdapter
@@ -284,6 +288,9 @@ class PasswordCheckManager
       password_manager::BulkLeakCheckServiceInterface,
       password_manager::BulkLeakCheckServiceInterface::Observer>
       observed_bulk_leak_check_service_{this};
+
+  // Weak pointer factory for callback binding safety.
+  base::WeakPtrFactory<PasswordCheckManager> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_PASSWORD_CHECK_ANDROID_PASSWORD_CHECK_MANAGER_H_

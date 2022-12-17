@@ -150,17 +150,16 @@ class BenchmarkConfig(object):
 
   @property
   def stories(self):
-    if self._stories != None:
+    if self._stories is not None:
       return self._stories
-    else:
-      story_set = benchmark_utils.GetBenchmarkStorySet(self.benchmark())
-      abridged_story_set_tag = (
-          story_set.GetAbridgedStorySetTagFilter() if self.abridged else None)
-      story_filter_obj = story_filter.StoryFilter(
-          abridged_story_set_tag=abridged_story_set_tag)
-      stories = story_filter_obj.FilterStories(story_set)
-      self._stories = [story.name for story in stories]
-      return self._stories
+    story_set = benchmark_utils.GetBenchmarkStorySet(self.benchmark())
+    abridged_story_set_tag = (story_set.GetAbridgedStorySetTagFilter()
+                              if self.abridged else None)
+    story_filter_obj = story_filter.StoryFilter(
+        abridged_story_set_tag=abridged_story_set_tag)
+    stories = story_filter_obj.FilterStories(story_set)
+    self._stories = [story.name for story in stories]
+    return self._stories
 
 
 class ExecutableConfig(object):
@@ -470,9 +469,15 @@ _ANDROID_PIXEL2_FYI_BENCHMARK_CONFIGS = PerfSuite([
 ])
 _CHROMEOS_KEVIN_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('rendering.desktop')])
-_LACROS_EVE_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
+_LACROS_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
     'blink_perf.display_locking',
     'v8.runtime_stats.top_25',
+])
+_FUCHSIA_PERF_ASTRO_BENCHMARK_CONFIGS = PerfSuite([
+    _GetBenchmarkConfig('speedometer2'),
+])
+_FUCHSIA_PERF_SHERLOCK_BENCHMARK_CONFIGS = PerfSuite([
+    _GetBenchmarkConfig('speedometer2'),
 ])
 _LINUX_PERF_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('power.desktop'),
@@ -601,8 +606,11 @@ WIN_10_LOW_END_PGO = PerfPlatform(
 WIN_10 = PerfPlatform(
     'win-10-perf',
     'Windows Intel HD 630 towers, Core i7-7700 3.6 GHz, 16GB RAM,'
-    ' Intel Kaby Lake HD Graphics 630', _WIN_10_BENCHMARK_CONFIGS,
-    26, 'win', executables=_WIN_10_EXECUTABLE_CONFIGS)
+    ' Intel Kaby Lake HD Graphics 630',
+    _WIN_10_BENCHMARK_CONFIGS,
+    20,
+    'win',
+    executables=_WIN_10_EXECUTABLE_CONFIGS)
 WIN_10_PGO = PerfPlatform(
     'win-10-perf-pgo',
     'Windows Intel HD 630 towers, Core i7-7700 3.6 GHz, 16GB RAM,'
@@ -682,8 +690,24 @@ ANDROID_PIXEL4A_POWER_PGO = PerfPlatform(
     _ANDROID_PIXEL4A_POWER_BENCHMARK_CONFIGS, 12, 'android')
 
 # Cros/Lacros
-LACROS_EVE_PERF = PerfPlatform('lacros-eve-perf', '',
-                               _LACROS_EVE_BENCHMARK_CONFIGS, 8, 'chromeos')
+LACROS_EVE_PERF = PerfPlatform('lacros-eve-perf', '', _LACROS_BENCHMARK_CONFIGS,
+                               8, 'chromeos')
+LACROS_X86_PERF = PerfPlatform('lacros-x86-perf', '', _LACROS_BENCHMARK_CONFIGS,
+                               12, 'chromeos')
+# Fuchsia
+FUCHSIA_PERF_ASTRO = PerfPlatform('fuchsia-perf-ast',
+                                  '',
+                                  _FUCHSIA_PERF_ASTRO_BENCHMARK_CONFIGS,
+                                  1,
+                                  'fuchsia',
+                                  executables=FUCHSIA_EXEC_CONFIGS['astro'])
+FUCHSIA_PERF_SHERLOCK = PerfPlatform(
+    'fuchsia-perf-shk',
+    '',
+    _FUCHSIA_PERF_SHERLOCK_BENCHMARK_CONFIGS,
+    1,
+    'fuchsia',
+    executables=FUCHSIA_EXEC_CONFIGS['sherlock'])
 
 # FYI bots
 WIN_10_LOW_END_HP_CANDIDATE = PerfPlatform(
@@ -779,3 +803,4 @@ def find_bot_platform(builder_name):
   for bot_platform in ALL_PLATFORMS:
     if bot_platform.name == builder_name:
       return bot_platform
+  return None

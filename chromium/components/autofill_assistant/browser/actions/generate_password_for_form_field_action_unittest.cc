@@ -11,7 +11,7 @@
 #include "base/test/mock_callback.h"
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/client_status.h"
-#include "components/autofill_assistant/browser/mock_website_login_manager.h"
+#include "components/autofill_assistant/browser/public/password_change/mock_website_login_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace {
@@ -60,7 +60,7 @@ class GeneratePasswordForFormFieldActionTest : public testing::Test {
 
 TEST_F(GeneratePasswordForFormFieldActionTest, GeneratedPassword) {
   ON_CALL(mock_action_delegate_, RetrieveElementFormAndFieldData)
-      .WillByDefault(RunOnceCallback<1>(ClientStatus(ACTION_APPLIED),
+      .WillByDefault(RunOnceCallback<1>(ClientStatus(ACTION_APPLIED), nullptr,
                                         autofill::FormData(),
                                         autofill::FormFieldData()));
   GeneratePasswordForFormFieldProto* generate_password_proto =
@@ -84,7 +84,7 @@ TEST_F(GeneratePasswordForFormFieldActionTest, GeneratedPassword) {
 
 TEST_F(GeneratePasswordForFormFieldActionTest, FormDataIsNotRetrieved) {
   ON_CALL(mock_action_delegate_, RetrieveElementFormAndFieldData)
-      .WillByDefault(RunOnceCallback<1>(ClientStatus(INVALID_SELECTOR),
+      .WillByDefault(RunOnceCallback<1>(ClientStatus(INVALID_SELECTOR), nullptr,
                                         autofill::FormData(),
                                         autofill::FormFieldData()));
 
@@ -107,7 +107,7 @@ TEST_F(GeneratePasswordForFormFieldActionTest, FormDataIsNotRetrieved) {
 
 TEST_F(GeneratePasswordForFormFieldActionTest, GeneratePasswordFails) {
   ON_CALL(mock_action_delegate_, RetrieveElementFormAndFieldData)
-      .WillByDefault(RunOnceCallback<1>(ClientStatus(ACTION_APPLIED),
+      .WillByDefault(RunOnceCallback<1>(ClientStatus(ACTION_APPLIED), nullptr,
                                         autofill::FormData(),
                                         autofill::FormFieldData()));
   GeneratePasswordForFormFieldProto* generate_password_proto =

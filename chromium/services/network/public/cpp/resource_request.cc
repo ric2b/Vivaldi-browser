@@ -221,6 +221,7 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
              request.originated_from_service_worker &&
          skip_service_worker == request.skip_service_worker &&
          corb_detachable == request.corb_detachable && mode == request.mode &&
+         target_address_space == request.target_address_space &&
          credentials_mode == request.credentials_mode &&
          redirect_mode == request.redirect_mode &&
          fetch_integrity == request.fetch_integrity &&
@@ -247,7 +248,6 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
              request.is_signed_exchange_prefetch_cache_enabled &&
          is_fetch_like_api == request.is_fetch_like_api &&
          is_favicon == request.is_favicon &&
-         obey_origin_policy == request.obey_origin_policy &&
          recursive_prefetch_token == request.recursive_prefetch_token &&
          OptionalTrustedParamsEqualsForTesting(trusted_params,
                                                request.trusted_params) &&

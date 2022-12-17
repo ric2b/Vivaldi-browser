@@ -303,6 +303,9 @@ class ComputedStyle : public ComputedStyleBase,
   Vector<AtomicString>& EnsureVariableNamesCache() const;
   void ClearVariableNamesCache() const;
 
+  PositionFallbackStyleCache& EnsurePositionFallbackStyleCache(
+      unsigned ensure_size) const;
+
  private:
   // TODO(sashab): Move these private members to the bottom of ComputedStyle.
   ALWAYS_INLINE ComputedStyle();
@@ -431,6 +434,11 @@ class ComputedStyle : public ComputedStyleBase,
       PseudoId pseudo_id,
       const AtomicString& pseudo_argument) const;
   void ClearCachedPseudoElementStyles() const;
+
+  const ComputedStyle* GetCachedPositionFallbackStyle(unsigned index) const;
+  const ComputedStyle* AddCachedPositionFallbackStyle(
+      scoped_refptr<const ComputedStyle>,
+      unsigned index) const;
 
   // If this ComputedStyle is affected by animation/transitions, then the
   // unanimated "base" style can be retrieved with this function.
@@ -2005,9 +2013,6 @@ class ComputedStyle : public ComputedStyleBase,
     return GetPosition() == EPosition::kRelative ||
            GetPosition() == EPosition::kSticky;
   }
-  bool HasViewportConstrainedPosition() const {
-    return GetPosition() == EPosition::kFixed;
-  }
   bool HasStickyConstrainedPosition() const {
     return GetPosition() == EPosition::kSticky &&
            (!Top().IsAuto() || !Left().IsAuto() || !Right().IsAuto() ||
@@ -2301,6 +2306,15 @@ class ComputedStyle : public ComputedStyleBase,
            OverflowY() == EOverflow::kVisible;
   }
 
+  // Returns true if 'overflow' is 'visible' or 'clip' along both axes.
+  bool IsOverflowVisibleOrClip() const {
+    bool overflow_x =
+        OverflowX() == EOverflow::kVisible || OverflowX() == EOverflow::kClip;
+    DCHECK(!overflow_x || OverflowY() == EOverflow::kVisible ||
+           OverflowY() == EOverflow::kClip);
+    return overflow_x;
+  }
+
   // An overflow value of visible or clip is not a scroll container, all other
   // values result in a scroll container. Also note that if visible or clip is
   // set on one axis, then the other axis must also be visible or clip. For
@@ -2309,6 +2323,25 @@ class ComputedStyle : public ComputedStyleBase,
   bool IsScrollContainer() const {
     return OverflowX() != EOverflow::kVisible &&
            OverflowX() != EOverflow::kClip;
+  }
+
+  // Returns true if object-fit, object-position and object-view-box would avoid
+  // replaced contents overflow.
+  bool ObjectPropertiesPreventReplacedOverflow() const {
+    if (GetObjectFit() == EObjectFit::kNone ||
+        GetObjectFit() == EObjectFit::kCover) {
+      return false;
+    }
+
+    if (ObjectPosition() !=
+        LengthPoint(Length::Percent(50.0), Length::Percent(50.0))) {
+      return false;
+    }
+
+    if (ObjectViewBox())
+      return false;
+
+    return true;
   }
 
   bool IsDisplayTableRowOrColumnType() const {
@@ -2687,9 +2720,6 @@ class ComputedStyle : public ComputedStyleBase,
       AccessBackgroundLayers().FillUnsetProperties();
     }
   }
-  bool IsBackgroundColorCurrentColor() const {
-    return BackgroundColor().IsCurrentColor();
-  }
   bool HasBackgroundRelatedColorReferencingCurrentColor() const {
     if (BackgroundColor().IsCurrentColor() ||
         InternalVisitedBackgroundColor().IsCurrentColor() ||
@@ -2714,7 +2744,8 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Color utility functions.
   CORE_EXPORT Color
-  VisitedDependentColor(const CSSProperty& color_property) const;
+  VisitedDependentColor(const CSSProperty& color_property,
+                        bool* is_current_color = nullptr) const;
 
   // -webkit-appearance utility functions.
   bool HasEffectiveAppearance() const {
@@ -2950,6 +2981,7 @@ class ComputedStyle : public ComputedStyleBase,
   }
   const StyleAutoColor& CaretColor() const { return CaretColorInternal(); }
   const StyleColor& GetColor() const { return ColorInternal(); }
+  bool ColorIsCurrentColor() const { return ColorIsCurrentColorInternal(); }
   const StyleColor& ColumnRuleColor() const {
     return ColumnRuleColorInternal();
   }
@@ -2967,6 +2999,9 @@ class ComputedStyle : public ComputedStyleBase,
   }
   const StyleColor& InternalVisitedColor() const {
     return InternalVisitedColorInternal();
+  }
+  bool InternalVisitedColorIsCurrentColor() const {
+    return InternalVisitedColorIsCurrentColorInternal();
   }
   const StyleAutoColor& InternalVisitedCaretColor() const {
     return InternalVisitedCaretColorInternal();
@@ -3092,17 +3127,19 @@ class ComputedStyle : public ComputedStyleBase,
   CORE_EXPORT bool CustomPropertiesEqual(const Vector<AtomicString>& properties,
                                          const ComputedStyle& other) const;
 
-  Color GetCurrentColor() const;
-  Color GetInternalVisitedCurrentColor() const;
-  Color GetInternalForcedCurrentColor() const;
-  Color GetInternalForcedVisitedCurrentColor() const;
+  Color GetCurrentColor(bool* is_current_color = nullptr) const;
+  Color GetInternalVisitedCurrentColor(bool* is_current_color = nullptr) const;
+  Color GetInternalForcedCurrentColor(bool* is_current_color = nullptr) const;
+  Color GetInternalForcedVisitedCurrentColor(
+      bool* is_current_color = nullptr) const;
 
   // Helper for resolving a StyleColor which may contain currentColor or a
   // system color keyword. This is intended for cases where a given property
   // consists of a StyleColor plus additional information. For <color>
   // properties, prefer VisitedDependentColor() or
   // Longhand::ColorIncludingFallback() instead.
-  Color ResolvedColor(const StyleColor& color) const;
+  Color ResolvedColor(const StyleColor& color,
+                      bool* is_current_color = nullptr) const;
 
   static bool ShadowListHasCurrentColor(const ShadowList*);
 

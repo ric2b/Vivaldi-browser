@@ -95,12 +95,13 @@ class DocumentPictureInPictureWindowControllerBrowserTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "PictureInPictureV2");
+                                    "DocumentPictureInPictureAPI");
     InProcessBrowserTest::SetUpCommandLine(command_line);
   }
 
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(features::kPictureInPictureV2);
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kDocumentPictureInPictureAPI);
     InProcessBrowserTest::SetUp();
   }
 
@@ -297,6 +298,26 @@ IN_PROC_BROWSER_TEST_F(
                          "navigateInDocumentPipWindow('#top');"));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(window_controller()->GetChildWebContents());
+}
+
+// Adding a script to the popup window should not crash.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// Document PiP is not supported in Lacros yet.
+#define MAYBE_AddScriptToPictureInPictureWindow \
+  DISABLED_AddScriptToPictureInPictureWindow
+#else
+#define MAYBE_AddScriptToPictureInPictureWindow \
+  AddScriptToPictureInPictureWindow
+#endif
+IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
+                       MAYBE_AddScriptToPictureInPictureWindow) {
+  LoadTabAndEnterPictureInPicture(browser());
+
+  content::WebContents* active_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_EQ(true, EvalJs(active_web_contents,
+                         "addScriptToPictureInPictureWindow();"));
+  base::RunLoop().RunUntilIdle();
 }
 
 // Make sure that document PiP fails without a secure context.

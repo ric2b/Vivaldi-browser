@@ -31,6 +31,7 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/variations_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -44,6 +45,8 @@
 
 namespace policy {
 
+const size_t kNumChunks = 8;
+
 namespace {
 
 base::FilePath GetTestCasePath() {
@@ -52,6 +55,15 @@ base::FilePath GetTestCasePath() {
   base::PathService::Get(chrome::DIR_TEST_DATA, &path);
   return path.Append(FILE_PATH_LITERAL("policy"))
       .Append(FILE_PATH_LITERAL("policy_test_cases.json"));
+}
+
+size_t GetNumChunks() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          kPolicyToPrefMappingsFilterSwitch)) {
+    // Run as one chunk when test filter specified.
+    return 1;
+  }
+  return kNumChunks;
 }
 
 }  // namespace
@@ -72,6 +84,12 @@ class PolicyPrefsTest : public PlatformBrowserTest {
 
  protected:
   void SetUpInProcessBrowserTestFixture() override {
+    // Some policies default value might depend on features, enforce use of
+    // field trial testing config to avoid having unexpected results based on
+    // new feature flags coming from the server (e.g. on Chrome-branded CI
+    // bots).
+    variations::EnableTestingConfig();
+
     GetMockPolicyProvider()->SetDefaultReturns(
         true /* is_initialization_complete_return */,
         true /* is_first_policy_load_complete_return */);
@@ -112,6 +130,21 @@ class PolicyPrefsTest : public PlatformBrowserTest {
 #endif  // !BUILDFLAG(IS_ANDROID)
 };
 
+// Splits the test cases into `kNumChunks` and the testing parameter determines
+// the index of the current chunk. This prevents the test from timing out when
+// testing all test cases in a single browser test.
+class ChunkedPolicyPrefsTest : public PolicyPrefsTest,
+                               public ::testing::WithParamInterface<size_t> {
+ public:
+  ChunkedPolicyPrefsTest() = default;
+  ChunkedPolicyPrefsTest(const ChunkedPolicyPrefsTest&) = delete;
+  ChunkedPolicyPrefsTest& operator=(const ChunkedPolicyPrefsTest&) = delete;
+  ~ChunkedPolicyPrefsTest() override = default;
+
+ protected:
+  PrefMappingChunkInfo chunk_info_{GetParam(), GetNumChunks()};
+};
+
 // Verifies that policies make their corresponding preferences become managed,
 // and that the user can't override that setting.
 // README SHERIFFs: This test encapsulates a whole suite of individual browser
@@ -119,8 +152,7 @@ class PolicyPrefsTest : public PlatformBrowserTest {
 // failure/flakiness.
 // IMPORTANT: Please add hendrich@chromium.org on any related bugs when
 // disabling this test.
-// Flaky on all platforms: crbug.com/1294825
-IN_PROC_BROWSER_TEST_F(PolicyPrefsTest, DISABLED_PolicyToPrefsMapping) {
+IN_PROC_BROWSER_TEST_P(ChunkedPolicyPrefsTest, PolicyToPrefsMapping) {
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   policy::FakeBrowserDMTokenStorage storage;
   policy::BrowserDMTokenStorage::SetForTesting(&storage);
@@ -133,8 +165,13 @@ IN_PROC_BROWSER_TEST_F(PolicyPrefsTest, DISABLED_PolicyToPrefsMapping) {
 
   VerifyPolicyToPrefMappings(GetTestCasePath(), local_state, user_prefs,
                              /* signin_profile_prefs= */ nullptr,
-                             GetMockPolicyProvider());
-}
+                             GetMockPolicyProvider(), &chunk_info_);
+};
+
+INSTANTIATE_TEST_SUITE_P(Chunked,
+                         ChunkedPolicyPrefsTest,
+                         ::testing::Range(/* start= */ static_cast<size_t>(0),
+                                          /* end= */ GetNumChunks()));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 

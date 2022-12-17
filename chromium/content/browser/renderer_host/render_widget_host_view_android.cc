@@ -438,11 +438,8 @@ void RenderWidgetHostViewAndroid::LostFocus() {
 void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
     const cc::RenderFrameMetadata& metadata) {
   bool is_transparent = metadata.has_transparent_background;
-  SkColor root_background_color = metadata.root_background_color;
 
   if (!using_browser_compositor_) {
-    // DevTools ScreenCast support for Android WebView.
-    last_render_frame_metadata_ = metadata;
     // Android WebView ignores transparent background.
     is_transparent = false;
   }
@@ -489,8 +486,10 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
       metadata.bottom_controls_shown_ratio,
       metadata.bottom_controls_min_height_offset);
 
-  SetContentBackgroundColor(is_transparent ? SK_ColorTRANSPARENT
-                                           : root_background_color);
+  // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
+  SetContentBackgroundColor(is_transparent
+                                ? SK_ColorTRANSPARENT
+                                : metadata.root_background_color.toSkColor());
 
   if (overscroll_controller_) {
     overscroll_controller_->OnFrameMetadataUpdated(
@@ -1099,7 +1098,27 @@ void RenderWidgetHostViewAndroid::FocusedNodeChanged(
     bool is_editable_node,
     const gfx::Rect& node_bounds_in_screen) {
   if (ime_adapter_android_)
-    ime_adapter_android_->FocusedNodeChanged(is_editable_node);
+    ime_adapter_android_->FocusedNodeChanged(is_editable_node,
+                                             node_bounds_in_screen);
+}
+
+bool RenderWidgetHostViewAndroid::RequestStartStylusWriting() {
+  return ime_adapter_android_ &&
+         ime_adapter_android_->RequestStartStylusWriting();
+}
+
+void RenderWidgetHostViewAndroid::SetHoverActionStylusWritable(
+    bool stylus_writable) {
+  view_.SetHoverActionStylusWritable(stylus_writable);
+}
+
+void RenderWidgetHostViewAndroid::OnEditElementFocusedForStylusWriting(
+    const gfx::Rect& focused_edit_bounds,
+    const gfx::Rect& caret_bounds) {
+  if (ime_adapter_android_) {
+    ime_adapter_android_->OnEditElementFocusedForStylusWriting(
+        focused_edit_bounds, caret_bounds);
+  }
 }
 
 void RenderWidgetHostViewAndroid::RenderProcessGone() {
@@ -1247,34 +1266,6 @@ bool RenderWidgetHostViewAndroid::RequestRepaintForTesting() {
                                      absl::nullopt);
 }
 
-void RenderWidgetHostViewAndroid::FrameTokenChangedForSynchronousCompositor(
-    uint32_t frame_token,
-    const gfx::PointF& root_scroll_offset) {
-  if (!viz::FrameTokenGT(frame_token, sync_compositor_last_frame_token_))
-    return;
-  sync_compositor_last_frame_token_ = frame_token;
-
-  if (host() && frame_token) {
-    DCHECK(!using_browser_compositor_);
-    // DevTools ScreenCast support for Android WebView. Don't call this if
-    // we're currently in SynchronousCopyContents, as this can lead to
-    // redundant copies.
-    if (!in_sync_copy_contents_) {
-      RenderFrameHostImpl* frame_host =
-          RenderViewHostImpl::From(host())->GetMainRenderFrameHost();
-      if (frame_host && last_render_frame_metadata_) {
-        // Update our |root_scroll_offset|, as changes to this value do not
-        // trigger a new RenderFrameMetadata, and it may be out of date. This
-        // is needed for devtools DOM node selection.
-        cc::RenderFrameMetadata updated_metadata = *last_render_frame_metadata_;
-        updated_metadata.root_scroll_offset = root_scroll_offset;
-        RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(
-            frame_host, updated_metadata);
-      }
-    }
-  }
-}
-
 void RenderWidgetHostViewAndroid::SetSynchronousCompositorClient(
       SynchronousCompositorClient* client) {
   synchronous_compositor_client_ = client;
@@ -1395,10 +1386,6 @@ void RenderWidgetHostViewAndroid::SynchronousCopyContents(
     const gfx::Rect& src_subrect_dip,
     const gfx::Size& dst_size_in_pixel,
     base::OnceCallback<void(const SkBitmap&)> callback) {
-  // Track that we're in this function to avoid repeatedly calling DevTools
-  // capture logic.
-  base::AutoReset<bool> in_sync_copy_contents(&in_sync_copy_contents_, true);
-
   // Note: When |src_subrect| is empty, a conversion from the view size must
   // be made instead of using |current_frame_size_|. The latter sometimes also
   // includes extra height for the toolbar UI, which is not intended for
@@ -1783,7 +1770,8 @@ void RenderWidgetHostViewAndroid::ProcessAckedTouchEvent(
 
 void RenderWidgetHostViewAndroid::GestureEventAck(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   if (overscroll_controller_)
     overscroll_controller_->OnGestureEventAck(event, ack_result);
   mouse_wheel_phase_handler_.GestureEventAck(event, ack_result);
@@ -1795,16 +1783,19 @@ void RenderWidgetHostViewAndroid::GestureEventAck(
   StopFlingingIfNecessary(event, ack_result);
 
   if (gesture_listener_manager_)
-    gesture_listener_manager_->GestureEventAck(event, ack_result);
+    gesture_listener_manager_->GestureEventAck(event, ack_result,
+                                               std::move(scroll_result_data));
 
   HandleSwipeToMoveCursorGestureAck(event);
 }
 
 void RenderWidgetHostViewAndroid::ChildDidAckGestureEvent(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   if (gesture_listener_manager_)
-    gesture_listener_manager_->GestureEventAck(event, ack_result);
+    gesture_listener_manager_->GestureEventAck(event, ack_result,
+                                               std::move(scroll_result_data));
 }
 
 blink::mojom::InputEventResultState
@@ -1839,7 +1830,7 @@ RenderWidgetHostViewAndroid::FilterInputEvent(
     return blink::mojom::InputEventResultState::kNotConsumed;
 
   if (input_event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
-    GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_SANDBOXED,
+    GpuProcessHost::CallOnIO(FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
                              false /* force_create */,
                              base::BindOnce(&WakeUpGpu));
   }

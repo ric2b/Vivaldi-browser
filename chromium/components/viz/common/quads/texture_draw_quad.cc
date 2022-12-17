@@ -20,6 +20,7 @@ TextureDrawQuad::TextureDrawQuad()
       premultiplied_alpha(false),
       secure_output_only(false),
       is_video_frame(false),
+      is_stream_video(false),
       protected_video_type(gfx::ProtectedVideoType::kClear) {
   static_assert(static_cast<int>(gfx::ProtectedVideoType::kMaxValue) < 4,
                 "protected_video_type needs more bits in order to represent "
@@ -38,7 +39,7 @@ void TextureDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
                              bool premultiplied,
                              const gfx::PointF& top_left,
                              const gfx::PointF& bottom_right,
-                             SkColor background,
+                             SkColor4f background,
                              const float opacity[4],
                              bool flipped,
                              bool nearest,
@@ -53,7 +54,7 @@ void TextureDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
   premultiplied_alpha = premultiplied;
   uv_top_left = top_left;
   uv_bottom_right = bottom_right;
-  background_color = SkColor4f::FromColor(background);
+  background_color = background;
   vertex_opacity[0] = opacity[0];
   vertex_opacity[1] = opacity[1];
   vertex_opacity[2] = opacity[2];
@@ -73,7 +74,7 @@ void TextureDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
                              bool premultiplied,
                              const gfx::PointF& top_left,
                              const gfx::PointF& bottom_right,
-                             SkColor background,
+                             SkColor4f background,
                              const float opacity[4],
                              bool flipped,
                              bool nearest,
@@ -87,7 +88,7 @@ void TextureDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
   premultiplied_alpha = premultiplied;
   uv_top_left = top_left;
   uv_bottom_right = bottom_right;
-  background_color = SkColor4f::FromColor(background);
+  background_color = background;
   vertex_opacity[0] = opacity[0];
   vertex_opacity[1] = opacity[1];
   vertex_opacity[2] = opacity[2];
@@ -122,6 +123,7 @@ void TextureDrawQuad::ExtendValue(base::trace_event::TracedValue* value) const {
   value->SetBoolean("y_flipped", y_flipped);
   value->SetBoolean("nearest_neighbor", nearest_neighbor);
   value->SetBoolean("is_video_frame", is_video_frame);
+  value->SetBoolean("is_stream_video", is_stream_video);
   value->SetInteger("protected_video_type",
                     static_cast<int>(protected_video_type));
 }

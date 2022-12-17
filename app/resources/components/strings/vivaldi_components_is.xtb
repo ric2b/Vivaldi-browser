@@ -30,6 +30,7 @@
           og afhakaðu"<ph name="NO_PREFETCH_DESCRIPTION" />."
           Ef þetta leysir ekki vandmálið þá mælum við með því að setja hak aftur í
           þessa stillingu til þess að bæta frammistöðu.</translation>
+<translation id="7496505986576158197">Vivaldi er mögulegt vegna opna hugbúnaðarverkefnisins <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> og annars <ph name="BEGIN_LINK_OSS" />opins hugbúnaðar<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Fara í
           Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies
           og fjarlægðu hök þar sem vefsel (e. proxy) hefur verið valið.</translation>

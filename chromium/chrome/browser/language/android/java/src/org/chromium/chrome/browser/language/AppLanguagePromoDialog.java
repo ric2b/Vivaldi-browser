@@ -83,6 +83,21 @@ public class AppLanguagePromoDialog {
     }
 
     /**
+     * Annotation for the TopULPMatch Histogram.
+     * Do not reorder or remove items, only add new items before NUM_ENTRIES.
+     * Keep in sync with ULPTopLanguageMatch from enums.xml.
+     */
+    @IntDef({TopULPMatchType.NO, TopULPMatchType.YES, TopULPMatchType.EMPTY,
+            TopULPMatchType.NUM_ENTRIES})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TopULPMatchType {
+        int NO = 0;
+        int YES = 1;
+        int EMPTY = 2;
+        int NUM_ENTRIES = 3;
+    }
+
+    /**
      * Interface for holding the Chrome restart action.
      */
     @FunctionalInterface
@@ -545,7 +560,7 @@ public class AppLanguagePromoDialog {
     public static boolean maybeShowPrompt(Activity activity,
             ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier,
             RestartAction restartAction) {
-        if (!shouldShowPrompt()) return false;
+        if (!shouldShowPrompt(NetworkChangeNotifier.isOnline())) return false;
 
         AppLanguagePromoDialog prompt =
                 new AppLanguagePromoDialog(activity, modalDialogManagerSupplier, restartAction);
@@ -554,28 +569,30 @@ public class AppLanguagePromoDialog {
     }
 
     /**
+     * @param isOnline True if the device is currently online.
      * @return Whether the app language prompt should be shown or not.
      */
-    private static boolean shouldShowPrompt() {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    static boolean shouldShowPrompt(boolean isOnline) {
         // Skip feature and preference checks if forced on for testing.
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.FORCE_APP_LANGUAGE_PROMPT)) {
             // Don't show if prompt has already been shown.
             if (TranslateBridge.getAppLanguagePromptShown()) return false;
-            boolean hasULPMatch =
+            @TopULPMatchType
+            int hasULPMatch =
                     LanguageBridge.isTopULPBaseLanguage(Locale.getDefault().toLanguageTag());
             recordTopULPMatchStatus(hasULPMatch);
             // Don't show if not enabled.
             if (!ChromeFeatureList.isEnabled(ChromeFeatureList.APP_LANGUAGE_PROMPT)) return false;
-            // Don't show if ULP match is enabled and the UI language matches the top ULP language.
+            // Don't show if ULP match is enabled and the UI language doesn't match the top ULP
+            // language.
             if (ChromeFeatureList.isEnabled(ChromeFeatureList.APP_LANGUAGE_PROMPT_ULP)
-                    && hasULPMatch) {
+                    && hasULPMatch != TopULPMatchType.NO) {
                 return false;
             }
         }
 
-        boolean isOnline = NetworkChangeNotifier.isOnline();
         recordOnlineStatus(isOnline);
-
         // Only show the prompt if online.
         return isOnline;
     }
@@ -594,9 +611,10 @@ public class AppLanguagePromoDialog {
                 "LanguageSettings.AppLanguagePrompt.IsOnline", isOnline);
     }
 
-    private static void recordTopULPMatchStatus(boolean hasMatch) {
-        RecordHistogram.recordBooleanHistogram(
-                "LanguageSettings.AppLanguagePrompt.HasTopULPMatch", hasMatch);
+    private static void recordTopULPMatchStatus(@TopULPMatchType int hasMatch) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "LanguageSettings.AppLanguagePrompt.TopULPMatchStatus", hasMatch,
+                TopULPMatchType.NUM_ENTRIES);
     }
 
     private static void recordIsTopLanguage(boolean isTopLanguage) {

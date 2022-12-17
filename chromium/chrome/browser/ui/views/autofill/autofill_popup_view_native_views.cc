@@ -209,8 +209,8 @@ std::unique_ptr<views::ImageView> GetIconImageViewByName(
   if (icon_str == "empty")
     return ImageViewFromVectorIcon(omnibox::kHttpIcon);
 
-  if (icon_str == "fingerprint")
-    return ImageViewFromVectorIcon(kFingerprintIcon);
+  if (icon_str == "device")
+    return ImageViewFromVectorIcon(kLaptopAndSmartphoneIcon);
 
   if (icon_str == "google") {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -304,9 +304,6 @@ class PopupSeparator : public views::Separator {
   METADATA_HEADER(PopupSeparator);
   explicit PopupSeparator(AutofillPopupBaseView* popup);
 
-  // views::Separator:
-  void OnThemeChanged() override;
-
  private:
   raw_ptr<AutofillPopupBaseView> popup_;
 };
@@ -320,11 +317,7 @@ PopupSeparator::PopupSeparator(AutofillPopupBaseView* popup) : popup_(popup) {
   SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
       GetContentsVerticalPadding(), 0,
       UseImprovedSuggestionUi() ? GetContentsVerticalPadding() : 0, 0)));
-}
-
-void PopupSeparator::OnThemeChanged() {
-  views::Separator::OnThemeChanged();
-  SetColor(popup_->GetSeparatorColor());
+  SetColorId(popup_->GetSeparatorColorId());
 }
 
 BEGIN_METADATA(PopupSeparator, views::Separator)
@@ -1197,7 +1190,7 @@ void AutofillPopupFooterView::RefreshStyle() {
               ? 0
               : views::MenuConfig::instance().separator_thickness,
           0, 0, 0),
-      popup_view()->GetSeparatorColor()));
+      GetColorProvider()->GetColor(popup_view()->GetSeparatorColorId())));
 }
 
 int AutofillPopupFooterView::GetPrimaryTextStyle() {
@@ -1279,9 +1272,9 @@ void AutofillPopupWarningView::GetAccessibleNodeData(
   if (!controller)
     return;
 
+  node_data->role = ax::mojom::Role::kStaticText;
   node_data->SetName(
       controller->GetSuggestionAt(GetLineNumber()).main_text.value);
-  node_data->role = ax::mojom::Role::kStaticText;
 }
 
 void AutofillPopupWarningView::CreateContent() {

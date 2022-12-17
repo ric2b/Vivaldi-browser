@@ -775,7 +775,7 @@ TEST_F(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscard_Sync) {
   }
 }
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) && !defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(FFmpegDemuxerTest, TestAudioNegativeTimestamps) {

@@ -352,7 +352,7 @@ void WebAppSyncBridge::AddAllowedLaunchProtocol(
   // examine stale data.
   {
     ScopedRegistryUpdate update(this);
-    web_app::WebApp* app_to_update = update->UpdateApp(app_id);
+    WebApp* app_to_update = update->UpdateApp(app_id);
     base::flat_set<std::string> protocol_handlers(
         app_to_update->allowed_launch_protocols());
 
@@ -372,7 +372,7 @@ void WebAppSyncBridge::RemoveAllowedLaunchProtocol(
   // examine stale data.
   {
     ScopedRegistryUpdate update(this);
-    web_app::WebApp* app_to_update = update->UpdateApp(app_id);
+    WebApp* app_to_update = update->UpdateApp(app_id);
     base::flat_set<std::string> protocol_handlers(
         app_to_update->allowed_launch_protocols());
     protocol_handlers.erase(protocol_scheme);
@@ -390,7 +390,7 @@ void WebAppSyncBridge::AddDisallowedLaunchProtocol(
   // examine stale data.
   {
     ScopedRegistryUpdate update(this);
-    web_app::WebApp* app_to_update = update->UpdateApp(app_id);
+    WebApp* app_to_update = update->UpdateApp(app_id);
     base::flat_set<std::string> protocol_handlers(
         app_to_update->disallowed_launch_protocols());
 
@@ -410,7 +410,7 @@ void WebAppSyncBridge::RemoveDisallowedLaunchProtocol(
   // examine stale data.
   {
     ScopedRegistryUpdate update(this);
-    web_app::WebApp* app_to_update = update->UpdateApp(app_id);
+    WebApp* app_to_update = update->UpdateApp(app_id);
     base::flat_set<std::string> protocol_handlers(
         app_to_update->disallowed_launch_protocols());
     protocol_handlers.erase(protocol_scheme);
@@ -419,6 +419,20 @@ void WebAppSyncBridge::RemoveDisallowedLaunchProtocol(
   // Notify observers that the list of disallowed protocols was updated.
   registrar_->NotifyWebAppProtocolSettingsChanged();
 }
+
+#if BUILDFLAG(IS_MAC)
+void WebAppSyncBridge::SetAlwaysShowToolbarInFullscreen(const AppId& app_id,
+                                                        bool show) {
+  if (!registrar_->IsInstalled(app_id))
+    return;
+  {
+    ScopedRegistryUpdate(this)
+        ->UpdateApp(app_id)
+        ->SetAlwaysShowToolbarInFullscreen(show);
+  }
+  registrar_->NotifyAlwaysShowToolbarInFullscreenChanged(app_id, show);
+}
+#endif
 
 void WebAppSyncBridge::SetAppFileHandlerApprovalState(const AppId& app_id,
                                                       ApiApprovalState state) {
@@ -549,11 +563,11 @@ void WebAppSyncBridge::OnDataWritten(CommitCallback callback, bool success) {
   std::move(callback).Run(success);
 }
 
-void WebAppSyncBridge::WebAppUninstalled(const AppId& app, bool uninstalled) {
-  // In the case `uninstalled` is false, the AppId should still be removed from
-  // the set, since uninstall failures are not yet handled, and there are no
-  // uninstall retry attempts.
-  apps_in_sync_uninstall_.erase(app);
+void WebAppSyncBridge::OnWebAppUninstallComplete(
+    const AppId& app,
+    webapps::UninstallResultCode code) {
+  base::UmaHistogramBoolean("Webapp.SyncInitiatedUninstallResult",
+                            code == webapps::UninstallResultCode::kSuccess);
 }
 
 void WebAppSyncBridge::ReportErrorToChangeProcessor(
@@ -676,12 +690,10 @@ void WebAppSyncBridge::ApplySyncChangesToRegistrar(
 
   // Initiate any uninstall actions to clean up os integration, disk data, etc.
   if (!apps_to_delete.empty()) {
-    apps_in_sync_uninstall_.insert(apps_to_delete.begin(),
-                                   apps_to_delete.end());
     command_manager_->NotifySyncSourceRemoved(apps_to_delete);
     install_delegate_->UninstallFromSync(
         apps_to_delete,
-        base::BindRepeating(&WebAppSyncBridge::WebAppUninstalled,
+        base::BindRepeating(&WebAppSyncBridge::OnWebAppUninstallComplete,
                             weak_ptr_factory_.GetWeakPtr()));
   }
 
@@ -787,10 +799,6 @@ std::string WebAppSyncBridge::GetClientTag(
 std::string WebAppSyncBridge::GetStorageKey(
     const syncer::EntityData& entity_data) {
   return GetClientTag(entity_data);
-}
-
-const std::set<AppId>& WebAppSyncBridge::GetAppsInSyncUninstallForTest() {
-  return apps_in_sync_uninstall_;
 }
 
 void WebAppSyncBridge::MaybeUninstallAppsPendingUninstall() {

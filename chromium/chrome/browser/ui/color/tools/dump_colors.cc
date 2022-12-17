@@ -28,6 +28,8 @@ const char* enum_names[] = {
 };
 // clang-format on
 
+// Note that this second include is not redundant. The second inclusion of the
+// .inc file serves to undefine the macros the first inclusion defined.
 #include "ui/color/color_id_macros.inc"
 
 #if BUILDFLAG(IS_MAC)
@@ -53,7 +55,7 @@ int main(int argc, const char* argv[]) {
     const ui::ColorProviderManager::Key key = {
         color_mode, contrast_mode,
         ui::ColorProviderManager::SystemTheme::kDefault,
-        ui::ColorProviderManager::FrameType::kChromium, nullptr};
+        ui::ColorProviderManager::FrameType::kChromium};
     ui::AddColorMixers(provider, key);
     AddChromeColorMixers(provider, key);
   };

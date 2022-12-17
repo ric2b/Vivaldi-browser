@@ -415,6 +415,8 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   // platforms that don't need video detection.
   std::unique_ptr<VideoDetector> video_detector_;
 
+  scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
+  mojo::Remote<mojom::FrameSinkManagerClient> client_remote_;
   // There are three states this can be in:
   //  1. Mojo client: |client_| will point to |client_remote_|, the Mojo client,
   //     and |ui_task_runner_| will not be used. Calls to OnFrameTokenChanged()
@@ -429,8 +431,6 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   //     OnFrameTokenChanged() will be directly called (without PostTask) on
   //     |client_|. Used for some unit tests.
   raw_ptr<mojom::FrameSinkManagerClient> client_ = nullptr;
-  scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
-  mojo::Remote<mojom::FrameSinkManagerClient> client_remote_;
   mojo::Receiver<mojom::FrameSinkManager> receiver_{this};
 
   base::ObserverList<FrameSinkObserver>::Unchecked observer_list_;

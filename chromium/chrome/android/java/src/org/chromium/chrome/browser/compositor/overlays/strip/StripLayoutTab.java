@@ -25,7 +25,6 @@ import org.chromium.chrome.browser.compositor.layouts.components.CompositorButto
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton.CompositorOnClickHandler;
 import org.chromium.chrome.browser.compositor.layouts.components.TintedCompositorButton;
 import org.chromium.chrome.browser.compositor.overlays.strip.TabLoadTracker.TabLoadTrackerCallback;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
 import org.chromium.chrome.browser.layouts.animation.FloatProperty;
@@ -120,6 +119,34 @@ public class StripLayoutTab implements VirtualView {
                 }
             };
 
+    /** A property for animations to use for changing the drawX of the tab. */
+    public static final FloatProperty<StripLayoutTab> DRAW_X =
+            new FloatProperty<StripLayoutTab>("drawX") {
+                @Override
+                public void setValue(StripLayoutTab object, float value) {
+                    object.setDrawX(value);
+                }
+
+                @Override
+                public Float get(StripLayoutTab object) {
+                    return object.getDrawX();
+                }
+            };
+
+    /** A property for animations to use for changing the trailingMargin of the tab. */
+    public static final FloatProperty<StripLayoutTab> TRAILING_MARGIN =
+            new FloatProperty<StripLayoutTab>("trailingMargin") {
+                @Override
+                public void setValue(StripLayoutTab object, float value) {
+                    object.setTrailingMargin(value);
+                }
+
+                @Override
+                public Float get(StripLayoutTab object) {
+                    return object.getTrailingMargin();
+                }
+            };
+
     // Behavior Constants
     private static final float VISIBILITY_FADE_CLOSE_BUTTON_PERCENTAGE = 0.99f;
 
@@ -151,6 +178,7 @@ public class StripLayoutTab implements VirtualView {
     private float mIdealX;
     private float mTabOffsetX;
     private float mTabOffsetY;
+    private float mTrailingMargin;
 
     // Actual draw parameters
     private float mDrawX;
@@ -165,6 +193,7 @@ public class StripLayoutTab implements VirtualView {
     private CompositorAnimator mButtonOpacityAnimation;
 
     private float mLoadingSpinnerRotationDegrees;
+    private float mBrightness = 1.f;
 
     // Preallocated
     private final RectF mClosePlacement = new RectF();
@@ -463,6 +492,20 @@ public class StripLayoutTab implements VirtualView {
     }
 
     /**
+     * @param brightness The fraction (from 0.f to 1.f) of how bright the tab should be.
+     */
+    public void setBrightness(float brightness) {
+        mBrightness = brightness;
+    }
+
+    /**
+     * @return The fraction (from 0.f to 1.f) of how bright the tab should be.
+     */
+    public float getBrightness() {
+        return mBrightness;
+    }
+
+    /**
      * @param offsetX How far to offset the tab content (favicons and title).
      */
     public void setContentOffsetX(float offsetX) {
@@ -658,6 +701,23 @@ public class StripLayoutTab implements VirtualView {
     }
 
     /**
+     * This is used to help calculate the tab's position and is not used for rendering.
+     * @param trailingMargin The trailing margin of the tab (used for margins around tab groups
+     *                       when reordering, etc.).
+     */
+    public void setTrailingMargin(float trailingMargin) {
+        mTrailingMargin = trailingMargin;
+    }
+
+    /**
+     * This is used to help calculate the tab's position and is not used for rendering.
+     * @return The trailing margin of the tab.
+     */
+    public float getTrailingMargin() {
+        return mTrailingMargin;
+    }
+
+    /**
      * Finishes any content animations currently owned and running on this StripLayoutTab.
      */
     public void finishAnimation() {
@@ -673,8 +733,7 @@ public class StripLayoutTab implements VirtualView {
     }
 
     private RectF getCloseRect() {
-        boolean tabStripImprovementsEnabled =
-                CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS);
+        boolean tabStripImprovementsEnabled = ChromeFeatureList.sTabStripImprovements.isEnabled();
         int closeButtonWidth = tabStripImprovementsEnabled ? CLOSE_BUTTON_WIDTH_SCROLLING_STRIP_DP
                                                            : CLOSE_BUTTON_WIDTH_DP;
         // Vivaldi: Bounds offset for shifted close button.

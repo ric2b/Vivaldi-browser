@@ -17,6 +17,11 @@ namespace fileManagerPrivateInternal {
     DOMString? destinationFolderUrl;
     DOMString? password;
   };
+  dictionary ParsedTrashInfoFile {
+    EntryDescription restoreEntry;
+    DOMString trashInfoFileName;
+    double deletionDate;
+  };
 
   callback SimpleCallback = void();
   callback ResolveIsolatedEntriesCallback = void(EntryDescription[] entries);
@@ -36,8 +41,8 @@ namespace fileManagerPrivateInternal {
   callback GetUrlCallback = void(DOMString url);
   callback GetDisallowedTransfersCallback =
       void(EntryDescription[] entries);
-  callback GetFilesRestrictedByDlpCallback =
-      void(EntryDescription[] entries);
+  callback GetDlpMetadataCallback =
+      void(fileManagerPrivate.DlpMetadata[] entries);
   callback StartCopyCallback = void(long copyId);
   callback IOTaskIdCallback = void(long taskId);
   callback ZipSelectionCallback = void(long zipId, double totalBytes);
@@ -53,6 +58,7 @@ namespace fileManagerPrivateInternal {
   callback GetThumbnailCallback = void(DOMString ThumbnailDataUrl);
   callback BooleanCallback = void(boolean result);
   callback GetVolumeRootCallback = void(EntryDescription rootDir);
+callback ParseTrashInfoFilesCallback = void(ParsedTrashInfoFile[] files);
 
   interface Functions {
     static void resolveIsolatedEntries(DOMString[] urls,
@@ -98,8 +104,8 @@ namespace fileManagerPrivateInternal {
     static void getDisallowedTransfers(DOMString[] entries,
                                        DOMString destinationEntry,
                                        GetDisallowedTransfersCallback callback);
-    static void getFilesRestrictedByDlp(DOMString[] entries,
-                                        GetFilesRestrictedByDlpCallback callback);
+    static void getDlpMetadata(DOMString[] entries,
+                               GetDlpMetadataCallback callback);
     static void startCopy(DOMString url,
                           DOMString parentUrl,
                           DOMString newName,
@@ -155,5 +161,7 @@ namespace fileManagerPrivateInternal {
                             DOMString[] urls,
                             IOTaskParams params,
                             optional IOTaskIdCallback callback);
+    static void parseTrashInfoFiles(DOMString[] urls,
+                                    ParseTrashInfoFilesCallback callback);
   };
 };

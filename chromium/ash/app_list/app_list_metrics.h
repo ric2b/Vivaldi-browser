@@ -79,7 +79,7 @@ enum AppListPeekingToFullscreenSource {
 // The different ways the app list can be shown. These values are written to
 // logs.  New enum values can be added, but existing enums must never be
 // renumbered or deleted and reused.
-enum AppListShowSource {
+enum AppListShowSource : uint8_t {
   kSearchKey = 0,
   kShelfButton = 1,
   kSwipeFromShelf = 2,
@@ -221,6 +221,23 @@ enum class AppListUserAction {
   kOpenSuggestionChip = 5,
 
   kMaxValue = kOpenSuggestionChip,
+};
+
+// Whether and how user-entered search box text matches up with the first search
+// result. These values are persisted to logs. Entries should not be renumbered
+// and numeric values should never be reused.
+enum class SearchBoxTextMatch {
+  // The user entered query does not match the first search result. Autocomplete
+  // is not triggered.
+  kNoMatch = 0,
+  // The user entered query matches the prefix of the first search result.
+  kPrefixMatch = 1,
+  // The user entered query is a substring of the first search result.
+  kSubstringMatch = 2,
+  // The user's query does not match the first search result but autocomplete is
+  // triggered.
+  kAutocompletedWithoutMatch = 3,
+  kMaxValue = kAutocompletedWithoutMatch,
 };
 
 // Parameters to call RecordAppListAppLaunched. Passed to code that does not

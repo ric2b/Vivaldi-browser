@@ -493,40 +493,43 @@ public class WebsitePermissionsFetcherTest {
         // If the ContentSettingsType.NUM_TYPES value changes *and* a new value has been exposed on
         // Android, then please update this code block to include a test for your new type.
         // Otherwise, just update count in the assert.
-        Assert.assertEquals(77, ContentSettingsType.NUM_TYPES);
+        Assert.assertEquals(78, ContentSettingsType.NUM_TYPES);
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.COOKIES, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.POPUPS, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.ADS, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.JAVASCRIPT, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.SOUND, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.BACKGROUND_SYNC, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.AUTOMATIC_DOWNLOADS, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
-        websitePreferenceBridge.addContentSettingException(
-                new ContentSettingException(ContentSettingsType.INSECURE_PRIVATE_NETWORK,
-                        googleOrigin, ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
+        websitePreferenceBridge.addContentSettingException(new ContentSettingException(
+                ContentSettingsType.INSECURE_PRIVATE_NETWORK, googleOrigin,
+                ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.JAVASCRIPT_JIT, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.AUTO_DARK_WEB_CONTENT, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.REQUEST_DESKTOP_SITE, googleOrigin,
-                        ContentSettingValues.DEFAULT, preferenceSource));
+                        ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
+        websitePreferenceBridge.addContentSettingException(new ContentSettingException(
+                ContentSettingsType.FEDERATED_IDENTITY_API, googleOrigin,
+                ContentSettingValues.DEFAULT, preferenceSource, /*isEmbargoed=*/false));
 
         // Add storage info.
         int storageSize = 256;
@@ -593,6 +596,9 @@ public class WebsitePermissionsFetcherTest {
             Assert.assertEquals(Integer.valueOf(ContentSettingValues.DEFAULT),
                     site.getContentSetting(UNUSED_BROWSER_CONTEXT_HANDLE,
                             ContentSettingsType.REQUEST_DESKTOP_SITE));
+            Assert.assertEquals(Integer.valueOf(ContentSettingValues.DEFAULT),
+                    site.getContentSetting(UNUSED_BROWSER_CONTEXT_HANDLE,
+                            ContentSettingsType.FEDERATED_IDENTITY_API));
 
             // Check storage info.
             ArrayList<StorageInfo> storageInfos = new ArrayList<>(site.getStorageInfo());
@@ -697,6 +703,7 @@ public class WebsitePermissionsFetcherTest {
     public void assertContentSettingExceptionEquals(
             ContentSettingException expected, ContentSettingException actual) {
         Assert.assertEquals(expected.getSource(), actual.getSource());
+        Assert.assertEquals(expected.isEmbargoed(), actual.isEmbargoed());
         Assert.assertEquals(expected.getPrimaryPattern(), actual.getPrimaryPattern());
         Assert.assertEquals(expected.getSecondaryPattern(), actual.getSecondaryPattern());
         Assert.assertEquals(expected.getContentSetting(), actual.getContentSetting());
@@ -746,16 +753,19 @@ public class WebsitePermissionsFetcherTest {
 
         String googleOrigin = "https://google.com";
         String preferenceSource = "preference";
+        boolean isEmbargoed = false;
         ArrayList<Integer> contentSettingExceptionTypes = new ArrayList<>(
                 Arrays.asList(ContentSettingsType.ADS, ContentSettingsType.AUTOMATIC_DOWNLOADS,
                         ContentSettingsType.BACKGROUND_SYNC, ContentSettingsType.BLUETOOTH_SCANNING,
-                        ContentSettingsType.COOKIES, ContentSettingsType.JAVASCRIPT,
-                        ContentSettingsType.POPUPS, ContentSettingsType.SOUND));
+                        ContentSettingsType.COOKIES, ContentSettingsType.FEDERATED_IDENTITY_API,
+                        ContentSettingsType.JAVASCRIPT, ContentSettingsType.POPUPS,
+                        ContentSettingsType.SOUND));
 
         for (@ContentSettingsType int type : contentSettingExceptionTypes) {
             {
-                ContentSettingException fakeContentSettingException = new ContentSettingException(
-                        type, googleOrigin, ContentSettingValues.DEFAULT, preferenceSource);
+                ContentSettingException fakeContentSettingException =
+                        new ContentSettingException(type, googleOrigin,
+                                ContentSettingValues.DEFAULT, preferenceSource, isEmbargoed);
                 websitePreferenceBridge.addContentSettingException(fakeContentSettingException);
 
                 fetcher.fetchPreferencesForCategory(
@@ -772,8 +782,9 @@ public class WebsitePermissionsFetcherTest {
 
             // Make sure that the content setting value is updated.
             {
-                ContentSettingException fakeContentSettingException = new ContentSettingException(
-                        type, googleOrigin, ContentSettingValues.BLOCK, preferenceSource);
+                ContentSettingException fakeContentSettingException =
+                        new ContentSettingException(type, googleOrigin, ContentSettingValues.BLOCK,
+                                preferenceSource, isEmbargoed);
                 websitePreferenceBridge.addContentSettingException(fakeContentSettingException);
 
                 fetcher.fetchPreferencesForCategory(
@@ -801,6 +812,7 @@ public class WebsitePermissionsFetcherTest {
         String mainSite = "https://a.com";
         String thirdPartySite = "https://b.com";
         String preferenceSource = "preference";
+        boolean isEmbargoed = false;
         @ContentSettingsType
         int contentSettingsType = ContentSettingsType.COOKIES;
 
@@ -818,7 +830,7 @@ public class WebsitePermissionsFetcherTest {
             {
                 ContentSettingException fakeContentSettingException =
                         new ContentSettingException(contentSettingsType, pair.first, pair.second,
-                                ContentSettingValues.DEFAULT, preferenceSource);
+                                ContentSettingValues.DEFAULT, preferenceSource, isEmbargoed);
                 websitePreferenceBridge.addContentSettingException(fakeContentSettingException);
 
                 fetcher.fetchPreferencesForCategory(
@@ -837,7 +849,7 @@ public class WebsitePermissionsFetcherTest {
             {
                 ContentSettingException fakeContentSettingException =
                         new ContentSettingException(contentSettingsType, pair.first, pair.second,
-                                ContentSettingValues.BLOCK, preferenceSource);
+                                ContentSettingValues.BLOCK, preferenceSource, isEmbargoed);
                 websitePreferenceBridge.addContentSettingException(fakeContentSettingException);
 
                 fetcher.fetchPreferencesForCategory(

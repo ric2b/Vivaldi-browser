@@ -6,7 +6,6 @@
 
 #include "chrome/browser/ash/bruschetta/bruschetta_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 
 namespace bruschetta {
 
@@ -24,15 +23,13 @@ BruschettaServiceFactory* BruschettaServiceFactory::GetInstance() {
 }
 
 BruschettaServiceFactory::BruschettaServiceFactory()
-    : BrowserContextKeyedServiceFactory(
-          "BruschettaService",
-          BrowserContextDependencyManager::GetInstance()) {}
+    : ProfileKeyedServiceFactory("BruschettaService") {}
 
 BruschettaServiceFactory::~BruschettaServiceFactory() = default;
 
 KeyedService* BruschettaServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  return new BruschettaService();
+  return new BruschettaService(Profile::FromBrowserContext(context));
 }
 
 }  // namespace bruschetta

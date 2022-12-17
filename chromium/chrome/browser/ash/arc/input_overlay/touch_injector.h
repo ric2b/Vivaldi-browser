@@ -51,6 +51,10 @@ class TouchInjector : public ui::EventRewriter {
   ~TouchInjector() override;
 
   aura::Window* target_window() { return target_window_; }
+  const gfx::RectF& content_bounds() { return content_bounds_; }
+  const gfx::Transform* rotation_transform() {
+    return rotation_transform_.get();
+  }
   const std::vector<std::unique_ptr<Action>>& actions() const {
     return actions_;
   }
@@ -69,10 +73,8 @@ class TouchInjector : public ui::EventRewriter {
   bool first_launch() const { return first_launch_; }
   void set_first_launch(bool first_launch) { first_launch_ = first_launch; }
 
-  bool data_reading_finished() const { return data_reading_finished_; }
-  void set_data_reading_finished(bool finished) {
-    data_reading_finished_ = finished;
-  }
+  bool show_nudge() const { return show_nudge_; }
+  void set_show_nudge(bool show_nudge) { show_nudge_ = show_nudge; }
 
   void set_display_mode(DisplayMode mode) { display_mode_ = mode; }
   void set_display_overlay_controller(DisplayOverlayController* controller) {
@@ -101,6 +103,9 @@ class TouchInjector : public ui::EventRewriter {
   void RegisterEventRewriter();
   // Unregister the EventRewriter.
   void UnRegisterEventRewriter();
+  // Update info for touch injector. For example, update transform information
+  // if there is screen rotation.
+  void Update();
   // Change bindings. This could be from user editing from display overlay
   // (|mode| = DisplayMode::kEdit) or from customized protobuf data (|mode| =
   // DisplayMode::kView).
@@ -120,6 +125,12 @@ class TouchInjector : public ui::EventRewriter {
   void OnProtoDataAvailable(AppDataProto& proto);
   // Save the input menu state when the menu is closed.
   void OnInputMenuViewRemoved();
+  void NotifyFirstTimeLaunch();
+
+  // Update |content_bounds_| and touch positions for each |actions_| for
+  // different reasons.
+  void UpdateForDisplayMetricsChanged();
+  void UpdateForWindowBoundsChanged();
 
   // UMA stats.
   void RecordMenuStateOnLaunch();
@@ -197,6 +208,7 @@ class TouchInjector : public ui::EventRewriter {
   DisplayOverlayController* GetControllerForTesting();
 
   raw_ptr<aura::Window> target_window_;
+  gfx::RectF content_bounds_;
   base::WeakPtr<ui::EventRewriterContinuation> continuation_;
   std::vector<std::unique_ptr<Action>> actions_;
   base::ScopedObservation<ui::EventSource,
@@ -205,6 +217,7 @@ class TouchInjector : public ui::EventRewriter {
                           &ui::EventSource::RemoveEventRewriter>
       observation_{this};
   std::unique_ptr<KeyCommand> mouse_lock_;
+  std::unique_ptr<gfx::Transform> rotation_transform_;
   bool text_input_active_ = false;
   // The mouse is unlocked by default.
   bool is_mouse_locked_ = false;
@@ -227,8 +240,9 @@ class TouchInjector : public ui::EventRewriter {
   // The game app is launched for the first time when input overlay is enabled
   // if the value is true.
   bool first_launch_ = false;
-  // Data reading is finished after launching if the value is true.
-  bool data_reading_finished_ = false;
+  // Check whether to show the nudge view. We only show the nudge view for the
+  // first time launch and before it is dismissed.
+  bool show_nudge_ = false;
 
   // TODO(cuicuiruan): It can be removed after the mouse lock is enabled for
   // post MVP.

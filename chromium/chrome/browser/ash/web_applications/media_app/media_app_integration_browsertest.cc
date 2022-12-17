@@ -5,13 +5,17 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/webui/media_app_ui/buildflags.h"
 #include "ash/webui/media_app_ui/test/media_app_ui_browsertest.h"
 #include "ash/webui/media_app_ui/url_constants.h"
+#include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
@@ -25,33 +29,42 @@
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/app_service_file_tasks.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
+#include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "chrome/browser/ash/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/ash/system_web_apps/test_support/system_web_app_integration_test.h"
 #include "chrome/browser/ash/web_applications/media_app/media_web_app_info.h"
-#include "chrome/browser/ash/web_applications/system_web_app_integration_test.h"
 #include "chrome/browser/error_reporting/mock_chrome_js_error_report_processor.h"
 #include "chrome/browser/extensions/component_loader.h"
+#include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_paths.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/crash/content/browser/error_reporting/mock_crash_endpoint.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "content/public/browser/media_session_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/entry_info.h"
 #include "media/base/media_switches.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 using ash::SystemWebAppType;
 using platform_util::OpenOperationResult;
@@ -100,7 +113,19 @@ constexpr char kDomExceptionScript[] =
     "new "
     "CustomEvent('simulate-unhandled-rejection-with-dom-exception-for-test'));";
 
-class MediaAppIntegrationTest : public SystemWebAppIntegrationTest {
+// Runs the provided `script` in a non-isolated JS world that can access
+// variables defined in global scope (otherwise only DOM queries are allowed).
+// The script must call `domAutomationController.send(result)` to return, where
+// `result` is a boolean.
+bool ExtractBoolInGlobalScope(content::WebContents* web_ui,
+                              const std::string& script) {
+  bool result;
+  content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(app, script, &result));
+  return result;
+}
+
+class MediaAppIntegrationTest : public ash::SystemWebAppIntegrationTest {
  public:
   MediaAppIntegrationTest() {
     feature_list_.InitAndEnableFeature(ash::features::kMediaAppHandlesPdf);
@@ -114,15 +139,41 @@ class MediaAppIntegrationTest : public SystemWebAppIntegrationTest {
     command_line->AppendSwitch(switches::kDisableAudioOutput);
   }
 
-  void MediaAppLaunchWithFile();
-  void MediaAppWithLaunchSystemWebAppAsync();
-  void MediaAppEligibleOpenTask();
+  void SetUpOnMainThread() override {
+    SystemWebAppIntegrationTest::SetUpOnMainThread();
+    WaitForTestSystemAppInstall();
+  }
 
-  // Helper to initiate a test by launching a single file.
+  apps::AppLaunchParams MediaAppLaunchParams();
+  std::string MediaAppAppId();
+
+  // Helper to initiate a test by launching a single file, as if from the files
+  // app.
   content::WebContents* LaunchWithOneTestFile(const char* file);
 
   // Helper to initiate a test by launching with no files (zero state).
   content::WebContents* LaunchWithNoFiles();
+
+  // Launch the MediApp with the given |file_path| as a launch param, and wait
+  // for the application to finish loading.
+  content::WebContents* DirectlyLaunchWithFile(const base::FilePath& file_path);
+
+  struct DataArgsHelper {
+    const char* const open_image = "0";
+    const char* const open_video = "0";
+    const char* const edit_image = "0";
+    const char* const edit_video = "0";
+  };
+  void ExpectProductSurveyData(DataArgsHelper expected_data) {
+    auto data = HatsProductSpecificDataForMediaApp();
+    EXPECT_EQ(data["did_open_image_in_gallery"], expected_data.open_image);
+    EXPECT_EQ(data["did_open_video_in_gallery"], expected_data.open_video);
+    EXPECT_EQ(data["clicked_edit_image_in_photos"], expected_data.edit_image);
+    EXPECT_EQ(data["clicked_edit_video_in_photos"], expected_data.edit_video);
+  }
+
+ protected:
+  ash::NetworkPortalDetectorMixin network_portal_detector_{&mixin_host_};
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -158,6 +209,171 @@ class MediaAppIntegrationDarkLightModeDisabledTest
   base::test::ScopedFeatureList feature_list_;
 };
 
+class MediaAppIntegrationPhotosIntegrationTest
+    : public MediaAppIntegrationTest {
+ public:
+  void TestPhotosIntegrationForVideo(bool expect_flag_enabled) {
+    TestPhotosIntegration(expect_flag_enabled,
+                          /* flag= */ "photosAvailableForVideo");
+  }
+
+  void TestPhotosIntegrationForImage(bool expect_flag_enabled) {
+    TestPhotosIntegration(expect_flag_enabled,
+                          /* flag= */ "photosAvailableForImage");
+  }
+
+ private:
+  void TestPhotosIntegration(bool expect_flag_enabled, const char* flag) {
+    InstallPhotosApp(profile());
+    content::WebContents* web_ui = LaunchWithNoFiles();
+
+    EXPECT_EQ(expect_flag_enabled, GetFlagInApp(web_ui, flag));
+  }
+
+  apps::AppPtr MakePhotosApp() {
+    auto app = std::make_unique<apps::App>(apps::AppType::kChromeApp,
+                                           arc::kGooglePhotosAppId);
+    // TODO(b/239776967): expand testing to adjust app readiness.
+    app->readiness = apps::Readiness::kReady;
+    // Set arbitrary version-- it only matters when compared relative to our
+    // `minPhotosVersionForX` parameters.
+    app->version = "5.9";
+    return app;
+  }
+
+  void InstallPhotosApp(Profile* profile) {
+    auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
+    std::vector<apps::AppPtr> registry_deltas;
+    registry_deltas.push_back(MakePhotosApp());
+    proxy->AppRegistryCache().OnApps(std::move(registry_deltas),
+                                     apps::AppType::kUnknown,
+                                     /*should_notify_initialized=*/false);
+  }
+
+  bool GetFlagInApp(content::WebContents* web_ui, const char* flag) {
+    constexpr char kGetLoadTimeData[] =
+        R"(domAutomationController.send(!!loadTimeData?.data_['$1']))";
+
+    return ExtractBoolInGlobalScope(
+        web_ui,
+        base::ReplaceStringPlaceholders(kGetLoadTimeData, {flag}, nullptr));
+  }
+};
+
+class MediaAppIntegrationPhotosIntegrationImageEnabledWithParametersTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationImageEnabledWithParametersTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        chromeos::features::kMediaAppPhotosIntegrationImage,
+        // 4.3.2.1 is less than the test default Google Photos version of 5.9--
+        // so we expect the Photos integration feature to be enabled.
+        {{"minPhotosVersionForImage", "4.3.2.1"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationImageVersionTooOldTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationImageVersionTooOldTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        chromeos::features::kMediaAppPhotosIntegrationImage,
+        // 6.5.4.3 is greater than the test default Google Photos version
+        // of 5.9-- so we expect the Photos integration feature to be disabled.
+        {{"minPhotosVersionForImage", "6.5.4.3"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationImageDisabledWithParametersTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationImageDisabledWithParametersTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        chromeos::features::kMediaAppPhotosIntegrationImage,
+        // Empty string is an invalid version, we expect the Photos integration
+        // feature to be disabled.
+        {{"minPhotosVersionForImage", ""}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationImageDisabledTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationImageDisabledTest() {
+    feature_list_.InitAndDisableFeature(
+        chromeos::features::kMediaAppPhotosIntegrationImage);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationVideoEnabledWithParametersTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationVideoEnabledWithParametersTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        chromeos::features::kMediaAppPhotosIntegrationVideo,
+        // 4.3.2.1 is less than the test default Google Photos version of 5.9--
+        // so we expect the Photos integration feature to be enabled.
+        {{"minPhotosVersionForVideo", "4.3.2.1"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationVideoVersionTooOldTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationVideoVersionTooOldTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        chromeos::features::kMediaAppPhotosIntegrationVideo,
+        // 6.5.4.3 is greater than the test default Google Photos version
+        // of 5.9-- so we expect the Photos integration feature to be disabled.
+        {{"minPhotosVersionForVideo", "6.5.4.3"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationVideoDisabledWithParametersTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationVideoDisabledWithParametersTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        chromeos::features::kMediaAppPhotosIntegrationVideo,
+        // Empty string is an invalid version, we expect the Photos integration
+        // feature to be disabled.
+        {{"minPhotosVersionForVideo", ""}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class MediaAppIntegrationPhotosIntegrationVideoDisabledTest
+    : public MediaAppIntegrationPhotosIntegrationTest {
+ public:
+  MediaAppIntegrationPhotosIntegrationVideoDisabledTest() {
+    feature_list_.InitAndDisableFeature(
+        chromeos::features::kMediaAppPhotosIntegrationVideo);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 class MediaAppIntegrationPdfDisabledTest : public MediaAppIntegrationTest {
  public:
   MediaAppIntegrationPdfDisabledTest() {
@@ -173,6 +389,47 @@ class MediaAppIntegrationPdfDisabledTest : public MediaAppIntegrationTest {
 using MediaAppIntegrationAllProfilesTest = MediaAppIntegrationTest;
 using MediaAppIntegrationWithFilesAppAllProfilesTest =
     MediaAppIntegrationWithFilesAppTest;
+
+// Scoped observer of notifications that will spin a run loop until a
+// notification is displayed.
+class NotificationWatcher : public NotificationDisplayService::Observer {
+ public:
+  NotificationWatcher(Profile* profile,
+                      ash::NetworkPortalDetectorMixin& network_portal_detector)
+      : profile_(profile) {
+    // Notifications only fire if the device is "online". Simulate that.
+    network_portal_detector.SimulateDefaultNetworkState(
+        ash::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
+
+    NotificationDisplayService::GetForProfile(profile_)->AddObserver(this);
+  }
+  ~NotificationWatcher() override {
+    NotificationDisplayService::GetForProfile(profile_)->RemoveObserver(this);
+  }
+  std::string NextSeenNotificationId() {
+    if (seen_notification_id_.empty())
+      run_loop_.Run();
+    return seen_notification_id_;
+  }
+
+ private:
+  Profile* profile_;
+  base::RunLoop run_loop_;
+  std::string seen_notification_id_;
+
+  void OnNotificationDisplayed(
+      const message_center::Notification& notification,
+      const NotificationCommon::Metadata* const metadata) override {
+    seen_notification_id_ = notification.id();
+    if (run_loop_.IsRunningOnCurrentThread()) {
+      run_loop_.Quit();
+    }
+  }
+
+  void OnNotificationClosed(const std::string& notification_id) override {}
+  void OnNotificationDisplayServiceDestroyed(
+      NotificationDisplayService* service) override {}
+};
 
 class BrowserWindowWaiter : public BrowserListObserver {
  public:
@@ -272,7 +529,8 @@ content::EvalJsResult WaitForImageAlt(content::WebContents* web_ui,
 
 // Runs the provided `script` in a non-isolated JS world that can access
 // variables defined in global scope (otherwise only DOM queries are allowed).
-// The script must call `domAutomationController.send(result)` to return.
+// The script must call `domAutomationController.send(result)` to return, where
+// `result` is a string.
 std::string ExtractStringInGlobalScope(content::WebContents* web_ui,
                                        const std::string& script) {
   std::string result;
@@ -300,9 +558,16 @@ void TouchFileSync(const base::FilePath& path, const base::Time& time) {
   EXPECT_TRUE(base::TouchFile(path, time, time));
 }
 
+apps::AppLaunchParams MediaAppIntegrationTest::MediaAppLaunchParams() {
+  return LaunchParamsForApp(ash::SystemWebAppType::MEDIA);
+}
+
+std::string MediaAppIntegrationTest::MediaAppAppId() {
+  return *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
+}
+
 content::WebContents* MediaAppIntegrationTest::LaunchWithOneTestFile(
     const char* file) {
-  WaitForTestSystemAppInstall();
   launch_folder_ =
       std::make_unique<file_manager::test::FolderInMyFiles>(profile());
   launch_folder_->Add({TestFile(file)});
@@ -312,20 +577,26 @@ content::WebContents* MediaAppIntegrationTest::LaunchWithOneTestFile(
 }
 
 content::WebContents* MediaAppIntegrationTest::LaunchWithNoFiles() {
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* web_ui = LaunchApp(MediaAppLaunchParams());
   PrepareAppForTest(web_ui);
   return web_ui;
+}
+
+content::WebContents* MediaAppIntegrationTest::DirectlyLaunchWithFile(
+    const base::FilePath& file_path) {
+  apps::AppLaunchParams params = MediaAppLaunchParams();
+  params.launch_files.push_back(file_path);
+  return LaunchApp(std::move(params));
 }
 
 std::vector<apps::IntentLaunchInfo> GetAppsForMimeType(
     apps::AppServiceProxy* proxy,
     const std::string& mime_type) {
-  std::vector<apps::mojom::IntentFilePtr> intent_files;
-  auto file = apps::mojom::IntentFile::New();
-  file->url = GURL("filesystem://path/to/file.bin");
+  std::vector<apps::IntentFilePtr> intent_files;
+  auto file =
+      std::make_unique<apps::IntentFile>(GURL("filesystem://path/to/file.bin"));
   file->mime_type = mime_type;
-  file->is_directory = apps::mojom::OptionalBool::kFalse;
+  file->is_directory = false;
   intent_files.push_back(std::move(file));
   return proxy->GetAppsForFiles(std::move(intent_files));
 }
@@ -343,23 +614,22 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaApp) {
 // Test that the MediaApp successfully loads a file passed in on its launch
 // params. This exercises only web_applications logic.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchWithFile) {
-  WaitForTestSystemAppInstall();
   // Launch the App for the first time.
-  content::WebContents* app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
-                                                TestFile(kFilePng800x600));
+  content::WebContents* app = DirectlyLaunchWithFile(TestFile(kFilePng800x600));
   Browser* first_browser = chrome::FindBrowserWithActiveWindow();
   PrepareAppForTest(app);
 
   EXPECT_EQ("800x600", WaitForImageAlt(app, kFilePng800x600));
+  ExpectProductSurveyData({.open_image = "1"});
 
   // Launch with a different file in a new window.
-  app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
-                          TestFile(kFileJpeg640x480));
+  app = DirectlyLaunchWithFile(TestFile(kFileJpeg640x480));
   Browser* second_browser = chrome::FindBrowserWithActiveWindow();
   PrepareAppForTest(app);
 
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
   EXPECT_NE(first_browser, second_browser);
+  ExpectProductSurveyData({.open_image = "1"});  // The "1" is a bool.
 }
 
 // Test that the MediaApp successfully loads a file using
@@ -367,41 +637,41 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchWithFile) {
 // platform (a different code path than MediaAppLaunchWithFile test).
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        MediaAppWithLaunchSystemWebAppAsync) {
-  WaitForTestSystemAppInstall();
   // Launch the App for the first time.
-  web_app::SystemAppLaunchParams audio_params;
+  ash::SystemAppLaunchParams audio_params;
   audio_params.launch_paths.push_back(TestFile(kFilePng800x600));
-  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
-                                   audio_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                               audio_params);
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
   Browser* first_browser = chrome::FindBrowserWithActiveWindow();
   content::WebContents* app = PrepareActiveBrowserForTest();
 
   EXPECT_EQ("800x600", WaitForImageAlt(app, kFilePng800x600));
+  ExpectProductSurveyData({.open_image = "1"});
 
   // Launch the App for the second time.
-  web_app::SystemAppLaunchParams image_params;
+  ash::SystemAppLaunchParams image_params;
   image_params.launch_paths.push_back(TestFile(kFileJpeg640x480));
-  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
-                                   image_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                               image_params);
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
   app = PrepareActiveBrowserForTest(3);
   Browser* second_browser = chrome::FindBrowserWithActiveWindow();
 
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
   EXPECT_NE(first_browser, second_browser);
+  ExpectProductSurveyData({.open_image = "1"});
 }
 
 // Test that the Media App launches a single window for images.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchImageMulti) {
-  WaitForTestSystemAppInstall();
-  web_app::SystemAppLaunchParams image_params;
+  ash::SystemAppLaunchParams image_params;
   image_params.launch_paths = {TestFile(kFilePng800x600),
                                TestFile(kFileJpeg640x480)};
 
-  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
-                                   image_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                               image_params);
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   const BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(2u, browser_list->size());  // 1 extra for the browser test browser.
@@ -410,17 +680,17 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchImageMulti) {
       browser_list->get(1)->tab_strip_model()->GetActiveWebContents(),
       u"image.png");
   EXPECT_EQ(u"image.png", watcher.WaitAndGetTitle());
+  ExpectProductSurveyData({.open_image = "1"});
 }
 
 // Test that the Media App launches multiple windows for PDFs.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchPdfMulti) {
-  WaitForTestSystemAppInstall();
-  web_app::SystemAppLaunchParams pdf_params;
+  ash::SystemAppLaunchParams pdf_params;
   pdf_params.launch_paths = {TestFile(kFilePdfTall), TestFile(kFilePdfImg)};
 
-  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
-                                   pdf_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                               pdf_params);
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   WaitForBrowserCount(3);  // 1 extra for the browser test browser.
   const BrowserList* browser_list = BrowserList::GetInstance();
@@ -434,14 +704,13 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchPdfMulti) {
       u"img.pdf");
   EXPECT_EQ(u"tall.pdf", watcher1.WaitAndGetTitle());
   EXPECT_EQ(u"img.pdf", watcher2.WaitAndGetTitle());
+  ExpectProductSurveyData({});  // Only images and video are tracked.
 }
 
 // Test that the Media App appears as a handler for files in the App Service.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppHandlesIntents) {
-  WaitForTestSystemAppInstall();
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
-  const std::string media_app_id =
-      *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
+  const std::string media_app_id = MediaAppAppId();
 
   {
     // Smoke test that a binary blob is not handled by Media App.
@@ -479,8 +748,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppHandlesIntents) {
 
 // Regression test for b/172881869.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsPdf) {
-  WaitForTestSystemAppInstall();
-  LaunchApp(ash::SystemWebAppType::MEDIA);
+  LaunchWithNoFiles();
   content::WebContents* app = PrepareActiveBrowserForTest();
   // TODO(crbug/1148090): To fully load PDFs, "frame-src" needs to be set, this
   // test doesn't provide coverage for that.
@@ -533,7 +801,7 @@ bool isAppBarButtonOn(content::WebContents* app, const std::string& selector) {
     (async function isAppBarButtonOn() {
       const button =
           await getNode('$1', ['backlight-app-bar', 'backlight-app']);
-      return button.hasAttribute('on');
+      return button.hasAttribute('toggled');
     })();
   )";
   return MediaAppUiBrowserTest::EvalJsInAppFrame(
@@ -562,9 +830,8 @@ bool isAppBarButtonOn(content::WebContents* app, const std::string& selector) {
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        MAYBE_LoadsInkForImageAnnotation) {
-  WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
-                                                TestFile(kFileJpeg640x480));
+  content::WebContents* app =
+      DirectlyLaunchWithFile(TestFile(kFileJpeg640x480));
   PrepareAppForTest(app);
 
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
@@ -595,9 +862,8 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 // Tests that clicking on the 'Info' button in the app bar toggles the
 // information panel.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MAYBE_InformationPanel) {
-  WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
-                                                TestFile(kFileJpeg640x480));
+  content::WebContents* app =
+      DirectlyLaunchWithFile(TestFile(kFileJpeg640x480));
   PrepareAppForTest(app);
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
 
@@ -638,7 +904,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MAYBE_InformationPanel) {
 // Tests that the media app is able to overwrite the original file on save.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
                        MAYBE_SavesToOriginalFile) {
-  WaitForTestSystemAppInstall();
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({TestFile(kFilePng800x600)});
 
@@ -799,8 +1064,6 @@ startxref
 
 // Test that the MediaApp can load RAW files passed on launch params.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, HandleRawFiles) {
-  WaitForTestSystemAppInstall();
-
   // Initialize a folder with 2 RAW images. Note this approach doesn't guarantee
   // the modification times of the files so, and therefore does not suggest an
   // ordering to the files of the directory contents. But by having at most two
@@ -843,6 +1106,8 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, HandleRawFiles) {
 
   // Width and height should be swapped now.
   EXPECT_EQ("272x378", WaitForImageAlt(web_ui, kRaw378x272));
+  // Raw files aren't tracked (they are not directly editable by Photos).
+  ExpectProductSurveyData({});
 }
 
 // Ensures that chrome://media-app is available as a file task for the ChromeOS
@@ -852,8 +1117,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppEligibleOpenTask) {
   file_paths.push_back(TestFile(kFilePng800x600));
   file_paths.push_back(TestFile(kFileVideoVP9));
   file_paths.push_back(TestFile(kFileAudioOgg));
-
-  WaitForTestSystemAppInstall();
 
   for (const auto& file_path : file_paths) {
     std::vector<file_manager::file_tasks::FullTaskDescriptor> result =
@@ -870,10 +1133,9 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppEligibleOpenTask) {
     const auto& descriptor = task.task_descriptor;
 
     EXPECT_EQ("Gallery", task.task_title);
-    EXPECT_EQ(extensions::api::file_manager_private::Verb::VERB_OPEN_WITH,
+    EXPECT_EQ(extensions::api::file_manager_private::Verb::VERB_NONE,
               task.task_verb);
-    EXPECT_EQ(descriptor.app_id,
-              *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA));
+    EXPECT_EQ(descriptor.app_id, MediaAppAppId());
     EXPECT_EQ(ash::kChromeUIMediaAppURL, descriptor.action_id);
     EXPECT_EQ(file_manager::file_tasks::TASK_TYPE_WEB_APP,
               descriptor.task_type);
@@ -882,8 +1144,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppEligibleOpenTask) {
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
                        ShownInLauncherAndSearch) {
-  WaitForTestSystemAppInstall();
-
   // Check system_web_app_manager has the correct attributes for Media App.
   auto* system_app = GetManager().GetSystemApp(ash::SystemWebAppType::MEDIA);
   EXPECT_TRUE(system_app->ShouldShowInLauncher());
@@ -894,8 +1154,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
 // features::MediaAppHandlesPdf.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationPdfDisabledTest,
                        HiddenInLauncherAndSearch) {
-  WaitForTestSystemAppInstall();
-
   // Check system_web_app_manager has the correct attributes for Media App.
   auto* system_app = GetManager().GetSystemApp(ash::SystemWebAppType::MEDIA);
   EXPECT_FALSE(system_app->ShouldShowInLauncher());
@@ -909,8 +1167,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* web_ui = LaunchWithNoFiles();
 
   // Pass multiple arguments to console.error() to also check they are parsed
   // and captured in the error message correctly.
@@ -931,8 +1188,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* web_ui = LaunchWithNoFiles();
 
   EXPECT_EQ(true, ExecuteScript(web_ui, kDomExceptionScript));
   auto report = endpoint.WaitForReport();
@@ -948,8 +1204,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* app = LaunchWithNoFiles();
 
   EXPECT_EQ(true,
             MediaAppUiBrowserTest::EvalJsInAppFrame(app, kDomExceptionScript));
@@ -965,8 +1220,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* web_ui = LaunchWithNoFiles();
 
   EXPECT_EQ(true, ExecuteScript(web_ui, kUnhandledRejectionScript));
   auto report = endpoint.WaitForReport();
@@ -982,8 +1236,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* app = LaunchWithNoFiles();
 
   EXPECT_EQ(true, MediaAppUiBrowserTest::EvalJsInAppFrame(
                       app, kUnhandledRejectionScript));
@@ -998,8 +1251,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* web_ui = LaunchWithNoFiles();
 
   EXPECT_EQ(true, ExecuteScript(web_ui, kTypeErrorScript));
   auto report = endpoint.WaitForReport();
@@ -1016,8 +1268,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   MockCrashEndpoint endpoint(embedded_test_server());
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
-  WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchApp(ash::SystemWebAppType::MEDIA);
+  content::WebContents* app = LaunchWithNoFiles();
 
   EXPECT_EQ(true,
             MediaAppUiBrowserTest::EvalJsInAppFrame(app, kTypeErrorScript));
@@ -1035,7 +1286,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
                        FileOpenUsesMediaApp) {
   base::HistogramTester histograms;
 
-  WaitForTestSystemAppInstall();
   Browser* test_browser = chrome::FindBrowserWithActiveWindow();
 
   file_manager::test::FolderInMyFiles folder(profile());
@@ -1055,7 +1305,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   // Check that chrome://media-app launched and the test file loads.
   EXPECT_NE(test_browser, app_browser);
   EXPECT_EQ(web_app::GetAppIdFromApplicationName(app_browser->app_name()),
-            *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA));
+            MediaAppAppId());
   EXPECT_EQ("800x600", WaitForImageAlt(web_ui, kFilePng800x600));
 
   // Check the metric is recorded.
@@ -1063,11 +1313,55 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   histograms.ExpectBucketCount("Apps.MediaApp.Load.OtherOpenWindowCount", 0, 1);
 }
 
+IN_PROC_BROWSER_TEST_P(
+    MediaAppIntegrationPhotosIntegrationImageEnabledWithParametersTest,
+    PhotosIntegrationEnabledViaParameters) {
+  TestPhotosIntegrationForImage(/* expect_flag_enabled= */ true);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    MediaAppIntegrationPhotosIntegrationImageDisabledWithParametersTest,
+    PhotosIntegrationDisabledViaParameters) {
+  TestPhotosIntegrationForImage(/* expect_flag_enabled= */ false);
+}
+
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationPhotosIntegrationImageDisabledTest,
+                       PhotosIntegrationDisabledViaFlag) {
+  TestPhotosIntegrationForImage(/* expect_flag_enabled= */ false);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    MediaAppIntegrationPhotosIntegrationImageVersionTooOldTest,
+    PhotosVersionTooOldForImageIntegration) {
+  TestPhotosIntegrationForImage(/* expect_flag_enabled= */ false);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    MediaAppIntegrationPhotosIntegrationVideoEnabledWithParametersTest,
+    PhotosIntegrationEnabledViaParameters) {
+  TestPhotosIntegrationForVideo(/* expect_flag_enabled= */ true);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    MediaAppIntegrationPhotosIntegrationVideoDisabledWithParametersTest,
+    PhotosIntegrationDisabledViaParameters) {
+  TestPhotosIntegrationForVideo(/* expect_flag_enabled= */ false);
+}
+
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationPhotosIntegrationVideoDisabledTest,
+                       PhotosIntegrationDisabledViaFlag) {
+  TestPhotosIntegrationForVideo(/* expect_flag_enabled= */ false);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    MediaAppIntegrationPhotosIntegrationVideoVersionTooOldTest,
+    PhotosVersionTooOldForVideoIntegration) {
+  TestPhotosIntegrationForVideo(/* expect_flag_enabled= */ false);
+}
+
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeEnabledTest,
                        HasCorrectThemeAndBackgroundColor) {
-  WaitForTestSystemAppInstall();
-  web_app::AppId app_id =
-      *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
+  web_app::AppId app_id = MediaAppAppId();
 
   web_app::WebAppRegistrar& registrar =
       web_app::WebAppProvider::GetForTest(profile())->registrar();
@@ -1081,9 +1375,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeEnabledTest,
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeDisabledTest,
                        HasCorrectThemeAndBackgroundColor) {
-  WaitForTestSystemAppInstall();
-  web_app::AppId app_id =
-      *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
+  web_app::AppId app_id = MediaAppAppId();
 
   web_app::WebAppRegistrar& registrar =
       web_app::WebAppProvider::GetForTest(profile())->registrar();
@@ -1097,8 +1389,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeDisabledTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        FileOpenCanLaunchBothAudioAndImages) {
   base::HistogramTester histograms;
-
-  WaitForTestSystemAppInstall();
 
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({TestFile(kFileJpeg640x480), TestFile(kFileAudioOgg)});
@@ -1122,10 +1412,10 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   PrepareAppForTest(image_web_ui);
 
   EXPECT_NE(image_app_browser, audio_app_browser);
-  EXPECT_TRUE(web_app::IsBrowserForSystemWebApp(image_app_browser,
-                                                ash::SystemWebAppType::MEDIA));
-  EXPECT_TRUE(web_app::IsBrowserForSystemWebApp(audio_app_browser,
-                                                ash::SystemWebAppType::MEDIA));
+  EXPECT_TRUE(ash::IsBrowserForSystemWebApp(image_app_browser,
+                                            ash::SystemWebAppType::MEDIA));
+  EXPECT_TRUE(ash::IsBrowserForSystemWebApp(audio_app_browser,
+                                            ash::SystemWebAppType::MEDIA));
 
   // Verify that launch params were correctly proceed by the "second" app to
   // launch.
@@ -1219,8 +1509,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaControls) {
 // that was opened, even if those files have changed since launch.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
                        FileOpenCanTraverseDirectory) {
-  WaitForTestSystemAppInstall();
-
   // Initialize a folder with 2 files: 1 JPEG, 1 PNG. Note this approach doesn't
   // guarantee the modification times of the files so, and therefore does not
   // suggest an ordering to the files of the directory contents. But by having
@@ -1278,8 +1566,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
 // Integration test for rename using the WritableFileSystem and Streams APIs.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
                        RenameFile) {
-  WaitForTestSystemAppInstall();
-
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({TestFile(kFileJpeg640x480)});
   folder.Open(TestFile(kFileJpeg640x480));
@@ -1317,8 +1603,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
 
 // Integration test for deleting a file using the WritableFiles API.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, DeleteFile) {
-  WaitForTestSystemAppInstall();
-
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({
       TestFile(kFileJpeg640x480),
@@ -1346,8 +1630,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, DeleteFile) {
 // Integration test for deleting a special file using the WritableFiles API.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
                        FailToDeleteReservedFile) {
-  WaitForTestSystemAppInstall();
-
   file_manager::test::FolderInMyFiles folder(profile());
 
   // Files like "thumbs.db" can't be accessed by filename using WritableFiles.
@@ -1377,10 +1659,47 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   EXPECT_EQ("thumbs.db", folder.files()[0].BaseName().value());
 }
 
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, CheckArcWritable) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  // Create a new filesystem which represents a mounted archive. ARC should
+  // never be able to write to such a filesystem.
+  base::ScopedTempDir temp_dir;
+  EXPECT_TRUE(temp_dir.CreateUniqueTempDir());
+  EXPECT_TRUE(profile()->GetMountPoints()->RegisterFileSystem(
+      "archive", storage::kFileSystemTypeLocal,
+      storage::FileSystemMountOption(), temp_dir.GetPath()));
+  file_manager::VolumeManager::Get(profile())->AddVolumeForTesting(
+      temp_dir.GetPath(), file_manager::VOLUME_TYPE_MOUNTED_ARCHIVE_FILE,
+      ash::DeviceType::kUnknown, true /* read_only */);
+
+  // Copy the test image into the new filesystem.
+  base::FilePath image_path = temp_dir.GetPath().Append(kFileJpeg640x480);
+  EXPECT_TRUE(base::CopyFile(TestFile(kFileJpeg640x480), image_path));
+
+  // Open the image.
+  base::RunLoop run_loop;
+  platform_util::OpenItem(
+      profile(), image_path, platform_util::OPEN_FILE,
+      base::BindLambdaForTesting(
+          [&](OpenOperationResult result) { run_loop.Quit(); }));
+  run_loop.Run();
+
+  content::WebContents* web_ui = PrepareActiveBrowserForTest();
+  content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
+
+  EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
+
+  bool result;
+  constexpr char kScript[] =
+      "lastLoadedReceivedFileList().item(0).isArcWritable()"
+      ".then(result => domAutomationController.send(result));";
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(app, kScript, &result));
+  EXPECT_FALSE(result);
+}
+
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
                        CheckBrowserWritable) {
-  WaitForTestSystemAppInstall();
-
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({
       TestFile(kFileJpeg640x480),
@@ -1424,6 +1743,13 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   EXPECT_FALSE(result);
 }
 
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, OpenVideoFile) {
+  content::WebContents* web_ui = LaunchWithOneTestFile(kFileVideoVP9);
+
+  EXPECT_NE(web_ui, nullptr);
+  ExpectProductSurveyData({.open_video = "1"});
+}
+
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, ToggleBrowserFullscreen) {
   content::WebContents* web_ui = LaunchWithOneTestFile(kFileVideoVP9);
   Browser* app_browser = chrome::FindBrowserWithActiveWindow();
@@ -1442,6 +1768,81 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, ToggleBrowserFullscreen) {
 
   EXPECT_EQ("success", ExtractStringInGlobalScope(web_ui, kToggleFullscreen));
   EXPECT_FALSE(app_browser->window()->IsFullscreen());
+}
+
+// Tests that invoking the maybeTriggerPdfHats() MediaApp delegate method fires
+// the notification that asks the user whether to complete a HaTS survey.
+// Note kForceHappinessTrackingSystem is set in the test fixture to ignore the
+// "dice roll" that would normally only show the prompt by chance.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MaybeTriggerPdfHats) {
+  // Enable HaTS testing for PDF editing.
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      ash::switches::kForceHappinessTrackingSystem,
+      features::kHappinessTrackingMediaAppPdf.name);
+
+  content::WebContents* web_ui = LaunchWithOneTestFile(kFilePdfTall);
+
+  constexpr char kMaybeTriggerPdfHats[] = R"(
+      (async function triggerPdfHats() {
+        await customLaunchData.delegate.maybeTriggerPdfHats();
+        domAutomationController.send("success");
+      })();
+  )";
+
+  NotificationWatcher notification_watcher(profile(), network_portal_detector_);
+
+  EXPECT_EQ("success",
+            ExtractStringInGlobalScope(web_ui, kMaybeTriggerPdfHats));
+  EXPECT_EQ(notification_watcher.NextSeenNotificationId(), "hats_notification");
+}
+
+// Tests that the Photos happiness tracking survey triggers when the monitored
+// app is closed, after force-enabling display of the survey.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MaybeTriggerPhotosHats) {
+  // Enable HaTS testing for the Photos Experience.
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      ash::switches::kForceHappinessTrackingSystem,
+      features::kHappinessTrackingPhotosExperience.name);
+
+  // Pretend the Gallery is the Android Photos app, so it can be tracked for
+  // survey triggers that fire when the app is closed.
+  std::string media_app_app_id = MediaAppAppId();
+  SetPhotosExperienceSurveyTriggerAppIdForTesting(media_app_app_id.c_str());
+
+  NotificationWatcher notification_watcher(profile(), network_portal_detector_);
+
+  LaunchWithNoFiles();
+  chrome::FindBrowserWithActiveWindow()->window()->Close();
+
+  EXPECT_EQ(notification_watcher.NextSeenNotificationId(), "hats_notification");
+
+  // Avoid leaving a ref to the std::string about to be destroyed.
+  SetPhotosExperienceSurveyTriggerAppIdForTesting("");
+}
+
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, CapturesUserActionsForHats) {
+  ExpectProductSurveyData({});  // Initially nothing.
+
+  using base::RecordAction;
+  using base::UserMetricsAction;
+
+  // Actions aren't tracked when the app isn't running (the corresponding
+  // buttons are impossible to click).
+  RecordAction(UserMetricsAction("MediaApp.Image.Tool.EditInPhotos"));
+  RecordAction(UserMetricsAction("MediaApp.Video.Tool.EditInPhotos"));
+
+  LaunchWithNoFiles();
+  ExpectProductSurveyData({});
+
+  RecordAction(UserMetricsAction("MediaApp.Image.Tool.EditInPhotos"));
+  ExpectProductSurveyData({.edit_image = "1"});
+
+  RecordAction(UserMetricsAction("MediaApp.Video.Tool.EditInPhotos"));
+  ExpectProductSurveyData({.edit_image = "1", .edit_video = "1"});
+
+  // Actions are boolean, and never go back to false.
+  RecordAction(UserMetricsAction("MediaApp.Image.Tool.EditInPhotos"));
+  ExpectProductSurveyData({.edit_image = "1", .edit_video = "1"});
 }
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, GuestCanReadLocalFonts) {
@@ -1492,6 +1893,30 @@ INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationDarkLightModeDisabledTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationImageEnabledWithParametersTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationImageVersionTooOldTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationImageDisabledTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationImageDisabledWithParametersTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationVideoEnabledWithParametersTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationVideoVersionTooOldTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationVideoDisabledTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
+    MediaAppIntegrationPhotosIntegrationVideoDisabledWithParametersTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationTest);

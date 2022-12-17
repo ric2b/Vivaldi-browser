@@ -231,6 +231,24 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
                     Comparator(LESS_THAN, 3), 90, 360));
     return config;
   }
+  if (kIPHContextualPageActionsPriceTrackingActionChipFeature.name ==
+      feature->name) {
+    // A config that allows the Price Tracking Action Chip to be shown:
+    // * 3 times per session.
+    // * 5 times per day.
+    // * 10 times per week.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(LESS_THAN, 3);
+    config->trigger = EventConfig(
+        "contextual_page_actions_price_tracking_action_chip_iph_trigger",
+        Comparator(LESS_THAN, 5), 1, 360);
+    config->event_configs.insert(EventConfig(
+        "contextual_page_actions_price_tracking_action_chip_iph_trigger",
+        Comparator(LESS_THAN, 10), 7, 360));
+    return config;
+  }
   if (kIPHAddToHomescreenMessageFeature.name == feature->name) {
     // A config that allows the Add to homescreen message IPH to be shown:
     // * Once per 15 days
@@ -245,23 +263,6 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
                                Comparator(EQUAL, 0), 90, 90);
     config->event_configs.insert(EventConfig(
         "add_to_homescreen_message_iph_trigger", Comparator(EQUAL, 0), 15, 90));
-    return config;
-  }
-  if (kIPHAddToHomescreenTextBubbleFeature.name == feature->name) {
-    // A config that allows the Add to homescreen text bubble IPH to be shown:
-    // * Once per 15 days
-    // * Up to 2 times but only if unused in the last 15 days.
-    absl::optional<FeatureConfig> config = FeatureConfig();
-    config->valid = true;
-    config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(EQUAL, 0);
-    config->trigger = EventConfig("add_to_homescreen_text_bubble_iph_trigger",
-                                  Comparator(LESS_THAN, 2), 90, 90);
-    config->used = EventConfig("add_to_homescreen_dialog_shown",
-                               Comparator(EQUAL, 0), 90, 90);
-    config->event_configs.insert(
-        EventConfig("add_to_homescreen_text_bubble_iph_trigger",
-                    Comparator(EQUAL, 0), 15, 90));
     return config;
   }
 
@@ -516,6 +517,25 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
                                              Comparator(EQUAL, 0), 15, 90));
     return config;
   }
+  if (kIPHShoppingListMenuItemFeature.name == feature->name) {
+    // Allows a shopping list menu item IPH to be displayed at most:
+    // * Once per week.
+    // * Up to 3 times per year.
+    // * And only as long as the user has never initiated price tracking from
+    // the menu.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 1);
+    config->trigger = EventConfig("shopping_list_menu_item_iph_triggered",
+                                  Comparator(EQUAL, 0), 7, 7);
+    config->event_configs.insert(
+        EventConfig("shopping_list_menu_item_iph_triggered",
+                    Comparator(LESS_THAN, 3), 360, 360));
+    config->used = EventConfig("shopping_list_track_price_from_menu",
+                               Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
   if (kIPHTabSwitcherButtonFeature.name == feature->name) {
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
@@ -698,28 +718,6 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
-  if (kIPHStartSurfaceTabSwitcherHomeButton.name == feature->name) {
-    // A config that allows the StartSurfaceTabSwitcherHomeButton IPH to be
-    // shown:
-    // * Once per day
-    // * Up to 7 times but only if the home button is not clicked when IPH is
-    // showing.
-    absl::optional<FeatureConfig> config = FeatureConfig();
-    config->valid = true;
-    config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(ANY, 0);
-    config->trigger =
-        EventConfig("start_surface_tab_switcher_home_button_iph_trigger",
-                    Comparator(LESS_THAN, 7), k10YearsInDays, k10YearsInDays);
-    config->used =
-        EventConfig("start_surface_tab_switcher_home_button_clicked",
-                    Comparator(EQUAL, 0), k10YearsInDays, k10YearsInDays);
-    config->event_configs.insert(
-        EventConfig("start_surface_tab_switcher_home_button_iph_trigger",
-                    Comparator(EQUAL, 0), 1, 360));
-    return config;
-  }
-
   if (kIPHSharedHighlightingReceiverFeature.name == feature->name) {
     // A config that allows the shared highlighting message IPH to be shown
     // when a user receives a highlight:
@@ -884,6 +882,23 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
                                   Comparator(EQUAL, 0), 60, 60);
     config->used = EventConfig("read_later_context_menu_tapped",
                                Comparator(EQUAL, 0), 60, 60);
+    return config;
+  }
+
+  if (kIPHRequestDesktopSiteAppMenuFeature.name == feature->name) {
+    // A config that allows the RDS site-level setting user education prompt to
+    // be shown:
+    // * If the user has used the RDS (tab-level) setting on the app menu at
+    // least once.
+    // * If the prompt has never been shown before.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->used = EventConfig("app_menu_desktop_site_for_tab_clicked",
+                               Comparator(GREATER_THAN_OR_EQUAL, 1), 180, 180);
+    config->trigger = EventConfig("request_desktop_site_app_menu_iph_trigger",
+                                  Comparator(EQUAL, 0), 180, 180);
     return config;
   }
 #endif  // BUILDFLAG(IS_ANDROID)

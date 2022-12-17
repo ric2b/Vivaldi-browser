@@ -67,6 +67,11 @@ const StorageType kTemp = StorageType::kTemporary;
 const StorageType kPerm = StorageType::kPersistent;
 const StorageType kSync = StorageType::kSyncable;
 
+const storage::mojom::StorageType kStorageTemp =
+    storage::mojom::StorageType::kTemporary;
+const storage::mojom::StorageType kStoragePerm =
+    storage::mojom::StorageType::kPersistent;
+
 // Values in bytes.
 const int64_t kAvailableSpaceForApp = 13377331U;
 const int64_t kMustRemainAvailableForSystem = kAvailableSpaceForApp / 2;
@@ -132,10 +137,11 @@ const storage::mojom::BucketTableEntry* FindBucketTableEntry(
 }
 
 MATCHER_P3(MatchesBucketTableEntry, storage_key, type, use_count, "") {
-  return testing::ExplainMatchResult(storage_key, arg.storage_key,
+  return testing::ExplainMatchResult(storage_key, arg->storage_key,
                                      result_listener) &&
-         testing::ExplainMatchResult(type, arg.type, result_listener) &&
-         testing::ExplainMatchResult(use_count, arg.use_count, result_listener);
+         testing::ExplainMatchResult(type, arg->type, result_listener) &&
+         testing::ExplainMatchResult(use_count, arg->use_count,
+                                     result_listener);
 }
 
 }  // namespace
@@ -257,28 +263,29 @@ class QuotaManagerImplTest : public testing::Test {
     return future.Take();
   }
 
-  QuotaErrorOr<std::set<BucketLocator>> GetBucketsForType(
+  QuotaErrorOr<std::set<BucketInfo>> GetBucketsForType(
       blink::mojom::StorageType storage_type) {
-    base::test::TestFuture<QuotaErrorOr<std::set<BucketLocator>>> future;
+    base::test::TestFuture<QuotaErrorOr<std::set<BucketInfo>>> future;
     quota_manager_impl_->GetBucketsForType(storage_type, future.GetCallback());
     return future.Take();
   }
 
-  QuotaErrorOr<std::set<BucketLocator>> GetBucketsForHost(
+  QuotaErrorOr<std::set<BucketInfo>> GetBucketsForHost(
       const std::string& host,
       blink::mojom::StorageType storage_type) {
-    base::test::TestFuture<QuotaErrorOr<std::set<BucketLocator>>> future;
+    base::test::TestFuture<QuotaErrorOr<std::set<BucketInfo>>> future;
     quota_manager_impl_->GetBucketsForHost(host, storage_type,
                                            future.GetCallback());
     return future.Take();
   }
 
-  QuotaErrorOr<std::set<BucketLocator>> GetBucketsForStorageKey(
+  QuotaErrorOr<std::set<BucketInfo>> GetBucketsForStorageKey(
       const StorageKey& storage_key,
-      blink::mojom::StorageType storage_type) {
-    base::test::TestFuture<QuotaErrorOr<std::set<BucketLocator>>> future;
-    quota_manager_impl_->GetBucketsForStorageKey(storage_key, storage_type,
-                                                 future.GetCallback());
+      blink::mojom::StorageType storage_type,
+      bool delete_expired = false) {
+    base::test::TestFuture<QuotaErrorOr<std::set<BucketInfo>>> future;
+    quota_manager_impl_->GetBucketsForStorageKey(
+        storage_key, storage_type, future.GetCallback(), delete_expired);
     return future.Take();
   }
 
@@ -455,9 +462,8 @@ class QuotaManagerImplTest : public testing::Test {
 
   BucketTableEntries DumpBucketTable() {
     base::test::TestFuture<BucketTableEntries> future;
-    quota_manager_impl_->DumpBucketTable(
-        future.GetCallback<const BucketTableEntries&>());
-    return future.Get();
+    quota_manager_impl_->DumpBucketTable(future.GetCallback());
+    return future.Take();
   }
 
   std::vector<storage::mojom::BucketTableEntryPtr> RetrieveBucketsTable() {
@@ -961,18 +967,18 @@ TEST_F(QuotaManagerImplTest, GetBucketsForType) {
   EXPECT_TRUE(bucket.ok());
   BucketInfo bucket_c = bucket.value();
 
-  QuotaErrorOr<std::set<BucketLocator>> result = GetBucketsForType(kTemp);
+  QuotaErrorOr<std::set<BucketInfo>> result = GetBucketsForType(kTemp);
   EXPECT_TRUE(result.ok());
 
-  std::set<BucketLocator> buckets = result.value();
+  std::set<BucketInfo> buckets = result.value();
   EXPECT_EQ(2U, buckets.size());
-  EXPECT_THAT(buckets, testing::Contains(bucket_a.ToBucketLocator()));
-  EXPECT_THAT(buckets, testing::Contains(bucket_b.ToBucketLocator()));
+  EXPECT_THAT(buckets, testing::Contains(bucket_a));
+  EXPECT_THAT(buckets, testing::Contains(bucket_b));
 
   result = GetBucketsForType(kPerm);
   buckets = result.value();
   EXPECT_EQ(1U, buckets.size());
-  EXPECT_THAT(buckets, testing::Contains(bucket_c.ToBucketLocator()));
+  EXPECT_THAT(buckets, testing::Contains(bucket_c));
 }
 
 TEST_F(QuotaManagerImplTest, GetBucketsForHost) {
@@ -994,19 +1000,18 @@ TEST_F(QuotaManagerImplTest, GetBucketsForHost) {
   EXPECT_TRUE(bucket.ok());
   BucketInfo host_b_bucket = bucket.value();
 
-  QuotaErrorOr<std::set<BucketLocator>> result =
-      GetBucketsForHost("a.com", kTemp);
+  QuotaErrorOr<std::set<BucketInfo>> result = GetBucketsForHost("a.com", kTemp);
   EXPECT_TRUE(result.ok());
 
-  std::set<BucketLocator> buckets = result.value();
+  std::set<BucketInfo> buckets = result.value();
   EXPECT_EQ(2U, buckets.size());
-  EXPECT_THAT(buckets, testing::Contains(host_a_bucket_1.ToBucketLocator()));
-  EXPECT_THAT(buckets, testing::Contains(host_a_bucket_2.ToBucketLocator()));
+  EXPECT_THAT(buckets, testing::Contains(host_a_bucket_1));
+  EXPECT_THAT(buckets, testing::Contains(host_a_bucket_2));
 
   result = GetBucketsForHost("b.com", kPerm);
   buckets = result.value();
   EXPECT_EQ(1U, buckets.size());
-  EXPECT_THAT(buckets, testing::Contains(host_b_bucket.ToBucketLocator()));
+  EXPECT_THAT(buckets, testing::Contains(host_b_bucket));
 }
 
 TEST_F(QuotaManagerImplTest, GetBucketsForStorageKey) {
@@ -1030,14 +1035,14 @@ TEST_F(QuotaManagerImplTest, GetBucketsForStorageKey) {
   EXPECT_TRUE(bucket.ok());
   BucketInfo bucket_c = bucket.value();
 
-  QuotaErrorOr<std::set<BucketLocator>> result =
+  QuotaErrorOr<std::set<BucketInfo>> result =
       GetBucketsForStorageKey(storage_key_a, kTemp);
   EXPECT_TRUE(result.ok());
 
-  std::set<BucketLocator> buckets = result.value();
+  std::set<BucketInfo> buckets = result.value();
   EXPECT_EQ(2U, buckets.size());
-  EXPECT_THAT(buckets, testing::Contains(bucket_a1.ToBucketLocator()));
-  EXPECT_THAT(buckets, testing::Contains(bucket_a2.ToBucketLocator()));
+  EXPECT_THAT(buckets, testing::Contains(bucket_a1));
+  EXPECT_THAT(buckets, testing::Contains(bucket_a2));
 
   result = GetBucketsForStorageKey(storage_key_a, kPerm);
   EXPECT_TRUE(result.ok());
@@ -1048,7 +1053,43 @@ TEST_F(QuotaManagerImplTest, GetBucketsForStorageKey) {
 
   buckets = result.value();
   EXPECT_EQ(1U, buckets.size());
-  EXPECT_THAT(buckets, testing::Contains(bucket_c.ToBucketLocator()));
+  EXPECT_THAT(buckets, testing::Contains(bucket_c));
+}
+
+TEST_F(QuotaManagerImplTest, GetBucketsForStorageKey_Expiration) {
+  StorageKey storage_key = ToStorageKey("http://a.com/");
+
+  auto clock = std::make_unique<base::SimpleTestClock>();
+  QuotaDatabase::SetClockForTesting(clock.get());
+  clock->SetNow(base::Time::Now());
+
+  BucketInitParams params(storage_key, "bucket_1");
+  auto bucket = UpdateOrCreateBucket(params);
+  EXPECT_TRUE(bucket.ok());
+  BucketInfo bucket_1 = bucket.value();
+
+  params.name = "bucket_2";
+  params.expiration = clock->Now() + base::Days(1);
+  bucket = UpdateOrCreateBucket(params);
+  EXPECT_TRUE(bucket.ok());
+  BucketInfo bucket_2 = bucket.value();
+
+  params.name = "bucket_3";
+  bucket = UpdateOrCreateBucket(params);
+  EXPECT_TRUE(bucket.ok());
+  BucketInfo bucket_3 = bucket.value();
+
+  clock->Advance(base::Days(2));
+
+  QuotaErrorOr<std::set<BucketInfo>> result =
+      GetBucketsForStorageKey(storage_key, kTemp, /*delete_expired=*/true);
+  EXPECT_TRUE(result.ok());
+
+  std::set<BucketInfo> buckets = result.value();
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_EQ(*buckets.begin(), bucket_1);
+
+  QuotaDatabase::SetClockForTesting(nullptr);
 }
 
 TEST_F(QuotaManagerImplTest, GetUsageAndQuota_Simple) {
@@ -2433,17 +2474,21 @@ TEST_F(QuotaManagerImplTest, DeleteHostDataMultiple) {
 
   const BucketTableEntries& entries = DumpBucketTable();
   for (const auto& entry : entries) {
-    if (entry.type != kTemp)
+    if (entry->type != kStorageTemp)
       continue;
 
+    absl::optional<StorageKey> storage_key =
+        StorageKey::Deserialize(entry->storage_key);
+    ASSERT_TRUE(storage_key.has_value());
+
     EXPECT_NE(std::string("http://foo.com/"),
-              entry.storage_key.origin().GetURL().spec());
+              storage_key.value().origin().GetURL().spec());
     EXPECT_NE(std::string("http://foo.com:1/"),
-              entry.storage_key.origin().GetURL().spec());
+              storage_key.value().origin().GetURL().spec());
     EXPECT_NE(std::string("https://foo.com/"),
-              entry.storage_key.origin().GetURL().spec());
+              storage_key.value().origin().GetURL().spec());
     EXPECT_NE(std::string("http://bar.com/"),
-              entry.storage_key.origin().GetURL().spec());
+              std::move(storage_key).value().origin().GetURL().spec());
   }
 
   global_usage_result = GetGlobalUsage(kTemp);
@@ -2525,17 +2570,21 @@ TEST_F(QuotaManagerImplTest, DeleteHostDataMultipleClientsDifferentTypes) {
 
   const BucketTableEntries& entries = DumpBucketTable();
   for (const auto& entry : entries) {
-    if (entry.type != kPerm)
+    if (entry->type != kStoragePerm)
       continue;
 
+    absl::optional<StorageKey> storage_key =
+        StorageKey::Deserialize(entry->storage_key);
+    ASSERT_TRUE(storage_key.has_value());
+
     EXPECT_NE(std::string("http://foo.com/"),
-              entry.storage_key.origin().GetURL().spec());
+              storage_key.value().origin().GetURL().spec());
     EXPECT_NE(std::string("http://foo.com:1/"),
-              entry.storage_key.origin().GetURL().spec());
+              storage_key.value().origin().GetURL().spec());
     EXPECT_NE(std::string("https://foo.com/"),
-              entry.storage_key.origin().GetURL().spec());
+              storage_key.value().origin().GetURL().spec());
     EXPECT_NE(std::string("http://bar.com/"),
-              entry.storage_key.origin().GetURL().spec());
+              std::move(storage_key).value().origin().GetURL().spec());
   }
 
   global_usage_result = GetGlobalUsage(kTemp);
@@ -2891,32 +2940,6 @@ TEST_F(QuotaManagerImplTest, FindAndDeleteBucketDataWithDBError) {
              .usage);
 }
 
-TEST_F(QuotaManagerImplTest, GetHostUsageForInternals) {
-  static const ClientBucketData kData[] = {
-      {"http://example.com/", kDefaultBucketName, kTemp, 400},
-      {"http://example.com/", kDefaultBucketName, kPerm, 2},
-  };
-  MockQuotaClient* client =
-      CreateAndRegisterClient(QuotaClientType::kFileSystem, {kTemp, kPerm});
-  RegisterClientBucketData(client, kData);
-
-  base::test::TestFuture<int64_t> temp_future;
-  quota_manager_impl()->GetHostUsageForInternals(
-      "example.com", storage::mojom::StorageType::kTemporary,
-      temp_future.GetCallback());
-  int64_t temp_result = temp_future.Take();
-
-  EXPECT_EQ(400, temp_result);
-
-  base::test::TestFuture<int64_t> perm_future;
-  quota_manager_impl()->GetHostUsageForInternals(
-      "example.com", storage::mojom::StorageType::kPersistent,
-      perm_future.GetCallback());
-  int64_t perm_result = perm_future.Take();
-
-  EXPECT_EQ(2, perm_result);
-}
-
 TEST_F(QuotaManagerImplTest, GetDiskAvailabilityAndTempPoolSize) {
   const int kPoolSize = 1000;
   const int kPerHostQuota = kPoolSize / 5;
@@ -3101,9 +3124,11 @@ TEST_F(QuotaManagerImplTest, DumpBucketTable) {
   task_environment_.RunUntilIdle();
 
   const BucketTableEntries& entries = DumpBucketTable();
-  EXPECT_THAT(entries, testing::UnorderedElementsAre(
-                           MatchesBucketTableEntry(kStorageKey, kTemp, 1),
-                           MatchesBucketTableEntry(kStorageKey, kPerm, 2)));
+  EXPECT_THAT(
+      entries,
+      testing::UnorderedElementsAre(
+          MatchesBucketTableEntry(kStorageKey.Serialize(), kStorageTemp, 1),
+          MatchesBucketTableEntry(kStorageKey.Serialize(), kStoragePerm, 2)));
 }
 
 TEST_F(QuotaManagerImplTest, RetrieveBucketsTable) {
@@ -3122,18 +3147,7 @@ TEST_F(QuotaManagerImplTest, RetrieveBucketsTable) {
 
   quota_manager_impl()->NotifyStorageAccessed(kStorageKey, kTemp, kAccessTime);
   quota_manager_impl()->NotifyStorageAccessed(kStorageKey, kPerm, kAccessTime);
-
-  base::RunLoop run_loop;
-  base::Time time1 = client->IncrementMockTime();
-  client->ModifyStorageKeyAndNotify(ToStorageKey("http://example.com/"), kTemp,
-                                    10);
-  client->ModifyStorageKeyAndNotify(ToStorageKey("http://example.com/"), kPerm,
-                                    10);
-  base::Time time2 = client->IncrementMockTime();
-  client->ModifyStorageKeyAndNotify(ToStorageKey("http://example.com/"), kTemp,
-                                    10, run_loop.QuitClosure());
-  base::Time time3 = client->IncrementMockTime();
-  run_loop.Run();
+  const base::Time time1 = base::Time::Now();
 
   auto temp_bucket = GetBucket(kStorageKey, kDefaultBucketName, kTemp);
   auto perm_bucket = GetBucket(kStorageKey, kDefaultBucketName, kPerm);
@@ -3145,27 +3159,25 @@ TEST_F(QuotaManagerImplTest, RetrieveBucketsTable) {
       FindBucketTableEntry(bucket_table_entries, temp_bucket->id);
   EXPECT_TRUE(temp_entry);
   EXPECT_EQ(temp_entry->storage_key, kSerializedStorageKey);
-  EXPECT_EQ(temp_entry->host, "example.com");
-  EXPECT_EQ(temp_entry->type, "temporary");
+  EXPECT_EQ(temp_entry->type, kStorageTemp);
   EXPECT_EQ(temp_entry->name, kDefaultBucketName);
   EXPECT_EQ(temp_entry->use_count, 1);
   EXPECT_EQ(temp_entry->last_accessed, kAccessTime);
-  EXPECT_GE(temp_entry->last_modified, time2);
-  EXPECT_LE(temp_entry->last_modified, time3);
-  EXPECT_EQ(temp_entry->usage, 143);
+  EXPECT_GE(temp_entry->last_modified, kAccessTime);
+  EXPECT_LE(temp_entry->last_modified, time1);
+  EXPECT_EQ(temp_entry->usage, 123);
 
   auto* perm_entry =
       FindBucketTableEntry(bucket_table_entries, perm_bucket->id);
   EXPECT_TRUE(perm_entry);
   EXPECT_EQ(perm_entry->storage_key, kSerializedStorageKey);
-  EXPECT_EQ(perm_entry->host, "example.com");
-  EXPECT_EQ(perm_entry->type, "persistent");
+  EXPECT_EQ(perm_entry->type, kStoragePerm);
   EXPECT_EQ(perm_entry->name, kDefaultBucketName);
   EXPECT_EQ(perm_entry->use_count, 1);
   EXPECT_EQ(perm_entry->last_accessed, kAccessTime);
-  EXPECT_GE(perm_entry->last_modified, time1);
-  EXPECT_LE(perm_entry->last_modified, time2);
-  EXPECT_EQ(perm_entry->usage, 466);
+  EXPECT_GE(temp_entry->last_modified, kAccessTime);
+  EXPECT_LE(temp_entry->last_modified, time1);
+  EXPECT_EQ(perm_entry->usage, 456);
 }
 
 TEST_F(QuotaManagerImplTest, QuotaForEmptyHost) {

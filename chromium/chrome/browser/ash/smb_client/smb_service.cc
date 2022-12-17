@@ -35,7 +35,7 @@
 #include "chrome/browser/ui/webui/chromeos/smb_shares/smb_credentials_dialog.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
@@ -128,7 +128,7 @@ SmbService::SmbService(Profile* profile,
 
   KerberosCredentialsManager* credentials_manager =
       KerberosCredentialsManagerFactory::GetExisting(profile);
-  if (credentials_manager && credentials_manager->IsKerberosEnabled()) {
+  if (credentials_manager) {
     kerberos_credentials_updater_ =
         std::make_unique<SmbKerberosCredentialsUpdater>(
             credentials_manager,
@@ -353,6 +353,12 @@ void SmbService::MountInternal(
     bool save_credentials,
     bool skip_connect,
     MountInternalCallback callback) {
+  // Preconfigured or persisted share information could be invalid.
+  if (!info.share_url().IsValid() || info.share_url().GetShare().empty()) {
+    std::move(callback).Run(SmbMountResult::kInvalidUrl, {});
+    return;
+  }
+
   user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile_);
   DCHECK(user);
 
@@ -426,13 +432,7 @@ file_system_provider::Service* SmbService::GetProviderService() const {
 }
 
 SmbProviderClient* SmbService::GetSmbProviderClient() const {
-  // If the DBusThreadManager or the SmbProviderClient aren't available,
-  // there isn't much we can do. This should only happen when running tests.
-  if (!chromeos::DBusThreadManager::IsInitialized() ||
-      !chromeos::DBusThreadManager::Get()) {
-    return nullptr;
-  }
-  return chromeos::DBusThreadManager::Get()->GetSmbProviderClient();
+  return SmbProviderClient::Get();
 }
 
 void SmbService::RestoreMounts() {

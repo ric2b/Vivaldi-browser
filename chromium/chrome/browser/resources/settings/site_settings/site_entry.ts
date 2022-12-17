@@ -7,15 +7,15 @@
  * 'site-entry' is an element representing a single eTLD+1 site entity.
  */
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../site_favicon.js';
 
-import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {FocusRowBehavior} from 'chrome://resources/js/cr/ui/focus_row_behavior.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
@@ -137,8 +137,8 @@ export class SiteEntryElement extends SiteEntryElementBase {
   private cookieString_: string;
   listIndex: number;
   private overallUsageString_: string;
-  private originUsages_: Array<string>;
-  private cookiesNum_: Array<string>;
+  private originUsages_: string[];
+  private cookiesNum_: string[];
   sortMethod?: SortMethod;
   private enableConsolidatedSiteStorageControls_: boolean;
 
@@ -323,8 +323,7 @@ export class SiteEntryElement extends SiteEntryElementBase {
    * @param change The change record for the array.
    * @param index The index of the array item.
    */
-  private originUsagesItem_(change: {base: Array<string>}, index: number):
-      string {
+  private originUsagesItem_(change: {base: string[]}, index: number): string {
     return change.base[index];
   }
 
@@ -333,8 +332,7 @@ export class SiteEntryElement extends SiteEntryElementBase {
    * @param change The change record for the array.
    * @param index The index of the array item.
    */
-  private originCookiesItem_(change: {base: Array<string>}, index: number):
-      string {
+  private originCookiesItem_(change: {base: string[]}, index: number): string {
     return change.base[index];
   }
 

@@ -5,6 +5,7 @@
 #include "components/history_clusters/core/query_clusters_state.h"
 
 #include <set>
+#include <string>
 
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/metrics/histogram_functions.h"
@@ -58,9 +59,11 @@ class QueryClustersState::PostProcessor
 
 QueryClustersState::QueryClustersState(
     base::WeakPtr<HistoryClustersService> service,
-    const std::string& query)
+    const std::string& query,
+    bool recluster)
     : service_(service),
       query_(query),
+      recluster_(recluster),
       post_processing_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
       post_processing_state_(
@@ -76,7 +79,7 @@ void QueryClustersState::LoadNextBatchOfClusters(ResultCallback callback) {
   base::TimeTicks query_start_time = base::TimeTicks::Now();
   query_clusters_task = service_->QueryClusters(
       ClusteringRequestSource::kJourneysPage,
-      /*begin_time=*/base::Time(), continuation_params_,
+      /*begin_time=*/base::Time(), continuation_params_, recluster_,
       base::BindOnce(&QueryClustersState::OnGotRawClusters,
                      weak_factory_.GetWeakPtr(), query_start_time,
                      std::move(callback)));
@@ -133,18 +136,52 @@ void QueryClustersState::OnGotClusters(
   // This is distinct from the "tall monitor" case because the page may already
   // be full of clusters. In that case, the WebUI would not know to make another
   // request for clusters.
-  if (clusters.empty() && !continuation_params.is_done) {
+  if (clusters.empty() && !continuation_params.exhausted_all_visits) {
     LoadNextBatchOfClusters(std::move(callback));
     return;
   }
 
+  // This feels like it belongs in `PostProcessor`, but this operates on the
+  // main thread, because the data needs to live on the main thread. Doing it
+  // on the task runner requires making heap copies, which probably costs more
+  // than just doing this simple computation on the main thread.
+  UpdateUniqueRawLabels(clusters);
+
   std::move(callback).Run(query_, std::move(clusters),
-                          !continuation_params.is_done, is_continuation_);
+                          !continuation_params.exhausted_all_visits,
+                          is_continuation_);
   is_continuation_ = true;
 
   // Log metrics after delivering the results to the page.
   base::TimeDelta service_latency = base::TimeTicks::Now() - query_start_time;
   base::UmaHistogramTimes("History.Clusters.ServiceLatency", service_latency);
+}
+
+void QueryClustersState::UpdateUniqueRawLabels(
+    const std::vector<history::Cluster>& clusters) {
+  // Skip this computation when there's a search query.
+  if (!query_.empty())
+    return;
+
+  for (const auto& cluster : clusters) {
+    if (!cluster.raw_label)
+      return;
+
+    const auto& raw_label_value = cluster.raw_label.value();
+    // Warning: N^2 algorithm below. If this ends up scaling poorly, it can be
+    // optimized by adding a map that tracks which labels have been seen
+    // already.
+    auto it = std::find_if(raw_label_counts_so_far_.begin(),
+                           raw_label_counts_so_far_.end(),
+                           [&raw_label_value](const LabelCount& label_count) {
+                             return label_count.first == raw_label_value;
+                           });
+    if (it == raw_label_counts_so_far_.end()) {
+      it = raw_label_counts_so_far_.insert(it,
+                                           std::make_pair(raw_label_value, 0));
+    }
+    it->second++;
+  }
 }
 
 }  // namespace history_clusters

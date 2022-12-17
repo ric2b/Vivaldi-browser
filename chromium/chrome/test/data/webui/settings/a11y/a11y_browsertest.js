@@ -20,7 +20,7 @@ const axeOptionsExcludeLinkInTextBlock =
     Object.assign({}, SettingsAccessibilityV3Test.axeOptions, {
       'rules': Object.assign({}, SettingsAccessibilityV3Test.axeOptions.rules, {
         'link-in-text-block': {enabled: false},
-      })
+      }),
     });
 
 const violationFilterExcludeCustomInputAndTabindex =
@@ -44,8 +44,9 @@ const violationFilterExcludeCustomInputAndTabindex =
 
 GEN('#if !BUILDFLAG(IS_CHROMEOS)');
 [[
-  'ManageProfile', 'manage_profile_a11y_test.js',
-  {filter: violationFilterExcludeCustomInputAndTabindex}
+  'ManageProfile',
+  'manage_profile_a11y_test.js',
+  {filter: violationFilterExcludeCustomInputAndTabindex},
 ],
  ['Signout', 'sign_out_a11y_test.js'],
 ].forEach(test => defineTest(...test));
@@ -56,7 +57,8 @@ function defineTest(testName, module, config) {
   this[className] = class extends SettingsAccessibilityV3Test {
     /** @override */
     get browsePreload() {
-      return `chrome://settings/test_loader.html?module=settings/a11y/${module}&host=webui-test`;
+      return `chrome://settings/test_loader.html?module=settings/a11y/${
+          module}`;
     }
   };
 

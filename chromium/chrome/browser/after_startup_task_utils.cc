@@ -11,6 +11,7 @@
 #include "base/process/process.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/performance_manager/performance_manager_impl.h"
@@ -24,7 +25,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/startup/browser_init_params.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 using content::BrowserThread;
@@ -103,6 +104,7 @@ void SetBrowserStartupIsComplete() {
   if (IsBrowserStartupComplete())
     return;
 
+  TRACE_EVENT0("startup", "SetBrowserStartupIsComplete");
   g_startup_complete_flag.Get().Set();
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
@@ -219,7 +221,7 @@ void AfterStartupTaskUtils::StartMonitoringStartup() {
 #if !BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // For Lacros, there may not be a Browser created at startup.
-  if (chromeos::BrowserInitParams::Get()->initial_browser_action ==
+  if (chromeos::BrowserParamsProxy::Get()->InitialBrowserAction() ==
       crosapi::mojom::InitialBrowserAction::kDoNotOpenWindow) {
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE, base::BindOnce(&SetBrowserStartupIsComplete));

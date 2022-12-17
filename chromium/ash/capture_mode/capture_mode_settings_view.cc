@@ -13,7 +13,6 @@
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_toggle_button.h"
-#include "ash/constants/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
@@ -78,14 +77,9 @@ CaptureModeSettingsView::CaptureModeSettingsView(CaptureModeSession* session,
         kAudioMicrophone);
   }
 
-  auto* color_provider = AshColorProvider::Get();
-  const SkColor separator_color = color_provider->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparatorColor);
-
-  if (features::IsCaptureModeSelfieCameraEnabled() &&
-      !controller->is_recording_in_progress()) {
+  if (!controller->is_recording_in_progress()) {
     separator_1_ = AddChildView(std::make_unique<views::Separator>());
-    separator_1_->SetColor(separator_color);
+    separator_1_->SetColorId(ui::kColorAshSystemUIMenuSeparator);
     auto* camera_controller = controller->camera_controller();
     const bool managed_by_policy =
         camera_controller->IsCameraDisabledByPolicy();
@@ -103,7 +97,7 @@ CaptureModeSettingsView::CaptureModeSettingsView(CaptureModeSession* session,
 
   if (!is_in_projector_mode) {
     separator_2_ = AddChildView(std::make_unique<views::Separator>());
-    separator_2_->SetColor(separator_color);
+    separator_2_->SetColorId(ui::kColorAshSystemUIMenuSeparator);
 
     save_to_menu_group_ = AddChildView(std::make_unique<CaptureModeMenuGroup>(
         this, kCaptureModeFolderIcon,
@@ -120,8 +114,9 @@ CaptureModeSettingsView::CaptureModeSettingsView(CaptureModeSession* session,
   }
 
   SetPaintToLayer();
-  SetBackground(views::CreateSolidBackground(color_provider->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kTransparent80)));
+  SetBackground(
+      views::CreateSolidBackground(AshColorProvider::Get()->GetBaseLayerColor(
+          AshColorProvider::BaseLayerType::kTransparent80)));
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetRoundedCornerRadius(kBorderRadius);
   layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
@@ -132,8 +127,7 @@ CaptureModeSettingsView::CaptureModeSettingsView(CaptureModeSession* session,
 }
 
 CaptureModeSettingsView::~CaptureModeSettingsView() {
-  if (features::IsCaptureModeSelfieCameraEnabled())
-    CaptureModeController::Get()->camera_controller()->RemoveObserver(this);
+  CaptureModeController::Get()->camera_controller()->RemoveObserver(this);
 }
 
 gfx::Rect CaptureModeSettingsView::GetBounds(
@@ -192,10 +186,8 @@ CaptureModeSettingsView::GetHighlightableItems() {
       highlightable_items;
   DCHECK(audio_input_menu_group_);
   audio_input_menu_group_->AppendHighlightableItems(highlightable_items);
-  if (features::IsCaptureModeSelfieCameraEnabled()) {
-    DCHECK(camera_menu_group_);
-    camera_menu_group_->AppendHighlightableItems(highlightable_items);
-  }
+  DCHECK(camera_menu_group_);
+  camera_menu_group_->AppendHighlightableItems(highlightable_items);
   if (save_to_menu_group_)
     save_to_menu_group_->AppendHighlightableItems(highlightable_items);
   return highlightable_items;

@@ -16,7 +16,6 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/ash_prefs.h"
-#include "ash/public/mojom/cros_display_config.mojom.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -50,10 +49,9 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine.pb.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
 #include "chromeos/components/disks/disks_prefs.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/update_engine/update_engine.pb.h"
-#include "chromeos/dbus/update_engine/update_engine_client.h"
 #include "chromeos/system/devicemode.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/drive/drive_pref_names.h"
@@ -124,7 +122,7 @@ Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
 Preferences::~Preferences() {
   prefs_->RemoveObserver(this);
   user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
-  DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
+  UpdateEngineClient::Get()->RemoveObserver(this);
 }
 
 // static
@@ -261,9 +259,12 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(drive::prefs::kDriveFsPinnedMigrated, false);
   registry->RegisterBooleanPref(drive::prefs::kDriveFsEnableVerboseLogging,
                                 false);
-  // Do not sync drive::prefs::kDriveFsEnableMirrorSync because we're syncing
-  // local files and users may wish to turn this off on a per device basis.
+  // Do not sync drive::prefs::kDriveFsEnableMirrorSync and
+  // drive::prefs::kDriveFsMirrorSyncMachineId because we're syncing local files
+  // and users may wish to turn this off on a per device basis.
   registry->RegisterBooleanPref(drive::prefs::kDriveFsEnableMirrorSync, false);
+  registry->RegisterStringPref(drive::prefs::kDriveFsMirrorSyncMachineRootId,
+                               "");
   // We don't sync ::prefs::kLanguageCurrentInputMethod and PreviousInputMethod
   // because they're just used to track the logout state of the device.
   registry->RegisterStringPref(::prefs::kLanguageCurrentInputMethod, "");
@@ -337,9 +338,6 @@ void Preferences::RegisterProfilePrefs(
 
   // Don't sync the note-taking app; it may not be installed on other devices.
   registry->RegisterStringPref(::prefs::kNoteTakingAppId, std::string());
-  registry->RegisterBooleanPref(::prefs::kNoteTakingAppEnabledOnLockScreen,
-                                true);
-  registry->RegisterListPref(::prefs::kNoteTakingAppsLockScreenAllowlist);
   registry->RegisterBooleanPref(::prefs::kRestoreLastLockScreenNote, true);
   registry->RegisterDictionaryPref(
       ::prefs::kNoteTakingAppsLockScreenToastShown);
@@ -444,6 +442,10 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(::prefs::kHatsPerformanceDeviceIsSelected,
                                 false);
 
+  registry->RegisterInt64Pref(::prefs::kHatsCameraAppSurveyCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(::prefs::kHatsCameraAppDeviceIsSelected, false);
+
   // Personalization HaTS survey prefs for avatar, screensaver, and wallpaper
   // features.
   registry->RegisterInt64Pref(
@@ -496,8 +498,6 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kStartupBrowserWindowLaunchSuppressed,
                                 false);
-
-  registry->RegisterBooleanPref(::prefs::kSettingsShowOSBanner, true);
 
   // This pref is a per-session pref and must not be synced.
   registry->RegisterBooleanPref(
@@ -605,8 +605,7 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
     pref_change_registrar_.Add(copy_pref, callback);
 
   // Re-enable OTA update when feature flag is disabled by owner.
-  auto* update_engine_client =
-      DBusThreadManager::Get()->GetUpdateEngineClient();
+  auto* update_engine_client = UpdateEngineClient::Get();
   if (user_manager::UserManager::Get()->IsCurrentUserOwner() &&
       !features::IsConsumerAutoUpdateToggleAllowed()) {
     // Write into the platform will signal back so pref gets synced.
@@ -629,7 +628,7 @@ void Preferences::Init(Profile* profile, const user_manager::User* user) {
   // This causes OnIsSyncingChanged to be called when the value of
   // PrefService::IsSyncing() changes.
   prefs->AddObserver(this);
-  DBusThreadManager::Get()->GetUpdateEngineClient()->AddObserver(this);
+  UpdateEngineClient::Get()->AddObserver(this);
 
   user_ = user;
   user_is_primary_ =
@@ -696,9 +695,7 @@ void Preferences::InitUserPrefsForTesting(
 
   InitUserPrefs(prefs);
 
-  auto* update_engine_client =
-      DBusThreadManager::Get()->GetUpdateEngineClient();
-  update_engine_client->AddObserver(this);
+  UpdateEngineClient::Get()->AddObserver(this);
 
   input_method_syncer_ =
       std::make_unique<input_method::InputMethodSyncer>(prefs, ime_state_);
@@ -1095,14 +1092,13 @@ void Preferences::ApplyPreferences(ApplyReason reason,
 
   if (pref_name == ::prefs::kParentAccessCodeConfig ||
       reason != REASON_PREF_CHANGED) {
-    const base::Value* value =
-        prefs_->GetDictionary(::prefs::kParentAccessCodeConfig);
-    if (value &&
-        prefs_->IsManagedPreference(::prefs::kParentAccessCodeConfig) &&
+    if (prefs_->IsManagedPreference(::prefs::kParentAccessCodeConfig) &&
         user_->IsChild()) {
+      const base::Value::Dict& value =
+          prefs_->GetValueDict(::prefs::kParentAccessCodeConfig);
       known_user.SetPath(user_->GetAccountId(),
                          ::prefs::kKnownUserParentAccessCodeConfig,
-                         value->Clone());
+                         base::Value(value.Clone()));
       parent_access::ParentAccessService::Get().LoadConfigForUser(user_);
     } else {
       known_user.RemovePref(user_->GetAccountId(),
@@ -1112,12 +1108,8 @@ void Preferences::ApplyPreferences(ApplyReason reason,
 
   for (auto* copy_pref : kCopyToKnownUserPrefs) {
     if (pref_name == copy_pref || reason != REASON_ACTIVE_USER_CHANGED) {
-      absl::optional<base::Value> opt_value = absl::nullopt;
-      if (const base::Value* value = prefs_->Get(copy_pref)) {
-        opt_value = value->Clone();
-      }
       known_user.SetPath(user_->GetAccountId(), copy_pref,
-                         std::move(opt_value));
+                         prefs_->GetValue(copy_pref).Clone());
     }
   }
 

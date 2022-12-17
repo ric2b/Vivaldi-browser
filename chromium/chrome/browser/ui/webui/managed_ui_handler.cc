@@ -53,13 +53,14 @@ ManagedUIHandler::~ManagedUIHandler() {
 }
 
 void ManagedUIHandler::RegisterMessages() {
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "observeManagedUI",
       base::BindRepeating(&ManagedUIHandler::HandleObserveManagedUI,
                           base::Unretained(this)));
 }
 
-void ManagedUIHandler::HandleObserveManagedUI(const base::ListValue* /*args*/) {
+void ManagedUIHandler::HandleObserveManagedUI(
+    const base::Value::List& /*args*/) {
   AllowJavascript();
   AddObservers();
 }
@@ -110,13 +111,11 @@ void ManagedUIHandler::RemoveObservers() {
 
 base::Value::Dict ManagedUIHandler::GetDataSourceUpdate() const {
   base::Value::Dict update;
-  update.Set("browserManagedByOrg",
-             base::Value(chrome::GetManagedUiWebUILabel(profile_)));
+  update.Set("browserManagedByOrg", chrome::GetManagedUiWebUILabel(profile_));
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  update.Set("deviceManagedByOrg",
-             base::Value(chrome::GetDeviceManagedUiWebUILabel()));
+  update.Set("deviceManagedByOrg", chrome::GetDeviceManagedUiWebUILabel());
 #endif
-  update.Set("isManaged", base::Value(managed_));
+  update.Set("isManaged", managed_);
   return update;
 }
 

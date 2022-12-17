@@ -41,13 +41,13 @@
 #include "ash/projector/projector_annotation_tray.h"
 #include "ash/projector/projector_controller_impl.h"
 #include "ash/projector/projector_metrics.h"
-#include "ash/projector/test/mock_projector_client.h"
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/holding_space/holding_space_test_api.h"
 #include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/public/cpp/projector/projector_session.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/test/mock_projector_client.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/root_window_controller.h"
 #include "ash/services/recording/recording_service_test_api.h"
@@ -1152,6 +1152,53 @@ TEST_F(CaptureModeTest, DisplayRemoval) {
   EXPECT_TRUE(gfx::Rect(800, 800).Contains(
       GetCaptureModeBarView()->GetBoundsInScreen()));
   ASSERT_EQ(Shell::GetAllRootWindows()[0], session->current_root());
+}
+
+// Tests behavior of a capture mode session if the active display is removed
+// and countdown running.
+TEST_F(CaptureModeTest, DisplayRemovalWithCountdownVisible) {
+  UpdateDisplay("800x700,801+0-800x700");
+
+  // Start capture mode on the secondary display.
+  auto recorded_window = CreateTestWindow(gfx::Rect(1000, 200, 400, 400));
+  auto* controller =
+      StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kVideo);
+  GetEventGenerator()->MoveMouseToCenterOf(recorded_window.get());
+
+  auto* session = controller->capture_mode_session();
+
+  RemoveSecondaryDisplay();
+
+  ASSERT_EQ(Shell::GetAllRootWindows()[0], session->current_root());
+
+  // Test passes if no crash.
+}
+
+// Tests behavior of a capture mode session if the active display is removed,
+// countdown running, fullscreen window, and in overview mode.
+TEST_F(CaptureModeTest,
+       DisplayRemovalWithCountdownVisibleFullscreenWindowAndInOverview) {
+  UpdateDisplay("800x700,801+0-800x700");
+
+  // Start capture mode on the secondary display.
+  auto recorded_window = CreateTestWindow(gfx::Rect(1000, 200, 400, 400));
+  auto* controller =
+      StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kVideo);
+  GetEventGenerator()->MoveMouseToCenterOf(recorded_window.get());
+  // Make the window fullscreen. This is important as the corner case is
+  // moving a fullscreen window triggers the shelf to occur, which changes
+  // display metrics.
+  recorded_window->SetProperty(aura::client::kShowStateKey,
+                               ui::SHOW_STATE_FULLSCREEN);
+
+  auto* session = controller->capture_mode_session();
+
+  EnterOverview();
+  RemoveSecondaryDisplay();
+
+  ASSERT_EQ(Shell::GetAllRootWindows()[0], session->current_root());
+
+  // Test passes if no crash.
 }
 
 // Tests that using fullscreen or window source, moving the mouse across
@@ -4077,6 +4124,19 @@ TEST_F(CaptureModeTest, ReverseTabbingTest) {
     EXPECT_TRUE(GetCloseButton()->has_focus());
     controller->Stop();
   }
+}
+
+// A regression test for a UAF issue reported at https://crbug.com/1350743, in
+// which if a the native widget of the settings menu gets deleted without
+// calling `Close()` or `CloseNow()` on the widget, we get a UAF. This can
+// happen when all the windows in the window tree hierarchy gets deleted e.g.
+// when shutting down.
+TEST_F(CaptureModeTest, SettingsMenuWidgetDestruction) {
+  CaptureModeTestApi().StartForFullscreen(true);
+  ClickOnView(GetSettingsButton(), GetEventGenerator());
+  auto* widget = GetCaptureModeSettingsWidget();
+  ASSERT_TRUE(widget);
+  delete widget->GetNativeWindow();
 }
 
 // A test class that uses a mock time task environment.

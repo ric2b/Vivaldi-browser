@@ -10,8 +10,8 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
-import org.chromium.chrome.browser.power_bookmarks.PowerBookmarkMeta;
-import org.chromium.chrome.browser.power_bookmarks.PowerBookmarkType;
+import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
+import org.chromium.components.power_bookmarks.PowerBookmarkType;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -21,7 +21,7 @@ import javax.annotation.Nonnull;
 /**
  * Represents different type of views in the bookmark UI.
  */
-final class BookmarkListEntry {
+public final class BookmarkListEntry {
     /**
      * Specifies the view types that the bookmark delegate screen can contain.
      */
@@ -29,7 +29,7 @@ final class BookmarkListEntry {
     @IntDef({ViewType.INVALID, ViewType.PERSONALIZED_SIGNIN_PROMO, ViewType.PERSONALIZED_SYNC_PROMO,
             ViewType.SYNC_PROMO, ViewType.FOLDER, ViewType.BOOKMARK, ViewType.DIVIDER,
             ViewType.SECTION_HEADER, ViewType.SHOPPING_POWER_BOOKMARK, ViewType.TAG_CHIP_LIST})
-    @interface ViewType {
+    public @interface ViewType {
         int INVALID = -1;
         int PERSONALIZED_SIGNIN_PROMO = 0;
         int PERSONALIZED_SYNC_PROMO = 1;
@@ -48,13 +48,10 @@ final class BookmarkListEntry {
      */
     static final class SectionHeaderData {
         public final CharSequence headerTitle;
-        public final CharSequence headerDescription;
         public final int topPadding;
 
-        SectionHeaderData(
-                @Nullable CharSequence title, @Nullable CharSequence description, int topPadding) {
+        SectionHeaderData(@Nullable CharSequence title, int topPadding) {
             headerTitle = title;
-            headerDescription = description;
             this.topPadding = topPadding;
         }
     }
@@ -126,14 +123,13 @@ final class BookmarkListEntry {
     /**
      * Create an entry representing the reading list read/unread section header.
      * @param title The title of the section header.
-     * @param description The description of the section header.
      * @param topPadding The top padding of the section header. Only impacts the padding when
      *         greater than 0.
      * @param context The context to use.
      */
     static BookmarkListEntry createSectionHeader(
-            CharSequence title, CharSequence description, int topPadding, Context context) {
-        SectionHeaderData sectionHeaderData = new SectionHeaderData(title, description, topPadding);
+            CharSequence title, int topPadding, Context context) {
+        SectionHeaderData sectionHeaderData = new SectionHeaderData(title, topPadding);
         return new BookmarkListEntry(ViewType.SECTION_HEADER, null, sectionHeaderData);
     }
 
@@ -157,12 +153,6 @@ final class BookmarkListEntry {
     @Nullable
     CharSequence getHeaderTitle() {
         return mSectionHeaderData.headerTitle;
-    }
-
-    /** @return The description text to be shown if it is a section header. */
-    @Nullable
-    CharSequence getHeaderDescription() {
-        return mSectionHeaderData.headerDescription;
     }
 
     /**

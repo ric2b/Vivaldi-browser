@@ -1612,18 +1612,6 @@ void GL_APIENTRY GLES2UnlockDiscardableTextureCHROMIUM(GLuint texture_id) {
 bool GL_APIENTRY GLES2LockDiscardableTextureCHROMIUM(GLuint texture_id) {
   return gles2::GetGLContext()->LockDiscardableTextureCHROMIUM(texture_id);
 }
-void GL_APIENTRY GLES2TexStorage2DImageCHROMIUM(GLenum target,
-                                                GLenum internalFormat,
-                                                GLenum bufferUsage,
-                                                GLsizei width,
-                                                GLsizei height) {
-  gles2::GetGLContext()->TexStorage2DImageCHROMIUM(target, internalFormat,
-                                                   bufferUsage, width, height);
-}
-void GL_APIENTRY GLES2SetColorSpaceMetadataCHROMIUM(GLuint texture_id,
-                                                    GLcolorSpace color_space) {
-  gles2::GetGLContext()->SetColorSpaceMetadataCHROMIUM(texture_id, color_space);
-}
 void GL_APIENTRY GLES2WindowRectanglesEXT(GLenum mode,
                                           GLsizei count,
                                           const GLint* box) {
@@ -1676,12 +1664,6 @@ void GL_APIENTRY GLES2BeginSharedImageAccessDirectCHROMIUM(GLuint texture,
 }
 void GL_APIENTRY GLES2EndSharedImageAccessDirectCHROMIUM(GLuint texture) {
   gles2::GetGLContext()->EndSharedImageAccessDirectCHROMIUM(texture);
-}
-void GL_APIENTRY GLES2BeginBatchReadAccessSharedImageCHROMIUM() {
-  gles2::GetGLContext()->BeginBatchReadAccessSharedImageCHROMIUM();
-}
-void GL_APIENTRY GLES2EndBatchReadAccessSharedImageCHROMIUM() {
-  gles2::GetGLContext()->EndBatchReadAccessSharedImageCHROMIUM();
 }
 void GL_APIENTRY GLES2EnableiOES(GLenum target, GLuint index) {
   gles2::GetGLContext()->EnableiOES(target, index);
@@ -3014,14 +2996,6 @@ extern const NameToFunc g_gles2_function_table[] = {
             glLockDiscardableTextureCHROMIUM),
     },
     {
-        "glTexStorage2DImageCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glTexStorage2DImageCHROMIUM),
-    },
-    {
-        "glSetColorSpaceMetadataCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glSetColorSpaceMetadataCHROMIUM),
-    },
-    {
         "glWindowRectanglesEXT",
         reinterpret_cast<GLES2FunctionPointer>(glWindowRectanglesEXT),
     },
@@ -3074,16 +3048,6 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glEndSharedImageAccessDirectCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glEndSharedImageAccessDirectCHROMIUM),
-    },
-    {
-        "glBeginBatchReadAccessSharedImageCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(
-            glBeginBatchReadAccessSharedImageCHROMIUM),
-    },
-    {
-        "glEndBatchReadAccessSharedImageCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(
-            glEndBatchReadAccessSharedImageCHROMIUM),
     },
     {
         "glEnableiOES",

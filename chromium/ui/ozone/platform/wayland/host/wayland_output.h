@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "base/memory/raw_ptr.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/gfx/geometry/rect.h"
@@ -15,6 +16,8 @@
 namespace ui {
 
 class XDGOutput;
+class WaylandZcrColorManager;
+class WaylandZcrColorManagementOutput;
 class WaylandConnection;
 class WaylandZAuraOutput;
 
@@ -39,7 +42,8 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
                                        const gfx::Insets& insets,
                                        float scale_factor,
                                        int32_t panel_transform,
-                                       int32_t logical_transform) = 0;
+                                       int32_t logical_transform,
+                                       const std::string& label) = 0;
 
    protected:
     virtual ~Delegate() = default;
@@ -57,6 +61,7 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
   void Initialize(Delegate* delegate);
   void InitializeXdgOutput(struct zxdg_output_manager_v1* manager);
   void InitializeZAuraOutput(zaura_shell* aura_shell);
+  void InitializeColorManagementOutput(WaylandZcrColorManager* manager);
   float GetUIScaleFactor() const;
 
   uint32_t output_id() const { return output_id_; }
@@ -68,6 +73,11 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
   gfx::Size logical_size() const;
   gfx::Size physical_size() const { return physical_size_; }
   gfx::Insets insets() const;
+  const std::string& label() const;
+  const std::string& name() const;
+  WaylandZcrColorManagementOutput* color_management_output() const {
+    return color_management_output_.get();
+  }
 
   // Tells if the output has already received physical screen dimensions in the
   // global compositor space.
@@ -75,6 +85,8 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
 
   wl_output* get_output() { return output_.get(); }
   zaura_output* get_zaura_output();
+
+  void SetScaleFactorForTesting(float scale_factor);
 
  private:
   static constexpr int32_t kDefaultScaleFactor = 1;
@@ -109,6 +121,7 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
   wl::Object<wl_output> output_;
   std::unique_ptr<XDGOutput> xdg_output_;
   std::unique_ptr<WaylandZAuraOutput> aura_output_;
+  std::unique_ptr<WaylandZcrColorManagementOutput> color_management_output_;
   float scale_factor_ = kDefaultScaleFactor;
   int32_t panel_transform_ = WL_OUTPUT_TRANSFORM_NORMAL;
   // Origin of the output in DIP screen coordinate.
@@ -116,8 +129,8 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
   // Size of the output in physical pixels.
   gfx::Size physical_size_;
 
-  Delegate* delegate_ = nullptr;
-  WaylandConnection* connection_ = nullptr;
+  raw_ptr<Delegate> delegate_ = nullptr;
+  raw_ptr<WaylandConnection> connection_ = nullptr;
 };
 
 }  // namespace ui

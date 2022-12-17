@@ -29,6 +29,12 @@ class VIEWS_EXPORT HighlightBorder : public views::Border {
     // A less contrast highlight border for components that float above a
     // shield.
     kHighlightBorder2,
+    // Has same inner border color as `kHighlightBorder1`. The outer color is
+    // same in dark and light mode with low opacity. This type is mainly used
+    // with `HighlightBorderLayerOverlay` whose outer border is outside the
+    // window contents. For more information, refer to the comment of
+    // `HighlightBorderOverlay`.
+    kHighlightBorder3,
   };
 
   // The type of insets created by this highlight border. The insets shrink the
@@ -46,6 +52,18 @@ class VIEWS_EXPORT HighlightBorder : public views::Border {
     // overlap between content.
     kFullInsets,
   };
+
+  // Paints the highlight border onto `canvas` with given highlight and border
+  // border color. Note that directly using this function won't set the insets
+  // on any view so it acts like setting kNoInsets when using HighlightBorder
+  // class.
+  static void PaintBorderToCanvas(gfx::Canvas* canvas,
+                                  SkColor highlight_color,
+                                  SkColor border_color,
+                                  const gfx::Rect& bounds,
+                                  const gfx::RoundedCornersF& corner_radii,
+                                  Type type,
+                                  bool use_light_colors);
 
   // Paints the highlight border onto `canvas` for the specified `view`. The
   // color of the border will be determined using `view`'s color provider. Note

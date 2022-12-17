@@ -32,15 +32,17 @@ GPU_EXPORT extern const base::Feature kDefaultEnableGpuRasterization;
 
 GPU_EXPORT extern const base::Feature kCanvasOopRasterization;
 
+GPU_EXPORT extern const base::Feature kEnableMSAAOnNewIntelGPUs;
+
 GPU_EXPORT extern const base::Feature kDefaultEnableANGLEValidation;
 
 GPU_EXPORT extern const base::Feature kCanvasContextLostInBackground;
 
 #if BUILDFLAG(IS_WIN)
 GPU_EXPORT extern const base::Feature kGpuProcessHighPriorityWin;
-#endif
 
-GPU_EXPORT extern const base::Feature kGpuUseDisplayThreadPriority;
+GPU_EXPORT extern const base::Feature kDisableVideoOverlayIfMoving;
+#endif
 
 #if BUILDFLAG(IS_MAC)
 GPU_EXPORT extern const base::Feature kMetal;
@@ -79,6 +81,8 @@ GPU_EXPORT extern const base::Feature kEnableDrDcVulkan;
 #endif  // BUILDFLAG(IS_ANDROID)
 
 GPU_EXPORT extern const base::Feature kWebGPUService;
+
+GPU_EXPORT extern const base::Feature kIncreasedCmdBufferParseSlice;
 
 GPU_EXPORT bool UseGles2ForOopR();
 GPU_EXPORT bool IsUsingVulkan();

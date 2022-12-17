@@ -115,6 +115,11 @@ class ChromiumDepGraph {
             resolveVersion: '1.0',
             licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
             licenseName: 'Apache 2.0'),
+        org_bouncycastle_bcprov_jdk15on: new PropertyOverride(
+            url: 'https://github.com/bcgit/bc-java',
+            licensePath: 'licenses/Bouncy_Castle-2015.txt',
+            licenseName: 'MIT',
+            overrideLatest: true),
         org_codehaus_mojo_animal_sniffer_annotations: new PropertyOverride(
             url: 'http://www.mojohaus.org/animal-sniffer/animal-sniffer-annotations/',
             /* groovylint-disable-next-line LineLength */
@@ -697,14 +702,16 @@ class ChromiumDepGraph {
         // Use a background thread to avoid slowing down main thread.
         // Saves about 80 seconds currently.
         new Thread().start(() -> {
-            HttpURLConnection http = new URL(url).openConnection();
-            http.setRequestMethod("HEAD");
-            if (http.getResponseCode() != 200) {
-                new RuntimeException("Resolved POM but could not resolve $url").printStackTrace();
+            HttpURLConnection http = new URL(url).openConnection()
+            http.requestMethod = 'HEAD'
+            if (http.responseCode != 200) {
+                /* groovylint-disable-next-line PrintStackTrace */
+                new RuntimeException("Resolved POM but could not resolve $url").printStackTrace()
                 // Exception is logged and ignored if thrown, so explicitly exit.
-                System.exit(1);
-              }
-            http.disconnect();
+                /* groovylint-disable-next-line SystemExit */
+                System.exit(1)
+            }
+            http.disconnect()
         });
     }
 

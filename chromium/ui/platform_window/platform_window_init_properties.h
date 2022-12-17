@@ -11,6 +11,8 @@
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -106,9 +108,11 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
   bool activatable = true;
   bool force_show_in_taskbar;
   bool keep_on_top = false;
+  bool is_security_surface = false;
   bool visible_on_all_workspaces = false;
   bool remove_standard_frame = false;
   std::string workspace;
+  ZOrderLevel z_order = ZOrderLevel::kNormal;
 
   raw_ptr<WorkspaceExtensionDelegate> workspace_extension_delegate = nullptr;
 
@@ -116,8 +120,8 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   bool prefer_dark_theme = false;
-  gfx::ImageSkia* icon = nullptr;
-  absl::optional<int> background_color;
+  raw_ptr<gfx::ImageSkia> icon = nullptr;
+  absl::optional<SkColor> background_color;
 
   // Specifies the res_name and res_class fields,
   // respectively, of the WM_CLASS window property. Controls window grouping
@@ -126,7 +130,7 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
   std::string wm_class_name;
   std::string wm_class_class;
 
-  X11ExtensionDelegate* x11_extension_delegate = nullptr;
+  raw_ptr<X11ExtensionDelegate> x11_extension_delegate = nullptr;
 
   // Wayland specific.  Holds the application ID that is used by the window
   // manager to match the desktop entry and group windows.

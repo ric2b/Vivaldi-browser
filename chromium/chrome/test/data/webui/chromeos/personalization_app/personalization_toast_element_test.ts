@@ -5,7 +5,7 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {DismissErrorAction, PersonalizationActionName, PersonalizationToastElement} from 'chrome://personalization/trusted/personalization_app.js';
+import {DismissErrorAction, PersonalizationActionName, PersonalizationToastElement} from 'chrome://personalization/js/personalization_app.js';
 import {assertEquals, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/test_util.js';
 
@@ -74,7 +74,7 @@ suite('PersonalizationToastTest', function() {
 
     personalizationStore.data.error = {
       message: 'There was an error',
-      dismiss: {callback: dismissCallback}
+      dismiss: {callback: dismissCallback},
     };
     personalizationStore.notifyObservers();
     await waitAfterNextRender(personalizationToastElement);
@@ -87,7 +87,8 @@ suite('PersonalizationToastTest', function() {
   test('automatically dismisses after ten seconds', async () => {
     // Spy on calls to |window.setTimeout|.
     const setTimeout = window.setTimeout;
-    const setTimeoutCalls: {handler: Function|string, delay?: number}[] = [];
+    const setTimeoutCalls: Array<{handler: Function | string, delay?: number}> =
+        [];
     window.setTimeout =
         (handler: Function|string, delay?: number, ...args: any[]): number => {
           setTimeoutCalls.push({handler, delay});

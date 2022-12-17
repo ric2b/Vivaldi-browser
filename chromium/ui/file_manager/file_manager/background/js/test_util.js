@@ -64,7 +64,7 @@ test.util.sync.getFileList = contentWindow => {
       row.querySelector('.filename-label').textContent,
       row.querySelector('.size').textContent,
       row.querySelector('.type').textContent,
-      row.querySelector('.date').textContent
+      row.querySelector('.date').textContent,
     ]);
   }
   return fileList;
@@ -109,7 +109,7 @@ test.util.sync.selectFile = (contentWindow, filename) => {
     test.util.sync.fakeKeyDown(
         contentWindow, '#file-list', 'ArrowDown', false, false, false);
   }
-  console.error('Failed to select file "' + filename + '"');
+  console.warn('Failed to select file "' + filename + '"');
   return false;
 };
 
@@ -185,7 +185,7 @@ test.util.async.selectInDirectoryTree =
           callback(
               test.util.sync.fakeMouseDown(contentWindow, query) &&
               test.util.sync.fakeMouseClick(contentWindow, query));
-        }
+        },
       };
       steps.checkQuery();
     };
@@ -472,20 +472,14 @@ test.util.sync.unload = contentWindow => {
  * @return {string} The breadcrumb path.
  */
 test.util.sync.getBreadcrumbPath = contentWindow => {
-  const breadcrumb =
-      contentWindow.document.querySelector('#location-breadcrumbs');
+  const doc = contentWindow.document;
+  const breadcrumb = doc.querySelector('#location-breadcrumbs xf-breadcrumb');
+
   if (!breadcrumb) {
     return '';
   }
 
-  let path = '';
-
-  const crumbs = breadcrumb.querySelector('bread-crumb');
-  if (crumbs) {
-    path = '/' + crumbs.path;
-  }
-
-  return path;
+  return '/' + breadcrumb.path;
 };
 
 /**

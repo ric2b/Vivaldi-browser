@@ -5,14 +5,15 @@
 #ifndef IOS_PUBLIC_PROVIDER_CHROME_BROWSER_PUSH_NOTIFICATION_PUSH_NOTIFICATION_API_H_
 #define IOS_PUBLIC_PROVIDER_CHROME_BROWSER_PUSH_NOTIFICATION_PUSH_NOTIFICATION_API_H_
 
+#import <memory>
+
+#import "ios/chrome/browser/push_notification/push_notification_service.h"
+
 namespace ios {
 namespace provider {
 
-// Initializes the device to handle push notifications
-void InitializeConfiguration();
-
-// Registers the device with the server to receive push notifications
-void RegisterDevice();
+// Creates a new instance of PushNotificationService.
+std::unique_ptr<PushNotificationService> CreatePushNotificationService();
 
 }  // namespace provider
 }  // namespace ios

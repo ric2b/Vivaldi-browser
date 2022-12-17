@@ -41,14 +41,14 @@ class VIEWS_EXAMPLES_EXPORT TableExample : public ExampleBase,
   void CreateExampleView(View* container) override;
 
   // ui::TableModel:
-  int RowCount() override;
-  std::u16string GetText(int row, int column_id) override;
-  ui::ImageModel GetIcon(int row) override;
-  std::u16string GetTooltip(int row) override;
+  size_t RowCount() override;
+  std::u16string GetText(size_t row, int column_id) override;
+  ui::ImageModel GetIcon(size_t row) override;
+  std::u16string GetTooltip(size_t row) override;
   void SetObserver(ui::TableModelObserver* observer) override;
 
   // TableGrouper:
-  void GetGroupRange(int model_index, GroupRange* range) override;
+  void GetGroupRange(size_t model_index, GroupRange* range) override;
 
   // TableViewObserver:
   void OnSelectionChanged() override;
@@ -61,6 +61,8 @@ class VIEWS_EXAMPLES_EXPORT TableExample : public ExampleBase,
   void OnViewIsDeleting(View* observed_view) override;
 
  private:
+  std::string SelectedColumnName();
+
   // The table to be tested.
   raw_ptr<TableView> table_ = nullptr;
 

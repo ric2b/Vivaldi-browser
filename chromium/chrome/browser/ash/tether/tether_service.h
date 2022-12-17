@@ -13,18 +13,15 @@
 #include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_state_handler_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 
 class Profile;
-
-namespace chromeos {
-class NetworkStateHandler;
-}
 
 namespace session_manager {
 class SessionManager;
@@ -35,6 +32,8 @@ class PrefRegistrySyncable;
 }  // namespace user_prefs
 
 namespace ash {
+
+class NetworkStateHandler;
 
 namespace secure_channel {
 class SecureChannelClient;
@@ -57,7 +56,7 @@ class TetherService
       public chromeos::PowerManagerClient::Observer,
       public TetherHostFetcher::Observer,
       public device::BluetoothAdapter::Observer,
-      public chromeos::NetworkStateHandlerObserver,
+      public NetworkStateHandlerObserver,
       public TetherComponent::Observer,
       public device_sync::DeviceSyncClient::Observer,
       public multidevice_setup::MultiDeviceSetupClient::Observer {
@@ -68,7 +67,7 @@ class TetherService
       device_sync::DeviceSyncClient* device_sync_client,
       secure_channel::SecureChannelClient* secure_channel_client,
       multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
-      chromeos::NetworkStateHandler* network_state_handler,
+      NetworkStateHandler* network_state_handler,
       session_manager::SessionManager* session_manager);
   TetherService(const TetherService&) = delete;
   TetherService& operator=(const TetherService&) = delete;
@@ -80,7 +79,7 @@ class TetherService
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Attempt to start the Tether module. Only succeeds if all conditions to
-  // reach chromeos::NetworkStateHandler::TechnologyState::ENABLED are reached.
+  // reach NetworkStateHandler::TechnologyState::ENABLED are reached.
   // Should only be called once a user is logged in.
   virtual void StartTetherIfPossible();
 
@@ -102,9 +101,9 @@ class TetherService
   void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
                              bool powered) override;
 
-  // chromeos::NetworkStateHandlerObserver:
+  // NetworkStateHandlerObserver:
   void DeviceListChanged() override;
-  void DevicePropertiesUpdated(const chromeos::DeviceState* device) override;
+  void DevicePropertiesUpdated(const DeviceState* device) override;
 
   // Helper method called from NetworkStateHandlerObserver methods.
   void UpdateEnabledState();
@@ -128,9 +127,9 @@ class TetherService
   virtual bool HasSyncedTetherHosts() const;
 
   virtual void UpdateTetherTechnologyState();
-  chromeos::NetworkStateHandler::TechnologyState GetTetherTechnologyState();
+  NetworkStateHandler::TechnologyState GetTetherTechnologyState();
 
-  chromeos::NetworkStateHandler* network_state_handler() {
+  NetworkStateHandler* network_state_handler() {
     return network_state_handler_;
   }
 
@@ -270,7 +269,9 @@ class TetherService
   device_sync::DeviceSyncClient* device_sync_client_;
   secure_channel::SecureChannelClient* secure_channel_client_;
   multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client_;
-  chromeos::NetworkStateHandler* network_state_handler_;
+  NetworkStateHandler* network_state_handler_;
+  base::ScopedObservation<NetworkStateHandler, NetworkStateHandlerObserver>
+      network_state_handler_observer_{this};
   session_manager::SessionManager* session_manager_;
   std::unique_ptr<NotificationPresenter> notification_presenter_;
   std::unique_ptr<GmsCoreNotificationsStateTrackerImpl>

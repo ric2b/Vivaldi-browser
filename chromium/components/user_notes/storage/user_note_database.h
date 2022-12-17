@@ -9,9 +9,11 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "components/user_notes/interfaces/user_note_metadata_snapshot.h"
+#include "components/user_notes/interfaces/user_note_storage.h"
 #include "components/user_notes/model/user_note.h"
 #include "sql/database.h"
 #include "url/gurl.h"
@@ -32,27 +34,28 @@ class UserNoteDatabase {
   // Initialises internal database. Must be called prior to any other usage.
   bool Init();
 
-  UserNoteMetadataSnapshot GetNoteMetadataForUrls(std::vector<GURL> urls);
+  UserNoteMetadataSnapshot GetNoteMetadataForUrls(
+      const UserNoteStorage::UrlSet& urls);
 
   std::vector<std::unique_ptr<UserNote>> GetNotesById(
-      std::vector<base::UnguessableToken> ids);
+      const UserNoteStorage::IdSet& ids);
 
-  void UpdateNote(const UserNote* model,
-                  std::string note_body_text,
+  bool UpdateNote(const UserNote* model,
+                  std::u16string note_body_text,
                   bool is_creation);
 
-  void DeleteNote(const base::UnguessableToken& id);
+  bool DeleteNote(const base::UnguessableToken& id);
 
-  void DeleteAllForUrl(const GURL& url);
+  bool DeleteAllForUrl(const GURL& url);
 
-  void DeleteAllForOrigin(const url::Origin& origin);
+  bool DeleteAllForOrigin(const url::Origin& origin);
 
-  void DeleteAllNotes();
+  bool DeleteAllNotes();
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(UserNoteDatabaseTest, UpdateNote);
-  FRIEND_TEST_ALL_PREFIXES(UserNoteDatabaseTest, CreateNote);
-  FRIEND_TEST_ALL_PREFIXES(UserNoteDatabaseTest, DeleteNote);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteDatabaseTest, GetNotesById);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteDatabaseTest, GetNoteMetadataForUrls);
+  friend class UserNoteDatabaseTest;
 
   // Initialises internal database if needed.
   bool EnsureDBInit();
@@ -64,9 +67,13 @@ class UserNoteDatabase {
   bool InitSchema();
 
   // Called by UpdateNote() with is_creation=true to create a new note.
-  void CreateNote(const UserNote* model, std::string note_body_text);
+  bool CreateNote(const UserNote* model, std::u16string note_body_text);
 
   bool CreateSchema();
+
+  bool DeleteNoteWithStringId(std::string id);
+
+  std::unique_ptr<UserNote> GetNoteById(const base::UnguessableToken& id);
 
   sql::Database db_ GUARDED_BY_CONTEXT(sequence_checker_);
 

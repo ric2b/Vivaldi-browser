@@ -55,7 +55,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #elif BUILDFLAG(IS_LINUX)
 #include "device/bluetooth/dbus/dbus_bluez_manager_wrapper_linux.h"
@@ -66,8 +66,8 @@
 #endif
 
 #if BUILDFLAG(IS_LINUX)
-#include "ui/views/linux_ui/linux_ui.h"  // nogncheck
-#include "ui/views/linux_ui/linux_ui_factory.h"  // nogncheck
+#include "ui/linux/linux_ui.h"          // nogncheck
+#include "ui/linux/linux_ui_factory.h"  // nogncheck
 #endif
 
 namespace content {
@@ -154,7 +154,7 @@ void ShellBrowserMainParts::ToolkitInitialized() {
     return;
 
 #if BUILDFLAG(IS_LINUX)
-  views::LinuxUI::SetInstance(CreateLinuxUi());
+  ui::LinuxUi::SetInstance(ui::CreateLinuxUi());
 #endif
 }
 
@@ -197,7 +197,7 @@ void ShellBrowserMainParts::PostMainMessageLoopRun() {
   browser_context_.reset();
   off_the_record_browser_context_.reset();
 #if BUILDFLAG(IS_LINUX)
-  views::LinuxUI::SetInstance(nullptr);
+  ui::LinuxUi::SetInstance(nullptr);
 #endif
   performance_manager_lifetime_.reset();
 }

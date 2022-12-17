@@ -4,7 +4,6 @@
 
 import {assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {EntryList, FakeEntryImpl, VolumeEntry} from '../../common/js/files_app_entry_types.js';
 import {TrashRootEntry} from '../../common/js/trash.js';
@@ -617,7 +616,8 @@ export class NavigationListModel extends EventTarget {
       this.navigationItems_.push(shortcut);
     }
 
-    let myFilesEntry, myFilesModel;
+    let myFilesEntry;
+    let myFilesModel;
     if (!this.myFilesModel_) {
       // When MyFilesVolume is enabled we use the Downloads volume to be the
       // MyFiles volume.
@@ -691,17 +691,39 @@ export class NavigationListModel extends EventTarget {
       myFilesEntry.removeAllByRootType(VolumeManagerCommon.RootType.GUEST_OS);
 
       // For each volume, add any which aren't already in the list.
-      for (const volume of getVolumes(
-               VolumeManagerCommon.VolumeType.GUEST_OS)) {
+      let guestOsVolumes = getVolumes(VolumeManagerCommon.VolumeType.GUEST_OS);
+      if (util.isArcVirtioBlkForDataEnabled()) {
+        // Remove GuestOs Android placeholder, similar to what we did for
+        // GuestOs placeholders. This should be readded if needed.
+        myFilesEntry.removeAllByRootType(
+            VolumeManagerCommon.RootType.ANDROID_FILES);
+        const androidVolume =
+            getSingleVolume(VolumeManagerCommon.VolumeType.ANDROID_FILES);
+        if (androidVolume) {
+          guestOsVolumes = guestOsVolumes.concat(androidVolume);
+        }
+      }
+      for (const volume of guestOsVolumes) {
         if (myFilesEntry.findIndexByVolumeInfo(volume.volumeInfo) === -1) {
           myFilesEntry.addEntry(new VolumeEntry(volume.volumeInfo));
+        }
+      }
+      // For each entry in the list, remove any for volumes that no longer
+      // exist.
+      for (const volume of myFilesEntry.getUIChildren()) {
+        if (!volume.volumeInfo ||
+            volume.volumeInfo.volumeType !=
+                VolumeManagerCommon.VolumeType.GUEST_OS) {
+          continue;
+        }
+        if (!guestOsVolumes.find(v => v.label === volume.name)) {
+          myFilesEntry.removeChildEntry(volume);
         }
       }
       // Now we add any guests we know about which don't already have a
       // matching volume.
       for (const item of this.guestOsPlaceholders_) {
-        if (!getVolumes(VolumeManagerCommon.VolumeType.GUEST_OS)
-                 .find(v => v.label === item.label)) {
+        if (!guestOsVolumes.find(v => v.label === item.label)) {
           // Since it's a fake item, link the navigation model so
           // DirectoryTree can choose the correct DirectoryItem for it.
           item.entry.navigationModel = item;
@@ -723,7 +745,8 @@ export class NavigationListModel extends EventTarget {
     }
 
     // Add Trash.
-    if (loadTimeData.getBoolean('FILES_TRASH_ENABLED')) {
+    // TODO(b/237351925): Trash should not show up when in File picker / saver.
+    if (util.isTrashEnabled()) {
       if (!this.trashItem_) {
         this.trashItem_ = new NavigationModelFakeItem(
             str('TRASH_ROOT_LABEL'), NavigationModelItemType.TRASH,

@@ -148,6 +148,9 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate,
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
       const content::OpenURLParams& params) override;
+  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
+      content::RenderFrameHost* frame,
+      content::EyeDropperListener* listener) override;
 
   // These are the original delegates Chromium would normally use
   // and we call into them to allow existing functionality to work.

@@ -50,7 +50,6 @@
 #include "chrome/browser/transition_manager/full_browser_transition_manager.h"
 #include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
-#include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
@@ -59,8 +58,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/testing_profile_key.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/test/history_service_test_util.h"
@@ -84,12 +81,11 @@
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/test/model/fake_sync_change_processor.h"
-#include "components/sync/test/model/sync_error_factory_mock.h"
+#include "components/sync/test/fake_sync_change_processor.h"
+#include "components/sync/test/sync_error_factory_mock.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_prefs/user_prefs.h"
-#include "components/webdata_services/web_data_service_wrapper.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -125,11 +121,13 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/account_manager/account_manager_factory.h"
 #include "chrome/browser/ash/arc/session/arc_service_launcher.h"
 #include "chrome/browser/ash/net/delay_network_call.h"
 #include "chrome/browser/ash/policy/core/user_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager_factory.h"
+#include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_manager.h"
+#include "chromeos/ash/components/account_manager/account_manager_factory.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #endif
 
@@ -152,21 +150,6 @@ using testing::Return;
 
 namespace {
 
-void TestProfileErrorCallback(WebDataServiceWrapper::ErrorType error_type,
-                              sql::InitStatus status,
-                              const std::string& diagnostics) {
-  NOTREACHED();
-}
-
-std::unique_ptr<KeyedService> BuildWebDataService(
-    content::BrowserContext* context) {
-  const base::FilePath& context_path = context->GetPath();
-  return std::make_unique<WebDataServiceWrapper>(
-      context_path, g_browser_process->GetApplicationLocale(),
-      content::GetUIThreadTaskRunner({}),
-      base::BindRepeating(&TestProfileErrorCallback));
-}
-
 std::unique_ptr<KeyedService> BuildPersonalDataManagerInstanceFor(
     content::BrowserContext* context) {
   return std::unique_ptr<KeyedService>(
@@ -176,7 +159,7 @@ std::unique_ptr<KeyedService> BuildPersonalDataManagerInstanceFor(
 }  // namespace
 
 // static
-const char TestingProfile::kDefaultProfileUserName[] = "testing_profile";
+const char TestingProfile::kDefaultProfileUserName[] = "testing_profile@test";
 
 // static
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -413,7 +396,12 @@ void TestingProfile::Init(bool is_supervised_profile) {
 
   web_app::WebAppProviderFactory::GetInstance()->SetTestingFactory(
       this, base::BindRepeating(&web_app::FakeWebAppProvider::BuildDefault));
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  ash::SystemWebAppManagerFactory::GetInstance()->SetTestingFactory(
+      this, base::BindRepeating(&ash::TestSystemWebAppManager::BuildDefault));
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Prefs for incognito profiles are set in CreateIncognitoPrefService().
   SimpleFactoryKey* key = GetProfileKey();
@@ -441,7 +429,7 @@ void TestingProfile::InitializeProfileType() {
     return;
   }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
   bool is_system = false;
   if (IsOffTheRecord()) {
     is_system = original_profile_->IsSystemProfile();
@@ -456,7 +444,7 @@ void TestingProfile::InitializeProfileType() {
         this, profile_metrics::BrowserProfileType::kSystem);
     return;
   }
-#endif
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
 
   if (IsOffTheRecord()) {
     profile_metrics::SetBrowserProfileType(
@@ -541,11 +529,6 @@ TestingProfile::~TestingProfile() {
   // Shutdown storage partitions before we post a task to delete
   // the resource context.
   ShutdownStoragePartitions();
-}
-
-void TestingProfile::CreateWebDataService() {
-  WebDataServiceFactory::GetInstance()->SetTestingFactory(
-      this, base::BindRepeating(&BuildWebDataService));
 }
 
 void TestingProfile::SetGuestSession(bool guest) {
@@ -651,11 +634,14 @@ Profile* TestingProfile::GetOffTheRecordProfile(
 }
 
 std::vector<Profile*> TestingProfile::GetAllOffTheRecordProfiles() {
-  std::vector<Profile*> otr_profiles;
+  // This matches the implementation of OffTheRecordProfileImpl:
+  if (IsOffTheRecord())
+    return original_profile_->GetAllOffTheRecordProfiles();
 
+  // This matches the implementation of ProfileImpl:
+  std::vector<Profile*> otr_profiles;
   for (auto& otr : otr_profiles_)
     otr_profiles.push_back(otr.second.get());
-
   return otr_profiles;
 }
 
@@ -983,6 +969,11 @@ TestingProfile::GetBrowsingDataRemoverDelegate() {
   // data backends, which are already mocked if considered too heavy-weight
   // for TestingProfile.
   return ChromeBrowsingDataRemoverDelegateFactory::GetForProfile(this);
+}
+
+content::ReduceAcceptLanguageControllerDelegate*
+TestingProfile::GetReduceAcceptLanguageControllerDelegate() {
+  return nullptr;
 }
 
 bool TestingProfile::WasCreatedByVersionOrLater(const std::string& version) {

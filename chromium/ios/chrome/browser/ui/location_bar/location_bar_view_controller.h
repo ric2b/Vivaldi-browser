@@ -16,7 +16,6 @@
 @class OmniboxTextFieldIOS;
 @protocol ActivityServiceCommands;
 @protocol ApplicationCommands;
-@protocol BrowserCommands;
 @protocol LocationBarOffsetProvider;
 @protocol LoadQueryCommands;
 
@@ -66,7 +65,6 @@
 // The dispatcher for the share button, voice search, and long press actions.
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
-                              BrowserCommands,
                               LoadQueryCommands,
                               OmniboxCommands>
     dispatcher;
@@ -82,19 +80,19 @@
 // - non-editing state, with location icon and text.
 - (void)switchToEditing:(BOOL)editing;
 
-// Updates the location icon to become |icon| and use the new |statusText| for
+// Updates the location icon to become `icon` and use the new `statusText` for
 // a11y labeling.
 - (void)updateLocationIcon:(UIImage*)icon
         securityStatusText:(NSString*)statusText;
 // Updates the location text in the non-editing mode.
-// |clipTail| indicates whether the tail or the head should be clipped when the
+// `clipTail` indicates whether the tail or the head should be clipped when the
 // location text is too long.
 - (void)updateLocationText:(NSString*)text clipTail:(BOOL)clipTail;
 // Updates the location view to show a fake placeholder in the steady location
-// view and hides the trailing button if |isNTP|. Otherwise, shows the
+// view and hides the trailing button if `isNTP`. Otherwise, shows the
 // location text and the button as normal.
 - (void)updateForNTP:(BOOL)isNTP;
-// Sets |enabled| of the share button.
+// Sets `enabled` of the share button.
 - (void)setShareButtonEnabled:(BOOL)enabled;
 
 // Displays the voice search button instead of the share button in steady state,

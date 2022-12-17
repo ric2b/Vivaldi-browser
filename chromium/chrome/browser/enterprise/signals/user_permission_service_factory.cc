@@ -14,7 +14,6 @@
 #include "components/device_signals/core/browser/user_delegate.h"
 #include "components/device_signals/core/browser/user_permission_service.h"
 #include "components/device_signals/core/browser/user_permission_service_impl.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/policy/core/common/management/management_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -35,9 +34,7 @@ UserPermissionServiceFactory::GetForProfile(Profile* profile) {
 }
 
 UserPermissionServiceFactory::UserPermissionServiceFactory()
-    : BrowserContextKeyedServiceFactory(
-          "UserPermissionService",
-          BrowserContextDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactory("UserPermissionService") {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(policy::ManagementServiceFactory::GetInstance());
 }
@@ -54,7 +51,7 @@ KeyedService* UserPermissionServiceFactory::BuildServiceInstanceFor(
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
 
   return new device_signals::UserPermissionServiceImpl(
-      identity_manager, management_service,
+      management_service,
       std::make_unique<UserDelegateImpl>(profile, identity_manager));
 }
 

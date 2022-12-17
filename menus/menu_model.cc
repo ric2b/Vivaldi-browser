@@ -121,11 +121,11 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
         if (loaded && loaded->parent()) {
           // Remove old content
           Menu_Node* target_parent = target->parent();
-          int target_index = target_parent->GetIndexOf(target);
+          int target_index = target_parent->GetIndexOf(target).value();
           target_parent->Remove(target_index);
           // Add new content
           Menu_Node* loaded_parent = loaded->parent();
-          int loaded_index = loaded_parent->GetIndexOf(loaded);
+          int loaded_index = loaded_parent->GetIndexOf(loaded).value();
           std::unique_ptr<Menu_Node> node = loaded_parent->Remove(loaded_index);
           // In case a node or more were tagged as deleted in the old tree, that
           // must now be removed now as a part of reseting the content.
@@ -187,7 +187,7 @@ bool Menu_Model::Move(const Menu_Node* node,
   }
 
   const Menu_Node* old_parent = node->parent();
-  size_t old_index = old_parent->GetIndexOf(node);
+  size_t old_index = old_parent->GetIndexOf(node).value();
 
   if (old_parent == new_parent &&
       (index == old_index || index == old_index + 1)) {
@@ -368,7 +368,7 @@ bool Menu_Model::Remove(Menu_Node* node) {
   RemoveBundleTag(node, true);
 
   Menu_Node* parent = node->parent();
-  int index = parent->GetIndexOf(node);
+  int index = parent->GetIndexOf(node).value();
   parent->Remove(index);
 
   Save();
@@ -389,7 +389,7 @@ bool Menu_Model::RemoveAction(Menu_Node* root, const std::string& action) {
       while (item) {
         RemoveBundleTag(item, false);
         Menu_Node* parent = item->parent();
-        int index = parent->GetIndexOf(item);
+        int index = parent->GetIndexOf(item).value();
         parent->Remove(index);
         did_remove = true;
         item = menu->GetByAction(action);

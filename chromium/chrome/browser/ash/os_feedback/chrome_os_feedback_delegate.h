@@ -42,9 +42,14 @@ class ChromeOsFeedbackDelegate : public OsFeedbackDelegate {
   void SendReport(os_feedback_ui::mojom::ReportPtr report,
                   SendReportCallback callback) override;
   void OpenDiagnosticsApp() override;
+  void OpenExploreApp() override;
+  void OpenMetricsDialog() override;
+  void OpenSystemInfoDialog() override;
+  void OpenBluetoothLogsInfoDialog() override;
 
  private:
   void OnSendFeedbackDone(SendReportCallback callback, bool status);
+  void OpenWebDialog(GURL url);
 
   // TODO(xiangdongkong): make sure the profile_ cannot be destroyed while
   // operations are pending.

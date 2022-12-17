@@ -59,6 +59,11 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/menu/browser_action_factory.h"
+
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -130,6 +135,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 @property(nonatomic, strong) UIControl* scrimView;
 // Handler for URL drag interactions.
 @property(nonatomic, strong) TableViewURLDragDropHandler* dragDropHandler;
+
+
 @end
 
 @implementation HistoryTableViewController
@@ -193,7 +200,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   self.title = l10n_util::GetNSString(IDS_HISTORY_TITLE);
   // Configures NavigationController Toolbar buttons.
   [self configureViewsForNonEditModeWithAnimation:NO];
-  // Adds the "Done" button and hooks it up to |dismissHistory|.
+  // Adds the "Done" button and hooks it up to `dismissHistory`.
   UIBarButtonItem* dismissButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                            target:self
@@ -201,6 +208,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   [dismissButton setAccessibilityIdentifier:
                      kHistoryNavigationControllerDoneButtonIdentifier];
   self.navigationItem.rightBarButtonItem = dismissButton;
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+      self.navigationItem.rightBarButtonItem =
+        [self customizedDoneMenuButton];
+  }
+  // Vivaldi
 
   // SearchController Configuration.
   // Init the searchController with nil so the results are displayed on the same
@@ -248,7 +262,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 - (void)loadModel {
   [super loadModel];
   // Add Status section, this section will always exist during the lifetime of
-  // HistoryTableVC. Its content will be driven by |updateEntriesStatusMessage|.
+  // HistoryTableVC. Its content will be driven by `updateEntriesStatusMessage`.
   [self.tableViewModel
       addSectionWithIdentifier:kEntriesStatusSectionIdentifier];
   _entryInserter =
@@ -469,6 +483,10 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     [self hideScrim];
   }
 
+  if (text.length != 0) {
+    self.searchInProgress = YES;
+  }
+
   [self showHistoryMatchingQuery:text];
 }
 
@@ -515,7 +533,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 #pragma mark - History Data Updates
 
-// Search history for text |query| and display the results. |query| may be nil.
+// Search history for text `query` and display the results. `query` may be nil.
 // If query is empty, show all history items.
 - (void)showHistoryMatchingQuery:(NSString*)query {
   self.finishedLoading = NO;
@@ -544,7 +562,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   }
   self.historyService->RemoveVisits(entries);
 
-  // Delete items from |self.tableView| using performBatchUpdates.
+  // Delete items from `self.tableView` using performBatchUpdates.
   __weak __typeof(self) weakSelf = self;
   [self.tableView
       performBatchUpdates:^{
@@ -739,7 +757,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 #pragma mark - Private methods
 
-// Fetches history for search text |query|. If |query| is nil or the empty
+// Fetches history for search text `query`. If `query` is nil or the empty
 // string, all history is fetched. If continuation is false, then the most
 // recent results are fetched, otherwise the results more recent than the
 // previous query will be returned.
@@ -846,7 +864,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 }
 
 // Deletes all items in the tableView which indexes are included in indexArray,
-// if |deleteItemsFromTableView| is YES this method needs to be run inside a
+// if `deleteItemsFromTableView` is YES this method needs to be run inside a
 // performBatchUpdates block.
 - (void)deleteItemsFromTableViewModelWithIndex:(NSArray*)indexArray
                       deleteItemsFromTableView:(BOOL)deleteItemsFromTableView {
@@ -952,8 +970,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 #pragma mark Navigation Toolbar Configuration
 
-// Animates the view configuration after flipping the current status of |[self
-// setEditing]|.
+// Animates the view configuration after flipping the current status of `[self
+// setEditing]`.
 - (void)animateViewsConfigurationForEditingChange {
   if (self.isEditing) {
     [self configureViewsForNonEditModeWithAnimation:YES];
@@ -1123,7 +1141,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 #pragma mark Helper Methods
 
-// Loads and opens a tab using |params|. If |incognito| is YES the tab will be
+// Loads and opens a tab using `params`. If `incognito` is YES the tab will be
 // opened in incognito mode.
 - (void)loadAndActivateTabFromHistoryWithParams:(const UrlLoadParams&)params
                                       incognito:(BOOL)incognito {
@@ -1162,6 +1180,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   if (self.isEditing) {
     return @[ self.deleteButton, [self createSpacerButton], self.cancelButton ];
   }
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+      return @[];
+  }
+  // End Vivaldi
+
   return @[
     self.clearBrowsingDataButton, [self createSpacerButton], self.editButton
   ];
@@ -1293,6 +1318,79 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   if (!_filteredOutEntriesIndexPaths)
     _filteredOutEntriesIndexPaths = [[NSMutableArray alloc] init];
   return _filteredOutEntriesIndexPaths;
+}
+
+#pragma mark - Vivaldi
+
+- (void)dismissHistory:(id)sender {
+  [self.delegate dismissHistoryWithCompletion:nil];
+}
+
+- (UIBarButtonItem*)customizedDoneMenuButton {
+  UIMenu* menu = [self setupContextMenu];
+      UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+      initWithTitle:l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
+                                 style:UIBarButtonItemStyleDone
+                                target:self
+                                action:@selector(dismissHistory:)];
+  doneButton.image = [UIImage systemImageNamed:@"ellipsis.circle"];
+  doneButton.menu = menu;
+  doneButton.accessibilityLabel =
+    l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
+
+  return doneButton;
+}
+
+- (UIBarButtonItem*)customizedDoneTextButton {
+    UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
+                style:UIBarButtonItemStyleDone
+               target:self
+               action:@selector(dismissHistory:)];
+    doneButton.accessibilityLabel =
+        l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
+    return doneButton;
+}
+
+- (UIMenu*)setupContextMenu {
+   __weak HistoryTableViewController* weakSelf = self;
+
+   HistoryTableViewController* strongSelf = weakSelf;
+   if (!strongSelf)
+      return [UIMenu menuWithTitle:@"" children:@[]];
+
+   BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
+       initWithBrowser:strongSelf.browser
+              scenario:MenuScenario::kBookmarkEntry];
+
+ //Disable if in editing mode
+  NSMutableArray<UIMenuElement*>* menuElements =
+          [[NSMutableArray alloc] init];
+   UIAction* clearHistoryAction =
+    [actionFactory actionToClearHistoryWithBlock:^{
+        HistoryTableViewController* strongSelf = weakSelf;
+        if (!strongSelf)
+          return;
+        [self openPrivacySettings];
+    }];
+
+  UIAction* editAction = [actionFactory actionToEditWithBlock:^{
+      HistoryTableViewController* strongSelf = weakSelf;
+      if (!strongSelf)
+        return;
+      [self animateViewsConfigurationForEditingChange];
+  }];
+  UIAction* doneAction = [actionFactory actionDoneWithBlock:^{
+        HistoryTableViewController* strongSelf = weakSelf;
+        if (!strongSelf)
+          return;
+        [self dismissHistory];
+  }];
+  [menuElements addObject:doneAction];
+  [menuElements addObject:editAction];
+  [menuElements addObject:clearHistoryAction];
+
+  return [UIMenu menuWithTitle:@"" children:menuElements];
 }
 
 @end

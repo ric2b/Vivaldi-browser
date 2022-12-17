@@ -29,8 +29,7 @@ void ChromeOSDataPropertyGetCallback(
 
 void InstallChromeOSExtensions(ScriptState* script_state) {
   auto* execution_context = ExecutionContext::From(script_state);
-  if (!execution_context ||
-      !ExecutionContext::From(script_state)->IsServiceWorkerGlobalScope() ||
+  if (!execution_context || !execution_context->IsServiceWorkerGlobalScope() ||
       !RuntimeEnabledFeatures::BlinkExtensionChromeOSEnabled()) {
     return;
   }
@@ -44,6 +43,12 @@ void InstallChromeOSExtensions(ScriptState* script_state) {
                             v8::Local<v8::Value>(), v8::DontEnum,
                             v8::SideEffectType::kHasNoSideEffect)
       .ToChecked();
+
+  // Eagerly initialize objects. This is usually done so that they set up a
+  // connection to the browser to receive events.
+  if (RuntimeEnabledFeatures::BlinkExtensionChromeOSWindowManagementEnabled()) {
+    std::ignore = CrosWindowManagement::From(*execution_context);
+  }
 }
 
 }  // namespace
@@ -70,13 +75,6 @@ void ChromeOSExtensions::InitServiceWorkerGlobalScope(
     ServiceWorkerGlobalScope& worker_global_scope) {
   if (!RuntimeEnabledFeatures::BlinkExtensionChromeOSEnabled())
     return;
-
-  if (RuntimeEnabledFeatures::BlinkExtensionChromeOSWindowManagementEnabled()) {
-    auto& interface_registry = worker_global_scope.GetInterfaceRegistry();
-    interface_registry.AddInterface(WTF::BindRepeating(
-        &CrosWindowManagement::BindWindowManagerStartObserver,
-        WrapWeakPersistent(&worker_global_scope)));
-  }
 }
 
 }  // namespace blink

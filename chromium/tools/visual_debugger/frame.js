@@ -2,18 +2,51 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Enum class to identify horizontal or vertical flips
+//
+class FlipEnum {
+  static HorizontalFlip = new FlipEnum(1);
+  static VerticalFlip = new FlipEnum(2);
+
+  constructor(id) {
+    this.id = id;
+  }
+}
+// Circular buffer to store the past X amount of frames.
+//
+class CircularBuffer {
+  constructor(size) {
+    this.instances = Array(size);
+    this.maxSize = size;
+    this.numFrames = 0;
+  }
+
+  get(index) {
+    if (index < 0 || index < this.numFrames - this.maxSize ||
+        index >= this.numFrames) {
+      return undefined;
+    }
+    return this.instances[index % this.maxSize];
+  }
+
+  push(frame) {
+    // Push frames into buffer
+    this.instances[this.numFrames % this.maxSize] = frame;
+    this.numFrames++;
+  }
+}
+
 // Represents a single frame, and contains all associated data.
 //
 class DrawFrame {
-  static instances = [];
-
-  static count() { return DrawFrame.instances.length; }
+  // Circular buffer supports 2^14 frames.
+  static maxBufferNumFrames = 16384;
+  static frameBuffer = new CircularBuffer(DrawFrame.maxBufferNumFrames);
+  static buffer_map = new Object();
+  static count() { return DrawFrame.frameBuffer.instances.length; }
 
   static get(index) {
-    const ins = DrawFrame.instances;
-    if (index < 0) return ins[index];
-    if (index >= ins.length) return ins[ins.length - 1];
-    return ins[index];
+    return DrawFrame.frameBuffer.get(index);
   }
 
   constructor(json) {
@@ -25,6 +58,24 @@ class DrawFrame {
     this.logs_ = json.logs;
     this.drawTexts_ = json.text;
     this.drawCalls_ = json.drawcalls.map(c => new DrawCall(c));
+    this.buffer_map = json.buff_map;
+
+    this.threadMapping_ = {}
+
+    json.threads.forEach(t => {
+      // If new thread has not been registered yet, then register it.
+      if (!(Thread.isThreadRegistered(t.thread_name))) {
+        new Thread(t);
+      };
+      // Map thread id's to all the thread information.
+      // Values are set by default when frame first comes in.
+      this.threadMapping_[t.thread_id] = {threadName: t.thread_name,
+                                           threadEnabled: true,
+                                           overrideFilters: false,
+                                           threadColor: "#000000",
+                                           threadAlpha: "10"};
+    });
+
     this.submissionFreezeIndex_ = -1;
     if (json.new_sources) {
       for (const s of json.new_sources) {
@@ -32,12 +83,48 @@ class DrawFrame {
       }
     }
 
+    for (let buff in this.buffer_map) {
+      let image = new ImageData(Uint8ClampedArray
+                                  .from(this.buffer_map[buff]["buffer"]),
+                                this.buffer_map[buff]["width"],
+                                this.buffer_map[buff]["height"]);
+      createImageBitmap(image)
+        .then(res => {
+          DrawFrame.buffer_map[buff] = res;
+          return res;
+        });
+    }
+
     // Retain the original JSON, so that the file can be saved to local disk.
     // Ideally, the JSON would be constructed on demand, but generating
     // |new_sources| requires some work. So for now, do the easy thing.
     this.json_ = json;
 
-    DrawFrame.instances.push(this);
+    DrawFrame.frameBuffer.push(this);
+
+    // Update scrubber as new frames come in
+    const scrubberFrame = document.querySelector('#scrubberframe');
+
+    scrubberFrame.max = DrawFrame.frameBuffer.numFrames - 1;
+
+    // Handle scrubber when # of frames reached cap of circular buffer.
+    if (DrawFrame.frameBuffer.numFrames > DrawFrame.frameBuffer.maxSize) {
+      const oldestFrameId = DrawFrame.frameBuffer.numFrames
+                            - DrawFrame.frameBuffer.maxSize;
+
+      scrubberFrame.min = oldestFrameId;
+      // Once the scrubber reaches the left very (oldest frame),
+      // update scrubber value to match scrubber min value and
+      // update drawing on canvas to match correspondingly.
+      if (scrubberFrame.value <= scrubberFrame.min) {
+        scrubberFrame.value = oldestFrameId;
+        Player.instance.forward();
+      }
+    }
+    // Handle scrubber when # of frames haven't yet reached buffer cap.
+    else {
+      scrubberFrame.min = 0;
+    }
   }
 
   submissionCount() {
@@ -49,9 +136,17 @@ class DrawFrame {
       (this.submissionCount() - 1);
   }
 
-  updateCanvasSize(canvas, scale) {
-    canvas.width = this.size_.width * scale;
-    canvas.height = this.size_.height * scale;
+  updateCanvasSize(canvas, scale, orientationDeg) {
+    // Swap canvas width/height for 90 or 270 deg rotations
+    if (orientationDeg === 90 || orientationDeg === 270) {
+      canvas.width = this.size_.height * scale;
+      canvas.height = this.size_.width * scale;
+    }
+    // Restore original canvas width/height for 0 or 180 deg rotations
+    else {
+      canvas.width = this.size_.width * scale;
+      canvas.height = this.size_.height * scale;
+    }
   }
 
   getFilter(source_index) {
@@ -73,40 +168,118 @@ class DrawFrame {
     return filter;
   }
 
-  draw(canvas, scale) {
+  draw(canvas, context, scale, orientationDeg) {
+    // Look at global state of all threads and copy those states
+    // to the current frame's threadID-to-state mapping.
+    for (const threadId of Object.keys(this.threadMapping_)) {
+      const mappedThread = this.threadMapping_[threadId];
+      mappedThread.threadEnabled =
+              Thread.getThread(mappedThread.threadName).enabled_;
+      mappedThread.threadColor =
+              Thread.getThread(mappedThread.threadName).drawColor_;
+      mappedThread.threadAlpha =
+              Thread.getThread(mappedThread.threadName).fillAlpha_;
+      mappedThread.overrideFilters =
+              Thread.getThread(mappedThread.threadName).overrideFilters_;
+    }
+
+    // Generate a transform from frame space to canvas space.
+    context.translate(canvas.width / 2, canvas.height / 2);
+    if (orientationDeg === FlipEnum.HorizontalFlip.id) {
+      context.scale(-1, 1);
+    } else if (orientationDeg === FlipEnum.VerticalFlip.id) {
+      context.scale(1, -1);
+    } else {
+      context.rotate(orientationDeg * Math.PI / 180);
+    }
+    context.scale(scale, scale);
+    context.translate(-this.size_.width / 2, -this.size_.height / 2);
+
     for (const call of this.drawCalls_) {
       if (call.drawIndex_ > this.submissionFreezeIndex()) break;
 
-      call.draw(canvas, scale);
+      // If thread not enabled, then skip draw call from this thread.
+      if (!this.threadMapping_[call.threadId_].threadEnabled) {
+        continue;
+      }
+
+      call.draw(context, DrawFrame.buffer_map,
+                this.threadMapping_[call.threadId_]);
     }
 
-    canvas.fillStyle = 'black';
-    canvas.font = "16px Courier bold";
-    canvas.fillText(this.num_, 3, 15);
+    // Get the current transform so that we can draw text in the right position
+    // without rotating or reflecting it.
+    const transformMatrix = context.getTransform();
+    context.resetTransform();
+
+    context.fillStyle = 'black';
+    context.font = "16px Courier bold";
+
+    const frameNumberPosX = 3;
+    const frameNumberPosY = 15;
+    this.drawText(context,
+                  this.num_,
+                  frameNumberPosX,
+                  frameNumberPosY,
+                  transformMatrix);
 
     for (const text of this.drawTexts_) {
+      // If thread not enabled, then skip text calls from this thread.
+      if (!this.threadMapping_[text.thread_id].threadEnabled) {
+        continue;
+      }
+
       if (text.drawindex > this.submissionFreezeIndex()) break;
 
-      let filter = this.getFilter(text.source_index);
-      if (!filter) continue;
+      var color;
+      // If thread is overriding, take thread color.
+      if (this.threadMapping_[text.thread_id].overrideFilters) {
+        color = this.threadMapping_[text.thread_id].threadColor;
+      }
+      // Otherwise, take filter's color.
+      else {
+        let filter = this.getFilter(text.source_index);
+        if (!filter) continue;
 
-      var color = (filter && filter.drawColor) ?
-        filter.drawColor : text.option.color;
-      canvas.fillStyle = color;
+        color = (filter && filter.drawColor) ?
+          filter.drawColor : text.option.color;
+      }
+      context.fillStyle = color;
       // TODO: This should also create some DrawText object or something.
-      canvas.fillText(text.text, text.pos[0] * scale, text.pos[1] * scale);
+      this.drawText(context,
+                    text.text,
+                    text.pos[0],
+                    text.pos[1],
+                    transformMatrix);
     }
+  }
+
+  // Draw text with a transformed position.
+  drawText(context, text, posX, posY, transformMatrix) {
+    // TODO: Set the text alignment based on the transform.
+    var newTextPos = transformMatrix.transformPoint(new DOMPoint(posX, posY));
+    context.fillText(text, newTextPos.x, newTextPos.y);
   }
 
   appendLogs(logContainer) {
     for (const log of this.logs_) {
       if (log.drawindex > this.submissionFreezeIndex()) break;
 
-      let filter = this.getFilter(log.source_index);
-      if (!filter) continue;
+      var color;
+      let filter;
+      // If thread is overriding, take thread color.
+      if (this.threadMapping_[log.thread_id].overrideFilters) {
+        color = this.threadMapping_[log.thread_id].threadColor;
+      }
+      // Otherwise, take filter's color.
+      else {
+        filter = this.getFilter(log.source_index);
+        if (!filter) continue;
 
-      var color = (filter && filter.drawColor) ?
-        filter.drawColor : log.option.color;
+        color = (filter && filter.drawColor) ?
+          filter.drawColor : log.option.color;
+      }
+
       var container = document.createElement("span");
       var new_node = document.createTextNode(log.value);
       container.style.color = color;
@@ -136,10 +309,13 @@ class Viewer {
   constructor(canvas, log) {
     this.canvas_ = canvas;
     this.logContainer_ = log;
-    this.drawContext_ = this.canvas_.getContext('2d');
+    this.drawContext_ = this.canvas_.getContext("2d");
 
     this.currentFrameIndex_ = -1;
     this.viewScale = 1.0;
+    this.viewOrientation = 0;
+    this.translationX = 0;
+    this.translationY = 0;
   }
 
   updateCurrentFrame() {
@@ -173,8 +349,11 @@ class Viewer {
   redrawCurrentFrame_() {
     const frame = this.getCurrentFrame();
     if (!frame) return;
-    frame.updateCanvasSize(this.canvas_, this.viewScale);
-    frame.draw(this.drawContext_, this.viewScale);
+    frame.updateCanvasSize(this.canvas_, this.viewScale, this.viewOrientation);
+    frame.draw(this.canvas_,
+               this.drawContext_,
+               this.viewScale,
+               this.viewOrientation);
   }
 
   updateLogs_() {
@@ -194,6 +373,10 @@ class Viewer {
     this.viewScale = scaleAsInt / 100.0;
   }
 
+  setViewerOrientation(orientationAsInt) {
+    this.viewOrientation = orientationAsInt;
+  }
+
   freezeFrame(frameIndex, drawIndex) {
     if (DrawFrame.get(frameIndex)) {
       this.currentFrameIndex_ = frameIndex;
@@ -205,6 +388,21 @@ class Viewer {
   unfreeze() {
     const frame = this.getCurrentFrame();
     if (frame) frame.unfreeze();
+  }
+
+  zoomToMouse(currentMouseX, currentMouseY, delta) {
+    var factor = 1.1;
+    if (delta > 0) {
+      factor = 0.9;
+    }
+    // this.translationX = currentMouseX;
+    // this.translationY = currentMouseY;
+    // this.updateCurrentFrame();
+    this.viewScale *= factor;
+    this.updateCurrentFrame();
+    // this.translationX = -currentMouseX;
+    // this.translationY = -currentMouseY;
+    // this.updateCurrentFrame();
   }
 };
 
@@ -266,6 +464,18 @@ class Player {
 
   setViewerScale(scaleAsString) {
     this.viewer_.setViewerScale(parseInt(scaleAsString));
+    this.refresh();
+  }
+
+  setViewerOrientation(orientationAsString) {
+    // Set orientationAsInt as selected orientation degree
+    // Horizontal Flip enum or Vertical Flip enum
+    const orientationAsInt = parseInt(orientationAsString) >= 0 ?
+      parseInt(orientationAsString) :
+      (orientationAsString === "Horizontal Flip" ?
+          FlipEnum.HorizontalFlip.id : FlipEnum.VerticalFlip.id);
+
+    this.viewer_.setViewerOrientation(orientationAsInt);
     this.refresh();
   }
 

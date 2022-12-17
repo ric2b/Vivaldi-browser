@@ -4,7 +4,6 @@
 
 #include "extensions/renderer/api/automation/automation_ax_tree_wrapper.h"
 
-#include "automation_ax_tree_wrapper.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/no_destructor.h"
@@ -14,7 +13,6 @@
 #include "extensions/renderer/api/automation/automation_internal_custom_bindings.h"
 #include "ui/accessibility/ax_language_detection.h"
 #include "ui/accessibility/ax_node_position.h"
-#include "ui/accessibility/ax_tree_manager_map.h"
 
 namespace extensions {
 
@@ -44,18 +42,10 @@ std::map<std::string, std::vector<AppNodeInfo>>& GetAppIDToTreeNodeMap() {
 AutomationAXTreeWrapper::AutomationAXTreeWrapper(
     ui::AXTreeID tree_id,
     AutomationInternalCustomBindings* owner)
-    : tree_id_(tree_id), owner_(owner), event_generator_(&tree_) {
-  tree_.AddObserver(this);
-  ui::AXTreeManagerMap::GetInstance().AddTreeManager(tree_id, this);
-  event_generator_.set_always_fire_load_complete(true);
-}
+    : ui::AXTreeManager(tree_id, std::make_unique<ui::AXTree>()),
+      owner_(owner) {}
 
-AutomationAXTreeWrapper::~AutomationAXTreeWrapper() {
-  // Stop observing so we don't get a callback for every node being deleted.
-  event_generator_.SetTree(nullptr);
-  tree_.RemoveObserver(this);
-  ui::AXTreeManagerMap::GetInstance().RemoveTreeManager(tree_id_);
-}
+AutomationAXTreeWrapper::~AutomationAXTreeWrapper() = default;
 
 // static
 AutomationAXTreeWrapper* AutomationAXTreeWrapper::GetParentOfTreeId(
@@ -80,7 +70,7 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
 
   std::map<ui::AXTreeID, AutomationAXTreeWrapper*>& child_tree_id_reverse_map =
       GetChildTreeIDReverseMap();
-  const auto& child_tree_ids = tree_.GetAllChildTreeIds();
+  const auto& child_tree_ids = ax_tree_->GetAllChildTreeIds();
 
   // Invalidate any reverse child tree id mappings. Note that it is possible
   // there are no entries in this map for a given child tree to |this|, if this
@@ -95,7 +85,7 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
     deleted_node_ids_.clear();
     did_send_tree_change_during_unserialization_ = false;
 
-    if (!tree_.Unserialize(update)) {
+    if (!ax_tree_->Unserialize(update)) {
       static crash_reporter::CrashKeyString<4> crash_key(
           "ax-tree-wrapper-unserialize-failed");
       crash_key.Set("yes");
@@ -104,18 +94,18 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
     }
 
     if (is_active_profile) {
-      owner_->SendNodesRemovedEvent(&tree_, deleted_node_ids_);
+      owner_->SendNodesRemovedEvent(ax_tree(), deleted_node_ids_);
 
       if (update.nodes.size() && did_send_tree_change_during_unserialization_) {
         owner_->SendTreeChangeEvent(
-            api::automation::TREE_CHANGE_TYPE_SUBTREEUPDATEEND, &tree_,
-            tree_.root());
+            api::automation::TREE_CHANGE_TYPE_SUBTREEUPDATEEND, ax_tree(),
+            ax_tree_->root());
       }
     }
   }
 
   // Refresh child tree id  mappings.
-  for (const ui::AXTreeID& tree_id : tree_.GetAllChildTreeIds()) {
+  for (const ui::AXTreeID& tree_id : ax_tree_->GetAllChildTreeIds()) {
     DCHECK(!base::Contains(child_tree_id_reverse_map, tree_id));
     child_tree_id_reverse_map.insert(std::make_pair(tree_id, this));
   }
@@ -134,18 +124,17 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
   // Currently language detection only runs once for initial load complete, any
   // content loaded after this will not have language detection performed for
   // it.
-  for (const auto& targeted_event : event_generator_) {
-    if (targeted_event.event_params.event ==
-        ui::AXEventGenerator::Event::LOAD_COMPLETE) {
-      tree_.language_detection_manager->DetectLanguages();
-      tree_.language_detection_manager->LabelLanguages();
+  for (const auto& event : event_bundle.events) {
+    if (event.event_type == ax::mojom::Event::kLoadComplete) {
+      ax_tree_->language_detection_manager->DetectLanguages();
+      ax_tree_->language_detection_manager->LabelLanguages();
 
       // After initial language detection, enable language detection for future
       // content updates in order to support dynamic content changes.
       //
       // If the LanguageDetectionDynamic feature flag is not enabled then this
       // is a no-op.
-      tree_.language_detection_manager->RegisterLanguageDetectionObserver();
+      ax_tree_->language_detection_manager->RegisterLanguageDetectionObserver();
 
       break;
     }
@@ -192,20 +181,21 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
 }
 
 bool AutomationAXTreeWrapper::IsDesktopTree() const {
-  return tree_.root() ? tree_.root()->GetRole() == ax::mojom::Role::kDesktop
-                      : false;
+  return ax_tree_->root()
+             ? ax_tree_->root()->GetRole() == ax::mojom::Role::kDesktop
+             : false;
 }
 
 bool AutomationAXTreeWrapper::HasDeviceScaleFactor() const {
-  return tree_.root() ?
-                      // These are views-backed trees.
-             tree_.root()->GetRole() != ax::mojom::Role::kDesktop &&
-                 tree_.root()->GetRole() != ax::mojom::Role::kClient
-                      : true;
+  return ax_tree_->root() ?
+                          // These are views-backed trees.
+             ax_tree_->root()->GetRole() != ax::mojom::Role::kDesktop &&
+                 ax_tree_->root()->GetRole() != ax::mojom::Role::kClient
+                          : true;
 }
 
 bool AutomationAXTreeWrapper::IsInFocusChain(int32_t node_id) {
-  if (tree()->data().focus_id != node_id)
+  if (ax_tree_->data().focus_id != node_id)
     return false;
 
   if (IsDesktopTree())
@@ -216,9 +206,9 @@ bool AutomationAXTreeWrapper::IsInFocusChain(int32_t node_id) {
   AutomationAXTreeWrapper* ancestor_tree = descendant_tree;
   bool found = true;
   while ((ancestor_tree = ancestor_tree->GetParentTree())) {
-    int32_t ancestor_tree_focus_id = ancestor_tree->tree()->data().focus_id;
+    int32_t ancestor_tree_focus_id = ancestor_tree->ax_tree()->data().focus_id;
     ui::AXNode* ancestor_tree_focused_node =
-        ancestor_tree->tree()->GetFromId(ancestor_tree_focus_id);
+        ancestor_tree->ax_tree()->GetFromId(ancestor_tree_focus_id);
     if (!ancestor_tree_focused_node)
       return false;
 
@@ -237,7 +227,7 @@ bool AutomationAXTreeWrapper::IsInFocusChain(int32_t node_id) {
                    ancestor_tree_focused_node->GetStringAttribute(
                        ax::mojom::StringAttribute::kChildTreeId)) !=
                    descendant_tree_id &&
-               ancestor_tree->tree()->data().focused_tree_id !=
+               ancestor_tree->ax_tree()->data().focused_tree_id !=
                    descendant_tree_id) {
       // Surprisingly, an ancestor frame can "skip" a child frame to point to a
       // descendant granchild, so we have to scan upwards.
@@ -261,11 +251,11 @@ bool AutomationAXTreeWrapper::IsInFocusChain(int32_t node_id) {
 }
 
 ui::AXTree::Selection AutomationAXTreeWrapper::GetUnignoredSelection() {
-  return tree()->GetUnignoredSelection();
+  return ax_tree_->GetUnignoredSelection();
 }
 
 ui::AXNode* AutomationAXTreeWrapper::GetUnignoredNodeFromId(int32_t id) {
-  ui::AXNode* node = tree_.GetFromId(id);
+  ui::AXNode* node = ax_tree_->GetFromId(id);
   return (node && !node->IsIgnored()) ? node : nullptr;
 }
 
@@ -276,12 +266,12 @@ void AutomationAXTreeWrapper::SetAccessibilityFocus(int32_t node_id) {
 ui::AXNode* AutomationAXTreeWrapper::GetAccessibilityFocusedNode() {
   return accessibility_focused_id_ == ui::kInvalidAXNodeID
              ? nullptr
-             : tree_.GetFromId(accessibility_focused_id_);
+             : ax_tree_->GetFromId(accessibility_focused_id_);
 }
 
 AutomationAXTreeWrapper* AutomationAXTreeWrapper::GetParentTree() {
   // Explicit parent tree from this tree's data.
-  auto* ret = GetParentOfTreeId(tree()->data().tree_id);
+  auto* ret = GetParentOfTreeId(ax_tree_->data().tree_id);
 
   // If this tree has multiple roots, and no explicit parent tree, fallback to
   // any node with a parent tree node app id to find a parent tree.
@@ -367,7 +357,7 @@ ui::AXNode* AutomationAXTreeWrapper::GetParentTreeNodeForAppID(
   if (!wrapper)
     return nullptr;
 
-  return wrapper->tree()->GetFromId(it->second.second);
+  return wrapper->ax_tree()->GetFromId(it->second.second);
 }
 
 // static
@@ -398,7 +388,7 @@ std::vector<ui::AXNode*> AutomationAXTreeWrapper::GetChildTreeNodesForAppID(
     if (!wrapper)
       continue;
 
-    nodes.push_back(wrapper->tree()->GetFromId(app_node_info.node_id));
+    nodes.push_back(wrapper->ax_tree()->GetFromId(app_node_info.node_id));
   }
 
   return nodes;
@@ -500,7 +490,7 @@ void AutomationAXTreeWrapper::OnAtomicUpdateFinished(
     ui::AXTree* tree,
     bool root_changed,
     const std::vector<ui::AXTreeObserver::Change>& changes) {
-  DCHECK_EQ(&tree_, tree);
+  DCHECK_EQ(ax_tree(), tree);
   for (const auto& change : changes) {
     ui::AXNode* node = change.node;
     switch (change.type) {
@@ -568,32 +558,20 @@ ui::AXNode* AutomationAXTreeWrapper::GetNodeFromTree(
 
 ui::AXNode* AutomationAXTreeWrapper::GetNodeFromTree(
     const ui::AXNodeID node_id) const {
-  return tree_.GetFromId(node_id);
-}
-
-ui::AXTreeID AutomationAXTreeWrapper::GetTreeID() const {
-  return tree_id_;
+  return ax_tree_->GetFromId(node_id);
 }
 
 ui::AXTreeID AutomationAXTreeWrapper::GetParentTreeID() const {
-  AutomationAXTreeWrapper* parent_tree = GetParentOfTreeId(tree_id_);
+  AutomationAXTreeWrapper* parent_tree = GetParentOfTreeId(ax_tree_id_);
   return parent_tree ? parent_tree->GetTreeID() : ui::AXTreeIDUnknown();
-}
-
-ui::AXNode* AutomationAXTreeWrapper::GetRootAsAXNode() const {
-  return tree_.root();
 }
 
 ui::AXNode* AutomationAXTreeWrapper::GetParentNodeFromParentTreeAsAXNode()
     const {
   AutomationAXTreeWrapper* wrapper = const_cast<AutomationAXTreeWrapper*>(this);
-  return owner_->GetParent(tree_.root(), &wrapper,
+  return owner_->GetParent(ax_tree_->root(), &wrapper,
                            /* should_use_app_id = */ true,
                            /* requires_unignored = */ false);
-}
-
-std::string AutomationAXTreeWrapper::ToString() const {
-  return "<AutomationAXTreeWrapper>";
 }
 
 }  // namespace extensions

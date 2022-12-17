@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/fingerprint_setup_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/guest_tos_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/marketing_opt_in_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/pin_setup_screen_handler.h"
@@ -202,6 +203,14 @@ void TapConsolidatedConsentAccept() {
   OobeJS().TapOnPath({"consolidated-consent", "acceptButton"});
 }
 
+void WaitForGuestTosScreen() {
+  WaitFor(GuestTosScreenView::kScreenId);
+}
+
+void TapGuestTosAccept() {
+  OobeJS().TapOnPath({"guest-tos", "acceptButton"});
+}
+
 void ClickSignInFatalScreenActionButton() {
   OobeJS().ClickOnPath({"signin-fatal-error", "actionButton"});
 }
@@ -251,10 +260,10 @@ void OobeUiDestroyedWaiter::Wait() {
 
   ASSERT_TRUE(was_destroyed_)
       << "Timed out while waiting for OobeUI to be destroyed!";
-  oobe_ui_observation_.Reset();
 }
 
 void OobeUiDestroyedWaiter::OnDestroyingOobeUI() {
+  oobe_ui_observation_.Reset();
   was_destroyed_ = true;
   run_loop_->Quit();
 }

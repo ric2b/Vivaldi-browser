@@ -9,6 +9,10 @@
 
 #include <string>
 
+#include "base/bind.h"
+#include "base/callback.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/timer/elapsed_timer.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
@@ -403,7 +407,9 @@ enum class PasswordDropdownSelectedOption {
   kResigninToUnlockAccountStore = 5,
   // User selected a WebAuthn credential.
   kWebAuthn = 6,
-  kMaxValue = kWebAuthn
+  // User selected the "Sign in with another device" button.
+  kWebAuthnSignInWithAnotherDevice = 7,
+  kMaxValue = kWebAuthnSignInWithAnotherDevice
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -456,8 +462,26 @@ enum class PasswordCheckInteraction {
   kShowPassword = 6,
   kMutePassword = 7,
   kUnmutePassword = 8,
+  kChangePasswordAutomatically = 9,
   // Must be last.
-  kMaxValue = kUnmutePassword,
+  kMaxValue = kChangePasswordAutomatically,
+};
+
+// Represents the (automatic password change) scripts cache state and the UI
+// reaction to it encountered on opening the password check subpage on Desktop.
+// These values are persisted to logs. Always keep this enum in sync with the
+// corresponding `PasswordCheckScriptsCacheState` in enums.xml.
+enum class PasswordCheckScriptsCacheState {
+  // The cache is already fresh and does not need to be refetched.
+  kCacheFresh = 0,
+  // The cache is stale, but none of the credentials has a password change
+  // script and therefore no UI update was triggered.
+  kCacheStaleAndNoUiUpdate = 1,
+  // The cache is stale and at least one of the credential has a password change
+  // script. A UI update was triggered (but, if the credential was already known
+  // to be compromised, the UI may not have changed).
+  kCacheStaleAndUiUpdate = 2,
+  kMaxValue = kCacheStaleAndUiUpdate
 };
 
 // Represents different user interactions related to adding credential from the
@@ -783,6 +807,22 @@ void LogUserInteractionsWhenAddingCredentialFromSettings(
 // Log how the user interaction with the note field in password add / edit
 // dialogs.
 void LogPasswordNoteActionInSettings(PasswordNoteAction action);
+
+// Wraps |callback| into another callback that measures the elapsed time between
+// construction and actual execution of the callback. Records the result to
+// |histogram|, which is expected to be a char literal.
+template <typename R, typename... Args>
+base::OnceCallback<R(Args...)> TimeCallback(
+    base::OnceCallback<R(Args...)> callback,
+    const char* histogram) {
+  return base::BindOnce(
+      [](const char* histogram, const base::ElapsedTimer& timer,
+         base::OnceCallback<R(Args...)> callback, Args... args) {
+        base::UmaHistogramTimes(histogram, timer.Elapsed());
+        return std::move(callback).Run(std::forward<Args>(args)...);
+      },
+      histogram, base::ElapsedTimer(), std::move(callback));
+}
 
 }  // namespace metrics_util
 

@@ -140,6 +140,8 @@ SSLConfigServiceManager::SSLConfigServiceManager(PrefService* local_state) {
       prefs::kH2ClientCertCoalescingHosts, local_state, local_state_callback);
   cecpq2_enabled_.Init(prefs::kCECPQ2Enabled, local_state,
                        local_state_callback);
+  ech_enabled_.Init(prefs::kEncryptedClientHelloEnabled, local_state,
+                    local_state_callback);
 
   local_state_change_registrar_.Init(local_state);
   local_state_change_registrar_.Add(prefs::kCipherSuiteBlacklist,
@@ -170,6 +172,8 @@ void SSLConfigServiceManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(prefs::kH2ClientCertCoalescingHosts);
   registry->RegisterBooleanPref(prefs::kCECPQ2Enabled,
                                 default_context_config.cecpq2_enabled);
+  registry->RegisterBooleanPref(prefs::kEncryptedClientHelloEnabled,
+                                default_context_config.ech_enabled);
 }
 
 void SSLConfigServiceManager::AddToNetworkContextParams(
@@ -237,6 +241,7 @@ network::mojom::SSLConfigPtr SSLConfigServiceManager::GetSSLConfigFromPrefs()
   // is especially conservative.
   config->cecpq2_enabled =
       cecpq2_enabled_.GetValue() && variations_unrestricted_;
+  config->ech_enabled = ech_enabled_.GetValue();
 
   return config;
 }

@@ -52,22 +52,21 @@ class DisplayOverlayControllerTest : public exo::test::ExoTestBase {
   }
 
  protected:
-  std::unique_ptr<input_overlay::test::ArcTestWindow> arc_test_window_;
+  std::unique_ptr<test::ArcTestWindow> arc_test_window_;
   std::unique_ptr<DisplayOverlayController> controller_;
 
  private:
   void SetUp() override {
     exo::test::ExoTestBase::SetUp();
-    arc_test_window_ = std::make_unique<input_overlay::test::ArcTestWindow>(
+    arc_test_window_ = std::make_unique<test::ArcTestWindow>(
         exo_test_helper(), ash::Shell::GetPrimaryRootWindow(),
         "org.chromium.arc.testapp.inputoverlay");
     injector_ = std::make_unique<TouchInjector>(
         arc_test_window_->GetWindow(),
         base::BindLambdaForTesting(
             [&](std::unique_ptr<AppDataProto>, const std::string&) {}));
-    base::JSONReader::ValueWithError json_value =
-        base::JSONReader::ReadAndReturnValueWithError(kValidJson);
-    injector_->ParseActions(json_value.value.value());
+    auto json_value = base::JSONReader::ReadAndReturnValueWithError(kValidJson);
+    injector_->ParseActions(*json_value);
     controller_ =
         std::make_unique<DisplayOverlayController>(injector_.get(), false);
   }

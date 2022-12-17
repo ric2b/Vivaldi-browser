@@ -10,9 +10,13 @@
 #include "chrome/browser/ui/side_search/side_search_config.h"
 #include "chrome/browser/ui/side_search/side_search_metrics.h"
 #include "chrome/browser/ui/side_search/side_search_tab_contents_helper.h"
+#include "chrome/browser/ui/side_search/side_search_utils.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/side_search/default_search_icon_source.h"
 #include "chrome/browser/ui/views/side_search/side_search_browser_controller.h"
+#include "chrome/browser/ui/views/side_search/side_search_views_utils.h"
+#include "chrome/browser/ui/views/side_search/unified_side_search_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
@@ -33,10 +37,11 @@ SideSearchIconView::SideSearchIconView(
                          icon_label_bubble_delegate,
                          page_action_icon_delegate),
       browser_(browser),
-      default_search_icon_source_(
-          browser,
-          base::BindRepeating(&SideSearchIconView::UpdateIconImage,
-                              base::Unretained(this))) {
+      icon_changed_subscription_(
+          DefaultSearchIconSource::GetOrCreateForBrowser(browser)
+              ->RegisterIconChangedSubscription(
+                  base::BindRepeating(&SideSearchIconView::UpdateIconImage,
+                                      base::Unretained(this)))) {
   image()->SetFlipCanvasOnPaintForRTLUI(false);
   SetProperty(views::kElementIdentifierKey, kSideSearchButtonElementId);
   SetVisible(false);
@@ -80,10 +85,17 @@ void SideSearchIconView::UpdateImpl() {
     return;
 
   auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+
+  // TODO(crbug.com/1339789): BrowserView should never be null here, investigate
+  // why GetBrowserViewForBrowser() is returning null in certain circumstances
+  // and remove this check.
+  if (!browser_view)
+    return;
+
   const bool was_visible = GetVisible();
   const bool should_show =
       tab_contents_helper->CanShowSidePanelForCommittedNavigation() &&
-      !tab_contents_helper->toggled_open();
+      !side_search::IsSideSearchToggleOpen(browser_view);
   SetVisible(should_show);
 
   if (should_show && !was_visible) {
@@ -91,7 +103,7 @@ void SideSearchIconView::UpdateImpl() {
       SetPageActionLabelShown();
       should_extend_label_shown_duration_ = true;
       AnimateIn(absl::nullopt);
-    } else if (tab_contents_helper->returned_to_previous_srp()) {
+    } else if (tab_contents_helper->returned_to_previous_srp_count() > 0) {
       // If we are not animating-in the label text make a request to show the
       // IPH if we detect the user may be engaging in a pogo-sticking journey.
       browser_view->MaybeShowFeaturePromo(
@@ -106,8 +118,6 @@ void SideSearchIconView::UpdateImpl() {
 }
 
 void SideSearchIconView::OnExecuting(PageActionIconView::ExecuteSource source) {
-  auto* side_search_browser_controller =
-      BrowserView::GetBrowserViewForBrowser(browser_)->side_search_controller();
   RecordSideSearchPageActionLabelVisibilityOnToggle(
       label()->GetVisible() ? SideSearchPageActionLabelVisibility::kVisible
                             : SideSearchPageActionLabelVisibility::kNotVisible);
@@ -115,8 +125,21 @@ void SideSearchIconView::OnExecuting(PageActionIconView::ExecuteSource source) {
   // Reset the slide animation if in progress.
   HidePageActionLabel();
 
-  side_search_browser_controller->ToggleSidePanel();
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
 
+  // TODO(crbug.com/1339789): BrowserView should never be null here, investigate
+  // why GetBrowserViewForBrowser() is returning null in certain circumstances
+  // and remove this check.
+  if (!browser_view)
+    return;
+
+  if (base::FeatureList::IsEnabled(features::kUnifiedSidePanel)) {
+    browser_view->side_panel_coordinator()->Show(
+        SidePanelEntry::Id::kSideSearch,
+        SidePanelUtil::SidePanelOpenTrigger::kSideSearchPageAction);
+  } else {
+    browser_view->side_search_controller()->ToggleSidePanel();
+  }
   auto* tracker = feature_engagement::TrackerFactory::GetForBrowserContext(
       browser_->profile());
   if (tracker)
@@ -133,7 +156,8 @@ const gfx::VectorIcon& SideSearchIconView::GetVectorIcon() const {
 }
 
 ui::ImageModel SideSearchIconView::GetSizedIconImage(int size) const {
-  return default_search_icon_source_.GetSizedIconImage(size);
+  return DefaultSearchIconSource::GetOrCreateForBrowser(browser_)
+      ->GetSizedIconImage(size);
 }
 
 std::u16string SideSearchIconView::GetTextForTooltipAndAccessibleName() const {

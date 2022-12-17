@@ -13,7 +13,6 @@
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_path_reservation_tracker.h"
-#include "components/download/public/common/download_schedule.h"
 #include "components/download/public/common/download_utils.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -51,10 +50,16 @@ class DownloadTargetDeterminerDelegate {
   //    selection, then this parameter will be the empty path. On Chrome OS,
   //    this path may contain virtual mount points if the user chose a virtual
   //    path (e.g. Google Drive).
-  using ConfirmationCallback = base::OnceCallback<void(
-      DownloadConfirmationResult,
-      const base::FilePath& virtual_path,
-      absl::optional<download::DownloadSchedule> download_schedule)>;
+  using ConfirmationCallback =
+      base::OnceCallback<void(DownloadConfirmationResult,
+                              const base::FilePath& virtual_path)>;
+
+  // Callback to be invoked when RequestIncognitoWarningConfirmation()
+  // completes.
+  // |accepted|: boolean saying if user accepted or the prompt was
+  // dismissed.
+  using IncognitoWarningConfirmationCallback =
+      base::OnceCallback<void(bool /*accepted*/)>;
 
   // Callback to be invoked after CheckDownloadUrl() completes. The parameter to
   // the callback should indicate the danger type of the download based on the
@@ -108,7 +113,12 @@ class DownloadTargetDeterminerDelegate {
                                    const base::FilePath& virtual_path,
                                    DownloadConfirmationReason reason,
                                    ConfirmationCallback callback) = 0;
-
+#if BUILDFLAG(IS_ANDROID)
+  // Display a message prompt to the user containing an incognito warning.
+  // Should invoke |callback| upon completion.
+  virtual void RequestIncognitoWarningConfirmation(
+      IncognitoWarningConfirmationCallback callback) = 0;
+#endif
   // If |virtual_path| is not a local path, should return a possibly temporary
   // local path to use for storing the downloaded file. If |virtual_path| is
   // already local, then it should return the same path. |callback| should be

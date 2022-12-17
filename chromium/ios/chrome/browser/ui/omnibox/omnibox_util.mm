@@ -17,7 +17,7 @@
 namespace {
 
 // The size of symbol images.
-NSInteger kSymbolLocationBarPointSize = 10;
+const CGFloat kSymbolLocationBarPointSize = 10;
 
 }  // namespace
 
@@ -42,13 +42,14 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
     case AutocompleteMatchType::URL_WHAT_YOU_TYPED:
     case AutocompleteMatchType::DOCUMENT_SUGGESTION:
     case AutocompleteMatchType::PEDAL_DEPRECATED:
-      return DEFAULT_FAVICON;
     case AutocompleteMatchType::HISTORY_BODY:
     case AutocompleteMatchType::HISTORY_KEYWORD:
     case AutocompleteMatchType::HISTORY_TITLE:
     case AutocompleteMatchType::HISTORY_URL:
     case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
     case AutocompleteMatchType::OPEN_TAB:
+    case AutocompleteMatchType::HISTORY_CLUSTER:
+    case AutocompleteMatchType::STARTER_PACK:
       return DEFAULT_FAVICON;
     case AutocompleteMatchType::CONTACT_DEPRECATED:
     case AutocompleteMatchType::SEARCH_OTHER_ENGINE:
@@ -69,6 +70,7 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
     case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:
     case AutocompleteMatchType::TILE_SUGGESTION:
     case AutocompleteMatchType::TILE_NAVSUGGEST:
+    case AutocompleteMatchType::NULL_RESULT_MESSAGE:
     case AutocompleteMatchType::NUM_TYPES:
       NOTREACHED();
       return DEFAULT_FAVICON;
@@ -97,7 +99,7 @@ UIImage* GetLocationBarSecurityIcon(LocationBarSecurityIconType iconType) {
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
-// Converts the |security_level| to an appropriate security icon type.
+// Converts the `security_level` to an appropriate security icon type.
 LocationBarSecurityIconType GetLocationBarSecurityIconTypeForSecurityState(
     security_state::SecurityLevel security_level) {
   switch (security_level) {
@@ -115,7 +117,7 @@ LocationBarSecurityIconType GetLocationBarSecurityIconTypeForSecurityState(
   }
 }
 
-// Converts the |security_level| to an appropriate icon in "always template"
+// Converts the `security_level` to an appropriate icon in "always template"
 // rendering mode.
 UIImage* GetLocationBarSecurityIconForSecurityState(
     security_state::SecurityLevel security_level) {

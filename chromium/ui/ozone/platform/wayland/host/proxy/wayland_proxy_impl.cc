@@ -49,9 +49,17 @@ wl_surface* WaylandProxyImpl::GetWlSurfaceForAcceleratedWidget(
   return window->root_surface()->surface();
 }
 
+ui::WaylandWindow* WaylandProxyImpl::GetWaylandWindowForAcceleratedWidget(
+    gfx::AcceleratedWidget widget) {
+  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
+  DCHECK(window);
+  return window;
+}
+
 wl_buffer* WaylandProxyImpl::CreateShmBasedWlBuffer(
     const gfx::Size& buffer_size) {
-  ui::WaylandShmBuffer shm_buffer(connection_->shm(), buffer_size);
+  ui::WaylandShmBuffer shm_buffer(connection_->wayland_buffer_factory(),
+                                  buffer_size);
   auto* wlbuffer = shm_buffer.get();
   DCHECK(wlbuffer);
   shm_buffers_.emplace_back(std::move(shm_buffer));
@@ -70,6 +78,10 @@ void WaylandProxyImpl::ScheduleDisplayFlush() {
   connection_->ScheduleFlush();
 }
 
+void WaylandProxyImpl::FlushForTesting() {
+  connection_->Flush();
+}
+
 ui::PlatformWindowType WaylandProxyImpl::GetWindowType(
     gfx::AcceleratedWidget widget) {
   auto* window = connection_->wayland_window_manager()->GetWindow(widget);
@@ -77,22 +89,16 @@ ui::PlatformWindowType WaylandProxyImpl::GetWindowType(
   return window->type();
 }
 
-gfx::Rect WaylandProxyImpl::GetWindowBounds(gfx::AcceleratedWidget widget) {
-  auto* window = connection_->wayland_window_manager()->GetWindow(widget);
-  DCHECK(window);
-  return window->GetBoundsInPixels();
-}
-
 bool WaylandProxyImpl::WindowHasPointerFocus(gfx::AcceleratedWidget widget) {
   auto* window = connection_->wayland_window_manager()->GetWindow(widget);
   DCHECK(window);
-  return window->has_pointer_focus();
+  return window->HasPointerFocus();
 }
 
 bool WaylandProxyImpl::WindowHasKeyboardFocus(gfx::AcceleratedWidget widget) {
   auto* window = connection_->wayland_window_manager()->GetWindow(widget);
   DCHECK(window);
-  return window->has_keyboard_focus();
+  return window->HasKeyboardFocus();
 }
 
 void WaylandProxyImpl::OnWindowAdded(ui::WaylandWindow* window) {
@@ -109,6 +115,11 @@ void WaylandProxyImpl::OnWindowConfigured(ui::WaylandWindow* window) {
   DCHECK(delegate_);
   delegate_->OnWindowConfigured(window->GetWidget(),
                                 window->IsSurfaceConfigured());
+}
+
+void WaylandProxyImpl::OnWindowRoleAssigned(ui::WaylandWindow* window) {
+  DCHECK(delegate_);
+  delegate_->OnWindowRoleAssigned(window->GetWidget());
 }
 
 }  // namespace wl

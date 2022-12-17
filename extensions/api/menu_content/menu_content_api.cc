@@ -248,7 +248,8 @@ ExtensionFunction::ResponseAction MenuContentMoveFunction::Run() {
     success = true;
     Menu_Node* parent =
         pair.second->root_node().GetById(GetIdFromString(params->parent_id));
-    int index = params->index < 0 ? parent->children().size() : params->index;
+    uint64_t index =
+        params->index < 0 ? parent->children().size() : params->index;
     for (auto& id : params->ids) {
       Menu_Node* node = pair.first->GetById(GetIdFromString(id));
       if (!node) {
@@ -258,8 +259,8 @@ ExtensionFunction::ResponseAction MenuContentMoveFunction::Run() {
       // stepping the target index once one element has been added to the model.
       // Needed when moving items into another folder (parent differs) or when
       // moving towards the start of the list in the same folder.
-      bool step =
-          node->parent() != parent || node->parent()->GetIndexOf(node) > index;
+      bool step = node->parent() != parent ||
+                  node->parent()->GetIndexOf(node).value() > index;
       pair.second->Move(node, parent, index);
       if (step) {
         index++;

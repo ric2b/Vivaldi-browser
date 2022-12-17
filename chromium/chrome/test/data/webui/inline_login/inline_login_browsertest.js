@@ -22,7 +22,7 @@ var InlineLoginBrowserTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_test.js&reason=5';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_test.js&reason=5&host=test';
   }
 
   get suiteName() {
@@ -52,7 +52,7 @@ TEST_F('InlineLoginBrowserTest', 'BackButton', function() {
 });
 
 GEN('#if BUILDFLAG(IS_CHROMEOS_ASH)');
-// TODO(crbug.com/1275568): Merge this test suite with the test above after the
+// TODO(crbug.com/1347746): Merge this test suite with the test above after the
 // feature is launched.
 // eslint-disable-next-line no-var
 var InlineLoginBrowserTestWithArcAccountRestrictionsEnabled =
@@ -61,9 +61,8 @@ var InlineLoginBrowserTestWithArcAccountRestrictionsEnabled =
   get featureList() {
     return {
       enabled: [
-        'chromeos::features::kArcAccountRestrictions',
-        'chromeos::features::kLacrosSupport'
-      ]
+        'chromeos::features::kLacrosSupport',
+      ],
     };
   }
 };
@@ -97,20 +96,11 @@ var InlineLoginWelcomePageBrowserTest = class extends InlineLoginBrowserTest {
   /** @override */
   get browsePreload() {
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_welcome_page_test.js&reason=5';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_welcome_page_test.js&reason=5&host=test';
   }
 
   get suiteName() {
     return inline_login_welcome_page_test.suiteName;
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      disabled: [
-        'chromeos::features::kArcAccountRestrictions',
-      ]
-    };
   }
 };
 
@@ -130,7 +120,7 @@ TEST_F('InlineLoginWelcomePageBrowserTest', 'GoBack', function() {
   this.runMochaTest(inline_login_welcome_page_test.TestNames.GoBack);
 });
 
-// TODO(crbug.com/1275568): Make this test the default one, and remove the test
+// TODO(crbug.com/1347746): Make this test the default one, and remove the test
 // suite above when the feature is enabled by default.
 // eslint-disable-next-line no-var
 var InlineLoginWelcomePageBrowserTestWithArcAccountRestrictionsEnabled =
@@ -139,9 +129,8 @@ var InlineLoginWelcomePageBrowserTestWithArcAccountRestrictionsEnabled =
   get featureList() {
     return {
       enabled: [
-        'chromeos::features::kArcAccountRestrictions',
-        'chromeos::features::kLacrosSupport'
-      ]
+        'chromeos::features::kLacrosSupport',
+      ],
     };
   }
 };
@@ -190,7 +179,7 @@ var InlineLoginArcAccountPickerBrowserTest =
   /** @override */
   get browsePreload() {
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/arc_account_picker_page_test.js&reason=5';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/arc_account_picker_page_test.js&reason=5&host=test';
   }
 
   get suiteName() {
@@ -201,9 +190,8 @@ var InlineLoginArcAccountPickerBrowserTest =
   get featureList() {
     return {
       enabled: [
-        'chromeos::features::kArcAccountRestrictions',
-        'chromeos::features::kLacrosSupport'
-      ]
+        'chromeos::features::kLacrosSupport',
+      ],
     };
   }
 };
@@ -242,7 +230,7 @@ var InlineLoginSigninBlockedByPolicyPageBrowserTest =
   get browsePreload() {
     // Reason 1: Add secondary account.
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_signin_blocked_by_policy_page_test.js&reason=1';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_signin_blocked_by_policy_page_test.js&reason=1&host=test';
   }
 
   get suiteName() {

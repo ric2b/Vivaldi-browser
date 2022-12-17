@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "ash/ambient/ambient_view_delegate_impl.h"
+#include "ash/ambient/metrics/ambient_multi_screen_metrics_recorder.h"
 #include "ash/ambient/model/ambient_animation_attribution_provider.h"
 #include "ash/ambient/model/ambient_backend_model.h"
 #include "ash/ambient/model/ambient_photo_config.h"
@@ -85,10 +86,26 @@ constexpr SkColor kDarkModeShieldColor =
 void LogCompositorThroughput(AmbientAnimationTheme theme, int smoothness) {
   // Use VLOG instead of DVLOG since this log is performance-related and
   // developers will almost certainly only care about this log on non-debug
-  // builds. The overhead of "--vmodule" regex matching is very minor so far to
-  // performance/CPU.
+  // builds.
   VLOG(1) << "Compositor throughput report: smoothness=" << smoothness;
   ambient::RecordAmbientModeAnimationSmoothness(smoothness, theme);
+}
+
+void OnCompositorThroughputReported(
+    base::TimeTicks logging_start_time,
+    AmbientAnimationTheme theme,
+    const cc::FrameSequenceMetrics::CustomReportData& data) {
+  base::TimeDelta duration = base::TimeTicks::Now() - logging_start_time;
+  float duration_sec = duration.InSecondsF();
+  VLOG(1) << "Compositor throughput report: frames_expected="
+          << data.frames_expected << " frames_produced=" << data.frames_produced
+          << " jank_count=" << data.jank_count
+          << " expected_fps=" << data.frames_expected / duration_sec
+          << " actual_fps=" << data.frames_produced / duration_sec
+          << " duration=" << duration;
+  metrics_util::ForSmoothness(
+      base::BindRepeating(&LogCompositorThroughput, theme))
+      .Run(data);
 }
 
 // Returns the maximum possible displacement in either dimension from the
@@ -158,20 +175,24 @@ std::unique_ptr<views::Border> CreateMediaStringBorder(
 
 AmbientAnimationView::AmbientAnimationView(
     AmbientViewDelegateImpl* view_delegate,
-    std::unique_ptr<const AmbientAnimationStaticResources> static_resources)
+    AmbientAnimationProgressTracker* progress_tracker,
+    std::unique_ptr<const AmbientAnimationStaticResources> static_resources,
+    AmbientMultiScreenMetricsRecorder* multi_screen_metrics_recorder)
     : view_delegate_(view_delegate),
+      progress_tracker_(progress_tracker),
       static_resources_(std::move(static_resources)),
       animation_photo_provider_(static_resources_.get(),
                                 view_delegate->GetAmbientBackendModel()),
       animation_jitter_calculator_(kAnimationJitterConfig) {
   DCHECK(view_delegate_);
   SetID(AmbientViewID::kAmbientAnimationView);
-  Init();
+  Init(multi_screen_metrics_recorder);
 }
 
 AmbientAnimationView::~AmbientAnimationView() = default;
 
-void AmbientAnimationView::Init() {
+void AmbientAnimationView::Init(
+    AmbientMultiScreenMetricsRecorder* multi_screen_metrics_recorder) {
   SetUseDefaultFillLayout(true);
 
   views::View* animation_container_view =
@@ -194,6 +215,8 @@ void AmbientAnimationView::Init() {
       static_resources_->GetSkottieWrapper(), cc::SkottieColorMap(),
       &animation_photo_provider_);
   animation_observer_.Observe(animation.get());
+  DCHECK(multi_screen_metrics_recorder);
+  multi_screen_metrics_recorder->RegisterScreen(animation.get());
   animated_image_view_->SetAnimatedImage(std::move(animation));
   animated_image_view_observer_.Observe(animated_image_view_);
   animation_attribution_provider_ =
@@ -351,8 +374,8 @@ void AmbientAnimationView::StartPlayingAnimation() {
   animation_player_.reset();
   // |animated_image_view_| is owned by the base |View| class and outlives the
   // |animation_player_|, so it's safe to pass a raw ptr here.
-  animation_player_ =
-      std::make_unique<AmbientAnimationPlayer>(animated_image_view_);
+  animation_player_ = std::make_unique<AmbientAnimationPlayer>(
+      animated_image_view_, progress_tracker_.get());
   view_delegate_->NotifyObserversMarkerHit(
       AmbientPhotoConfig::Marker::kUiStartRendering);
   last_jitter_timestamp_ = base::TimeTicks::Now();
@@ -369,9 +392,10 @@ void AmbientAnimationView::RestartThroughputTracking() {
   ui::Compositor* compositor = widget->GetCompositor();
   DCHECK(compositor);
   throughput_tracker_ = compositor->RequestNewThroughputTracker();
-  throughput_tracker_->Start(metrics_util::ForSmoothness(
-      base::BindRepeating(&LogCompositorThroughput,
-                          static_resources_->GetAmbientAnimationTheme())));
+  throughput_tracker_->Start(
+      base::BindOnce(&OnCompositorThroughputReported,
+                     /*logging_start_time=*/base::TimeTicks::Now(),
+                     static_resources_->GetAmbientAnimationTheme()));
 }
 
 void AmbientAnimationView::ApplyJitter() {

@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 import './icons.html.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/icons.m.js';
@@ -98,6 +98,12 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
 
       isMalware_: {
         computed: 'computeIsMalware_(isDangerous_, data.dangerType)',
+        type: Boolean,
+        value: false,
+      },
+
+      isReviewable_: {
+        computed: 'computeIsReviewable_(data.isReviewable)',
         type: Boolean,
         value: false,
       },
@@ -402,6 +408,10 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
          this.data.dangerType === DangerType.DANGEROUS_ACCOUNT_COMPROMISE);
   }
 
+  private computeIsReviewable_(): boolean {
+    return this.data.isReviewable;
+  }
+
   private toggleButtonClass_() {
     this.shadowRoot!.querySelector('#pauseOrResume')!.classList.toggle(
         'action-button',
@@ -528,6 +538,10 @@ export class DownloadsItemElement extends DownloadsItemElementBase {
 
   private onOpenNowTap_() {
     this.mojoHandler_!.openDuringScanningRequiringGesture(this.data.id);
+  }
+
+  private onReviewDangerousTap_() {
+    this.mojoHandler_!.reviewDangerousRequiringGesture(this.data.id);
   }
 
   private onDragStart_(e: Event) {

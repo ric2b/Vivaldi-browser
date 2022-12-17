@@ -247,7 +247,7 @@ TEST(ContainerNamesTest, FileCheckUNKNOWN) {
   TestFile(CONTAINER_UNKNOWN, GetTestDataFilePath("webm_vp8_track_entry"));
 }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 // Determine the container type of a specified file.
 void OperaTestFile(MediaContainerName expected,
                    const base::FilePath& filename) {
@@ -305,7 +305,7 @@ TEST(ContainerNamesTest, OperaFileCheckUNKNOWN) {
                               sizeof(kNegativeBoxSize)));
 }
 
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 
 }  // namespace container_names
 

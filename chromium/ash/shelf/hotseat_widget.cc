@@ -21,6 +21,7 @@
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
+#include "ash/style/system_shadow.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -482,6 +483,8 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
   // The most recent color that the |translucent_background_| has been animated
   // to.
   SkColor target_color_ = SK_ColorTRANSPARENT;
+
+  std::unique_ptr<SystemShadow> shadow_;
 };
 
 HotseatWidget::DelegateView::~DelegateView() {
@@ -527,18 +530,39 @@ void HotseatWidget::DelegateView::Init(
     translucent_background_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   }
   translucent_background_->layer()->SetName("hotseat/Background");
+
+  // Create a shadow and stack at the bottom.
+  shadow_ = SystemShadow::CreateShadowOnTextureLayer(
+      SystemShadow::Type::kElevation12);
+  auto* parent_layer = translucent_background_->layer()->parent();
+  auto* shadow_layer = shadow_->GetLayer();
+  parent_layer->Add(shadow_layer);
+  parent_layer->StackAtBottom(shadow_layer);
 }
 
 void HotseatWidget::DelegateView::UpdateTranslucentBackground() {
   if (!HotseatWidget::ShouldShowHotseatBackground()) {
     translucent_background_->SetVisible(false);
     SetBackgroundBlur(false);
+    shadow_->GetLayer()->SetVisible(false);
     return;
   }
 
   DCHECK(scrollable_shelf_view_);
   SetTranslucentBackground(
       scrollable_shelf_view_->GetHotseatBackgroundBounds());
+
+  // Hide the shadow when home launcher is showing in tablet mode.
+  if (hotseat_widget_->state() == HotseatState::kShownHomeLauncher) {
+    shadow_->GetLayer()->SetVisible(false);
+    return;
+  }
+
+  // Update the shadow content bounds and corner radius.
+  shadow_->GetLayer()->SetVisible(true);
+  gfx::Rect background_bounds = translucent_background_->bounds();
+  shadow_->SetRoundedCornerRadius(background_bounds.height() / 2);
+  shadow_->SetContentBounds(background_bounds);
 }
 
 void HotseatWidget::DelegateView::SetTranslucentBackground(
@@ -666,7 +690,6 @@ void HotseatWidget::DelegateView::OnOverviewModeEndingAnimationComplete(
 void HotseatWidget::DelegateView::OnWallpaperColorsChanged() {
   UpdateTranslucentBackground();
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // ScopedInStateTransition
@@ -1267,28 +1290,6 @@ void HotseatWidget::StartNormalBoundsAnimation(double target_opacity,
                                                const gfx::Rect& target_bounds) {
   GetNativeView()->layer()->SetOpacity(target_opacity);
   SetBounds(target_bounds);
-}
-
-bool HotseatWidget::IsPointWithinGestureTouchArea(
-    const gfx::Point& screen_location) {
-  if (!features::IsShelfPalmRejectionTouchAreaEnabled())
-    return true;
-
-  const int touch_area_width = base::GetFieldTrialParamByFeatureAsInt(
-      features::kShelfPalmRejectionTouchArea, "shelf_touch_area", 100);
-
-  gfx::Rect hotseat_bounds = GetWindowBoundsInScreen();
-
-  if (hotseat_bounds.width() < touch_area_width)
-    return true;
-
-  hotseat_bounds.ClampToCenteredSize(
-      gfx::Size(touch_area_width, hotseat_bounds.height()));
-
-  const int min_x =
-      (hotseat_bounds.width() - touch_area_width) / 2 + hotseat_bounds.x();
-  const int max_x = min_x + touch_area_width;
-  return screen_location.x() >= min_x && screen_location.x() <= max_x;
 }
 
 }  // namespace ash

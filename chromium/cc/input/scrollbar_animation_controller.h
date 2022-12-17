@@ -65,6 +65,8 @@ class CC_EXPORT ScrollbarAnimationController {
   ~ScrollbarAnimationController();
 
   bool ScrollbarsHidden() const;
+  bool visibility_changed() const { return visibility_changed_; }
+  void ClearVisibilityChanged() { visibility_changed_ = false; }
 
   bool Animate(base::TimeTicks now);
 
@@ -94,7 +96,8 @@ class CC_EXPORT ScrollbarAnimationController {
 
   ScrollbarSet Scrollbars() const;
 
-  static constexpr float kMouseMoveDistanceToTriggerFadeIn = 30.0f;
+  SingleScrollbarAnimationControllerThinning& GetScrollbarAnimationController(
+      ScrollbarOrientation) const;
 
  private:
   // Describes whether the current animation should FadeIn or FadeOut.
@@ -112,9 +115,6 @@ class CC_EXPORT ScrollbarAnimationController {
                                base::TimeDelta fade_duration,
                                base::TimeDelta thinning_duration,
                                float initial_opacity);
-
-  SingleScrollbarAnimationControllerThinning& GetScrollbarAnimationController(
-      ScrollbarOrientation) const;
 
   // Any scrollbar state update would show scrollbar hen post the delay fade out
   // if needed.
@@ -164,6 +164,8 @@ class CC_EXPORT ScrollbarAnimationController {
   bool is_mouse_down_;
 
   bool tickmarks_showing_;
+
+  bool visibility_changed_ = false;
 
   std::unique_ptr<SingleScrollbarAnimationControllerThinning>
       vertical_controller_;

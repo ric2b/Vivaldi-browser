@@ -47,6 +47,7 @@
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -196,8 +197,8 @@ Browser* LaunchWebAppBrowser(Profile* profile,
       apps::AppServiceProxyFactory::GetForProfile(profile)
           ->BrowserAppLauncher()
           ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-              app_id, apps::mojom::LaunchContainer::kLaunchContainerWindow,
-              disposition, apps::mojom::LaunchSource::kFromTest));
+              app_id, apps::LaunchContainer::kLaunchContainerWindow,
+              disposition, apps::LaunchSource::kFromTest));
   EXPECT_TRUE(web_contents);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   EXPECT_TRUE(AppBrowserController::IsForWebApp(browser, app_id));
@@ -222,9 +223,9 @@ Browser* LaunchBrowserForWebAppInTab(Profile* profile, const AppId& app_id) {
       apps::AppServiceProxyFactory::GetForProfile(profile)
           ->BrowserAppLauncher()
           ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-              app_id, apps::mojom::LaunchContainer::kLaunchContainerTab,
+              app_id, apps::LaunchContainer::kLaunchContainerTab,
               WindowOpenDisposition::NEW_FOREGROUND_TAB,
-              apps::mojom::LaunchSource::kFromTest));
+              apps::LaunchSource::kFromTest));
   DCHECK(web_contents);
 
   EXPECT_EQ(app_id, *WebAppTabHelper::GetAppId(web_contents));
@@ -232,6 +233,24 @@ Browser* LaunchBrowserForWebAppInTab(Profile* profile, const AppId& app_id) {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   EXPECT_EQ(browser, chrome::FindLastActive());
   EXPECT_EQ(web_contents, browser->tab_strip_model()->GetActiveWebContents());
+  return browser;
+}
+
+Browser* LaunchWebAppToURL(Profile* profile,
+                           const AppId& app_id,
+                           const GURL& url) {
+  apps::AppLaunchParams params(
+      app_id, apps::LaunchContainer::kLaunchContainerWindow,
+      WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromCommandLine);
+  params.override_url = url;
+  content::WebContents* const web_contents =
+      apps::AppServiceProxyFactory::GetForProfile(profile)
+          ->BrowserAppLauncher()
+          ->LaunchAppWithParamsForTesting(std::move(params));
+  EXPECT_TRUE(web_contents);
+
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  EXPECT_TRUE(AppBrowserController::IsForWebApp(browser, app_id));
   return browser;
 }
 
@@ -320,7 +339,7 @@ AppMenuCommandState GetAppMenuCommandState(int command_id, Browser* browser) {
   auto app_menu_model = std::make_unique<AppMenuModel>(nullptr, browser);
   app_menu_model->Init();
   ui::MenuModel* model = app_menu_model.get();
-  int index = -1;
+  size_t index = 0;
   if (!app_menu_model->GetModelAndIndexForCommandId(command_id, &model,
                                                     &index)) {
     return kNotPresent;

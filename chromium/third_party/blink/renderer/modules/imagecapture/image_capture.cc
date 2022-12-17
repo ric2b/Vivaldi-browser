@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/modules/imagecapture/image_capture_frame_grabber.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
+#include "third_party/blink/renderer/modules/mediastream/overconstrained_error.h"
 #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -43,6 +44,7 @@
 
 namespace blink {
 
+using BackgroundBlurMode = media::mojom::blink::BackgroundBlurMode;
 using FillLightMode = media::mojom::blink::FillLightMode;
 using MeteringMode = media::mojom::blink::MeteringMode;
 using RedEyeReduction = media::mojom::blink::RedEyeReduction;
@@ -53,6 +55,10 @@ const char kNoServiceError[] = "ImageCapture service unavailable.";
 
 const char kInvalidStateTrackError[] =
     "The associated Track is in an invalid state";
+
+bool Contains(const Vector<bool>& vector, bool value) {
+  return std::find(vector.begin(), vector.end(), value) != vector.end();
+}
 
 bool TrackIsInactive(const MediaStreamTrack& track) {
   // Spec instructs to return an exception if the Track's readyState() is not
@@ -82,6 +88,15 @@ FillLightMode ParseFillLightMode(const String& blink_mode) {
     return FillLightMode::FLASH;
   NOTREACHED();
   return FillLightMode::OFF;
+}
+
+bool ToBooleanMode(BackgroundBlurMode mode) {
+  switch (mode) {
+    case BackgroundBlurMode::OFF:
+      return false;
+    case BackgroundBlurMode::BLUR:
+      return true;
+  }
 }
 
 WebString ToString(MeteringMode value) {
@@ -409,6 +424,9 @@ void ImageCapture::GetMediaTrackCapabilities(
 
   if (capabilities_->hasTorch())
     capabilities->setTorch(capabilities_->torch());
+
+  if (capabilities_->hasBackgroundBlur())
+    capabilities->setBackgroundBlur(capabilities_->backgroundBlur());
 }
 
 // TODO(mcasas): make the implementation fully Spec compliant, see the TODOs
@@ -455,6 +473,8 @@ void ImageCapture::SetMediaTrackConstraints(
     UseCounter::Count(context, WebFeature::kImageCaptureZoom);
   if (constraints->hasTorch())
     UseCounter::Count(context, WebFeature::kImageCaptureTorch);
+  // TODO(eero.hakkinen@intel.com): count how many times backgroundBlur is
+  // used.
 
   if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -483,9 +503,12 @@ void ImageCapture::SetMediaTrackConstraints(
        !(capabilities_->hasTilt() && HasPanTiltZoomPermissionGranted())) ||
       (constraints->hasZoom() &&
        !(capabilities_->hasZoom() && HasPanTiltZoomPermissionGranted())) ||
-      (constraints->hasTorch() && !capabilities_->hasTorch())) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kNotSupportedError, "Unsupported constraint(s)"));
+      (constraints->hasTorch() && !capabilities_->hasTorch()) ||
+      (constraints->hasBackgroundBlur() &&
+       !capabilities_->hasBackgroundBlur())) {
+    // TODO(eero): supply a constraint name.
+    resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+        "", "Unsupported constraint(s)"));
     return;
   }
 
@@ -504,9 +527,8 @@ void ImageCapture::SetMediaTrackConstraints(
         constraints->whiteBalanceMode()->GetAsString();
     if (capabilities_->whiteBalanceMode().Find(white_balance_mode) ==
         kNotFound) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Unsupported whiteBalanceMode."));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "whiteBalanceMode", "Unsupported whiteBalanceMode."));
       return;
     }
     temp_constraints->setWhiteBalanceMode(constraints->whiteBalanceMode());
@@ -517,8 +539,8 @@ void ImageCapture::SetMediaTrackConstraints(
   if (settings->has_exposure_mode) {
     const auto exposure_mode = constraints->exposureMode()->GetAsString();
     if (capabilities_->exposureMode().Find(exposure_mode) == kNotFound) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "Unsupported exposureMode."));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "exposureMode", "Unsupported exposureMode."));
       return;
     }
     temp_constraints->setExposureMode(constraints->exposureMode());
@@ -530,8 +552,8 @@ void ImageCapture::SetMediaTrackConstraints(
   if (settings->has_focus_mode) {
     const auto focus_mode = constraints->focusMode()->GetAsString();
     if (capabilities_->focusMode().Find(focus_mode) == kNotFound) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "Unsupported focusMode."));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "focusMode", "Unsupported focusMode."));
       return;
     }
     temp_constraints->setFocusMode(constraints->focusMode());
@@ -562,9 +584,8 @@ void ImageCapture::SetMediaTrackConstraints(
         constraints->exposureCompensation()->GetAsDouble();
     if (exposure_compensation < capabilities_->exposureCompensation()->min() ||
         exposure_compensation > capabilities_->exposureCompensation()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "exposureCompensation setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "exposureCompensation", "exposureCompensation setting out of range"));
       return;
     }
     temp_constraints->setExposureCompensation(
@@ -578,9 +599,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto exposure_time = constraints->exposureTime()->GetAsDouble();
     if (exposure_time < capabilities_->exposureTime()->min() ||
         exposure_time > capabilities_->exposureTime()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "exposureTime setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "exposureTime", "exposureTime setting out of range"));
       return;
     }
     temp_constraints->setExposureTime(constraints->exposureTime());
@@ -593,9 +613,8 @@ void ImageCapture::SetMediaTrackConstraints(
         constraints->colorTemperature()->GetAsDouble();
     if (color_temperature < capabilities_->colorTemperature()->min() ||
         color_temperature > capabilities_->colorTemperature()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "colorTemperature setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "colorTemperature", "colorTemperature setting out of range"));
       return;
     }
     temp_constraints->setColorTemperature(constraints->colorTemperature());
@@ -606,8 +625,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto iso = constraints->iso()->GetAsDouble();
     if (iso < capabilities_->iso()->min() ||
         iso > capabilities_->iso()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "iso setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "iso", "iso setting out of range"));
       return;
     }
     temp_constraints->setIso(constraints->iso());
@@ -620,9 +639,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto brightness = constraints->brightness()->GetAsDouble();
     if (brightness < capabilities_->brightness()->min() ||
         brightness > capabilities_->brightness()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "brightness setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "brightness", "brightness setting out of range"));
       return;
     }
     temp_constraints->setBrightness(constraints->brightness());
@@ -634,9 +652,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto contrast = constraints->contrast()->GetAsDouble();
     if (contrast < capabilities_->contrast()->min() ||
         contrast > capabilities_->contrast()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "contrast setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "contrast", "contrast setting out of range"));
       return;
     }
     temp_constraints->setContrast(constraints->contrast());
@@ -648,9 +665,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto saturation = constraints->saturation()->GetAsDouble();
     if (saturation < capabilities_->saturation()->min() ||
         saturation > capabilities_->saturation()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "saturation setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "saturation", "saturation setting out of range"));
       return;
     }
     temp_constraints->setSaturation(constraints->saturation());
@@ -662,9 +678,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto sharpness = constraints->sharpness()->GetAsDouble();
     if (sharpness < capabilities_->sharpness()->min() ||
         sharpness > capabilities_->sharpness()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "sharpness setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "sharpness", "sharpness setting out of range"));
       return;
     }
     temp_constraints->setSharpness(constraints->sharpness());
@@ -677,9 +692,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto focus_distance = constraints->focusDistance()->GetAsDouble();
     if (focus_distance < capabilities_->focusDistance()->min() ||
         focus_distance > capabilities_->focusDistance()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "focusDistance setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "focusDistance", "focusDistance setting out of range"));
       return;
     }
     temp_constraints->setFocusDistance(constraints->focusDistance());
@@ -696,8 +710,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto pan = constraints->pan()->GetAsDouble();
     if (pan < capabilities_->pan()->min() ||
         pan > capabilities_->pan()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "pan setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "pan", "pan setting out of range"));
       return;
     }
     temp_constraints->setPan(constraints->pan());
@@ -715,8 +729,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto tilt = constraints->tilt()->GetAsDouble();
     if (tilt < capabilities_->tilt()->min() ||
         tilt > capabilities_->tilt()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "tilt setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "tilt", "tilt setting out of range"));
       return;
     }
     temp_constraints->setTilt(constraints->tilt());
@@ -734,8 +748,8 @@ void ImageCapture::SetMediaTrackConstraints(
     const auto zoom = constraints->zoom()->GetAsDouble();
     if (zoom < capabilities_->zoom()->min() ||
         zoom > capabilities_->zoom()->max()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "zoom setting out of range"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "zoom", "zoom setting out of range"));
       return;
     }
     temp_constraints->setZoom(constraints->zoom());
@@ -748,12 +762,27 @@ void ImageCapture::SetMediaTrackConstraints(
   if (settings->has_torch) {
     const auto torch = constraints->torch()->GetAsBoolean();
     if (torch && !capabilities_->torch()) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "torch not supported"));
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "torch", "torch not supported"));
       return;
     }
     temp_constraints->setTorch(constraints->torch());
     settings->torch = torch;
+  }
+
+  settings->has_background_blur_mode =
+      constraints->hasBackgroundBlur() &&
+      constraints->backgroundBlur()->IsBoolean();
+  if (settings->has_background_blur_mode) {
+    const auto background_blur = constraints->backgroundBlur()->GetAsBoolean();
+    if (!Contains(capabilities_->backgroundBlur(), background_blur)) {
+      resolver->Reject(MakeGarbageCollected<OverconstrainedError>(
+          "backgroundBlur", "backgroundBlur setting value not supported"));
+      return;
+    }
+    temp_constraints->setBackgroundBlur(constraints->backgroundBlur());
+    settings->background_blur_mode =
+        background_blur ? BackgroundBlurMode::BLUR : BackgroundBlurMode::OFF;
   }
 
   current_constraints_ = temp_constraints;
@@ -892,6 +921,9 @@ void ImageCapture::GetMediaTrackSettings(MediaTrackSettings* settings) const {
 
   if (settings_->hasTorch())
     settings->setTorch(settings_->torch());
+
+  if (settings_->hasBackgroundBlur())
+    settings->setBackgroundBlur(settings_->backgroundBlur());
 }
 
 ImageCapture::ImageCapture(ExecutionContext* context,
@@ -1177,6 +1209,17 @@ void ImageCapture::UpdateMediaTrackCapabilities(
   if (photo_state->supports_torch)
     settings_->setTorch(photo_state->torch);
 
+  if (photo_state->supported_background_blur_modes &&
+      !photo_state->supported_background_blur_modes->IsEmpty()) {
+    Vector<bool> supported_background_blur_modes;
+    for (auto mode : *photo_state->supported_background_blur_modes)
+      supported_background_blur_modes.push_back(ToBooleanMode(mode));
+    capabilities_->setBackgroundBlur(
+        std::move(supported_background_blur_modes));
+    settings_->setBackgroundBlur(
+        ToBooleanMode(photo_state->background_blur_mode));
+  }
+
   std::move(initialized_callback).Run();
 }
 
@@ -1255,6 +1298,8 @@ ImageCapture* ImageCapture::Clone() const {
     clone->capabilities_->setZoom(capabilities_->zoom());
   if (capabilities_->hasTorch())
     clone->capabilities_->setTorch(capabilities_->torch());
+  if (capabilities_->hasBackgroundBlur())
+    clone->capabilities_->setBackgroundBlur(capabilities_->backgroundBlur());
 
   // Copy settings.
   if (settings_->hasWhiteBalanceMode())
@@ -1295,6 +1340,8 @@ ImageCapture* ImageCapture::Clone() const {
     clone->settings_->setZoom(settings_->zoom());
   if (settings_->hasTorch())
     clone->settings_->setTorch(settings_->torch());
+  if (settings_->hasBackgroundBlur())
+    clone->settings_->setBackgroundBlur(settings_->backgroundBlur());
 
   if (!current_constraints_)
     return clone;
@@ -1357,6 +1404,10 @@ ImageCapture* ImageCapture::Clone() const {
     clone->current_constraints_->setZoom(current_constraints_->zoom());
   if (current_constraints_->hasTorch())
     clone->current_constraints_->setTorch(current_constraints_->torch());
+  if (current_constraints_->hasBackgroundBlur()) {
+    clone->current_constraints_->setBackgroundBlur(
+        current_constraints_->backgroundBlur());
+  }
 
   return clone;
 }

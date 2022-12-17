@@ -18,7 +18,6 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.text.SpannableString;
-import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.view.View;
 import android.widget.Button;
@@ -49,6 +48,7 @@ import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.ButtonCompat;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,12 +61,6 @@ class AccountSelectionViewBinder {
     private static final String TAG = "AccountSelectionView";
 
     /**
-     * The size of the maskable icon's safe zone as a fraction of the icon's edge size as defined
-     * in https://www.w3.org/TR/appmanifest/
-     */
-    private static final float MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO = 0.8f;
-
-    /**
      * Returns bitmap with the maskable bitmap's safe zone as defined in
      * https://www.w3.org/TR/appmanifest/ cropped in a circle.
      * @param resources the Resources used to set initial target density.
@@ -77,10 +71,10 @@ class AccountSelectionViewBinder {
      */
     public static Drawable createBitmapWithMaskableIconSafeZone(
             Resources resources, Bitmap bitmap, int outBitmapSize) {
-        int cropWidth =
-                (int) Math.floor(bitmap.getWidth() * MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO);
-        int cropHeight =
-                (int) Math.floor(bitmap.getHeight() * MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO);
+        int cropWidth = (int) Math.floor(
+                bitmap.getWidth() * AccountSelectionBridge.MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO);
+        int cropHeight = (int) Math.floor(
+                bitmap.getHeight() * AccountSelectionBridge.MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO);
         int cropX = (int) Math.floor((bitmap.getWidth() - cropWidth) / 2.0f);
         int cropY = (int) Math.floor((bitmap.getHeight() - cropHeight) / 2.0f);
 
@@ -149,13 +143,13 @@ class AccountSelectionViewBinder {
         }
     }
 
-    static SpanApplier.SpanInfo createLink(Context context, String url, String tag) {
-        if (TextUtils.isEmpty(url)) return null;
+    static SpanApplier.SpanInfo createLink(Context context, GURL url, String tag) {
+        if (GURL.isEmptyOrInvalid(url)) return null;
 
         String startTag = "<" + tag + ">";
         String endTag = "</" + tag + ">";
         Callback<View> onClickCallback = v -> {
-            CustomTabActivity.showInfoPage(context, url);
+            CustomTabActivity.showInfoPage(context, url.getSpec());
         };
         return new SpanApplier.SpanInfo(
                 startTag, endTag, new NoUnderlineClickableSpan(context, onClickCallback));

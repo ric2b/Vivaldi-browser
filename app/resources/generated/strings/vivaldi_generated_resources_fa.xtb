@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">تعداد خروج از حالت بی‌کار</translation>
 <translation id="119944043368869598">پاک کردن همه</translation>
 <translation id="1221825588892235038">فقط محتوای انتخاب شده</translation>
+<translation id="1234736487471201993">ایجاد QR Code برای این تصویر</translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
 <translation id="125220115284141797">پیش‌فرض</translation>
 <translation id="1297175357211070620">مقصد</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">زبانه‌ی ارسال محتوا</translation>
 <translation id="2150139952286079145">جستجوی مقصدها</translation>
 <translation id="215753907730220065">خروج از حالت تمام صفحه</translation>
+<translation id="2158475082070321257">کپی کردن لینک در موارد برجسته‌شده</translation>
 <translation id="2177950615300672361">برگه ناشناس: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">‏ماژول Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">جای‌گذاری به‌عنوان نوشتار ساده</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">ممکن است سایت ها نیاز به شناسایی دستگاه شما با شناسه هم داشته باشند</translation>
 <translation id="2445081178310039857">دایرکتوری ریشه برنامهٔ افزودنی لازم است.</translation>
 <translation id="2470702053775288986">افزونه‌های پشتیبانی نشده غیرفعال شدند</translation>
-<translation id="2476578072172137802">تنظیمات سایت</translation>
+<translation id="2485422356828889247">حذف نصب</translation>
 <translation id="2498539833203011245">کوچک‌سازی</translation>
 <translation id="2509495747794740764">مقیاس باید عددی بین ۱۰ تا ۲۰۰ باشد.</translation>
 <translation id="253557089021624350">تعداد فعالیت‌های زنده‌نگه‌داری</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">گزارش سوءاستفاده</translation>
 <translation id="2941112035454246133">کم</translation>
 <translation id="2972581237482394796">انجام مجدد</translation>
+<translation id="2993517869960930405">اطلاعات برنامه</translation>
 <translation id="3003623123441819449">‏حافظه‌ی نهان CSS</translation>
 <translation id="3008272652534848354">بازنشانی مجوزها</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">گشودن پیوند به‌عنوان</translation>
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">دایرکتوری ریشه برنامهٔ افزودنی را برای فشرده کردن انتخاب کنید. همچنین برای به‌روزرسانی برنامهٔ افزودنی، فایل کلید خصوصی را برای استفاده مجدد انتخاب کنید.</translation>
+<translation id="3275778913554317645">باز کردن به‌عنوان پنجره</translation>
 <translation id="3280237271814976245">ذخیره &amp;به‌عنوان...</translation>
 <translation id="3285322247471302225">&amp;زبانه‌ی جدید</translation>
 <translation id="3288047731229977326">افزونه‌هایی که در حالت برنامه‌نوبس اجرا می‌شوند می‌توانند به رایانه شما آسیب برسانند. اگر برنامه‌نویس نیستید، باید این برنامه‌های افزودنی را که در حالت برنامه‌نویس اجرا می‌شوند غیرفعال کنید تا ایمن بمانید.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">گشودن PDF در پیش‌نمایش</translation>
 <translation id="3308134619352333507">دکمه‌ی مخفی‌سازی</translation>
 <translation id="3317459757438853210">دو طرفه</translation>
+<translation id="3331974543021145906">اطلاعات برنامه</translation>
 <translation id="3341703758641437857">اجازه‌ی دسترسی به آدرس فایل‌ها</translation>
 <translation id="3347086966102161372">کپی آدرس تصویر</translation>
 <translation id="3360297538363969800">چاپ ناموفق بود. لطفاً چاپگرتان را بررسی کنید و دوباره امتحان کنید.</translation>
 <translation id="3378572629723696641">ممکن است این برنامه افزودنی خراب شده باشد.</translation>
 <translation id="3387614642886316601">استفاده از غلط‌گیر املایی بهبودیافته</translation>
+<translation id="3390013585654699824">جزئیات برنامه</translation>
 <translation id="3393582007140394275">اشتراک‌گذاری محتوای صفحه نمایش ممکن نیست.</translation>
 <translation id="3432227430032737297">حذف همه‌ی موارد نشان‌ داده شده</translation>
 <translation id="345693547134384690">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;جستجوی <ph name="SEARCH_ENGINE" /> برای تصویر</translation>
 <translation id="3955193568934677022">به سایت‌ها اجازه داده شود محتوای محافظت‌شده پخش کنند (توصیه می‌شود)</translation>
 <translation id="3979395879372752341">افزودنه‌های جدید اضافه شد (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">کپی کردن لینک در موارد برجسته‌شده</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;افزودن به واژه‌نامه</translation>
 <translation id="407520071244661467">مقیاس</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">‏پیش از وارد کردن اطلاعات مرورگر را ببندید</translation>
 <translation id="4130207949184424187">‏این افزونه، صفحه‌ای را تغییر داده است که هنگام جستجو از Omnibox نشان داده می‌شود.</translation>
 <translation id="4131410914670010031">سیاه و سفید</translation>
+<translation id="4165986682804962316">تنظیمات سایت</translation>
 <translation id="4176463684765177261">غیرفعال شد</translation>
 <translation id="4200983522494130825">&amp;زبانه‌ی جدید</translation>
 <translation id="4225397296022057997">در همه‌ی سایت‌ها</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">بازیابی تنظیمات</translation>
 <translation id="4726710629007580002">هشدارهایی هنگام نصب این افزونه وجود دارد:</translation>
 <translation id="479536056609751218">‏صفحه وب، فقط HTML</translation>
+<translation id="4827904420700932487">ایجاد QR Code برای این تصویر</translation>
 <translation id="4839303808932127586">ذ&amp;خیره‌ی ویدیو به‌عنوان...</translation>
 <translation id="4840096453115567876">درهر صورت از حالت ناشناس خارج می‌شوید؟</translation>
 <translation id="488785315393301722">نمایش جزئیات</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">قبل از دسترسی سؤال شود (توصیه می‌شود)</translation>
 <translation id="5677928146339483299">مسدود است</translation>
 <translation id="5707185214361380026">بارگذاری ناموفق افزونه از:</translation>
+<translation id="5713171467967533494">‏باز کردن در مرورگر ویوالدی</translation>
 <translation id="5715711091495208045">واسطه افزایه:‌ <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">‏ذخیره به‌عنوان PDF</translation>
 <translation id="5747809636523347288">&amp;جای‌گذاری و رفتن به <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">گزینه‌ها</translation>
 <translation id="6579369886355986318">نمایش همه &amp;کنترل‌ها</translation>
 <translation id="6639554308659482635">‏حافظه‌ی SQLite</translation>
+<translation id="666731172850799929">باز کردن در <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">ذخیره‌ی رمز عبور</translation>
 <translation id="6691936601825168937">&amp;ارسال کردن</translation>
 <translation id="6798954102094737107">افزایه: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@
 <translation id="9003647077635673607">اجازه‌ی کار بر روی همه‌ی وب‌سایت‌ها</translation>
 <translation id="9027459031423301635">گشودن پیوند در &amp;زبانه‌ی جدید</translation>
 <translation id="9056810968620647706">مورد منطبقی یافت نشد.</translation>
+<translation id="9084064520949870008">بازکردن به‌عنوان پنجره</translation>
 <translation id="9137916601698928395">گشودن پیوند به‌عنوان <ph name="USER" /></translation>
 <translation id="91568222606626347">ایجاد میان‌بر...</translation>
 <translation id="916607977885256133">تصویر در تصویر</translation>

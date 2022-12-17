@@ -14,7 +14,6 @@
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/shelf_context_menu.h"
-#include "chrome/common/chrome_features.h"
 #include "components/app_constants/constants.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -163,7 +162,10 @@ void BrowserAppShelfItemController::OnBrowserAppAdded(
     return;
   }
 
-  if (!(bitty_icon_.isNull() || medium_icon_.isNull())) {
+  // If we are adding a tab to a browser window for the app, then we still want
+  // the browser window to maintain its own icon.
+  if (instance.type != apps::BrowserAppInstance::Type::kAppTab &&
+      !(bitty_icon_.isNull() || medium_icon_.isNull())) {
     views::NativeWidgetAura::AssignIconToAuraWindow(instance.window,
                                                     bitty_icon_, medium_icon_);
   }
@@ -221,22 +223,12 @@ void BrowserAppShelfItemController::LoadIcon(int32_t size_hint_in_dip,
                                              apps::LoadIconCallback callback) {
   const std::string& app_id = shelf_id().app_id;
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
-  auto app_type = proxy->AppRegistryCache().GetAppType(app_id);
-  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    icon_loader_releaser_ = proxy->LoadIcon(
-        app_type, app_id, apps::IconType::kStandard,
-        // matches favicon size
-        /* size_hint_in_dip= */ size_hint_in_dip,
-        /* allow_placeholder_icon= */ false, std::move(callback));
-  } else {
-    icon_loader_releaser_ = proxy->LoadIcon(
-        apps::ConvertAppTypeToMojomAppType(app_type), app_id,
-        apps::mojom::IconType::kStandard,
-        // matches favicon size
-        /* size_hint_in_dip= */ size_hint_in_dip,
-        /* allow_placeholder_icon= */ false,
-        apps::MojomIconValueToIconValueCallback(std::move(callback)));
-  }
+  icon_loader_releaser_ =
+      proxy->LoadIcon(proxy->AppRegistryCache().GetAppType(app_id), app_id,
+                      apps::IconType::kStandard,
+                      // matches favicon size
+                      /* size_hint_in_dip= */ size_hint_in_dip,
+                      /* allow_placeholder_icon= */ false, std::move(callback));
 }
 
 void BrowserAppShelfItemController::OnLoadMediumIcon(

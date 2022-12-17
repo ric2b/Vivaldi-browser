@@ -141,6 +141,13 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   std::vector<base::StringPiece16> GetTitledUrlNodeAncestorTitles()
       const override;
 
+  // Returns the last time the bookmark was opened. This is only maintained
+  // for urls (no folders).
+  base::Time date_last_used() const { return date_last_used_; }
+  void set_date_last_used(const base::Time date_last_used) {
+    date_last_used_ = date_last_used;
+  }
+
   // Vivaldi: TitledUrlNode interface methods.
   const std::u16string GetTitledUrlNodeNickName() const override;
   const std::u16string GetTitledUrlNodeDescription() const override;
@@ -224,6 +231,8 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   std::unique_ptr<MetaInfoMap> meta_info_map_;
 
   const bool is_permanent_node_;
+
+  base::Time date_last_used_;
 };
 
 // BookmarkPermanentNode -------------------------------------------------------

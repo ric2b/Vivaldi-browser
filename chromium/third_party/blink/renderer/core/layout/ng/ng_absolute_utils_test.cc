@@ -99,11 +99,24 @@ class NGAbsoluteUtilsTest : public RenderingTest {
       const NGLogicalStaticPosition& static_position,
       const WritingDirectionMode container_writing_direction,
       NGLogicalOutOfFlowDimensions* dimensions) {
+    WritingModeConverter container_converter(
+        container_writing_direction,
+        ToPhysicalSize(space.AvailableSize(),
+                       container_writing_direction.GetWritingMode()));
+    NGLogicalAnchorQuery anchor_query;
+    NGAnchorEvaluatorImpl anchor_evaluator(
+        anchor_query, container_converter,
+        /* offset_to_padding_box */
+        PhysicalOffset(),
+        /* self_writing_mode */ WritingMode::kHorizontalTb);
+    const NGLogicalOutOfFlowInsets insets = ComputeOutOfFlowInsets(
+        node.Style(), space.AvailableSize(), &anchor_evaluator);
     LogicalSize computed_available_size =
-        ComputeOutOfFlowAvailableSize(node, space, static_position);
+        ComputeOutOfFlowAvailableSize(node, space, insets, static_position);
     blink::ComputeOutOfFlowInlineDimensions(
-        node, space, border_padding, static_position, computed_available_size,
-        absl::nullopt, container_writing_direction, dimensions);
+        node, node.Style(), space, insets, border_padding, static_position,
+        computed_available_size, absl::nullopt, container_writing_direction,
+        /* anchor_evaluator */ nullptr, dimensions);
   }
 
   void ComputeOutOfFlowBlockDimensions(
@@ -113,11 +126,24 @@ class NGAbsoluteUtilsTest : public RenderingTest {
       const NGLogicalStaticPosition& static_position,
       const WritingDirectionMode container_writing_direction,
       NGLogicalOutOfFlowDimensions* dimensions) {
+    WritingModeConverter container_converter(
+        container_writing_direction,
+        ToPhysicalSize(space.AvailableSize(),
+                       container_writing_direction.GetWritingMode()));
+    NGLogicalAnchorQuery anchor_query;
+    NGAnchorEvaluatorImpl anchor_evaluator(
+        anchor_query, container_converter,
+        /* offset_to_padding_box */
+        PhysicalOffset(),
+        /* self_writing_mode */ WritingMode::kHorizontalTb);
+    const NGLogicalOutOfFlowInsets insets = ComputeOutOfFlowInsets(
+        node.Style(), space.AvailableSize(), &anchor_evaluator);
     LogicalSize computed_available_size =
-        ComputeOutOfFlowAvailableSize(node, space, static_position);
+        ComputeOutOfFlowAvailableSize(node, space, insets, static_position);
     blink::ComputeOutOfFlowBlockDimensions(
-        node, space, border_padding, static_position, computed_available_size,
-        absl::nullopt, container_writing_direction, dimensions);
+        node, node.Style(), space, insets, border_padding, static_position,
+        computed_available_size, absl::nullopt, container_writing_direction,
+        /* anchor_evaluator */ nullptr, dimensions);
   }
 
   Persistent<Element> element_;

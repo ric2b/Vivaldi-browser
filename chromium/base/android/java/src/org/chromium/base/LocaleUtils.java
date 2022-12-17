@@ -62,11 +62,17 @@ public class LocaleUtils {
     @VisibleForTesting
     public static Locale getUpdatedLocaleForChromium(Locale locale) {
         String language = locale.getLanguage();
+        // Vivaldi
+        String script = locale.getScript();
+        if (script.isEmpty()) {
         String languageForChrome = getUpdatedLanguageForChromium(language);
         if (languageForChrome.equals(language)) {
             return locale;
         }
         return new Locale.Builder().setLocale(locale).setLanguage(languageForChrome).build();
+        } else {
+            return locale;
+        }
     }
 
     /**
@@ -150,6 +156,7 @@ public class LocaleUtils {
      * one, but it is only usable for Android N or after.
      * @return a well-formed IETF BCP 47 language tag with language and country code that
      *         represents this locale.
+     * Vivaldi: Added support for script, ref. VAB-3887.
      */
     public static String toLanguageTag(Locale locale) {
         String language = getUpdatedLanguageForChromium(locale.getLanguage());
@@ -157,6 +164,14 @@ public class LocaleUtils {
         if (language.equals("no") && country.equals("NO") && locale.getVariant().equals("NY")) {
             return "nn-NO";
         }
+        // Vivaldi
+        String script = locale.getScript();
+        if (!script.isEmpty()) {
+            language = language + "-" + script;
+            if (language.equals("sr-Latn")) // Special case, ref. VAB-3887.
+                return language;
+        }
+
         return country.isEmpty() ? language : language + "-" + country;
     }
 
@@ -186,6 +201,8 @@ public class LocaleUtils {
         if (pos < 0) {
             return languageTag;
         }
+        if (languageTag.contains("sr-Latn")) // Vivaldi: Special case, ref. VAB-3887.
+            return languageTag;
         return languageTag.substring(0, pos);
     }
 

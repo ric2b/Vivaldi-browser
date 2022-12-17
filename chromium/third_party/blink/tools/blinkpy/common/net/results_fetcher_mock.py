@@ -35,8 +35,8 @@ BuilderStep = namedtuple('BuilderStep', ['build', 'step_name'])
 # TODO(qyearsley): To be consistent with other fake ("mock") classes, this
 # could be changed so it's not a subclass of TestResultsFetcher.
 class MockTestResultsFetcher(TestResultsFetcher):
-    def __init__(self, builders=None):
-        super(MockTestResultsFetcher, self).__init__(builders)
+    def __init__(self, web, luci_auth, builders=None):
+        super(MockTestResultsFetcher, self).__init__(web, luci_auth, builders)
         self._canned_results = {}
         self._canned_artifacts_resultdb = {}
         self._canned_retry_summary_json = {}
@@ -88,7 +88,7 @@ class MockTestResultsFetcher(TestResultsFetcher):
     def set_retry_sumary_json(self, build, content):
         self._canned_retry_summary_json[build] = content
 
-    def fetch_retry_summary_json(self, build):
+    def fetch_retry_summary_json(self, build, test_suite):
         return self._canned_retry_summary_json.get(build)
 
     def get_layout_test_step_names(self, build):

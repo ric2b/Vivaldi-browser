@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_ASH_CHROME_SHELL_DELEGATE_H_
 
 #include <memory>
+#include <string>
 
 #include "ash/shell_delegate.h"
 #include "base/callback_forward.h"
@@ -49,6 +50,9 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   void BindMultiDeviceSetup(
       mojo::PendingReceiver<ash::multidevice_setup::mojom::MultiDeviceSetup>
           receiver) override;
+  void BindMultiCaptureService(
+      mojo::PendingReceiver<video_capture::mojom::MultiCaptureService> receiver)
+      override;
   media_session::MediaSessionService* GetMediaSessionService() override;
   bool IsSessionRestoreInProgress() const override;
   void SetUpEnvironmentForLockedFullscreen(bool locked) override;
@@ -62,6 +66,12 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   static void SetDisableLoggingRedirectForTesting(bool value);
   static void ResetDisableLoggingRedirectForTesting();
   const GURL& GetLastCommittedURLForWindowIfAny(aura::Window* window) override;
+  version_info::Channel GetChannel() override;
+  void ForceSkipWarningUserOnClose(
+      const std::vector<aura::Window*>& windows) override;
+  std::string GetVersionString() override;
+  void ShouldExitFullscreenBeforeLock(
+      ShouldExitFullscreenCallback callback) override;
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_CHROME_SHELL_DELEGATE_H_

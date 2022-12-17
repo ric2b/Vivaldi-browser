@@ -19,6 +19,7 @@
 #include "extensions/common/extension_id.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
+#include "url/url_constants.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -172,8 +173,15 @@ bool WebAccessibleResourcesInfo::IsResourceWebAccessible(
     const Extension* extension,
     const std::string& relative_path,
     const absl::optional<url::Origin>& initiator_origin) {
-  auto initiator_url =
-      initiator_origin.has_value() ? initiator_origin->GetURL() : GURL();
+  GURL initiator_url;
+  if (initiator_origin) {
+    if (initiator_origin->opaque()) {
+      initiator_url =
+          initiator_origin->GetTupleOrPrecursorTupleIfOpaque().GetURL();
+    } else {
+      initiator_url = initiator_origin->GetURL();
+    }
+  }
   const WebAccessibleResourcesInfo* info = GetResourcesInfo(extension);
   if (!info) {  // No web-accessible resources
     return false;
@@ -186,6 +194,7 @@ bool WebAccessibleResourcesInfo::IsResourceWebAccessible(
           vivaldi::IsVivaldiApp(extension->id()))
         return true;
 
+      // Match patterns.
       if (entry.matches.MatchesURL(initiator_url))
         return true;
       if (initiator_url.SchemeIs(extensions::kExtensionScheme) &&
@@ -204,6 +213,21 @@ bool WebAccessibleResourcesInfo::HasWebAccessibleResources(
     const Extension* extension) {
   const WebAccessibleResourcesInfo* info = GetResourcesInfo(extension);
   return info && (info->web_accessible_resources.size() > 0);
+}
+
+// static
+bool WebAccessibleResourcesInfo::ShouldUseDynamicUrl(const Extension* extension,
+                                                     const std::string& path) {
+  const WebAccessibleResourcesInfo* info = GetResourcesInfo(extension);
+  if (!info)
+    return false;
+  for (const auto& entry : info->web_accessible_resources) {
+    if (extension->ResourceMatches(entry.resources, path) &&
+        entry.use_dynamic_url) {
+      return true;
+    }
+  }
+  return false;
 }
 
 WebAccessibleResourcesInfo::Entry::Entry() = default;

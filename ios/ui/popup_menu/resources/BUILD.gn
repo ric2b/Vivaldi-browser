@@ -1,0 +1,109 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("popup_menu_add_bookmark") {
+  sources = [
+    "popup_menu_add_bookmark.imageset/Contents.json",
+    "popup_menu_add_bookmark.imageset/popup_menu_add_bookmark.png",
+    "popup_menu_add_bookmark.imageset/popup_menu_add_bookmark@2x.png",
+    "popup_menu_add_bookmark.imageset/popup_menu_add_bookmark@3x.png",
+  ]
+}
+
+imageset("popup_menu_notes") {
+  sources = [
+    "popup_menu_notes.imageset/Contents.json",
+    "popup_menu_notes.imageset/popup_menu_notes.png",
+    "popup_menu_notes.imageset/popup_menu_notes@2x.png",
+    "popup_menu_notes.imageset/popup_menu_notes@3x.png",
+  ]
+}
+
+imageset("popup_menu_bookmarks") {
+  sources = [
+    "popup_menu_bookmarks.imageset/Contents.json",
+    "popup_menu_bookmarks.imageset/popup_menu_bookmarks.png",
+    "popup_menu_bookmarks.imageset/popup_menu_bookmarks@2x.png",
+    "popup_menu_bookmarks.imageset/popup_menu_bookmarks@3x.png",
+  ]
+}
+
+imageset("popup_menu_downloads") {
+  sources = [
+    "popup_menu_downloads.imageset/Contents.json",
+    "popup_menu_downloads.imageset/popup_menu_downloads@2x.png",
+    "popup_menu_downloads.imageset/popup_menu_downloads@3x.png",
+  ]
+}
+
+imageset("popup_menu_history") {
+  sources = [
+    "popup_menu_history.imageset/Contents.json",
+    "popup_menu_history.imageset/popup_menu_history.png",
+    "popup_menu_history.imageset/popup_menu_history@2x.png",
+    "popup_menu_history.imageset/popup_menu_history@3x.png",
+  ]
+}
+
+imageset("popup_menu_new_incognito_tab") {
+  sources = [
+    "popup_menu_new_incognito_tab.imageset/Contents.json",
+    "popup_menu_new_incognito_tab.imageset/popup_menu_new_incognito_tab@2x.png",
+    "popup_menu_new_incognito_tab.imageset/popup_menu_new_incognito_tab@3x.png",
+  ]
+}
+
+imageset("popup_menu_new_tab") {
+  sources = [
+    "popup_menu_new_tab.imageset/Contents.json",
+    "popup_menu_new_tab.imageset/popup_menu_new_tab.png",
+    "popup_menu_new_tab.imageset/popup_menu_new_tab@2x.png",
+    "popup_menu_new_tab.imageset/popup_menu_new_tab@3x.png",
+  ]
+}
+
+imageset("popup_menu_reading_list") {
+  sources = [
+    "popup_menu_reading_list.imageset/Contents.json",
+    "popup_menu_reading_list.imageset/popup_menu_reading_list.png",
+    "popup_menu_reading_list.imageset/popup_menu_reading_list@2x.png",
+    "popup_menu_reading_list.imageset/popup_menu_reading_list@3x.png",
+  ]
+}
+
+imageset("popup_menu_recent_tabs") {
+  sources = [
+    "popup_menu_recent_tabs.imageset/Contents.json",
+    "popup_menu_recent_tabs.imageset/popup_menu_recent_tabs.png",
+    "popup_menu_recent_tabs.imageset/popup_menu_recent_tabs@2x.png",
+    "popup_menu_recent_tabs.imageset/popup_menu_recent_tabs@3x.png",
+  ]
+}
+
+imageset("popup_menu_reload") {
+  sources = [
+    "popup_menu_reload.imageset/Contents.json",
+    "popup_menu_reload.imageset/popup_menu_reload.png",
+    "popup_menu_reload.imageset/popup_menu_reload@2x.png",
+    "popup_menu_reload.imageset/popup_menu_reload@3x.png",
+  ]
+}
+
+imageset("popup_menu_settings") {
+  sources = [
+    "popup_menu_settings.imageset/Contents.json",
+    "popup_menu_settings.imageset/popup_menu_settings.png",
+    "popup_menu_settings.imageset/popup_menu_settings@2x.png",
+    "popup_menu_settings.imageset/popup_menu_settings@3x.png",
+  ]
+}
+
+imageset("popup_menu_stop") {
+  sources = [
+    "popup_menu_stop.imageset/Contents.json",
+    "popup_menu_stop.imageset/popup_menu_stop.png",
+    "popup_menu_stop.imageset/popup_menu_stop@2x.png",
+    "popup_menu_stop.imageset/popup_menu_stop@3x.png",
+  ]
+}

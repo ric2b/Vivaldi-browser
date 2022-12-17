@@ -9,7 +9,7 @@
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/ad_blocker/adblock_metadata.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 

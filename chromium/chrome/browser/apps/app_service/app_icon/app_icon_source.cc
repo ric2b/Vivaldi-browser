@@ -16,7 +16,6 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
@@ -88,7 +87,7 @@ void AppIconSource::StartDataRequest(
   if (query_position != std::string::npos)
     size_param = size_param.substr(0, query_position);
   int size_in_dip = 0;
-  if (!base::StringToInt(size_param, &size_in_dip)) {
+  if (!base::StringToInt(size_param, &size_in_dip) || size_in_dip < 1) {
     LoadDefaultImage(std::move(callback));
     return;
   }
@@ -96,24 +95,14 @@ void AppIconSource::StartDataRequest(
   auto* app_service_proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile_);
   const std::string app_id = path_parts[0];
-  const auto app_type =
-      app_service_proxy->AppRegistryCache().GetAppType(app_id);
-  constexpr bool allow_placeholder_icon = false;
-  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    app_service_proxy->LoadIcon(
-        app_type, app_id, IconType::kCompressed, size_in_dip,
-        allow_placeholder_icon,
-        base::BindOnce(&RunCallback, std::move(callback)));
-  } else {
-    app_service_proxy->LoadIcon(
-        ConvertAppTypeToMojomAppType(app_type), app_id,
-        apps::mojom::IconType::kCompressed, size_in_dip, allow_placeholder_icon,
-        MojomIconValueToIconValueCallback(
-            base::BindOnce(&RunCallback, std::move(callback))));
-  }
+  app_service_proxy->LoadIcon(
+      app_service_proxy->AppRegistryCache().GetAppType(app_id), app_id,
+      IconType::kCompressed, size_in_dip,
+      /*allow_placeholder_icon=*/false,
+      base::BindOnce(&RunCallback, std::move(callback)));
 }
 
-std::string AppIconSource::GetMimeType(const std::string&) {
+std::string AppIconSource::GetMimeType(const GURL&) {
   // We need to explicitly return a mime type, otherwise if the user tries to
   // drag the image they get no extension.
   return "image/png";

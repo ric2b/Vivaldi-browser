@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/js/cr.m.js';
@@ -28,19 +28,19 @@ import {GoogleAppProxy, GoogleAppProxyImpl} from './google_app_proxy.js';
 import {GoogleAppsMetricsProxyImpl} from './google_apps_metrics_proxy.js';
 import {getTemplate} from './nux_google_apps.html.js';
 
-type AppItem = {
-  id: number,
-  name: string,
-  icon: string,
-  url: string,
-  bookmarkId: string|null,
-  selected: boolean,
-};
+interface AppItem {
+  id: number;
+  name: string;
+  icon: string;
+  url: string;
+  bookmarkId: string|null;
+  selected: boolean;
+}
 
-type AppItemModel = {
-  item: AppItem,
-  set: (p1: string, p2: boolean) => void,
-};
+interface AppItemModel {
+  item: AppItem;
+  set: (p1: string, p2: boolean) => void;
+}
 
 const KEYBOARD_FOCUSED = 'keyboard-focused';
 

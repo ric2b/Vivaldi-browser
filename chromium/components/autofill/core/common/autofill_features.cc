@@ -95,7 +95,14 @@ const base::Feature kAutofillInferCountryCallingCode{
 // determine the address requirements.
 // TODO(crbug.com/1297032): Cleanup when launched.
 const base::Feature kAutofillComplementCountryCodeOnImport{
-    "AutofillComplementCountryCodeOnImport", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AutofillComplementCountryCodeOnImport", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// If enabled, label inference considers strings entirely made up of  '(', ')'
+// and '-' as valid labels.
+// TODO(crbug.com/1311937): Cleanup when launched.
+const base::Feature kAutofillConsiderPhoneNumberSeparatorsValidLabels{
+    "AutofillConsiderPhoneNumberSeparatorsValidLabels",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, local heuristics fall back to the fields placeholder attribute.
 const base::Feature kAutofillConsiderPlaceholderForParsing{
@@ -127,12 +134,6 @@ const base::Feature kAutofillFillAndImportFromMoreFields{
 const base::Feature kAutofillFillCreditCardAsPerFormatString{
     "AutofillFillCreditCardAsPerFormatString",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, AutofillPopupControllerImpl is destructed not immediately in its
-// HideViewAndDie() function, but as a delayed task.
-// TODO(crbug.com/1277218): Cleanup when launched.
-const base::Feature kAutofillDelayPopupControllerDeletion{
-    "AutofillDelayPopupControllerDeletion", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Kill switch for Autofill filling.
 const base::Feature kAutofillDisableFilling{"AutofillDisableFilling",
@@ -195,14 +196,11 @@ const base::Feature kAutofillEnableAugmentedPhoneCountryCode{
     "AutofillEnableAugmentedPhoneCountryCode",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// This feature guards the logic for Autofills future compatibility launch of
-// birthdates. Currently filling is not supported and this effectively
-// disables the birthdate merging logic, reads/writes to the AutofillTable and
-// reading/writing from the sync proto.
-// TODO(crbug.com/1305940):  Remove once launched.
-const base::Feature kAutofillEnableCompatibilitySupportForBirthdates{
-    "AutofillEnableCompatibilitySupportForBirthdates",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables parsing for birthdate fields. Filling is not supported and parsing
+// is meant to prevent false positive credit card expiration dates.
+// TODO(crbug.com/1306654): Remove once launched.
+const base::Feature kAutofillEnableBirthdateParsing{
+    "AutofillEnableBirthdateParsing", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls if Autofill parses ADDRESS_HOME_DEPENDENT_LOCALITY.
 // TODO(crbug.com/1157405): Remove once launched.
@@ -218,7 +216,7 @@ const base::Feature kAutofillEnableExtendedAddressFormats{
 
 // Controls whether to save the first number in a form with multiple phone
 // numbers instead of aborting the import.
-// TODO(crbug.com/1167484) Remove once launched
+// TODO(crbug.com/1167484) Remove once launched.
 const base::Feature kAutofillEnableImportWhenMultiplePhoneNumbers{
     "AutofillEnableImportWhenMultiplePhoneNumbers",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -267,13 +265,13 @@ const base::Feature kAutofillEnableProfileDeduplication{
 // TODO(crbug.com/1098943): Remove once launched.
 const base::Feature kAutofillEnableSupportForMoreStructureInNames{
     "AutofillEnableSupportForMoreStructureInNames",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls if Autofill supports new structure in addresses.
 // TODO(crbug.com/1098943): Remove once launched.
 const base::Feature kAutofillEnableSupportForMoreStructureInAddresses{
     "AutofillEnableSupportForMoreStructureInAddresses",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls if Autofill supports merging subset names.
 // TODO(crbug.com/1098943): Remove once launched.
@@ -323,25 +321,6 @@ const base::Feature kAutofillExtractAllDatalists{
 const base::Feature kAutofillTypeSpecificPopupWidth{
     "AutofillTypeSpecificPopupWidth", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Autofill uses the local heuristic such that address forms are only filled if
-// at least 3 fields are fillable according to local heuristics. Unfortunately,
-// the criterion for fillability is only that the field type is unknown. So many
-// field types that we don't fill (search term, price, ...) count towards that
-// counter, effectively reducing the threshold for some forms.
-const base::Feature kAutofillFixFillableFieldTypes{
-    "AutofillFixFillableFieldTypes", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Lookups for field classifications are gated on either Autofill for addresses
-// or payments being enabled. As a consequence, if both are disabled, the
-// password manager does not get server-side field classifications anymore
-// and its performance is reduced. When this feature is enabled, Autofill parse
-// forms and perform server lookups even if only the password manager is
-// enabled.
-// TODO(crbug.com/1293341): Remove once launched.
-const base::Feature kAutofillFixServerQueriesIfPasswordManagerIsEnabled{
-    "AutofillFixServerQueriesIfPasswordManagerIsEnabled",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // When enabled, the Autofill popup ignores second clicks for a certain period
 // (kAutofillIgnoreEarlyClicksOnPopupDuration) after the Autofill popup was
 // shown. This is to prevent double clicks accidentally accepting suggestions.
@@ -356,7 +335,20 @@ const base::Feature kAutofillIgnoreEarlyClicksOnPopup{
 const base::FeatureParam<base::TimeDelta>
     kAutofillIgnoreEarlyClicksOnPopupDuration{
         &kAutofillIgnoreEarlyClicksOnPopup, "duration",
-        base::Milliseconds(250)};
+        base::Milliseconds(500)};
+
+// When enabled, HTML autocomplete values that do not map to any known type, but
+// look reasonable (e.g. contain "address") are simply ignored. Without the
+// feature, Autofill is disabled on such fields.
+const base::Feature kAutofillIgnoreUnmappableAutocompleteValues{
+    "AutofillIgnoreUnmappableAutocompleteValues",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, <label for=..> inference relies on control.labels() instead of
+// iterating through all <label> tags manually.
+// TODO(crbug.com/1339277) Remove once launched.
+const base::Feature kAutofillImprovedLabelForInference{
+    "AutofillImprovedLabelForInference", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, only changed values are highlighted in preview mode.
 // TODO(crbug/1248585): Remove when launched.
@@ -433,6 +425,19 @@ const base::FeatureParam<std::string> kAutofillParsingPatternActiveSource{
 // TODO(crbug/1150895): Cleanup when launched.
 const base::Feature kAutofillPageLanguageDetection{
     "AutofillPageLanguageDetection", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, AutofillManager::ParseForm() isn't called synchronously.
+// Instead, all incoming events parse the form asynchronously and proceed
+// afterwards.
+// TODO(crbug.com/1309848) Remove once launched.
+const base::Feature kAutofillParseAsync{"AutofillParseAsync",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, local heuristics fall back to interpreting the fields' name as an
+// autocomplete type.
+// TODO(crbug.com/TODO) Remove once launched.
+const base::Feature kAutofillParseNameAsAutocompleteType{
+    "AutofillParseNameAsAutocompleteType", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If the feature is enabled, FormTracker's probable-form-submission detection
 // is disabled and replaced with browser-side detection.
@@ -536,6 +541,7 @@ const base::Feature kAutofillSilentProfileUpdateForInsufficientImport{
 
 // Controls whether inferred label is considered for comparing in
 // FormFieldData.SimilarFieldAs.
+// TODO(crbug.com/1211834): The experiment seems dead; remove?
 const base::Feature kAutofillSkipComparingInferredLabels{
     "AutofillSkipComparingInferredLabels", base::FEATURE_DISABLED_BY_DEFAULT};
 

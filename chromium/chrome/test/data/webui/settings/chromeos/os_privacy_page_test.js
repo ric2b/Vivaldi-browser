@@ -35,7 +35,7 @@ class TestPeripheralDataAccessBrowserProxy extends TestBrowserProxy {
     /** @type {DataAccessPolicyState} */
     this.policy_state_ = {
       prefName: crosSettingPrefName,
-      isUserConfigurable: false
+      isUserConfigurable: false,
     };
   }
 
@@ -74,7 +74,7 @@ class TestMetricsConsentBrowserProxy extends TestBrowserProxy {
     /** @type {MetricsConsentState} */
     this.state_ = {
       prefName: deviceMetricsConsentPrefName,
-      isConfigurable: false
+      isConfigurable: false,
     };
   }
 
@@ -109,9 +109,9 @@ suite('PrivacyPageTests', function() {
       'device': {
         'peripheral_data_access_enabled': {
           value: true,
-        }
-      }
-    }
+        },
+      },
+    },
   };
 
   /** @type {?TestPeripheralDataAccessBrowserProxy} */
@@ -119,7 +119,7 @@ suite('PrivacyPageTests', function() {
 
   setup(async () => {
     browserProxy = new TestPeripheralDataAccessBrowserProxy();
-    PeripheralDataAccessBrowserProxyImpl.setInstance(browserProxy);
+    PeripheralDataAccessBrowserProxyImpl.setInstanceForTesting(browserProxy);
     PolymerTest.clearBody();
     privacyPage = document.createElement('os-settings-privacy-page');
     document.body.appendChild(privacyPage);
@@ -163,23 +163,23 @@ suite('PrivacyPageTests', function() {
       'settings': {
         'suggested_content_enabled': {
           value: true,
-        }
+        },
       },
       'cros': {
         'device': {
           'peripheral_data_access_enabled': {
             value: true,
-          }
-        }
+          },
+        },
       },
       'dns_over_https': {
         'mode': {
-          value: SecureDnsMode.AUTOMATIC
+          value: SecureDnsMode.AUTOMATIC,
         },
         'templates': {
-          value: ''
-        }
-      }
+          value: '',
+        },
+      },
     };
 
     flush();
@@ -334,6 +334,14 @@ suite('PrivacyPageTests', function() {
     assertTrue(privacyPage.showPasswordPromptDialog_);
   });
 
+  test('Refresh token when authentication token invalid', async () => {
+    privacyPage.setProperties({setModes_: () => {}});
+    flush();
+
+    privacyPage.dispatchEvent(new CustomEvent('auth-token-invalid'));
+
+    assertEquals(privacyPage.setModes_, undefined);
+  });
 
   test('Smart privacy hidden when both features disabled', async () => {
     loadTimeData.overrideValues({
@@ -390,18 +398,18 @@ suite('PrivacePageTest_OfficialBuild', async () => {
       'device': {
         'peripheral_data_access_enabled': {
           value: true,
-        }
+        },
       },
       'metrics': {
         'reportingEnabled': {
           value: true,
-        }
-      }
+        },
+      },
     },
     'metrics': {
       'user_consent': {
         value: false,
-      }
+      },
     },
     'dns_over_https':
         {'mode': {value: SecureDnsMode.AUTOMATIC}, 'templates': {value: ''}},
@@ -415,10 +423,11 @@ suite('PrivacePageTest_OfficialBuild', async () => {
 
   setup(async () => {
     browserProxy = new TestPeripheralDataAccessBrowserProxy();
-    PeripheralDataAccessBrowserProxyImpl.setInstance(browserProxy);
+    PeripheralDataAccessBrowserProxyImpl.setInstanceForTesting(browserProxy);
 
     metricsConsentBrowserProxy = new TestMetricsConsentBrowserProxy();
-    MetricsConsentBrowserProxyImpl.setInstance(metricsConsentBrowserProxy);
+    MetricsConsentBrowserProxyImpl.setInstanceForTesting(
+        metricsConsentBrowserProxy);
 
     privacyPage = document.createElement('os-settings-privacy-page');
     PolymerTest.clearBody();
@@ -527,8 +536,8 @@ suite('PeripheralDataAccessTest', function() {
       'device': {
         'peripheral_data_access_enabled': {
           value: false,
-        }
-      }
+        },
+      },
     },
     'settings': {'local_state_device_pci_data_access_enabled': {value: false}},
     'dns_over_https':
@@ -540,7 +549,7 @@ suite('PeripheralDataAccessTest', function() {
 
   setup(async () => {
     browserProxy = new TestPeripheralDataAccessBrowserProxy();
-    PeripheralDataAccessBrowserProxyImpl.setInstance(browserProxy);
+    PeripheralDataAccessBrowserProxyImpl.setInstanceForTesting(browserProxy);
     PolymerTest.clearBody();
   });
 

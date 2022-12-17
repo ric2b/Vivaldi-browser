@@ -13,8 +13,10 @@
  * extended to override methods that extract lines for multiline fields
  * or to provide other customizations.
  */
-import {ChromeVoxState} from '/chromevox/background/chromevox_state.js';
-import {AbstractTts} from '/chromevox/common/abstract_tts.js';
+import {AbstractTts} from '../../common/abstract_tts.js';
+import {Msgs} from '../../common/msgs.js';
+import {QueueMode, TtsCategory, TtsInterface, TtsSpeechProperties} from '../../common/tts_interface.js';
+import {ChromeVoxState} from '../chromevox_state.js';
 
 /**
  * A class containing the information needed to speak
@@ -68,7 +70,7 @@ export const TypingEcho = {
   WORD: 1,
   CHARACTER_AND_WORD: 2,
   NONE: 3,
-  COUNT: 4
+  COUNT: 4,
 };
 
 
@@ -116,7 +118,7 @@ export class ChromeVoxEditableTextBase {
       }.bind(this),
       set: function(val) {
         this.value_ = val.replace('\u00a0', ' ');
-      }.bind(this)
+      }.bind(this),
     });
     this.value = value;
 
@@ -251,7 +253,8 @@ export class ChromeVoxEditableTextBase {
    * @param {string} str The string to speak.
    * @param {boolean=} opt_triggeredByUser True if the speech was triggered by a
    * user action.
-   * @param {Object=} opt_personality Personality used to speak text.
+   * @param {TtsSpeechProperties=} opt_personality Personality used to speak
+   *     text.
    */
   speak(str, opt_triggeredByUser, opt_personality) {
     if (!str) {
@@ -261,8 +264,8 @@ export class ChromeVoxEditableTextBase {
     if (opt_triggeredByUser === true) {
       queueMode = QueueMode.CATEGORY_FLUSH;
     }
-    const props = opt_personality || {};
-    props['category'] = TtsCategory.NAV;
+    const props = opt_personality || new TtsSpeechProperties();
+    props.category = TtsCategory.NAV;
     this.tts.speak(str, queueMode, props);
   }
 
@@ -304,7 +307,7 @@ export class ChromeVoxEditableTextBase {
     if (this.isPassword) {
       this.speak(
           (new goog.i18n.MessageFormat(Msgs.getMsg('bullet')).format({
-            'COUNT': 1
+            'COUNT': 1,
           })),
           evt.triggeredByUser);
       return;
@@ -337,12 +340,15 @@ export class ChromeVoxEditableTextBase {
           } else {
             this.speak(
                 this.value.substr(evt.start, 1), evt.triggeredByUser,
-                {'phoneticCharacters': evt.triggeredByUser});
+                new TtsSpeechProperties(
+                    {'phoneticCharacters': evt.triggeredByUser}));
           }
         } else {
           this.speak(
               this.value.substr(Math.min(this.start, evt.start), 1),
-              evt.triggeredByUser, {'phoneticCharacters': evt.triggeredByUser});
+              evt.triggeredByUser,
+              new TtsSpeechProperties(
+                  {'phoneticCharacters': evt.triggeredByUser}));
         }
       } else {
         // Moved by more than one character. Read all characters crossed.
@@ -406,14 +412,14 @@ export class ChromeVoxEditableTextBase {
    * @param {TextChangeEvent} evt The text change event.
    */
   describeTextChanged(prev, evt) {
-    let personality = {};
+    let personality = new TtsSpeechProperties();
     if (evt.value.length < (prev.value.length - 1)) {
       personality = AbstractTts.PERSONALITY_DELETED;
     }
     if (this.isPassword) {
       this.speak(
           (new goog.i18n.MessageFormat(Msgs.getMsg('bullet')).format({
-            'COUNT': 1
+            'COUNT': 1,
           })),
           evt.triggeredByUser, personality);
       return;
@@ -560,7 +566,8 @@ export class ChromeVoxEditableTextBase {
    * @param {string} autocompleteSuffix The autocomplete string that was added
    *     to the end, if any. It should be spoken at the end of the utterance
    *     describing the change.
-   * @param {Object=} opt_personality Personality to speak the text.
+   * @param {TtsSpeechProperties=} opt_personality Personality to speak the
+   *     text.
    */
   describeTextChangedHelper(
       prev, evt, prefixLen, suffixLen, autocompleteSuffix, opt_personality) {

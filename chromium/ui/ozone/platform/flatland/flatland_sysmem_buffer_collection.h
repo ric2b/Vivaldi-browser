@@ -64,10 +64,14 @@ class FlatlandSysmemBufferCollection
                   VkDevice vk_device,
                   size_t min_buffer_count);
 
+  // Does minimum initialization needed for tests based on |usage|.
+  void InitializeForTesting(gfx::BufferUsage usage);
+
   // Creates a NativePixmap with the specified index. The returned
   // NativePixmap holds a reference to the collection, so that the collection
   // is not deleted until all NativePixmaps are destroyed.
-  scoped_refptr<gfx::NativePixmap> CreateNativePixmap(size_t buffer_index);
+  scoped_refptr<gfx::NativePixmap> CreateNativePixmap(size_t buffer_index,
+                                                      gfx::Size size);
 
   // Creates a new Vulkan image for the buffer with the specified index.
   bool CreateVkImage(size_t buffer_index,
@@ -81,7 +85,6 @@ class FlatlandSysmemBufferCollection
 
   gfx::SysmemBufferCollectionId id() const { return id_; }
   size_t num_buffers() const { return buffers_info_.buffer_count; }
-  gfx::Size size() const { return image_size_; }
   gfx::BufferFormat format() const { return format_; }
   size_t buffer_size() const {
     return buffers_info_.settings.buffer_settings.size_bytes;
@@ -90,6 +93,8 @@ class FlatlandSysmemBufferCollection
   // Returns a duplicate of |flatland_import_token_| so Images can be created.
   fuchsia::ui::composition::BufferCollectionImportToken GetFlatlandImportToken()
       const;
+  bool HasFlatlandImportToken() const;
+
   void AddOnDeletedCallback(base::OnceClosure on_deleted);
 
  private:
@@ -138,7 +143,6 @@ class FlatlandSysmemBufferCollection
   // threads.
   THREAD_CHECKER(vulkan_thread_checker_);
 
-  gfx::Size image_size_;
   size_t buffer_size_ = 0;
   bool is_protected_ = false;
 

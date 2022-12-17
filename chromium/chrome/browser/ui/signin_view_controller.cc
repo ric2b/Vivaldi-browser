@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/signin_modal_dialog.h"
 #include "chrome/browser/ui/signin_modal_dialog_impl.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
@@ -74,7 +75,7 @@ void ShowTabOverwritingNTP(Browser* browser, const GURL& url) {
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   params.window_action = NavigateParams::SHOW_WINDOW;
   params.user_gesture = false;
-  params.tabstrip_add_types |= TabStripModel::ADD_INHERIT_OPENER;
+  params.tabstrip_add_types |= AddTabTypes::ADD_INHERIT_OPENER;
 
   content::WebContents* contents =
       browser->tab_strip_model()->GetActiveWebContents();
@@ -233,6 +234,14 @@ void SigninViewController::ShowModalInterceptFirstRunExperienceDialog(
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+void SigninViewController::ShowModalProfileCustomizationDialog() {
+  CloseModalSignin();
+  dialog_ = std::make_unique<SigninModalDialogImpl>(
+      SigninViewControllerDelegate::CreateProfileCustomizationDelegate(
+          browser_, /*show_profile_switch_iph=*/true),
+      GetOnModalDialogClosedCallback());
+}
+
 void SigninViewController::ShowModalSigninEmailConfirmationDialog(
     const std::string& last_email,
     const std::string& email,
@@ -364,8 +373,10 @@ void SigninViewController::ShowDiceSigninTab(
           signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS) {
         // Extensions do not activate the tab to prevent misbehaving
         // extensions to keep focusing the signin tab.
-        tab_strip->ActivateTabAt(dice_tab_index,
-                                 {TabStripModel::GestureType::kOther});
+        tab_strip->ActivateTabAt(
+            dice_tab_index,
+            TabStripUserGestureDetails(
+                TabStripUserGestureDetails::GestureType::kOther));
       }
       // Do not create a new signin tab, because there is already one.
       return;

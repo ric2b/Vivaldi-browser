@@ -1,11 +1,10 @@
 Name: Alliance for Open Media Video Codec
 Short Name: libaom
 URL: https://aomedia.googlesource.com/aom/
-Version: 3.1.2
-CPEPrefix: cpe:/a:aomedia:aomedia:3.1.2
-Date: Wednesday May 18 2022
-Branch: main
-Commit: 32d6783c4c9f6e78f43bd4ceffaa0eb2143aed57
+Version: 3.4.0
+Date: Thursday September 08 2022
+Revision: 5bd38c95006adc1b3b9523a6980207c5576fd8a5
+CPEPrefix: cpe:/a:aomedia:aomedia:3.4.0
 License: BSD
 License File: source/libaom/LICENSE
 Security Critical: yes
@@ -31,7 +30,7 @@ Please follow these steps to update libaom source code:
      ./cmake_update.sh
 
    This will also update this file with the new revision.
-   Update 'Branch' in this file if necessary.
+   Update 'Version' and 'CPEPrefix' in this file if necessary.
 
 3. Amend the commit created by the first step:
 

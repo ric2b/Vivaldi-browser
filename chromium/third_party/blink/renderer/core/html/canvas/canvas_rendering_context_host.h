@@ -35,7 +35,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
                                                public CanvasImageSource,
                                                public GarbageCollectedMixin {
  public:
-  enum HostType {
+  enum class HostType {
     kNone,
     kCanvasHost,
     kOffscreenCanvasHost,
@@ -51,7 +51,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
 
   virtual void PreFinalizeFrame() = 0;
   virtual void PostFinalizeFrame() = 0;
-  virtual bool PushFrame(scoped_refptr<CanvasResource> frame,
+  virtual bool PushFrame(scoped_refptr<CanvasResource>&& frame,
                          const SkIRect& damage_rect) = 0;
   virtual bool OriginClean() const = 0;
   virtual void SetOriginTainted() = 0;
@@ -76,7 +76,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
 
   virtual bool ShouldAccelerate2dContext() const = 0;
 
-  virtual void Commit(scoped_refptr<CanvasResource> canvas_resource,
+  virtual void Commit(scoped_refptr<CanvasResource>&& canvas_resource,
                       const SkIRect& damage_rect);
 
   virtual UkmParameters GetUkmParameters() = 0;
@@ -131,7 +131,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
 
   bool did_fail_to_create_resource_provider_ = false;
   bool did_record_canvas_size_to_uma_ = false;
-  HostType host_type_ = kNone;
+  HostType host_type_ = HostType::kNone;
 };
 
 }  // namespace blink

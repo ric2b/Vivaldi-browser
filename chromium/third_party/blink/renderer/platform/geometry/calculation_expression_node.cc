@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/platform/geometry/calculation_expression_node.h"
+#include "third_party/blink/renderer/platform/geometry/length_functions.h"
 
 #include "base/notreached.h"
 
@@ -10,7 +11,9 @@ namespace blink {
 
 // ------ CalculationExpressionNumberNode ------
 
-float CalculationExpressionNumberNode::Evaluate(float max_value) const {
+float CalculationExpressionNumberNode::Evaluate(
+    float max_value,
+    const Length::AnchorEvaluator*) const {
   return value_;
 }
 
@@ -37,7 +40,8 @@ CalculationExpressionNumberNode::ResolvedResultType() const {
 // ------ CalculationExpressionPixelsAndPercentNode ------
 
 float CalculationExpressionPixelsAndPercentNode::Evaluate(
-    float max_value) const {
+    float max_value,
+    const Length::AnchorEvaluator*) const {
   return value_.pixels + value_.percent / 100 * max_value;
 }
 
@@ -178,45 +182,70 @@ CalculationExpressionOperationNode::CreateSimplified(Children&& children,
   }
 }
 
-float CalculationExpressionOperationNode::Evaluate(float max_value) const {
+bool CalculationExpressionOperationNode::ComputeHasAnchorQueries() const {
+  for (const auto& child : children_) {
+    if (child->HasAnchorQueries())
+      return true;
+  }
+  return false;
+}
+
+CalculationExpressionOperationNode::CalculationExpressionOperationNode(
+    Children&& children,
+    CalculationOperator op)
+    : children_(std::move(children)), operator_(op) {
+#if DCHECK_IS_ON()
+  result_type_ = ResolvedResultType();
+  DCHECK_NE(result_type_, ResultType::kInvalid);
+#endif
+  has_anchor_queries_ = ComputeHasAnchorQueries();
+}
+
+float CalculationExpressionOperationNode::Evaluate(
+    float max_value,
+    const Length::AnchorEvaluator* anchor_evaluator) const {
   switch (operator_) {
     case CalculationOperator::kAdd: {
       DCHECK_EQ(children_.size(), 2u);
-      float left = children_[0]->Evaluate(max_value);
-      float right = children_[1]->Evaluate(max_value);
+      float left = children_[0]->Evaluate(max_value, anchor_evaluator);
+      float right = children_[1]->Evaluate(max_value, anchor_evaluator);
       return left + right;
     }
     case CalculationOperator::kSubtract: {
       DCHECK_EQ(children_.size(), 2u);
-      float left = children_[0]->Evaluate(max_value);
-      float right = children_[1]->Evaluate(max_value);
+      float left = children_[0]->Evaluate(max_value, anchor_evaluator);
+      float right = children_[1]->Evaluate(max_value, anchor_evaluator);
       return left - right;
     }
     case CalculationOperator::kMultiply: {
       DCHECK_EQ(children_.size(), 2u);
-      float left = children_[0]->Evaluate(max_value);
-      float right = children_[1]->Evaluate(max_value);
+      float left = children_[0]->Evaluate(max_value, anchor_evaluator);
+      float right = children_[1]->Evaluate(max_value, anchor_evaluator);
       return left * right;
     }
     case CalculationOperator::kMin: {
       DCHECK(!children_.IsEmpty());
-      float minimum = children_[0]->Evaluate(max_value);
-      for (auto& child : children_)
-        minimum = std::min(minimum, child->Evaluate(max_value));
+      float minimum = children_[0]->Evaluate(max_value, anchor_evaluator);
+      for (auto& child : children_) {
+        minimum =
+            std::min(minimum, child->Evaluate(max_value, anchor_evaluator));
+      }
       return minimum;
     }
     case CalculationOperator::kMax: {
       DCHECK(!children_.IsEmpty());
-      float maximum = children_[0]->Evaluate(max_value);
-      for (auto& child : children_)
-        maximum = std::max(maximum, child->Evaluate(max_value));
+      float maximum = children_[0]->Evaluate(max_value, anchor_evaluator);
+      for (auto& child : children_) {
+        maximum =
+            std::max(maximum, child->Evaluate(max_value, anchor_evaluator));
+      }
       return maximum;
     }
     case CalculationOperator::kClamp: {
       DCHECK(!children_.IsEmpty());
-      float min = children_[0]->Evaluate(max_value);
-      float val = children_[1]->Evaluate(max_value);
-      float max = children_[2]->Evaluate(max_value);
+      float min = children_[0]->Evaluate(max_value, anchor_evaluator);
+      float val = children_[1]->Evaluate(max_value, anchor_evaluator);
+      float max = children_[2]->Evaluate(max_value, anchor_evaluator);
       // clamp(MIN, VAL, MAX) is identical to max(MIN, min(VAL, MAX))
       return std::max(min, std::min(val, max));
     }
@@ -387,8 +416,27 @@ CalculationExpressionAnchorQueryNode::Zoom(double factor) const {
       type_, anchor_name_, value_, side_percentage_, fallback_.Zoom(factor));
 }
 
-float CalculationExpressionAnchorQueryNode::Evaluate(float) const {
-  // TODO(crbug.com/1309178): Implement.
+float CalculationExpressionAnchorQueryNode::Evaluate(
+    float max_value,
+    const Length::AnchorEvaluator* anchor_evaluator) const {
+  if (anchor_evaluator) {
+    switch (Type()) {
+      case AnchorQueryType::kAnchor:
+        if (const absl::optional<LayoutUnit> value =
+                anchor_evaluator->EvaluateAnchor(anchor_name_, AnchorSide())) {
+          return value->ToFloat();
+        }
+        break;
+      case AnchorQueryType::kAnchorSize:
+        if (const absl::optional<LayoutUnit> value =
+                anchor_evaluator->EvaluateAnchorSize(anchor_name_,
+                                                     AnchorSize())) {
+          return value->ToFloat();
+        }
+        break;
+    }
+    return FloatValueForLength(fallback_, max_value, anchor_evaluator);
+  }
   return 0;
 }
 

@@ -220,7 +220,8 @@ void WaylandDataDragController::DrawIconInternal() {
   DCHECK(!icon_bitmap_->empty());
   gfx::Size size(icon_bitmap_->width(), icon_bitmap_->height());
 
-  icon_buffer_ = std::make_unique<WaylandShmBuffer>(connection_->shm(), size);
+  icon_buffer_ = std::make_unique<WaylandShmBuffer>(
+      connection_->wayland_buffer_factory(), size);
   if (!icon_buffer_->IsValid()) {
     LOG(ERROR) << "Failed to create drag icon buffer.";
     return;
@@ -256,10 +257,12 @@ void WaylandDataDragController::OnDragEnter(WaylandWindow* window,
 
   if (pointer_grabber_for_window_drag_) {
     DCHECK(drag_source_.has_value());
-    if (*drag_source_ == DragSource::kMouse)
-      pointer_delegate_->OnPointerFocusChanged(window, location);
-    else
+    if (*drag_source_ == DragSource::kMouse) {
+      pointer_delegate_->OnPointerFocusChanged(
+          window, location, wl::EventDispatchPolicy::kImmediate);
+    } else {
       touch_delegate_->OnTouchFocusChanged(window);
+    }
 
     pointer_grabber_for_window_drag_ =
         window_manager_->GetCurrentPointerOrTouchFocusedWindow();

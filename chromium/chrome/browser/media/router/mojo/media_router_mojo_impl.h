@@ -327,11 +327,10 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void GetMediaSinkServiceStatus(
       mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) override;
   void GetMirroringServiceHostForTab(
-      int32_t target_tab_id,
+      int32_t frame_tree_node_id,
       mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver)
       override;
   void GetMirroringServiceHostForDesktop(
-      int32_t initiator_tab_id,
       const std::string& desktop_stream_id,
       mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver)
       override;
@@ -349,7 +348,7 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void OnTerminateRouteResult(const MediaRoute::Id& route_id,
                               mojom::MediaRouteProviderId provider_id,
                               const absl::optional<std::string>& error_text,
-                              RouteRequestResult::ResultCode result_code);
+                              mojom::RouteRequestResultCode result_code);
 
   // Adds |route| to the list of routes. Called in the callback for
   // CreateRoute() etc. so that even if the callback is called before
@@ -367,7 +366,7 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
                              const absl::optional<MediaRoute>& media_route,
                              mojom::RoutePresentationConnectionPtr connection,
                              const absl::optional<std::string>& error_text,
-                             RouteRequestResult::ResultCode result_code);
+                             mojom::RouteRequestResultCode result_code);
 
   // Callback called by MRP's CreateMediaRouteController().
   void OnMediaControllerCreated(const MediaRoute::Id& route_id, bool success);

@@ -46,9 +46,6 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
 
   base::TimeDelta session_length_limit() const { return session_length_limit_; }
   base::Time session_start_time() const { return session_start_time_; }
-  bool session_state_change_in_progress() const {
-    return session_state_change_in_progress_;
-  }
 
   // Returns the number of signed in users. If 0 is returned, there is either
   // no session in progress or no active user.
@@ -140,6 +137,9 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   // Locks the screen. The locking happens asynchronously.
   void LockScreen();
 
+  // Hides the lock screen.
+  void HideLockScreen();
+
   // Requests signing out all users, ending the current session.
   // NOTE: This should only be called from LockStateController, other callers
   // should use LockStateController::RequestSignOut() instead.
@@ -158,9 +158,6 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
 
   // Show the multi-profile login UI to add another user to this session.
   void ShowMultiProfileLogin();
-
-  // Forwards EmitAshInitialized to |client_|.
-  void EmitAshInitialized();
 
   // Returns the PrefService used at the signin screen, which is tied to an
   // incognito profile in chrome and is valid until the browser exits.
@@ -317,9 +314,6 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   PrefService* last_active_user_prefs_ = nullptr;
 
   std::unique_ptr<FullscreenController> fullscreen_controller_;
-
-  // Indicate if the session state is being changed.
-  bool session_state_change_in_progress_ = false;
 
   base::WeakPtrFactory<SessionControllerImpl> weak_ptr_factory_{this};
 };

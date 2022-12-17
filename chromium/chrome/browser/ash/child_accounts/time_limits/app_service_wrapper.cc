@@ -18,8 +18,9 @@
 #include "chrome/browser/ash/child_accounts/time_limits/app_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/common/chrome_features.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/instance_update.h"
 #include "components/services/app_service/public/cpp/types_util.h"
@@ -99,9 +100,15 @@ void AppServiceWrapper::ResumeApp(const AppId& app_id) {
 }
 
 void AppServiceWrapper::LaunchApp(const std::string& app_service_id) {
-  GetAppProxy()->Launch(app_service_id, ui::EF_NONE,
-                        apps::mojom::LaunchSource::kFromParentalControls,
-                        apps::MakeWindowInfo(display::kDefaultDisplayId));
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    GetAppProxy()->Launch(
+        app_service_id, ui::EF_NONE, apps::LaunchSource::kFromParentalControls,
+        std::make_unique<apps::WindowInfo>(display::kDefaultDisplayId));
+  } else {
+    GetAppProxy()->Launch(app_service_id, ui::EF_NONE,
+                          apps::mojom::LaunchSource::kFromParentalControls,
+                          apps::MakeWindowInfo(display::kDefaultDisplayId));
+  }
 }
 
 std::vector<AppId> AppServiceWrapper::GetInstalledApps() const {
@@ -174,43 +181,21 @@ void AppServiceWrapper::GetAppIcon(
   const std::string app_service_id = AppServiceIdFromAppId(app_id, profile_);
   DCHECK(!app_service_id.empty());
 
-  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    apps::IconKey icon_key;
-    GetAppProxy()->LoadIconFromIconKey(
-        app_id.app_type(), app_service_id, icon_key, apps::IconType::kStandard,
-        size_hint_in_dp,
-        /* allow_placeholder_icon */ false,
-        base::BindOnce(
-            [](base::OnceCallback<void(absl::optional<gfx::ImageSkia>)>
-                   callback,
-               apps::IconValuePtr icon_value) {
-              if (!icon_value ||
-                  icon_value->icon_type != apps::IconType::kStandard) {
-                std::move(callback).Run(absl::nullopt);
-              } else {
-                std::move(callback).Run(icon_value->uncompressed);
-              }
-            },
-            std::move(on_icon_ready)));
-  } else {
-    GetAppProxy()->LoadIconFromIconKey(
-        apps::ConvertAppTypeToMojomAppType(app_id.app_type()), app_service_id,
-        apps::mojom::IconKey::New(), apps::mojom::IconType::kStandard,
-        size_hint_in_dp,
-        /* allow_placeholder_icon */ false,
-        base::BindOnce(
-            [](base::OnceCallback<void(absl::optional<gfx::ImageSkia>)>
-                   callback,
-               apps::mojom::IconValuePtr icon_value) {
-              if (!icon_value ||
-                  icon_value->icon_type != apps::mojom::IconType::kStandard) {
-                std::move(callback).Run(absl::nullopt);
-              } else {
-                std::move(callback).Run(icon_value->uncompressed);
-              }
-            },
-            std::move(on_icon_ready)));
-  }
+  GetAppProxy()->LoadIconFromIconKey(
+      app_id.app_type(), app_service_id, apps::IconKey(),
+      apps::IconType::kStandard, size_hint_in_dp,
+      /* allow_placeholder_icon */ false,
+      base::BindOnce(
+          [](base::OnceCallback<void(absl::optional<gfx::ImageSkia>)> callback,
+             apps::IconValuePtr icon_value) {
+            if (!icon_value ||
+                icon_value->icon_type != apps::IconType::kStandard) {
+              std::move(callback).Run(absl::nullopt);
+            } else {
+              std::move(callback).Run(icon_value->uncompressed);
+            }
+          },
+          std::move(on_icon_ready)));
 }
 
 std::string AppServiceWrapper::GetAppServiceId(const AppId& app_id) const {

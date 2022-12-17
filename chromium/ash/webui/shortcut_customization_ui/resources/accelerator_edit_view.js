@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './icons.js';
-import './shortcut_customization_shared_css.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import './icons.html.js';
+import './shortcut_customization_shared.css.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {getTemplate} from './accelerator_edit_view.html.js';
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {ViewState} from './accelerator_view.js';
 import {getShortcutProvider} from './mojo_interface_provider.js';
@@ -25,10 +26,6 @@ import {AcceleratorConfigResult, AcceleratorInfo, AcceleratorKeys, AcceleratorSo
 export class AcceleratorEditViewElement extends PolymerElement {
   static get is() {
     return 'accelerator-edit-view';
-  }
-
-  static get template() {
-    return html`{__html_template__}`;
   }
 
   static get properties() {
@@ -131,7 +128,7 @@ export class AcceleratorEditViewElement extends PolymerElement {
             this.dispatchEvent(new CustomEvent('request-update-accelerator', {
               bubbles: true,
               composed: true,
-              detail: {source: this.source, action: this.action}
+              detail: {source: this.source, action: this.action},
             }));
           }
         });
@@ -157,6 +154,10 @@ export class AcceleratorEditViewElement extends PolymerElement {
    */
   computeIsAddView_() {
     return this.viewState === ViewState.ADD;
+  }
+
+  static get template() {
+    return getTemplate();
   }
 }
 

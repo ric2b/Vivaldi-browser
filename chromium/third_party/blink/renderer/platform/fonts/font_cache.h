@@ -35,6 +35,7 @@
 #include <memory>
 #include <string>
 
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
@@ -73,7 +74,6 @@ namespace base {
 namespace trace_event {
 class ProcessMemoryDump;
 }  // namespace trace_event
-struct Feature;
 }  // namespace base
 
 namespace blink {
@@ -398,7 +398,8 @@ class PLATFORM_EXPORT FontCache final {
   Persistent<HeapHashSet<WeakMember<FontCacheClient>>> font_cache_clients_;
   std::unique_ptr<FontPlatformDataCache> font_platform_data_cache_;
   FallbackListShaperCache fallback_list_shaper_cache_;
-  FontDataCache font_data_cache_;
+
+  std::unique_ptr<FontDataCache> font_data_cache_;
 
   Persistent<FontFallbackMap> font_fallback_map_;
 

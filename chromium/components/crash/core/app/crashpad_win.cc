@@ -15,6 +15,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/windows_version.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "components/crash/core/app/crash_export_thunks.h"
@@ -164,12 +165,24 @@ bool PlatformCrashpadInitialization(
   if (!initialized)
     return false;
 
-  if (crash_reporter_client->GetShouldDumpLargerDumps()) {
-    const uint32_t kIndirectMemoryLimit = 4 * 1024 * 1024;
-    crashpad::CrashpadInfo::GetCrashpadInfo()
-        ->set_gather_indirectly_referenced_memory(crashpad::TriState::kEnabled,
-                                                  kIndirectMemoryLimit);
+  // Regester WER helper only if it will produce useful information - prior to
+  // 20H1 the crashes it can help with did not make their way to the helper.
+  if (base::win::GetVersion() >= base::win::Version::WIN10_20H1) {
+    auto path = crash_reporter_client->GetWerRuntimeExceptionModule();
+    if (!path.empty())
+      GetCrashpadClient().RegisterWerModule(path);
   }
+
+  // In the not-large-dumps case record enough extra memory to be able to save
+  // dereferenced memory from all registers on the crashing thread. crashpad may
+  // save 512-bytes per register, and the largest register set (not including
+  // stack pointers) is ARM64 with 32 registers. Hence, 16 KiB.
+  const uint32_t kIndirectMemoryLimit =
+      crash_reporter_client->GetShouldDumpLargerDumps() ? 4 * 1024 * 1024
+                                                        : 16 * 1024;
+  crashpad::CrashpadInfo::GetCrashpadInfo()
+      ->set_gather_indirectly_referenced_memory(crashpad::TriState::kEnabled,
+                                                kIndirectMemoryLimit);
 
   return true;
 }

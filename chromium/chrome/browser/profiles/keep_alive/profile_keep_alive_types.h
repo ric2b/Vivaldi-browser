@@ -42,7 +42,13 @@ enum class ProfileKeepAliveOrigin {
   //
   // DEPRECATED: Not currently in use, but left here for consistency with
   // enums.xml.
-  // kAppControllerMac = 5,
+
+  // NOTE(tomas@vivaldi.com): VB-91558
+  // This fixes the profile error issue. It was caused by an extra render
+  // process host that is created for portals. The profile was not removed
+  // properly when the last window was closed because the rph was still alive
+  // So we will keep the profile alive as well on macOS.
+  kAppControllerMac = 5,
 
   // In the middle of clearing browsing data, e.g. when the user deletes it via
   // the Profile menu, or during ephemeral profile teardown.

@@ -73,6 +73,8 @@ class ContainerQueryEvaluator;
 class CSSPropertyName;
 class CSSPropertyValueSet;
 class CSSStyleDeclaration;
+class CSSToggle;
+class CSSToggleMap;
 class CustomElementDefinition;
 class DOMRect;
 class DOMRectList;
@@ -88,7 +90,6 @@ class ElementRareData;
 class ExceptionState;
 class FocusOptions;
 class GetInnerHTMLOptions;
-class HTMLFieldSetElement;
 class HTMLSelectMenuElement;
 class HTMLTemplateElement;
 class Image;
@@ -103,15 +104,19 @@ class ResizeObservation;
 class ResizeObserver;
 class ResizeObserverSize;
 class ScrollIntoViewOptions;
-class IsVisibleOptions;
+class CheckVisibilityOptions;
 class ScrollToOptions;
 class ShadowRoot;
 class ShadowRootInit;
 class SpaceSplitString;
+class StyleEngine;
 class StylePropertyMap;
 class StylePropertyMapReadOnly;
 class StyleRecalcContext;
 class StyleRequest;
+class ToggleRoot;
+class ToggleRootList;
+class ToggleTrigger;
 class V8UnionBooleanOrScrollIntoViewOptions;
 
 enum class CSSPropertyID;
@@ -163,11 +168,11 @@ enum class PopupValueType {
   kNone,
   kAuto,
   kHint,
-  kAsync,
+  kManual,
 };
 constexpr const char* kPopupTypeValueAuto = "auto";
 constexpr const char* kPopupTypeValueHint = "hint";
-constexpr const char* kPopupTypeValueAsync = "async";
+constexpr const char* kPopupTypeValueManual = "manual";
 
 enum class PopupTriggerAction {
   kNone,
@@ -179,6 +184,16 @@ enum class PopupTriggerAction {
 enum class HidePopupFocusBehavior {
   kNone,
   kFocusPreviousElement,
+};
+
+enum class HidePopupForcingLevel {
+  kHideAfterAnimations,
+  kHideImmediately,
+};
+
+enum class HidePopupIndependence {
+  kLeaveUnrelated,
+  kHideUnrelated,
 };
 
 typedef HeapVector<Member<Attr>> AttrNodeList;
@@ -457,6 +472,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   const AtomicString& prefix() const { return tag_name_.Prefix(); }
   const AtomicString& namespaceURI() const { return tag_name_.NamespaceURI(); }
 
+  bool IsHTMLWithTagName(const String& tag_name) const;
+
   const AtomicString& LocateNamespacePrefix(
       const AtomicString& namespace_uri) const;
 
@@ -558,19 +575,39 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // attributes in a start tag were added to the element.
   virtual void ParseAttribute(const AttributeModificationParams&);
 
+  void DefaultEventHandler(Event&) override;
+
   // Popup API related functions.
   void UpdatePopupAttribute(String);
   bool HasValidPopupAttribute() const;
   PopupData* GetPopupData() const;
   PopupValueType PopupType() const;
   bool popupOpen() const;
-  void showPopup(ExceptionState& exception_state);
-  void hidePopup(ExceptionState& exception_state);
-  void hidePopupInternal(HidePopupFocusBehavior focus_behavior);
-  static const Element* NearestOpenAncestralPopup(Node* start_node);
+  void showPopUp(ExceptionState& exception_state);
+  void hidePopUp(ExceptionState& exception_state);
+  void HidePopUpInternal(HidePopupFocusBehavior focus_behavior,
+                         HidePopupForcingLevel forcing_level);
+  void PopupHideFinishIfNeeded();
+  static const Element* NearestOpenAncestralPopup(const Node& node,
+                                                  bool inclusive = false);
+  // Retrieves the element pointed to by this element's 'anchor' content
+  // attribute, if that element exists, and if this element is a pop-up.
+  Element* anchorElement() const;
   static void HandlePopupLightDismiss(const Event& event);
   void InvokePopup(Element* invoker);
   void SetPopupFocusOnShow();
+  // This hides all visible popups up to, but not including,
+  // |endpoint|. If |endpoint| is nullptr, all popups are hidden.
+  static void HideAllPopupsUntil(const Element*,
+                                 Document&,
+                                 HidePopupFocusBehavior,
+                                 HidePopupForcingLevel,
+                                 HidePopupIndependence);
+  Element* PopupHoverTargetElement() const;
+  bool IsNodePopUpDescendant(const Node& node) const;
+  void MaybeQueuePopupHideEvent();
+  static void HoveredElementChanged(Element* old_element, Element* new_element);
+  void HandlePopupHovered(bool hovered);
 
   // TODO(crbug.com/1197720): The popup position should be provided by the new
   // anchored positioning scheme.
@@ -582,11 +619,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual const QualifiedName& SubResourceAttributeName() const;
 
   // Only called by the parser immediately after element construction.
-  void ParserSetAttributes(const Vector<Attribute>&);
+  void ParserSetAttributes(const Vector<Attribute, kAttributePrealloc>&);
 
   // Remove attributes that might introduce scripting from the vector leaving
   // the element unchanged.
-  void StripScriptingAttributes(Vector<Attribute>&) const;
+  void StripScriptingAttributes(Vector<Attribute, kAttributePrealloc>&) const;
 
   bool SharesSameElementData(const Element& other) const {
     return GetElementData() == other.GetElementData();
@@ -630,6 +667,17 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
            NeedsLayoutSubtreeUpdate();
   }
   void RebuildLayoutTree(WhitespaceAttacher&);
+
+  // Reattach layout tree for all children but not the element itself. This is
+  // only used for UpdateStyleAndLayoutTreeForContainer when:
+  // 1. Re-attaching fieldset when the fieldset layout tree changes and the size
+  //    query container is a fieldset.
+  // 2. Re-attaching for legacy box tree when table-* boxes have columns.
+  //
+  // Case 2 is only necessary until table fragmentation is shipped for LayoutNG.
+  //
+  void ReattachLayoutTreeChildren(base::PassKey<StyleEngine>);
+
   void HandleSubtreeModifications();
   void PseudoStateChanged(CSSSelector::PseudoType);
   void PseudoStateChangedForTesting(CSSSelector::PseudoType);
@@ -649,6 +697,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   // Returns a pointer to the crop-ID if one was set; nullptr otherwise.
   const RegionCaptureCropId* GetRegionCaptureCropId() const;
+
+  // Support for all elements with region capture is currently experimental.
+  // TODO(crbug.com/1332641): Remove this after support is stable.
+  virtual bool IsSupportedByRegionCapture() const;
 
   ShadowRoot* attachShadow(const ShadowRootInit*, ExceptionState&);
 
@@ -888,6 +940,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   scoped_refptr<ComputedStyle> StyleForPseudoElement(const StyleRecalcContext&,
                                                      const StyleRequest&);
 
+  // Returns the ComputedStyle after applying the declarations in the @try block
+  // at the given index. Returns nullptr if the current element doesn't use
+  // position fallback, or if the index is out of bound.
+  // The style is computed on demand and cached on the ComputedStyle of |this|.
+  const ComputedStyle* StyleForPositionFallback(unsigned index);
+
   virtual bool CanGeneratePseudoElement(PseudoId) const;
 
   virtual bool MatchesDefaultPseudoClass() const { return false; }
@@ -929,6 +987,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual bool IsClearButtonElement() const { return false; }
   virtual bool IsScriptElement() const { return false; }
   virtual bool IsVTTCueBackgroundBox() const { return false; }
+  virtual bool IsVTTCueBox() const { return false; }
   virtual bool IsSliderThumbElement() const { return false; }
   virtual bool IsOutputElement() const { return false; }
 
@@ -1078,8 +1137,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool ActivateDisplayLockIfNeeded(DisplayLockActivationReason reason);
 
   ContainerQueryData* GetContainerQueryData() const;
-  void SetContainerQueryEvaluator(ContainerQueryEvaluator*);
   ContainerQueryEvaluator* GetContainerQueryEvaluator() const;
+  ContainerQueryEvaluator& EnsureContainerQueryEvaluator();
   bool SkippedContainerStyleRecalc() const;
 
   virtual void SetActive(bool active);
@@ -1098,6 +1157,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // For font-related style invalidation.
   void SetScrollbarPseudoElementStylesDependOnFontMetrics(bool);
 
+  bool AffectedBySubjectHas() const;
+  void SetAffectedBySubjectHas();
   bool AffectedByNonSubjectHas() const;
   void SetAffectedByNonSubjectHas();
   bool AncestorsOrAncestorSiblingsAffectedByHas() const;
@@ -1117,6 +1178,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetAncestorsOrSiblingsAffectedByFocusVisibleInHas();
   bool AffectedByLogicalCombinationsInHas() const;
   void SetAffectedByLogicalCombinationsInHas();
+  bool AffectedByMultipleHas() const;
+  void SetAffectedByMultipleHas();
 
   void SaveIntrinsicSize(ResizeObserverSize* size);
   const ResizeObserverSize* LastIntrinsicSize() const;
@@ -1140,16 +1203,30 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   FocusgroupFlags GetFocusgroupFlags() const;
 
-  bool isVisible(IsVisibleOptions* options) const;
+  bool checkVisibility(CheckVisibilityOptions* options) const;
 
   bool IsDocumentElement() const;
 
-  // Not all Elements are presently supported by the Region Capture feature.
-  // Those that are override and this method and return true.
-  // TODO(crbug.com/1332641): Remove this after adding support for all subtypes.
-  virtual bool IsSupportedByRegionCapture() const { return false; }
-
   bool IsReplacedElementRespectingCSSOverflow() const;
+
+  CSSToggleMap* toggles() { return &EnsureToggleMap(); }
+
+  CSSToggleMap* GetToggleMap();
+  CSSToggleMap& EnsureToggleMap();
+
+  // Create any toggles specified by 'toggle-root' that don't already exist on
+  // the element.
+  void CreateToggles(const ToggleRootList* toggle_roots);
+
+  // Find the toggle and corresponding element that has the toggle named name
+  // that is in scope on this element, or both null if no toggle is in scope.
+  // The element may be this.
+  //
+  // See https://tabatkins.github.io/css-toggle/#toggle-in-scope .
+  std::pair<CSSToggle*, Element*> FindToggleInScope(const AtomicString& name);
+
+  // Implement https://tabatkins.github.io/css-toggle/#fire-a-toggle-activation
+  void FireToggleActivation(const ToggleTrigger& activation);
 
  protected:
   const ElementData* GetElementData() const { return element_data_.Get(); }
@@ -1208,6 +1285,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // work to create layout objects is completed (e.g. in display-locked trees).
   bool IsFocusableStyleAfterUpdate() const;
 
+  // Is the node descendant of this in something clickable/activatable, such
+  // that we shouldn't handle events targeting it?
+  bool IsClickableControl(Node*);
+
   // ClassAttributeChanged() and UpdateClassList() exist to share code between
   // ParseAttribute (called via setAttribute()) and SvgAttributeChanged (called
   // when element.className.baseVal is set or when the 'class' attribute is
@@ -1242,11 +1323,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // be modified if required by this element.
   void AdjustForceLegacyLayout(const ComputedStyle*,
                                bool* should_force_legacy_layout);
-
-  // Reattach layout tree for all children but not the element itself. This is
-  // only used for reattaching fieldset children when the fieldset is a query
-  // container for size container queries.
-  void ReattachLayoutTreeChildren(base::PassKey<HTMLFieldSetElement>);
 
  private:
   friend class AXObject;
@@ -1325,10 +1401,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     kRebuildLayoutTree,
     kAttachLayoutTree,
   };
-
-  // Retrieves the element pointed to by this element's 'anchor' content
-  // attribute, if that element exists.
-  Element* anchorElement() const;
 
   // Special focus handling for popups.
   Element* GetPopupFocusableArea(bool autofocus_only) const;
@@ -1558,6 +1630,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // like *::selection. To improve runtime and keep copy-on-write inheritance,
   // avoid recalc if neither parent nor child matched any non-universal rules.
   bool CanSkipRecalcForHighlightPseudos(const ComputedStyle& new_style) const;
+
+  static void ChangeToggle(Element* toggle_element,
+                           CSSToggle* toggle,
+                           const ToggleTrigger& action,
+                           const ToggleRoot* override_spec);
+  void FireToggleChangeEvent(CSSToggle* toggle);
 
   Member<ElementData> element_data_;
 };

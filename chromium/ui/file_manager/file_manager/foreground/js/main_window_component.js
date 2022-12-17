@@ -5,8 +5,11 @@
 import {DialogType} from '../../common/js/dialog_type.js';
 import {metrics} from '../../common/js/metrics.js';
 import {str, util} from '../../common/js/util.js';
+import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {DirectoryChangeEvent} from '../../externs/directory_change_event.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
+import {changeDirectory} from '../../state/actions.js';
+import {getStore} from '../../state/store.js';
 
 import {AppStateController} from './app_state_controller.js';
 import {FileFilter} from './directory_contents.js';
@@ -141,8 +144,6 @@ export class MainWindowComponent {
         'focus', this.onFileListFocus_.bind(this));
     ui.listContainer.grid.addEventListener(
         'focus', this.onFileListFocus_.bind(this));
-    ui.breadcrumbController.addEventListener(
-        'pathclick', this.onBreadcrumbClick_.bind(this));
     /**
      * We are binding both click/keyup event here because "click" event will
      * be triggered multiple times if the Enter/Space key is being pressed
@@ -191,14 +192,6 @@ export class MainWindowComponent {
 
       return false;
     });
-  }
-
-  /**
-   * @param {Event} event Click event.
-   * @private
-   */
-  onBreadcrumbClick_(event) {
-    this.directoryModel_.changeDirectoryEntry(event.entry);
   }
 
   /**
@@ -258,6 +251,12 @@ export class MainWindowComponent {
     }
 
     const entry = selection.entries[0];
+    // A TrashEntry must have a key on it called `restoreEntry` and thus we use
+    // that as a signal this is a TrashEntry and should not be traversable.
+    if (entry.restoreEntry) {
+      this.ui_.alertDialog.show(str('OPEN_TRASHED_FILES_ERROR'), null, null);
+      return false;
+    }
     if (entry.isDirectory) {
       this.directoryModel_.changeDirectoryEntry(
           /** @type {!DirectoryEntry} */ (entry));
@@ -274,6 +273,13 @@ export class MainWindowComponent {
    */
   acceptSelection_() {
     if (this.dialogType_ === DialogType.FULL_PAGE) {
+      // Files within the trash root should not have default tasks. They should
+      // be restored first.
+      if (this.directoryModel_.getCurrentRootType() ===
+          VolumeManagerCommon.RootType.TRASH) {
+        this.ui_.alertDialog.show(str('OPEN_TRASHED_FILES_ERROR'), null, null);
+        return false;
+      }
       this.taskController_.getFileTasks()
           .then(tasks => {
             tasks.executeDefault();
@@ -407,16 +413,14 @@ export class MainWindowComponent {
     switch (util.getKeyModifiers(event) + event.key) {
       case 'Backspace':  // Backspace => Up one directory.
         event.preventDefault();
-        const components =
-            this.ui_.breadcrumbController.getCurrentPathComponents();
-        if (components.length < 2) {
+        const store = getStore();
+        const state = store.getState();
+        const components = state.currentDirectory?.pathComponents;
+        if (!components || components.length < 2) {
           break;
         }
-        const parentPathComponent = components[components.length - 2];
-        parentPathComponent.resolveEntry().then((parentEntry) => {
-          this.directoryModel_.changeDirectoryEntry(
-              /** @type {!DirectoryEntry} */ (parentEntry));
-        });
+        const parent = components[components.length - 2];
+        store.dispatch(changeDirectory({toKey: parent.key}));
         break;
 
       case 'Enter':  // Enter => Change directory or perform default action.
@@ -477,7 +481,6 @@ export class MainWindowComponent {
     this.ui_.element.toggleAttribute('unformatted', /*force=*/ unformatted);
 
     if (event.newDirEntry) {
-      this.ui_.breadcrumbController.show(event.newDirEntry);
       // Updates UI.
       if (this.dialogType_ === DialogType.FULL_PAGE) {
         const locationInfo =
@@ -491,8 +494,6 @@ export class MainWindowComponent {
               event.newDirEntry.fullPath);
         }
       }
-    } else {
-      this.ui_.breadcrumbController.hide();
     }
   }
 

@@ -26,6 +26,8 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_mode.h"
+#include "media/base/supported_video_decoder_config.h"
+#include "media/video/video_encode_accelerator.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/blink/public/mojom/gpu/gpu.mojom.h"
 #include "ui/display/display_observer.h"
@@ -40,11 +42,6 @@ class GURL;
 namespace gpu {
 struct GpuPreferences;
 }
-
-namespace media {
-struct SupportedVideoDecoderConfig;
-using SupportedVideoDecoderConfigs = std::vector<SupportedVideoDecoderConfig>;
-}  // namespace media
 
 namespace content {
 
@@ -137,8 +134,11 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
                             const absl::optional<gpu::GpuFeatureInfo>&
                                 gpu_feature_info_for_hardware_gpu);
   void UpdateGpuExtraInfo(const gfx::GpuExtraInfo& gpu_extra_info);
-  void UpdateMojoMediaVideoCapabilities(
+  void UpdateMojoMediaVideoDecoderCapabilities(
       const media::SupportedVideoDecoderConfigs& configs);
+  void UpdateMojoMediaVideoEncoderCapabilities(
+      const media::VideoEncodeAccelerator::SupportedProfiles&
+          supported_profiles);
 
   gpu::GpuFeatureInfo GetGpuFeatureInfo() const;
 
@@ -170,8 +170,8 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
 
   void ProcessCrashed();
 
-  // Returns a new copy of the ListValue.
-  std::unique_ptr<base::ListValue> GetLogMessages() const;
+  // Returns a base::Value::List with the log messages.
+  base::Value::List GetLogMessages() const;
 
   // Called when switching GPUs.
   void HandleGpuSwitch();
@@ -180,11 +180,14 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
   // using client-facing 3D APIs (WebGL, Pepper 3D), either because
   // the domain has caused the GPU to reset, or because too many GPU
   // resets have been observed globally recently, and system stability
-  // might be compromised.
+  // might be compromised. A set of URLs is passed because in the
+  // situation where the GPU process crashes, the implementation needs
+  // to know that these URLs all came from the same crash.
   //
-  // The given URL may be a partial URL (including at least the host)
-  // or a full URL to a page.
-  void BlockDomainFrom3DAPIs(const GURL& url, gpu::DomainGuilt guilt);
+  // In the set, each URL may be a partial URL (including at least the
+  // host) or a full URL to a page.
+  void BlockDomainsFrom3DAPIs(const std::set<GURL>& urls,
+                              gpu::DomainGuilt guilt);
   bool Are3DAPIsBlocked(const GURL& top_origin_url,
                         ThreeDAPIType requester);
   void UnblockDomainFrom3DAPIs(const GURL& url);

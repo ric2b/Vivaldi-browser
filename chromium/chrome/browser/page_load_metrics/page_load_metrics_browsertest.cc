@@ -26,15 +26,14 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/core/ukm_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/service_worker_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/session_restore_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
-#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
-#include "chrome/browser/prefetch/no_state_prefetch/prerender_test_utils.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
+#include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
+#include "chrome/browser/preloading/prefetch/no_state_prefetch/prerender_test_utils.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
@@ -714,9 +713,17 @@ IN_PROC_BROWSER_TEST_F(
   main_frame_intersection_expectation_waiter->Wait();
 }
 
+// TODO(crbug.com/1352092): Fix flakiness.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+#define MAYBE_NonZeroMainFrameScrollOffset_NestedCrossOriginFrame_MainFrameIntersection \
+  DISABLED_NonZeroMainFrameScrollOffset_NestedCrossOriginFrame_MainFrameIntersection
+#else
+#define MAYBE_NonZeroMainFrameScrollOffset_NestedCrossOriginFrame_MainFrameIntersection \
+  NonZeroMainFrameScrollOffset_NestedCrossOriginFrame_MainFrameIntersection
+#endif
 IN_PROC_BROWSER_TEST_F(
     PageLoadMetricsBrowserTest,
-    NonZeroMainFrameScrollOffset_NestedCrossOriginFrame_MainFrameIntersection) {
+    MAYBE_NonZeroMainFrameScrollOffset_NestedCrossOriginFrame_MainFrameIntersection) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/scroll/scrollable_page_with_content.html");
@@ -1410,144 +1417,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DISABLED_BadXhtml) {
       page_load_metrics::internal::INVALID_ORDER_PARSE_START_FIRST_PAINT, 1);
 }
 
-// Test code that aborts provisional navigations.
-// TODO(csharrison): Move these to unit tests once the navigation API in content
-// properly calls NavigationHandle/NavigationThrottle methods.
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, AbortNewNavigation) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
-  content::TestNavigationManager manager(
-      browser()->tab_strip_model()->GetActiveWebContents(), url);
-
-  Navigate(&params);
-  EXPECT_TRUE(manager.WaitForRequestStart());
-
-  GURL url2(embedded_test_server()->GetURL("/title2.html"));
-  NavigateParams params2(browser(), url2, ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-
-  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-  waiter->AddPageExpectation(TimingField::kLoadEvent);
-  Navigate(&params2);
-  waiter->Wait();
-
-  histogram_tester_->ExpectTotalCount(
-      internal::kHistogramAbortNewNavigationBeforeCommit, 1);
-}
-
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, AbortReload) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
-  content::TestNavigationManager manager(
-      browser()->tab_strip_model()->GetActiveWebContents(), url);
-
-  Navigate(&params);
-  EXPECT_TRUE(manager.WaitForRequestStart());
-
-  NavigateParams params2(browser(), url, ui::PAGE_TRANSITION_RELOAD);
-
-  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-  waiter->AddPageExpectation(TimingField::kLoadEvent);
-  Navigate(&params2);
-  waiter->Wait();
-
-  histogram_tester_->ExpectTotalCount(
-      internal::kHistogramAbortReloadBeforeCommit, 1);
-}
-
-// TODO(crbug.com/675061): Flaky on Win7 dbg.
-#if BUILDFLAG(IS_WIN)
-#define MAYBE_AbortClose DISABLED_AbortClose
-#else
-#define MAYBE_AbortClose AbortClose
-#endif
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, MAYBE_AbortClose) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
-  content::TestNavigationManager manager(
-      browser()->tab_strip_model()->GetActiveWebContents(), url);
-
-  Navigate(&params);
-  EXPECT_TRUE(manager.WaitForRequestStart());
-
-  browser()->tab_strip_model()->GetActiveWebContents()->Close();
-
-  manager.WaitForNavigationFinished();
-
-  histogram_tester_->ExpectTotalCount(
-      internal::kHistogramAbortCloseBeforeCommit, 1);
-}
-
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, AbortMultiple) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
-  content::TestNavigationManager manager(
-      browser()->tab_strip_model()->GetActiveWebContents(), url);
-
-  Navigate(&params);
-  EXPECT_TRUE(manager.WaitForRequestStart());
-
-  GURL url2(embedded_test_server()->GetURL("/title2.html"));
-  NavigateParams params2(browser(), url2, ui::PAGE_TRANSITION_TYPED);
-  content::TestNavigationManager manager2(
-      browser()->tab_strip_model()->GetActiveWebContents(), url2);
-  Navigate(&params2);
-
-  EXPECT_TRUE(manager2.WaitForRequestStart());
-  manager.WaitForNavigationFinished();
-
-  GURL url3(embedded_test_server()->GetURL("/title3.html"));
-  NavigateParams params3(browser(), url3, ui::PAGE_TRANSITION_TYPED);
-
-  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-  waiter->AddPageExpectation(TimingField::kLoadEvent);
-  Navigate(&params3);
-  waiter->Wait();
-
-  manager2.WaitForNavigationFinished();
-
-  histogram_tester_->ExpectTotalCount(
-      internal::kHistogramAbortNewNavigationBeforeCommit, 2);
-}
-
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
-                       NoAbortMetricsOnClientRedirect) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL first_url(embedded_test_server()->GetURL("/title1.html"));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first_url));
-
-  GURL second_url(embedded_test_server()->GetURL("/title2.html"));
-  NavigateParams params(browser(), second_url, ui::PAGE_TRANSITION_LINK);
-  content::TestNavigationManager manager(
-      browser()->tab_strip_model()->GetActiveWebContents(), second_url);
-  Navigate(&params);
-  EXPECT_TRUE(manager.WaitForRequestStart());
-
-  {
-    auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-    waiter->AddPageExpectation(TimingField::kLoadEvent);
-    EXPECT_TRUE(content::ExecuteScript(
-        browser()->tab_strip_model()->GetActiveWebContents(),
-        "window.location.reload();"));
-    waiter->Wait();
-  }
-
-  manager.WaitForNavigationFinished();
-
-  EXPECT_TRUE(
-      histogram_tester_
-          ->GetTotalCountsForPrefix("PageLoad.Experimental.AbortTiming.")
-          .empty());
-}
-
 // TODO(crbug.com/1009885): Flaky on Linux MSan builds.
 #if defined(MEMORY_SANITIZER) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
 #define MAYBE_FirstMeaningfulPaintRecorded DISABLED_FirstMeaningfulPaintRecorded
@@ -1569,8 +1438,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
       internal::FIRST_MEANINGFUL_PAINT_RECORDED, 1);
   histogram_tester_->ExpectTotalCount(internal::kHistogramFirstMeaningfulPaint,
                                       1);
-  histogram_tester_->ExpectTotalCount(
-      internal::kHistogramParseStartToFirstMeaningfulPaint, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
@@ -1595,8 +1462,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
       internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE, 1);
   histogram_tester_->ExpectTotalCount(internal::kHistogramFirstMeaningfulPaint,
                                       0);
-  histogram_tester_->ExpectTotalCount(
-      internal::kHistogramParseStartToFirstMeaningfulPaint, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PayloadSize) {
@@ -2622,13 +2487,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   ExpectFirstPaintMetricsTotalCount(1);
 }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_InitialForegroundTabChanged DISABLED_InitialForegroundTabChanged
-#else
-#define MAYBE_InitialForegroundTabChanged InitialForegroundTabChanged
-#endif
+// TODO(crbug.com/1336621): Flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
-                       MAYBE_InitialForegroundTabChanged) {
+                       DISABLED_InitialForegroundTabChanged) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestURL()));
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GetTestURL(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
@@ -2642,7 +2503,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   ASSERT_TRUE(tab_strip);
   ASSERT_EQ(2, tab_strip->count());
   ASSERT_EQ(0, tab_strip->active_index());
-  tab_strip->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  tab_strip->ActivateTabAt(
+      1, TabStripUserGestureDetails(
+             TabStripUserGestureDetails::GestureType::kOther));
 
   session_restore_paint_waiter.WaitForForegroundTabs(1);
 
@@ -2723,7 +2586,8 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
 }
 
 // TODO(crbug.com/1242284): Flaky on Linux.
-#if BUILDFLAG(IS_LINUX)
+// TODO(crbug.com/1338490): Flaky on lacros.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_RestoreForeignSession DISABLED_RestoreForeignSession
 #else
 #define MAYBE_RestoreForeignSession RestoreForeignSession
@@ -2988,6 +2852,35 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, InputEventsForClick) {
       {url, embedded_test_server()->GetURL("/title1.html")});
 }
 
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, SoftNavigation) {
+  embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
+  content::SetupCrossSiteRedirector(embedded_test_server());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
+  waiter->AddPageExpectation(TimingField::kLoadEvent);
+  waiter->AddPageExpectation(TimingField::kFirstContentfulPaint);
+  GURL url =
+      embedded_test_server()->GetURL("/page_load_metrics/soft_navigation.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  waiter->Wait();
+
+  waiter->AddPageExpectation(TimingField::kSoftNavigationCountUpdated);
+  content::SimulateMouseClickAt(
+      browser()->tab_strip_model()->GetActiveWebContents(), 0,
+      blink::WebMouseEvent::Button::kLeft, gfx::Point(100, 100));
+
+  waiter->Wait();
+
+  // Force navigation to another page, which should force logging of histograms
+  // persisted at the end of the page load lifetime.
+  NavigateToUntrackedUrl();
+
+  VerifyNavigationMetrics({url});
+  int64_t value = GetUKMPageLoadMetric(PageLoad::kSoftNavigationCountName);
+  ASSERT_EQ(value, 1);
+}
+
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, InputEventsForOmniboxMatch) {
   embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
   content::SetupCrossSiteRedirector(embedded_test_server());
@@ -3150,6 +3043,56 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, ServiceWorkerMetrics) {
   histogram_tester_->ExpectTotalCount(internal::kHistogramFirstPaint, 2);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramServiceWorkerFirstPaint, 1);
+
+  // Force navigation to another page, which should force logging of histograms
+  // persisted at the end of the page load lifetime.
+  NavigateToUntrackedUrl();
+
+  // Navigation should record the metrics twice because of the initial pageload
+  // to register a service worker and the page load controlled by the service
+  // worker.
+  VerifyNavigationMetrics({url, controlled_url});
+}
+
+// Does a navigation to a page controlled by a skippable service worker
+// fetch handler and verifies that the page load metrics are logged.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
+                       ServiceWorkerSkippableFetchHandlerMetrics) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
+  waiter->AddPageExpectation(TimingField::kFirstPaint);
+
+  // Load a page that registers a service worker.
+  GURL url = embedded_test_server()->GetURL(
+      "/service_worker/create_service_worker.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  EXPECT_EQ("DONE", EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                           "register('empty_fetch_event.js');"));
+  waiter->Wait();
+
+  // The first load was not controlled, so service worker metrics should not be
+  // logged.
+  histogram_tester_->ExpectTotalCount(internal::kHistogramFirstPaint, 1);
+  histogram_tester_->ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 0);
+
+  waiter = CreatePageLoadMetricsTestWaiter("waiter");
+  waiter->AddPageExpectation(TimingField::kFirstPaint);
+
+  // Load a controlled page.
+  GURL controlled_url = url;
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), controlled_url));
+  waiter->Wait();
+
+  // The metrics should be logged.
+  histogram_tester_->ExpectTotalCount(internal::kHistogramFirstPaint, 2);
+  histogram_tester_->ExpectTotalCount(
+      internal::kHistogramServiceWorkerFirstPaint, 1);
+  histogram_tester_->ExpectTotalCount(
+      internal::
+          kHistogramServiceWorkerFirstContentfulPaintSkippableFetchHandler,
+      1);
 
   // Force navigation to another page, which should force logging of histograms
   // persisted at the end of the page load lifetime.
@@ -3480,7 +3423,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PageLCPStopsUponInput) {
   ASSERT_EQ(all_frames_value, main_frame_value);
 }
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)  // crbug.com/1277391
+// Test is flaky. https://crbug.com/1260953
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 #define MAYBE_PageLCPAnimatedImage DISABLED_PageLCPAnimatedImage
 #else
 #define MAYBE_PageLCPAnimatedImage PageLCPAnimatedImage

@@ -65,6 +65,20 @@ enum CustomContextMenuItemType {
   kSubMenu
 };
 
+// Container for information about the form renderer id from where the context
+// menu was triggered.
+// autofill::FormRendererId
+struct FormRendererId {
+  uint64 id;
+};
+
+// Container for information about the field renderer id where the context menu
+// was triggered.
+// autofill::FieldRendererId
+struct FieldRendererId {
+  uint64 id;
+};
+
 // Container for information about entries in an HTML select popup menu and
 // custom entries of the context menu.
 // TODO(crbug.com/1093904): Consider merging the MenuItem struct in
@@ -191,6 +205,14 @@ struct UntrustworthyContextMenuParams {
   // Whether the context contains text highlighted by a text fragment.
   // See TextFragmentAnchor.
   bool opened_from_highlight;
+
+  // The renderer id of the form that contains the input or textarea field.
+  // Not set if the initiating field is not an input or textarea field.
+  FormRendererId? form_renderer_id;
+
+  // The renderer id of the input or textarea field from where the context menu
+  // is opened. Not set if it is not an input or text area field.
+  FieldRendererId? field_renderer_id;
 
   // Vivaldi
   url.mojom.Url vivaldi_keyword_url;

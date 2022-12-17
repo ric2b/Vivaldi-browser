@@ -63,8 +63,6 @@ class FakeDownloadItem : public download::DownloadItem {
   bool IsTransient() const override;
   bool IsParallelDownload() const override;
   DownloadCreationType GetDownloadCreationType() const override;
-  const absl::optional<download::DownloadSchedule>& GetDownloadSchedule()
-      const override;
   ::network::mojom::CredentialsMode GetCredentialsMode() const override;
   const absl::optional<net::IsolationInfo>& GetIsolationInfo() const override;
   bool IsDone() const override;
@@ -77,6 +75,7 @@ class FakeDownloadItem : public download::DownloadItem {
   bool CanResume() const override;
   int64_t GetBytesWasted() const override;
   int32_t GetAutoResumeCount() const override;
+  bool IsOffTheRecord() const override;
   const GURL& GetReferrerUrl() const override;
   const std::string& GetSerializedEmbedderDownloadData() const override;
   const GURL& GetTabUrl() const override;
@@ -136,8 +135,6 @@ class FakeDownloadItem : public download::DownloadItem {
               RenameDownloadCallback callback) override;
   void OnAsyncScanningCompleted(
       download::DownloadDangerType danger_type) override;
-  void OnDownloadScheduleChanged(
-      absl::optional<download::DownloadSchedule> schedule) override;
 
   bool removed() const { return removed_; }
 
@@ -205,7 +202,6 @@ class FakeDownloadItem : public download::DownloadItem {
   std::string etag_;
   std::string last_modified_time_;
   std::string hash_;
-  absl::optional<download::DownloadSchedule> download_schedule_;
   int percent_complete_ = 0;
   download::DownloadItemRerouteInfo reroute_info_;
   bool open_when_complete_ = false;

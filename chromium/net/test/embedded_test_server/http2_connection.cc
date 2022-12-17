@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "absl/strings/escaping.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/debug/stack_trace.h"
@@ -20,6 +19,7 @@
 #include "net/ssl/ssl_info.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "third_party/abseil-cpp/absl/strings/escaping.h"
 
 namespace net {
 
@@ -373,7 +373,7 @@ Http2Connection::OnHeaderForStream(http2::adapter::Http2StreamId stream_id,
 bool Http2Connection::OnEndHeadersForStream(
     http2::adapter::Http2StreamId stream_id) {
   HttpRequest::HeaderMap header_map = header_map_[stream_id];
-  std::unique_ptr<HttpRequest> request(new HttpRequest());
+  auto request = std::make_unique<HttpRequest>();
   request->relative_url = header_map[":path"];
   request->base_url = GURL(header_map[":authority"]);
   request->method_string = header_map[":method"];

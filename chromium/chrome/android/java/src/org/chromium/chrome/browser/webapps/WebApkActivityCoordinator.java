@@ -7,14 +7,12 @@ package org.chromium.chrome.browser.webapps;
 import androidx.annotation.NonNull;
 
 import org.chromium.base.BuildInfo;
+import org.chromium.chrome.browser.browserservices.InstalledWebappRegistrar;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.permissiondelegation.PermissionUpdater;
-import org.chromium.chrome.browser.browserservices.ui.controller.trustedwebactivity.TwaRegistrar;
 import org.chromium.chrome.browser.browserservices.ui.controller.webapps.WebappDisclosureController;
 import org.chromium.chrome.browser.browserservices.ui.view.DisclosureInfobar;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.components.embedder_support.util.Origin;
@@ -31,7 +29,7 @@ import dagger.Lazy;
 public class WebApkActivityCoordinator implements DestroyObserver {
     private final BrowserServicesIntentDataProvider mIntentDataProvider;
     private final Lazy<WebApkUpdateManager> mWebApkUpdateManager;
-    private final TwaRegistrar mTwaRegistrar;
+    private final InstalledWebappRegistrar mInstalledWebappRegistrar;
 
     @Inject
     public WebApkActivityCoordinator(
@@ -40,14 +38,15 @@ public class WebApkActivityCoordinator implements DestroyObserver {
             WebApkActivityLifecycleUmaTracker webApkActivityLifecycleUmaTracker,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             BrowserServicesIntentDataProvider intendDataProvider,
-            Lazy<WebApkUpdateManager> webApkUpdateManager, TwaRegistrar twaRegistrar) {
+            Lazy<WebApkUpdateManager> webApkUpdateManager,
+            InstalledWebappRegistrar installedWebappRegistrar) {
         // We don't need to do anything with |disclosureController|, |disclosureInfobar| and
         // |webApkActivityLifecycleUmaTracker|. We just need to resolve
         // them so that they start working.
 
         mIntentDataProvider = intendDataProvider;
         mWebApkUpdateManager = webApkUpdateManager;
-        mTwaRegistrar = twaRegistrar;
+        mInstalledWebappRegistrar = installedWebappRegistrar;
 
         deferredStartupWithStorageHandler.addTask((storage, didCreateStorage) -> {
             if (lifecycleDispatcher.isActivityFinishingOrDestroyed()) return;
@@ -64,6 +63,10 @@ public class WebApkActivityCoordinator implements DestroyObserver {
 
         mWebApkUpdateManager.get().updateIfNeeded(storage, mIntentDataProvider);
 
+        if (!BuildInfo.isAtLeastT()) {
+            return;
+        }
+
         // The scope should not be empty here, this is for a WebAPK that just launched.
         String scope = storage.getScope();
         assert !scope.isEmpty();
@@ -71,14 +74,7 @@ public class WebApkActivityCoordinator implements DestroyObserver {
         Origin origin = Origin.create(scope);
         String packageName = storage.getWebApkPackageName();
 
-        if (!BuildInfo.isAtLeastT()
-                || !CachedFeatureFlags.isEnabled(
-                        ChromeFeatureList
-                                .TRUSTED_WEB_ACTIVITY_NOTIFICATION_PERMISSION_DELEGATION)) {
-            return;
-        }
-
-        mTwaRegistrar.registerClient(packageName, origin);
+        mInstalledWebappRegistrar.registerClient(packageName, origin, storage.getUrl());
         PermissionUpdater.get().onWebApkLaunch(origin, packageName);
     }
 

@@ -16,11 +16,11 @@
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_constants.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/authentication/views/identity_button_control.h"
-#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/text_view_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "net/base/mac/url_conversions.h"
@@ -195,7 +195,7 @@ const char* const kSettingsSyncURL = "internal://settings-sync";
   [container addSubview:separator];
 
   // Sync settings description.
-  self.syncSettingsTextView = [[UITextView alloc] init];
+  self.syncSettingsTextView = CreateUITextViewWithTextKit1();
   self.syncSettingsTextView.scrollEnabled = NO;
   self.syncSettingsTextView.editable = NO;
   self.syncSettingsTextView.delegate = self;
@@ -375,7 +375,7 @@ const char* const kSettingsSyncURL = "internal://settings-sync";
   if (_managementNoticeTextView)
     return _managementNoticeTextView;
 
-  _managementNoticeTextView = [[UITextView alloc] init];
+  _managementNoticeTextView = CreateUITextViewWithTextKit1();
   _managementNoticeTextView.scrollEnabled = NO;
   _managementNoticeTextView.editable = NO;
   _managementNoticeTextView.delegate = self;

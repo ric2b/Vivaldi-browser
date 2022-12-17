@@ -11,27 +11,6 @@ namespace features {
 
 // Alphabetical:
 
-// Enables package name logging for the most popular WebView embedders that are
-// on a dynamically generated allowlist.
-const base::Feature kWebViewAppsPackageNamesAllowlist{
-    "WebViewAppsPackageNamesAllowlist", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Maximum time to throttle querying the app package names allowlist from the
-// component updater service, used when there is a valid cached allowlist
-// result.
-const base::FeatureParam<base::TimeDelta>
-    kWebViewAppsMinAllowlistThrottleTimeDelta{
-        &kWebViewAppsPackageNamesAllowlist,
-        "WebViewAppsMinAllowlistThrottleTimeDelta", base::Hours(1)};
-
-// Minimum time to throttle querying the app package names allowlist from the
-// component updater service, used when there is no valid cached allowlist
-// result.
-const base::FeatureParam<base::TimeDelta>
-    kWebViewAppsMaxAllowlistThrottleTimeDelta{
-        &kWebViewAppsPackageNamesAllowlist,
-        "WebViewAppsMaxAllowlistThrottleTimeDelta", base::Days(2)};
-
 // Enable brotli compression support in WebView.
 const base::Feature kWebViewBrotliSupport{"WebViewBrotliSupport",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
@@ -45,6 +24,9 @@ const base::Feature kWebViewConnectionlessSafeBrowsing{
 // the app's theme is dark.
 const base::Feature kWebViewForceDarkModeMatchTheme{
     "WebViewForceDarkModeMatchTheme", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kWebViewHitTestInBlinkOnTouchStart{
+    "WebViewHitTestInBlinkOnTouchStart", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable display cutout support for Android P and above.
 const base::Feature kWebViewDisplayCutout{"WebViewDisplayCutout",
@@ -75,7 +57,7 @@ const base::Feature kWebViewJavaJsBridgeMojo{"WebViewJavaJsBridgeMojo",
 
 // When enabled, connections using legacy TLS 1.0/1.1 versions are allowed.
 const base::Feature kWebViewLegacyTlsSupport{"WebViewLegacyTlsSupport",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Measure the number of pixels occupied by one or more WebViews as a
 // proportion of the total screen size. Depending on the number of
@@ -93,10 +75,6 @@ const base::Feature kWebViewOriginTrials{"WebViewOriginTrials",
 // histogram Android.WebView.AppDataDirectorySize.
 const base::Feature kWebViewRecordAppDataDirectorySize{
     "WebViewRecordAppDataDirectorySize", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Whether WebView will send variations headers on URLs where applicable.
-const base::Feature kWebViewSendVariationsHeaders{
-    "WebViewSendVariationsHeaders", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Disallows window.{alert, prompt, confirm} if triggered inside a subframe that
 // is not same origin with the main frame.
@@ -132,7 +110,7 @@ const base::FeatureParam<int> kWebViewXRequestedWithHeaderMode{
 // invalidates the URL after).
 const base::Feature kWebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess{
     "WebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace android_webview

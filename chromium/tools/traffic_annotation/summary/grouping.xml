@@ -111,6 +111,7 @@ after discussions on the right group.
       <annotation id="printing_oauth2_next_token_request"/>
       <annotation id="printing_oauth2_registration_request"/>
       <annotation id="printing_oauth2_token_exchange_request"/>
+      <annotation id="printing_server_printers_query"/>
     </sender>
     <sender name="Device Activity">
       <annotation id="device_activity_client_health_check"/>
@@ -232,7 +233,6 @@ after discussions on the right group.
       <annotation id="certificate_verifier_url_loader"/>
       <annotation id="expect_ct_reporter"/>
       <annotation id="domain_security_policy"/>
-      <annotation id="origin_policy_loader"/>
       <annotation id="services_http_server_error_response"/>
       <annotation id="webrtc_peer_connection"/>
       <annotation id="direct_sockets"/>
@@ -248,6 +248,14 @@ after discussions on the right group.
       <annotation id="drivefs_http_client"/>
       <annotation id="borealis_splash_logo_loader"/>
       <annotation id="pending_beacon_api"/>
+      <annotation id="download_bubble_retry_download"/>
+      <annotation id="quick_answers_loader"/>
+      <annotation id="chrome_search_suggest_service"/>
+      <annotation id="coupon_persisted_tab_data"/>
+      <annotation id="chrome_commerce_subscriptions_create"/>
+      <annotation id="chrome_commerce_subscriptions_delete"/>
+      <annotation id="chrome_commerce_subscriptions_get"/>
+      <annotation id="cryptauth_get_my_devices"/>
     </sender>
   </group>
   <group name="Admin Features" hidden="true">
@@ -292,6 +300,7 @@ after discussions on the right group.
   <group name="Child-protection and Safe Browsing Features" hidden="true">
     <sender name="Safe Browsing">
       <annotation id="client_download_request"/>
+      <annotation id="kids_chrome_management_list_family_members"/>
       <annotation id="password_protection_request"/>
       <annotation id="permission_predictions"/>
       <annotation id="safe_browsing_certificate_error_reporting"/>
@@ -334,7 +343,6 @@ after discussions on the right group.
       <annotation id="gaia_auth_check_connection_info"/>
       <annotation id="gaia_auth_exchange_device_id"/>
       <annotation id="gaia_auth_fetch_for_uber"/>
-      <annotation id="gaia_auth_get_user_info"/>
       <annotation id="gaia_auth_list_accounts"/>
       <annotation id="gaia_auth_log_out"/>
       <annotation id="gaia_auth_login"/>
@@ -419,6 +427,7 @@ after discussions on the right group.
       <annotation id="predictive_prefetch"/>
       <annotation id="prefetch_proxy_probe"/>
       <annotation id="speculation_rules_prefetch"/>
+      <annotation id="speculation_rules_prefetch_probe"/>
     </sender>
   </group>
   <group name="Updates, Recovery, and Crash Reports" hidden="true">
@@ -481,7 +490,7 @@ after discussions on the right group.
       <annotation id="popular_sites_fetch"/>
       <annotation id="remote_suggestions_provider"/>
       <annotation id="promo_service"/>
-      <annotation id="task_module_service"/>
+      <annotation id="recipes_service"/>
       <annotation id="chrome_cart_discounts_lookup"/>
       <annotation id="chrome_cart_get_discounted_link"/>
     </sender>

@@ -91,7 +91,7 @@ class UrlLabel : public views::Label {
 //     View [FlexLayout, vertical]
 //       Label (title)
 //       Label (URL)
-PreviewView::PreviewView(share::ShareAttempt attempt, ui::ImageModel image) {
+PreviewView::PreviewView(share::ShareAttempt attempt) {
   auto variant = LayoutVariant::FromFeatureConfig();
 
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
@@ -102,7 +102,8 @@ PreviewView::PreviewView(share::ShareAttempt attempt, ui::ImageModel image) {
       .SetDefault(views::kMarginsKey, variant.default_margin)
       .SetCollapseMargins(true);
 
-  image_ = AddChildView(std::make_unique<views::ImageView>(image));
+  image_ =
+      AddChildView(std::make_unique<views::ImageView>(attempt.preview_image));
   image_->SetPreferredSize(variant.image_size);
 
   auto* labels_container = AddChildView(std::make_unique<views::View>());
@@ -123,11 +124,11 @@ PreviewView::PreviewView(share::ShareAttempt attempt, ui::ImageModel image) {
   // use a hardcoded font, but we could also specify the font more explicitly
   // here.
   title_ = labels_container->AddChildView(std::make_unique<views::Label>(
-      attempt.title, views::style::CONTEXT_DIALOG_TITLE));
+      attempt.title, views::style::CONTEXT_DIALOG_BODY_TEXT));
   title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   url_ = labels_container->AddChildView(std::make_unique<UrlLabel>(
-      attempt.url, views::style::CONTEXT_DIALOG_TITLE,
+      attempt.url, views::style::CONTEXT_DIALOG_BODY_TEXT,
       views::style::STYLE_HINT));
   url_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 }

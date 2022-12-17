@@ -20,15 +20,15 @@ ChromeVoxIntentHandlerTest = class extends ChromeVoxNextE2ETest {
     await importModule(
         'IntentHandler', '/chromevox/background/editing/intent_handler.js');
     await importModule('Output', '/chromevox/background/output/output.js');
+    await importModule(
+        'OutputEventType', '/chromevox/background/output/output_types.js');
 
     window.Dir = constants.Dir;
     window.IntentTextBoundaryType = chrome.automation.IntentTextBoundaryType;
-    window.Movement = cursors.Movement;
-    window.Unit = cursors.Unit;
   }
 };
 
-SYNC_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByCharacter', function() {
+AX_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByCharacter', function() {
   let calls = [];
   const fakeLine = class {
     constructor(startOffset) {
@@ -79,7 +79,7 @@ SYNC_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByCharacter', function() {
   assertArraysEquals(['go'], calls[3]);
 });
 
-SYNC_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByWord', function() {
+AX_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByWord', function() {
   let calls = [];
   const fakeLine = new (class {
     constructor() {}
@@ -122,7 +122,7 @@ SYNC_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByWord', function() {
   assertEquals(0, calls.length);
 });
 
-SYNC_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByLine', function() {
+AX_TEST_F('ChromeVoxIntentHandlerTest', 'MoveByLine', function() {
   const fakeLine = new (class {
     constructor() {
       this.speakLineCount = 0;

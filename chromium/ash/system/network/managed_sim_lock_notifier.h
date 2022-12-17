@@ -9,8 +9,9 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
+#include "chromeos/services/network_config/public/cpp/cros_network_config_observer.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace ash {
 
@@ -18,7 +19,8 @@ namespace ash {
 // restrict cellular SIM lock Global Network Configuration is set to true.
 class ASH_EXPORT ManagedSimLockNotifier
     : public SessionObserver,
-      public chromeos::network_config::mojom::CrosNetworkConfigObserver {
+      public chromeos::network_config::CrosNetworkConfigObserver,
+      public message_center::NotificationObserver {
  public:
   ManagedSimLockNotifier();
   ManagedSimLockNotifier(const ManagedSimLockNotifier&) = delete;
@@ -31,17 +33,13 @@ class ASH_EXPORT ManagedSimLockNotifier
   // SessionObserver:
   void OnSessionStateChanged(session_manager::SessionState state) override;
 
+  // message_center::NotificationObserver:
+  void Close(bool by_user) override;
+  void Click(const absl::optional<int>& button_index,
+             const absl::optional<std::u16string>& reply) override;
+
   // CrosNetworkConfigObserver:
-  void OnNetworkStateListChanged() override {}
-  void OnActiveNetworksChanged(
-      std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
-          networks) override {}
-  void OnNetworkStateChanged(
-      chromeos::network_config::mojom::NetworkStatePropertiesPtr network)
-      override {}
   void OnDeviceStateListChanged() override;
-  void OnVpnProvidersChanged() override {}
-  void OnNetworkCertificatesChanged() override {}
   void OnPoliciesApplied(const std::string& userhash) override;
 
   void OnGetDeviceStateList(

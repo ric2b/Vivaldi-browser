@@ -1,0 +1,93 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+source_set("sync_notes") {
+  sources = [
+    "note_sync_service_factory.cc",
+    "note_sync_service_factory.h",
+  ]
+
+  deps = [
+    "//ios/chrome/browser/browser_state",
+    "//vivaldi/sync/notes:sync_notes",
+  ]
+}
+
+source_set("invalidation") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_invalidation_service_factory.h",
+    "vivaldi_invalidation_service_factory.mm",
+  ]
+
+  deps = [
+    "//ios/chrome/browser/browser_state",
+    "//vivaldi/sync:invalidation",
+  ]
+}
+
+source_set("sync") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_sync_client.cc",
+    "vivaldi_sync_client.h",
+    "vivaldi_sync_service_factory.mm",
+    "vivaldi_sync_service_factory.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/autofill/core/browser",
+    "//components/browser_sync",
+    "//components/consent_auditor",
+    "//components/dom_distiller/core",
+    "//components/history/core/browser",
+    "//components/invalidation/impl",
+    "//components/keyed_service/core",
+    "//components/keyed_service/ios",
+    "//components/metrics/demographics",
+    "//components/network_time",
+    "//components/password_manager/core/browser",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/reading_list/core",
+    "//components/search_engines",
+    "//components/send_tab_to_self",
+    "//components/sessions",
+    "//components/signin/public/identity_manager",
+    "//components/sync",
+    "//components/sync_device_info",
+    "//components/sync_preferences",
+    "//components/sync_sessions",
+    "//components/sync_user_events",
+    "//components/version_info",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/autofill",
+    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/complex_tasks",
+    "//ios/chrome/browser/dom_distiller",
+    "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/history",
+    "//ios/chrome/browser/passwords:store_factory",
+    "//ios/chrome/browser/policy",
+    "//ios/chrome/browser/reading_list",
+    "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/sessions",
+    "//ios/chrome/browser/sync/glue",
+    "//ios/chrome/browser/sync/sessions",
+    "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/undo",
+    "//ios/chrome/browser/webdata_services",
+    "//ios/chrome/common",
+    "//ios/components/webui:url_constants",
+    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/signin",
+    "//ios/web",
+    "//ios/web/public/session",
+    "//net",
+    "//ui/base",
+    "//url",
+    "//vivaldi/prefs",
+    "//vivaldi/sync:browser",
+  ]
+}

@@ -30,6 +30,7 @@
           e deseleziona "<ph name="NO_PREFETCH_DESCRIPTION" />".
           Se il problema non si risolve, prova a riselezionare questa opzione
           per ottenere prestazioni migliori.</translation>
+<translation id="7496505986576158197">Vivaldi è reso possibile dal progetto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e da altri <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Seleziona
           Applicazioni &gt; Preferenze di Sistema &gt; Rete &gt; Avanzate &gt; Proxy
           e deseleziona i proxy selezionati.</translation>

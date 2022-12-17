@@ -141,6 +141,7 @@ exec("./try/tryserver.chromium.linux.star")
 exec("./try/tryserver.chromium.mac.star")
 exec("./try/tryserver.chromium.packager.star")
 exec("./try/tryserver.chromium.rust.star")
+exec("./try/tryserver.chromium.tricium.star")
 exec("./try/tryserver.chromium.updater.star")
 exec("./try/tryserver.chromium.win.star")
 
@@ -255,6 +256,10 @@ chrome_internal_verifier(
 
 chrome_internal_verifier(
     builder = "lacros-arm-generic-chrome-skylab",
+)
+
+chrome_internal_verifier(
+    builder = "lacros-arm64-generic-chrome-skylab",
 )
 
 chrome_internal_verifier(

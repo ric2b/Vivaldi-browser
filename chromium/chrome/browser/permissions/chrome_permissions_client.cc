@@ -17,16 +17,16 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
-#include "chrome/browser/permissions/abusive_origin_permission_revocation_request.h"
 #include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/permission_actions_history_factory.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
-#include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/permissions/permission_revocation_request.h"
 #include "chrome/browser/permissions/prediction_based_permission_ui_selector.h"
 #include "chrome/browser/permissions/pref_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
@@ -72,6 +72,10 @@
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -203,12 +207,6 @@ ChromePermissionsClient::GetPermissionDecisionAutoBlocker(
       Profile::FromBrowserContext(browser_context));
 }
 
-permissions::PermissionManager* ChromePermissionsClient::GetPermissionManager(
-    content::BrowserContext* browser_context) {
-  return PermissionManagerFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context));
-}
-
 double ChromePermissionsClient::GetSiteEngagementScore(
     content::BrowserContext* browser_context,
     const GURL& origin) {
@@ -330,9 +328,11 @@ void ChromePermissionsClient::OnPromptResolved(
         (quiet_ui_reason.value() ==
              QuietUiReason::kTriggeredDueToAbusiveRequests ||
          quiet_ui_reason.value() ==
-             QuietUiReason::kTriggeredDueToAbusiveContent)) {
-      AbusiveOriginPermissionRevocationRequest::
-          ExemptOriginFromFutureRevocations(profile, origin);
+             QuietUiReason::kTriggeredDueToAbusiveContent ||
+         quiet_ui_reason.value() ==
+             QuietUiReason::kTriggeredDueToDisruptiveBehavior)) {
+      PermissionRevocationRequest::ExemptOriginFromFutureRevocations(profile,
+                                                                     origin);
     }
   }
 
@@ -363,14 +363,14 @@ ChromePermissionsClient::HasPreviouslyAutoRevokedPermission(
   }
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  return AbusiveOriginPermissionRevocationRequest::
-      HasPreviouslyRevokedPermission(profile, origin);
+  return PermissionRevocationRequest::HasPreviouslyRevokedPermission(profile,
+                                                                     origin);
 }
 
 absl::optional<url::Origin> ChromePermissionsClient::GetAutoApprovalOrigin() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   // In web kiosk mode, all permission requests are auto-approved for the origin
   // of the main app.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (user_manager::UserManager::IsInitialized() &&
       user_manager::UserManager::Get()->IsLoggedInAsWebKioskApp()) {
     const AccountId& account_id =
@@ -380,6 +380,11 @@ absl::optional<url::Origin> ChromePermissionsClient::GetAutoApprovalOrigin() {
         ash::WebKioskAppManager::Get()->GetAppByAccountId(account_id);
     DCHECK(app_data);
     return url::Origin::Create(app_data->install_url());
+  }
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (profiles::IsWebKioskSession()) {
+    return url::Origin::Create(
+        KioskSessionServiceLacros::Get()->GetInstallURL());
   }
 #endif
   return absl::nullopt;
@@ -430,7 +435,7 @@ absl::optional<GURL> ChromePermissionsClient::OverrideCanonicalOrigin(
   return absl::nullopt;
 }
 
-bool ChromePermissionsClient::DoOriginsMatchNewTabPage(
+bool ChromePermissionsClient::DoURLsMatchNewTabPage(
     const GURL& requesting_origin,
     const GURL& embedding_origin) {
   return embedding_origin ==

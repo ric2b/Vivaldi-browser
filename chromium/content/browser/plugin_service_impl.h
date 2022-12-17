@@ -28,11 +28,14 @@
 #include "content/browser/ppapi_plugin_process_host.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/plugin_service.h"
-#include "content/public/common/pepper_plugin_info.h"
 #include "ipc/ipc_channel_handle.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(ENABLE_PPAPI)
+#include "content/public/common/pepper_plugin_info.h"
+#endif
 
 namespace content {
 class PluginServiceFilter;
@@ -53,7 +56,7 @@ class CONTENT_EXPORT PluginServiceImpl : public PluginService {
                           bool allow_wildcard,
                           std::vector<WebPluginInfo>* info,
                           std::vector<std::string>* actual_mime_types) override;
-  bool GetPluginInfo(int render_process_id,
+  bool GetPluginInfo(content::BrowserContext* browser_context,
                      const GURL& url,
                      const std::string& mime_type,
                      bool allow_wildcard,
@@ -77,9 +80,6 @@ class CONTENT_EXPORT PluginServiceImpl : public PluginService {
   void GetInternalPlugins(std::vector<WebPluginInfo>* plugins) override;
   bool PpapiDevChannelSupported(BrowserContext* browser_context,
                                 const GURL& document_url) override;
-  int CountPpapiPluginProcessesForProfile(
-      const base::FilePath& plugin_path,
-      const base::FilePath& profile_data_directory) override;
 
   // Returns the plugin process host corresponding to the plugin process that
   // has been started by this service. This will start a process to host the
@@ -87,7 +87,6 @@ class CONTENT_EXPORT PluginServiceImpl : public PluginService {
   // is NULL. Must be called on the IO thread.
   PpapiPluginProcessHost* FindOrStartPpapiPluginProcess(
       int render_process_id,
-      const url::Origin& embedder_origin,
       const base::FilePath& plugin_path,
       const base::FilePath& profile_data_directory,
       const absl::optional<url::Origin>& origin_lock);
@@ -96,7 +95,6 @@ class CONTENT_EXPORT PluginServiceImpl : public PluginService {
   // a new plugin process if necessary.  This must be called on the IO thread
   // or else a deadlock can occur.
   void OpenChannelToPpapiPlugin(int render_process_id,
-                                const url::Origin& embedder_origin,
                                 const base::FilePath& plugin_path,
                                 const base::FilePath& profile_data_directory,
                                 const absl::optional<url::Origin>& origin_lock,
@@ -131,7 +129,9 @@ class CONTENT_EXPORT PluginServiceImpl : public PluginService {
 
   void RegisterPepperPlugins();
 
+#if BUILDFLAG(ENABLE_PPAPI)
   std::vector<PepperPluginInfo> ppapi_plugins_;
+#endif
 
   int max_ppapi_processes_per_profile_ = kDefaultMaxPpapiProcessesPerProfile;
 

@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {EventGenerator} from '/common/event_generator.js';
-import {Navigator} from '/switch_access/navigator.js';
-import {BasicNode} from '/switch_access/nodes/basic_node.js';
-import {SAChildNode, SARootNode} from '/switch_access/nodes/switch_access_node.js';
-import {SAConstants, SwitchAccessMenuAction} from '/switch_access/switch_access_constants.js';
+import {AutomationPredicate} from '../../common/automation_predicate.js';
+import {EventGenerator} from '../../common/event_generator.js';
+import {KeyCode} from '../../common/key_code.js';
+import {Navigator} from '../navigator.js';
+import {SAConstants, SwitchAccessMenuAction} from '../switch_access_constants.js';
+
+import {BasicNode} from './basic_node.js';
+import {SAChildNode, SARootNode} from './switch_access_node.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 
@@ -75,7 +78,7 @@ class ComboBoxNode extends BasicNode {
 
   onExpandedChanged() {
     // TODO: figure out why a short timeout is needed here.
-    window.setTimeout(() => {
+    setTimeout(() => {
       if (this.isGroup()) {
         Navigator.byItem.enterGroup();
       }
@@ -85,5 +88,5 @@ class ComboBoxNode extends BasicNode {
 
 BasicNode.creators.push({
   predicate: AutomationPredicate.comboBox,
-  creator: (node, parent) => new ComboBoxNode(node, parent)
+  creator: (node, parent) => new ComboBoxNode(node, parent),
 });

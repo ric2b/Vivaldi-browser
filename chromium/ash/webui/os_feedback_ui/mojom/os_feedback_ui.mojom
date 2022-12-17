@@ -74,6 +74,16 @@ struct FeedbackContext {
   string? email;
   // The URL of the page that this issue was being experienced on.
   url.mojom.Url?  page_url;
+  // Extra diagnostics information provided by source CrOS application by
+  // setting the extra_diagnostics query parameter when opening the CrOS
+  // Feedback app. Content of extra_diagnostics is added to
+  // a collection of key-value pairs, and eventually is serialized to a text
+  // file, zipped, and then attached to the report.
+  // Example value: "Failed to connect to wifi network.".
+  string? extra_diagnostics;
+  // When a report is sent with bluetooth logs, the category_tag will be set
+  // to BluetoothReportWithLogs.
+  string? category_tag;
 };
 
 // Status of the sending of a feedback report.
@@ -113,6 +123,65 @@ struct Report {
   // Whether or not to include the screenshot with this report. The screenshot
   // data should have been cached in C++ side.
   bool include_screenshot;
+  // Whether or not consent has been granted to Google for to contact user in
+  // reference to report. See (go/feedback-user-consent-faq).
+  bool contact_user_consent_granted;
+  // Whether or not the report has sendBluetoothLogs
+  // flag set true by internal google account only.
+  bool send_bluetooth_logs;
+};
+
+// The first action taken on the confirmation page.
+enum FeedbackAppPostSubmitAction {
+  // User send a new report.
+  kSendNewReport,
+  // User close app by clicking done button.
+  kClickDoneButton,
+  // User open explore app.
+  kOpenExploreApp,
+  // User open diagnostics app.
+  kOpenDiagnosticsApp,
+  // User open chromebook community link.
+  kOpenChromebookCommunity,
+  // User close app by clicking x button on the top right.
+  kCloseFeedbackApp
+
+  // NOTE: If you add any entries to this enum, you must also update the
+  // corresponding UMA FeedbackAppPostSubmitAction at
+  // tools/metrics/histograms/enums.xml.
+};
+
+// User actions before sending the feedback.
+enum FeedbackAppPreSubmitAction {
+  // User clicked the help content on search page.
+  kViewedHelpContent,
+  // User viewed the screenshot on share data page.
+  kViewedScreenshot,
+  // User viewed the selected image to be attached on share data page.
+  kViewedImage,
+  // User viewed the system and app info on share data page.
+  kViewedSystemAndAppInfo,
+  // User viewed the metrics on share data page.
+  kViewedMetrics
+};
+
+// User exit paths.
+enum FeedbackAppExitPath {
+  // User quit on search page after clicking some help contents.
+  kQuitSearchPageHelpContentClicked,
+  // User quit on search page without clicking some help contents.
+  kQuitSearchPageNoHelpContentClicked,
+  // User close on search page because no help content is shown (Offline or
+  // Search is down).
+  kQuitNoResultFound,
+  // User close on share data page after clicking some help contents.
+  kQuitShareDataPageHelpContentClicked,
+  // User close on share data page without clicking some help contents.
+  kQuitShareDataPageNoHelpContentClicked,
+  // User submit feedback and click the help content.
+  kSuccessHelpContentClicked,
+  // User submit feedback without clicking the help content.
+  kSuccessNoHelpContentClicked
 };
 
 // Provides services needed by the feedback UI to display data and send reports.
@@ -128,5 +197,21 @@ interface FeedbackServiceProvider {
   // Sends a feedback report and returns its status.
   SendReport(Report report) => (SendReportStatus status);
   // Open Diagnostics app.
-  OpenDiagnosticsApp() => ();
+  OpenDiagnosticsApp();
+  // Open Explore app.
+  OpenExploreApp();
+  // Open metrics dialog (which displays chrome://histograms).
+  OpenMetricsDialog();
+  // Open system info dialog (which displays the system logs
+  // to be sent with the report if the user has opted in).
+  OpenSystemInfoDialog();
+  // Open bluetooth logs info dialog (which displays the bluetooth logs
+  // to be sent with the report if the user has opted in).
+  OpenBluetoothLogsInfoDialog();
+  // Record the metrics of users' first action on confirmation page.
+  RecordPostSubmitAction(FeedbackAppPostSubmitAction action);
+  // Record metrics of users' action before sending the feedback.
+  RecordPreSubmitAction(FeedbackAppPreSubmitAction action);
+  // Record metrics of users' exit paths of feedback app.
+  RecordExitPath(FeedbackAppExitPath exit_path);
 };

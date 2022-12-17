@@ -182,7 +182,7 @@ void remote_shell_get_remote_surface(wl_client* client,
   if (wl_resource_get_version(remote_surface_resource) < 18)
     shell_surface->set_server_reparent_window(true);
 
-  shell_surface->SetCapabilities(GetCapabilities(client));
+  shell_surface->SetSecurityDelegate(GetSecurityDelegate(client));
 
   shell_surface->set_delegate(
       shell->CreateShellSurfaceDelegate(remote_surface_resource));
@@ -294,8 +294,7 @@ void remote_shell_get_remote_output(wl_client* client,
                          wl_resource_get_version(resource), id);
 
   auto remote_output = std::make_unique<WaylandRemoteOutput>(
-      remote_output_resource, remote_output_event_mapping_v1);
-  display_handler->AddObserver(remote_output.get());
+      remote_output_resource, remote_output_event_mapping_v1, display_handler);
 
   SetImplementation(remote_output_resource, &remote_output_implementation,
                     std::move(remote_output));

@@ -71,7 +71,7 @@ class CORE_EXPORT DisplayLockContext final
  public:
   // Note the order of the phases matters. Each phase implies all previous ones
   // as well.
-  enum class ForcedPhase { kStyleAndLayoutTree, kLayout, kPrePaint };
+  enum class ForcedPhase { kNone, kStyleAndLayoutTree, kLayout, kPrePaint };
 
   explicit DisplayLockContext(Element*);
   ~DisplayLockContext() = default;
@@ -180,6 +180,7 @@ class CORE_EXPORT DisplayLockContext final
     if (IsLocked() && IsActivatable(DisplayLockActivationReason::kAny)) {
       MarkForStyleRecalcIfNeeded();
       MarkForLayoutIfNeeded();
+      MarkAncestorsForPrePaintIfNeeded();
     }
   }
 
@@ -220,6 +221,30 @@ class CORE_EXPORT DisplayLockContext final
   bool IsShapingDeferred() const;
   bool IsInclusiveDescendantOf(const LayoutObject& ancestor) const;
 
+  // This updates the rendering state to account for the fact that one of the
+  // ancestor may be a non-root shared element, which should cause the
+  // content-visibility: auto locks to be unlocked.
+  // This function is called anytime a descendant or ancestor shared element may
+  // change. Note that to determine the descendants, this function uses a
+  // document level function to mark all ancestors of shared elements. This
+  // updates all display locks on such ancestor chains, but it should be a no-op
+  // for any lock except this one. This is the most optimal way to do this and
+  // not a necessary component of the function.
+  // Note that this function also does not consider the root as a shared element
+  // (even though it might be). The reason for this is that root is treated
+  // different in SET: it is clipped by a viewport or some margin around, and
+  // it's captured by default. This means that it will frequently be in the
+  // chain of all display locks, and we want to avoid unnecessary unlocks.
+  void DetermineIfInSharedElementTransitionChain();
+  // Note that the following only checks the ancestor chain, and does not
+  // consider shared descendants. This is an optimization to be used by the
+  // document state.
+  void ResetAndDetermineIfAncestorIsSharedElement();
+  // State control for shared element render affecting state.
+  void ResetInSharedElementTransitionChain();
+  void SetInSharedElementTransitionChain();
+  bool IsInSharedElementAncestorChain() const;
+
  private:
   // Give access to |NotifyForcedUpdateScopeStarted()| and
   // |NotifyForcedUpdateScopeEnded()|.
@@ -238,8 +263,13 @@ class CORE_EXPORT DisplayLockContext final
   void RequestUnlock();
 
   // Called in |DisplayLockUtilities| to notify the state of scope.
-  void NotifyForcedUpdateScopeStarted(ForcedPhase phase, bool emit_warnings);
+  void NotifyForcedUpdateScopeStarted(ForcedPhase phase, bool emit_warnings) {
+    UpgradeForcedScope(ForcedPhase::kNone, phase, emit_warnings);
+  }
   void NotifyForcedUpdateScopeEnded(ForcedPhase phase);
+  void UpgradeForcedScope(ForcedPhase old_phase,
+                          ForcedPhase new_phase,
+                          bool emit_warnings);
 
   // Records the locked context counts on the document as well as context that
   // block all activation.
@@ -343,6 +373,8 @@ class CORE_EXPORT DisplayLockContext final
 
   bool SubtreeHasTopLayerElement() const;
 
+  void ScheduleStateChangeEventIfNeeded();
+
   WeakMember<Element> element_;
   WeakMember<Document> document_;
   EContentVisibility state_ = EContentVisibility::kVisible;
@@ -351,6 +383,9 @@ class CORE_EXPORT DisplayLockContext final
   struct UpdateForcedInfo {
     bool is_forced(ForcedPhase phase) const {
       switch (phase) {
+        case ForcedPhase::kNone:
+          NOTREACHED();
+          return false;
         case ForcedPhase::kStyleAndLayoutTree:
           return style_update_forced_ || layout_update_forced_ ||
                  prepaint_update_forced_;
@@ -363,6 +398,8 @@ class CORE_EXPORT DisplayLockContext final
 
     void start(ForcedPhase phase) {
       switch (phase) {
+        case ForcedPhase::kNone:
+          break;
         case ForcedPhase::kStyleAndLayoutTree:
           ++style_update_forced_;
           break;
@@ -376,6 +413,8 @@ class CORE_EXPORT DisplayLockContext final
 
     void end(ForcedPhase phase) {
       switch (phase) {
+        case ForcedPhase::kNone:
+          break;
         case ForcedPhase::kStyleAndLayoutTree:
           DCHECK(style_update_forced_);
           --style_update_forced_;
@@ -451,6 +490,7 @@ class CORE_EXPORT DisplayLockContext final
     kAutoStateUnlockedUntilLifecycle,
     kAutoUnlockedForPrint,
     kSubtreeHasTopLayerElement,
+    kSharedElementTransitionChain,
     kNumRenderAffectingStates
   };
   void SetRenderAffectingState(RenderAffectingState state, bool flag);

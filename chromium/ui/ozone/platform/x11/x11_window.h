@@ -13,6 +13,7 @@
 #include "base/cancelable_callback.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/x/x11_desktop_window_move_client.h"
 #include "ui/base/x/x11_drag_drop_client.h"
@@ -148,7 +149,6 @@ class X11Window : public PlatformWindow,
 
   void OnXWindowStateChanged();
   void OnXWindowDamageEvent(const gfx::Rect& damage_rect);
-  void OnXWindowBoundsChanged(const gfx::Rect& size);
   void OnXWindowCloseRequested();
   void OnXWindowIsActiveChanged(bool active);
   void OnXWindowWorkspaceChanged();
@@ -240,7 +240,7 @@ class X11Window : public PlatformWindow,
 
   void SetFlashFrameHint(bool flash_frame);
   void UpdateMinAndMaxSize();
-  void DispatchResize();
+  void DispatchResize(bool origin_changed);
   void CancelResize();
 
   // Resets the window region for the current window bounds if necessary.
@@ -287,7 +287,7 @@ class X11Window : public PlatformWindow,
 
   void MaybeUpdateOcclusionState();
 
-  void DelayedResize(const gfx::Rect& bounds_in_pixels);
+  void DelayedResize(bool origin_changed);
 
   // If mapped, sends a message to the window manager to enable or disable the
   // states |state1| and |state2|.  Otherwise, the states will be enabled or
@@ -307,7 +307,7 @@ class X11Window : public PlatformWindow,
 
   void UpdateWindowRegion(std::unique_ptr<std::vector<x11::Rectangle>> region);
 
-  void NotifyBoundsChanged(const gfx::Rect& new_bounds_in_px);
+  void NotifyBoundsChanged(bool origin_changed);
 
   // Initializes as a status icon window.
   bool InitializeAsStatusIcon();
@@ -315,11 +315,11 @@ class X11Window : public PlatformWindow,
   // Stores current state of this window.
   PlatformWindowState state_ = PlatformWindowState::kUnknown;
 
-  PlatformWindowDelegate* const platform_window_delegate_;
+  const raw_ptr<PlatformWindowDelegate> platform_window_delegate_;
 
-  WorkspaceExtensionDelegate* workspace_extension_delegate_ = nullptr;
+  raw_ptr<WorkspaceExtensionDelegate> workspace_extension_delegate_ = nullptr;
 
-  X11ExtensionDelegate* x11_extension_delegate_ = nullptr;
+  raw_ptr<X11ExtensionDelegate> x11_extension_delegate_ = nullptr;
 
   // Tells if the window got a ::Close call.
   bool is_shutting_down_ = false;
@@ -341,7 +341,7 @@ class X11Window : public PlatformWindow,
   // Handles XDND events going through this window.
   std::unique_ptr<XDragDropClient> drag_drop_client_;
   WmDragHandler::DragFinishedCallback drag_finished_callback_;
-  WmDragHandler::LocationDelegate* drag_location_delegate_ = nullptr;
+  raw_ptr<WmDragHandler::LocationDelegate> drag_location_delegate_ = nullptr;
 
   // Run loop used while dragging from this window.
   std::unique_ptr<X11MoveLoop> drag_loop_;
@@ -350,7 +350,7 @@ class X11Window : public PlatformWindow,
   std::unique_ptr<x11::XScopedEventSelector> source_window_events_;
 
   // The display and the native X window hosting the root window.
-  x11::Connection* const connection_;
+  const raw_ptr<x11::Connection> connection_;
   x11::Window xwindow_ = x11::Window::None;
   x11::Window x_root_window_ = x11::Window::None;
 
@@ -369,7 +369,7 @@ class X11Window : public PlatformWindow,
   // Was this window initialized with the override_redirect window attribute?
   bool override_redirect_ = false;
 
-  std::u16string window_title_;
+  absl::optional<std::u16string> window_title_;
 
   // Whether the window is visible with respect to Aura.
   bool window_mapped_in_client_ = false;
@@ -391,6 +391,9 @@ class X11Window : public PlatformWindow,
 
   // True if the window should stay on top of most other windows.
   bool is_always_on_top_ = false;
+
+  // True if the window is security-sensitive. Implies |is_always_on_top_|.
+  bool is_security_surface_ = false;
 
   // True if the window is fully obscured by another window.
   bool is_occluded_ = false;
@@ -487,10 +490,14 @@ class X11Window : public PlatformWindow,
   // cross-display fullscreening, there is a Restore() (called by BrowserView)
   // that may cause configuration bounds updates that make this window appear to
   // temporarily be on a different screen than its destination screen.  This
-  // restore only happens if the window is maximized.
-  bool ignore_next_configure_ = false;
+  // restore only happens if the window is maximized. The integer represents how
+  // many events to ignore.
+  int ignore_next_configures_ = 0;
   // True between Restore() and the next OnXWindowStateChanged().
   bool restore_in_flight_ = false;
+  // True between SetBoundsInPixels (when the bounds actually change) and the
+  // next OnConfigureEvent.
+  bool bounds_change_in_flight_ = false;
 
   base::CancelableOnceClosure delayed_resize_task_;
 

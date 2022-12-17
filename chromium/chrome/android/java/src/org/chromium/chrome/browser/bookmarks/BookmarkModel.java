@@ -118,7 +118,7 @@ public class BookmarkModel extends BookmarkBridge {
      * Calls {@link BookmarkBridge#moveBookmark(BookmarkId, BookmarkId, int)} for the given
      * bookmark list. The bookmarks are appended at the end.
      */
-    void moveBookmarks(List<BookmarkId> bookmarkIds, BookmarkId newParentId) {
+    public void moveBookmarks(List<BookmarkId> bookmarkIds, BookmarkId newParentId) {
         if (ChromeApplicationImpl.isVivaldi()) {
             List<BookmarkId> list = getChildIDsVivaldi(newParentId,
                     true, true, false);
@@ -137,7 +137,7 @@ public class BookmarkModel extends BookmarkBridge {
     /**
      * @see org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem#getTitle()
      */
-    String getBookmarkTitle(BookmarkId bookmarkId) {
+    public String getBookmarkTitle(BookmarkId bookmarkId) {
         BookmarkItem bookmarkItem = getBookmarkById(bookmarkId);
         if (bookmarkItem == null) return "";
         return bookmarkItem.getTitle();

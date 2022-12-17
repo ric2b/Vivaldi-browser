@@ -45,12 +45,12 @@ MakeCredentialOperation::~MakeCredentialOperation() = default;
 void MakeCredentialOperation::Run() {
   // Verify pubKeyCredParams contains ES-256, which is the only algorithm we
   // support.
-  auto is_es256 =
+  const auto is_es256 =
       [](const PublicKeyCredentialParams::CredentialInfo& cred_info) {
         return cred_info.algorithm ==
                static_cast<int>(CoseAlgorithmIdentifier::kEs256);
       };
-  const auto& key_params =
+  const std::vector<PublicKeyCredentialParams::CredentialInfo>& key_params =
       request_.public_key_credential_params.public_key_credential_params();
   if (!std::any_of(key_params.begin(), key_params.end(), is_es256)) {
     DVLOG(1) << "No supported algorithm found.";
@@ -98,11 +98,9 @@ void MakeCredentialOperation::PromptTouchIdDone(bool success) {
   }
 
   // Delete the key pair for this RP + user handle if one already exists.
-  //
-  // TODO(crbug/1025065): Decide whether we should evict non-resident
-  // credentials at all.
   if (!credential_store_->DeleteCredentialsForUserId(request_.rp.id,
                                                      request_.user.id)) {
+    FIDO_LOG(ERROR) << "DeleteCredentialsForUserId() failed";
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
                              absl::nullopt);
     return;
@@ -110,33 +108,35 @@ void MakeCredentialOperation::PromptTouchIdDone(bool success) {
 
   // Generate the new key pair.
   absl::optional<std::pair<Credential, base::ScopedCFTypeRef<SecKeyRef>>>
-      credential = credential_store_->CreateCredential(
-          request_.rp.id, request_.user, request_.resident_key_required,
-          touch_id_context_->access_control());
-  if (!credential) {
+      credential_result = credential_store_->CreateCredential(
+          request_.rp.id, request_.user,
+          request_.resident_key_required
+              ? TouchIdCredentialStore::kDiscoverable
+              : TouchIdCredentialStore::kNonDiscoverable);
+  if (!credential_result) {
     FIDO_LOG(ERROR) << "CreateCredential() failed";
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
                              absl::nullopt);
     return;
   }
+  auto [credential, sec_key_ref] = std::move(*credential_result);
 
   // Create attestation object. There is no separate attestation key pair, so
   // we perform self-attestation.
   absl::optional<AttestedCredentialData> attested_credential_data =
-      MakeAttestedCredentialData(credential->first.credential_id,
-                                 SecKeyRefToECPublicKey(credential->second));
+      MakeAttestedCredentialData(credential.credential_id,
+                                 SecKeyRefToECPublicKey(sec_key_ref));
   if (!attested_credential_data) {
     FIDO_LOG(ERROR) << "MakeAttestedCredentialData failed";
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
                              absl::nullopt);
     return;
   }
-  AuthenticatorData authenticator_data =
-      MakeAuthenticatorData(CredentialMetadata::kCurrentVersion, request_.rp.id,
-                            std::move(*attested_credential_data));
-  absl::optional<std::vector<uint8_t>> signature =
-      GenerateSignature(authenticator_data, request_.client_data_hash,
-                        credential->first.private_key);
+  AuthenticatorData authenticator_data = MakeAuthenticatorData(
+      credential.metadata.sign_counter_type, request_.rp.id,
+      std::move(*attested_credential_data));
+  absl::optional<std::vector<uint8_t>> signature = GenerateSignature(
+      authenticator_data, request_.client_data_hash, credential.private_key);
   if (!signature) {
     FIDO_LOG(ERROR) << "MakeSignature failed";
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
@@ -151,6 +151,8 @@ void MakeCredentialOperation::PromptTouchIdDone(bool success) {
               CoseAlgorithmIdentifier::kEs256, std::move(*signature),
               /*x509_certificates=*/std::vector<std::vector<uint8_t>>())));
   response.is_resident_key = request_.resident_key_required;
+  response.transports.emplace();
+  response.transports->insert(FidoTransportProtocol::kInternal);
   std::move(callback_).Run(CtapDeviceResponseCode::kSuccess,
                            std::move(response));
 }

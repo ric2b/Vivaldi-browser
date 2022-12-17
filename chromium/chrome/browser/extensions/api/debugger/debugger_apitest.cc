@@ -156,7 +156,9 @@ testing::AssertionResult DebuggerApiTest::RunAttachFunction(
     if (id == tab_id) {
       const base::DictionaryValue& target_dict =
           base::Value::AsDictionaryValue(target_value);
-      EXPECT_TRUE(target_dict.GetString("id", &debugger_target_id));
+      const std::string* id_str = target_dict.GetDict().FindString("id");
+      EXPECT_TRUE(id_str);
+      debugger_target_id = *id_str;
       break;
     }
   }
@@ -263,7 +265,8 @@ class TestInterstitialPage
   void OnInterstitialClosing() override {}
 
  protected:
-  void PopulateInterstitialStrings(base::Value* load_time_data) override {}
+  void PopulateInterstitialStrings(base::Value::Dict& load_time_data) override {
+  }
 
   std::unique_ptr<security_interstitials::MetricsHelper>
   CreateTestMetricsHelper(content::WebContents* web_contents) {
@@ -716,6 +719,17 @@ IN_PROC_BROWSER_TEST_F(DebuggerExtensionApiTest, AttachToPdf) {
 IN_PROC_BROWSER_TEST_F(DebuggerExtensionApiTest, NavigateToForbiddenUrl) {
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
   ASSERT_TRUE(RunExtensionTest("debugger_navigate_to_forbidden_url"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(DebuggerExtensionApiTest, NavigateToUntrustedWebUIUrl) {
+  ASSERT_TRUE(RunExtensionTest("debugger_navigate_to_untrusted_webui_url"))
+      << message_;
+}
+
+// Tests that Target.createTarget to WebUI origins are blocked.
+IN_PROC_BROWSER_TEST_F(DebuggerExtensionApiTest, CreateTargetToUntrustedWebUI) {
+  ASSERT_TRUE(RunExtensionTest("debugger_create_target_to_untrusted_webui"))
       << message_;
 }
 

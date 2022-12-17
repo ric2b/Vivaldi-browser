@@ -8,6 +8,7 @@
 
 #include "base/base64.h"
 #include "base/check.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -28,7 +29,7 @@ namespace {
 constexpr VAType kVAType = VAType::DEFAULT_VA;
 
 // Size of nonce for challenge response.
-const size_t kChallengResponseNonceBytesSize = 32;
+const size_t kChallengeResponseNonceBytesSize = 32;
 
 // Verifies that the `signed_challenge_data` comes from Verified Access.
 bool ChallengeComesFromVerifiedAccess(
@@ -54,8 +55,8 @@ absl::optional<std::string> CreateChallengeResponseString(
   *response_pb.mutable_challenge() = signed_challenge_data;
 
   crypto::RandBytes(base::WriteInto(response_pb.mutable_nonce(),
-                                    kChallengResponseNonceBytesSize + 1),
-                    kChallengResponseNonceBytesSize);
+                                    kChallengeResponseNonceBytesSize + 1),
+                    kChallengeResponseNonceBytesSize);
 
   std::string key;
   if (!CryptoUtility::EncryptWithSeed(
@@ -180,10 +181,14 @@ void DesktopAttestationService::OnChallengeValidated(
   key_info.set_customer_id(
       *signals.FindString(device_signals::names::kObfuscatedCustomerId));
 
-  // VA currently only accepts the signals in a protobuf format.
-  std::unique_ptr<DeviceTrustSignals> signals_proto =
-      DictionarySignalsToProtobufSignals(signals);
-  key_info.set_allocated_device_trust_signals(signals_proto.release());
+  // VA should accept signals JSON string.
+  std::string signals_json;
+  if (!base::JSONWriter::Write(signals, &signals_json)) {
+    std::move(callback).Run(std::string());
+    return;
+  }
+
+  key_info.set_device_trust_signals_json(signals_json);
 
   std::string serialized_key_info;
   if (!key_info.SerializeToString(&serialized_key_info)) {

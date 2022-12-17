@@ -43,7 +43,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   static const int kMaxUploadDepthToSchedule;
 
   using UploadAllowedCallback =
-      base::RepeatingCallback<void(const GURL&,
+      base::RepeatingCallback<void(const url::Origin&,
                                    base::OnceCallback<void(bool)>)>;
 
   DomainReliabilityContext(
@@ -68,10 +68,6 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
 
   // Called to clear browsing data, since beacons are like browsing history.
   void ClearBeacons();
-
-  // Gets a Value containing data that can be formatted into a web page for
-  // debugging purposes.
-  base::Value GetWebUIData() const;
 
   // Gets the beacons queued for upload in this context. `*beacons_out` will be
   // cleared and filled with pointers to the beacons; the pointers remain valid

@@ -23,10 +23,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/system/sys_info.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
-#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/win/atl.h"
 #include "base/win/registry.h"
@@ -35,9 +31,7 @@
 #include "chrome/installer/util/work_item_list.h"
 #include "chrome/updater/app/server/win/com_classes.h"
 #include "chrome/updater/app/server/win/com_classes_legacy.h"
-#include "chrome/updater/configurator.h"
 #include "chrome/updater/constants.h"
-#include "chrome/updater/prefs.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/update_service_internal.h"
@@ -48,7 +42,6 @@
 #include "chrome/updater/win/setup/uninstall.h"
 #include "chrome/updater/win/win_constants.h"
 #include "chrome/updater/win/win_util.h"
-#include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
@@ -188,7 +181,7 @@ bool SwapGoogleUpdate(UpdaterScope scope,
                             WorkItem::ALWAYS);
 
   const std::wstring google_update_appid_key =
-      base::StrCat({CLIENTS_KEY, L"{430FD4D0-B729-4F61-AA34-91526481799D}"});
+      GetAppClientsKey(L"{430FD4D0-B729-4F61-AA34-91526481799D}");
   list->AddCreateRegKeyWorkItem(root, COMPANY_KEY, KEY_WOW64_32KEY);
   list->AddCreateRegKeyWorkItem(root, UPDATER_KEY, KEY_WOW64_32KEY);
   list->AddCreateRegKeyWorkItem(root, CLIENTS_KEY, KEY_WOW64_32KEY);
@@ -222,18 +215,6 @@ void ComServerApp::Stop() {
                                 this_server->update_service_internal_ = nullptr;
                                 this_server->Shutdown(0);
                               }));
-}
-
-void ComServerApp::InitializeThreadPool() {
-  base::ThreadPoolInstance::Create(kThreadPoolName);
-
-  // Reuses the logic in base::ThreadPoolInstance::StartWithDefaultParams.
-  const size_t max_num_foreground_threads =
-      static_cast<size_t>(std::max(3, base::SysInfo::NumberOfProcessors() - 1));
-  base::ThreadPoolInstance::InitParams init_params(max_num_foreground_threads);
-  init_params.common_thread_pool_environment = base::ThreadPoolInstance::
-      InitParams::CommonThreadPoolEnvironment::COM_MTA;
-  base::ThreadPoolInstance::Get()->Start(init_params);
 }
 
 HRESULT ComServerApp::RegisterClassObjects() {
@@ -293,15 +274,12 @@ bool ComServerApp::SwapInNewVersion() {
   std::unique_ptr<WorkItemList> list(WorkItem::CreateWorkItemList());
 
   const absl::optional<base::FilePath> versioned_directory =
-      GetVersionedDirectory(updater_scope());
+      GetVersionedDataDirectory(updater_scope());
   if (!versioned_directory)
     return false;
 
   const base::FilePath updater_path =
-      versioned_directory->Append(FILE_PATH_LITERAL("updater.exe"));
-
-  HKEY root = (updater_scope() == UpdaterScope::kSystem) ? HKEY_LOCAL_MACHINE
-                                                         : HKEY_CURRENT_USER;
+      versioned_directory->Append(GetExecutableRelativePath());
 
   installer::SelfCleaningTempDir temp_dir;
   if (!CreateSecureTempDir(updater_scope(), temp_dir)) {
@@ -312,21 +290,15 @@ bool ComServerApp::SwapInNewVersion() {
     return false;
   }
 
-  if (!SwapGoogleUpdate(updater_scope(), updater_path, temp_dir.path(), root,
-                        list.get())) {
+  if (!SwapGoogleUpdate(updater_scope(), updater_path, temp_dir.path(),
+                        UpdaterScopeToHKeyRoot(updater_scope()), list.get())) {
     return false;
   }
 
   if (updater_scope() == UpdaterScope::kSystem) {
     AddComServiceWorkItems(updater_path, false, list.get());
   } else {
-    for (const CLSID& clsid : GetActiveServers(updater_scope())) {
-      AddInstallServerWorkItems(root, clsid, updater_path, false, list.get());
-    }
-
-    for (const GUID& iid : GetActiveInterfaces()) {
-      AddInstallComInterfaceWorkItems(root, updater_path, iid, list.get());
-    }
+    AddComServerWorkItems(updater_path, false, list.get());
   }
 
   return list->Do();
@@ -335,8 +307,7 @@ bool ComServerApp::SwapInNewVersion() {
 bool ComServerApp::MigrateLegacyUpdaters(
     base::RepeatingCallback<void(const RegistrationRequest&)>
         register_callback) {
-  HKEY root = (updater_scope() == UpdaterScope::kSystem) ? HKEY_LOCAL_MACHINE
-                                                         : HKEY_CURRENT_USER;
+  const HKEY root = UpdaterScopeToHKeyRoot(updater_scope());
   for (base::win::RegistryKeyIterator it(root, CLIENTS_KEY, KEY_WOW64_32KEY);
        it.Valid(); ++it) {
     const std::wstring app_id = it.Name();
@@ -346,8 +317,8 @@ bool ComServerApp::MigrateLegacyUpdaters(
       continue;
 
     base::win::RegKey key;
-    if (key.Open(root, base::StrCat({CLIENTS_KEY, app_id}).c_str(),
-                 Wow6432(KEY_READ)) != ERROR_SUCCESS) {
+    if (key.Open(root, GetAppClientsKey(app_id).c_str(), Wow6432(KEY_READ)) !=
+        ERROR_SUCCESS) {
       continue;
     }
 

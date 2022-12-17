@@ -421,8 +421,7 @@ void WebViewGuest::UpdateTargetURL(content::WebContents* source,
   SendEventToView(*this, webview::kEventTargetURLChanged, std::move(args));
 }
 
-void WebViewGuest::CreateSearch(const base::ListValue& search_value) {
-  const base::Value::List& search = search_value.GetList();
+void WebViewGuest::CreateSearch(const base::Value::List& search) {
   if (search.size() < 2)
     return;
   const std::string* keyword = search[0].GetIfString();
@@ -436,8 +435,7 @@ void WebViewGuest::CreateSearch(const base::ListValue& search_value) {
   SendEventToView(*this, webview::kEventCreateSearch, std::move(args));
 }
 
-void WebViewGuest::PasteAndGo(const base::ListValue& search_value) {
-  const base::Value::List& search = search_value.GetList();
+void WebViewGuest::PasteAndGo(const base::Value::List& search) {
   if (search.size() < 3)
     return;
   const std::string* clipBoardText = search[0].GetIfString();
@@ -541,12 +539,12 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   int index = -1;
   index = std::min(std::max(index, -1), tab_strip->count());
 
-  int add_types = active ? TabStripModel::ADD_ACTIVE : TabStripModel::ADD_NONE;
-  add_types |= TabStripModel::ADD_FORCE_INDEX;
+  int add_types = active ? AddTabTypes::ADD_ACTIVE : AddTabTypes::ADD_NONE;
+  add_types |= AddTabTypes::ADD_FORCE_INDEX;
   if (pinned)
-    add_types |= TabStripModel::ADD_PINNED;
+    add_types |= AddTabTypes::ADD_PINNED;
   if (inherit_opener) {
-    add_types |= TabStripModel::ADD_INHERIT_OPENER;
+    add_types |= AddTabTypes::ADD_INHERIT_OPENER;
   }
 
   NavigateParams navigate_params(
@@ -565,7 +563,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   }
   if (navigate_params.navigated_or_inserted_contents) {
     content::RenderFrameHost* host =
-        navigate_params.navigated_or_inserted_contents->GetMainFrame();
+        navigate_params.navigated_or_inserted_contents->GetPrimaryMainFrame();
     DCHECK(host);
     mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> client;
     host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
@@ -630,7 +628,7 @@ void WebViewGuest::AllowRunningInsecureContent() {
         *web_contents()->GetOpener());
   }
 
-  web_contents()->ForEachFrame(
+  web_contents()->ForEachRenderFrameHost(
       base::BindRepeating(&SetAllowRunningInsecureContent));
 }
 
@@ -750,7 +748,7 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
       // TODO(igor@vivaldi.com): Find out if we should check for
       // rwhv->IsKeyboardLocked() here and unlock the keyboard as well.
       content::RenderWidgetHostView* rwhv =
-          web_contents()->GetMainFrame()->GetView();
+          web_contents()->GetPrimaryMainFrame()->GetView();
       if (rwhv->IsMouseLocked()) {
         rwhv->UnlockMouse();
         handled = true;
@@ -772,14 +770,13 @@ void WebViewGuest::SetIsNavigatingAwayFromVivaldiUI(bool away) {
 }
 
 void WebViewGuest::VivaldiCreateWebContents(
-    const base::DictionaryValue& create_params_value,
+    const base::Value::Dict& create_params,
     WebContentsCreatedCallback callback) {
   RenderProcessHost* owner_render_process_host =
-      owner_web_contents()->GetMainFrame()->GetProcess();
+      owner_web_contents()->GetPrimaryMainFrame()->GetProcess();
   // browser_context_ is always owner_web_contents->GetBrowserContext().
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
 
-  const base::Value::Dict& create_params = create_params_value.GetDict();
   std::string storage_partition_id;
   bool persist_storage = false;
   ParsePartitionParam(create_params, &storage_partition_id, &persist_storage);
@@ -911,7 +908,8 @@ void WebViewGuest::VivaldiCreateWebContents(
                 inspected_contents);
         if (devtools_contents == nullptr) {
           // This can happen when going between docked and undocked.
-          DevToolsWindow::InspectElement(inspected_contents->GetMainFrame(), 0,
+          DevToolsWindow::InspectElement(
+              inspected_contents->GetPrimaryMainFrame(), 0,
                                          0);
           devtools_contents =
               DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
@@ -957,7 +955,7 @@ void WebViewGuest::VivaldiCreateWebContents(
         new_contents = contents;
         CreatePluginGuest(new_contents);
         inspecting_tab_id_ = *tab_id;
-        SetAttachParams(create_params_value);
+        SetAttachParams(create_params);
       }
     }
   } else {
@@ -1052,7 +1050,7 @@ void WebViewGuest::VivaldiCreateWebContents(
   //
   // TODO(dcheng): Is granting commit origin really the right thing to do here?
   content::ChildProcessSecurityPolicy::GetInstance()->GrantCommitOrigin(
-      new_contents->GetMainFrame()->GetProcess()->GetID(),
+      new_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
       url::Origin::Create(GetOwnerSiteURL()));
 
   std::move(callback).Run(new_contents);

@@ -17,6 +17,7 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/ui/webui/settings/chromeos/device_storage_util.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_features_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -136,31 +137,6 @@ void StorageHandler::OnJavascriptDisallowed() {
   StopObservingEvents();
 }
 
-int64_t StorageHandler::RoundByteSize(int64_t bytes) {
-  if (bytes < 0) {
-    NOTREACHED() << "Negative bytes value";
-    return -1;
-  }
-
-  if (bytes == 0)
-    return 0;
-
-  // Subtract one to the original number of bytes.
-  bytes--;
-  // Set all the lower bits to 1.
-  bytes |= bytes >> 1;
-  bytes |= bytes >> 2;
-  bytes |= bytes >> 4;
-  bytes |= bytes >> 8;
-  bytes |= bytes >> 16;
-  bytes |= bytes >> 32;
-  // Add one. The one bit beyond the highest set bit is set to 1. All the lower
-  // bits are set to 0.
-  bytes++;
-
-  return bytes;
-}
-
 void StorageHandler::HandleUpdateAndroidEnabled(
     const base::Value::List& unused_args) {
   // OnJavascriptAllowed() calls ArcSessionManager::AddObserver() later.
@@ -199,14 +175,14 @@ void StorageHandler::HandleUpdateExternalStorages(
 }
 
 void StorageHandler::UpdateExternalStorages() {
-  base::Value devices(base::Value::Type::LIST);
-  for (const auto& itr : DiskMountManager::GetInstance()->mount_points()) {
-    const DiskMountManager::MountPointInfo& mount_info = itr.second;
-    if (!IsEligibleForAndroidStorage(mount_info.source_path))
+  base::Value::List devices;
+  for (const auto& mount_point :
+       DiskMountManager::GetInstance()->mount_points()) {
+    if (!IsEligibleForAndroidStorage(mount_point.source_path))
       continue;
 
     const Disk* disk = DiskMountManager::GetInstance()->FindDiskBySourcePath(
-        mount_info.source_path);
+        mount_point.source_path);
 
     // Assigning a dummy UUID for diskless volume for testing.
     const std::string uuid = disk ? disk->fs_uuid() : kDummyUuid;
@@ -217,11 +193,11 @@ void StorageHandler::UpdateExternalStorages() {
       // That is, we use the base name of mount path instead in such cases.
       // TODO(fukino): Share the implementation to compute the volume name with
       // Files app. crbug.com/1002535.
-      label = base::FilePath(mount_info.mount_path).BaseName().AsUTF8Unsafe();
+      label = base::FilePath(mount_point.mount_path).BaseName().AsUTF8Unsafe();
     }
-    base::Value device(base::Value::Type::DICTIONARY);
-    device.SetKey("uuid", base::Value(uuid));
-    device.SetKey("label", base::Value(label));
+    base::Value::Dict device;
+    device.Set("uuid", uuid);
+    device.Set("label", label);
     devices.Append(std::move(device));
   }
   FireWebUIListener("onExternalStoragesUpdated", devices);
@@ -229,17 +205,16 @@ void StorageHandler::UpdateExternalStorages() {
 
 void StorageHandler::OnArcPlayStoreEnabledChanged(bool enabled) {
   base::Value::Dict update;
-  update.Set(
-      kAndroidEnabled,
-      base::Value(features::ShouldShowExternalStorageSettings(profile_)));
+  update.Set(kAndroidEnabled,
+             features::ShouldShowExternalStorageSettings(profile_));
   content::WebUIDataSource::Update(profile_, source_name_, std::move(update));
 }
 
 void StorageHandler::OnMountEvent(
     DiskMountManager::MountEvent event,
-    chromeos::MountError error_code,
-    const DiskMountManager::MountPointInfo& mount_info) {
-  if (error_code != chromeos::MountError::MOUNT_ERROR_NONE)
+    ash::MountError error_code,
+    const DiskMountManager::MountPoint& mount_info) {
+  if (error_code != ash::MountError::kNone)
     return;
 
   if (!IsEligibleForAndroidStorage(mount_info.source_path))
@@ -343,11 +318,10 @@ void StorageHandler::UpdateOverallStatistics() {
     return;
   }
 
-  base::DictionaryValue size_stat;
-  size_stat.SetStringKey("availableSize", ui::FormatBytes(available_bytes));
-  size_stat.SetStringKey("usedSize", ui::FormatBytes(in_use_bytes));
-  size_stat.SetDoubleKey("usedRatio",
-                         static_cast<double>(in_use_bytes) / total_bytes);
+  base::Value::Dict size_stat;
+  size_stat.Set("availableSize", ui::FormatBytes(available_bytes));
+  size_stat.Set("usedSize", ui::FormatBytes(in_use_bytes));
+  size_stat.Set("usedRatio", static_cast<double>(in_use_bytes) / total_bytes);
   int storage_space_state =
       static_cast<int>(StorageSpaceState::kStorageSpaceNormal);
   if (available_bytes < kSpaceCriticallyLowBytes)
@@ -355,7 +329,7 @@ void StorageHandler::UpdateOverallStatistics() {
         static_cast<int>(StorageSpaceState::kStorageSpaceCriticallyLow);
   else if (available_bytes < kSpaceLowBytes)
     storage_space_state = static_cast<int>(StorageSpaceState::kStorageSpaceLow);
-  size_stat.SetIntKey("spaceState", storage_space_state);
+  size_stat.Set("spaceState", storage_space_state);
 
   FireWebUIListener(CalculationTypeToEventName(
                         calculator::SizeCalculator::CalculationType::kTotal),

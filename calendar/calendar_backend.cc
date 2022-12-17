@@ -464,6 +464,7 @@ void CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row,
     if (result->success) {
       EventRow changed_row;
       if (db_->GetRowForEvent(invite_row.event_id, &changed_row)) {
+        result->inviteRow = invite_row;
         NotifyCalendarChanged();
       }
     }

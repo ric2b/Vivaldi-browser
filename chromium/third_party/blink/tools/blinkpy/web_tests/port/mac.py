@@ -58,15 +58,7 @@ class MacPort(base.Port):
     @classmethod
     def determine_full_port_name(cls, host, options, port_name):
         if port_name.endswith('mac'):
-            parts = [port_name]
-            # TODO(crbug.com/1126062): Workaround for Big sur using 10.16 version,
-            # use mac11 instead. This must be done before macOS 12 capability
-            # for this script.
-            if host.platform.os_version == 'mac10.16':
-                version = 'mac11'
-            else:
-                version = host.platform.os_version
-            parts.append(version)
+            parts = [port_name, host.platform.os_version]
             # Maybe add an architecture suffix.
             # In this context, 'arm64' refers to Apple M1.
             # No suffix is appended for Intel-based ports.
@@ -120,9 +112,7 @@ class MacPort(base.Port):
 
     def default_smoke_test_only(self):
         # only run platform specific tests on older mac versions
-        if self.host.platform.os_version in ['mac10.13', 'mac10.14']:
-            return True
-        return False
+        return self._version in {'mac10.13', 'mac10.14'}
 
     def path_to_smoke_tests_file(self):
         return self._filesystem.join(self.web_tests_dir(), 'SmokeTests',

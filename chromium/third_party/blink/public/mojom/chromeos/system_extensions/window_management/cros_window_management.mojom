@@ -54,6 +54,31 @@ struct CrosWindowInfo {
   VisibilityState visibility_state;
 };
 
+// Represents a screen display.
+struct CrosScreenInfo {
+  // Display's area, minus permanent or semipermanent user interface features
+  // displayed by the operating system.
+  gfx.mojom.Rect work_area;
+
+  // Display's bounds.
+  gfx.mojom.Rect bounds;
+
+  // If this screen is designated as the 'primary' screen by the OS (otherwise
+  // it is 'secondary'). Useful for placing prominent vs peripheral windows.
+  bool is_primary;
+};
+
+// Interface to bind CrosWindowManagement and CrosWindowManagementObserver.
+// Implemented by CrosWindowManagementContext which is a keyed service.
+interface CrosWindowManagementFactory {
+  // Binds a CrosWindowManagement and a CrosWindowManagementStartObserver
+  // interfaces associated with CrosWindowManagementFactory. Their lifetimes are
+  // tied to that of the pipe.
+  Create(
+      pending_associated_receiver<CrosWindowManagement> receiver,
+      pending_associated_remote<CrosWindowManagementStartObserver> observer_remote);
+};
+
 // Chrome OS Window Management API for System Extensions.
 // Called by System Extensions Renderers and implemented by Ash Chrome.
 interface CrosWindowManagement {
@@ -89,13 +114,39 @@ interface CrosWindowManagement {
 
   // Closes the window identified by id if it exists, else do nothing.
   Close(mojo_base.mojom.UnguessableToken id) => (CrosWindowManagementStatus value);
+
+  // Returns all screens.
+  GetAllScreens() => (array<CrosScreenInfo> screens);
 };
 
-// Interface used by the browser to send the `start` event to Window Management
-// System Extensions service workers. This is only bound once when the system
-// extension is installed and the event is dispatched.
+struct AcceleratorEvent {
+  // Whether the key is being pressed or released.
+  enum Type {
+    kDown,
+    kUp,
+  };
+
+  Type type;
+
+  // For now this is a concatenation of all pressed keys.
+  // TODO(b/238578914): Change to being the name of the accelerator.
+  string accelerator_name;
+
+  // True if the given key is being held down such that it is automatically
+  // repeating.
+  bool repeat;
+};
+
+// Interface used by the browser to send events to Window Management System
+// Extensions service workers. Bound using CrosWindowManagementFactory.Create.
 interface CrosWindowManagementStartObserver {
   // Notify the renderer that it should dispatch the `start` event. Currently,
   // start is only dispatched when the System Extension is installed.
   DispatchStartEvent();
+
+  // Notify the renderer that an accelerator has been pressed.
+  // TODO(b/238578914): Eventually we will allow System Extensions to register
+  // their accelerators, but for prototyping, we just send any key press with a
+  // modifier.
+  DispatchAcceleratorEvent(AcceleratorEvent event);
 };

@@ -14,10 +14,10 @@
 #include "chrome/browser/policy/messaging_layer/upload/record_handler_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
+#include "components/reporting/resources/resource_interface.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/status_macros.h"
 #include "components/reporting/util/statusor.h"
@@ -28,7 +28,6 @@
 namespace reporting {
 
 using DmServerUploader = DmServerUploadService::DmServerUploader;
-using ::policy::CloudPolicyClient;
 
 namespace {
 // Thread-safe helper callback class: calls callback once |Decrement|
@@ -64,13 +63,12 @@ class CollectorCallback {
 };
 }  // namespace
 
-DmServerUploadService::RecordHandler::RecordHandler(
-    policy::CloudPolicyClient* client)
-    : client_(client) {}
+DmServerUploadService::RecordHandler::RecordHandler() = default;
 
 DmServerUploader::DmServerUploader(
     bool need_encryption_key,
     std::vector<EncryptedRecord> records,
+    ScopedReservation scoped_reservation,
     RecordHandler* handler,
     ReportSuccessfulUploadCallback report_success_upload_cb,
     EncryptionKeyAttachedCallback encryption_key_attached_cb,
@@ -80,6 +78,7 @@ DmServerUploader::DmServerUploader(
                                             sequenced_task_runner),
       need_encryption_key_(need_encryption_key),
       encrypted_records_(std::move(records)),
+      scoped_reservation_(std::move(scoped_reservation)),
       report_success_upload_cb_(std::move(report_success_upload_cb)),
       encryption_key_attached_cb_(std::move(encryption_key_attached_cb)),
       handler_(handler) {
@@ -143,6 +142,7 @@ void DmServerUploader::HandleRecords() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   handler_->HandleRecords(
       need_encryption_key_, std::move(encrypted_records_),
+      std::move(scoped_reservation_),
       base::BindOnce(&DmServerUploader::Complete, base::Unretained(this)),
       std::move(encryption_key_attached_cb_));
 }
@@ -154,7 +154,10 @@ void DmServerUploader::Finalize(CompletionResponse upload_result) {
         .Run(upload_result.ValueOrDie().sequence_information,
              upload_result.ValueOrDie().force_confirm);
   } else {
-    LOG(WARNING) << upload_result.status();
+    // Log any error except NOT_FOUND, which is a transient state for managed
+    // device, and an uninteresting one for unmanaged ones.
+    LOG_IF(WARNING, upload_result.status().code() != error::NOT_FOUND)
+        << upload_result.status();
   }
   Response(upload_result);
 }
@@ -183,33 +186,26 @@ Status DmServerUploader::IsRecordValid(
 }
 
 void DmServerUploadService::Create(
-    policy::CloudPolicyClient* client,
     base::OnceCallback<void(StatusOr<std::unique_ptr<DmServerUploadService>>)>
         created_cb) {
-  if (client == nullptr) {
-    std::move(created_cb)
-        .Run(Status(error::INVALID_ARGUMENT, "client may not be nullptr."));
-    return;
-  }
-
-  auto uploader =
-      base::WrapUnique(new DmServerUploadService(std::move(client)));
+  auto uploader = base::WrapUnique(new DmServerUploadService());
   InitRecordHandler(std::move(uploader), std::move(created_cb));
 }
 
-DmServerUploadService::DmServerUploadService(policy::CloudPolicyClient* client)
-    : client_(std::move(client)),
-      sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {}
+DmServerUploadService::DmServerUploadService()
+    : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {}
 
 DmServerUploadService::~DmServerUploadService() = default;
 
 Status DmServerUploadService::EnqueueUpload(
     bool need_encryption_key,
     std::vector<EncryptedRecord> records,
+    ScopedReservation scoped_reservation,
     ReportSuccessfulUploadCallback report_upload_success_cb,
     EncryptionKeyAttachedCallback encryption_key_attached_cb) {
   Start<DmServerUploader>(need_encryption_key, std::move(records),
-                          handler_.get(), std::move(report_upload_success_cb),
+                          std::move(scoped_reservation), handler_.get(),
+                          std::move(report_upload_success_cb),
                           std::move(encryption_key_attached_cb),
                           base::DoNothing(), sequenced_task_runner_);
   return Status::StatusOK();
@@ -219,19 +215,7 @@ void DmServerUploadService::InitRecordHandler(
     std::unique_ptr<DmServerUploadService> uploader,
     base::OnceCallback<void(StatusOr<std::unique_ptr<DmServerUploadService>>)>
         created_cb) {
-  auto* const client = uploader->GetClient();
-  if (client == nullptr) {
-    std::move(created_cb)
-        .Run(Status(error::FAILED_PRECONDITION, "Client was null"));
-    return;
-  }
-
-  uploader->handler_ = std::make_unique<RecordHandlerImpl>(client);
+  uploader->handler_ = std::make_unique<RecordHandlerImpl>();
   std::move(created_cb).Run(std::move(uploader));
 }
-
-CloudPolicyClient* DmServerUploadService::GetClient() {
-  return client_;
-}
-
 }  // namespace reporting

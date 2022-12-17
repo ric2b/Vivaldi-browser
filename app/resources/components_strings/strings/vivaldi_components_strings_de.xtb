@@ -45,7 +45,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Verbindungsdiagnose ausführen<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Die Verbindung wurde zurückgesetzt.</translation>
 <translation id="2826760142808435982">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt und authentifiziert und verwendet <ph name="KX" /> als Mechanismus für den Schlüsselaustausch.</translation>
-<translation id="2856444702002559011">Hacker könnten versuchen, Ihre Daten von <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> zu stehlen, zum Beispiel Passwörter, Nachrichten oder Kreditkartendaten. <ph name="BEGIN_LEARN_MORE_LINK" />Weitere Informationen<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="2856444702002559011">Angreifer könnten versuchen, Ihre Daten von <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> zu stehlen, zum Beispiel Passwörter, Nachrichten oder Kreditkartendaten. <ph name="BEGIN_LEARN_MORE_LINK" />Weitere Informationen<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Eine Netzwerkänderung ist aufgetreten.</translation>
 <translation id="2948083400971632585">Sie können jeden Proxy, der für eine Verbindung konfiguriert wurde, in den Einstellungen deaktivieren.</translation>
 <translation id="2953943267837858202">Automatische Video-Wiedergabe nicht erlaubt</translation>
@@ -150,6 +150,7 @@
 <translation id="6321917430147971392">Überprüfen Sie Ihre DNS-Einstellungen.</translation>
 <translation id="6328639280570009161">Deaktivieren Sie die Netzwerkvervollständigung.</translation>
 <translation id="6328786501058569169">Sie befinden sich auf einer betrügerischen Website</translation>
+<translation id="6348220984832452017">Aktive Variationen</translation>
 <translation id="6358450015545214790">Was bedeuten diese Hinweise?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> hat die Verbindung abgelehnt.</translation>
 <translation id="6447842834002726250">Cookies</translation>
@@ -168,6 +169,7 @@
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> von <ph name="DOMAIN" /> zulassen</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> erfüllt die Sicherheitsstandards nicht.</translation>
 <translation id="7219179957768738017">Die Verbindung verwendet <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Benachrichtigungen anzeigen</translation>
 <translation id="7260504762447901703">Zugriff entziehen</translation>
 <translation id="7353601530677266744">Befehlszeile</translation>
 <translation id="7364115444476960850">Die Seite, auf die Sie zugreifen wollten, wurde von Vivaldis <ph name="BLOCKER_NAME" /> geblockt</translation>
@@ -189,7 +191,7 @@
 <translation id="7834693436815575883">Automatische Wiedergabe ein</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
-<translation id="8025119109950072390">Angreifer auf dieser Website können Sie dazu verleiten, etwas Gefährliches zu tun, wie die Installation von Software oder die Offenlegung Ihrer persönlichen Daten (z. B. Passwörter, Telefonnummern oder Kreditkartendaten).</translation>
+<translation id="8025119109950072390">Angreifer auf dieser Website können Sie dazu verleiten etwas Gefährliches zu tun, wie die Installation von Software oder die Offenlegung Ihrer persönlichen Daten (z. B. Passwörter, Telefonnummern oder Kreditkartendaten).</translation>
 <translation id="8037357227543935929">Nachfragen (Standardeinstellung)</translation>
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>
 <translation id="8044382196220116469">Webseiten nicht erlauben, Videos automatisch abzuspielen</translation>

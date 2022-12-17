@@ -8,14 +8,13 @@
 #include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "services/network/public/cpp/network_switches.h"
 
 namespace web_app::integration_tests {
 
 TwoClientWebAppsIntegrationTestBase::TwoClientWebAppsIntegrationTestBase()
     : WebAppsSyncTestBase(TWO_CLIENT), helper_(this) {}
 
-// WebAppIntegrationBrowserTestBase::TestDelegate
+// WebAppIntegrationTestDriver::TestDelegate
 Browser* TwoClientWebAppsIntegrationTestBase::CreateBrowser(Profile* profile) {
   return InProcessBrowserTest::CreateBrowser(profile);
 }
@@ -88,7 +87,6 @@ void TwoClientWebAppsIntegrationTestBase::SetUpCommandLine(
     base::CommandLine* command_line) {
   SyncTest::SetUpCommandLine(command_line);
   ASSERT_TRUE(embedded_test_server()->Start());
-  command_line->AppendSwitch("disable-fake-server-failure-output");
 }
 
 }  // namespace web_app::integration_tests

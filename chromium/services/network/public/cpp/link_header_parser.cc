@@ -19,9 +19,8 @@ namespace {
 
 bool IsValidMimeType(const std::string& type_string) {
   std::string top_level_type;
-  std::string subtype;
   if (!net::ParseMimeTypeWithoutParameter(type_string, &top_level_type,
-                                          &subtype)) {
+                                          /*subtype=*/nullptr)) {
     return false;
   }
 
@@ -36,6 +35,8 @@ absl::optional<mojom::LinkRelAttribute> ParseRelAttribute(
     return absl::nullopt;
 
   std::string value = base::ToLowerASCII(attr.value());
+  if (value == "dns-prefetch")
+    return mojom::LinkRelAttribute::kDnsPrefetch;
   if (value == "preconnect")
     return mojom::LinkRelAttribute::kPreconnect;
   if (value == "preload")

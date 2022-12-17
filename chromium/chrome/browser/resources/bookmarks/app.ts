@@ -5,7 +5,7 @@
 import 'chrome://resources/cr_components/managed_footnote/managed_footnote.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.js';
 import 'chrome://resources/cr_elements/cr_splitter/cr_splitter.js';
 import './folder_node.js';
@@ -181,7 +181,7 @@ export class BookmarksAppElement extends BookmarksAppElementBase {
       this.dispatchEvent(new CustomEvent('iron-announce', {
         bubbles: true,
         composed: true,
-        detail: {text: loadTimeData.getString('searchCleared')}
+        detail: {text: loadTimeData.getString('searchCleared')},
       }));
     }
 
@@ -200,8 +200,8 @@ export class BookmarksAppElement extends BookmarksAppElementBase {
         detail: {
           text: ids.length > 0 ?
               loadTimeData.getStringF('searchResults', this.searchTerm_) :
-              loadTimeData.getString('noSearchResults')
-        }
+              loadTimeData.getString('noSearchResults'),
+        },
       }));
     });
   }
@@ -233,6 +233,7 @@ export class BookmarksAppElement extends BookmarksAppElementBase {
   }
 
   /** Overridden from IronScrollTargetBehavior */
+  /* eslint-disable-next-line @typescript-eslint/naming-convention */
   override _scrollHandler() {
     this.toolbarShadow_ = this.scrollTarget!.scrollTop !== 0;
   }

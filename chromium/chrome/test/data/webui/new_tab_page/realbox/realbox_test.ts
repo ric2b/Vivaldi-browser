@@ -252,9 +252,10 @@ suite('NewTabPageRealboxTest', () => {
   // Test Querying Autocomplete
   //============================================================================
 
-  test('left-clicking the input when empty queries autocomplete', async () => {
+  test('left-clicking empy input queries autocomplete', async () => {
+    // Query zero-prefix matches.
     realbox.$.input.value = '';
-
+    // Left click queries autocomplete when matches are not showing.
     realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
     await testProxy.handler.whenCalled('queryAutocomplete').then((args) => {
       assertEquals(decodeString16(args.input), realbox.$.input.value);
@@ -264,11 +265,37 @@ suite('NewTabPageRealboxTest', () => {
 
     testProxy.handler.reset();
 
-    // Only left clicks query autocomplete.
+    // Show zero-prefix matches.
+    const matches = [createSearchMatch(), createUrlMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: mojoString16(''),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    await testProxy.callbackRouterRemote.$.flushForTesting();
+
+    assertTrue(areMatchesShowing());
+    const matchEls =
+        realbox.$.matches.shadowRoot!.querySelectorAll('ntp-realbox-match');
+    assertEquals(2, matchEls.length);
+
+    // Left click does not query autocomplete when matches are showing.
+    realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
+    assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+
+    // Hide the matches by focusing out.
+    matchEls[0]!.dispatchEvent(new FocusEvent('focusout', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,  // So it propagates across shadow DOM boundary.
+      relatedTarget: document.body,
+    }));
+
+    // Right click does not query autocomplete.
     realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 1}));
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
 
-    // Non-empty input won't query autocomplete.
+    // Left click does not query autocomplete when input is non-empty.
     realbox.$.input.value = '   ';
     realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
@@ -281,8 +308,49 @@ suite('NewTabPageRealboxTest', () => {
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
   });
 
-  test('tabbing into the input when empty queries autocomplete', async () => {
+  test('tabbing into empty input queries autocomplete', async () => {
+    // Query zero-prefix matches.
     realbox.$.input.value = '';
+    realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
+    await testProxy.handler.whenCalled('queryAutocomplete').then((args) => {
+      assertEquals(decodeString16(args.input), realbox.$.input.value);
+      assertFalse(args.preventInlineAutocomplete);
+    });
+    assertEquals(1, testProxy.handler.getCallCount('queryAutocomplete'));
+
+    testProxy.handler.reset();
+
+    // Show zero-prefix matches.
+    const matches = [createSearchMatch(), createUrlMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: mojoString16(''),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    await testProxy.callbackRouterRemote.$.flushForTesting();
+
+    assertTrue(areMatchesShowing());
+    const matchEls =
+        realbox.$.matches.shadowRoot!.querySelectorAll('ntp-realbox-match');
+    assertEquals(2, matchEls.length);
+
+    // Tabbing into input does not query autocomplete when matches are showing.
+    realbox.$.input.dispatchEvent(new KeyboardEvent('keyup', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Tab',
+    }));
+    assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+
+    // Hide the matches by focusing out.
+    matchEls[0]!.dispatchEvent(new FocusEvent('focusout', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,  // So it propagates across shadow DOM boundary.
+      relatedTarget: document.body,
+    }));
+
+    // Tabbing into empty input queries autocomplete.
     realbox.$.input.dispatchEvent(new KeyboardEvent('keyup', {
       bubbles: true,
       cancelable: true,
@@ -293,27 +361,23 @@ suite('NewTabPageRealboxTest', () => {
       assertFalse(args.preventInlineAutocomplete);
     });
     assertEquals(1, testProxy.handler.getCallCount('queryAutocomplete'));
-  });
 
-  test(
-      'tabbing into the input when non-empty does not query autocomplete',
-      async () => {
-        realbox.$.input.value = ' ';
-        realbox.$.input.dispatchEvent(new KeyboardEvent('keyup', {
-          bubbles: true,
-          cancelable: true,
-          key: 'Tab',
-        }));
-        assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
-      });
+    testProxy.handler.reset();
 
-  test('arrow up/down keys query autocomplete', async () => {
-    realbox.$.input.value = '';
-    realbox.$.input.dispatchEvent(new KeyboardEvent('keydown', {
+    // Tabbing into non-empty input does not query autocomplete.
+    realbox.$.input.value = '   ';
+    realbox.$.input.dispatchEvent(new KeyboardEvent('keyup', {
       bubbles: true,
       cancelable: true,
-      key: 'ArrowUp',
+      key: 'Tab',
     }));
+    assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+  });
+
+  test('arrow up/down keys in empty input query autocomplete', async () => {
+    // Query zero-prefix matches.
+    realbox.$.input.value = '';
+    realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
     await testProxy.handler.whenCalled('queryAutocomplete').then((args) => {
       assertEquals(decodeString16(args.input), realbox.$.input.value);
       assertFalse(args.preventInlineAutocomplete);
@@ -322,7 +386,92 @@ suite('NewTabPageRealboxTest', () => {
 
     testProxy.handler.reset();
 
+    // Show zero-prefix matches.
+    const matches = [createSearchMatch(), createUrlMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: mojoString16(''),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    await testProxy.callbackRouterRemote.$.flushForTesting();
+
+    assertTrue(areMatchesShowing());
+    const matchEls =
+        realbox.$.matches.shadowRoot!.querySelectorAll('ntp-realbox-match');
+    assertEquals(2, matchEls.length);
+
+    // Arrow up/down keys do not query autocomplete when matches are showing.
+    realbox.$.input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowUp',
+    }));
+    assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+
+    // Hide the matches by focusing out.
+    matchEls[0]!.dispatchEvent(new FocusEvent('focusout', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,  // So it propagates across shadow DOM boundary.
+      relatedTarget: document.body,
+    }));
+
+    // Arrow up/down keys query autocomplete.
+    realbox.$.input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowDown',
+    }));
+    await testProxy.handler.whenCalled('queryAutocomplete').then((args) => {
+      assertEquals(decodeString16(args.input), realbox.$.input.value);
+      assertTrue(args.preventInlineAutocomplete);
+    });
+    assertEquals(1, testProxy.handler.getCallCount('queryAutocomplete'));
+  });
+
+  test('arrow up/down keys in non-empty input query autocomplete', async () => {
+    // Query matches.
     realbox.$.input.value = 'hello';
+    realbox.$.input.dispatchEvent(new InputEvent('input'));
+    await testProxy.handler.whenCalled('queryAutocomplete').then((args) => {
+      assertEquals(decodeString16(args.input), realbox.$.input.value);
+      assertFalse(args.preventInlineAutocomplete);
+    });
+    assertEquals(1, testProxy.handler.getCallCount('queryAutocomplete'));
+
+    testProxy.handler.reset();
+
+    // Show matches.
+    const matches = [createSearchMatch(), createUrlMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: mojoString16('hello'),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    await testProxy.callbackRouterRemote.$.flushForTesting();
+
+    assertTrue(areMatchesShowing());
+    const matchEls =
+        realbox.$.matches.shadowRoot!.querySelectorAll('ntp-realbox-match');
+    assertEquals(2, matchEls.length);
+
+    // Arrow up/down keys do not query autocomplete when matches are showing.
+    realbox.$.input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowUp',
+    }));
+    assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+
+    // Hide the matches by focusing out.
+    matchEls[0]!.dispatchEvent(new FocusEvent('focusout', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,  // So it propagates across shadow DOM boundary.
+      relatedTarget: document.body,
+    }));
+
+    // Arrow up/down keys query autocomplete.
     realbox.$.input.dispatchEvent(new KeyboardEvent('keydown', {
       bubbles: true,
       cancelable: true,
@@ -469,7 +618,7 @@ suite('NewTabPageRealboxTest', () => {
       createSearchMatch({
         allowedToBeDefaultMatch: true,
       }),
-      createUrlMatch()
+      createUrlMatch(),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -541,7 +690,7 @@ suite('NewTabPageRealboxTest', () => {
       set: (value) => {
         inputValueChanged = true;
         originalValueProperty.set!.call(realbox.$.input, value);
-      }
+      },
     });
 
     // If the user types the next character of the inline autocompletion, the
@@ -765,7 +914,7 @@ suite('NewTabPageRealboxTest', () => {
       createSearchMatch({
         allowedToBeDefaultMatch: true,
       }),
-      createUrlMatch()
+      createUrlMatch(),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -1003,7 +1152,7 @@ suite('NewTabPageRealboxTest', () => {
       createSearchMatch({
         allowedToBeDefaultMatch: true,
       }),
-      createUrlMatch()
+      createUrlMatch(),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -1070,7 +1219,7 @@ suite('NewTabPageRealboxTest', () => {
       createSearchMatch({
         allowedToBeDefaultMatch: true,
       }),
-      createUrlMatch()
+      createUrlMatch(),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -1275,7 +1424,7 @@ suite('NewTabPageRealboxTest', () => {
       createSearchMatch({
         allowedToBeDefaultMatch: true,
       }),
-      createUrlMatch({supportsDeletion: true})
+      createUrlMatch({supportsDeletion: true}),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -1679,10 +1828,10 @@ suite('NewTabPageRealboxTest', () => {
         a11yLabel: mojoString16(''),
         hint: mojoString16('Clear Browsing History'),
         suggestionContents: mojoString16(''),
-        iconUrl: 'chrome://theme/current-channel-logo'
+        iconUrl: 'chrome://theme/current-channel-logo',
       },
       fillIntoEdit: mojoString16('clear browsing history'),
-      supportsDeletion: true
+      supportsDeletion: true,
     })];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -1832,7 +1981,7 @@ suite('NewTabPageRealboxTest', () => {
 
         const matches = [
           createSearchMatch({iconUrl: 'clock.svg'}),
-          createUrlMatch({iconUrl: 'page.svg'})
+          createUrlMatch({iconUrl: 'page.svg'}),
         ];
         testProxy.callbackRouterRemote.autocompleteResultChanged({
           input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -1959,12 +2108,13 @@ suite('NewTabPageRealboxTest', () => {
         realbox.$.input.dispatchEvent(new InputEvent('input'));
 
         const matches = [
-          createUrlMatch({iconUrl: 'page.svg'}), createSearchMatch({
+          createUrlMatch({iconUrl: 'page.svg'}),
+          createSearchMatch({
             iconUrl: 'clock.svg',
             imageUrl: 'https://gstatic.com/',
             imageDominantColor: '#757575',
             isRichSuggestion: true,
-          })
+          }),
         ];
         testProxy.callbackRouterRemote.autocompleteResultChanged({
           input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -2078,14 +2228,14 @@ suite('NewTabPageRealboxTest', () => {
         header: mojoString16('Recommended for you'),
         hideGroupA11yLabel: mojoString16(''),
         showGroupA11yLabel: mojoString16(''),
-        hidden: true
+        hidden: true,
       },
       101: {
         header: mojoString16('Not recommended for you'),
         hideGroupA11yLabel: mojoString16(''),
         showGroupA11yLabel: mojoString16(''),
-        hidden: false
-      }
+        hidden: false,
+      },
     };
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -2182,7 +2332,7 @@ suite('NewTabPageRealboxTest', () => {
             header: mojoString16('Recommended for you'),
             hideGroupA11yLabel: mojoString16(''),
             showGroupA11yLabel: mojoString16(''),
-            hidden: false
+            hidden: false,
           },
         };
         testProxy.callbackRouterRemote.autocompleteResultChanged({
@@ -2280,7 +2430,7 @@ suite('NewTabPageRealboxTest', () => {
     const matches = [createSearchMatch({
       answer: {
         firstLine: mojoString16('When is Christmas Day'),
-        secondLine: mojoString16('Saturday, December 25, 2021')
+        secondLine: mojoString16('Saturday, December 25, 2021'),
       },
       isRichSuggestion: true,
     })];
@@ -2325,8 +2475,8 @@ suite('NewTabPageRealboxTest', () => {
         a11yLabel: mojoString16(''),
         hint: mojoString16('Clear Browsing History'),
         suggestionContents: mojoString16(''),
-        iconUrl: 'chrome://theme/current-channel-logo'
-      }
+        iconUrl: 'chrome://theme/current-channel-logo',
+      },
     })];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),
@@ -2376,9 +2526,9 @@ suite('NewTabPageRealboxTest', () => {
           a11yLabel: mojoString16(''),
           hint: mojoString16('Clear Browsing History'),
           suggestionContents: mojoString16(''),
-          iconUrl: 'chrome://theme/current-channel-logo'
-        }
-      })
+          iconUrl: 'chrome://theme/current-channel-logo',
+        },
+      }),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimLeft()),

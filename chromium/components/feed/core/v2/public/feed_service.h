@@ -15,6 +15,7 @@
 #include "components/feed/core/v2/public/types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/leveldb_proto/public/proto_database.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/web_resource/eula_accepted_notifier.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -67,6 +68,8 @@ class FeedService : public KeyedService {
     virtual DisplayMetrics GetDisplayMetrics() = 0;
     // Returns true if autoplay is enabled.
     virtual bool IsAutoplayEnabled() = 0;
+    // Returns how the tab group feature is enabled.
+    virtual TabGroupEnabledState GetTabGroupEnabledState() = 0;
     // Clear all stored data.
     virtual void ClearAll() = 0;
     // Fetch the image and store it in the disk cache.
@@ -122,6 +125,11 @@ class FeedService : public KeyedService {
 
   //  Whether autoplay is enabled.
   static bool IsAutoplayEnabled(const PrefService& pref_service);
+
+  // Returns true if the feed is personalized.
+  // TODO(iwells): Add comments and consider renaming to explain exceptional
+  // cases.
+  bool IsSignedIn();
 
  private:
   class StreamDelegateImpl;

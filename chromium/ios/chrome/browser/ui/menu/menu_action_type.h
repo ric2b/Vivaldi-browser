@@ -48,7 +48,12 @@ enum class MenuActionType {
   SearchCopiedImage = 36,
   VisitCopiedLink = 37,
   SearchCopiedText = 38,
-  kMaxValue = SearchCopiedText
+  // Vivaldi
+  NewNote = 39,
+  NewFolder = 40,
+  ClearHistory = 41,
+  Done = 42,
+  kMaxValue = Done
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_MENU_MENU_ACTION_TYPE_H_

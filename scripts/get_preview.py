@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import sys
 
 assert(len(sys.argv)>1)

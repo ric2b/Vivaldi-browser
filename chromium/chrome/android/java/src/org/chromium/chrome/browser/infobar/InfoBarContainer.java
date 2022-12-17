@@ -16,7 +16,11 @@ import org.chromium.base.UserData;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManagerSupplier;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
@@ -91,11 +95,17 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     /** Resets the state of the InfoBarContainer when the user navigates. */
     private final TabObserver mTabObserver = new EmptyTabObserver() {
         @Override
-        public void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle) {
+        public void onDidStartNavigationInPrimaryMainFrame(
+                Tab tab, NavigationHandle navigationHandle) {
             // Make sure Y translation is reset on navigation.
-            if (mInfoBarContainerView != null && navigationHandle.isInPrimaryMainFrame()) {
+            if (mInfoBarContainerView != null) {
                 mInfoBarContainerView.setTranslationY(0);
             }
+        }
+
+        @Override
+        public void onDidStartNavigationNoop(Tab tab, NavigationHandle navigationHandle) {
+            if (!navigationHandle.isInPrimaryMainFrame()) return;
         }
 
         @Override
@@ -168,6 +178,20 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
                         observer.onInfoBarContainerShownRatioChanged(
                                 InfoBarContainer.this, shownFraction);
                     }
+                }
+            };
+
+    private final FullscreenManager.Observer mFullscreenObserver =
+            new FullscreenManager.Observer() {
+                @Override
+                public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
+                    setIsAllowedToAutoHide(false);
+                    mInfoBarContainerView.setTranslationY(0);
+                }
+
+                @Override
+                public void onExitFullscreen(Tab tab) {
+                    setIsAllowedToAutoHide(true);
                 }
             };
 
@@ -375,6 +399,12 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     @Override
     public void destroy() {
         destroyContainerView();
+        BrowserControlsManager browserControlsManager =
+                BrowserControlsManagerSupplier.getValueOrNullFrom(mTab.getWindowAndroid());
+        if (browserControlsManager != null
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.INFOBAR_SCROLL_OPTIMIZATION)) {
+            browserControlsManager.getFullscreenManager().removeObserver(mFullscreenObserver);
+        }
         mTab.removeObserver(mTabObserver);
         if (mNativeInfoBarContainer != 0) {
             InfoBarContainerJni.get().destroy(mNativeInfoBarContainer, InfoBarContainer.this);
@@ -465,9 +495,14 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     }
 
     private void initializeContainerView(Activity activity) {
+        BrowserControlsManager browserControlsManager =
+                BrowserControlsManagerSupplier.getValueOrNullFrom(mTab.getWindowAndroid());
         mInfoBarContainerView = new InfoBarContainerView(activity, mContainerViewObserver,
-                BrowserControlsManagerSupplier.getValueOrNullFrom(mTab.getWindowAndroid()),
-                DeviceFormFactor.isWindowOnTablet(mTab.getWindowAndroid()));
+                browserControlsManager, DeviceFormFactor.isWindowOnTablet(mTab.getWindowAndroid()));
+        if (browserControlsManager != null
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.INFOBAR_SCROLL_OPTIMIZATION)) {
+            browserControlsManager.getFullscreenManager().addObserver(mFullscreenObserver);
+        }
 
         mInfoBarContainerView.addOnAttachStateChangeListener(
                 new View.OnAttachStateChangeListener() {

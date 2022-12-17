@@ -17,6 +17,7 @@
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_test_api.h"
+#include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
@@ -97,6 +98,12 @@ FormGlobalId MakeFormGlobalId(RandomizeFrame randomize) {
 
 FieldGlobalId MakeFieldGlobalId(RandomizeFrame randomize) {
   return {MakeLocalFrameToken(randomize), MakeFieldRendererId()};
+}
+
+FormData WithoutValues(FormData form) {
+  for (FormFieldData& field : form.fields)
+    field.value.clear();
+  return form;
 }
 
 void SetFormGroupValues(FormGroup& form_group,
@@ -474,6 +481,13 @@ AutofillProfile GetServerProfile2() {
   return profile;
 }
 
+IBAN GetIBAN() {
+  IBAN iban(base::GenerateGUID());
+  iban.set_value(u"DE91 1000 0000 0123 4567 89");
+  iban.set_nickname(u"Nickname for Iban");
+  return iban;
+}
+
 CreditCard GetCreditCard() {
   CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Test User", "4111111111111111" /* Visa */,
@@ -556,15 +570,6 @@ CreditCard GetMaskedServerCardWithNickname() {
                           NextMonth().c_str(), NextYear().c_str(), "1");
   credit_card.SetNetworkForMaskedCard(kVisaCard);
   credit_card.SetNickname(u"Test nickname");
-  return credit_card;
-}
-
-CreditCard GetMaskedServerCardWithInvalidNickname() {
-  CreditCard credit_card(CreditCard::MASKED_SERVER_CARD, "c789");
-  test::SetCreditCardInfo(&credit_card, "Test user", "1111" /* Visa */,
-                          NextMonth().c_str(), NextYear().c_str(), "1");
-  credit_card.SetNetworkForMaskedCard(kVisaCard);
-  credit_card.SetNickname(u"Invalid nickname which is too long");
   return credit_card;
 }
 

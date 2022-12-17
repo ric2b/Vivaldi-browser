@@ -691,8 +691,9 @@ void CertNetFetcherURLRequest::AsyncCertNetFetcherURLRequest::Fetch(
     return;
   }
 
-  job = new Job(std::move(request_params), this);
-  jobs_[job] = base::WrapUnique(job);
+  auto new_job = std::make_unique<Job>(std::move(request_params), this);
+  job = new_job.get();
+  jobs_[job] = std::move(new_job);
   // Attach the request before calling StartURLRequest; this ensures that the
   // request will get signalled if StartURLRequest completes the job
   // synchronously.
@@ -803,7 +804,7 @@ std::unique_ptr<CertNetFetcher::Request>
 CertNetFetcherURLRequest::FetchCaIssuers(const GURL& url,
                                          int timeout_milliseconds,
                                          int max_response_bytes) {
-  std::unique_ptr<RequestParams> request_params(new RequestParams);
+  auto request_params = std::make_unique<RequestParams>();
 
   request_params->url = url;
   request_params->http_method = HTTP_METHOD_GET;
@@ -818,7 +819,7 @@ std::unique_ptr<CertNetFetcher::Request> CertNetFetcherURLRequest::FetchCrl(
     const GURL& url,
     int timeout_milliseconds,
     int max_response_bytes) {
-  std::unique_ptr<RequestParams> request_params(new RequestParams);
+  auto request_params = std::make_unique<RequestParams>();
 
   request_params->url = url;
   request_params->http_method = HTTP_METHOD_GET;
@@ -833,7 +834,7 @@ std::unique_ptr<CertNetFetcher::Request> CertNetFetcherURLRequest::FetchOcsp(
     const GURL& url,
     int timeout_milliseconds,
     int max_response_bytes) {
-  std::unique_ptr<RequestParams> request_params(new RequestParams);
+  auto request_params = std::make_unique<RequestParams>();
 
   request_params->url = url;
   request_params->http_method = HTTP_METHOD_GET;
@@ -867,7 +868,7 @@ void CertNetFetcherURLRequest::DoFetchOnNetworkSequence(
 std::unique_ptr<CertNetFetcherURLRequest::Request>
 CertNetFetcherURLRequest::DoFetch(
     std::unique_ptr<RequestParams> request_params) {
-  scoped_refptr<RequestCore> request_core = new RequestCore(task_runner_);
+  auto request_core = base::MakeRefCounted<RequestCore>(task_runner_);
 
   // If the fetcher has already been shutdown, DoFetchOnNetworkSequence will
   // signal the request with an error. However, if the fetcher shuts down

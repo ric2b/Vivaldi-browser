@@ -20,15 +20,15 @@
 #include "chrome/browser/policy/networking/device_network_configuration_updater_ash.h"
 #include "chrome/browser/policy/networking/user_network_configuration_updater_ash.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/network/fake_network_device_handler.h"
+#include "chromeos/ash/components/network/mock_managed_network_configuration_handler.h"
 #include "chromeos/ash/components/network/onc/onc_certificate_importer.h"
+#include "chromeos/ash/components/network/policy_certificate_provider.h"
 #include "chromeos/components/onc/certificate_scope.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
 #include "chromeos/components/onc/onc_test_utils.h"
 #include "chromeos/components/onc/onc_utils.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "chromeos/network/fake_network_device_handler.h"
-#include "chromeos/network/mock_managed_network_configuration_handler.h"
-#include "chromeos/network/policy_certificate_provider.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/account_id/account_id.h"
@@ -88,7 +88,7 @@ class FakeUser : public user_manager::User {
 };
 
 class MockPolicyProvidedCertsObserver
-    : public chromeos::PolicyCertificateProvider::Observer {
+    : public ash::PolicyCertificateProvider::Observer {
  public:
   MockPolicyProvidedCertsObserver() = default;
 
@@ -100,7 +100,7 @@ class MockPolicyProvidedCertsObserver
   MOCK_METHOD0(OnPolicyProvidedCertsChanged, void());
 };
 
-class FakeNetworkDeviceHandler : public chromeos::FakeNetworkDeviceHandler {
+class FakeNetworkDeviceHandler : public ash::FakeNetworkDeviceHandler {
  public:
   FakeNetworkDeviceHandler() = default;
 
@@ -119,7 +119,7 @@ class FakeNetworkDeviceHandler : public chromeos::FakeNetworkDeviceHandler {
   bool mac_addr_randomization_ = false;
 };
 
-class FakeCertificateImporter : public chromeos::onc::CertificateImporter {
+class FakeCertificateImporter : public ash::onc::CertificateImporter {
  public:
   using OncParsedCertificates = chromeos::onc::OncParsedCertificates;
 
@@ -276,11 +276,10 @@ void SelectSingleClientCertificateFromOnc(
       toplevel_onc->FindKey(onc::toplevel_config::kCertificates);
   ASSERT_TRUE(certs);
   ASSERT_TRUE(certs->is_list());
-  ASSERT_TRUE(certs->GetListDeprecated().size() > client_certificate_index);
+  ASSERT_TRUE(certs->GetList().size() > client_certificate_index);
 
   base::ListValue selected_certs;
-  selected_certs.Append(
-      certs->GetListDeprecated()[client_certificate_index].Clone());
+  selected_certs.Append(certs->GetList()[client_certificate_index].Clone());
 
   chromeos::onc::OncParsedCertificates parsed_selected_certs(selected_certs);
   ASSERT_FALSE(parsed_selected_certs.has_error());
@@ -298,7 +297,7 @@ MATCHER_P(IsEqualTo,
 }
 
 MATCHER(IsListEmpty, std::string(negation ? "isn't" : "is") + " empty.") {
-  return arg.GetListDeprecated().empty();
+  return arg.GetList().empty();
 }
 
 MATCHER(IsDictEmpty, std::string(negation ? "isn't" : "is") + " empty.") {
@@ -421,7 +420,7 @@ class NetworkConfigurationUpdaterAshTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_;
 
   std::unique_ptr<chromeos::onc::OncParsedCertificates> fake_certificates_;
-  StrictMock<chromeos::MockManagedNetworkConfigurationHandler>
+  StrictMock<ash::MockManagedNetworkConfigurationHandler>
       network_config_handler_;
   FakeNetworkDeviceHandler network_device_handler_;
   ash::ScopedStubInstallAttributes scoped_stub_install_attributes_;
@@ -434,7 +433,7 @@ class NetworkConfigurationUpdaterAshTest : public testing::Test {
   // continues to point to that instance but
   // |client_certificate_importer_owned_| is released.
   FakeCertificateImporter* certificate_importer_;
-  std::unique_ptr<chromeos::onc::CertificateImporter>
+  std::unique_ptr<ash::onc::CertificateImporter>
       client_certificate_importer_owned_;
 
   StrictMock<MockConfigurationPolicyProvider> provider_;
@@ -448,7 +447,7 @@ class NetworkConfigurationUpdaterAshTest : public testing::Test {
  private:
   base::Value fake_network_configs_;
   base::Value fake_global_network_config_{base::Value::Type::DICTIONARY};
-  chromeos::ScopedFakeSessionManagerClient scoped_session_manager_client_;
+  ash::ScopedFakeSessionManagerClient scoped_session_manager_client_;
 };
 
 TEST_F(NetworkConfigurationUpdaterAshTest, CellularRoamingDefaults) {

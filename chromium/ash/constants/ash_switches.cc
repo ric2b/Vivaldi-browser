@@ -101,6 +101,9 @@ const char kArcDisableMediaStoreMaintenance[] =
 // apps silently. Used in autotests to resolve racy conditions.
 const char kArcDisablePlayAutoInstall[] = "arc-disable-play-auto-install";
 
+// Used in autotest to disable TTS cache which is on by default.
+const char kArcDisableTtsCache[] = "arc-disable-tts-cache";
+
 // Flag that disables ureadahead completely, including host and guest parts.
 // See also |kArcVmUreadaheadMode|.
 const char kArcDisableUreadahead[] = "arc-disable-ureadahead";
@@ -142,11 +145,6 @@ const char kArcStartMode[] = "arc-start-mode";
 
 // Sets ARC Terms Of Service hostname url for testing.
 const char kArcTosHostForTests[] = "arc-tos-host-for-tests";
-
-// Mounts the debugfs file system if this flag is set.
-// Debugfs was removed in Android S to meet GTS requirements, but for ureadahead
-// tracing we need to enable it in developer mode only.
-const char kArcVmMountDebugFs[] = "arcvm-mount-debugfs";
 
 // Sets the mode of operation for ureadahead during ARCVM boot. If this switch
 // is not set, ARCVM ureadahead will check for the presence and age of pack
@@ -221,6 +219,11 @@ const char kAshForceStatusAreaCollapsible[] = "force-status-area-collapsible";
 // such as battery level updates.
 const char kAshHideNotificationsForFactory[] =
     "ash-hide-notifications-for-factory";
+
+// Hides educational nudges that can interfere with tast integration tests.
+// Somewhat similar to --no-first-run but affects system UI behavior, not
+// browser behavior.
+const char kAshNoNudges[] = "ash-no-nudges";
 
 // Power button position includes the power button's physical display side and
 // the percentage for power button center position to the display's
@@ -614,6 +617,11 @@ const char kIgnoreArcVmDevConf[] = "ignore-arcvm-dev-conf";
 const char kIgnoreUserProfileMappingForTests[] =
     "ignore-user-profile-mapping-for-tests";
 
+// If true, the time dependent views (such as the time view) show with the
+// predefined fixed time.
+const char kStabilizeTimeDependentViewForTests[] =
+    "stabilize-time-dependent-view-for-tests";
+
 // Decreases delay in uploading installation event logs for integration test.
 const char kInstallLogFastUploadForTests[] =
     "install-log-fast-upload-for-tests";
@@ -632,6 +640,14 @@ const char kLacrosAvailabilityIgnore[] = "lacros-availability-ignore";
 //   --foo=5
 //   --bar=/tmp/dir name
 const char kLacrosChromeAdditionalArgs[] = "lacros-chrome-additional-args";
+
+// If this switch is set, then ash-chrome will read from the provided path
+// and pass additional arguments when launching lacros-chrome. Each non-empty
+// line in the file will be treated as an argument. Example file contents:
+//   --foo=5
+//   --bar=/tmp/dir name
+const char kLacrosChromeAdditionalArgsFile[] =
+    "lacros-chrome-additional-args-file";
 
 // Additional environment variables set for lacros-chrome. The string '####' is
 // used as a delimiter. For example:
@@ -714,9 +730,6 @@ const char kOobeLargeScreenSpecialScaling[] =
 // Specifies directory for screenshots taken with OOBE UI Debugger.
 const char kOobeScreenshotDirectory[] = "oobe-screenshot-dir";
 
-// Shows Blazey screens.
-const char kOobeShowBlazeyScreen[] = "oobe-show-blazey";
-
 // Skips all other OOBE pages after user login.
 const char kOobeSkipPostLogin[] = "oobe-skip-postlogin";
 
@@ -795,6 +808,11 @@ const char kShowTaps[] = "show-taps";
 const char kSkipForceOnlineSignInForTesting[] =
     "skip-force-online-signin-for-testing";
 
+// Used to skip the threshold duration that the reorder nudge has to show before
+// the nudge is considered as shown.
+const char kSkipReorderNudgeShowThresholdDurationForTest[] =
+    "skip-reorder-nudge-show-threshold-duration";
+
 // If set, the device will be forced to stay in clamshell UI mode but screen
 // auto rotation will be supported. E.g, chromebase device Dooly.
 const char kSupportsClamshellAutoRotation[] =
@@ -862,6 +880,10 @@ const char kWaitForInitialPolicyFetchForTest[] =
 // Used to determine if and how on-device handwriting recognition is supported
 // (e.g. via rootfs or downloadable content).
 const char kOndeviceHandwritingSwitch[] = "ondevice_handwriting";
+
+// Enable the getAccessToken autotest API which creates access tokens using
+// the internal OAuth client ID.
+const char kGetAccessTokenForTest[] = "get-access-token-for-test";
 
 bool IsAuthSessionCryptohomeEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -989,6 +1011,16 @@ bool ShouldClearFastInkBuffer() {
 
 bool HasHps() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kHasHps);
+}
+
+bool IsSkipRecorderNudgeShowThresholdDurationEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kSkipReorderNudgeShowThresholdDurationForTest);
+}
+
+bool IsStabilizeTimeDependentViewForTestsEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kStabilizeTimeDependentViewForTests);
 }
 
 }  // namespace switches

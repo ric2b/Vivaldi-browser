@@ -21,7 +21,6 @@ from blinkpy.common.net.network_transaction import NetworkTimeout
 from blinkpy.common.path_finder import PathFinder
 from blinkpy.common.system.executive import ScriptError
 from blinkpy.common.system.log_utils import configure_logging
-from blinkpy.w3c.android_wpt_expectations_updater import AndroidWPTExpectationsUpdater
 from blinkpy.w3c.chromium_exportable_commits import exportable_commits_over_last_n_commits
 from blinkpy.w3c.common import read_credentials, is_testharness_baseline, is_file_exportable, WPT_GH_URL
 from blinkpy.w3c.directory_owners_extractor import DirectoryOwnersExtractor
@@ -78,13 +77,6 @@ class TestImporter(object):
         args = ['--clean-up-affected-tests-only',
                 '--clean-up-test-expectations']
         self._expectations_updater = WPTExpectationsUpdater(
-            self.host, args, wpt_manifests)
-
-        args = [
-            '--android-product',
-            'android_weblayer'
-        ]
-        self._android_expectations_updater = AndroidWPTExpectationsUpdater(
             self.host, args, wpt_manifests)
 
     def main(self, argv=None):
@@ -186,15 +178,14 @@ class TestImporter(object):
             _log.info('Only manifest or expectations was updated; skipping the import.')
             return 0
 
-        with self._expectations_updater.prepare_smoke_tests(self.chromium_git):
-            self._commit_changes(commit_message)
-            _log.info('Changes imported and committed.')
+        self._commit_changes(commit_message)
+        _log.info('Changes imported and committed.')
 
-            if not options.auto_upload and not options.auto_update:
-                return 0
+        if not options.auto_upload and not options.auto_update:
+            return 0
 
-            self._upload_cl()
-            _log.info('Issue: %s', self.git_cl.run(['issue']).strip())
+        self._upload_cl()
+        _log.info('Issue: %s', self.git_cl.run(['issue']).strip())
 
         if not self.update_expectations_for_cl():
             return 1
@@ -256,7 +247,6 @@ class TestImporter(object):
 
         if try_results and self.git_cl.some_failed(try_results):
             self.fetch_new_expectations_and_baselines()
-            self.fetch_wpt_override_expectations()
             if self.chromium_git.has_working_directory_changes():
                 # Skip slow and timeout tests so that presubmit check passes
                 port = self.host.port_factory.get()
@@ -685,19 +675,6 @@ class TestImporter(object):
 
         _log.info('Adding test expectations lines for disable-site-isolation-trials')
         self._expectations_updater.update_expectations_for_flag_specific('disable-site-isolation-trials')
-
-    def fetch_wpt_override_expectations(self):
-        """Modifies WPT Override expectations based on try job results.
-
-        Assuming that there are some try job results available, this
-        adds new expectation lines to WPT Override Expectation files,
-        e.g. WebLayerWPTOverrideExpectations
-
-        This is the same as invoking the `wpt-update-expectations` script.
-        """
-        _log.info('Adding test expectations lines to Override Expectations.')
-        _, self.new_override_expectations = (
-            self._android_expectations_updater.update_expectations())
 
     def _get_last_imported_wpt_revision(self):
         """Finds the last imported WPT revision."""

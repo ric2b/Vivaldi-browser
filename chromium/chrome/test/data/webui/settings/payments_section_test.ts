@@ -20,7 +20,7 @@ suite('PaymentSectionUiTest', function() {
     // Initializing with fake prefs
     const section = document.createElement('settings-payments-section');
     section.prefs = {
-      autofill: {credit_card_enabled: {}, credit_card_fido_auth_enabled: {}}
+      autofill: {credit_card_enabled: {}, credit_card_fido_auth_enabled: {}},
     };
     document.body.appendChild(section);
 
@@ -43,6 +43,7 @@ suite('PaymentsSection', function() {
     loadTimeData.overrideValues({
       migrationEnabled: true,
       virtualCardEnrollmentEnabled: true,
+      virtualCardMetadataEnabled: true,
     });
   });
 
@@ -96,14 +97,8 @@ suite('PaymentsSection', function() {
 
   // Fakes the existence of a platform authenticator.
   function addFakePlatformAuthenticator() {
-    if (!window.PublicKeyCredential) {
-      (window.PublicKeyCredential as PublicKeyCredential) = {} as
-          PublicKeyCredential;
-    }
-    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable =
-        function() {
-      return Promise.resolve(true);
-    };
+    (PaymentsManagerImpl.getInstance() as TestPaymentsManager)
+        .setIsUserVerifyingPlatformAuthenticatorAvailable(true);
   }
 
 
@@ -213,7 +208,7 @@ suite('PaymentsSection', function() {
     assertEquals(
         creditCard.metadata!.summaryLabel,
         rowShadowRoot.querySelector<HTMLElement>(
-                         '#creditCardLabel')!.textContent);
+                         '#summaryLabel')!.textContent!.trim());
     assertEquals(
         creditCard.expirationMonth + '/' + creditCard.expirationYear,
         rowShadowRoot.querySelector<HTMLElement>(
@@ -310,6 +305,77 @@ suite('PaymentsSection', function() {
             rowShadowRoot.querySelector('cr-icon-button.icon-external');
         assertFalse(!!outlinkButton);
       });
+
+  test('verifyCreditCardSummarySublabelWhenSublabelIsValid', function() {
+    const creditCard = createCreditCardEntry();
+    creditCard.metadata!.isLocal = false;
+    creditCard.metadata!.isVirtualCardEnrollmentEligible = false;
+    creditCard.metadata!.isVirtualCardEnrolled = false;
+    const section =
+        createPaymentsSection([creditCard], /*upiIds=*/[], /*prefValues=*/ {});
+
+    const creditCardList = section.$.paymentsList;
+    assertTrue(!!creditCardList);
+    assertEquals(1, getLocalAndServerCreditCardListItems().length);
+    assertFalse(getCardRowShadowRoot(section.$.paymentsList)
+                    .querySelector<HTMLElement>('#summarySublabel')!.hidden);
+  });
+
+  test('verifyCreditCardSummarySublabelWhenSublabelIsInvalid', function() {
+    const creditCard = createCreditCardEntry();
+    creditCard.metadata!.isLocal = false;
+    creditCard.metadata!.isVirtualCardEnrollmentEligible = false;
+    creditCard.metadata!.isVirtualCardEnrolled = false;
+    creditCard.metadata!.summarySublabel = '';
+    const section =
+        createPaymentsSection([creditCard], /*upiIds=*/[], /*prefValues=*/ {});
+
+    const creditCardList = section.$.paymentsList;
+    assertTrue(!!creditCardList);
+    assertEquals(1, getLocalAndServerCreditCardListItems().length);
+    assertTrue(getCardRowShadowRoot(section.$.paymentsList)
+                   .querySelector<HTMLElement>('#summarySublabel')!.hidden);
+  });
+
+  test('verifyCreditCardSummarySublabelWhenVirtualCardAvailable', function() {
+    const creditCard = createCreditCardEntry();
+    creditCard.metadata!.isLocal = false;
+    creditCard.metadata!.isVirtualCardEnrollmentEligible = true;
+    creditCard.metadata!.isVirtualCardEnrolled = false;
+    const section =
+        createPaymentsSection([creditCard], /*upiIds=*/[], /*prefValues=*/ {});
+
+    const creditCardList = section.$.paymentsList;
+    assertTrue(!!creditCardList);
+    assertEquals(1, getLocalAndServerCreditCardListItems().length);
+    assertFalse(getCardRowShadowRoot(section.$.paymentsList)
+                    .querySelector<HTMLElement>('#summarySublabel')!.hidden);
+    assertEquals(
+        'Virtual card available',
+        getCardRowShadowRoot(section.$.paymentsList)
+            .querySelector<HTMLElement>(
+                '#summarySublabel')!.textContent!.trim());
+  });
+
+  test('verifyCreditCardSummarySublabelWhenVirtualCardTurnedOn', function() {
+    const creditCard = createCreditCardEntry();
+    creditCard.metadata!.isLocal = false;
+    creditCard.metadata!.isVirtualCardEnrollmentEligible = false;
+    creditCard.metadata!.isVirtualCardEnrolled = true;
+    const section =
+        createPaymentsSection([creditCard], /*upiIds=*/[], /*prefValues=*/ {});
+
+    const creditCardList = section.$.paymentsList;
+    assertTrue(!!creditCardList);
+    assertEquals(1, getLocalAndServerCreditCardListItems().length);
+    assertFalse(getCardRowShadowRoot(section.$.paymentsList)
+                    .querySelector<HTMLElement>('#summarySublabel')!.hidden);
+    assertEquals(
+        'Virtual card turned on',
+        getCardRowShadowRoot(section.$.paymentsList)
+            .querySelector<HTMLElement>(
+                '#summarySublabel')!.textContent!.trim());
+  });
 
   test('verifyAddVsEditCreditCardTitle', function() {
     const newCreditCard = createEmptyCreditCardEntry();
@@ -422,7 +488,7 @@ suite('PaymentsSection', function() {
           assertTrue(creditCardDialog.$.saveButton.disabled);
 
           // Add a name.
-          creditCardDialog.set('creditCard.name', 'Jane Doe');
+          creditCardDialog.set('name_', 'Jane Doe');
           flush();
 
           assertEquals('hidden', getComputedStyle(expiredError).visibility);
@@ -436,6 +502,29 @@ suite('PaymentsSection', function() {
         .then(function(event) {
           assertEquals(creditCard.guid, event.detail.guid);
         });
+  });
+
+  test('verifyNotEditedEntryAfterCancel', async function() {
+    const creditCard = createCreditCardEntry();
+    let creditCardDialog = createCreditCardDialog(creditCard);
+
+    await whenAttributeIs(creditCardDialog.$.dialog, 'open', '');
+
+    // Edit a entry.
+    creditCardDialog.set('name_', 'EditedName');
+    creditCardDialog.set('nickname_', 'NickName');
+    creditCardDialog.set('cardNumber_', '0000000000001234');
+    flush();
+
+    creditCardDialog.$.cancelButton.click();
+    await eventToPromise('close', creditCardDialog);
+
+    creditCardDialog = createCreditCardDialog(creditCard);
+    await whenAttributeIs(creditCardDialog.$.dialog, 'open', '');
+
+    assertEquals(creditCardDialog.get('name_'), creditCard.name);
+    assertEquals(creditCardDialog.get('cardNumber_'), creditCard.cardNumber);
+    assertEquals(creditCardDialog.get('nickname_'), creditCard.nickname);
   });
 
   test('verifyCancelCreditCardEdit', function(done) {
@@ -821,7 +910,7 @@ suite('PaymentsSection', function() {
     addFakePlatformAuthenticator();
     const section = createPaymentsSection(/*creditCards=*/[], /*upiIds=*/[], {
       credit_card_enabled: {value: true},
-      credit_card_fido_auth_enabled: {value: true}
+      credit_card_fido_auth_enabled: {value: true},
     });
     assertTrue(section.shadowRoot!
                    .querySelector<SettingsToggleButtonElement>(
@@ -834,7 +923,7 @@ suite('PaymentsSection', function() {
     addFakePlatformAuthenticator();
     const section = createPaymentsSection(/*creditCards=*/[], /*upiIds=*/[], {
       credit_card_enabled: {value: true},
-      credit_card_fido_auth_enabled: {value: false}
+      credit_card_fido_auth_enabled: {value: false},
     });
     assertFalse(section.shadowRoot!
                     .querySelector<SettingsToggleButtonElement>(

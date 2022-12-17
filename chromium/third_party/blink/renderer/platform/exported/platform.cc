@@ -61,13 +61,16 @@
 #include "third_party/blink/renderer/platform/instrumentation/partition_alloc_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/memory_cache_dump_provider.h"
 #include "third_party/blink/renderer/platform/language.h"
-#include "third_party/blink/renderer/platform/scheduler/common/simple_thread_scheduler.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/common/simple_main_thread_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/non_main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_helper.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
+#include "third_party/skia/include/core/SkGraphics.h"
 #include "third_party/webrtc/api/rtp_parameters.h"
 #include "third_party/webrtc/p2p/base/port_allocator.h"
 
@@ -161,7 +164,8 @@ class SimpleMainThread : public Thread {
   // and Platform::UnsetMainThreadTaskRunnerForTesting().
 
   ThreadScheduler* Scheduler() override { return &scheduler_; }
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override {
+  scoped_refptr<base::SingleThreadTaskRunner> GetDeprecatedTaskRunner()
+      const override {
     if (main_thread_task_runner_for_testing_)
       return main_thread_task_runner_for_testing_;
     DCHECK(WTF::IsMainThread());
@@ -176,7 +180,7 @@ class SimpleMainThread : public Thread {
  private:
   bool IsSimpleMainThread() const override { return true; }
 
-  scheduler::SimpleThreadScheduler scheduler_;
+  scheduler::SimpleMainThreadScheduler scheduler_;
   scoped_refptr<base::SingleThreadTaskRunner>
       main_thread_task_runner_for_testing_;
 };
@@ -256,6 +260,9 @@ void Platform::InitializeMainThreadCommon(Platform* platform,
       CanvasMemoryDumpProvider::Instance(), "Canvas",
       base::ThreadTaskRunnerHandle::Get());
 
+  SkGraphics::SetVariableColrV1EnabledFunc(
+      RuntimeEnabledFeatures::VariableCOLRV1Enabled);
+
   // Use a delayed idle task as this is low priority work that should stop when
   // the main thread is not doing any work.
   WTF::Partitions::StartPeriodicReclaim(
@@ -295,12 +302,6 @@ std::unique_ptr<WebURLLoaderFactory> Platform::WrapURLLoaderFactory(
   return nullptr;
 }
 
-std::unique_ptr<blink::WebURLLoaderFactory>
-Platform::WrapSharedURLLoaderFactory(
-    scoped_refptr<network::SharedURLLoaderFactory> factory) {
-  return nullptr;
-}
-
 std::unique_ptr<WebDedicatedWorkerHostFactoryClient>
 Platform::CreateDedicatedWorkerHostFactoryClient(
     WebDedicatedWorker*,
@@ -314,20 +315,11 @@ void Platform::CreateServiceWorkerSubresourceLoaderFactory(
     const WebString& client_id,
     std::unique_ptr<network::PendingSharedURLLoaderFactory> fallback_factory,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-    scoped_refptr<base::SequencedTaskRunner> task_runner,
-    scoped_refptr<base::SequencedTaskRunner> worker_timing_callback_task_runner,
-    base::RepeatingCallback<
-        void(int, mojo::PendingReceiver<blink::mojom::WorkerTimingContainer>)>
-        worker_timing_callback) {}
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {}
 
 ThreadSafeBrowserInterfaceBrokerProxy* Platform::GetBrowserInterfaceBroker() {
   DEFINE_STATIC_LOCAL(DefaultBrowserInterfaceBrokerProxy, proxy, ());
   return &proxy;
-}
-
-std::unique_ptr<Thread> Platform::CreateThread(
-    const ThreadCreationParams& params) {
-  return Thread::CreateThread(params);
 }
 
 void Platform::CreateAndSetCompositorThread() {
@@ -336,7 +328,7 @@ void Platform::CreateAndSetCompositorThread() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 Platform::CompositorThreadTaskRunner() {
-  if (Thread* compositor_thread = Thread::CompositorThread())
+  if (NonMainThread* compositor_thread = Thread::CompositorThread())
     return compositor_thread->GetTaskRunner();
   return nullptr;
 }

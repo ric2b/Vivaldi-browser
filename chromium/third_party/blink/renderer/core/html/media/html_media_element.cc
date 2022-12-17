@@ -35,9 +35,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "cc/layers/layer.h"
-#include "media/base/logging_override_if_enabled.h"
 #include "media/base/media_content_type.h"
 #include "media/base/media_switches.h"
 #include "services/media_session/public/mojom/media_session.mojom-blink.h"
@@ -48,34 +48,26 @@
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-shared.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_client.h"
-#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_audio_source_provider.h"
-#include "third_party/blink/public/platform/web_content_decryption_module.h"
 #include "third_party/blink/public/platform/web_inband_text_track.h"
 #include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/public/platform/web_media_player_source.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/core_probes_inl.h"
-#include "third_party/blink/renderer/core/css/media_list.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
-#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/event_queue.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
-#include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/fileapi/url_file_api.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
-#include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/picture_in_picture_controller.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
@@ -104,9 +96,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
-#include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
 #include "third_party/blink/renderer/core/layout/layout_media.h"
-#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -117,17 +107,14 @@
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_from_url.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
-#include "third_party/blink/renderer/platform/network/parsed_content_type.h"
 #include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
-#include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/display/screen_info.h"
 
@@ -172,18 +159,6 @@ enum class MediaControlsShow {
   kMaxValue = kUserExplicitlyDisabled,
 };
 
-// These values are used for the Media.MediaElement.ContentTypeResult histogram.
-// Do not reorder.
-enum class ContentTypeParseableResult {
-  kIsSupportedParseable = 0,
-  kMayBeSupportedParseable,
-  kIsNotSupportedParseable,
-  kIsSupportedNotParseable,
-  kMayBeSupportedNotParseable,
-  kIsNotSupportedNotParseable,
-  kMaxValue = kIsNotSupportedNotParseable,
-};
-
 // The state of the HTMLMediaElement when ProgressEventTimerFired is invoked.
 // These values are histogrammed, so please only add values to the end.
 enum class ProgressEventTimerState {
@@ -214,34 +189,6 @@ void RecordProgressEventTimerState(ProgressEventTimerState state) {
 }
 
 static const base::TimeDelta kStalledNotificationInterval = base::Seconds(3);
-
-void ReportContentTypeResultToUMA(String content_type,
-                                  MIMETypeRegistry::SupportsType result) {
-  ParsedContentType parsed_content_type(content_type);
-  ContentTypeParseableResult uma_result =
-      ContentTypeParseableResult::kIsNotSupportedNotParseable;
-  switch (result) {
-    case MIMETypeRegistry::kIsSupported:
-      uma_result = parsed_content_type.IsValid()
-                       ? ContentTypeParseableResult::kIsSupportedParseable
-                       : ContentTypeParseableResult::kIsSupportedNotParseable;
-      break;
-    case MIMETypeRegistry::kMayBeSupported:
-      uma_result =
-          parsed_content_type.IsValid()
-              ? ContentTypeParseableResult::kMayBeSupportedParseable
-              : ContentTypeParseableResult::kMayBeSupportedNotParseable;
-      break;
-    case MIMETypeRegistry::kIsNotSupported:
-      uma_result =
-          parsed_content_type.IsValid()
-              ? ContentTypeParseableResult::kIsNotSupportedParseable
-              : ContentTypeParseableResult::kIsNotSupportedNotParseable;
-      break;
-  }
-  base::UmaHistogramEnumeration("Media.MediaElement.ContentTypeParseable",
-                                uma_result);
-}
 
 String UrlForLoggingMedia(const KURL& url) {
   static const unsigned kMaximumURLLengthForLogging = 128;
@@ -390,7 +337,7 @@ bool CanLoadURL(const KURL& url, const String& content_type_str) {
       content_type_codecs.IsEmpty()) {
     return MIMETypeRegistry::SupportsMediaMIMEType(content_mime_type,
                                                    content_type_codecs) !=
-           MIMETypeRegistry::kIsNotSupported;
+           MIMETypeRegistry::kNotSupported;
   }
 
   return false;
@@ -447,20 +394,19 @@ MIMETypeRegistry::SupportsType HTMLMediaElement::GetSupportsType(
   String type_codecs = content_type.Parameter("codecs");
 
   if (type.IsEmpty())
-    return MIMETypeRegistry::kIsNotSupported;
+    return MIMETypeRegistry::kNotSupported;
 
   // 4.8.12.3 MIME types - The canPlayType(type) method must return the empty
   // string if type is a type that the user agent knows it cannot render or is
   // the type "application/octet-stream"
   if (type == "application/octet-stream")
-    return MIMETypeRegistry::kIsNotSupported;
+    return MIMETypeRegistry::kNotSupported;
 
-  // Check if stricter parsing of |contentType| will cause problems.
-  // TODO(jrummell): Either switch to ParsedContentType or remove this UMA,
-  // depending on the results reported.
+  // |contentType| could be handled using ParsedContentType, but there are
+  // still a lot of sites using codec strings that don't work with the
+  // stricter parsing rules.
   MIMETypeRegistry::SupportsType result =
       MIMETypeRegistry::SupportsMediaMIMEType(type, type_codecs);
-  ReportContentTypeResultToUMA(content_type.Raw(), result);
   return result;
 }
 
@@ -473,11 +419,6 @@ bool HTMLMediaElement::IsHLSURL(const KURL& url) {
     return false;
 
   return url.GetPath().EndsWith(".m3u8");
-}
-
-bool HTMLMediaElement::MediaTracksEnabledInternally() {
-  return RuntimeEnabledFeatures::AudioVideoTracksEnabled() ||
-         RuntimeEnabledFeatures::BackgroundVideoTrackOptimizationEnabled();
 }
 
 // static
@@ -651,8 +592,9 @@ void HTMLMediaElement::DidMoveToNewDocument(Document& old_document) {
   // media element to a new document. This is a work in progress, and may cause
   // security and/or stability issues.
   const bool reuse_player =
-      RuntimeEnabledFeatures::PictureInPictureV2Enabled() && new_origin &&
-      old_origin && old_origin->IsSameOriginWith(new_origin.get());
+      RuntimeEnabledFeatures::DocumentPictureInPictureAPIEnabled() &&
+      new_origin && old_origin &&
+      old_origin->IsSameOriginWith(new_origin.get());
   if (!reuse_player) {
     // Don't worry about notifications from any previous document if we're not
     // re-using the player.
@@ -957,13 +899,13 @@ String HTMLMediaElement::canPlayType(ExecutionContext* context,
 
   // 4.8.12.3
   switch (support) {
-    case MIMETypeRegistry::kIsNotSupported:
+    case MIMETypeRegistry::kNotSupported:
       can_play = g_empty_string;
       break;
-    case MIMETypeRegistry::kMayBeSupported:
+    case MIMETypeRegistry::kMaybeSupported:
       can_play = "maybe";
       break;
-    case MIMETypeRegistry::kIsSupported:
+    case MIMETypeRegistry::kSupported:
       can_play = "probably";
       break;
   }
@@ -1155,7 +1097,7 @@ void HTMLMediaElement::LoadInternal() {
   if (text_tracks_) {
     for (unsigned i = 0; i < text_tracks_->length(); ++i) {
       TextTrack* track = text_tracks_->AnonymousIndexedGetter(i);
-      if (track->mode() != TextTrack::DisabledKeyword())
+      if (track->mode() != TextTrackMode::kDisabled)
         text_tracks_when_resource_selection_began_.push_back(track);
     }
   }
@@ -2062,6 +2004,7 @@ void HTMLMediaElement::SetReadyState(ReadyState state) {
           frame,
           HasVideo() ? mojom::blink::RequestContextType::VIDEO
                      : mojom::blink::RequestContextType::AUDIO,
+          network::mojom::blink::IPAddressSpace::kUnknown,
           current_src_for_check,
           // Strictly speaking, this check is an approximation; a request could
           // have have redirected back to its original URL, for example.
@@ -3153,7 +3096,6 @@ void HTMLMediaElement::AudioTrackChanged(AudioTrack* track) {
   DVLOG(3) << "audioTrackChanged(" << *this
            << ") trackId= " << String(track->id())
            << " enabled=" << BoolString(track->enabled());
-  DCHECK(MediaTracksEnabledInternally());
 
   audioTracks().ScheduleChangeEvent();
 
@@ -3206,7 +3148,6 @@ VideoTrackList& HTMLMediaElement::videoTracks() {
 void HTMLMediaElement::SelectedVideoTrackChanged(VideoTrack* track) {
   DVLOG(3) << "selectedVideoTrackChanged(" << *this << ") selectedTrackId="
            << (track->selected() ? String(track->id()) : "none");
-  DCHECK(MediaTracksEnabledInternally());
 
   if (track->selected())
     videoTracks().TrackSelected(track->id());
@@ -3347,7 +3288,7 @@ TextTrack* HTMLMediaElement::addTextTrack(const AtomicString& kind,
   // wrong. (The 'change' event shouldn't be fired at all in this case...)
 
   // ..., its text track mode to the text track hidden mode, ...
-  text_track->setMode(TextTrack::HiddenKeyword());
+  text_track->SetModeEnum(TextTrackMode::kHidden);
 
   // 5. Return the new TextTrack object.
   return text_track;
@@ -4417,9 +4358,6 @@ void HTMLMediaElement::Trace(Visitor* visitor) const {
 }
 
 void HTMLMediaElement::CreatePlaceholderTracksIfNecessary() {
-  if (!MediaTracksEnabledInternally())
-    return;
-
   // Create a placeholder audio track if the player says it has audio but it
   // didn't explicitly announce the tracks.
   if (HasAudio() && !audioTracks().length()) {
@@ -4593,7 +4531,7 @@ void HTMLMediaElement::OnRemovedFromDocumentTimerFired(TimerBase*) {
 
 void HTMLMediaElement::AudioSourceProviderImpl::Wrap(
     scoped_refptr<WebAudioSourceProviderImpl> provider) {
-  MutexLocker locker(provide_input_lock);
+  base::AutoLock locker(provide_input_lock);
 
   if (web_audio_source_provider_ && provider != web_audio_source_provider_)
     web_audio_source_provider_->SetClient(nullptr);
@@ -4605,7 +4543,7 @@ void HTMLMediaElement::AudioSourceProviderImpl::Wrap(
 
 void HTMLMediaElement::AudioSourceProviderImpl::SetClient(
     AudioSourceProviderClient* client) {
-  MutexLocker locker(provide_input_lock);
+  base::AutoLock locker(provide_input_lock);
 
   if (client)
     client_ = MakeGarbageCollected<HTMLMediaElement::AudioClientImpl>(client);
@@ -4621,8 +4559,9 @@ void HTMLMediaElement::AudioSourceProviderImpl::ProvideInput(
     int frames_to_process) {
   DCHECK(bus);
 
-  MutexTryLocker try_locker(provide_input_lock);
-  if (!try_locker.Locked() || !web_audio_source_provider_ || !client_.Get()) {
+  base::AutoTryLock try_locker(provide_input_lock);
+  if (!try_locker.is_acquired() || !web_audio_source_provider_ ||
+      !client_.Get()) {
     bus->Zero();
     return;
   }

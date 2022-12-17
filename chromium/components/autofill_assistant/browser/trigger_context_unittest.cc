@@ -33,7 +33,9 @@ TEST(TriggerContextTest, Create) {
       /* onboarding_shown = */ true,
       /* is_direct_action = */ true,
       /* initial_url = */ "https://www.example.com",
-      /* is_in_chrome_triggered = */ true};
+      /* is_in_chrome_triggered = */ true,
+      /* is_externally_triggered = */ true,
+      /* skip_autofill_assistant_onboarding = */ true};
   EXPECT_THAT(
       context.GetScriptParameters().ToProto(),
       UnorderedElementsAreArray(base::flat_map<std::string, std::string>(
@@ -44,6 +46,8 @@ TEST(TriggerContextTest, Create) {
   EXPECT_TRUE(context.GetDirectAction());
   EXPECT_EQ(context.GetInitialUrl(), "https://www.example.com");
   EXPECT_TRUE(context.GetInChromeTriggered());
+  EXPECT_TRUE(context.GetIsExternallyTriggered());
+  EXPECT_TRUE(context.GetSkipAutofillAssistantOnboarding());
   EXPECT_EQ(context.GetTriggerUIType(),
             TriggerScriptProto::UNSPECIFIED_TRIGGER_UI_TYPE);
 
@@ -105,7 +109,9 @@ TEST(TriggerContextTest, MergeNonEmptyWithNonEmpty) {
       /* onboarding_shown = */ true,
       /* is_direct_action = */ true,
       /* initial_url = */ "https://www.example.com",
-      /* is_in_chrome_triggered = */ true};
+      /* is_in_chrome_triggered = */ true,
+      /* is_externally_triggered = */ true,
+      /* skip_autofill_assistant_onboarding = */ true};
   context2.SetTriggerUIType(
       TriggerScriptProto::SHOPPING_CHECKOUT_FIRST_TIME_USER);
 
@@ -122,6 +128,8 @@ TEST(TriggerContextTest, MergeNonEmptyWithNonEmpty) {
   EXPECT_TRUE(merged.GetDirectAction());
   EXPECT_EQ(merged.GetInitialUrl(), "https://www.example.com");
   EXPECT_TRUE(merged.GetInChromeTriggered());
+  EXPECT_TRUE(merged.GetIsExternallyTriggered());
+  EXPECT_TRUE(merged.GetSkipAutofillAssistantOnboarding());
   EXPECT_EQ(merged.GetTriggerUIType(),
             TriggerScriptProto::SHOPPING_CHECKOUT_FIRST_TIME_USER);
 }

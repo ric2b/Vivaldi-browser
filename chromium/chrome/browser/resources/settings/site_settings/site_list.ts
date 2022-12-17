@@ -8,14 +8,14 @@
  * category.
  */
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import './add_site_dialog.js';
 import './edit_exception_dialog.js';
 import './site_list_entry.js';
@@ -141,7 +141,7 @@ export class SiteListElement extends SiteListElementBase {
           BLOCK: 'Block',
           RESET: 'Reset',
           SESSION_ONLY: 'SessionOnly',
-        }
+        },
       },
 
       lastFocused_: Object,
@@ -159,7 +159,7 @@ export class SiteListElement extends SiteListElementBase {
   categoryHeader: string;
   private actionMenuSite_: SiteException|null;
   private showEditExceptionDialog_: boolean;
-  sites: Array<SiteException>;
+  sites: SiteException[];
   categorySubtype: ContentSetting;
   private hasIncognito_: boolean;
   private showAddSiteButton_: boolean;
@@ -364,8 +364,8 @@ export class SiteListElement extends SiteListElementBase {
    * Processes exceptions and adds showAndroidSmsNote field to
    * the required exception item.
    */
-  private processExceptionsForAndroidSmsInfo_(sites: Array<SiteException>):
-      Array<SiteException> {
+  private processExceptionsForAndroidSmsInfo_(sites: SiteException[]):
+      SiteException[] {
     if (!this.androidSmsInfo_ || !this.androidSmsInfo_.enabled) {
       return sites;
     }
@@ -392,7 +392,7 @@ export class SiteListElement extends SiteListElementBase {
   /**
    * Process the exception list returned from the native layer.
    */
-  private processExceptions_(exceptionList: Array<RawSiteException>) {
+  private processExceptions_(exceptionList: RawSiteException[]) {
     let sites = exceptionList
                     .filter(
                         site => site.setting !== ContentSetting.DEFAULT &&
@@ -494,13 +494,13 @@ export class SiteListElement extends SiteListElementBase {
     }
   }
 
-  private getFilteredSites_(): Array<SiteException> {
+  private getFilteredSites_(): SiteException[] {
     if (!this.searchFilter) {
       return this.sites.slice();
     }
 
     type SearchableProperty = 'displayName'|'origin';
-    const propNames: Array<SearchableProperty> = ['displayName', 'origin'];
+    const propNames: SearchableProperty[] = ['displayName', 'origin'];
     const searchFilter = this.searchFilter.toLowerCase();
     return this.sites.filter(
         site => propNames.some(

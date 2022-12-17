@@ -42,13 +42,13 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/managed_ui.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/singleton_tabs.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/access_code_cast/access_code_cast_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_pairing_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_config_dialog.h"
@@ -58,24 +58,26 @@
 #include "chrome/browser/ui/webui/settings/chromeos/constants/setting.mojom.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
+#include "chrome/common/channel_info.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_util.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_util.h"
-#include "chromeos/network/tether_constants.h"
+#include "chromeos/ash/components/network/tether_constants.h"
+#include "components/prefs/pref_service.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/events/event_constants.h"
 #include "url/gurl.h"
-
-using chromeos::DBusThreadManager;
-using chromeos::UpdateEngineClient;
 using session_manager::SessionManager;
 using session_manager::SessionState;
 
@@ -119,10 +121,10 @@ ash::UpdateSeverity GetUpdateSeverity(ash::UpdateType update_type,
   }
 }
 
-const chromeos::NetworkState* GetNetworkState(const std::string& network_id) {
+const ash::NetworkState* GetNetworkState(const std::string& network_id) {
   if (network_id.empty())
     return nullptr;
-  return chromeos::NetworkHandler::Get()
+  return ash::NetworkHandler::Get()
       ->network_state_handler()
       ->GetNetworkStateFromGuid(network_id);
 }
@@ -132,7 +134,7 @@ bool ShouldOpenCellularSetupPsimFlowOnClick(const std::string& network_id) {
   // checking a networks activation state is |kActivationStateNotActivated|
   // ensures the current network is a phyical SIM network.
 
-  const chromeos::NetworkState* network_state = GetNetworkState(network_id);
+  const ash::NetworkState* network_state = GetNetworkState(network_id);
   return network_state && network_state->type() == shill::kTypeCellular &&
          network_state->activation_state() ==
              shill::kActivationStateNotActivated &&
@@ -491,14 +493,24 @@ void SystemTrayClientImpl::ShowAboutChromeOS() {
       "?checkForUpdate=true");
 }
 
+void SystemTrayClientImpl::ShowAboutChromeOSDetails() {
+  ShowSettingsSubPageForActiveUser(
+      chromeos::settings::mojom::kDetailedBuildInfoSubpagePath);
+}
+
 void SystemTrayClientImpl::ShowAccessibilityHelp() {
   ash::AccessibilityManager::ShowAccessibilityHelp();
 }
 
 void SystemTrayClientImpl::ShowAccessibilitySettings() {
   base::RecordAction(base::UserMetricsAction("ShowAccessibilitySettings"));
-  ShowSettingsSubPageForActiveUser(
-      chromeos::settings::mojom::kManageAccessibilitySubpagePath);
+  if (::features::IsAccessibilityOSSettingsVisibilityEnabled()) {
+    ShowSettingsSubPageForActiveUser(
+        chromeos::settings::mojom::kAccessibilitySectionPath);
+  } else {
+    ShowSettingsSubPageForActiveUser(
+        chromeos::settings::mojom::kManageAccessibilitySubpagePath);
+  }
 }
 
 void SystemTrayClientImpl::ShowGestureEducationHelp() {
@@ -507,11 +519,10 @@ void SystemTrayClientImpl::ShowGestureEducationHelp() {
   if (!profile)
     return;
 
-  web_app::SystemAppLaunchParams params;
+  ash::SystemAppLaunchParams params;
   params.url = GURL(chrome::kChromeOSGestureEducationHelpURL);
-  params.launch_source = apps::mojom::LaunchSource::kFromOtherApp;
-  web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::HELP,
-                                   params);
+  params.launch_source = apps::LaunchSource::kFromOtherApp;
+  ash::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::HELP, params);
 }
 
 void SystemTrayClientImpl::ShowPaletteHelp() {
@@ -559,13 +570,13 @@ void SystemTrayClientImpl::ShowNetworkConfigure(const std::string& network_id) {
   if (SessionManager::Get()->IsScreenLocked())
     return;
 
-  DCHECK(chromeos::NetworkHandler::IsInitialized());
-  const chromeos::NetworkState* network_state = GetNetworkState(network_id);
+  DCHECK(ash::NetworkHandler::IsInitialized());
+  const ash::NetworkState* network_state = GetNetworkState(network_id);
   if (!network_state) {
     LOG(ERROR) << "Network not found: " << network_id;
     return;
   }
-  if (network_state->type() == chromeos::kTypeTether &&
+  if (network_state->type() == ash::kTypeTether &&
       !network_state->tether_has_connected_to_host()) {
     ShowNetworkSettingsHelper(network_id, true /* show_configure */);
     return;
@@ -611,8 +622,13 @@ void SystemTrayClientImpl::ShowArcVpnCreate(const std::string& app_id) {
     return;
   }
 
-  apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
-      app_id, ui::EF_NONE, apps::mojom::LaunchSource::kFromParentalControls);
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
+        app_id, ui::EF_NONE, apps::LaunchSource::kFromParentalControls);
+  } else {
+    apps::AppServiceProxyFactory::GetForProfile(profile)->Launch(
+        app_id, ui::EF_NONE, apps::mojom::LaunchSource::kFromParentalControls);
+  }
 }
 
 void SystemTrayClientImpl::ShowSettingsSimUnlock() {
@@ -649,7 +665,7 @@ void SystemTrayClientImpl::ShowNetworkSettingsHelper(
   }
 
   std::string page = chromeos::settings::mojom::kNetworkSectionPath;
-  const chromeos::NetworkState* network_state = GetNetworkState(network_id);
+  const ash::NetworkState* network_state = GetNetworkState(network_id);
   if (!network_id.empty() && network_state) {
     // TODO(khorimoto): Use a more general path name here. This path is named
     // kWifi*, but it's actually a generic page.
@@ -660,7 +676,7 @@ void SystemTrayClientImpl::ShowNetworkSettingsHelper(
     page += base::EscapeUrlEncodedData(network_state->name(), true);
     page += "&type=";
     page += base::EscapeUrlEncodedData(
-        chromeos::network_util::TranslateShillTypeToONC(network_state->type()),
+        ash::network_util::TranslateShillTypeToONC(network_state->type()),
         true);
     page += "&settingId=";
     page += base::NumberToString(static_cast<int32_t>(
@@ -746,13 +762,39 @@ void SystemTrayClientImpl::ShowCalendarEvent(
   }
 
   // Launch web app.
-  proxy->LaunchAppWithUrl(
-      web_app::kGoogleCalendarAppId,
-      apps::GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerWindow,
-                          WindowOpenDisposition::NEW_WINDOW,
-                          /*prefer_container=*/true),
-      official_url, apps::mojom::LaunchSource::kFromShelf);
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    proxy->LaunchAppWithUrl(
+        web_app::kGoogleCalendarAppId,
+        apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                            /*prefer_container=*/true),
+        official_url, apps::LaunchSource::kFromShelf);
+  } else {
+    proxy->LaunchAppWithUrl(
+        web_app::kGoogleCalendarAppId,
+        apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                            /*prefer_container=*/true),
+        official_url, apps::mojom::LaunchSource::kFromShelf);
+  }
   opened_pwa = true;
+}
+
+void SystemTrayClientImpl::ShowChannelInfoAdditionalDetails() {
+  base::RecordAction(
+      base::UserMetricsAction("Tray_ShowChannelInfoAdditionalDetails"));
+  ShowSettingsSubPageForActiveUser(
+      std::string(chromeos::settings::mojom::kDetailedBuildInfoSubpagePath));
+}
+
+void SystemTrayClientImpl::ShowChannelInfoGiveFeedback() {
+  ash::NewWindowDelegate::GetInstance()->OpenFeedbackPage(
+      ash::NewWindowDelegate::kFeedbackSourceChannelIndicator);
+}
+
+bool SystemTrayClientImpl::IsUserFeedbackEnabled() {
+  PrefService* signin_prefs =
+      ProfileManager::GetActiveUserProfile()->GetPrefs();
+  DCHECK(signin_prefs);
+  return signin_prefs->GetBoolean(prefs::kUserFeedbackAllowed);
 }
 
 SystemTrayClientImpl::SystemTrayClientImpl(SystemTrayClientImpl* mock_instance)
@@ -795,6 +837,12 @@ void SystemTrayClientImpl::OnSystemClockChanged(
 
 ////////////////////////////////////////////////////////////////////////////////
 // UpgradeDetector::UpgradeObserver:
+void SystemTrayClientImpl::OnUpdateDeferred(bool use_notification) {
+  system_tray_->SetUpdateDeferred(
+      use_notification ? ash::DeferredUpdateState::kShowNotification
+                       : ash::DeferredUpdateState::kShowDialog);
+}
+
 void SystemTrayClientImpl::OnUpdateOverCellularAvailable() {
   // Requests that ash show the update over cellular available icon.
   system_tray_->SetUpdateOverCellularAvailableIconVisible(true);

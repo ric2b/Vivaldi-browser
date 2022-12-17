@@ -149,6 +149,10 @@ struct ASH_PUBLIC_EXPORT AppListItemMetadata {
 
   // The item's icon color.
   IconColor icon_color;
+
+  // Whether the item is ephemeral - i.e. an app or a folder that does not
+  // persist across sessions.
+  bool is_ephemeral = false;
 };
 
 // Where an app list item is being shown. Used for context menu.
@@ -308,19 +312,25 @@ enum class AppListModelStatus {
   kStatusSyncing,  // Syncing apps or installing synced apps.
 };
 
-// Indicate the state of the apps grid reorder animation.
-enum class AppListReorderAnimationStatus {
-  // No reorder animation is active.
+// Indicate the state of animations that affect the entire apps grid (e.g.
+// reorder/sorting, hide continue section). This does not cover smaller
+// animations (e.g. drag and drop, folder open).
+enum class AppListGridAnimationStatus {
+  // No whole-grid animation is active.
   kEmpty,
 
-  // Run the animation that fades out the obsolete layout.
-  kFadeOutAnimation,
+  // Run the animation that fades out the obsolete layout before reordering.
+  kReorderFadeOut,
 
   // After the fade out animation ends and before the fade in animation starts.
-  kIntermediaryState,
+  kReorderIntermediaryState,
 
   // Run the animation that fades in the new layout after reordering.
-  kFadeInAnimation
+  kReorderFadeIn,
+
+  // Run the animation that slides up each row of icons when the continue
+  // section is hidden by the user.
+  kHideContinueSection,
 };
 
 // The UI component the user launched the search result from. Must match
@@ -690,20 +700,11 @@ struct ASH_PUBLIC_EXPORT SearchResultMetadata {
   // Whether this is searched from Omnibox.
   bool is_omnibox_search = false;
 
-  // Whether this result is installing.
-  bool is_installing = false;
-
   // Whether this result is a recommendation.
   bool is_recommendation = false;
 
-  // A query URL associated with this result. The meaning and treatment of the
-  // URL (e.g. displaying inline web contents) is dependent on the result type.
-  absl::optional<GURL> query_url;
-
-  // An optional id that identifies an equivalent result to this result. Answer
-  // card result has this set to remove the equivalent omnibox
-  // search-what-you-typed result when there is an answer card for the query.
-  absl::optional<std::string> equivalent_result_id;
+  // Whether this result can have its update animation skipped.
+  bool skip_update_animation = false;
 
   // The icon of this result.
   SearchResultIconInfo icon;
@@ -721,10 +722,6 @@ struct ASH_PUBLIC_EXPORT SearchResultMetadata {
   // Flag indicating whether the `badge_icon` should be painted atop a circle
   // background image.
   bool use_badge_icon_background = false;
-
-  // If set to true, whether or not to send visibility updates through to to
-  // the chrome side when this result is set visible/invisible.
-  bool notify_visibility_change = false;
 };
 
 // A struct holding a search result id and its corresponding position index that

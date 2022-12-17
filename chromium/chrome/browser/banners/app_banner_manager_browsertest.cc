@@ -726,7 +726,7 @@ class AppBannerManagerBrowserTestWithChromeBFCache
   struct FeatureOperatorOverload {
     bool operator()(const base::Feature& feature1,
                     const base::Feature& feature2) const {
-      return std::strcmp(feature1.name, feature2.name) == 0;
+      return std::strcmp(feature1.name, feature2.name) < 0;
     }
   };
 
@@ -789,7 +789,7 @@ class AppBannerManagerBrowserTestWithChromeBFCache
   }
 
   content::RenderFrameHost* current_frame_host() {
-    return web_contents()->GetMainFrame();
+    return web_contents()->GetPrimaryMainFrame();
   }
 
   GURL Get2ndInstallableURL() {

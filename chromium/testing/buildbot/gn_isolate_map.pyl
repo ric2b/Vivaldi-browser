@@ -110,88 +110,67 @@
   },
   "angle_deqp_egl_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_egl_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles2_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles2_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles31_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles31_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles3_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles3_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_khr_gles2_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_khr_gles2_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_khr_gles3_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_khr_gles3_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_khr_gles31_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_khr_gles31_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
-  },
-  "angle_deqp_khr_gles32_tests": {
-    "label": "//third_party/angle/src/tests:angle_deqp_khr_gles32_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles3_rotate180_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles3_rotate180_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles3_rotate270_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles3_rotate270_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles3_rotate90_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles3_rotate90_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles31_rotate180_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles31_rotate180_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles31_rotate270_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles31_rotate270_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_deqp_gles31_rotate90_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_gles31_rotate90_tests",
-    "type": "script",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+    "type": "windowed_test_launcher",
   },
   "angle_end2end_tests": {
     "label": "//third_party/angle/src/tests:angle_end2end_tests",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
-    "type": "script",
+    "type": "windowed_test_launcher",
   },
   "angle_unittests": {
     "label": "//third_party/angle/src/tests:angle_unittests",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
-    "type": "script",
+    "type": "windowed_test_launcher",
   },
   "angle_white_box_tests": {
     "label": "//third_party/angle/src/tests:angle_white_box_tests",
-    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
-    "type": "script",
+    "type": "windowed_test_launcher",
   },
   "app_shell_unittests": {
     "label": "//extensions/shell:app_shell_unittests",
@@ -258,6 +237,11 @@
     "label": "//:blink_python_tests",
     "type": "generated_script",
   },
+  "blink_pytype": {
+    "label": "//third_party/blink/tools:blink_pytype",
+    "script": "//third_party/blink/tools/run_pytype.py",
+    "type": "script",
+  },
   "blink_tests": {
     "label": "//:blink_tests",
     "type": "additional_compile_target",
@@ -268,6 +252,14 @@
   },
   "blink_web_tests": {
     "label": "//:blink_web_tests",
+    "type": "generated_script",
+    "args": [
+      "--results-directory",
+      "${ISOLATED_OUTDIR}",
+    ],
+  },
+  "blink_wpt_tests": {
+    "label": "//:blink_wpt_tests",
     "type": "generated_script",
     "args": [
       "--results-directory",
@@ -292,14 +284,6 @@
   },
   "boringssl_ssl_tests": {
     "label": "//third_party/boringssl:boringssl_ssl_tests",
-    "type": "console_test_launcher",
-  },
-  "breakpad_unittests": {
-    "label": "//third_party/breakpad:breakpad_unittests",
-    "type": "console_test_launcher",
-  },
-  "browser_switcher_bho_unittests": {
-    "label": "//chrome/browser/browser_switcher/bho:browser_switcher_bho_unittests",
     "type": "console_test_launcher",
   },
   "browser_tests": {
@@ -338,9 +322,13 @@
     "label": "//fuchsia_web/runners:cast_runner_integration_tests",
     "type": "console_test_launcher",
   },
+  "cast_runner_integration_tests_cfv1": {
+    "label": "//fuchsia_web/runners:cast_runner_integration_tests_cfv1",
+    "type": "console_test_launcher",
+  },
   "cast_runner_pkg":{
     "label": "//fuchsia_web/runners:cast_runner_pkg",
-    "type": "additonal_compile_target",
+    "type": "additional_compile_target",
   },
   "cast_runner_unittests": {
     "label": "//fuchsia_web/runners:cast_runner_unittests",
@@ -718,12 +706,12 @@
     "label": "//courgette:courgette_unittests",
     "type": "console_test_launcher",
   },
-  "cr_fuchsia_base_unittests": {
-    "label": "//fuchsia/base:cr_fuchsia_base_unittests",
-    "type": "console_test_launcher",
-  },
   "crashpad_tests": {
     "label": "//third_party/crashpad/crashpad:crashpad_tests",
+    "type": "console_test_launcher",
+  },
+  "gnrt_unittests": {
+    "label": "//tools/crates/gnrt:gnrt_unittests",
     "type": "console_test_launcher",
   },
   "cronet_package": {
@@ -862,9 +850,10 @@
     "script": "//testing/scripts/run_flatbuffers_unittests.py",
     "type": "script",
   },
-  "fuchsia_mojo_unittests": {
-    "label": "//mojo/public/cpp/base/fuchsia:fuchsia_mojo_unittests",
-    "type": "console_test_launcher",
+  "fuchsia_pytype": {
+    "label": "//testing:fuchsia_pytype",
+    "script": "//build/fuchsia/test/run_pytype.py",
+    "type": "script",
   },
   "fuchsia_sizes": {
     "label": "//tools/fuchsia/size_tests:fuchsia_sizes",
@@ -912,6 +901,11 @@
   "gn_all": {
     "label": "//:gn_all",
     "type": "additional_compile_target",
+  },
+  "gold_common_pytype": {
+    "label": "//build:gold_common_pytype",
+    "script": "//build/skia_gold_common/run_pytype.py",
+    "type": "script",
   },
   "google_apis_unittests": {
     "label": "//google_apis:google_apis_unittests",
@@ -1163,10 +1157,6 @@
     "args": [
       "--logs-dir=${ISOLATED_OUTDIR}",
     ],
-  },
-  "lacros_version_metadata": {
-    "label": "//build/lacros:lacros_version_metadata",
-    "type": "additional_compile_target",
   },
   "lacros_variations_tast_tests" : {
     "label": "//chromeos/lacros:lacros_variations_tast_tests",
@@ -1475,6 +1465,10 @@
     "label": "//chrome/test:performance_test_suite_eve",
     "type": "generated_script",
   },
+  "performance_test_suite_octopus": {
+    "label": "//chrome/test:performance_test_suite_octopus",
+    "type": "generated_script",
+  },
   "performance_web_engine_test_suite": {
     "args": [
       "../../content/test/gpu/run_telemetry_benchmark_fuchsia.py",
@@ -1599,8 +1593,8 @@
     "label": "//sandbox/linux:sandbox_linux_unittests",
     "type": "console_test_launcher",
   },
-  "sandbox_mac_unittests": {
-    "label": "//sandbox/mac:sandbox_mac_unittests",
+  "sandbox_unittests": {
+    "label": "//sandbox:sandbox_unittests",
     "type": "console_test_launcher",
   },
   "sbox_integration_tests": {
@@ -1864,6 +1858,11 @@
     "label": "//ui/touch_selection:ui_touch_selection_unittests",
     "type": "windowed_test_launcher",
   },
+  "unexpected_passes_common_pytype": {
+    "label": "//testing:unexpected_passes_common_pytype",
+    "script": "//testing/run_pytype.py",
+    "type": "script",
+  },
   "unit_tests": {
     "label": "//chrome/test:unit_tests",
     "type": "windowed_test_launcher",
@@ -1987,7 +1986,7 @@
     "type": "console_test_launcher",
   },
   "web_engine_shell_pkg": {
-    "label": "//fuchsia_web/webengine:web_engine_shell_pkg",
+    "label": "//fuchsia_web/shell:web_engine_shell_pkg",
     "type": "additional_compile_target",
   },
   "web_engine_unittests": {
@@ -2000,7 +1999,7 @@
   },
   "web_runner_pkg": {
     "label": "//fuchsia_web/runners:web_runner_pkg",
-    "type": "additonal_compile_target",
+    "type": "additional_compile_target",
   },
   "webapk_client_junit_tests": {
     "label": "//chrome/android/webapk/libs/client:webapk_client_junit_tests",

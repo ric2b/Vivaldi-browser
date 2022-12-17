@@ -12,6 +12,7 @@
 #include "ash/accessibility/ui/accessibility_panel_layout_manager.h"
 #include "ash/ambient/test/ambient_ash_test_helper.h"
 #include "ash/app_list/test/app_list_test_helper.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/display/extended_mouse_warp_controller.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
@@ -51,6 +52,7 @@
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/init/input_method_initializer.h"
+#include "ui/compositor/compositor_switches.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -69,6 +71,8 @@ using session_manager::SessionState;
 
 namespace ash {
 namespace {
+
+// AshEventGeneratorDelegate ---------------------------------------------------
 
 class AshEventGeneratorDelegate
     : public aura::test::EventGeneratorDelegateAura {
@@ -98,7 +102,7 @@ class AshEventGeneratorDelegate
 
 }  // namespace
 
-/////////////////////////////////////////////////////////////////////////////
+// AshTestBase -----------------------------------------------------------------
 
 AshTestBase::AshTestBase(
     std::unique_ptr<base::test::TaskEnvironment> task_environment)
@@ -129,6 +133,8 @@ void AshTestBase::SetUp(std::unique_ptr<TestShellDelegate> delegate) {
   params.start_session = start_session_;
   params.delegate = std::move(delegate);
   params.local_state = local_state();
+  params.pixel_test_init_params =
+      (pixel_diff_init_params_ ? &*pixel_diff_init_params_ : nullptr);
   ash_test_helper_ = std::make_unique<AshTestHelper>();
   ash_test_helper_->SetUp(std::move(params));
 }
@@ -310,6 +316,43 @@ void AshTestBase::ParentWindowInPrimaryRootWindow(aura::Window* window) {
                                         gfx::Rect());
 }
 
+void AshTestBase::PrepareForPixelDiffTest() {
+  // Expect this function to be called before setup. Because the code that
+  // stabilizes the system UI for pixel tests should be executed during setup.
+  CHECK(!setup_called_);
+
+  CHECK(!pixel_diff_init_params_);
+  pixel_diff_init_params_ = pixel_test::InitParams();
+
+  // In pixel tests, we want to take screenshots then compare them with the
+  // benchmark images. Therefore, enable pixel output in tests.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ::switches::kEnablePixelOutputInTests);
+
+  // Enable the switch so that the time dependent views (such as the time view)
+  // are stable.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kStabilizeTimeDependentViewForTests);
+}
+
+void AshTestBase::SetPixelTestInitParam(const pixel_test::InitParams& params) {
+  // The init params are required during setup. Therefore, the params should be
+  // set before setup is called.
+  CHECK(!setup_called_);
+
+  // `PrepareForPixelDiffTest()` should be called before.
+  CHECK(pixel_diff_init_params_);
+
+  pixel_diff_init_params_ = params;
+}
+
+void AshTestBase::StabilizeUIForPixelTest() {
+  // This function should only be used in a pixel test.
+  CHECK(pixel_diff_init_params_);
+
+  ash_test_helper_->StabilizeUIForPixelTest();
+}
+
 void AshTestBase::SetUserPref(const std::string& user_email,
                               const std::string& path,
                               const base::Value& value) {
@@ -353,10 +396,7 @@ void AshTestBase::SimulateUserLogin(const std::string& user_email,
 
 void AshTestBase::SimulateUserLogin(const AccountId& account_id,
                                     user_manager::UserType user_type) {
-  TestSessionControllerClient* session = GetSessionControllerClient();
-  session->AddUserSession(account_id, account_id.GetUserEmail(), user_type);
-  session->SwitchActiveUser(account_id);
-  session->SetSessionState(SessionState::ACTIVE);
+  ash_test_helper_->SimulateUserLogin(account_id, user_type);
 }
 
 void AshTestBase::SimulateNewUserFirstLogin(const std::string& user_email) {

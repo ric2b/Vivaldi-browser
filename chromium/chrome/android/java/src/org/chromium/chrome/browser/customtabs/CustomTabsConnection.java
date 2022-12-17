@@ -36,6 +36,7 @@ import org.json.JSONObject;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FeatureList;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
@@ -46,6 +47,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.ChainedTasks;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
@@ -165,6 +167,19 @@ public class CustomTabsConnection {
     private static final String ON_RESIZED_CALLBACK = "onResized";
     private static final String ON_RESIZED_SIZE_EXTRA = "size";
 
+    private static final String ON_VERTICAL_SCROLL_EVENT_CALLBACK = "onVerticalScrollEvent";
+    private static final String ON_VERTICAL_SCROLL_EVENT_IS_DIRECTION_UP_EXTRA = "isDirectionUp";
+    private static final String ON_GREATEST_SCROLL_PERCENTAGE_INCREASED_CALLBACK =
+            "onGreatestScrollPercentageIncreased";
+    private static final String ON_GREATEST_SCROLL_PERCENTAGE_INCREASED_PERCENTAGE_EXTRA =
+            "scrollPercentage";
+    private static final String DID_GET_USER_INTERACTION_CALLBACK = "didGetUserInteraction";
+    private static final String DID_GET_USER_INTERACTION_EXTRA = "didInteract";
+    @VisibleForTesting
+    static final String GET_GREATEST_SCROLL_PERCENTAGE = "getGreatestScrollPercentage";
+    @VisibleForTesting
+    static final String GREATEST_SCROLL_PERCENTAGE_KEY = "greatestScrollPercentage";
+
     @IntDef({ParallelRequestStatus.NO_REQUEST, ParallelRequestStatus.SUCCESS,
             ParallelRequestStatus.FAILURE_NOT_INITIALIZED,
             ParallelRequestStatus.FAILURE_NOT_AUTHORIZED, ParallelRequestStatus.FAILURE_INVALID_URL,
@@ -208,6 +223,7 @@ public class CustomTabsConnection {
 
     @Nullable
     private Callback<CustomTabsSessionToken> mDisconnectCallback;
+    private @Nullable Supplier<Integer> mGreatestScrollPercentageSupplier;
 
     private volatile ChainedTasks mWarmupTasks;
 
@@ -620,8 +636,34 @@ public class CustomTabsConnection {
         }
     }
 
-    public Bundle extraCommand(String commandName, Bundle args) {
-        return null;
+    /**
+     * Sends a command that isn't part of the API yet.
+     *
+     * @param commandName Name of the extra command to execute.
+     * @param args Arguments for the command.
+     * @return The result {@link Bundle}, or null.
+     */
+    public @Nullable Bundle extraCommand(String commandName, Bundle args) {
+        Bundle result = null;
+        switch (commandName) {
+            case GET_GREATEST_SCROLL_PERCENTAGE:
+                if (!FeatureList.isInitialized()
+                        || !ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                    break;
+                }
+                Integer percentage = mGreatestScrollPercentageSupplier != null
+                        ? mGreatestScrollPercentageSupplier.get()
+                        : null;
+                if (percentage != null) {
+                    result = new Bundle();
+                    result.putInt(GREATEST_SCROLL_PERCENTAGE_KEY, percentage);
+                }
+                break;
+            default:
+                break;
+        }
+        return result;
     }
 
     public boolean updateVisuals(final CustomTabsSessionToken session, Bundle bundle) {
@@ -1140,6 +1182,57 @@ public class CustomTabsConnection {
     }
 
     /**
+     * Notifies the application of a vertical scroll event, i.e. when a scroll started or changed
+     * direction.
+     *
+     * @param session The Binder object identifying the session.
+     * @param isDirectionUp Whether the scroll direction is up.
+     */
+    public void notifyVerticalScrollEvent(CustomTabsSessionToken session, boolean isDirectionUp) {
+        Bundle args = new Bundle();
+        args.putBoolean(ON_VERTICAL_SCROLL_EVENT_IS_DIRECTION_UP_EXTRA, isDirectionUp);
+
+        if (safeExtraCallback(session, ON_VERTICAL_SCROLL_EVENT_CALLBACK, args)) {
+            logCallback("extraCallback(" + ON_VERTICAL_SCROLL_EVENT_CALLBACK + ")", args);
+        }
+    }
+
+    /**
+     * Notifies the application that the scroll percentage of the page reached a new maximum.
+     * Only the values that are multiples of 5 will be reported, and every value will be reported at
+     * most once.
+     *
+     * @param session The Binder object identifying the session.
+     * @param scrollPercentage The new scroll percentage.
+     */
+    public void notifyGreatestScrollPercentageIncreased(
+            CustomTabsSessionToken session, int scrollPercentage) {
+        Bundle args = new Bundle();
+        args.putInt(ON_GREATEST_SCROLL_PERCENTAGE_INCREASED_PERCENTAGE_EXTRA, scrollPercentage);
+
+        if (safeExtraCallback(session, ON_GREATEST_SCROLL_PERCENTAGE_INCREASED_CALLBACK, args)) {
+            logCallback("extraCallback(" + ON_GREATEST_SCROLL_PERCENTAGE_INCREASED_CALLBACK + ")",
+                    args);
+        }
+    }
+
+    /**
+     * Notify the application whether the user had interaction on the web contents. A user
+     * interaction includes touch event / mouse event / raw key down event / scroll event.
+     * @param session The Binder object identifying the session.
+     * @param didGetUserInteraction Whether user had any interaction in the current CCT session.
+     */
+    public void notifyDidGetUserInteraction(
+            CustomTabsSessionToken session, boolean didGetUserInteraction) {
+        Bundle args = new Bundle();
+        args.putBoolean(DID_GET_USER_INTERACTION_EXTRA, didGetUserInteraction);
+
+        if (safeExtraCallback(session, DID_GET_USER_INTERACTION_CALLBACK, args)) {
+            logCallback("extraCallback(" + DID_GET_USER_INTERACTION_CALLBACK + ")", args);
+        }
+    }
+
+    /**
      * Notifies the application of a navigation event.
      *
      * Delivers the {@link CustomTabsCallback#onNavigationEvent} callback to the application.
@@ -1549,6 +1642,10 @@ public class CustomTabsConnection {
 
     static void recordSpeculationStatusSwapTabNotMatched() {
         recordSpeculationStatusOnSwap(SPECULATION_STATUS_ON_SWAP_BACKGROUND_TAB_NOT_MATCHED);
+    }
+
+    public void setGreatestScrollPercentageSupplier(Supplier<Integer> supplier) {
+        mGreatestScrollPercentageSupplier = supplier;
     }
 
     @CalledByNative

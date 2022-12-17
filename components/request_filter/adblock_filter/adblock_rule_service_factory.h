@@ -8,11 +8,12 @@
 
 namespace adblock_filter {
 
-class RuleService;
+class RuleServiceContent;
 
 class RuleServiceFactory : public BrowserContextKeyedServiceFactory {
  public:
-  static RuleService* GetForBrowserContext(content::BrowserContext* context);
+  static RuleServiceContent* GetForBrowserContext(
+      content::BrowserContext* context);
   static RuleServiceFactory* GetInstance();
 
  private:

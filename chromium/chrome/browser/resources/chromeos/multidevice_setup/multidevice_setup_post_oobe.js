@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import './strings.m.js';
 
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
@@ -127,8 +127,9 @@ Polymer({
     }
 
     chrome.send('metricsHandler:recordInHistogram', [
-      'MultiDevice.PostOOBESetupFlow.PageShown', pageNameValue,
-      PageNameValue.MAX_VALUE
+      'MultiDevice.PostOOBESetupFlow.PageShown',
+      pageNameValue,
+      PageNameValue.MAX_VALUE,
     ]);
   },
 
@@ -169,5 +170,5 @@ Polymer({
     }
 
     return this.i18n(text);
-  }
+  },
 });

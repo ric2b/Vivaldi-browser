@@ -11,7 +11,7 @@
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/dom_action.pb.h"
-#include "components/autofill_assistant/browser/mock_website_login_manager.h"
+#include "components/autofill_assistant/browser/public/password_change/mock_website_login_manager.h"
 #include "components/autofill_assistant/browser/value_util.h"
 #include "components/autofill_assistant/browser/web/element_finder_result.h"
 #include "components/autofill_assistant/browser/web/element_store.h"
@@ -120,7 +120,7 @@ TEST_F(SendKeystrokeEventsActionTest, PasswordTextValueReturnLastTimeUsed) {
   content::WebContentsTester::For(web_contents_.get())
       ->NavigateAndCommit(GURL(kUrl));
   element.SetObjectId("id");
-  element.SetRenderFrameHost(web_contents_->GetPrimaryMainFrame());
+  element.SetRenderFrameHostForTest(web_contents_->GetPrimaryMainFrame());
   mock_action_delegate_.GetElementStore()->AddElement("e",
                                                       element.dom_object());
 
@@ -161,7 +161,7 @@ TEST_F(SendKeystrokeEventsActionTest,
   content::WebContentsTester::For(web_contents_.get())
       ->NavigateAndCommit(GURL(kUrl));
   element.SetObjectId("id");
-  element.SetRenderFrameHost(web_contents_->GetPrimaryMainFrame());
+  element.SetRenderFrameHostForTest(web_contents_->GetPrimaryMainFrame());
   mock_action_delegate_.GetElementStore()->AddElement("e",
                                                       element.dom_object());
 

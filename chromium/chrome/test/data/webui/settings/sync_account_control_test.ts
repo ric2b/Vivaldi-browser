@@ -28,18 +28,15 @@ suite('SyncAccountControl', function() {
     // Flipping syncStatus.signedIn will force promo state to be reset.
     testElement.syncStatus = {
       signedIn: !signedIn,
-      statusAction: StatusAction.NO_ACTION
+      statusAction: StatusAction.NO_ACTION,
     };
     testElement.syncStatus = {
       signedIn: signedIn,
-      statusAction: StatusAction.NO_ACTION
+      statusAction: StatusAction.NO_ACTION,
     };
   }
 
   setup(async function() {
-    // <if expr="chromeos_lacros">
-    loadTimeData.overrideValues({nonSyncingProfilesEnabled: true});
-    // </if>
     setupRouterWithSyncRoutes();
     browserProxy = new TestSyncBrowserProxy();
     SyncBrowserProxyImpl.setInstance(browserProxy);
@@ -49,7 +46,7 @@ suite('SyncAccountControl', function() {
     testElement.syncStatus = {
       signedIn: true,
       signedInUsername: 'foo@foo.com',
-      statusAction: StatusAction.NO_ACTION
+      statusAction: StatusAction.NO_ACTION,
     };
     testElement.prefs = {
       signin: {
@@ -110,7 +107,7 @@ suite('SyncAccountControl', function() {
     testElement.syncStatus = {
       signedIn: false,
       signedInUsername: '',
-      statusAction: StatusAction.NO_ACTION
+      statusAction: StatusAction.NO_ACTION,
     };
     testElement.promoLabelWithNoAccount = testElement.promoLabelWithAccount =
         'title';
@@ -122,7 +119,7 @@ suite('SyncAccountControl', function() {
     testElement.syncStatus = {
       signedIn: false,
       signedInUsername: '',
-      statusAction: StatusAction.NO_ACTION
+      statusAction: StatusAction.NO_ACTION,
     };
     simulateStoredAccounts([]);
 

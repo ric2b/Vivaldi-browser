@@ -85,15 +85,17 @@ class ArcPolicyBridge : public KeyedService,
                                   const std::string& package_name,
                                   mojom::InstallErrorReason reason) {}
 
-    // Called when CloudDPC scheduled direct install with Play Store for
-    // a set of packages.
-    virtual void OnReportDirectInstall(
-        base::Time time,
-        const std::set<std::string>& package_names) {}
-
     // Called when in CloudDPC the main loop of retries to install apps failed
     // to install some apps.
     virtual void OnReportForceInstallMainLoopFailed(
+        base::Time time,
+        const std::set<std::string>& package_names) {}
+
+    // Called when ARC DPC starts.
+    virtual void OnReportDPCVersion(const std::string& version) {}
+
+    // Called when a Play Store local policy was set.
+    virtual void OnPlayStoreLocalPolicySet(
         base::Time time,
         const std::set<std::string>& package_names) {}
 
@@ -156,10 +158,11 @@ class ArcPolicyBridge : public KeyedService,
   void ReportCloudDpsFailed(base::Time time,
                             const std::string& package_name,
                             mojom::InstallErrorReason reason) override;
-  void ReportDirectInstall(
+  void ReportForceInstallMainLoopFailed(
       base::Time time,
       const std::vector<std::string>& package_names) override;
-  void ReportForceInstallMainLoopFailed(
+  void ReportDPCVersion(const std::string& version) override;
+  void ReportPlayStoreLocalPolicySet(
       base::Time time,
       const std::vector<std::string>& package_names) override;
 
@@ -178,6 +181,7 @@ class ArcPolicyBridge : public KeyedService,
   const std::string& get_arc_policy_compliance_report() {
     return arc_policy_compliance_report_;
   }
+  const std::string& get_arc_dpc_version() { return arc_dpc_version_; }
 
  private:
   void InitializePolicyService();
@@ -203,20 +207,6 @@ class ArcPolicyBridge : public KeyedService,
   // ensuring that the first policy sent to CloudDPC is considered different
   // from previous policy and a compliance report is sent.
   const std::string instance_guid_;
-  // Hash of the policies that were up to date when ARC started.
-  std::string initial_policies_hash_;
-  // Whether the UMA metric for the first successfully obtained compliance
-  // report was already reported.
-  bool first_compliance_timing_reported_ = false;
-  // Hash of the policies that were up to date when the most recent policy
-  // update notification was sent to ARC.
-  std::string update_notification_policies_hash_;
-  // The time of the policy update notification sent when the policy with hash
-  // equal to |update_notification_policy_hash_| was active.
-  base::TimeTicks update_notification_time_;
-  // Whether the UMA metric for the successfully obtained compliance report
-  // since the most recent policy update notificaton was already reported.
-  bool compliance_since_update_timing_reported_ = false;
 
   base::ObserverList<Observer, true /* check_empty */>::Unchecked observers_;
 
@@ -228,6 +218,8 @@ class ArcPolicyBridge : public KeyedService,
   // Saved last received compliance report. Should be used only for feedback
   // reporting.
   std::string arc_policy_compliance_report_;
+  // Saved ARC DPC version.
+  std::string arc_dpc_version_;
 
   // Must be the last member.
   base::WeakPtrFactory<ArcPolicyBridge> weak_ptr_factory_{this};

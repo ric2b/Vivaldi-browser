@@ -68,10 +68,10 @@ class CONTENT_EXPORT PluginService {
       std::vector<std::string>* actual_mime_types) = 0;
 
   // Gets plugin info for an individual plugin and filters the plugins using
-  // the |context| and renderer IDs. This will report whether the data is stale
-  // via |is_stale| and returns whether or not the plugin can be found.
-  // This must be called from the UI thread.
-  virtual bool GetPluginInfo(int render_process_id,
+  // the |browser_context|. This will report whether the data is stale via
+  // |is_stale| and returns whether or not the plugin can be found. This must be
+  // called from the UI thread.
+  virtual bool GetPluginInfo(content::BrowserContext* browser_context,
                              const GURL& url,
                              const std::string& mime_type,
                              bool allow_wildcard,
@@ -133,12 +133,6 @@ class CONTENT_EXPORT PluginService {
   // Returns true iff PPAPI "dev channel" methods are supported.
   virtual bool PpapiDevChannelSupported(BrowserContext* browser_context,
                                         const GURL& document_url) = 0;
-
-  // Determine the number of PPAPI processes currently tracked by the service.
-  // Exposed primarily for testing purposes.
-  virtual int CountPpapiPluginProcessesForProfile(
-      const base::FilePath& plugin_path,
-      const base::FilePath& profile_data_directory) = 0;
 };
 
 }  // namespace content

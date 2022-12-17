@@ -40,6 +40,7 @@
 #include "google_apis/google_api_keys.h"
 #include "net/base/mime_util.h"
 #include "net/base/url_util.h"
+#include "template_url_starter_pack_data.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/device_form_factor.h"
 #include "url/gurl.h"
@@ -1220,8 +1221,7 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_PAGE_CLASSIFICATION:
         if (search_terms_args.page_classification !=
-                metrics::OmniboxEventProto::INVALID_SPEC &&
-            !base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching)) {
+            metrics::OmniboxEventProto::INVALID_SPEC) {
           HandleReplacement(
               "pgcl",
               base::NumberToString(search_terms_args.page_classification),
@@ -1305,14 +1305,19 @@ std::string TemplateURLRef::HandleReplacements(
       }
 
       case GOOGLE_SUGGEST_CLIENT:
-        HandleReplacement(std::string(), search_terms_data.GetSuggestClient(),
-                          replacement, &url);
+        HandleReplacement(
+            std::string(),
+            search_terms_data.GetSuggestClient(
+                search_terms_args.request_source == NON_SEARCHBOX_NTP),
+            replacement, &url);
         break;
 
       case GOOGLE_SUGGEST_REQUEST_ID:
-        HandleReplacement(std::string(),
-                          search_terms_data.GetSuggestRequestIdentifier(),
-                          replacement, &url);
+        HandleReplacement(
+            std::string(),
+            search_terms_data.GetSuggestRequestIdentifier(
+                search_terms_args.request_source == NON_SEARCHBOX_NTP),
+            replacement, &url);
         break;
 
       case GOOGLE_UNESCAPED_SEARCH_TERMS: {
@@ -1611,6 +1616,26 @@ SearchEngineType TemplateURL::GetEngineType(
     DCHECK_NE(SEARCH_ENGINE_UNKNOWN, engine_type_);
   }
   return engine_type_;
+}
+
+BuiltinEngineType TemplateURL::GetBuiltinEngineType() const {
+  if (data_.prepopulate_id != 0) {
+    return KEYWORD_MODE_PREPOPULATED_ENGINE;
+  } else if (data_.starter_pack_id != 0) {
+    switch (data_.starter_pack_id) {
+      case TemplateURLStarterPackData::kBookmarks:
+        return KEYWORD_MODE_STARTER_PACK_BOOKMARKS;
+      case TemplateURLStarterPackData::kHistory:
+        return KEYWORD_MODE_STARTER_PACK_HISTORY;
+      case TemplateURLStarterPackData::kTabs:
+        return KEYWORD_MODE_STARTER_PACK_TABS;
+      default:
+        NOTREACHED();
+        return KEYWORD_MODE_NON_BUILT_IN;
+    }
+  } else {
+    return KEYWORD_MODE_NON_BUILT_IN;
+  }
 }
 
 bool TemplateURL::ExtractSearchTermsFromURL(

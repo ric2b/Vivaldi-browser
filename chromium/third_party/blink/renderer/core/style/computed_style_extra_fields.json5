@@ -141,14 +141,6 @@
       custom_copy: true,
       custom_compare: true,
     },
-    // Whether this style is related with :has() pseudo-class
-    {
-      name: "AffectedBySubjectHas",
-      field_template: "monotonic_flag",
-      default_value: "false",
-      custom_copy: true,
-      custom_compare: true,
-    },
     // A non-inherited property references a variable or @apply is used
     {
       name: "HasVariableReferenceFromNonInheritedProperty",
@@ -479,7 +471,7 @@
       field_template: "primitive",
       include_paths: ["third_party/blink/renderer/platform/graphics/touch_action.h"],
       type_name: "TouchAction",
-      field_size: 7,
+      field_size: 8,
       default_value: "TouchAction::kAuto",
       field_group: "*",
       computed_style_custom_functions: ["getter", "setter"],
@@ -544,7 +536,7 @@
       default_value: "nullptr",
       wrapper_pointer_name: "scoped_refptr",
       field_group: "*",
-      computed_style_custom_functions: ["getter", "setter"],
+      computed_style_custom_functions: ["setter"],
     },
     {
       name: "Mask",
@@ -844,6 +836,16 @@
       type_name: "bool",
       default_value: "true",
       inherited: true,
+      computed_style_custom_functions: ["getter"],
+    },
+    {
+      name: "InternalVisitedColorIsCurrentColor",
+      field_template: "primitive",
+      field_group: "inherited",
+      type_name: "bool",
+      default_value: "true",
+      inherited: true,
+      computed_style_custom_functions: ["getter"],
     },
     {
       name: "WillChangeProperties",
@@ -1107,7 +1109,7 @@
       inherited: true,
     },
     {
-      name: "DependsOnContainerQueries",
+      name: "DependsOnSizeContainerQueries",
       field_template: "primitive",
       type_name: "bool",
       field_group: "*",
@@ -1116,7 +1118,7 @@
     {
       // Set to true if this ComputedStyle is for an element whose ::first-line
       // style depends on size container queries.
-      name: "FirstLineDependsOnContainerQueries",
+      name: "FirstLineDependsOnSizeContainerQueries",
       field_template: "primitive",
       type_name: "bool",
       field_group: "*",

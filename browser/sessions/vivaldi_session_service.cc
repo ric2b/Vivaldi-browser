@@ -15,7 +15,6 @@
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
@@ -98,24 +97,13 @@ void SessionService::OnExtDataUpdated(content::WebContents* web_contents) {
 
 /* static */
 bool SessionServiceBase::ShouldTrackVivaldiBrowser(Browser* browser) {
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
-      base::JSONReader::Read(browser->viv_ext_data(), options);
-  if (json) {
-    if (const base::Value::Dict* dict = json->GetIfDict()) {
-      if (const std::string* window_type = dict->FindString("windowType")) {
-        // Don't track popup windows (like settings) in the session.
-        // We have "", "popup" and "settings".
-        // TODO(pettern): Popup windows still rely on vivExtData, this
-        // should go away and we should use the type sent to the apis
-        // instead.
-        if (*window_type == "popup" || *window_type == "settings") {
-          return false;
-        }
-      }
-    }
+  // Don't track popup windows (like settings) in the session.
+  if (browser->is_type_popup()) {
+    return false;
   }
-  if (static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+
+
+  if (browser->window() && static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
       VivaldiBrowserWindow::WindowType::NORMAL) {
     return true;
   }

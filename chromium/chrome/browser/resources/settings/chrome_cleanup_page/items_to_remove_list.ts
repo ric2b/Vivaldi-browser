@@ -4,7 +4,7 @@
 
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -16,10 +16,10 @@ import {getTemplate} from './items_to_remove_list.html.js';
  * style at front of the line. The highlightSuffix will be appended to the end
  * of line and emphasized with bold font.
  */
-export type ChromeCleanupRemovalListItem = {
-  text: string,
-  highlightSuffix: string|null,
-};
+export interface ChromeCleanupRemovalListItem {
+  text: string;
+  highlightSuffix: string|null;
+}
 
 /**
  * The default number of items to show for files, registry keys and extensions
@@ -101,10 +101,10 @@ export class ItemsToRemoveListElement extends PolymerElement {
   }
 
   override title: string;
-  itemsToShow: Array<ChromeCleanupRemovalListItem>;
+  itemsToShow: ChromeCleanupRemovalListItem[];
   private expanded_: boolean;
-  private initialItems_: Array<ChromeCleanupRemovalListItem>|null;
-  private remainingItems_: Array<ChromeCleanupRemovalListItem>|null;
+  private initialItems_: ChromeCleanupRemovalListItem[]|null;
+  private remainingItems_: ChromeCleanupRemovalListItem[]|null;
   private moreItemsLinkText_: string;
 
   private expandList_() {
@@ -123,8 +123,7 @@ export class ItemsToRemoveListElement extends PolymerElement {
    * to the user will contain exactly |CHROME_CLEANUP_DEFAULT_ITEMS_TO_SHOW|
    *    elements, and the last one will be the "show more" link.
    */
-  private updateVisibleState_(itemsToShow:
-                                  Array<ChromeCleanupRemovalListItem>) {
+  private updateVisibleState_(itemsToShow: ChromeCleanupRemovalListItem[]) {
     // Start expanded if there are less than
     // |CHROME_CLEANUP_DEFAULT_ITEMS_TO_SHOW| items to show.
     this.expanded_ = itemsToShow.length <= CHROME_CLEANUP_DEFAULT_ITEMS_TO_SHOW;

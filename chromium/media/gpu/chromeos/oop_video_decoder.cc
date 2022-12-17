@@ -5,11 +5,18 @@
 #include "media/gpu/chromeos/oop_video_decoder.h"
 
 #include "base/memory/ptr_util.h"
+#include "build/chromeos_buildflags.h"
+#include "chromeos/components/cdm_factory_daemon/stable_cdm_context_impl.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/gpu/macros.h"
 #include "media/mojo/common/mojo_decoder_buffer_converter.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
+
+#if BUILDFLAG(USE_VAAPI)
+#include "media/gpu/vaapi/vaapi_wrapper.h"
+#endif  // BUILDFLAG(USE_VAAPI)
 
 // Throughout this file, we have sprinkled many CHECK()s to assert invariants
 // that should hold regardless of the behavior of the remote decoder or
@@ -170,26 +177,38 @@ void OOPVideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
-  // TODO(b/171813538): implement the re-initialization logic. The client can
-  // call Initialize() multiple times. This implies properly asserting the
-  // invariant imposed by media::VideoDecoder::Initialize(): "No VideoDecoder
-  // calls should be made before |init_cb| is executed."
-  if (output_cb_) {
-    // TODO(b/171813538): create specific error code for this decoder.
-    std::move(init_cb).Run(DecoderStatus::Codes::kFailed);
+  mojo::PendingRemote<stable::mojom::StableCdmContext>
+      pending_remote_stable_cdm_context;
+  if (config.is_encrypted()) {
+#if BUILDFLAG(IS_CHROMEOS)
+    if (!cdm_context || !cdm_context->GetChromeOsCdmContext()) {
+      std::move(init_cb).Run(DecoderStatus::Codes::kUnsupportedEncryptionMode);
+      return;
+    }
+    mojo::PendingReceiver<stable::mojom::StableCdmContext> cdm_receiver;
+    pending_remote_stable_cdm_context =
+        cdm_receiver.InitWithNewPipeAndPassRemote();
+    mojo::MakeSelfOwnedReceiver(
+        std::make_unique<chromeos::StableCdmContextImpl>(cdm_context),
+        std::move(cdm_receiver));
+#if BUILDFLAG(USE_VAAPI)
+    // We need to signal that for AMD we will do transcryption on the GPU side.
+    // Then on the other end we just make transcryption a no-op.
+    needs_transcryption_ = (VaapiWrapper::GetImplementationType() ==
+                            VAImplementation::kMesaGallium);
+#endif  // BUILDFLAG(USE_VAAPI)
+#else
+    std::move(init_cb).Run(DecoderStatus::Codes::kUnsupportedEncryptionMode);
     return;
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   init_cb_ = std::move(init_cb);
   output_cb_ = output_cb;
   waiting_cb_ = waiting_cb;
 
-  // TODO(b/171813538): plumb protected content.
-  mojo::PendingRemote<stable::mojom::StableCdmContext>
-      pending_remote_cdm_context;
-
   remote_decoder_->Initialize(config, low_delay,
-                              std::move(pending_remote_cdm_context),
+                              std::move(pending_remote_stable_cdm_context),
                               base::BindOnce(&OOPVideoDecoder::OnInitializeDone,
                                              weak_this_factory_.GetWeakPtr()));
 }
@@ -202,8 +221,11 @@ void OOPVideoDecoder::OnInitializeDone(const DecoderStatus& status,
 
   CHECK(!has_error_);
 
-  if (!status.is_ok() || (decoder_type != VideoDecoderType::kVaapi &&
-                          decoder_type != VideoDecoderType::kV4L2)) {
+  if (!status.is_ok() ||
+      (decoder_type != VideoDecoderType::kVaapi &&
+       decoder_type != VideoDecoderType::kV4L2) ||
+      (decoder_type_ != VideoDecoderType::kUnknown &&
+       decoder_type_ != decoder_type)) {
     Stop();
     return;
   }
@@ -397,7 +419,8 @@ bool OOPVideoDecoder::IsPlatformDecoder() const {
 }
 
 bool OOPVideoDecoder::NeedsTranscryption() {
-  return false;
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return needs_transcryption_;
 }
 
 void OOPVideoDecoder::OnVideoFrameDecoded(
@@ -408,6 +431,12 @@ void OOPVideoDecoder::OnVideoFrameDecoded(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   CHECK(!has_error_);
+
+  if (init_cb_) {
+    VLOGF(2) << "Received a decoded frame while waiting for initialization";
+    Stop();
+    return;
+  }
 
   // The destruction observer will be called after the client releases the
   // video frame. BindToCurrentLoop() is used to make sure that the WeakPtr

@@ -52,6 +52,7 @@ const char BookmarkCodec::kMetaInfo[] = "meta_info";
 const char BookmarkCodec::kTypeURL[] = "url";
 const char BookmarkCodec::kTypeFolder[] = "folder";
 const char BookmarkCodec::kSyncMetadata[] = "sync_metadata";
+const char BookmarkCodec::kDateLastUsed[] = "date_last_used";
 
 // Current version of the file.
 static const int kCurrentVersion = 1;
@@ -168,6 +169,9 @@ base::Value BookmarkCodec::EncodeNode(const BookmarkNode* node) {
   // TODO(crbug.com/634507): Avoid ToInternalValue().
   value.SetStringKey(kDateAddedKey, base::NumberToString(
                                         node->date_added().ToInternalValue()));
+  value.SetStringKey(
+      kDateLastUsed,
+      base::NumberToString(node->date_last_used().ToInternalValue()));
   if (node->is_url()) {
     value.SetStringKey(kTypeKey, kTypeURL);
     std::string url = node->url().possibly_invalid_spec();
@@ -180,10 +184,10 @@ base::Value BookmarkCodec::EncodeNode(const BookmarkNode* node) {
         base::NumberToString(node->date_folder_modified().ToInternalValue()));
     UpdateChecksumWithFolderNode(id, title);
 
-    base::Value child_values(base::Value::Type::LIST);
+    base::Value::List child_values;
     for (const auto& child : node->children())
       child_values.Append(EncodeNode(child.get()));
-    value.SetKey(kChildrenKey, std::move(child_values));
+    value.SetKey(kChildrenKey, base::Value(std::move(child_values)));
   }
   const BookmarkNode::MetaInfoMap* meta_info_map = node->GetMetaInfoMap();
   if (meta_info_map)
@@ -273,7 +277,7 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
 bool BookmarkCodec::DecodeChildren(const base::Value& child_value_list,
                                    BookmarkNode* parent) {
   DCHECK(child_value_list.is_list());
-  for (const base::Value& child_value : child_value_list.GetListDeprecated()) {
+  for (const base::Value& child_value : child_value_list.GetList()) {
     if (!child_value.is_dict())
       return false;
     DecodeNode(child_value, parent, nullptr);
@@ -359,6 +363,15 @@ bool BookmarkCodec::DecodeNode(const base::Value& value,
   int64_t date_added_time;
   base::StringToInt64(date_added_string, &date_added_time);
 
+  std::string date_last_used_string;
+  string_value = value.FindStringKey(kDateLastUsed);
+  if (string_value)
+    date_last_used_string = *string_value;
+  else
+    date_last_used_string = base::NumberToString(0);
+  int64_t date_last_used;
+  base::StringToInt64(date_last_used_string, &date_last_used);
+
   const std::string* type_string = value.FindStringKey(kTypeKey);
   if (!type_string)
     return false;
@@ -417,6 +430,7 @@ bool BookmarkCodec::DecodeNode(const base::Value& value,
 
   node->SetTitle(title);
   node->set_date_added(Time::FromInternalValue(date_added_time));
+  node->set_date_last_used(Time::FromInternalValue(date_last_used));
 
   BookmarkNode::MetaInfoMap meta_info_map;
   if (!DecodeMetaInfo(value, &meta_info_map))

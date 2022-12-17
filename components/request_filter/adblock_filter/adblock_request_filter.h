@@ -5,7 +5,7 @@
 
 #include <map>
 
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/ad_blocker/adblock_metadata.h"
 #include "components/request_filter/request_filter.h"
 
 namespace adblock_filter {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 import './shared/action_link_style.css.js';
 import './shared/animations.css.js';
@@ -26,7 +26,6 @@ export interface SigninViewElement {
 
 const SigninViewElementBase = NavigationMixin(PolymerElement);
 
-/** @polymer */
 export class SigninViewElement extends SigninViewElementBase {
   static get is() {
     return 'signin-view';
@@ -71,8 +70,7 @@ export class SigninViewElement extends SigninViewElementBase {
     this.signinViewProxy_.recordNavigatedAway();
   }
 
-  /** private */
-  onSignInClick_() {
+  private onSignInClick_() {
     this.finalized_ = true;
     this.signinViewProxy_.recordSignIn();
     this.welcomeBrowserProxy_.handleActivateSignIn(null);

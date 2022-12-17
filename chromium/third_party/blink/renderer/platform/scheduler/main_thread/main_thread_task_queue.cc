@@ -155,7 +155,7 @@ void MainThreadTaskQueue::OnTaskStarted(
 void MainThreadTaskQueue::OnTaskCompleted(
     const base::sequence_manager::Task& task,
     TaskQueue::TaskTiming* task_timing,
-    base::sequence_manager::LazyNow* lazy_now) {
+    base::LazyNow* lazy_now) {
   if (main_thread_scheduler_) {
     main_thread_scheduler_->OnTaskCompleted(weak_ptr_factory_.GetWeakPtr(),
                                             task, task_timing, lazy_now);
@@ -257,16 +257,6 @@ FrameSchedulerImpl* MainThreadTaskQueue::GetFrameScheduler() const {
 void MainThreadTaskQueue::SetFrameSchedulerForTest(
     FrameSchedulerImpl* frame_scheduler) {
   frame_scheduler_ = frame_scheduler;
-}
-
-void MainThreadTaskQueue::SetNetRequestPriority(
-    net::RequestPriority net_request_priority) {
-  net_request_priority_ = net_request_priority;
-}
-
-absl::optional<net::RequestPriority> MainThreadTaskQueue::net_request_priority()
-    const {
-  return net_request_priority_;
 }
 
 void MainThreadTaskQueue::SetWebSchedulingPriority(

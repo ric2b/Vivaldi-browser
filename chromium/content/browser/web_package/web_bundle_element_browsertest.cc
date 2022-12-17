@@ -573,10 +573,10 @@ IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, NetworkIsolationKey) {
   TitleWatcher title_watcher(shell()->web_contents(), expected_title);
   EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
 
-  RenderFrameHost* main_frame = shell()->web_contents()->GetMainFrame();
+  RenderFrameHost* main_frame = shell()->web_contents()->GetPrimaryMainFrame();
   RenderFrameHost* urn_frame = ChildFrameAt(main_frame, 0);
   EXPECT_EQ("https://page.test https://bundle.test",
-            urn_frame->GetNetworkIsolationKey().ToString());
+            *urn_frame->GetNetworkIsolationKey().ToCacheKeyString());
 }
 
 IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, ReloadSubframe) {

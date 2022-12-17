@@ -110,7 +110,7 @@ GURL DhcpPacFileAdapterFetcher::GetPacURL() const {
   return pac_url_;
 }
 
-DhcpPacFileAdapterFetcher::DhcpQuery::DhcpQuery() {}
+DhcpPacFileAdapterFetcher::DhcpQuery::DhcpQuery() = default;
 
 void DhcpPacFileAdapterFetcher::DhcpQuery::GetPacURLForAdapter(
     const std::string& adapter_name) {
@@ -126,7 +126,7 @@ std::string DhcpPacFileAdapterFetcher::DhcpQuery::ImplGetPacURLFromDhcp(
   return DhcpPacFileAdapterFetcher::GetPacURLFromDhcp(adapter_name);
 }
 
-DhcpPacFileAdapterFetcher::DhcpQuery::~DhcpQuery() {}
+DhcpPacFileAdapterFetcher::DhcpQuery::~DhcpQuery() = default;
 
 void DhcpPacFileAdapterFetcher::OnDhcpQueryDone(
     scoped_refptr<DhcpQuery> dhcp_query,
@@ -194,9 +194,9 @@ DhcpPacFileAdapterFetcher::ImplCreateScriptFetcher() {
   return PacFileFetcherImpl::Create(url_request_context_);
 }
 
-DhcpPacFileAdapterFetcher::DhcpQuery*
+scoped_refptr<DhcpPacFileAdapterFetcher::DhcpQuery>
 DhcpPacFileAdapterFetcher::ImplCreateDhcpQuery() {
-  return new DhcpQuery();
+  return base::MakeRefCounted<DhcpQuery>();
 }
 
 base::TimeDelta DhcpPacFileAdapterFetcher::ImplGetTimeout() const {

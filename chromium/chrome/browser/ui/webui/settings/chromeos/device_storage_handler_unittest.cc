@@ -22,13 +22,13 @@
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ui/webui/settings/ash/calculator/size_calculator_test_api.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_storage_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/device_storage_util.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/spaced/spaced_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
@@ -48,7 +48,6 @@ class TestStorageHandler : public StorageHandler {
       : StorageHandler(profile, html_source) {}
 
   // Pull WebUIMessageHandler::set_web_ui() into public so tests can call it.
-  using StorageHandler::RoundByteSize;
   using StorageHandler::set_web_ui;
 };
 
@@ -62,10 +61,6 @@ class StorageHandlerTest : public testing::Test {
   ~StorageHandlerTest() override = default;
 
   void SetUp() override {
-    // Need to initialize DBusThreadManager before ArcSessionManager's
-    // constructor calls DBusThreadManager::Get().
-    chromeos::DBusThreadManager::Initialize();
-
     // Initialize fake DBus clients.
     ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
     chromeos::SpacedClient::InitializeFake();
@@ -140,7 +135,6 @@ class StorageHandlerTest : public testing::Test {
     storage::ExternalMountPoints::GetSystemInstance()->RevokeAllFileSystems();
     chromeos::SpacedClient::Shutdown();
     ConciergeClient::Shutdown();
-    chromeos::DBusThreadManager::Shutdown();
   }
 
  protected:
@@ -248,7 +242,7 @@ TEST_F(StorageHandlerTest, RoundByteSize) {
   };
 
   for (auto& c : cases) {
-    int64_t rounded_bytes = handler_->RoundByteSize(c.bytes);
+    int64_t rounded_bytes = RoundByteSize(c.bytes);
     EXPECT_EQ(base::ASCIIToUTF16(c.expected), ui::FormatBytes(rounded_bytes));
   }
 }
@@ -261,7 +255,7 @@ TEST_F(StorageHandlerTest, GlobalSizeStat) {
   int64_t available_size = base::SysInfo::AmountOfFreeDiskSpace(mount_path);
 
   // Round the total size.
-  int64_t rounded_total_size = handler_->RoundByteSize(total_size);
+  int64_t rounded_total_size = RoundByteSize(total_size);
   int64_t used_size = rounded_total_size - available_size;
   double used_ratio = static_cast<double>(used_size) / rounded_total_size;
 

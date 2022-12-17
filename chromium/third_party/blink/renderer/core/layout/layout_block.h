@@ -462,7 +462,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
                            const PhysicalOffset& paint_offset) const;
   virtual void PaintChildren(const PaintInfo&,
                              const PhysicalOffset& paint_offset) const;
-  void UpdateAfterLayout() override;
   MinMaxSizes PreferredLogicalWidths() const override;
 
   virtual bool HasLineIfEmpty() const;
@@ -494,7 +493,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   bool HitTestChildren(HitTestResult&,
                        const HitTestLocation&,
                        const PhysicalOffset& accumulated_offset,
-                       HitTestAction) override;
+                       HitTestPhase) override;
 
   void StyleWillChange(StyleDifference,
                        const ComputedStyle& new_style) override;
@@ -537,10 +536,9 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   bool NeedsPreferredWidthsRecalculation() const override;
 
-  bool IsInSelfHitTestingPhase(HitTestAction hit_test_action) const final {
+  bool IsInSelfHitTestingPhase(HitTestPhase phase) const final {
     NOT_DESTROYED();
-    return hit_test_action == kHitTestBlockBackground ||
-           hit_test_action == kHitTestChildBlockBackground;
+    return phase == HitTestPhase::kSelfBlockBackground;
   }
 
   // Returns baseline offset of this block if is empty editable or having

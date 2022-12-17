@@ -22,7 +22,9 @@
 #include "chrome/browser/ash/web_applications/terminal_ui.h"
 
 #if !defined(OFFICIAL_BUILD)
-#include "ash/webui/sample_system_web_app_ui/untrusted_sample_system_web_app_ui.h"
+#include "ash/webui/demo_mode_app_ui/demo_mode_app_untrusted_ui.h"
+#include "ash/webui/sample_system_web_app_ui/sample_system_web_app_untrusted_ui.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #endif  // !defined(OFFICIAL_BUILD)
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -57,7 +59,10 @@ void RegisterAshChromeUntrustedWebUIConfigs() {
   }
 #if !defined(OFFICIAL_BUILD)
   map.AddUntrustedWebUIConfig(
-      std::make_unique<ash::UntrustedSampleSystemWebAppUIConfig>());
+      std::make_unique<ash::SampleSystemWebAppUntrustedUIConfig>());
+  map.AddUntrustedWebUIConfig(
+      std::make_unique<ash::DemoModeAppUntrustedUIConfig>(base::BindRepeating(
+          [] { return ash::DemoSession::Get()->DemoAppComponentPath(); })));
 #endif  // !defined(OFFICIAL_BUILD)
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

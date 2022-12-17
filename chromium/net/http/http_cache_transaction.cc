@@ -4,7 +4,7 @@
 
 #include "net/http/http_cache_transaction.h"
 
-#include "build/build_config.h"  // For OS_POSIX
+#include "build/build_config.h"  // For IS_POSIX
 
 #if BUILDFLAG(IS_POSIX)
 #include <unistd.h>
@@ -70,6 +70,13 @@ namespace {
 
 constexpr base::TimeDelta kStaleRevalidateTimeout = base::Seconds(60);
 
+uint64_t GetNextTraceId(HttpCache* cache) {
+  static uint32_t sNextTraceId = 0;
+
+  DCHECK(cache);
+  return (reinterpret_cast<uint64_t>(cache) << 32) | sNextTraceId++;
+}
+
 // From http://tools.ietf.org/html/draft-ietf-httpbis-p6-cache-21#section-6
 //      a "non-error response" is one with a 2xx (Successful) or 3xx
 //      (Redirection) status code.
@@ -89,6 +96,14 @@ enum ExternallyConditionalizedType {
   EXTERNALLY_CONDITIONALIZED_CACHE_USABLE,
   EXTERNALLY_CONDITIONALIZED_MISMATCHED_VALIDATORS,
   EXTERNALLY_CONDITIONALIZED_MAX
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class RestrictedPrefetchReused {
+  kNotReused = 0,
+  kReused = 1,
+  kMaxValue = kReused
 };
 
 void RecordPervasivePayloadIndex(const char* histogram_name, int index) {
@@ -161,7 +176,9 @@ static bool HeaderMatches(const HttpRequestHeaders& headers,
 //-----------------------------------------------------------------------------
 
 HttpCache::Transaction::Transaction(RequestPriority priority, HttpCache* cache)
-    : priority_(priority), cache_(cache->GetWeakPtr()) {
+    : trace_id_(GetNextTraceId(cache)),
+      priority_(priority),
+      cache_(cache->GetWeakPtr()) {
   TRACE_EVENT1("net", "HttpCacheTransaction::Transaction", "priority",
                RequestPriorityToString(priority));
   static_assert(HttpCache::Transaction::kNumValidationHeaders ==
@@ -212,8 +229,8 @@ int HttpCache::Transaction::Start(const HttpRequestInfo* request,
   DCHECK(request);
   DCHECK(!callback.is_null());
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::Start",
-                         net_log.source().id, TRACE_EVENT_FLAG_FLOW_OUT, "url",
-                         request->url.spec());
+                         TRACE_ID_LOCAL(trace_id_), TRACE_EVENT_FLAG_FLOW_OUT,
+                         "url", request->url.spec());
 
   // Ensure that we only have one asynchronous call at a time.
   DCHECK(callback_.is_null());
@@ -310,9 +327,15 @@ bool HttpCache::Transaction::IsReadyToRestartForAuth() {
 int HttpCache::Transaction::Read(IOBuffer* buf,
                                  int buf_len,
                                  CompletionOnceCallback callback) {
+  TRACE_EVENT_WITH_FLOW1(
+      "net", "HttpCacheTransaction::Read", TRACE_ID_LOCAL(trace_id_),
+      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "buf_len", buf_len);
+
   DCHECK_EQ(next_state_, STATE_NONE);
   DCHECK(buf);
-  DCHECK_GT(buf_len, 0);
+  // TODO(https://crbug.com/1335423): Change to DCHECK_GT() or remove after bug
+  // is fixed.
+  CHECK_GT(buf_len, 0);
   DCHECK(!callback.is_null());
 
   DCHECK(callback_.is_null());
@@ -397,7 +420,7 @@ int HttpCache::Transaction::TransitionToReadingState() {
   // Full request.
   // If it's a writer and a full request then it may read from the cache if its
   // offset is behind the current offset else from the network.
-  int disk_entry_size = entry_->disk_entry->GetDataSize(kResponseContentIndex);
+  int disk_entry_size = entry_->GetEntry()->GetDataSize(kResponseContentIndex);
   if (read_offset_ == disk_entry_size || entry_->writers->network_read_only()) {
     next_state_ = STATE_NETWORK_READ_CACHE_WRITE;
   } else {
@@ -612,7 +635,7 @@ void HttpCache::Transaction::SetValidatingCannotProceed() {
 void HttpCache::Transaction::WriterAboutToBeRemovedFromEntry(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::WriterAboutToBeRemovedFromEntry",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   // Since the transaction can no longer access the network transaction, save
   // all network related info now.
@@ -634,7 +657,7 @@ void HttpCache::Transaction::WriterAboutToBeRemovedFromEntry(int result) {
 void HttpCache::Transaction::WriteModeTransactionAboutToBecomeReader() {
   TRACE_EVENT_WITH_FLOW0(
       "net", "HttpCacheTransaction::WriteModeTransactionAboutToBecomeReader",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   mode_ = READ;
   if (moved_network_transaction_to_writers_ &&
@@ -1023,12 +1046,12 @@ int HttpCache::Transaction::DoGetBackendComplete(int result) {
   mode_ = NONE;
 
   if (!ShouldPassThrough()) {
-    // The flag LOAD_USE_SINGLE_KEYED_CACHE will have been changed to false if
-    // the entry was marked unusable and the transaction was restarted in
-    //  DoCacheReadResponseComplete(), so it will no longer match the value in
-    //  `request_`. So we pass it through explicitly.
-    cache_key_ = cache_->GenerateCacheKey(
-        request_, effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE);
+    // The flag `use_single_keyed_cache_` will have been changed back to false
+    // if the entry was marked unusable and the transaction was restarted in
+    // DoCacheReadResponseComplete(), even though `request_` will still have a
+    // checksum. So it needs to be passed explicitly.
+    cache_key_ =
+        *cache_->GenerateCacheKeyForRequest(request_, use_single_keyed_cache_);
 
     // Requested cache access mode.
     if (effective_load_flags_ & LOAD_ONLY_FROM_CACHE) {
@@ -1095,7 +1118,7 @@ int HttpCache::Transaction::DoGetBackendComplete(int result) {
 
 int HttpCache::Transaction::DoInitEntry() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoInitEntry",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(!new_entry_);
 
@@ -1115,7 +1138,7 @@ int HttpCache::Transaction::DoInitEntry() {
 
 int HttpCache::Transaction::DoOpenOrCreateEntry() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoOpenOrCreateEntry",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(!new_entry_);
   TransitionToState(STATE_OPEN_OR_CREATE_ENTRY_COMPLETE);
@@ -1176,7 +1199,7 @@ int HttpCache::Transaction::DoOpenOrCreateEntry() {
 int HttpCache::Transaction::DoOpenOrCreateEntryComplete(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::DoOpenOrCreateEntryComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result",
       (result == OK ? (new_entry_->opened ? "opened" : "created") : "failed"));
 
@@ -1266,7 +1289,7 @@ int HttpCache::Transaction::DoOpenOrCreateEntryComplete(int result) {
 
 int HttpCache::Transaction::DoDoomEntry() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoDoomEntry",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   TransitionToState(STATE_DOOM_ENTRY_COMPLETE);
   cache_pending_ = true;
@@ -1277,9 +1300,10 @@ int HttpCache::Transaction::DoDoomEntry() {
 }
 
 int HttpCache::Transaction::DoDoomEntryComplete(int result) {
-  TRACE_EVENT_WITH_FLOW1(
-      "net", "HttpCacheTransaction::DoDoomEntryComplete", net_log().source().id,
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
+  TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoDoomEntryComplete",
+                         TRACE_ID_LOCAL(trace_id_),
+                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
+                         "result", result);
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_DOOM_ENTRY,
                                     result);
   cache_pending_ = false;
@@ -1291,7 +1315,7 @@ int HttpCache::Transaction::DoDoomEntryComplete(int result) {
 
 int HttpCache::Transaction::DoCreateEntry() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoCreateEntry",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(!new_entry_);
   TransitionToState(STATE_CREATE_ENTRY_COMPLETE);
@@ -1302,7 +1326,7 @@ int HttpCache::Transaction::DoCreateEntry() {
 
 int HttpCache::Transaction::DoCreateEntryComplete(int result) {
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoCreateEntryComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", result);
   // It is important that we go to STATE_ADD_TO_ENTRY whenever the result is
@@ -1345,7 +1369,7 @@ int HttpCache::Transaction::DoCreateEntryComplete(int result) {
 
 int HttpCache::Transaction::DoAddToEntry() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoAddToEntry",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(new_entry_);
   cache_pending_ = true;
@@ -1421,14 +1445,17 @@ void HttpCache::Transaction::AddCacheLockTimeoutHandler(ActiveEntry* entry) {
 
 int HttpCache::Transaction::DoAddToEntryComplete(int result) {
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoAddToEntryComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", result);
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY,
                                     result);
-  const base::TimeDelta entry_lock_wait =
-      TimeTicks::Now() - entry_lock_waiting_since_;
-  UMA_HISTOGRAM_TIMES("HttpCache.EntryLockWait", entry_lock_wait);
+  if (cache_ && cache_->GetCurrentBackend() &&
+      cache_->GetCurrentBackend()->GetCacheType() != MEMORY_CACHE) {
+    const base::TimeDelta entry_lock_wait =
+        TimeTicks::Now() - entry_lock_waiting_since_;
+    base::UmaHistogramTimes("HttpCache.AddTransactionToEntry", entry_lock_wait);
+  }
 
   entry_lock_waiting_since_ = TimeTicks();
   DCHECK(new_entry_);
@@ -1464,8 +1491,8 @@ int HttpCache::Transaction::DoAddToEntryComplete(int result) {
   // TODO(crbug.com/713354) Access timestamp for histograms only if entry is
   // already written, to avoid data race since cache thread can also access
   // this.
-  if (!cache_->IsWritingInProgress(entry_))
-    open_entry_last_used_ = entry_->disk_entry->GetLastUsed();
+  if (!cache_->IsWritingInProgress(entry()))
+    open_entry_last_used_ = entry_->GetEntry()->GetLastUsed();
 
   // TODO(jkarlin): We should either handle the case or DCHECK.
   if (result != OK) {
@@ -1489,7 +1516,7 @@ int HttpCache::Transaction::DoAddToEntryComplete(int result) {
 int HttpCache::Transaction::DoDoneHeadersAddToEntryComplete(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::DoDoneHeadersAddToEntryComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   // This transaction's response headers did not match its ActiveEntry so it
   // created a new ActiveEntry (new_entry_) to write to (and doomed the old
@@ -1520,23 +1547,23 @@ int HttpCache::Transaction::DoDoneHeadersAddToEntryComplete(int result) {
 
 int HttpCache::Transaction::DoCacheReadResponse() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoCacheReadResponse",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(entry_);
   TransitionToState(STATE_CACHE_READ_RESPONSE_COMPLETE);
 
-  io_buf_len_ = entry_->disk_entry->GetDataSize(kResponseInfoIndex);
+  io_buf_len_ = entry_->GetEntry()->GetDataSize(kResponseInfoIndex);
   read_buf_ = base::MakeRefCounted<IOBuffer>(io_buf_len_);
 
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_INFO);
-  return entry_->disk_entry->ReadData(kResponseInfoIndex, 0, read_buf_.get(),
+  return entry_->GetEntry()->ReadData(kResponseInfoIndex, 0, read_buf_.get(),
                                       io_buf_len_, io_callback_);
 }
 
 int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   TRACE_EVENT_WITH_FLOW2("net",
                          "HttpCacheTransaction::DoCacheReadResponseComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", result, "io_buf_len", io_buf_len_);
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_INFO,
@@ -1556,9 +1583,9 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
 
     // We've read the single keyed entry and it turned out to be unusable. Let's
     // retry reading from the split cache.
-    if (effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE) {
+    if (use_single_keyed_cache_) {
       DCHECK(!network_trans_);
-      effective_load_flags_ &= ~LOAD_USE_SINGLE_KEYED_CACHE;
+      use_single_keyed_cache_ = false;
       DoneWithEntryForRestartWithCache();
       TransitionToState(STATE_GET_BACKEND);
       return OK;
@@ -1572,8 +1599,8 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   // TODO(crbug.com/713354) Only get data size if there is no other transaction
   // currently writing the response body due to the data race mentioned in the
   // associated bug.
-  if (!cache_->IsWritingInProgress(entry_)) {
-    int current_size = entry_->disk_entry->GetDataSize(kResponseContentIndex);
+  if (!cache_->IsWritingInProgress(entry())) {
+    int current_size = entry_->GetEntry()->GetDataSize(kResponseContentIndex);
     int64_t full_response_length = response_.headers->GetContentLength();
 
     // Some resources may have slipped in as truncated when they're not.
@@ -1627,6 +1654,11 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
       updated_prefetch_response_->restricted_prefetch = false;
     }
 
+    base::UmaHistogramEnumeration("HttpCache.RestrictedPrefetchReuse",
+                                  restricted_prefetch_reuse
+                                      ? RestrictedPrefetchReused::kReused
+                                      : RestrictedPrefetchReused::kNotReused);
+
     TransitionToState(STATE_WRITE_UPDATED_PREFETCH_RESPONSE);
     return OK;
   }
@@ -1638,7 +1670,7 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
 int HttpCache::Transaction::DoCacheWriteUpdatedPrefetchResponse(int result) {
   TRACE_EVENT_WITH_FLOW0(
       "net", "HttpCacheTransaction::DoCacheWriteUpdatedPrefetchResponse",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(updated_prefetch_response_);
   // TODO(jkarlin): If DoUpdateCachedResponse is also called for this
@@ -1653,7 +1685,7 @@ int HttpCache::Transaction::DoCacheWriteUpdatedPrefetchResponseComplete(
   TRACE_EVENT_WITH_FLOW0(
       "net",
       "HttpCacheTransaction::DoCacheWriteUpdatedPrefetchResponseComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   updated_prefetch_response_.reset();
   TransitionToState(STATE_CACHE_DISPATCH_VALIDATION);
@@ -1663,7 +1695,7 @@ int HttpCache::Transaction::DoCacheWriteUpdatedPrefetchResponseComplete(
 int HttpCache::Transaction::DoCacheDispatchValidation() {
   TRACE_EVENT_WITH_FLOW0("net",
                          "HttpCacheTransaction::DoCacheDispatchValidation",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   if (!entry_) {
     // Entry got destroyed when twiddling unused-since-prefetch bit.
@@ -1705,7 +1737,7 @@ int HttpCache::Transaction::DoCacheDispatchValidation() {
 
 int HttpCache::Transaction::DoCacheQueryData() {
   TransitionToState(STATE_CACHE_QUERY_DATA_COMPLETE);
-  return entry_->disk_entry->ReadyForSparseIO(io_callback_);
+  return entry_->GetEntry()->ReadyForSparseIO(io_callback_);
 }
 
 int HttpCache::Transaction::DoCacheQueryDataComplete(int result) {
@@ -1726,7 +1758,7 @@ int HttpCache::Transaction::DoStartPartialCacheValidation() {
   }
 
   TransitionToState(STATE_COMPLETE_PARTIAL_CACHE_VALIDATION);
-  return partial_->ShouldValidateCache(entry_->disk_entry, io_callback_);
+  return partial_->ShouldValidateCache(entry_->GetEntry(), io_callback_);
 }
 
 int HttpCache::Transaction::DoCompletePartialCacheValidation(int result) {
@@ -1742,7 +1774,7 @@ int HttpCache::Transaction::DoCompletePartialCacheValidation(int result) {
     return result;
   }
 
-  partial_->PrepareCacheValidation(entry_->disk_entry,
+  partial_->PrepareCacheValidation(entry_->GetEntry(),
                                    &custom_request_->extra_headers);
 
   if (reading_ && partial_->IsCurrentRangeCached()) {
@@ -1758,7 +1790,7 @@ int HttpCache::Transaction::DoCompletePartialCacheValidation(int result) {
 int HttpCache::Transaction::DoCacheUpdateStaleWhileRevalidateTimeout() {
   TRACE_EVENT_WITH_FLOW0(
       "net", "HttpCacheTransaction::DoCacheUpdateStaleWhileRevalidateTimeout",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   response_.stale_revalidate_timeout =
       cache_->clock_->Now() + kStaleRevalidateTimeout;
@@ -1771,7 +1803,7 @@ int HttpCache::Transaction::DoCacheUpdateStaleWhileRevalidateTimeoutComplete(
   TRACE_EVENT_WITH_FLOW0(
       "net",
       "HttpCacheTransaction::DoCacheUpdateStaleWhileRevalidateTimeoutComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(!reading_);
   TransitionToState(STATE_CONNECTED_CALLBACK);
@@ -1780,7 +1812,7 @@ int HttpCache::Transaction::DoCacheUpdateStaleWhileRevalidateTimeoutComplete(
 
 int HttpCache::Transaction::DoSendRequest() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoSendRequest",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(mode_ & WRITE || mode_ == NONE);
   DCHECK(!network_trans_.get());
@@ -1819,7 +1851,7 @@ int HttpCache::Transaction::DoSendRequest() {
 
 int HttpCache::Transaction::DoSendRequestComplete(int result) {
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoSendRequestComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", result);
   if (!cache_.get()) {
@@ -1867,7 +1899,7 @@ int HttpCache::Transaction::DoSendRequestComplete(int result) {
 // We received the response headers and there is no error.
 int HttpCache::Transaction::DoSuccessfulSendRequest() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoSuccessfulSendRequest",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(!new_response_);
   const HttpResponseInfo* new_response = network_trans_->GetResponseInfo();
@@ -1907,7 +1939,7 @@ int HttpCache::Transaction::DoSuccessfulSendRequest() {
 
   // The single-keyed cache only accepts responses with code 200 or 304.
   // Anything else is considered unusable.
-  if ((effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE) &&
+  if (use_single_keyed_cache_ &&
       !(new_response->headers->response_code() == 200 ||
         new_response->headers->response_code() == 304)) {
     // Either the new response will be written back to the cache, in which case
@@ -1994,7 +2026,7 @@ int HttpCache::Transaction::DoSuccessfulSendRequest() {
 // We received 304 or 206 and we want to update the cached response headers.
 int HttpCache::Transaction::DoUpdateCachedResponse() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoUpdateCachedResponse",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   int rv = OK;
   // Update the cached response based on the headers and properties of
@@ -2014,15 +2046,11 @@ int HttpCache::Transaction::DoUpdateCachedResponse() {
   if (mark_single_keyed_cache_entry_unusable_) {
     response_.single_keyed_cache_entry_unusable = true;
   }
-  if (new_response_->vary_data.is_valid()) {
-    response_.vary_data = new_response_->vary_data;
-  } else if (response_.vary_data.is_valid()) {
-    // There is a vary header in the stored response but not in the current one.
-    // Update the data with the new request headers.
-    HttpVaryData new_vary_data;
-    new_vary_data.Init(*request_, *response_.headers.get());
-    response_.vary_data = new_vary_data;
-  }
+
+  // If the new response didn't have a vary header, we continue to use the
+  // header from the stored response per the effect of headers->Update().
+  // Update the data with the new/updated request headers.
+  response_.vary_data.Init(*request_, *response_.headers);
 
   if (ShouldDisableCaching(*response_.headers)) {
     if (!entry_->doomed) {
@@ -2031,7 +2059,7 @@ int HttpCache::Transaction::DoUpdateCachedResponse() {
     }
     TransitionToState(STATE_UPDATE_CACHED_RESPONSE_COMPLETE);
   } else {
-    if (effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE) {
+    if (use_single_keyed_cache_) {
       DCHECK_EQ(method_, "GET");
       ChecksumHeaders();
     }
@@ -2052,7 +2080,7 @@ int HttpCache::Transaction::DoUpdateCachedResponse() {
 int HttpCache::Transaction::DoCacheWriteUpdatedResponse() {
   TRACE_EVENT_WITH_FLOW0("net",
                          "HttpCacheTransaction::DoCacheWriteUpdatedResponse",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   TransitionToState(STATE_CACHE_WRITE_UPDATED_RESPONSE_COMPLETE);
   return WriteResponseInfoToEntry(response_, false);
@@ -2061,7 +2089,7 @@ int HttpCache::Transaction::DoCacheWriteUpdatedResponse() {
 int HttpCache::Transaction::DoCacheWriteUpdatedResponseComplete(int result) {
   TRACE_EVENT_WITH_FLOW0(
       "net", "HttpCacheTransaction::DoCacheWriteUpdatedResponseComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   TransitionToState(STATE_UPDATE_CACHED_RESPONSE_COMPLETE);
   return OnWriteResponseInfoToEntryComplete(result);
@@ -2070,7 +2098,7 @@ int HttpCache::Transaction::DoCacheWriteUpdatedResponseComplete(int result) {
 int HttpCache::Transaction::DoUpdateCachedResponseComplete(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::DoUpdateCachedResponseComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   if (mode_ == UPDATE) {
     DCHECK(!handling_206_);
@@ -2109,7 +2137,7 @@ int HttpCache::Transaction::DoUpdateCachedResponseComplete(int result) {
 int HttpCache::Transaction::DoOverwriteCachedResponse() {
   TRACE_EVENT_WITH_FLOW0("net",
                          "HttpCacheTransaction::DoOverwriteCachedResponse",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   if (mode_ & READ) {
     TransitionToState(STATE_PARTIAL_HEADERS_RECEIVED);
@@ -2122,7 +2150,7 @@ int HttpCache::Transaction::DoOverwriteCachedResponse() {
 
   SetResponse(*new_response_);
 
-  if (effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE) {
+  if (use_single_keyed_cache_) {
     DCHECK_EQ(method_, "GET");
     ChecksumHeaders();
   }
@@ -2151,7 +2179,7 @@ int HttpCache::Transaction::DoOverwriteCachedResponse() {
 
 int HttpCache::Transaction::DoCacheWriteResponse() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoCacheWriteResponse",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(response_.headers);
   // Invalidate any current entry with a successful response if this transaction
@@ -2187,7 +2215,7 @@ int HttpCache::Transaction::DoCacheWriteResponse() {
 int HttpCache::Transaction::DoCacheWriteResponseComplete(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::DoCacheWriteResponseComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   TransitionToState(STATE_TRUNCATE_CACHED_DATA);
   return OnWriteResponseInfoToEntryComplete(result);
@@ -2195,14 +2223,14 @@ int HttpCache::Transaction::DoCacheWriteResponseComplete(int result) {
 
 int HttpCache::Transaction::DoTruncateCachedData() {
   TRACE_EVENT_WITH_FLOW0("net", "HttpCacheTransaction::DoTruncateCachedData",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   TransitionToState(STATE_TRUNCATE_CACHED_DATA_COMPLETE);
   if (!entry_)
     return OK;
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_DATA);
   // Truncate the stream.
-  return entry_->disk_entry->WriteData(kResponseContentIndex, /*offset=*/0,
+  return entry_->GetEntry()->WriteData(kResponseContentIndex, /*offset=*/0,
                                        /*buf=*/nullptr, /*buf_len=*/0,
                                        io_callback_, /*truncate=*/true);
 }
@@ -2210,7 +2238,7 @@ int HttpCache::Transaction::DoTruncateCachedData() {
 int HttpCache::Transaction::DoTruncateCachedDataComplete(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::DoTruncateCachedDataComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   if (entry_) {
     net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_DATA,
@@ -2263,7 +2291,7 @@ int HttpCache::Transaction::DoHeadersPhaseCannotProceed(int result) {
 
 int HttpCache::Transaction::DoFinishHeaders(int result) {
   TRACE_EVENT_WITH_FLOW1(
-      "net", "HttpCacheTransaction::DoFinishHeaders", net_log().source().id,
+      "net", "HttpCacheTransaction::DoFinishHeaders", TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   if (!cache_.get() || !entry_ || result != OK) {
     TransitionToState(STATE_NONE);
@@ -2296,7 +2324,7 @@ int HttpCache::Transaction::DoFinishHeaders(int result) {
 
 int HttpCache::Transaction::DoFinishHeadersComplete(int rv) {
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoFinishHeadersComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", rv);
   entry_lock_waiting_since_ = TimeTicks();
@@ -2325,7 +2353,7 @@ int HttpCache::Transaction::DoFinishHeadersComplete(int rv) {
 
 int HttpCache::Transaction::DoNetworkReadCacheWrite() {
   TRACE_EVENT_WITH_FLOW2("net", "HttpCacheTransaction::DoNetworkReadCacheWrite",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "read_offset", read_offset_, "read_buf_len",
                          read_buf_len_);
@@ -2337,7 +2365,7 @@ int HttpCache::Transaction::DoNetworkReadCacheWrite() {
 int HttpCache::Transaction::DoNetworkReadCacheWriteComplete(int result) {
   TRACE_EVENT_WITH_FLOW1(
       "net", "HttpCacheTransaction::DoNetworkReadCacheWriteComplete",
-      net_log().source().id,
+      TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
   if (!cache_.get()) {
     TransitionToState(STATE_NONE);
@@ -2408,7 +2436,7 @@ int HttpCache::Transaction::DoPartialNetworkReadCompleted(int result) {
 
 int HttpCache::Transaction::DoNetworkRead() {
   TRACE_EVENT_WITH_FLOW2(
-      "net", "HttpCacheTransaction::DoNetworkRead", net_log().source().id,
+      "net", "HttpCacheTransaction::DoNetworkRead", TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "read_offset",
       read_offset_, "read_buf_len", read_buf_len_);
   TransitionToState(STATE_NETWORK_READ_COMPLETE);
@@ -2417,7 +2445,7 @@ int HttpCache::Transaction::DoNetworkRead() {
 
 int HttpCache::Transaction::DoNetworkReadComplete(int result) {
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoNetworkReadComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", result);
 
@@ -2435,7 +2463,7 @@ int HttpCache::Transaction::DoNetworkReadComplete(int result) {
 
 int HttpCache::Transaction::DoCacheReadData() {
   TRACE_EVENT_WITH_FLOW2(
-      "net", "HttpCacheTransaction::DoCacheReadData", net_log().source().id,
+      "net", "HttpCacheTransaction::DoCacheReadData", TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "read_offset",
       read_offset_, "read_buf_len", read_buf_len_);
 
@@ -2449,18 +2477,18 @@ int HttpCache::Transaction::DoCacheReadData() {
 
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_DATA);
   if (partial_) {
-    return partial_->CacheRead(entry_->disk_entry, read_buf_.get(),
+    return partial_->CacheRead(entry_->GetEntry(), read_buf_.get(),
                                read_buf_len_, io_callback_);
   }
 
-  return entry_->disk_entry->ReadData(kResponseContentIndex, read_offset_,
+  return entry_->GetEntry()->ReadData(kResponseContentIndex, read_offset_,
                                       read_buf_.get(), read_buf_len_,
                                       io_callback_);
 }
 
 int HttpCache::Transaction::DoCacheReadDataComplete(int result) {
   TRACE_EVENT_WITH_FLOW1("net", "HttpCacheTransaction::DoCacheReadDataComplete",
-                         net_log().source().id,
+                         TRACE_ID_LOCAL(trace_id_),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "result", result);
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_DATA,
@@ -2498,7 +2526,7 @@ int HttpCache::Transaction::DoCacheReadDataComplete(int result) {
 }
 
 int HttpCache::Transaction::DoMarkSingleKeyedCacheEntryUnusable() {
-  DCHECK(effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE);
+  DCHECK(use_single_keyed_cache_);
   response_.single_keyed_cache_entry_unusable = true;
   TransitionToState(STATE_MARK_SINGLE_KEYED_CACHE_ENTRY_UNUSABLE_COMPLETE);
   return WriteResponseInfoToEntry(response_, /*truncated=*/false);
@@ -2534,6 +2562,9 @@ void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log) {
   effective_load_flags_ = request_->load_flags;
   method_ = request_->method;
 
+  if (!request_->checksum.empty())
+    use_single_keyed_cache_ = true;
+
   if (cache_->mode() == DISABLE)
     effective_load_flags_ |= LOAD_DISABLE_CACHE;
 
@@ -2562,9 +2593,9 @@ void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log) {
   if (request_->extra_headers.HasHeader(HttpRequestHeaders::kRange))
     range_found = true;
 
-  for (size_t i = 0; i < std::size(kSpecialHeaders); ++i) {
-    if (HeaderMatches(request_->extra_headers, kSpecialHeaders[i].search)) {
-      effective_load_flags_ |= kSpecialHeaders[i].load_flag;
+  for (const auto& special_header : kSpecialHeaders) {
+    if (HeaderMatches(request_->extra_headers, special_header.search)) {
+      effective_load_flags_ |= special_header.load_flag;
       special_headers = true;
       break;
     }
@@ -2821,9 +2852,9 @@ int HttpCache::Transaction::BeginPartialCacheValidation() {
 int HttpCache::Transaction::ValidateEntryHeadersAndContinue() {
   DCHECK_EQ(mode_, READ_WRITE);
 
-  if (!partial_->UpdateFromStoredHeaders(response_.headers.get(),
-                                         entry_->disk_entry, truncated_,
-                                         cache_->IsWritingInProgress(entry_))) {
+  if (!partial_->UpdateFromStoredHeaders(
+          response_.headers.get(), entry_->GetEntry(), truncated_,
+          cache_->IsWritingInProgress(entry()))) {
     return DoRestartPartialRequest();
   }
 
@@ -3273,6 +3304,15 @@ int HttpCache::Transaction::DoConnectedCallback() {
 
 int HttpCache::Transaction::DoConnectedCallbackComplete(int result) {
   if (result != OK) {
+    if (result ==
+        ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY) {
+      DoomInconsistentEntry();
+      UpdateCacheEntryStatus(CacheEntryStatus::ENTRY_OTHER);
+      TransitionToState(reading_ ? STATE_SEND_REQUEST
+                                 : STATE_HEADERS_PHASE_CANNOT_PROCEED);
+      return OK;
+    }
+
     if (result == ERR_INCONSISTENT_IP_ADDRESS_SPACE) {
       DoomInconsistentEntry();
     } else {
@@ -3392,7 +3432,7 @@ int HttpCache::Transaction::WriteResponseInfoToEntry(
 
   // When writing headers, we normally only write the non-transient headers.
   bool skip_transient_headers = true;
-  scoped_refptr<PickledIOBuffer> data(new PickledIOBuffer());
+  auto data = base::MakeRefCounted<PickledIOBuffer>();
   response.Persist(data->pickle(), skip_transient_headers, truncated);
   data->Done();
 
@@ -3618,7 +3658,7 @@ HttpTransaction* HttpCache::Transaction::network_transaction() {
 //
 bool HttpCache::Transaction::CanResume(bool has_data) {
   // Double check that there is something worth keeping.
-  if (has_data && !entry_->disk_entry->GetDataSize(kResponseContentIndex))
+  if (has_data && !entry_->GetEntry()->GetDataSize(kResponseContentIndex))
     return false;
 
   if (method_ != "GET")
@@ -3637,6 +3677,12 @@ bool HttpCache::Transaction::CanResume(bool has_data) {
 
 void HttpCache::Transaction::SetResponse(const HttpResponseInfo& response) {
   response_ = response;
+
+  if (response_.headers) {
+    DCHECK(request_);
+    response_.vary_data.Init(*request_, *response_.headers);
+  }
+
   SyncCacheEntryStatusToResponse();
 }
 
@@ -3912,7 +3958,7 @@ void HttpCache::Transaction::UpdateSecurityHeadersBeforeForwarding() {
 }
 
 void HttpCache::Transaction::ChecksumHeaders() {
-  DCHECK(effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE);
+  DCHECK(use_single_keyed_cache_);
   DCHECK(!checksum_);
   checksum_ = crypto::SecureHash::Create(crypto::SecureHash::SHA256);
   // For efficiency and concision, we list known headers matching a wildcard
@@ -3933,7 +3979,7 @@ void HttpCache::Transaction::ChecksumHeaders() {
       "cross-origin-embedder-policy",
       "cross-origin-opener-policy",
       "cross-origin-resource-policy",
-      "location"
+      "location",
       "sec-websocket-accept",
       "sec-websocket-extensions",
       "sec-websocket-key",
@@ -3942,20 +3988,22 @@ void HttpCache::Transaction::ChecksumHeaders() {
       "upgrade",
       "vary",
   });
-  // Iterate the response headers looking for matches.
-  size_t iter = 0;
-  std::string name;
-  std::string value;
   // Pairs of (lower_case_header_name, header_value).
   std::vector<std::pair<std::string, std::string>> filtered_headers;
   // It's good to set the initial allocation size of the vector to the
   // expected size to avoid a lot of reallocations. This value was chosen as
   // it is a nice round number.
   filtered_headers.reserve(16);
-  while (response_.headers->EnumerateHeaderLines(&iter, &name, &value)) {
-    std::string lowered_name = base::ToLowerASCII(name);
-    if (kHeadersToInclude.contains(lowered_name)) {
-      filtered_headers.emplace_back(lowered_name, value);
+  {
+    // Iterate the response headers looking for matches.
+    size_t iter = 0;
+    std::string name;
+    std::string value;
+    while (response_.headers->EnumerateHeaderLines(&iter, &name, &value)) {
+      std::string lowered_name = base::ToLowerASCII(name);
+      if (kHeadersToInclude.contains(lowered_name)) {
+        filtered_headers.emplace_back(lowered_name, value);
+      }
     }
   }
   std::sort(filtered_headers.begin(), filtered_headers.end());
@@ -3972,7 +4020,7 @@ bool HttpCache::Transaction::FinishAndCheckChecksum() {
   if (!checksum_)
     return true;
 
-  DCHECK(effective_load_flags_ & LOAD_USE_SINGLE_KEYED_CACHE);
+  DCHECK(use_single_keyed_cache_);
   return ResponseChecksumMatches(std::move(checksum_));
 }
 

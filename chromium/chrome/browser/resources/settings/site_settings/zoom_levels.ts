@@ -9,10 +9,10 @@
  */
 
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../site_favicon.js';
 
 import {ListPropertyUpdateMixin} from 'chrome://resources/js/list_property_update_mixin.js';
@@ -61,7 +61,7 @@ export class ZoomLevelsElement extends ZoomLevelsElementBase {
     };
   }
 
-  private sites_: Array<ZoomLevelEntry>;
+  private sites_: ZoomLevelEntry[];
   private showNoSites_: boolean;
 
   override ready() {
@@ -69,7 +69,7 @@ export class ZoomLevelsElement extends ZoomLevelsElementBase {
 
     this.addWebUIListener(
         'onZoomLevelsChanged',
-        (sites: Array<ZoomLevelEntry>) => this.onZoomLevelsChanged_(sites));
+        (sites: ZoomLevelEntry[]) => this.onZoomLevelsChanged_(sites));
     this.browserProxy.fetchZoomLevels();
   }
 
@@ -77,7 +77,7 @@ export class ZoomLevelsElement extends ZoomLevelsElementBase {
    * A handler for when zoom levels change.
    * @param sites The up to date list of sites and their zoom levels.
    */
-  private onZoomLevelsChanged_(sites: Array<ZoomLevelEntry>) {
+  private onZoomLevelsChanged_(sites: ZoomLevelEntry[]) {
     this.updateList('sites_', item => item.origin, sites);
     this.showNoSites_ = this.sites_.length === 0;
   }

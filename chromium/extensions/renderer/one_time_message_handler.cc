@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/containers/cxx20_erase.h"
 #include "base/supports_user_data.h"
 #include "content/public/renderer/render_frame.h"
 #include "extensions/common/api/messaging/message.h"
@@ -201,7 +202,8 @@ v8::Local<v8::Promise> OneTimeMessageHandler::SendMessage(
 
     APIRequestHandler::RequestDetails details =
         bindings_system_->api_system()->request_handler()->AddPendingRequest(
-            script_context->v8_context(), async_type, response_callback);
+            script_context->v8_context(), async_type, response_callback,
+            binding::ResultModifierFunction());
     OneTimeOpener& port = data->openers[new_port_id];
     port.request_id = details.request_id;
     port.routing_id = routing_id;
@@ -274,6 +276,17 @@ bool OneTimeMessageHandler::Disconnect(ScriptContext* script_context,
              : DisconnectReceiver(script_context, port_id);
 }
 
+int OneTimeMessageHandler::GetPendingCallbackCountForTest(
+    ScriptContext* script_context) {
+  v8::Isolate* isolate = script_context->isolate();
+  v8::HandleScope handle_scope(isolate);
+
+  OneTimeMessageContextData* data =
+      GetPerContextData<OneTimeMessageContextData>(script_context->v8_context(),
+                                                   kDontCreateIfMissing);
+  return data ? data->pending_callbacks.size() : 0;
+}
+
 bool OneTimeMessageHandler::DeliverMessageToReceiver(
     ScriptContext* script_context,
     const Message& message,
@@ -320,8 +333,8 @@ bool OneTimeMessageHandler::DeliverMessageToReceiver(
   new GCCallback(
       script_context, response_function,
       base::BindOnce(&OneTimeMessageHandler::OnResponseCallbackCollected,
-                     weak_factory_.GetWeakPtr(), script_context,
-                     target_port_id),
+                     weak_factory_.GetWeakPtr(), script_context, target_port_id,
+                     callback.get()),
       base::OnceClosure());
 
   v8::HandleScope handle_scope(isolate);
@@ -515,7 +528,8 @@ void OneTimeMessageHandler::OnOneTimeMessageResponse(
 
 void OneTimeMessageHandler::OnResponseCallbackCollected(
     ScriptContext* script_context,
-    const PortId& port_id) {
+    const PortId& port_id,
+    void* raw_callback) {
   // Note: we know |script_context| is still valid because the GC callback won't
   // be called after context invalidation.
   v8::HandleScope handle_scope(script_context->isolate());
@@ -536,6 +550,14 @@ void OneTimeMessageHandler::OnResponseCallbackCollected(
 
   int routing_id = iter->second.routing_id;
   data->receivers.erase(iter);
+
+  // Since there is no way to call the callback anymore, we can remove it from
+  // the pending callbacks.
+  base::EraseIf(
+      data->pending_callbacks,
+      [raw_callback](const std::unique_ptr<OneTimeMessageCallback>& callback) {
+        return callback.get() == raw_callback;
+      });
 
   // Close the message port. There's no way to send a reply anymore. Don't
   // close the channel because another listener may reply.

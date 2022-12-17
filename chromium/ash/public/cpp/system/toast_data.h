@@ -7,8 +7,8 @@
 
 #include <string>
 
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/ash_public_export.h"
-#include "ash/public/cpp/system/toast_catalog.h"
 #include "base/callback.h"
 #include "base/time/time.h"
 
@@ -56,6 +56,7 @@ struct ASH_PUBLIC_EXPORT ToastData {
   base::RepeatingClosure dismiss_callback;
   base::RepeatingClosure expired_callback;
   base::TimeTicks time_created;
+  base::TimeTicks time_shown;
 };
 
 }  // namespace ash

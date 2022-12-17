@@ -33,6 +33,9 @@ class COMPONENT_EXPORT(UI_BASE_IME_LINUX) FakeInputMethodContext
                       TextInputMode mode,
                       uint32_t flags,
                       bool should_do_learning) override;
+  void SetGrammarFragmentAtCursor(const ui::GrammarFragment& fragment) override;
+  void SetAutocorrectInfo(const gfx::Range& autocorrect_range,
+                          const gfx::Rect& autocorrect_bounds) override;
   VirtualKeyboardController* GetVirtualKeyboardController() override;
 };
 

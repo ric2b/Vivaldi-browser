@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/task_features.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/tick_clock.h"
@@ -22,23 +23,23 @@ namespace internal {
 
 namespace {
 
-// This feature controls whether or not the scheduled task is always abandoned
-// when the timer is stopped or reset. The re-use of the scheduled task is an
-// optimization that ensures a timer can not leave multiple canceled tasks in
-// the task queue.
-constexpr Feature kAlwaysAbandonScheduledTask{"AlwaysAbandonScheduledTask",
-                                              FEATURE_DISABLED_BY_DEFAULT};
-
 // Cache of the state of the kAlwaysAbandonScheduledTask feature. This avoids
 // the need to constantly query its enabled state through
 // FeatureList::IsEnabled().
-bool g_is_always_abandon_scheduled_task_enabled =
-    kAlwaysAbandonScheduledTask.default_state == FEATURE_ENABLED_BY_DEFAULT;
+bool g_is_always_abandon_scheduled_task_enabled = false;
 
 }  // namespace
 
 // static
 void TimerBase::InitializeFeatures() {
+  // Since kAlwaysAbandonScheduledTask is not constexpr (forbidden for
+  // Features), it cannot be used to initialize
+  // |g_is_always_abandon_scheduled_task_enabled| at compile time. At least
+  // DCHECK that its initial value matches the default value of the feature
+  // here.
+  DCHECK_EQ(
+      g_is_always_abandon_scheduled_task_enabled,
+      kAlwaysAbandonScheduledTask.default_state == FEATURE_ENABLED_BY_DEFAULT);
   g_is_always_abandon_scheduled_task_enabled =
       FeatureList::IsEnabled(kAlwaysAbandonScheduledTask);
 }
@@ -199,9 +200,12 @@ void DelayTimerBase::ScheduleNewTask(TimeDelta delay) {
   if (delay < TimeDelta())
     delay = TimeDelta();
 
+  if (!timer_callback_) {
+    timer_callback_ = BindRepeating(&DelayTimerBase::OnScheduledTaskInvoked,
+                                    Unretained(this));
+  }
   delayed_task_handle_ = GetTaskRunner()->PostCancelableDelayedTask(
-      base::subtle::PostDelayedTaskPassKey(), posted_from_,
-      BindOnce(&DelayTimerBase::OnScheduledTaskInvoked, Unretained(this)),
+      base::subtle::PostDelayedTaskPassKey(), posted_from_, timer_callback_,
       delay);
   scheduled_run_time_ = desired_run_time_ = Now() + delay;
 }
@@ -369,7 +373,6 @@ void DeadlineTimer::Start(const Location& posted_from,
   subtle::DelayPolicy delay_policy =
       exact ? subtle::DelayPolicy::kPrecise
             : subtle::DelayPolicy::kFlexiblePreferEarly;
-
   ScheduleNewTask(deadline, delay_policy);
 }
 
@@ -384,9 +387,12 @@ void DeadlineTimer::ScheduleNewTask(TimeTicks deadline,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   is_running_ = true;
 
+  if (!timer_callback_) {
+    timer_callback_ =
+        BindRepeating(&DeadlineTimer::OnScheduledTaskInvoked, Unretained(this));
+  }
   delayed_task_handle_ = GetTaskRunner()->PostCancelableDelayedTaskAt(
-      base::subtle::PostDelayedTaskPassKey(), posted_from_,
-      BindOnce(&DeadlineTimer::OnScheduledTaskInvoked, Unretained(this)),
+      base::subtle::PostDelayedTaskPassKey(), posted_from_, timer_callback_,
       deadline, delay_policy);
 }
 
@@ -451,9 +457,12 @@ void MetronomeTimer::ScheduleNewTask() {
   TimeTicks deadline =
       (TimeTicks::Now() + interval_ / 2).SnappedToNextTick(phase_, interval_);
 
+  if (!timer_callback_) {
+    timer_callback_ = BindRepeating(&MetronomeTimer::OnScheduledTaskInvoked,
+                                    Unretained(this));
+  }
   delayed_task_handle_ = GetTaskRunner()->PostCancelableDelayedTaskAt(
-      base::subtle::PostDelayedTaskPassKey(), posted_from_,
-      BindOnce(&MetronomeTimer::OnScheduledTaskInvoked, Unretained(this)),
+      base::subtle::PostDelayedTaskPassKey(), posted_from_, timer_callback_,
       deadline, subtle::DelayPolicy::kPrecise);
 }
 

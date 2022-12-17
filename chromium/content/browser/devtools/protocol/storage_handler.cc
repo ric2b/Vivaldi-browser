@@ -221,10 +221,10 @@ class StorageHandler::IndexedDBObserver
     auto found = storage_keys_.find(bucket_locator.storage_key);
     if (found == storage_keys_.end())
       return;
-    // TODO(https://crbug.com/1199077): Pass storage key instead once
-    // Chrome DevTools Protocol (CDP) supports it.
+
     owner_->NotifyIndexedDBListChanged(
-        bucket_locator.storage_key.origin().Serialize());
+        bucket_locator.storage_key.origin().Serialize(),
+        bucket_locator.storage_key.Serialize());
   }
 
   void OnIndexedDBContentChanged(
@@ -238,10 +238,10 @@ class StorageHandler::IndexedDBObserver
     auto found = storage_keys_.find(bucket_locator.storage_key);
     if (found == storage_keys_.end())
       return;
-    // TODO(https://crbug.com/1199077): Pass storage key instead once
-    // Chrome DevTools Protocol (CDP) supports it.
+
     owner_->NotifyIndexedDBContentChanged(
-        bucket_locator.storage_key.origin().Serialize(), database_name,
+        bucket_locator.storage_key.origin().Serialize(),
+        bucket_locator.storage_key.Serialize(), database_name,
         object_store_name);
   }
 
@@ -370,17 +370,16 @@ Response StorageHandler::GetStorageKeyForFrame(
   if (!node)
     return Response::InvalidParams("Frame tree node for given frame not found");
   RenderFrameHostImpl* rfh = node->current_frame_host();
+  if (rfh->storage_key().origin().opaque())
+    return Response::ServerError(
+        "Frame corresponds to an opaque origin and its storage key cannot be "
+        "serialized");
   *serialized_storage_key = rfh->storage_key().Serialize();
   return Response::Success();
 }
 
-void StorageHandler::ClearDataForOrigin(
-    const std::string& origin,
-    const std::string& storage_types,
-    std::unique_ptr<ClearDataForOriginCallback> callback) {
-  if (!storage_partition_)
-    return callback->sendFailure(Response::InternalError());
-
+namespace {
+uint32_t GetRemoveDataMask(const std::string& storage_types) {
   std::vector<std::string> types = base::SplitString(
       storage_types, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   std::unordered_set<std::string> set(types.begin(), types.end());
@@ -405,6 +404,18 @@ void StorageHandler::ClearDataForOrigin(
     remove_mask |= StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS;
   if (set.count(Storage::StorageTypeEnum::All))
     remove_mask |= StoragePartition::REMOVE_DATA_MASK_ALL;
+  return remove_mask;
+}
+}  // namespace
+
+void StorageHandler::ClearDataForOrigin(
+    const std::string& origin,
+    const std::string& storage_types,
+    std::unique_ptr<ClearDataForOriginCallback> callback) {
+  if (!storage_partition_)
+    return callback->sendFailure(Response::InternalError());
+
+  uint32_t remove_mask = GetRemoveDataMask(storage_types);
 
   if (!remove_mask) {
     return callback->sendFailure(
@@ -413,29 +424,53 @@ void StorageHandler::ClearDataForOrigin(
 
   storage_partition_->ClearData(
       remove_mask, StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-      GURL(origin), base::Time(), base::Time::Max(),
+      blink::StorageKey(url::Origin::Create(GURL(origin))), base::Time(),
+      base::Time::Max(),
       base::BindOnce(&ClearDataForOriginCallback::sendSuccess,
                      std::move(callback)));
 }
 
+void StorageHandler::ClearDataForStorageKey(
+    const std::string& storage_key,
+    const std::string& storage_types,
+    std::unique_ptr<ClearDataForStorageKeyCallback> callback) {
+  if (!storage_partition_)
+    return callback->sendFailure(Response::InternalError());
+
+  uint32_t remove_mask = GetRemoveDataMask(storage_types);
+
+  if (!remove_mask) {
+    return callback->sendFailure(
+        Response::InvalidParams("No valid storage type specified"));
+  }
+
+  absl::optional<blink::StorageKey> key =
+      blink::StorageKey::Deserialize(storage_key);
+  storage_partition_->ClearData(
+      remove_mask, StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL, *key,
+      base::Time(), base::Time::Max(),
+      base::BindOnce(&ClearDataForStorageKeyCallback::sendSuccess,
+                     std::move(callback)));
+}
+
 void StorageHandler::GetUsageAndQuota(
-    const String& origin,
+    const String& origin_string,
     std::unique_ptr<GetUsageAndQuotaCallback> callback) {
   if (!storage_partition_)
     return callback->sendFailure(Response::InternalError());
 
-  GURL origin_url(origin);
-  if (!origin_url.is_valid()) {
+  GURL origin_url(origin_string);
+  url::Origin origin = url::Origin::Create(origin_url);
+  if (!origin_url.is_valid() || origin.opaque()) {
     return callback->sendFailure(
-        Response::ServerError(origin + " is not a valid URL"));
+        Response::ServerError(origin_string + " is not a valid URL"));
   }
 
   storage::QuotaManager* manager = storage_partition_->GetQuotaManager();
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&GetUsageAndQuotaOnIOThread, base::RetainedRef(manager),
-                     blink::StorageKey(url::Origin::Create(origin_url)),
-                     std::move(callback)));
+                     blink::StorageKey(origin), std::move(callback)));
 }
 
 void StorageHandler::OverrideQuotaForOrigin(
@@ -471,62 +506,93 @@ void StorageHandler::OverrideQuotaForOrigin(
 
 // TODO(https://crbug.com/1199077): We should think about how this function
 // should be exposed when migrating to storage keys.
-Response StorageHandler::TrackCacheStorageForOrigin(const std::string& origin) {
+Response StorageHandler::TrackCacheStorageForOrigin(
+    const std::string& origin_string) {
   if (!storage_partition_)
     return Response::InternalError();
 
-  GURL origin_url(origin);
-  if (!origin_url.is_valid())
-    return Response::InvalidParams(origin + " is not a valid URL");
+  GURL origin_url(origin_string);
+  url::Origin origin = url::Origin::Create(origin_url);
+  if (!origin_url.is_valid() || origin.opaque())
+    return Response::InvalidParams(origin_string + " is not a valid URL");
 
-  GetCacheStorageObserver()->TrackStorageKey(
-      blink::StorageKey(url::Origin::Create(origin_url)));
+  GetCacheStorageObserver()->TrackStorageKey(blink::StorageKey(origin));
   return Response::Success();
 }
 
 // TODO(https://crbug.com/1199077): We should think about how this function
 // should be exposed when migrating to storage keys.
 Response StorageHandler::UntrackCacheStorageForOrigin(
-    const std::string& origin) {
+    const std::string& origin_string) {
   if (!storage_partition_)
     return Response::InternalError();
 
-  GURL origin_url(origin);
-  if (!origin_url.is_valid())
-    return Response::InvalidParams(origin + " is not a valid URL");
+  GURL origin_url(origin_string);
+  url::Origin origin = url::Origin::Create(origin_url);
+  if (!origin_url.is_valid() || origin.opaque())
+    return Response::InvalidParams(origin_string + " is not a valid URL");
 
-  GetCacheStorageObserver()->UntrackStorageKey(
-      blink::StorageKey(url::Origin::Create(origin_url)));
+  GetCacheStorageObserver()->UntrackStorageKey(blink::StorageKey(origin));
   return Response::Success();
 }
 
-Response StorageHandler::TrackIndexedDBForOrigin(const std::string& origin) {
+Response StorageHandler::TrackIndexedDBForOrigin(
+    const std::string& origin_string) {
   if (!storage_partition_)
     return Response::InternalError();
 
-  GURL origin_url(origin);
-  if (!origin_url.is_valid())
-    return Response::InvalidParams(origin + " is not a valid URL");
+  GURL origin_url(origin_string);
+  url::Origin origin = url::Origin::Create(origin_url);
+  if (!origin_url.is_valid() || origin.opaque())
+    return Response::InvalidParams(origin_string + " is not a valid URL");
 
   // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
   // function once the Chrome DevTools Protocol (CDP) supports StorageKey.
-  GetIndexedDBObserver()->TrackOrigin(
-      blink::StorageKey(url::Origin::Create(origin_url)));
+  GetIndexedDBObserver()->TrackOrigin(blink::StorageKey(origin));
   return Response::Success();
 }
 
-Response StorageHandler::UntrackIndexedDBForOrigin(const std::string& origin) {
+Response StorageHandler::TrackIndexedDBForStorageKey(
+    const std::string& storage_key) {
   if (!storage_partition_)
     return Response::InternalError();
 
-  GURL origin_url(origin);
-  if (!origin_url.is_valid())
-    return Response::InvalidParams(origin + " is not a valid URL");
+  absl::optional<blink::StorageKey> key =
+      blink::StorageKey::Deserialize(storage_key);
+  if (!key)
+    return Response::InvalidParams("Unable to deserialize storage key");
+
+  GetIndexedDBObserver()->TrackOrigin(*key);
+  return Response::Success();
+}
+
+Response StorageHandler::UntrackIndexedDBForOrigin(
+    const std::string& origin_string) {
+  if (!storage_partition_)
+    return Response::InternalError();
+
+  GURL origin_url(origin_string);
+  url::Origin origin = url::Origin::Create(origin_url);
+  if (!origin_url.is_valid() || origin.opaque())
+    return Response::InvalidParams(origin_string + " is not a valid URL");
 
   // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
   // function once the Chrome DevTools Protocol (CDP) supports StorageKey.
-  GetIndexedDBObserver()->UntrackOrigin(
-      blink::StorageKey(url::Origin::Create(origin_url)));
+  GetIndexedDBObserver()->UntrackOrigin(blink::StorageKey(origin));
+  return Response::Success();
+}
+
+Response StorageHandler::UntrackIndexedDBForStorageKey(
+    const std::string& storage_key) {
+  if (!storage_partition_)
+    return Response::InternalError();
+
+  absl::optional<blink::StorageKey> key =
+      blink::StorageKey::Deserialize(storage_key);
+  if (!key)
+    return Response::InvalidParams("Unable to deserialize storage key");
+
+  GetIndexedDBObserver()->UntrackOrigin(*key);
   return Response::Success();
 }
 
@@ -564,17 +630,21 @@ void StorageHandler::NotifyCacheStorageContentChanged(const std::string& origin,
   frontend_->CacheStorageContentUpdated(origin, name);
 }
 
-void StorageHandler::NotifyIndexedDBListChanged(const std::string& origin) {
+void StorageHandler::NotifyIndexedDBListChanged(
+    const std::string& origin,
+    const std::string& storage_key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  frontend_->IndexedDBListUpdated(origin);
+  frontend_->IndexedDBListUpdated(origin, storage_key);
 }
 
 void StorageHandler::NotifyIndexedDBContentChanged(
     const std::string& origin,
+    const std::string& storage_key,
     const std::u16string& database_name,
     const std::u16string& object_store_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  frontend_->IndexedDBContentUpdated(origin, base::UTF16ToUTF8(database_name),
+  frontend_->IndexedDBContentUpdated(origin, storage_key,
+                                     base::UTF16ToUTF8(database_name),
                                      base::UTF16ToUTF8(object_store_name));
 }
 

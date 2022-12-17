@@ -13,11 +13,13 @@ include_rules = [
   "+components/page_load_metrics/browser",
   "+components/qr_code_generator",
   "+components/safety_check",
+  "+components/saved_tab_groups",
   "+components/segmentation_platform/content",
   "+components/soda",
   "+components/translate/content/android",
   "+components/user_education/common",
   "+components/user_education/test",
+  "+components/user_education/webui",
   "+services/content/public",
   "+services/device/public/mojom",
   "+components/user_notes",
@@ -31,6 +33,9 @@ specific_include_rules = {
     "+ash/wm/desks/desk.h",
     "+ash/wm/desks/desks_controller.h",
     "+ash/wm/desks/desks_test_util.h",
+  ],
+  "browser_navigator_browsertest\.cc": [
+    "+ash/shell.h",
   ],
   "fullscreen_controller_interactive_browsertest\.cc": [
     "+ash/shell.h",

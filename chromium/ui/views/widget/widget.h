@@ -250,7 +250,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     // If null, a default implementation will be constructed. The default
     // implementation deletes itself when the Widget closes.
-    WidgetDelegate* delegate = nullptr;
+    raw_ptr<WidgetDelegate> delegate = nullptr;
 
     // Internal name. Propagated to the NativeWidget. Useful for debugging.
     std::string name;
@@ -349,13 +349,13 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     // If set, this value is used as the Widget's NativeWidget implementation.
     // The Widget will not construct a default one.
-    NativeWidget* native_widget = nullptr;
+    raw_ptr<NativeWidget> native_widget = nullptr;
 
     // Aura-only. Provides a DesktopWindowTreeHost implementation to use instead
     // of the default one.
     // TODO(beng): Figure out if there's a better way to expose this, e.g. get
     // rid of NW subclasses and do this all via message handling.
-    DesktopWindowTreeHost* desktop_window_tree_host = nullptr;
+    raw_ptr<DesktopWindowTreeHost> desktop_window_tree_host = nullptr;
 
     // Only used by NativeWidgetAura. Specifies the type of layer for the
     // aura::Window.
@@ -393,6 +393,13 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     // If set, the widget was created in headless mode.
     bool headless_mode = false;
+
+#if defined(USE_AURA) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+    // Indicates whether the desktop native widget is required for the widget.
+    // This may enforce changing the type of the underlying platform window.
+    // See crbug.com/1280332
+    bool requires_accelerated_widget = false;
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     // TODO(crbug.com/1327490): Rename restore info variables.
@@ -1202,7 +1209,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Non-owned pointer to the Widget's delegate. If a NULL delegate is supplied
   // to Init() a default WidgetDelegate is created.
-  raw_ptr<WidgetDelegate> widget_delegate_ = nullptr;
+  raw_ptr<WidgetDelegate, DanglingUntriaged> widget_delegate_ = nullptr;
 
   // The parent of this widget. This is the widget that associates with
   // the |params.parent| supplied to Init(). If no parent is given or the native

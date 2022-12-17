@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_components/managed_dialog/managed_dialog.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
@@ -13,7 +13,7 @@ import '../controls/settings_radio_group.js';
 import '../controls/settings_toggle_button.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../settings_vars.css.js';
 import './home_url_input.js';
 import '../controls/settings_dropdown_menu.js';
@@ -157,6 +157,13 @@ export class SettingsAppearancePageElement extends
       },
       // </if>
 
+      showSidePanelOptions_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('showSidePanelOptions');
+        },
+      },
+
       showManagedThemeDialog_: Boolean,
     };
   }
@@ -175,6 +182,7 @@ export class SettingsAppearancePageElement extends
   }
 
   pageVisibility: AppearancePageVisibility;
+  private showSidePanelOptions_: boolean;
   private defaultZoom_: number;
   private isWallpaperPolicyControlled_: boolean;
   private fontSizeOptions_: DropdownMenuOptionList;

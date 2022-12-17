@@ -17,6 +17,7 @@
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/common/pref_names.h"
 #include "components/download/public/common/download_item.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/download_item_utils.h"
@@ -120,7 +121,12 @@ class DownloadBubbleUIControllerDelegate
  public:
   // |profile| is required to outlive DownloadBubbleUIControllerDelegate.
   explicit DownloadBubbleUIControllerDelegate(Profile* profile)
-      : profile_(profile) {}
+      : profile_(profile) {
+    if (download::IsDownloadBubbleV2Enabled(profile_) &&
+        profile_->IsOffTheRecord()) {
+      profile_->GetPrefs()->SetBoolean(prefs::kPromptForDownload, true);
+    }
+  }
   ~DownloadBubbleUIControllerDelegate() override = default;
 
  private:
@@ -184,10 +190,14 @@ DownloadUIController::DownloadUIController(content::DownloadManager* manager,
     delegate_ = std::make_unique<AndroidUIControllerDelegate>();
 #elif BUILDFLAG(IS_CHROMEOS)
   if (!delegate_) {
-    // The Profile is guaranteed to be valid since DownloadUIController is owned
-    // by DownloadService, which in turn is a profile keyed service.
-    delegate_ = std::make_unique<DownloadNotificationManager>(
-        Profile::FromBrowserContext(manager->GetBrowserContext()));
+    if (download::IsDownloadBubbleEnabled(
+            Profile::FromBrowserContext(manager->GetBrowserContext()))) {
+      delegate_ = std::make_unique<DownloadBubbleUIControllerDelegate>(
+          Profile::FromBrowserContext(manager->GetBrowserContext()));
+    } else {
+      delegate_ = std::make_unique<DownloadNotificationManager>(
+          Profile::FromBrowserContext(manager->GetBrowserContext()));
+    }
   }
 #else   // BUILDFLAG(IS_CHROMEOS)
   if (!delegate_) {

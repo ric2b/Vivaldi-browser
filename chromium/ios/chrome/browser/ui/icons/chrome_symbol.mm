@@ -13,28 +13,28 @@
 
 namespace {
 
-// Returns the default configuration with the given |pointSize|.
+// Returns the default configuration with the given `point_size`.
 UIImageConfiguration* DefaultSymbolConfigurationWithPointSize(
-    NSInteger pointSize) {
+    CGFloat point_size) {
   return [UIImageSymbolConfiguration
-      configurationWithPointSize:pointSize
+      configurationWithPointSize:point_size
                           weight:UIImageSymbolWeightMedium
                            scale:UIImageSymbolScaleMedium];
 }
 
-// Returns a symbol named |symbolName| configured with the given
-// |configuration|. |systemSymbol| is used to specify if it is a SFSymbol or a
+// Returns a symbol named `symbol_name` configured with the given
+// `configuration`. `system_symbol` is used to specify if it is a SFSymbol or a
 // custom symbol.
 
-UIImage* SymbolWithConfiguration(NSString* symbolName,
+UIImage* SymbolWithConfiguration(NSString* symbol_name,
                                  UIImageConfiguration* configuration,
-                                 BOOL systemSymbol) {
+                                 BOOL system_symbol) {
   UIImage* symbol;
-  if (systemSymbol) {
-    symbol = [UIImage systemImageNamed:symbolName
+  if (system_symbol) {
+    symbol = [UIImage systemImageNamed:symbol_name
                      withConfiguration:configuration];
   } else {
-    symbol = [UIImage imageNamed:symbolName
+    symbol = [UIImage imageNamed:symbol_name
                         inBundle:nil
                withConfiguration:configuration];
   }
@@ -53,9 +53,10 @@ NSString* const kTranslateSymbol = @"translate";
 NSString* const kCameraSymbol = @"camera";
 NSString* const kCameraFillSymbol = @"camera_fill";
 NSString* const kPlusCircleFillSymbol = @"plus_circle_fill";
-NSString* const kArrowTriangleSlashCirclePathSymbol =
-    @"arrow_triangle_slash_circlepath";
 NSString* const kPopupBadgeMinusSymbol = @"popup_badge_minus";
+NSString* const kPhotoBadgePlusSymbol = @"photo_badge_plus";
+NSString* const kPhotoBadgeMagnifyingglassSymbol =
+    @"photo_badge_magnifyinggglass";
 
 // Default symbol names.
 NSString* const kCreditCardSymbol = @"creditcard";
@@ -79,36 +80,37 @@ NSString* const kCheckMarkCircleFillSymbol = @"checkmark.circle.fill";
 NSString* const kFailMarkCircleFillSymbol = @"exclamationmark.circle.fill";
 NSString* const kTrashSymbol = @"trash";
 NSString* const kInfoCircleSymbol = @"info.circle";
+NSString* const kClockArrowSymbol = @"clock.arrow.circlepath";
 
-UIImage* DefaultSymbolWithConfiguration(NSString* symbolName,
+UIImage* DefaultSymbolWithConfiguration(NSString* symbol_name,
                                         UIImageConfiguration* configuration) {
-  return SymbolWithConfiguration(symbolName, configuration, true);
+  return SymbolWithConfiguration(symbol_name, configuration, true);
 }
 
-UIImage* CustomSymbolWithConfiguration(NSString* symbolName,
+UIImage* CustomSymbolWithConfiguration(NSString* symbol_name,
                                        UIImageConfiguration* configuration) {
-  return SymbolWithConfiguration(symbolName, configuration, false);
+  return SymbolWithConfiguration(symbol_name, configuration, false);
 }
 
-UIImage* DefaultSymbolWithPointSize(NSString* symbolName, NSInteger pointSize) {
+UIImage* DefaultSymbolWithPointSize(NSString* symbol_name, CGFloat point_size) {
   return DefaultSymbolWithConfiguration(
-      symbolName, DefaultSymbolConfigurationWithPointSize(pointSize));
+      symbol_name, DefaultSymbolConfigurationWithPointSize(point_size));
 }
 
-UIImage* CustomSymbolWithPointSize(NSString* symbolName, NSInteger pointSize) {
+UIImage* CustomSymbolWithPointSize(NSString* symbol_name, CGFloat point_size) {
   return CustomSymbolWithConfiguration(
-      symbolName, DefaultSymbolConfigurationWithPointSize(pointSize));
+      symbol_name, DefaultSymbolConfigurationWithPointSize(point_size));
 }
 
-UIImage* DefaultSymbolTemplateWithPointSize(NSString* symbolName,
-                                            NSInteger pointSize) {
-  return [DefaultSymbolWithPointSize(symbolName, pointSize)
+UIImage* DefaultSymbolTemplateWithPointSize(NSString* symbol_name,
+                                            CGFloat point_size) {
+  return [DefaultSymbolWithPointSize(symbol_name, point_size)
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
-UIImage* CustomSymbolTemplateWithPointSize(NSString* symbolName,
-                                           NSInteger pointSize) {
-  return [CustomSymbolWithPointSize(symbolName, pointSize)
+UIImage* CustomSymbolTemplateWithPointSize(NSString* symbol_name,
+                                           CGFloat point_size) {
+  return [CustomSymbolWithPointSize(symbol_name, point_size)
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 

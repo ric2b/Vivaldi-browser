@@ -13,11 +13,10 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/ash/components/network/proxy/proxy_config_service_impl.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -52,20 +51,15 @@ NetworkSettingsServiceAsh::NetworkSettingsServiceAsh(PrefService* local_state)
     profile_manager_->AddObserver(this);
   }
   // Uninitialized in unit_tests.
-  if (chromeos::NetworkHandler::IsInitialized()) {
-    chromeos::NetworkHandler::Get()->network_state_handler()->AddObserver(
-        this, FROM_HERE);
+  if (ash::NetworkHandler::IsInitialized()) {
+    network_state_handler_observer_.Observe(
+        ash::NetworkHandler::Get()->network_state_handler());
   }
   observers_.set_disconnect_handler(base::BindRepeating(
       &NetworkSettingsServiceAsh::OnDisconnect, base::Unretained(this)));
 }
 
 NetworkSettingsServiceAsh::~NetworkSettingsServiceAsh() {
-  // Uninitialized in unit_tests.
-  if (chromeos::NetworkHandler::IsInitialized()) {
-    chromeos::NetworkHandler::Get()->network_state_handler()->RemoveObserver(
-        this, FROM_HERE);
-  }
   if (profile_manager_) {
     profile_manager_->RemoveObserver(this);
   }
@@ -77,7 +71,7 @@ void NetworkSettingsServiceAsh::BindReceiver(
 }
 
 void NetworkSettingsServiceAsh::DefaultNetworkChanged(
-    const chromeos::NetworkState* network) {
+    const ash::NetworkState* network) {
   if (!network) {
     cached_wpad_url_ = GURL();
     return;
@@ -200,8 +194,8 @@ void NetworkSettingsServiceAsh::DetermineEffectiveProxy() {
   if (!pref_service)
     return;
   crosapi::mojom::ProxyConfigPtr new_proxy_config = ProxyConfigToCrosapiProxy(
-      chromeos::ProxyConfigServiceImpl::GetActiveProxyConfigDictionary(
-          pref_service, local_state_)
+      ash::ProxyConfigServiceImpl::GetActiveProxyConfigDictionary(pref_service,
+                                                                  local_state_)
           .get(),
       cached_wpad_url_);
 

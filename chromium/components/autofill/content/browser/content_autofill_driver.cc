@@ -79,6 +79,10 @@ bool ContentAutofillDriver::IsIncognito() const {
       ->IsOffTheRecord();
 }
 
+bool ContentAutofillDriver::IsInActiveFrame() const {
+  return render_frame_host_->IsActive();
+}
+
 bool ContentAutofillDriver::IsInAnyMainFrame() const {
   return render_frame_host_->GetMainFrame() == render_frame_host_;
 }
@@ -109,17 +113,6 @@ ContentAutofillDriver::GetURLLoaderFactory() {
 
 bool ContentAutofillDriver::RendererIsAvailable() {
   return render_frame_host_->GetRenderViewHost() != nullptr;
-}
-
-webauthn::InternalAuthenticator*
-ContentAutofillDriver::GetOrCreateCreditCardInternalAuthenticator() {
-  if (!authenticator_impl_ && autofill_manager_ &&
-      autofill_manager_->client()) {
-    authenticator_impl_ =
-        autofill_manager_->client()->CreateCreditCardInternalAuthenticator(
-            render_frame_host_);
-  }
-  return authenticator_impl_.get();
 }
 
 void ContentAutofillDriver::PopupHidden() {
@@ -165,11 +158,6 @@ void ContentAutofillDriver::FillOrPreviewFormImpl(
     return;
 
   GetAutofillAgent()->FillOrPreviewForm(query_id, data, action);
-}
-
-void ContentAutofillDriver::HandleParsedForms(
-    const std::vector<const FormData*>& forms) {
-  // No op.
 }
 
 void ContentAutofillDriver::SendAutofillTypePredictionsToRendererImpl(
@@ -331,13 +319,13 @@ void ContentAutofillDriver::SelectControlDidChangeImpl(
 }
 
 void ContentAutofillDriver::AskForValuesToFillImpl(
-    int32_t query_id,
     const FormData& form,
     const FormFieldData& field,
     const gfx::RectF& bounding_box,
+    int32_t query_id,
     bool autoselect_first_suggestion,
     TouchToFillEligible touch_to_fill_eligible) {
-  autofill_manager_->OnAskForValuesToFill(query_id, form, field, bounding_box,
+  autofill_manager_->OnAskForValuesToFill(form, field, bounding_box, query_id,
                                           autoselect_first_suggestion,
                                           touch_to_fill_eligible);
 }
@@ -374,24 +362,27 @@ void ContentAutofillDriver::DidEndTextFieldEditingImpl() {
 
 void ContentAutofillDriver::SelectFieldOptionsDidChangeImpl(
     const FormData& form) {
-  autofill_manager_->SelectFieldOptionsDidChange(form);
+  autofill_manager_->OnSelectFieldOptionsDidChange(form);
 }
 
 void ContentAutofillDriver::JavaScriptChangedAutofilledValueImpl(
     const FormData& form,
     const FormFieldData& field,
     const std::u16string& old_value) {
-  autofill_manager_->JavaScriptChangedAutofilledValue(form, field, old_value);
+  autofill_manager_->OnJavaScriptChangedAutofilledValue(form, field, old_value);
 }
 
 void ContentAutofillDriver::FillFormForAssistantImpl(
     const AutofillableData& fill_data,
     const FormData& form,
-    const FormFieldData& field) {
+    const FormFieldData& field,
+    const autofill_assistant::AutofillAssistantIntent intent) {
   DCHECK(autofill_manager_);
   if (fill_data.is_profile()) {
+    autofill_manager_->SetProfileFillViaAutofillAssistantIntent(intent);
     autofill_manager_->FillProfileForm(fill_data.profile(), form, field);
   } else if (fill_data.is_credit_card()) {
+    autofill_manager_->SetCreditCardFillViaAutofillAssistantIntent(intent);
     autofill_manager_->FillCreditCardForm(
         /*query_id=*/kNoQueryId, form, field, fill_data.credit_card(),
         fill_data.cvc());
@@ -487,10 +478,10 @@ void ContentAutofillDriver::SelectControlDidChange(
 }
 
 void ContentAutofillDriver::AskForValuesToFill(
-    int32_t query_id,
     const FormData& raw_form,
     const FormFieldData& raw_field,
     const gfx::RectF& bounding_box,
+    int32_t query_id,
     bool autoselect_first_suggestion,
     TouchToFillEligible touch_to_fill_eligible) {
   if (!bad_message::CheckFrameNotPrerendering(render_frame_host_))
@@ -499,8 +490,8 @@ void ContentAutofillDriver::AskForValuesToFill(
   FormFieldData field = raw_field;
   SetFrameAndFormMetaData(form, &field);
   GetAutofillRouter().AskForValuesToFill(
-      this, query_id, form, field,
-      TransformBoundingBoxToViewportCoordinates(bounding_box),
+      this, form, field,
+      TransformBoundingBoxToViewportCoordinates(bounding_box), query_id,
       autoselect_first_suggestion, touch_to_fill_eligible);
 }
 
@@ -573,11 +564,13 @@ void ContentAutofillDriver::JavaScriptChangedAutofilledValue(
 void ContentAutofillDriver::FillFormForAssistant(
     const AutofillableData& fill_data,
     const FormData& raw_form,
-    const FormFieldData& raw_field) {
+    const FormFieldData& raw_field,
+    const autofill_assistant::AutofillAssistantIntent intent) {
   FormData form = raw_form;
   FormFieldData field = raw_field;
   SetFrameAndFormMetaData(form, &field);
-  GetAutofillRouter().FillFormForAssistant(this, fill_data, form, field);
+  GetAutofillRouter().FillFormForAssistant(this, fill_data, form, field,
+                                           intent);
 }
 
 void ContentAutofillDriver::DidNavigateFrame(

@@ -7,7 +7,6 @@
 #include <string>
 
 #include "ash/constants/ash_features.h"
-#include "ash/style/ash_color_provider.h"
 #include "ash/webui/file_manager/resources/grit/file_manager_swa_resources.h"
 #include "ash/webui/file_manager/url_constants.h"
 #include "base/strings/utf_string_conversions.h"
@@ -70,11 +69,10 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForFileManager() {
       },
       *info);
 
-  auto* color_provider = ash::AshColorProvider::Get();
-  info->theme_color =
-      color_provider->GetBackgroundColorInMode(/*use_dark_color=*/false);
-  info->dark_mode_theme_color =
-      color_provider->GetBackgroundColorInMode(/*use_dark_color=*/true);
+  info->theme_color = cros_styles::ResolveColor(
+      cros_styles::ColorName::kBgColor, /*is_dark_mode=*/false);
+  info->dark_mode_theme_color = cros_styles::ResolveColor(
+      cros_styles::ColorName::kBgColor, /*is_dark_mode=*/true);
   info->background_color = info->theme_color;
   info->dark_mode_background_color = info->dark_mode_theme_color;
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
@@ -122,15 +120,8 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForFileManager() {
   AppendFileHandler(*info, "open-hosted-gslides", {"gslides"});
 
   // Drive & Office Docs:
-  AppendFileHandler(*info,
-                    ::file_manager::file_tasks::kActionIdWebDriveOfficeWord,
-                    {"doc", "docx"});
-  AppendFileHandler(*info,
-                    ::file_manager::file_tasks::kActionIdWebDriveOfficeExcel,
-                    {"xls", "xlsx"});
-  AppendFileHandler(
-      *info, ::file_manager::file_tasks::kActionIdWebDriveOfficePowerPoint,
-      {"ppt", "pptx"});
+  AppendFileHandler(*info, ::file_manager::file_tasks::kActionIdHandleOffice,
+                    {"doc", "docx", "xls", "xlsx", "ppt", "pptx"});
 
   // View in the browser (with mime-type):
   AppendFileHandler(*info, "view-pdf", {"pdf"}, "application/pdf");

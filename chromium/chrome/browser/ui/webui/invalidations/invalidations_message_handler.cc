@@ -87,7 +87,7 @@ void InvalidationsMessageHandler::UpdateContent(const base::Value::List& args) {
 
 void InvalidationsMessageHandler::OnRegistrationChange(
     const std::set<std::string>& registered_handlers) {
-  base::ListValue list_of_handlers;
+  base::Value::List list_of_handlers;
   for (const auto& registered_handler : registered_handlers) {
     list_of_handlers.Append(registered_handler);
   }
@@ -117,11 +117,10 @@ void InvalidationsMessageHandler::OnUpdatedTopics(
     dict.Set("totalCount", topic_item.second);
     list_of_objects.Append(std::move(dict));
   }
-  FireWebUIListener("update-ids", base::Value(handler_name),
-                    base::Value(std::move(list_of_objects)));
+  FireWebUIListener("update-ids", base::Value(handler_name), list_of_objects);
 }
 void InvalidationsMessageHandler::OnDebugMessage(
-    const base::DictionaryValue& details) {}
+    const base::Value::Dict& details) {}
 
 void InvalidationsMessageHandler::OnInvalidation(
     const invalidation::TopicInvalidationMap& new_invalidations) {
@@ -131,6 +130,6 @@ void InvalidationsMessageHandler::OnInvalidation(
 }
 
 void InvalidationsMessageHandler::OnDetailedStatus(
-    const base::DictionaryValue& network_details) {
+    base::Value::Dict network_details) {
   FireWebUIListener("detailed-status-updated", network_details);
 }

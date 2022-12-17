@@ -815,6 +815,30 @@ TEST_P(LayoutBoxTest, OverflowRectsOverflowHidden) {
             container->OverflowClipRect(PhysicalOffset()));
 }
 
+TEST_P(LayoutBoxTest, SetTextFieldIntrinsicInlineSize) {
+  LoadAhem();
+  SetBodyInnerHTML(R"HTML(
+   <style>
+     input { font: 10px Ahem; }
+     #a::-webkit-inner-spin-button{ width: 50%; appearance: none; }
+     #b::-webkit-inner-spin-button{ width: 50px; appearance: none; }
+     #c::-webkit-inner-spin-button{ width: 100%; appearance: none; }
+   </style>
+   <input id='a' type='number' min='100' max='100' step='1'/>
+   <input id='b' type='number' min='100' max='100' step='1'/>
+   <input id='c' type='number' min='100' max='100' step='1'/>
+  )HTML");
+
+  LayoutBox* a = GetLayoutBoxByElementId("a");
+  EXPECT_EQ(LayoutUnit(60), a->DefaultIntrinsicContentInlineSize());
+
+  LayoutBox* b = GetLayoutBoxByElementId("b");
+  EXPECT_EQ(LayoutUnit(80), b->DefaultIntrinsicContentInlineSize());
+
+  LayoutBox* c = GetLayoutBoxByElementId("c");
+  EXPECT_EQ(LayoutUnit(30), c->DefaultIntrinsicContentInlineSize());
+}
+
 class AnimatedImage : public StubImage {
  public:
   bool MaybeAnimated() override { return true; }
@@ -1949,6 +1973,71 @@ TEST_P(LayoutBoxTest, ScrollsWithViewportFixedPositionInsideTransform) {
     <div style='width: 10px; height: 1000px'></div>
   )HTML");
   EXPECT_FALSE(GetLayoutBoxByElementId("target")->IsFixedToView());
+}
+
+TEST_P(LayoutBoxTest, HitTestResizerWithTextAreaChild) {
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin: 0; }</style>
+    <div id="target"
+         style="width: 100px; height: 100px; overflow: auto; resize: both">
+      <textarea id="textarea"
+          style="width: 100%; height: 100%; resize: none"></textarea>
+    </div>
+  )HTML");
+
+  EXPECT_EQ(GetDocument().getElementById("target"), HitTest(99, 99));
+  EXPECT_TRUE(HitTest(1, 1)->IsDescendantOrShadowDescendantOf(
+      GetDocument().getElementById("textarea")));
+}
+
+TEST_P(LayoutBoxTest, HitTestResizerStackedWithTextAreaChild) {
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin: 0; }</style>
+    <div id="target" style="position: relative; width: 100px; height: 100px;
+                            overflow: auto; resize: both">
+      <textarea id="textarea"
+          style="width: 100%; height: 100%; resize: none"></textarea>
+    </div>
+  )HTML");
+
+  EXPECT_EQ(GetDocument().getElementById("target"), HitTest(99, 99));
+  EXPECT_TRUE(HitTest(1, 1)->IsDescendantOrShadowDescendantOf(
+      GetDocument().getElementById("textarea")));
+}
+
+TEST_P(LayoutBoxTest, AnchorScrollObject) {
+  // LayoutBox::AnchorScrollObject() calculation is NG-only.
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return;
+
+  ScopedCSSAnchorPositioningForTest enabled_scope(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <div style="position: relative">
+      <div>
+        Lorem ipsum
+        <span id="anchor" style="anchor-name: --a1">anchor</span>
+        dolor sit amet
+      </div>
+      <div id="anchored" style="position: absolute; anchor-scroll: --a1">
+        anchored
+      </div>
+      <div id="no-anchor" style="position: absolute; anchor-scroll: --b1">
+        anchor not found
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  const LayoutBox* anchored =
+      To<LayoutBox>(GetLayoutObjectByElementId("anchored"));
+  EXPECT_EQ(anchored->AnchorScrollObject(),
+            GetLayoutObjectByElementId("anchor"));
+
+  const LayoutBox* anchor_not_found =
+      To<LayoutBox>(GetLayoutObjectByElementId("no-anchor"));
+  EXPECT_FALSE(anchor_not_found->AnchorScrollObject());
 }
 
 class LayoutBoxBackgroundPaintLocationTest : public RenderingTest,

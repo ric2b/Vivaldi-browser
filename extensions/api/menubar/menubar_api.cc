@@ -101,6 +101,8 @@ int getIdByAction(const menubar::MenuItem& item) {
   // And containers
   else if (item.action == "CONTAINER_MAC_SERVICES")
     tag_map[item.action] = {IDC_VIV_MAC_SERVICES, item.with_no_window, enabled};
+  else if (item.action == "CONTAINER_SHARE_MENU")
+    tag_map[item.action] = {IDC_VIV_SHARE_MENU_MAC, item.with_no_window, enabled};
   else if (item.action == "CONTAINER_BOOKMARK") {
     tag_map[item.action] = {IDC_VIV_BOOKMARK_CONTAINER, item.with_no_window,
                             enabled};
@@ -173,7 +175,7 @@ bool MenubarAPI::GetIsEnabled(int id, bool hasWindow, bool* enabled) {
       if (it->second.enabled_with_no_window) {
         *enabled = !hasWindow || it->second.enabled;
       } else {
-        *enabled = it->second.enabled;
+        *enabled = hasWindow && it->second.enabled;
       }
       return true;
     }

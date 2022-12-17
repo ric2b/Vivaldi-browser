@@ -37,22 +37,22 @@ CommanderHandler::CommanderHandler() = default;
 CommanderHandler::~CommanderHandler() = default;
 
 void CommanderHandler::RegisterMessages() {
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       kTextChangedMessage,
       base::BindRepeating(&CommanderHandler::HandleTextChanged,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       kOptionSelectedMessage,
       base::BindRepeating(&CommanderHandler::HandleOptionSelected,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       kCompositeCommandCancelledMessage,
       base::BindRepeating(&CommanderHandler::HandleCompositeCommandCancelled,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       kDismissMessage, base::BindRepeating(&CommanderHandler::HandleDismiss,
                                            base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       kHeightChangedMessage,
       base::BindRepeating(&CommanderHandler::HandleHeightChanged,
                           base::Unretained(this)));
@@ -68,73 +68,73 @@ void CommanderHandler::OnJavascriptAllowed() {
     delegate_->OnHandlerEnabled(true);
 }
 
-void CommanderHandler::HandleTextChanged(const base::ListValue* args) {
+void CommanderHandler::HandleTextChanged(const base::Value::List& args) {
   AllowJavascript();
-  CHECK_EQ(1u, args->GetListDeprecated().size());
-  std::string text = args->GetListDeprecated()[0].GetString();
+  CHECK_EQ(1u, args.size());
+  std::string text = args[0].GetString();
   if (delegate_)
     delegate_->OnTextChanged(base::UTF8ToUTF16(text));
 }
 
-void CommanderHandler::HandleOptionSelected(const base::ListValue* args) {
+void CommanderHandler::HandleOptionSelected(const base::Value::List& args) {
   AllowJavascript();
-  CHECK_EQ(2u, args->GetListDeprecated().size());
-  int index = args->GetListDeprecated()[0].GetInt();
-  int result_set_id = args->GetListDeprecated()[1].GetInt();
+  CHECK_EQ(2u, args.size());
+  int index = args[0].GetInt();
+  int result_set_id = args[1].GetInt();
   if (delegate_)
     delegate_->OnOptionSelected(index, result_set_id);
 }
 
 void CommanderHandler::HandleCompositeCommandCancelled(
-    const base::ListValue* args) {
+    const base::Value::List& args) {
   if (!delegate_)
     return;
   AllowJavascript();
   delegate_->OnCompositeCommandCancelled();
 }
 
-void CommanderHandler::HandleDismiss(const base::ListValue* args) {
+void CommanderHandler::HandleDismiss(const base::Value::List& args) {
   if (delegate_)
     delegate_->OnDismiss();
 }
 
-void CommanderHandler::HandleHeightChanged(const base::ListValue* args) {
-  CHECK_EQ(1u, args->GetListDeprecated().size());
-  int new_height = args->GetListDeprecated()[0].GetInt();
+void CommanderHandler::HandleHeightChanged(const base::Value::List& args) {
+  CHECK_EQ(1u, args.size());
+  int new_height = args[0].GetInt();
   if (delegate_)
     delegate_->OnHeightChanged(new_height);
 }
 
 void CommanderHandler::ViewModelUpdated(
     commander::CommanderViewModel view_model) {
-  base::DictionaryValue vm;
-  vm.GetDict().Set(kActionKey, view_model.action);
-  vm.GetDict().Set(kResultSetIdKey, view_model.result_set_id);
+  base::Value::Dict vm;
+  vm.Set(kActionKey, view_model.action);
+  vm.Set(kResultSetIdKey, view_model.result_set_id);
   if (view_model.action ==
       commander::CommanderViewModel::Action::kDisplayResults) {
-    base::ListValue option_list;
+    base::Value::List option_list;
     for (commander::CommandItemViewModel& item : view_model.items) {
-      base::DictionaryValue option;
-      option.GetDict().Set(kTitleKey, item.title);
-      option.GetDict().Set(kEntityKey, item.entity_type);
+      base::Value::Dict option;
+      option.Set(kTitleKey, item.title);
+      option.Set(kEntityKey, item.entity_type);
       if (!item.annotation.empty())
-        option.GetDict().Set(kAnnotationKey, item.annotation);
-      base::ListValue ranges;
+        option.Set(kAnnotationKey, item.annotation);
+      base::Value::List ranges;
       for (const gfx::Range& range : item.matched_ranges) {
-        base::ListValue range_value;
+        base::Value::List range_value;
         range_value.Append(static_cast<int>(range.start()));
         range_value.Append(static_cast<int>(range.end()));
         ranges.Append(std::move(range_value));
       }
-      option.GetDict().Set(kMatchedRangesKey, std::move(ranges));
+      option.Set(kMatchedRangesKey, std::move(ranges));
       option_list.Append(std::move(option));
     }
-    vm.GetDict().Set(kOptionsKey, std::move(option_list));
+    vm.Set(kOptionsKey, std::move(option_list));
   } else {
     // kDismiss is handled higher in the stack.
     DCHECK_EQ(view_model.action,
               commander::CommanderViewModel::Action::kPrompt);
-    vm.GetDict().Set(kPromptTextKey, view_model.prompt_text);
+    vm.Set(kPromptTextKey, view_model.prompt_text);
   }
   FireWebUIListener(kViewModelUpdatedEvent, vm);
 }

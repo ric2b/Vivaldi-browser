@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.app.omnibox.OmniboxPedalDelegateImpl;
 import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
@@ -40,6 +41,7 @@ import org.chromium.chrome.browser.init.SingleWindowKeyboardVisibilityDelegate;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.BackKeyBehaviorDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.OverrideUrlLoadingDelegate;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
@@ -191,6 +193,12 @@ public class SearchActivity extends AsyncInitializationActivity
             loadUrl(url, transition, postDataType, postData);
             return true;
         };
+
+        BackPressManager backPressManager = null;
+        if (BackPressManager.isEnabled()) {
+            backPressManager = new BackPressManager();
+            getOnBackPressedDispatcher().addCallback(this, backPressManager.getCallback());
+        }
         // clang-format off
         mLocationBarCoordinator = new LocationBarCoordinator(mSearchBox, anchorView,
                 mProfileSupplier, PrivacyPreferencesManagerImpl.getInstance(),
@@ -204,11 +212,10 @@ public class SearchActivity extends AsyncInitializationActivity
                 /*saveOfflineButtonState=*/(tab) -> false, /*omniboxUma*/(url, transition) -> {},
                 TabWindowManagerSingleton::getInstance, /*bookmarkState=*/(url) -> false,
                 VoiceToolbarButtonController::isToolbarMicEnabled, new DummyJankTracker(),
-                /*ExploreIconState*/(pixelSize, callback) ->{},
                 /*merchantTrustSignalsCoordinatorSupplier=*/null,
                 new OmniboxPedalDelegateImpl(this, new OneshotSupplierImpl<>(),
                         getModalDialogManagerSupplier()), null,
-                ChromePureJavaExceptionReporter::postReportJavaException);
+                ChromePureJavaExceptionReporter::postReportJavaException, backPressManager);
         // clang-format on
         mLocationBarCoordinator.setUrlBarFocusable(true);
         mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
@@ -406,7 +413,8 @@ public class SearchActivity extends AsyncInitializationActivity
         // Vivaldi
         if (ChromeApplicationImpl.isVivaldi() && IntentUtils.safeGetBooleanExtra(
                 getIntent(), VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, false)) {
-            VivaldiQrCodeScanDialog dialog = VivaldiQrCodeScanDialog.newInstance();
+            VivaldiQrCodeScanDialog dialog =
+                    VivaldiQrCodeScanDialog.newInstance(getWindowAndroid());
             dialog.show(getFragmentManager(), null);
             return;
         }
@@ -514,6 +522,14 @@ public class SearchActivity extends AsyncInitializationActivity
                 cancelSearch();
             }
         });
+
+        if (OmniboxFeatures.shouldShowModernizeVisualUpdate(this)) {
+            View toolbarView = contentView.findViewById(R.id.toolbar);
+            final int edgePadding =
+                    getResources().getDimensionPixelOffset(R.dimen.toolbar_edge_padding_modern);
+            toolbarView.setPaddingRelative(edgePadding, toolbarView.getPaddingTop(), edgePadding,
+                    toolbarView.getPaddingBottom());
+        }
         return contentView;
     }
 

@@ -26,7 +26,11 @@ enum class WidgetKitExtensionKind {
   kSearch = 1,
   kQuickActions = 2,
   kObsolete = 3,
-  kMaxValue = kObsolete,
+  kLockscreenLauncherSearch = 4,
+  kLockscreenLauncherIncognito = 5,
+  kLockscreenLauncherVoiceSearch = 6,
+  kLockscreenLauncherGame = 7,
+  kMaxValue = kLockscreenLauncherGame,
 };
 
 WidgetKitExtensionKind UMAKindForWidgetKind(NSString* kind) {
@@ -42,6 +46,19 @@ WidgetKitExtensionKind UMAKindForWidgetKind(NSString* kind) {
   if ([kind isEqualToString:@"QuickActionsWidget"]) {
     return WidgetKitExtensionKind::kQuickActions;
   }
+  if ([kind isEqualToString:@"LockscreenLauncherSearchWidget"]) {
+    return WidgetKitExtensionKind::kLockscreenLauncherSearch;
+  }
+  if ([kind isEqualToString:@"LockscreenLauncherIncognitoWidget"]) {
+    return WidgetKitExtensionKind::kLockscreenLauncherIncognito;
+  }
+  if ([kind isEqualToString:@"LockscreenLauncherVoiceSearchWidget"]) {
+    return WidgetKitExtensionKind::kLockscreenLauncherVoiceSearch;
+  }
+  if ([kind isEqualToString:@"LockscreenLauncherGameWidget"]) {
+    return WidgetKitExtensionKind::kLockscreenLauncherGame;
+  }
+
   NOTREACHED() << base::SysNSStringToUTF8(kind);
   return WidgetKitExtensionKind::kObsolete;
 }

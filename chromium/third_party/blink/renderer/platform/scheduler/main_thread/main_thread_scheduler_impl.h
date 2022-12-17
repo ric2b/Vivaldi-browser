@@ -28,9 +28,10 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/idle_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/common/pollable_thread_safe_flag.h"
-#include "third_party/blink/renderer/platform/scheduler/common/thread_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/common/thread_scheduler_base.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/deadline_task_runner.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/find_in_page_budget_pool_controller.h"
@@ -44,7 +45,9 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/render_widget_signals.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/use_case.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/user_model.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/widget_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/rail_mode_observer.h"
 #include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -53,6 +56,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 namespace base {
+class LazyNow;
 class TaskObserver;
 }  // namespace base
 
@@ -69,6 +73,8 @@ FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest, ShouldIgnoreTaskForUkm);
 FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest, Tracing);
 FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest,
                      LogIpcsPostedToDocumentsInBackForwardCache);
+FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest,
+                     CanExceedIdleDeadlineIfRequired);
 }  // namespace main_thread_scheduler_impl_unittest
 class AgentGroupSchedulerImpl;
 class FrameSchedulerImpl;
@@ -77,7 +83,9 @@ class WebRenderWidgetSchedulingState;
 class CPUTimeBudgetPool;
 
 class PLATFORM_EXPORT MainThreadSchedulerImpl
-    : public ThreadSchedulerImpl,
+    : public ThreadSchedulerBase,
+      public MainThreadScheduler,
+      public WebThreadScheduler,
       public IdleHelper::Delegate,
       public RenderWidgetSignals::Observer,
       public base::trace_event::TraceLog::AsyncEnabledStateObserver {
@@ -123,7 +131,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // Use resource fetch priority for resource loading tasks
     // (crbug.com/860545).
     bool use_resource_fetch_priority;
-    bool use_resource_priorities_only_during_loading;
 
     // Prioritize compositing and loading tasks until first contentful paint.
     // (crbug.com/971191)
@@ -147,9 +154,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // instead of per-MainThreadScheduler CompositorTaskRunner.
     bool mbi_compositor_task_runner_per_agent_scheduling_group;
 
-    // If enabled, the parser may continue parsing if BeginMainFrame was
-    // recently called.
-    bool can_defer_begin_main_frame_during_loading;
+    // If ThreadedScrollPreventRenderingStarvation is enabled, this is set to
+    // the policy set in the associated feature param, otherwise this is
+    // equivalent to the existing behavior.
+    CompositorTQPolicyDuringThreadedScroll
+        compositor_tq_policy_during_threaded_scroll;
   };
 
   static const char* UseCaseToString(UseCase use_case);
@@ -165,52 +174,30 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // WebThreadScheduler implementation:
   std::unique_ptr<Thread> CreateMainThread() override;
-  std::unique_ptr<WebWidgetScheduler> CreateWidgetScheduler() override;
   // Note: this is also shared by the ThreadScheduler interface.
   scoped_refptr<base::SingleThreadTaskRunner> NonWakingTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> DeprecatedDefaultTaskRunner()
       override;
-  std::unique_ptr<WebRenderWidgetSchedulingState>
-  NewRenderWidgetSchedulingState() override;
-  void WillBeginFrame(const viz::BeginFrameArgs& args) override;
-  void BeginFrameNotExpectedSoon() override;
-  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override;
-  void DidCommitFrameToCompositor() override;
-  void DidHandleInputEventOnCompositorThread(
-      const WebInputEvent& web_input_event,
-      InputEventState event_state) override;
-  void WillPostInputEventToMainThread(
-      WebInputEvent::Type web_input_event_type,
-      const WebInputEventAttribution& web_input_event_attribution) override;
-  void WillHandleInputEventOnMainThread(
-      WebInputEvent::Type web_input_event_type,
-      const WebInputEventAttribution& web_input_event_attribution) override;
-  void DidHandleInputEventOnMainThread(const WebInputEvent& web_input_event,
-                                       WebInputEventResult result) override;
-  void DidAnimateForInputOnCompositorThread() override;
-  void DidRunBeginMainFrame() override;
   void SetRendererHidden(bool hidden) override;
   void SetRendererBackgrounded(bool backgrounded) override;
 #if BUILDFLAG(IS_ANDROID)
   void PauseTimersForAndroidWebView() override;
   void ResumeTimersForAndroidWebView() override;
 #endif
-  [[nodiscard]] std::unique_ptr<ThreadScheduler::RendererPauseHandle>
-  PauseRenderer() override;
-  bool IsHighPriorityWorkAnticipated() override;
   bool ShouldYieldForHighPriorityWork() override;
-  bool CanExceedIdleDeadlineIfRequired() const override;
   void AddTaskObserver(base::TaskObserver* task_observer) override;
   void RemoveTaskObserver(base::TaskObserver* task_observer) override;
   void Shutdown() override;
-  void SetTopLevelBlameContext(
-      base::trace_event::BlameContext* blame_context) override;
   void AddRAILModeObserver(RAILModeObserver* observer) override;
   void RemoveRAILModeObserver(RAILModeObserver const* observer) override;
   void SetRendererProcessType(WebRendererProcessType type) override;
   Vector<WebInputEventAttribution> GetPendingUserInputInfo(
       bool include_continuous) const override;
-  bool DontDeferBeginMainFrame() const override;
+  blink::MainThreadScheduler* ToMainThreadScheduler() override;
+
+  // MainThreadScheduler implementation:
+  [[nodiscard]] std::unique_ptr<MainThreadScheduler::RendererPauseHandle>
+  PauseScheduler() override;
 
   // ThreadScheduler implementation:
   void PostIdleTask(const base::Location&, Thread::IdleTask) override;
@@ -223,11 +210,32 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   std::unique_ptr<WebAgentGroupScheduler> CreateAgentGroupScheduler() override;
   WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() override;
-  std::unique_ptr<ThreadScheduler::RendererPauseHandle> PauseScheduler()
-      override;
-  NonMainThreadSchedulerImpl* AsNonMainThreadScheduler() override {
-    return nullptr;
-  }
+  void SetV8Isolate(v8::Isolate* isolate) override;
+  base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
+
+  scoped_refptr<WidgetScheduler> CreateWidgetScheduler();
+  void WillBeginFrame(const viz::BeginFrameArgs& args);
+  void BeginFrameNotExpectedSoon();
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time);
+  void DidCommitFrameToCompositor();
+  void DidHandleInputEventOnCompositorThread(
+      const WebInputEvent& web_input_event,
+      WidgetScheduler::InputEventState event_state);
+  void WillPostInputEventToMainThread(
+      WebInputEvent::Type web_input_event_type,
+      const WebInputEventAttribution& web_input_event_attribution);
+  void WillHandleInputEventOnMainThread(
+      WebInputEvent::Type web_input_event_type,
+      const WebInputEventAttribution& web_input_event_attribution);
+  void DidHandleInputEventOnMainThread(const WebInputEvent& web_input_event,
+                                       WebInputEventResult result);
+  void DidAnimateForInputOnCompositorThread();
+
+  // Returns true if the scheduler has reason to believe that high priority work
+  // may soon arrive on the main thread, e.g., if gesture events were observed
+  // recently.
+  // Must be called from the main thread.
+  bool IsHighPriorityWorkAnticipated();
 
   // Use a separate task runner so that IPC tasks are not logged via the same
   // task queue that executes them. Otherwise this would result in an infinite
@@ -237,8 +245,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     return back_forward_cache_ipc_tracking_task_runner_;
   }
 
-  // WebThreadScheduler implementation:
-  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner();
 
   // The following functions are defined in both WebThreadScheduler and
   // ThreadScheduler, and have the same function signatures -- see above.
@@ -254,11 +261,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       bool has_visible_render_widget_with_touch_handler) override;
 
   // ThreadSchedulerImpl implementation:
-  scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> ControlTaskRunner() override;
   const base::TickClock* GetTickClock() const override;
   MainThreadSchedulerHelper& GetHelper() override { return helper_; }
 
+  scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner();
   base::TimeTicks NowTicks() const;
 
   TaskAttributionTracker* GetTaskAttributionTracker() override {
@@ -307,14 +314,14 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // Tells the scheduler that a provisional load has committed. Must be called
   // from the main thread.
-  void DidStartProvisionalLoad(bool is_main_frame);
+  void DidStartProvisionalLoad(bool is_outermost_main_frame);
 
   // Tells the scheduler that a provisional load has committed. The scheduler
   // may reset the task cost estimators and the UserModel. Must be called from
   // the main thread.
   void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
                                 bool is_reload,
-                                bool is_main_frame);
+                                bool is_outermost_main_frame);
 
   // Note that the main's thread policy should be upto date to compute
   // the correct priority.
@@ -347,7 +354,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       base::WeakPtr<MainThreadTaskQueue> queue,
       const base::sequence_manager::Task& task,
       base::sequence_manager::TaskQueue::TaskTiming* task_timing,
-      base::sequence_manager::LazyNow* lazy_now);
+      base::LazyNow* lazy_now);
 
   void UpdateIpcTracking();
   void SetOnIPCTaskPostedWhileInBackForwardCacheIfNeeded();
@@ -426,6 +433,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   FRIEND_TEST_ALL_PREFIXES(
       main_thread_scheduler_impl_unittest::MainThreadSchedulerImplTest,
       LogIpcsPostedToDocumentsInBackForwardCache);
+  FRIEND_TEST_ALL_PREFIXES(
+      main_thread_scheduler_impl_unittest::MainThreadSchedulerImplTest,
+      CanExceedIdleDeadlineIfRequired);
 
   enum class TimeDomainType {
     kReal,
@@ -433,9 +443,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   };
 
   // WebThreadScheduler private implementation:
-  WebThreadScheduler* GetWebMainThreadScheduler() override;
+  WebThreadScheduler* ToWebMainThreadScheduler() override;
 
-  // ThreadSchedulerImpl overrides
+  // ThreadSchedulerBase overrides
   base::SequencedTaskRunner* GetVirtualTimeTaskRunner() override;
   void OnVirtualTimeEnabled() override;
   void OnVirtualTimeDisabled() override;
@@ -461,8 +471,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       WebAgentGroupScheduler* next_agent_group_scheduler);
   void EndAgentGroupSchedulerScope();
 
-  bool IsAnyMainFrameWaitingForFirstContentfulPaint() const;
-  bool IsAnyMainFrameWaitingForFirstMeaningfulPaint() const;
+  bool IsAnyOrdinaryMainFrameWaitingForFirstContentfulPaint() const;
+  bool IsAnyOrdinaryMainFrameWaitingForFirstMeaningfulPaint() const;
 
   class Policy {
     DISALLOW_NEW();
@@ -551,7 +561,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   class TaskDurationMetricTracker;
 
-  class RendererPauseHandleImpl : public ThreadScheduler::RendererPauseHandle {
+  class RendererPauseHandleImpl
+      : public MainThreadScheduler::RendererPauseHandle {
    public:
     explicit RendererPauseHandleImpl(MainThreadSchedulerImpl* scheduler);
     ~RendererPauseHandleImpl() override;
@@ -633,8 +644,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       base::TimeDelta* expected_use_case_duration) const;
 
   // An input event of some sort happened, the policy may need updating.
-  void UpdateForInputEventOnCompositorThread(const WebInputEvent& event,
-                                             InputEventState input_event_state);
+  void UpdateForInputEventOnCompositorThread(
+      const WebInputEvent& event,
+      WidgetScheduler::InputEventState input_event_state);
 
   // The task cost estimators and the UserModel need to be reset upon page
   // nagigation. This function does that. Must be called from the main thread.
@@ -888,7 +900,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         waiting_for_any_main_frame_meaningful_paint;
     TraceableState<bool, TracingCategory::kInfo>
         have_seen_input_since_navigation;
-    base::TimeTicks last_main_frame_time;
   };
 
   struct CompositorThreadOnly {

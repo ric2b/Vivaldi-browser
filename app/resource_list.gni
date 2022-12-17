@@ -205,7 +205,37 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
   ],
 ]
 
+IOS_VIVALDI_RESOURCE_LIST = [
+  [
+    "//ios/chrome/app/strings:ios_google_chrome_strings",
+    "//vivaldi/app/resources/ios_branding_strings/vivaldi_ios_branding_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_google_chrome_strings_"
+      source = "ios_google_chrome_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_branding_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/app/strings:ios_strings",
+    "//vivaldi/app/resources/ios_strings/vivaldi_ios_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_strings_"
+      source = "ios_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_strings_"
+      add_mobile_locales = true
+      extra_locale=["af"]
+    },
+  ],
+]
+
 if (is_android) {
   CHROMIUM_VIVALDI_RESOURCE_LIST += ANDROID_VIVALDI_RESOURCE_LIST
   ANDROID_VIVALDI_RESOURCE_LIST = [] # to avoid duplication when extracting
+} else if (is_ios) {
+  CHROMIUM_VIVALDI_RESOURCE_LIST += IOS_VIVALDI_RESOURCE_LIST
+  IOS_VIVALDI_RESOURCE_LIST = [] # to avoid duplication when extracting
 }

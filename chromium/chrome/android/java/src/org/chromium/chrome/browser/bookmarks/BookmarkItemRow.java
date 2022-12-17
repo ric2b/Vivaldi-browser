@@ -123,6 +123,10 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
         return mFaviconCancelled;
     }
 
+    void setRoundedIconGeneratorForTesting(RoundedIconGenerator roundedIconGenerator) {
+        mIconGenerator = roundedIconGenerator;
+    }
+
     // Vivaldi
     private void largeIconAvailable(Bitmap icon, int fallbackColor, boolean isFallbackColorDefault,
             @IconType int iconType) {

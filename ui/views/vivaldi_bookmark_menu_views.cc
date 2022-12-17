@@ -56,9 +56,8 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
       if (e.id == node->id()) {
         SetBookmarkContainer(container, index);
         controller_ = new BookmarkMenuController(
-            browser, GetPageNavigatorGetter(),
-            GetTopLevelWidgetFromWebContents(web_contents_), node, offset,
-            false);
+            browser, GetTopLevelWidgetFromWebContents(web_contents_), node,
+            offset, false);
         controller_->set_observer(this);
         break;
       }

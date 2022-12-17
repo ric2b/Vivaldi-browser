@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {LocaleInfo} from './locale_info.js';
+
 const HintType = chrome.accessibilityPrivate.DictationBubbleHintType;
 const IconType = chrome.accessibilityPrivate.DictationBubbleIconType;
 
@@ -25,7 +27,7 @@ export const HintContext = {
   STANDBY: 'standby',
   TEXT_COMMITTED: 'text_committed',
   TEXT_SELECTED: 'text_selected',
-  MACRO_SUCCESS: 'macro_success'
+  MACRO_SUCCESS: 'macro_success',
 };
 
 /**
@@ -36,6 +38,10 @@ export class UIController {
   constructor() {
     /** @private {?number} */
     this.showHintsTimeoutId_ = null;
+
+    /** @private {number} */
+    this.showHintsTimeoutMs_ =
+        UIController.HintsTimeouts.STANDARD_HINT_TIMEOUT_MS_;
   }
 
   /**
@@ -73,14 +79,15 @@ export class UIController {
         break;
     }
 
-    if (!context) {
+    if (!context || !LocaleInfo.areCommandsSupported()) {
+      // Do not show hints if commands are not supported.
       return;
     }
 
     // If a HintContext was provided, set a timeout to show hints.
     const hints = UIController.GetHintsForContext_(context);
     this.showHintsTimeoutId_ =
-        setTimeout(() => this.showHints_(hints), UIController.HINT_TIMEOUT_MS_);
+        setTimeout(() => this.showHints_(hints), this.showHintsTimeoutMs_);
   }
 
   /** @private */
@@ -102,6 +109,18 @@ export class UIController {
   }
 
   /**
+   * In some circumstances we shouldn't show the hints too quickly because
+   * it is distracting to the user.
+   * @param {boolean} longerDuration Whether to wait for a longer time before
+   *     showing hints.
+   */
+  setHintsTimeoutDuration(longerDuration) {
+    this.showHintsTimeoutMs_ = longerDuration ?
+        UIController.HintsTimeouts.LONGER_HINT_TIMEOUT_MS_ :
+        UIController.HintsTimeouts.STANDARD_HINT_TIMEOUT_MS_;
+  }
+
+  /**
    * @param {!HintContext} context
    * @return {!Array<!HintType>}
    * @private
@@ -113,10 +132,13 @@ export class UIController {
 
 /**
  * The amount of time to wait before showing hints.
- * @private {number}
+ * @private {!Object<string, number>}
  * @const
  */
-UIController.HINT_TIMEOUT_MS_ = 2 * 1000;
+UIController.HintsTimeouts = {
+  STANDARD_HINT_TIMEOUT_MS_: 2 * 1000,
+  LONGER_HINT_TIMEOUT_MS_: 6 * 1000,
+};
 
 /**
  * Maps HintContexts to hints that should be shown for that context.
@@ -126,13 +148,19 @@ UIController.HINT_TIMEOUT_MS_ = 2 * 1000;
 UIController.CONTEXT_TO_HINTS_MAP_ = {
   [HintContext.STANDBY]: [HintType.TRY_SAYING, HintType.TYPE, HintType.HELP],
   [HintContext.TEXT_COMMITTED]: [
-    HintType.TRY_SAYING, HintType.UNDO, HintType.DELETE, HintType.SELECT_ALL,
-    HintType.HELP
+    HintType.TRY_SAYING,
+    HintType.UNDO,
+    HintType.DELETE,
+    HintType.SELECT_ALL,
+    HintType.HELP,
   ],
   [HintContext.TEXT_SELECTED]: [
-    HintType.TRY_SAYING, HintType.UNSELECT, HintType.COPY, HintType.DELETE,
-    HintType.HELP
+    HintType.TRY_SAYING,
+    HintType.UNSELECT,
+    HintType.COPY,
+    HintType.DELETE,
+    HintType.HELP,
   ],
   [HintContext.MACRO_SUCCESS]:
-      [HintType.TRY_SAYING, HintType.UNDO, HintType.HELP]
+      [HintType.TRY_SAYING, HintType.UNDO, HintType.HELP],
 };

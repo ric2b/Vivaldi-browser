@@ -26,7 +26,6 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 #include "gpu/command_buffer/service/gles2_query_manager.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/program_manager.h"
@@ -34,7 +33,7 @@
 #include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
-#include "gpu/command_buffer/service/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transform_feedback_manager.h"
@@ -61,7 +60,9 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   ~GLES2DecoderTestBase() override;
 
   void OnConsoleMessage(int32_t id, const std::string& message) override;
-  void CacheShader(const std::string& key, const std::string& shader) override;
+  void CacheBlob(gpu::GpuDiskCacheType type,
+                 const std::string& key,
+                 const std::string& blob) override;
   void OnFenceSyncRelease(uint64_t release) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
@@ -190,10 +191,6 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
 
   FramebufferManager* GetFramebufferManager() {
     return decoder_->GetFramebufferManager();
-  }
-
-  ImageManager* GetImageManagerForTest() {
-    return decoder_->GetImageManagerForTest();
   }
 
   void DoCreateProgram(GLuint client_id, GLuint service_id);
@@ -800,7 +797,6 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
   MailboxManagerImpl mailbox_manager_;
   ShaderTranslatorCache shader_translator_cache_;
   FramebufferCompletenessCache framebuffer_completeness_cache_;
-  ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
   SharedImageManager shared_image_manager_;
   scoped_refptr<ContextGroup> group_;
@@ -842,7 +838,9 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
   ~GLES2DecoderPassthroughTestBase() override;
 
   void OnConsoleMessage(int32_t id, const std::string& message) override;
-  void CacheShader(const std::string& key, const std::string& shader) override;
+  void CacheBlob(gpu::GpuDiskCacheType type,
+                 const std::string& key,
+                 const std::string& blob) override;
   void OnFenceSyncRelease(uint64_t release) override;
   void OnDescheduleUntilFinished() override;
   void OnRescheduleAfterFinished() override;
@@ -1024,7 +1022,6 @@ class GLES2DecoderPassthroughTestBase : public testing::Test,
   MailboxManagerImpl mailbox_manager_;
   ShaderTranslatorCache shader_translator_cache_;
   FramebufferCompletenessCache framebuffer_completeness_cache_;
-  ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
   PassthroughDiscardableManager passthrough_discardable_manager_;
   SharedImageManager shared_image_manager_;

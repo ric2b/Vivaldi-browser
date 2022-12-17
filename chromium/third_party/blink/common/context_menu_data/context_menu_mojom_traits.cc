@@ -10,6 +10,22 @@
 namespace mojo {
 
 // static
+bool StructTraits<blink::mojom::FormRendererIdDataView, uint64_t>::Read(
+    blink::mojom::FormRendererIdDataView data,
+    uint64_t* out) {
+  *out = data.id();
+  return true;
+}
+
+// static
+bool StructTraits<blink::mojom::FieldRendererIdDataView, uint64_t>::Read(
+    blink::mojom::FieldRendererIdDataView data,
+    uint64_t* out) {
+  *out = data.id();
+  return true;
+}
+
+// static
 bool StructTraits<blink::mojom::UntrustworthyContextMenuParamsDataView,
                   blink::UntrustworthyContextMenuParams>::
     Read(blink::mojom::UntrustworthyContextMenuParamsDataView data,
@@ -36,7 +52,9 @@ bool StructTraits<blink::mojom::UntrustworthyContextMenuParamsDataView,
       !data.ReadVivaldiKeywordUrl(&out->vivaldi_keyword_url) ||
       !data.ReadVivaldiInputType(&out->vivaldi_input_type) ||
       // </vivaldi>
-      !data.ReadSelectionRect(&out->selection_rect))
+      !data.ReadSelectionRect(&out->selection_rect) ||
+      !data.ReadFormRendererId(&out->form_renderer_id) ||
+      !data.ReadFieldRendererId(&out->field_renderer_id))
     return false;
 
   out->x = data.x();

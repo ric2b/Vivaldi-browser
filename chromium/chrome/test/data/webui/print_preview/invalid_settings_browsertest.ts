@@ -7,7 +7,7 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitBeforeNextRender} from 'chrome://webui-test/test_util.js';
 
-// <if expr="chromeos_ash or chromeos_lacros">
+// <if expr="is_chromeos">
 import {setNativeLayerCrosInstance} from './native_layer_cros_stub.js';
 // </if>
 import {NativeLayerStub} from './native_layer_stub.js';
@@ -45,13 +45,13 @@ suite(invalid_settings_browsertest.suiteName, function() {
     printerName: 'FooDevice',
     pdfPrinterDisabled: false,
     serializedAppStateStr: null,
-    serializedDefaultDestinationSelectionRulesStr: null
+    serializedDefaultDestinationSelectionRulesStr: null,
   };
 
   setup(function() {
     nativeLayer = new NativeLayerStub();
     NativeLayerImpl.setInstance(nativeLayer);
-    // <if expr="chromeos_ash or chromeos_lacros">
+    // <if expr="is_chromeos">
     setNativeLayerCrosInstance();
     // </if>
     document.body.innerHTML = '';
@@ -128,7 +128,7 @@ suite(invalid_settings_browsertest.suiteName, function() {
               // Wait for the preview request.
               return Promise.all([
                 nativeLayer.whenCalled('getPrinterCapabilities'),
-                nativeLayer.whenCalled('getPreview')
+                nativeLayer.whenCalled('getPreview'),
               ]);
             })
             .then(function() {

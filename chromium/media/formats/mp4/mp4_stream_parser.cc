@@ -429,7 +429,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           // Android. This is for backward compatibility until we have a better
           // solution. See crbug.com/1245123 for details.
           aac_extra_data = aac.codec_specific_data();
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
           // FEATURE_EXTRA_DATA
           extra_data = entry.esds.data;
 #elif BUILDFLAG(IS_ANDROID)

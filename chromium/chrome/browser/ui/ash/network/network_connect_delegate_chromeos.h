@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "chromeos/network/network_connect.h"
+#include "chromeos/ash/components/network/network_connect.h"
 
 namespace ash {
 class SystemTrayClient;
@@ -18,8 +18,7 @@ namespace chromeos {
 class NetworkStateNotifier;
 }
 
-class NetworkConnectDelegateChromeOS
-    : public chromeos::NetworkConnect::Delegate {
+class NetworkConnectDelegateChromeOS : public ash::NetworkConnect::Delegate {
  public:
   NetworkConnectDelegateChromeOS();
 

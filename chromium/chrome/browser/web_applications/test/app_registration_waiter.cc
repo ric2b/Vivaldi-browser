@@ -9,14 +9,46 @@
 
 namespace web_app {
 
-AppRegistrationWaiter::AppRegistrationWaiter(Profile* profile,
-                                             const AppId& app_id)
-    : app_id_(app_id) {
+AppTypeInitializationWaiter::AppTypeInitializationWaiter(Profile* profile,
+                                                         apps::AppType app_type)
+    : app_type_(app_type) {
   apps::AppRegistryCache& cache =
       apps::AppServiceProxyFactory::GetForProfile(profile)->AppRegistryCache();
   Observe(&cache);
-  if (cache.ForOneApp(app_id, [](const apps::AppUpdate&) {}))
+
+  if (cache.IsAppTypeInitialized(app_type))
     run_loop_.Quit();
+}
+
+AppTypeInitializationWaiter::~AppTypeInitializationWaiter() = default;
+
+void AppTypeInitializationWaiter::Await() {
+  run_loop_.Run();
+}
+
+void AppTypeInitializationWaiter::OnAppUpdate(const apps::AppUpdate& update) {}
+
+void AppTypeInitializationWaiter::OnAppTypeInitialized(apps::AppType app_type) {
+  if (app_type == app_type_)
+    run_loop_.Quit();
+}
+
+void AppTypeInitializationWaiter::OnAppRegistryCacheWillBeDestroyed(
+    apps::AppRegistryCache* cache) {
+  Observe(nullptr);
+}
+
+AppRegistrationWaiter::AppRegistrationWaiter(Profile* profile,
+                                             const AppId& app_id,
+                                             apps::Readiness readiness)
+    : app_id_(app_id), readiness_(readiness) {
+  apps::AppRegistryCache& cache =
+      apps::AppServiceProxyFactory::GetForProfile(profile)->AppRegistryCache();
+  Observe(&cache);
+  cache.ForOneApp(app_id, [this](const apps::AppUpdate& update) {
+    if (update.Readiness() == readiness_)
+      run_loop_.Quit();
+  });
 }
 AppRegistrationWaiter::~AppRegistrationWaiter() = default;
 
@@ -25,7 +57,7 @@ void AppRegistrationWaiter::Await() {
 }
 
 void AppRegistrationWaiter::OnAppUpdate(const apps::AppUpdate& update) {
-  if (update.AppId() == app_id_)
+  if (update.AppId() == app_id_ && update.Readiness() == readiness_)
     run_loop_.Quit();
 }
 void AppRegistrationWaiter::OnAppRegistryCacheWillBeDestroyed(

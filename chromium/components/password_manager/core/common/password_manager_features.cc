@@ -4,11 +4,24 @@
 
 #include "components/password_manager/core/common/password_manager_features.h"
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 
 namespace password_manager::features {
 // NOTE: It is strongly recommended to use UpperCamelCase style for feature
 //       names, e.g. "MyGreatFeature".
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// Enables biometric authentication before form filling.
+const base::Feature kBiometricAuthenticationForFilling = {
+    "BiometricAuthenticationForFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+#if BUILDFLAG(IS_MAC)
+// Enables biometric authentication in settings.
+const base::Feature kBiometricAuthenticationInSettings = {
+    "BiometricAuthenticationInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables Biometrics for the Touch To Fill feature. This only effects Android.
 const base::Feature kBiometricTouchToFill = {"BiometricTouchToFill",
@@ -89,6 +102,18 @@ const base::Feature kIOSEnablePasswordManagerBrandingUpdate{
     "IOSEnablePasswordManagerBrandingUpdate",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if BUILDFLAG(IS_IOS)
+// Removes the list of passwords from the Settings UI and adds a separate
+// Password Manager view.
+const base::Feature kIOSPasswordUISplit = {"IOSPasswordUISplit",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables password saving and filling in cross-origin iframes on IOS.
+const base::Feature kIOSPasswordManagerCrossOriginIframeSupport = {
+    "IOSPasswordManagerCrossOriginIframeSupport",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // IS_IOS
+
 // Enables (un)muting compromised passwords from bulk leak check in settings.
 const base::Feature kMuteCompromisedPasswords {
   "MuteCompromisedPasswords",
@@ -142,14 +167,14 @@ const base::Feature kPasswordDomainCapabilitiesFetching = {
 const base::Feature kPasswordImport = {"PasswordImport",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+const base::Feature kPasswordManagerRedesign{"PasswordManagerRedesign",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Enables password reuse detection.
 const base::Feature kPasswordReuseDetectionEnabled = {
     "PasswordReuseDetectionEnabled", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables a revised opt-in flow for the account-scoped password storage.
-const base::Feature kPasswordsAccountStorageRevisedOptInFlow = {
-    "PasswordsAccountStorageRevisedOptInFlow",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables password scripts fetching for the |PasswordChangeInSettings| feature.
 const base::Feature kPasswordScriptsFetching = {
@@ -160,9 +185,9 @@ const base::Feature kPasswordScriptsFetching = {
 const base::Feature kRecoverFromNeverSaveAndroid = {
     "RecoverFromNeverSaveAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables considering secondary server field predictions during form parsing.
-const base::Feature kSecondaryServerFieldPredictions = {
-    "SecondaryServerFieldPredictions", base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables the password strength indicator.
+const base::Feature kPasswordStrengthIndicator = {
+    "PasswordStrengthIndicator", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // Displays at least the decryptable and never saved logins in the password
@@ -170,11 +195,6 @@ const base::Feature kSecondaryServerFieldPredictions = {
 const base::Feature kSkipUndecryptablePasswords = {
     "SkipUndecryptablePasswords", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-
-// Enables the addition of passwords in Chrome Settings.
-// TODO(crbug/1226008): Remove once it's launched.
-const base::Feature kSupportForAddPasswordsInSettings = {
-    "SupportForAddPasswordsInSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if BUILDFLAG(IS_LINUX)
 // When enabled, all undecryptable passwords are deleted from the local database
@@ -184,13 +204,17 @@ const base::Feature kSyncUndecryptablePasswordsLinux = {
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
+const base::Feature kPasswordEditDialogWithDetails{
+    "PasswordEditDialogWithDetails", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kShowUPMErrorNotification{
+    "ShowUpmErrorNotification", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the experiment to automatically submit a form after filling by
 // TouchToFill
 const base::Feature kTouchToFillPasswordSubmission = {
     "TouchToFillPasswordSubmission", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
-#if BUILDFLAG(IS_ANDROID)
 // Enables the intent fetching for the credential manager in Google Mobile
 // Services. It does not enable launching the credential manager.
 const base::Feature kUnifiedCredentialManagerDryRun = {
@@ -201,6 +225,10 @@ const base::Feature kUnifiedCredentialManagerDryRun = {
 const base::Feature kUnifiedPasswordManagerAndroid{
     "UnifiedPasswordManagerAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables showing contextual error messages when UPM encounters an auth error.
+const base::Feature kUnifiedPasswordManagerErrorMessages{
+    "UnifiedPasswordManagerErrorMessages", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // If enabled, the built-in sync functionality in PasswordSyncBridge becomes
 // unused, meaning that SyncService/SyncEngine will no longer download or
 // upload changes to/from the Sync server. Instead, an external Android-specific
@@ -208,29 +236,17 @@ const base::Feature kUnifiedPasswordManagerAndroid{
 const base::Feature kUnifiedPasswordManagerSyncUsingAndroidBackendOnly{
     "UnifiedPasswordManagerSyncUsingAndroidBackendOnly",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kPasswordEditDialogWithDetails{
-    "PasswordEditDialogWithDetails", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// TODO(crbug.com/1310270): Remove after full launch and cleaning up the code.
 const base::Feature kUnifiedPasswordManagerDesktop = {
-    "UnifiedPasswordManagerDesktop", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables support of sending votes on username first flow. The votes are sent
-// on single username forms and are based on user interaction with the save
-// prompt.
-// TODO(crbug.com/959776): Clean up code 2-3 milestones after the launch.
-const base::Feature kUsernameFirstFlow = {"UsernameFirstFlow",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables support of filling and saving on username first flow.
-// TODO(crbug.com/959776): Clean up code 2-3 milestones after the launch.
-const base::Feature kUsernameFirstFlowFilling = {
-    "UsernameFirstFlowFilling", base::FEATURE_ENABLED_BY_DEFAULT};
+    "UnifiedPasswordManagerDesktop", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables support of sending additional votes on username first flow. The votes
 // are sent on single password forms and contain information about preceding
 // single username forms.
+// TODO(crbug.com/959776): Clean up if the main crowdsourcing is good enough and
+// we don't need additional signals.
 const base::Feature kUsernameFirstFlowFallbackCrowdsourcing = {
     "UsernameFirstFlowFallbackCrowdsourcing",
     base::FEATURE_DISABLED_BY_DEFAULT};

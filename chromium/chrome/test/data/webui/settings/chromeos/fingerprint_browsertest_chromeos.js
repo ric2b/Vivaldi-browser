@@ -53,7 +53,7 @@ class TestFingerprintBrowserProxy extends TestBrowserProxy {
     /** @type {FingerprintInfo} */
     const fingerprintInfo = {
       fingerprintsList: this.fingerprintsList_.slice(),
-      isMaxed: this.fingerprintsList_.length >= 3
+      isMaxed: this.fingerprintsList_.length >= 3,
     };
     return Promise.resolve(fingerprintInfo);
   }
@@ -124,7 +124,7 @@ suite('settings-fingerprint-list', function() {
 
   setup(function() {
     browserProxy = new TestFingerprintBrowserProxy();
-    FingerprintBrowserProxyImpl.setInstance(browserProxy);
+    FingerprintBrowserProxyImpl.setInstanceForTesting(browserProxy);
 
     PolymerTest.clearBody();
     fingerprintList = document.createElement('settings-fingerprint-list');
@@ -249,7 +249,7 @@ suite('settings-fingerprint-list', function() {
           // second fingerprint without closing the dialog works as expected.
           return Promise.all([
             browserProxy.whenCalled('startEnroll'),
-            browserProxy.whenCalled('getFingerprintsList')
+            browserProxy.whenCalled('getFingerprintsList'),
           ]);
         })
         .then(function() {
@@ -351,7 +351,7 @@ suite('settings-fingerprint-list', function() {
 
           return Promise.all([
             browserProxy.whenCalled('removeEnrollment'),
-            browserProxy.whenCalled('getFingerprintsList')
+            browserProxy.whenCalled('getFingerprintsList'),
           ]);
         })
         .then(function() {
@@ -417,7 +417,7 @@ suite('settings-fingerprint-list', function() {
 
           return Promise.all([
             browserProxy.whenCalled('changeEnrollmentLabel'),
-            browserProxy.whenCalled('getFingerprintsList')
+            browserProxy.whenCalled('getFingerprintsList'),
           ]);
         })
         .then(function() {
@@ -441,7 +441,7 @@ suite('settings-fingerprint-list', function() {
 
           return Promise.all([
             browserProxy.whenCalled('removeEnrollment'),
-            browserProxy.whenCalled('getFingerprintsList')
+            browserProxy.whenCalled('getFingerprintsList'),
           ]);
         })
         .then(function() {

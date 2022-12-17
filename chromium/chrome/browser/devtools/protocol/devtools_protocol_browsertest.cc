@@ -47,7 +47,6 @@
 #include "printing/buildflags/buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/boringssl/src/include/openssl/nid.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "url/origin.h"
 
@@ -65,7 +64,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
 
   Attach();
-  SendCommand("Security.enable", base::Value::Dict(), false);
+  SendCommandAsync("Security.enable");
   base::Value::Dict params =
       WaitForNotification("Security.visibleSecurityStateChanged", true);
 
@@ -92,13 +91,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CreateDeleteContext) {
         SendCommandSync("Target.createBrowserContext");
     std::string context_id = *result->FindString("browserContextId");
 
-    base::DictionaryValue params;
-    params.SetStringPath("url", "about:blank");
-    params.SetStringPath("browserContextId", context_id);
+    base::Value::Dict params;
+    params.Set("url", "about:blank");
+    params.Set("browserContextId", context_id);
     SendCommandSync("Target.createTarget", std::move(params));
 
-    params = base::DictionaryValue();
-    params.SetStringPath("browserContextId", context_id);
+    params = base::Value::Dict();
+    params.Set("browserContextId", context_id);
     SendCommandSync("Target.disposeBrowserContext", std::move(params));
   }
 }
@@ -110,9 +109,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
       SendCommandSync("Target.createBrowserContext");
   std::string context_id = *result->FindString("browserContextId");
 
-  base::DictionaryValue params;
-  params.SetStringPath("url", chrome::kChromeUINewTabURL);
-  params.SetStringPath("browserContextId", context_id);
+  base::Value::Dict params;
+  params.Set("url", chrome::kChromeUINewTabURL);
+  params.Set("browserContextId", context_id);
   content::WebContentsAddedObserver observer;
   SendCommandSync("Target.createTarget", std::move(params));
   content::WebContents* wc = observer.GetWebContents();
@@ -145,39 +144,39 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
       content::EvalJs(target_web_contents, setup_logging).error.empty());
   EXPECT_TRUE(content::EvalJs(other_web_contents, setup_logging).error.empty());
 
-  base::DictionaryValue params;
-  params.SetStringKey("button", "left");
-  params.SetIntKey("clickCount", 1);
-  params.SetIntKey("x", 100);
-  params.SetIntKey("y", 250);
-  params.SetIntKey("clickCount", 1);
+  base::Value::Dict params;
+  params.Set("button", "left");
+  params.Set("clickCount", 1);
+  params.Set("x", 100);
+  params.Set("y", 250);
+  params.Set("clickCount", 1);
 
-  params.SetStringKey("type", "mousePressed");
+  params.Set("type", "mousePressed");
   SendCommandSync("Input.dispatchMouseEvent", params.Clone());
 
-  params.SetStringKey("type", "mouseMoved");
-  params.SetIntKey("y", 270);
+  params.Set("type", "mouseMoved");
+  params.Set("y", 270);
   SendCommandSync("Input.dispatchMouseEvent", params.Clone());
 
-  params.SetStringKey("type", "mouseReleased");
+  params.Set("type", "mouseReleased");
   SendCommandSync("Input.dispatchMouseEvent", std::move(params));
 
-  params = base::DictionaryValue();
-  params.SetIntKey("x", 100);
-  params.SetIntKey("y", 250);
-  params.SetStringPath("type", "dragEnter");
-  params.SetIntPath("data.dragOperationsMask", 1);
-  params.SetPath("data.items", base::ListValue());
+  params = base::Value::Dict();
+  params.Set("x", 100);
+  params.Set("y", 250);
+  params.Set("type", "dragEnter");
+  params.SetByDottedPath("data.dragOperationsMask", 1);
+  params.SetByDottedPath("data.items", base::Value::List());
   SendCommandSync("Input.dispatchDragEvent", std::move(params));
 
-  params = base::DictionaryValue();
-  params.SetIntKey("x", 100);
-  params.SetIntKey("y", 250);
+  params = base::Value::Dict();
+  params.Set("x", 100);
+  params.Set("y", 250);
   SendCommandSync("Input.synthesizeTapGesture", std::move(params));
 
-  params = base::DictionaryValue();
-  params.SetStringKey("type", "keyDown");
-  params.SetStringKey("key", "a");
+  params = base::Value::Dict();
+  params.Set("type", "keyDown");
+  params.Set("key", "a");
   SendCommandSync("Input.dispatchKeyEvent", std::move(params));
 
   content::EvalJsResult main_target_events =
@@ -203,11 +202,11 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   SetIsTrusted(false);
   Attach();
 
-  base::DictionaryValue params;
-  params.SetStringKey("type", "rawKeyDown");
-  params.SetStringKey("key", "F12");
-  params.SetIntKey("windowsVirtualKeyCode", 123);
-  params.SetIntKey("nativeVirtualKeyCode", 123);
+  base::Value::Dict params;
+  params.Set("type", "rawKeyDown");
+  params.Set("key", "F12");
+  params.Set("windowsVirtualKeyCode", 123);
+  params.Set("nativeVirtualKeyCode", 123);
   SendCommandSync("Input.dispatchKeyEvent", std::move(params));
 
   EXPECT_EQ(nullptr, DevToolsWindow::FindDevToolsWindow(agent_host_.get()));
@@ -264,9 +263,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   // Attach DevTools and start a navigation but don't wait for it to finish.
   Attach();
   SendCommandSync("Page.enable");
-  base::DictionaryValue params;
-  params.SetStringKey("url", url.spec());
-  SendCommand("Page.navigate", std::move(params.GetDict()), false);
+  base::Value::Dict params;
+  params.Set("url", url.spec());
+  SendCommandAsync("Page.navigate", std::move(params));
   content::NavigationController& navigation_controller =
       web_contents()->GetController();
   content::NavigationEntry* pending_entry =
@@ -402,7 +401,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VisibleSecurityStateSecureState) {
   bool page_obsolete_ssl_signature = status & net::OBSOLETE_SSL_MASK_SIGNATURE;
 
   Attach();
-  SendCommand("Security.enable", base::Value::Dict(), false);
+  SendCommandAsync("Security.enable");
   auto has_certificate = [](const base::Value::Dict& params) {
     return params.FindListByDottedPath(
                "visibleSecurityState.certificateSecurityState.certificate") !=
@@ -540,14 +539,14 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   auto* manager = infobars::ContentInfoBarManager::FromWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
   {
-    base::Value params(base::Value::Type::DICTIONARY);
-    params.SetBoolKey("enabled", true);
+    base::Value::Dict params;
+    params.Set("enabled", true);
     SendCommandSync("Emulation.setAutomationOverride", std::move(params));
   }
   EXPECT_EQ(static_cast<int>(manager->infobar_count()), 1);
   {
-    base::Value params(base::Value::Type::DICTIONARY);
-    params.SetBoolKey("enabled", false);
+    base::Value::Dict params;
+    params.Set("enabled", false);
     SendCommandSync("Emulation.setAutomationOverride", std::move(params));
   }
   EXPECT_EQ(static_cast<int>(manager->infobar_count()), 0);
@@ -559,263 +558,28 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   auto* manager = infobars::ContentInfoBarManager::FromWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
   {
-    base::Value params(base::Value::Type::DICTIONARY);
-    params.SetBoolKey("enabled", true);
+    base::Value::Dict params;
+    params.Set("enabled", true);
     SendCommandSync("Emulation.setAutomationOverride", std::move(params));
   }
   EXPECT_EQ(static_cast<int>(manager->infobar_count()), 1);
   {
-    base::Value params(base::Value::Type::DICTIONARY);
-    params.SetBoolKey("enabled", true);
+    base::Value::Dict params;
+    params.Set("enabled", true);
     SendCommandSync("Emulation.setAutomationOverride", std::move(params));
   }
   EXPECT_EQ(static_cast<int>(manager->infobar_count()), 1);
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, UntrustedClient) {
-  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::Value::Dict> params(new base::Value::Dict());
   SetIsTrusted(false);
   Attach();
-  EXPECT_FALSE(
-      SendCommand("HeapProfiler.enable", nullptr, true));  // Implemented in V8
-  EXPECT_FALSE(
-      SendCommand("LayerTree.enable", nullptr, true));  // Implemented in blink
-  EXPECT_FALSE(SendCommand("Memory.prepareForLeakDetection", nullptr,
-                           true));  // Implemented in content
-  EXPECT_FALSE(
-      SendCommand("Cast.enable", nullptr, true));  // Implemented in content
-}
-
-class NetworkResponseProtocolTest : public DevToolsProtocolTest {
- protected:
-  base::Value::Dict FetchAndWaitForResponse(const GURL& url) {
-    content::WebContents* web_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
-    std::string script =
-        content::JsReplace("fetch($1).then(r => r.status)", url.spec());
-    content::EvalJsResult status = content::EvalJs(web_contents, script);
-    CHECK(200 == status);
-
-    // Look for the requestId.
-    auto matches_url = [](const GURL& url, const base::Value::Dict& params) {
-      const std::string* got_url = params.FindStringByDottedPath("request.url");
-      return got_url && *got_url == url.spec();
-    };
-    base::Value::Dict request = WaitForMatchingNotification(
-        "Network.requestWillBeSent", base::BindRepeating(matches_url, url));
-    const std::string* request_id = request.FindString("requestId");
-    CHECK(request_id) << "Could not find request ID";
-
-    // Look for the response.
-    auto matches_id = [](const std::string& request_id,
-                         const base::Value::Dict& params) {
-      const std::string* id = params.FindString("requestId");
-      return id && *id == request_id;
-    };
-    return WaitForMatchingNotification(
-        "Network.responseReceived",
-        base::BindRepeating(matches_id, *request_id));
-  }
-};
-
-// Test that the SecurityDetails field of the resource response matches the
-// server.
-IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetails) {
-  // Configure a specific TLS configuration to compare against.
-  net::SSLServerConfig server_config;
-  server_config.version_min = net::SSL_PROTOCOL_VERSION_TLS1_2;
-  server_config.version_max = net::SSL_PROTOCOL_VERSION_TLS1_2;
-  // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-  server_config.cipher_suite_for_testing = 0xc02f;
-  server_config.curves_for_testing = {NID_X25519};
-  net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
-  server.SetSSLConfig(net::EmbeddedTestServer::ServerCertificate::CERT_OK,
-                      server_config);
-  server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
-  ASSERT_TRUE(server.Start());
-
-  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
-      browser(), server.GetURL("/title1.html"), 1);
-
-  Attach();
-  SendCommand("Network.enable", base::Value::Dict(), false);
-
-  base::Value::Dict response =
-      FetchAndWaitForResponse(server.GetURL("/empty.html"));
-
-  const std::string* protocol =
-      response.FindStringByDottedPath("response.securityDetails.protocol");
-  ASSERT_TRUE(protocol);
-  EXPECT_EQ("TLS 1.2", *protocol);
-
-  const std::string* key_exchange =
-      response.FindStringByDottedPath("response.securityDetails.keyExchange");
-  ASSERT_TRUE(key_exchange);
-  EXPECT_EQ("ECDHE_RSA", *key_exchange);
-
-  const std::string* cipher =
-      response.FindStringByDottedPath("response.securityDetails.cipher");
-  ASSERT_TRUE(cipher);
-  EXPECT_EQ("AES_128_GCM", *cipher);
-
-  // AEAD ciphers should not report a MAC.
-  EXPECT_FALSE(response.FindStringByDottedPath("response.securityDetails.mac"));
-
-  const std::string* group = response.FindStringByDottedPath(
-      "response.securityDetails.keyExchangeGroup");
-  ASSERT_TRUE(group);
-  EXPECT_EQ("X25519", *group);
-
-  const std::string* subject =
-      response.FindStringByDottedPath("response.securityDetails.subjectName");
-  ASSERT_TRUE(subject);
-  EXPECT_EQ(server.GetCertificate()->subject().common_name, *subject);
-
-  const std::string* issuer =
-      response.FindStringByDottedPath("response.securityDetails.issuer");
-  ASSERT_TRUE(issuer);
-  EXPECT_EQ(server.GetCertificate()->issuer().common_name, *issuer);
-
-  // The default certificate has a single SAN, 127.0.0.1.
-  const base::Value* sans =
-      response.FindByDottedPath("response.securityDetails.sanList");
-  ASSERT_TRUE(sans);
-  ASSERT_EQ(1u, sans->GetListDeprecated().size());
-  EXPECT_EQ(base::Value("127.0.0.1"), sans->GetListDeprecated()[0]);
-
-  absl::optional<double> valid_from =
-      response.FindDoubleByDottedPath("response.securityDetails.validFrom");
-  EXPECT_EQ(server.GetCertificate()->valid_start().ToDoubleT(), valid_from);
-
-  absl::optional<double> valid_to =
-      response.FindDoubleByDottedPath("response.securityDetails.validTo");
-  EXPECT_EQ(server.GetCertificate()->valid_expiry().ToDoubleT(), valid_to);
-}
-
-// Test SecurityDetails, but with a TLS 1.3 cipher suite, which should not
-// report a key exchange component.
-IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetailsTLS13) {
-  // Configure a specific TLS configuration to compare against.
-  net::SSLServerConfig server_config;
-  server_config.version_min = net::SSL_PROTOCOL_VERSION_TLS1_3;
-  server_config.version_max = net::SSL_PROTOCOL_VERSION_TLS1_3;
-  server_config.curves_for_testing = {NID_X25519};
-  net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
-  server.SetSSLConfig(net::EmbeddedTestServer::ServerCertificate::CERT_OK,
-                      server_config);
-  server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
-  ASSERT_TRUE(server.Start());
-
-  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
-      browser(), server.GetURL("/title1.html"), 1);
-
-  Attach();
-  SendCommand("Network.enable", base::Value::Dict(), false);
-
-  base::Value::Dict response =
-      FetchAndWaitForResponse(server.GetURL("/empty.html"));
-
-  const std::string* protocol =
-      response.FindStringByDottedPath("response.securityDetails.protocol");
-  ASSERT_TRUE(protocol);
-  EXPECT_EQ("TLS 1.3", *protocol);
-
-  const std::string* key_exchange =
-      response.FindStringByDottedPath("response.securityDetails.keyExchange");
-  ASSERT_TRUE(key_exchange);
-  EXPECT_EQ("", *key_exchange);
-
-  const std::string* cipher =
-      response.FindStringByDottedPath("response.securityDetails.cipher");
-  ASSERT_TRUE(cipher);
-  // Depending on whether the host machine has AES hardware, the server may
-  // pick AES-GCM or ChaCha20-Poly1305.
-  EXPECT_TRUE(*cipher == "AES_128_GCM" || *cipher == "CHACHA20_POLY1305");
-
-  // AEAD ciphers should not report a MAC.
-  EXPECT_FALSE(response.FindStringByDottedPath("response.securityDetails.mac"));
-
-  const std::string* group = response.FindStringByDottedPath(
-      "response.securityDetails.keyExchangeGroup");
-  ASSERT_TRUE(group);
-  EXPECT_EQ("X25519", *group);
-}
-
-// Test SecurityDetails, but with a legacy cipher suite, which should report a
-// separate MAC component and no group.
-IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest,
-                       SecurityDetailsLegacyCipher) {
-  // Configure a specific TLS configuration to compare against.
-  net::SSLServerConfig server_config;
-  server_config.version_min = net::SSL_PROTOCOL_VERSION_TLS1_2;
-  server_config.version_max = net::SSL_PROTOCOL_VERSION_TLS1_2;
-  // TLS_RSA_WITH_AES_128_CBC_SHA
-  server_config.cipher_suite_for_testing = 0x002f;
-  net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
-  server.SetSSLConfig(net::EmbeddedTestServer::ServerCertificate::CERT_OK,
-                      server_config);
-  server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
-  ASSERT_TRUE(server.Start());
-
-  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
-      browser(), server.GetURL("/title1.html"), 1);
-
-  Attach();
-  SendCommand("Network.enable", base::Value::Dict(), false);
-
-  base::Value::Dict response =
-      FetchAndWaitForResponse(server.GetURL("/empty.html"));
-
-  const std::string* key_exchange =
-      response.FindStringByDottedPath("response.securityDetails.keyExchange");
-  ASSERT_TRUE(key_exchange);
-  EXPECT_EQ("RSA", *key_exchange);
-
-  const std::string* cipher =
-      response.FindStringByDottedPath("response.securityDetails.cipher");
-  ASSERT_TRUE(cipher);
-  EXPECT_EQ("AES_128_CBC", *cipher);
-
-  const std::string* mac =
-      response.FindStringByDottedPath("response.securityDetails.mac");
-  ASSERT_TRUE(mac);
-  EXPECT_EQ("HMAC-SHA1", *mac);
-
-  // RSA ciphers should not report a MAC.
-  EXPECT_FALSE(response.FindStringByDottedPath(
-      "response.securityDetails.keyExchangeGroup"));
-}
-
-// Test that complex certificate SAN lists are reported in SecurityDetails.
-IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetailsSAN) {
-  net::EmbeddedTestServer::ServerCertificateConfig cert_config;
-  cert_config.dns_names = {"a.example", "b.example", "*.c.example"};
-  cert_config.ip_addresses = {net::IPAddress::IPv4Localhost(),
-                              net::IPAddress::IPv6Localhost(),
-                              net::IPAddress(1, 2, 3, 4)};
-  net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
-  server.SetSSLConfig(cert_config);
-  server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
-  ASSERT_TRUE(server.Start());
-
-  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
-      browser(), server.GetURL("/title1.html"), 1);
-
-  Attach();
-  SendCommand("Network.enable", base::Value::Dict(), false);
-
-  base::Value::Dict response =
-      FetchAndWaitForResponse(server.GetURL("/empty.html"));
-  const base::Value* sans =
-      response.FindByDottedPath("response.securityDetails.sanList");
-  ASSERT_TRUE(sans);
-  ASSERT_EQ(6u, sans->GetListDeprecated().size());
-  EXPECT_EQ(base::Value("a.example"), sans->GetListDeprecated()[0]);
-  EXPECT_EQ(base::Value("b.example"), sans->GetListDeprecated()[1]);
-  EXPECT_EQ(base::Value("*.c.example"), sans->GetListDeprecated()[2]);
-  EXPECT_EQ(base::Value("127.0.0.1"), sans->GetListDeprecated()[3]);
-  EXPECT_EQ(base::Value("::1"), sans->GetListDeprecated()[4]);
-  EXPECT_EQ(base::Value("1.2.3.4"), sans->GetListDeprecated()[5]);
+  EXPECT_FALSE(SendCommandSync("HeapProfiler.enable"));  // Implemented in V8
+  EXPECT_FALSE(SendCommandSync("LayerTree.enable"));     // Implemented in blink
+  EXPECT_FALSE(SendCommandSync(
+      "Memory.prepareForLeakDetection"));        // Implemented in content
+  EXPECT_FALSE(SendCommandSync("Cast.enable"));  // Implemented in content
 }
 
 class ExtensionProtocolTest : public DevToolsProtocolTest {
@@ -885,10 +649,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionProtocolTest, ReloadTracedExtension) {
   ASSERT_TRUE(extension);
   Attach();
   ReloadExtension(extension->id());
-  base::DictionaryValue params;
-  params.SetStringPath("categories", "-*");
+  base::Value::Dict params;
+  params.Set("categories", "-*");
   SendCommandSync("Tracing.start", std::move(params));
-  SendCommand("Tracing.end", base::Value::Dict(), false);
+  SendCommandAsync("Tracing.end");
   WaitForNotification("Tracing.tracingComplete", true);
 }
 
@@ -918,9 +682,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionProtocolTest,
     }
   }
   {
-    base::Value params(base::Value::Type::DICTIONARY);
-    params.SetStringKey("targetId", *ext_target.FindStringKey("targetId"));
-    params.SetBoolKey("waitForDebuggerOnStart", false);
+    base::Value::Dict params;
+    params.Set("targetId", *ext_target.FindStringKey("targetId"));
+    params.Set("waitForDebuggerOnStart", false);
     SendCommandSync("Target.autoAttachRelated", std::move(params));
   }
   ReloadExtension(extension_id);
@@ -936,9 +700,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionProtocolTest,
               testing::Optional(false));
 
   {
-    base::Value params(base::Value::Type::DICTIONARY);
-    params.SetStringKey("targetId", *targetInfo->FindStringKey("targetId"));
-    params.SetBoolKey("waitForDebuggerOnStart", false);
+    base::Value::Dict params;
+    params.Set("targetId", *targetInfo->FindStringKey("targetId"));
+    params.Set("waitForDebuggerOnStart", false);
     SendCommandSync("Target.autoAttachRelated", std::move(params));
   }
   auto detached = WaitForNotification("Target.detachedFromTarget", true);

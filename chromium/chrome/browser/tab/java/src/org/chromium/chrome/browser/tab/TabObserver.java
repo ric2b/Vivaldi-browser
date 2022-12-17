@@ -106,8 +106,9 @@ public interface TabObserver {
      * Called when the favicon of a {@link Tab} has been updated.
      * @param tab The notifying {@link Tab}.
      * @param icon The favicon that was received.
+     * @param iconUrl The URL that the icon was fetched from.
      */
-    void onFaviconUpdated(Tab tab, Bitmap icon);
+    void onFaviconUpdated(Tab tab, Bitmap icon, GURL iconUrl);
 
     /**
      * Called when the title of a {@link Tab} changes.
@@ -208,12 +209,19 @@ public interface TabObserver {
     // WebContentsObserver methods ---------------------------------------------------------
 
     /**
-     * Called when a navigation is started in the WebContents.
+     * Called when a navigation in the primary main frame is started in the WebContents.
      * @param tab The notifying {@link Tab}.
      * @param navigationHandle Pointer to a NavigationHandle representing the navigation.
      *                         Its lifetime end at the end of onDidFinishNavigation().
      */
-    void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle);
+    void onDidStartNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigationHandle);
+
+    /**
+     * TODO(crbug.com/1337446) Remove when NotifyJavaSpuriouslyToMeasurePerf experiment is finished.
+     * No-op, for measuring performance of calling didStartNavigation in only the primary main
+     * frame vs calling it in all frames.
+     */
+    void onDidStartNavigationNoop(Tab tab, NavigationHandle navigationHandle);
 
     /**
      * Called when a navigation is redirected in the WebContents.

@@ -250,11 +250,11 @@ bool DoCopyDirectory(const FilePath& from_path,
     // use the base::File constructor. On Chrome OS, base::File uses a different
     // set of permissions than it does on other POSIX platforms.
 #if BUILDFLAG(IS_APPLE)
-    int mode = 0600 | (stat_at_use.st_mode & 0177);
+    mode_t mode = 0600 | (stat_at_use.st_mode & 0177);
 #elif BUILDFLAG(IS_CHROMEOS)
-    int mode = 0644;
+    mode_t mode = 0644;
 #else
-    int mode = 0600;
+    mode_t mode = 0600;
 #endif
     File outfile(open(target_path.value().c_str(), open_flags, mode));
     if (!outfile.IsValid()) {
@@ -462,7 +462,7 @@ bool ReadFromFD(int fd, char* buffer, size_t bytes) {
         HANDLE_EINTR(read(fd, buffer + total_read, bytes - total_read));
     if (bytes_read <= 0)
       break;
-    total_read += bytes_read;
+    total_read += static_cast<size_t>(bytes_read);
   }
   return total_read == bytes;
 }
@@ -510,7 +510,8 @@ bool ReadSymbolicLink(const FilePath& symlink_path, FilePath* target_path) {
     return false;
   }
 
-  *target_path = FilePath(FilePath::StringType(buf, count));
+  *target_path =
+      FilePath(FilePath::StringType(buf, static_cast<size_t>(count)));
   return true;
 }
 
@@ -539,7 +540,10 @@ bool SetPosixFilePermissions(const FilePath& path,
     return false;
 
   // Clears the existing permission bits, and adds the new ones.
-  mode_t updated_mode_bits = stat_buf.st_mode & ~FILE_PERMISSION_MASK;
+  // The casting here is because the Android NDK does not declare `st_mode` as a
+  // `mode_t`.
+  mode_t updated_mode_bits = static_cast<mode_t>(stat_buf.st_mode);
+  updated_mode_bits &= static_cast<mode_t>(~FILE_PERMISSION_MASK);
   updated_mode_bits |= mode & FILE_PERMISSION_MASK;
 
   if (HANDLE_EINTR(chmod(path.value().c_str(), updated_mode_bits)) != 0)
@@ -750,11 +754,10 @@ bool ReadFileToStringNonBlocking(const base::FilePath& file, std::string* ret) {
   do {
     char buf[4096];
     bytes_read = HANDLE_EINTR(read(fd.get(), buf, sizeof(buf)));
-    if (bytes_read < 0) {
+    if (bytes_read < 0)
       return false;
-    } else if (bytes_read > 0) {
-      ret->append(buf, bytes_read);
-    }
+    if (bytes_read > 0)
+      ret->append(buf, static_cast<size_t>(bytes_read));
   } while (bytes_read > 0);
 
   return true;
@@ -857,24 +860,30 @@ File FILEToFile(FILE* file_stream) {
 
 int ReadFile(const FilePath& filename, char* data, int max_size) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
+  if (max_size < 0)
+    return -1;
   int fd = HANDLE_EINTR(open(filename.value().c_str(), O_RDONLY));
   if (fd < 0)
     return -1;
 
-  ssize_t bytes_read = HANDLE_EINTR(read(fd, data, max_size));
+  long bytes_read = HANDLE_EINTR(read(fd, data, static_cast<size_t>(max_size)));
   if (IGNORE_EINTR(close(fd)) < 0)
     return -1;
-  return bytes_read;
+  return checked_cast<int>(bytes_read);
 }
 
 int WriteFile(const FilePath& filename, const char* data, int size) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
+  if (size < 0)
+    return -1;
   int fd = HANDLE_EINTR(creat(filename.value().c_str(), 0666));
   if (fd < 0)
     return -1;
 
   int bytes_written =
-      WriteFileDescriptor(fd, StringPiece(data, size)) ? size : -1;
+      WriteFileDescriptor(fd, StringPiece(data, static_cast<size_t>(size)))
+          ? size
+          : -1;
   if (IGNORE_EINTR(close(fd)) < 0)
     return -1;
   return bytes_written;
@@ -886,8 +895,9 @@ bool WriteFileDescriptor(int fd, span<const uint8_t> data) {
   ssize_t size = checked_cast<ssize_t>(data.size());
   for (ssize_t bytes_written_partial = 0; bytes_written_total < size;
        bytes_written_total += bytes_written_partial) {
-    bytes_written_partial = HANDLE_EINTR(write(
-        fd, data.data() + bytes_written_total, size - bytes_written_total));
+    bytes_written_partial =
+        HANDLE_EINTR(write(fd, data.data() + bytes_written_total,
+                           static_cast<size_t>(size - bytes_written_total)));
     if (bytes_written_partial < 0)
       return false;
   }
@@ -913,8 +923,13 @@ bool AllocateFileRegion(File* file, int64_t offset, size_t size) {
 
   // Increase the actual length of the file, if necessary. This can fail if
   // the disk is full and the OS doesn't support sparse files.
-  const int64_t new_file_len = offset + size;
-  if (!file->SetLength(std::max(original_file_len, new_file_len))) {
+  const int64_t new_file_len = offset + static_cast<int64_t>(size);
+  // If the first condition fails, the cast on the previous line was invalid
+  // (though not UB).
+  if (!IsValueInRangeForNumericType<int64_t>(size) ||
+      !IsValueInRangeForNumericType<off_t>(size) ||
+      !IsValueInRangeForNumericType<off_t>(new_file_len) ||
+      !file->SetLength(std::max(original_file_len, new_file_len))) {
     DPLOG(ERROR) << "ftruncate " << file->GetPlatformFile();
     return false;
   }
@@ -928,7 +943,8 @@ bool AllocateFileRegion(File* file, int64_t offset, size_t size) {
   // use the manual method below.
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-  if (HANDLE_EINTR(fallocate(file->GetPlatformFile(), 0, offset, size)) != -1)
+  if (HANDLE_EINTR(fallocate(file->GetPlatformFile(), 0, offset,
+                             static_cast<off_t>(size))) != -1)
     return true;
   DPLOG(ERROR) << "fallocate";
 #elif BUILDFLAG(IS_APPLE)
@@ -944,27 +960,27 @@ bool AllocateFileRegion(File* file, int64_t offset, size_t size) {
 #endif
 
   // Manually realize the extended file by writing bytes to it at intervals.
-  int64_t block_size = 512;  // Start with something safe.
+  blksize_t block_size = 512;  // Start with something safe.
   stat_wrapper_t statbuf;
   if (File::Fstat(file->GetPlatformFile(), &statbuf) == 0 &&
       statbuf.st_blksize > 0 && base::bits::IsPowerOfTwo(statbuf.st_blksize)) {
-    block_size = statbuf.st_blksize;
+    block_size = static_cast<blksize_t>(statbuf.st_blksize);
   }
 
   // Write starting at the next block boundary after the old file length.
-  const int64_t extension_start =
-      base::bits::AlignUp(original_file_len, block_size);
+  const int64_t extension_start = checked_cast<int64_t>(base::bits::AlignUp(
+      static_cast<size_t>(original_file_len), static_cast<size_t>(block_size)));
   for (int64_t i = extension_start; i < new_file_len; i += block_size) {
     char existing_byte;
-    if (HANDLE_EINTR(pread(file->GetPlatformFile(), &existing_byte, 1, i)) !=
-        1) {
+    if (HANDLE_EINTR(pread(file->GetPlatformFile(), &existing_byte, 1,
+                           static_cast<off_t>(i))) != 1) {
       return false;  // Can't read? Not viable.
     }
     if (existing_byte != 0) {
       continue;  // Block has data so must already exist.
     }
-    if (HANDLE_EINTR(pwrite(file->GetPlatformFile(), &existing_byte, 1, i)) !=
-        1) {
+    if (HANDLE_EINTR(pwrite(file->GetPlatformFile(), &existing_byte, 1,
+                            static_cast<off_t>(i))) != 1) {
       return false;  // Can't write? Not viable.
     }
   }
@@ -1090,7 +1106,7 @@ int GetMaximumPathComponentLength(const FilePath& path) {
   return 1024;
 #else
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
-  return pathconf(path.value().c_str(), _PC_NAME_MAX);
+  return saturated_cast<int>(pathconf(path.value().c_str(), _PC_NAME_MAX));
 #endif
 }
 
@@ -1143,9 +1159,9 @@ bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
 }
 #endif  // !BUILDFLAG(IS_APPLE)
 
-PrefetchResult PreReadFile(const FilePath& file_path,
-                           bool is_executable,
-                           int64_t max_bytes) {
+bool PreReadFile(const FilePath& file_path,
+                 bool is_executable,
+                 int64_t max_bytes) {
   DCHECK_GE(max_bytes, 0);
 
   // posix_fadvise() is only available in the Android NDK in API 21+. Older
@@ -1155,38 +1171,32 @@ PrefetchResult PreReadFile(const FilePath& file_path,
     (BUILDFLAG(IS_ANDROID) && __ANDROID_API__ >= 21)
   File file(file_path, File::FLAG_OPEN | File::FLAG_READ);
   if (!file.IsValid())
-    return PrefetchResult{PrefetchResultCode::kInvalidFile};
+    return false;
 
   if (max_bytes == 0) {
     // fadvise() pre-fetches the entire file when given a zero length.
-    return PrefetchResult{PrefetchResultCode::kSuccess};
+    return true;
   }
 
   const PlatformFile fd = file.GetPlatformFile();
   const ::off_t len = base::saturated_cast<::off_t>(max_bytes);
-  return posix_fadvise(fd, /*offset=*/0, len, POSIX_FADV_WILLNEED) == 0
-             ? PrefetchResult{PrefetchResultCode::kSuccess}
-             : PrefetchResult{PrefetchResultCode::kFastFailed};
+  return posix_fadvise(fd, /*offset=*/0, len, POSIX_FADV_WILLNEED) == 0;
 #elif BUILDFLAG(IS_APPLE)
   File file(file_path, File::FLAG_OPEN | File::FLAG_READ);
   if (!file.IsValid())
-    return PrefetchResult{PrefetchResultCode::kInvalidFile};
+    return false;
 
   if (max_bytes == 0) {
     // fcntl(F_RDADVISE) fails when given a zero length.
-    return PrefetchResult{PrefetchResultCode::kSuccess};
+    return true;
   }
 
   const PlatformFile fd = file.GetPlatformFile();
   ::radvisory read_advise_data = {
       .ra_offset = 0, .ra_count = base::saturated_cast<int>(max_bytes)};
-  return fcntl(fd, F_RDADVISE, &read_advise_data) != -1
-             ? PrefetchResult{PrefetchResultCode::kSuccess}
-             : PrefetchResult{PrefetchResultCode::kFastFailed};
+  return fcntl(fd, F_RDADVISE, &read_advise_data) != -1;
 #else
-  return internal::PreReadFileSlow(file_path, max_bytes)
-             ? PrefetchResult{PrefetchResultCode::kSlowSuccess}
-             : PrefetchResult{PrefetchResultCode::kSlowFailed};
+  return internal::PreReadFileSlow(file_path, max_bytes);
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
         // (BUILDFLAG(IS_ANDROID) &&
         // __ANDROID_API__ >= 21)
@@ -1232,6 +1242,8 @@ bool CopyFileContentsWithSendfile(File& infile,
   }
 
   int64_t file_size = in_file_info.st_size;
+  if (file_size < 0)
+    return false;
   if (file_size == 0) {
     // Non-regular files can return a file size of 0, things such as pipes,
     // sockets, etc. Additionally, kernel seq_files(most procfs files) will also
@@ -1248,18 +1260,18 @@ bool CopyFileContentsWithSendfile(File& infile,
 
   size_t copied = 0;
   ssize_t res = 0;
-  while (file_size - copied > 0) {
+  do {
     // Don't specify an offset and the kernel will begin reading/writing to the
     // current file offsets.
-    res = HANDLE_EINTR(sendfile(outfile.GetPlatformFile(),
-                                infile.GetPlatformFile(), /*offset=*/nullptr,
-                                /*length=*/file_size - copied));
+    res = HANDLE_EINTR(sendfile(
+        outfile.GetPlatformFile(), infile.GetPlatformFile(), /*offset=*/nullptr,
+        /*length=*/static_cast<size_t>(file_size) - copied));
     if (res <= 0) {
       break;
     }
 
-    copied += res;
-  }
+    copied += static_cast<size_t>(res);
+  } while (copied < static_cast<size_t>(file_size));
 
   // Fallback on non-fatal error cases. None of these errors can happen after
   // data has started copying, a check is included for good measure. As a result

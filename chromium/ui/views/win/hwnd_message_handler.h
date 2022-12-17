@@ -579,7 +579,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // |time_stamp| is the time stamp associated with the message.
   void GenerateTouchEvent(ui::EventType event_type,
                           const gfx::Point& point,
-                          size_t id,
+                          ui::PointerId id,
                           base::TimeTicks time_stamp,
                           TouchEvents* touch_events);
 
@@ -811,6 +811,13 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // This is set to true when we call ShowWindow(SC_RESTORE), in order to
   // call HandleWindowMinimizedOrRestored() when we get a WM_ACTIVATE message.
   bool notify_restore_on_activate_ = false;
+
+  // Counts the number of drag events received after a drag started event.
+  // This will be used to ignore a drag event to 0, 0, if it is one of the
+  // first few drag events after a drag started event. We randomly receive
+  // bogus 0, 0 drag events after the start of a drag. See
+  // https://crbug.com/1270828.
+  int num_drag_events_after_press_ = 0;
 
   // This tracks headless window visibility, fullscreen and min/max states. In
   // headless mode the platform window is never made visible or change its

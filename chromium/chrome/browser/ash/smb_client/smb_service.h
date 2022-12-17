@@ -23,7 +23,7 @@
 #include "chrome/browser/ash/smb_client/smb_share_finder.h"
 #include "chrome/browser/ash/smb_client/smbfs_share.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/dbus/smbprovider/smb_provider_client.h"
+#include "chromeos/ash/components/dbus/smbprovider/smb_provider_client.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "net/base/network_change_notifier.h"
 
@@ -107,8 +107,7 @@ class SmbService : public KeyedService,
   // Updates credentials for Kerberos service.
   void UpdateKerberosCredentials(const std::string& account_identifier);
 
-  // Returns true if Kerberos was enabled via policy at service creation time
-  // and is still enabled now.
+  // Returns true if the Kerberos feature is enabled.
   bool IsKerberosEnabledViaPolicy() const;
 
   // Sets the mounter creation callback, which is passed to

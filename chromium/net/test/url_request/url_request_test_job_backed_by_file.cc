@@ -53,17 +53,15 @@ URLRequestTestJobBackedByFile::URLRequestTestJobBackedByFile(
     const scoped_refptr<base::TaskRunner>& file_task_runner)
     : URLRequestJob(request),
       file_path_(file_path),
-      stream_(new FileStream(file_task_runner)),
+      stream_(std::make_unique<FileStream>(file_task_runner)),
       file_task_runner_(file_task_runner) {}
 
 void URLRequestTestJobBackedByFile::Start() {
-  FileMetaInfo* meta_info = new FileMetaInfo();
-  file_task_runner_->PostTaskAndReply(
+  file_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&URLRequestTestJobBackedByFile::FetchMetaInfo, file_path_,
-                     base::Unretained(meta_info)),
+      base::BindOnce(&URLRequestTestJobBackedByFile::FetchMetaInfo, file_path_),
       base::BindOnce(&URLRequestTestJobBackedByFile::DidFetchMetaInfo,
-                     weak_ptr_factory_.GetWeakPtr(), base::Owned(meta_info)));
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void URLRequestTestJobBackedByFile::Kill() {
@@ -156,9 +154,9 @@ URLRequestTestJobBackedByFile::SetUpSourceStream() {
   return GzipSourceStream::Create(std::move(source), SourceStream::TYPE_GZIP);
 }
 
-void URLRequestTestJobBackedByFile::FetchMetaInfo(
-    const base::FilePath& file_path,
-    FileMetaInfo* meta_info) {
+std::unique_ptr<URLRequestTestJobBackedByFile::FileMetaInfo>
+URLRequestTestJobBackedByFile::FetchMetaInfo(const base::FilePath& file_path) {
+  auto meta_info = std::make_unique<FileMetaInfo>();
   base::File::Info file_info;
   meta_info->file_exists = base::GetFileInfo(file_path, &file_info);
   if (meta_info->file_exists) {
@@ -170,10 +168,11 @@ void URLRequestTestJobBackedByFile::FetchMetaInfo(
   meta_info->mime_type_result =
       GetMimeTypeFromFile(file_path, &meta_info->mime_type);
   meta_info->absolute_path = base::MakeAbsoluteFilePath(file_path);
+  return meta_info;
 }
 
 void URLRequestTestJobBackedByFile::DidFetchMetaInfo(
-    const FileMetaInfo* meta_info) {
+    std::unique_ptr<FileMetaInfo> meta_info) {
   meta_info_ = *meta_info;
 
   if (!meta_info_.file_exists) {

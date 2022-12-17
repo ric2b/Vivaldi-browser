@@ -9,16 +9,16 @@
 
 namespace content {
 
-class AggregationServiceKeyStorage;
+class AggregationServiceStorage;
 
 // Internal interface that provides access to the storage.
 class AggregationServiceStorageContext {
  public:
   virtual ~AggregationServiceStorageContext() = default;
 
-  // Returns the underlying storage for public keys.
-  virtual const base::SequenceBound<AggregationServiceKeyStorage>&
-  GetKeyStorage() = 0;
+  // Returns the underlying storage for public keys and report requests.
+  virtual const base::SequenceBound<AggregationServiceStorage>&
+  GetStorage() = 0;
 };
 
 }  // namespace content

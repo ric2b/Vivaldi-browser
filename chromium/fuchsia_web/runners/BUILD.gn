@@ -34,8 +34,7 @@ source_set("common") {
   deps = [
     ":buildflags",
     "//base",
-    "//fuchsia/base",
-    "//fuchsia/base:modular",
+    "//fuchsia_web/runners/common/modular",
     "//fuchsia_web/webinstance_host",
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
     "//ui/gfx/geometry",
@@ -66,31 +65,23 @@ source_set("cast_runner_core") {
     "cast/cast_runner_switches.h",
     "cast/cast_streaming.cc",
     "cast/cast_streaming.h",
-    "cast/create_web_message.cc",
-    "cast/create_web_message.h",
     "cast/named_message_port_connector_fuchsia.cc",
     "cast/named_message_port_connector_fuchsia.h",
     "cast/pending_cast_component.cc",
     "cast/pending_cast_component.h",
   ]
-  data = [
-    "cast/data/receiver.html",
-    rebase_path(
-        "//components/cast/named_message_port_connector/named_message_port_connector.js"),
-  ]
+  data = [ rebase_path(
+          "//components/cast/named_message_port_connector/named_message_port_connector.js") ]
   deps = [
     "//base",
     "//components/cast/common:constants",
     "//components/cast/message_port",
     "//components/cast/named_message_port_connector:named_message_port_connector",
     "//components/fuchsia_component_support",
-    "//fuchsia/base",
-    "//fuchsia/base:modular",
-
-    # TODO(crbug.com/852834): Remove this dependency when
-    # kAudioCapturerWithEchoCancellation is removed.
-    "//media",
+    "//fuchsia_web/cast_streaming",
+    "//fuchsia_web/runners/common/modular",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.diagnostics",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.legacymetrics",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mem",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
@@ -101,23 +92,19 @@ source_set("cast_runner_core") {
   public_deps = [
     ":common",
     "./cast/fidl",
-    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.legacymetrics",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
   ]
 
-  # Keep CastRunner trim by ensuring that large browser dependencies don't creep in.
-  # TODO(crbug.com/1211328): Migrate //fuchsia_web/webengine/web_instance_host to have
-  # each web_instance set the command-line options internally, so that no-deps
-  # assertions on the "common" targets can be used again.
-  assert_no_deps = [
-    "//content/public/browser",
-    "//content/public/renderer",
-    "//third_party/blink/public/browser",
-    "//third_party/blink/public/renderer",
-  ]
+  visibility += [ "//fuchsia_web/runners/cast/test:*" ]
 }
 
 executable("cast_runner_exe") {
+  assert_no_deps = [
+    "//content/public/common",
+    "//media",
+    "//third_party/blink/common",
+  ]
+
   sources = [ "cast/main.cc" ]
   deps = [
     ":buildflags",
@@ -125,7 +112,7 @@ executable("cast_runner_exe") {
     ":common",
     "//base",
     "//components/fuchsia_component_support",
-    "//fuchsia/base",
+    "//fuchsia_web/common",
     "//fuchsia_web/webinstance_host",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_inspect_cpp",
   ]
@@ -181,6 +168,7 @@ fuchsia_package("cast_runner_pkg") {
 }
 
 fuchsia_package_installer("cast_runner") {
+  visibility += [ "//fuchsia_web:gn_all" ]
   package = ":cast_runner_pkg"
   package_name = "cast_runner"
   package_deps = [ [
@@ -211,10 +199,11 @@ test("cast_runner_unittests") {
   deps = [
     ":cast_runner_core",
     ":cast_runner_test_core",
+    "common/modular:unit_tests",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
-    "//fuchsia/base/test:test_support",
+    "//fuchsia_web/common/test:test_support",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -224,19 +213,69 @@ test("cast_runner_unittests") {
 }
 
 test("cast_runner_integration_tests") {
-  sources = [ "cast/cast_runner_integration_test.cc" ]
+  sources = [
+    "cast/cast_runner_integration_test.cc",
+    "cast/cast_runner_integration_test_base.cc",
+    "cast/cast_runner_integration_test_base.h",
+    "common/modular/fake_component_context.cc",
+    "common/modular/fake_component_context.h",
+  ]
+  data = [ "cast/testdata" ]
+  deps = [
+    ":cast_runner_component",
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:test_support",
+    "//components/cast/message_port",
+    "//fuchsia_web/common/test:run_all_integration_tests",
+    "//fuchsia_web/common/test:test_support",
+    "//fuchsia_web/runners/cast/test:integration",
+    "//fuchsia_web/runners/common/modular",
+    "//net:test_support",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.legacymetrics",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
+    "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+  ]
+  package_deps = [ [
+        "//fuchsia_web/webengine:web_engine",
+        "web_engine",
+      ] ]
+  use_cfv1 = false
+  additional_manifest_fragments = [
+    "//build/config/fuchsia/test/fonts.shard.test-cml",
+    "//build/config/fuchsia/test/network.shard.test-cml",
+    "//fuchsia_web/runners/cast/cast_runner_integration_test.shard.test-cml",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys/component/realm_builder_absolute.shard.cml",
+    "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
+  ]
+}
+
+test("cast_runner_integration_tests_cfv1") {
+  sources = [
+    "cast/cast_runner_integration_test.cc",
+    "cast/cast_runner_integration_test_base.cc",
+    "cast/cast_runner_integration_test_base.h",
+    "cast/cast_runner_integration_test_cfv1.cc",
+    "common/modular/fake_component_context.cc",
+    "common/modular/fake_component_context.h",
+  ]
   data = [ "cast/testdata" ]
   deps = [
     ":cast_runner_core",
     ":cast_runner_test_core",
     "//base/test:test_support",
     "//components/cast/message_port",
-    "//fuchsia/base:run_all_integration_tests",
-    "//fuchsia/base/test:test_support",
-    "//media/fuchsia/audio:test_support",
+    "//fuchsia_web/common/test:run_all_integration_tests",
+    "//fuchsia_web/common/test:test_support",
+    "//fuchsia_web/runners/cast/test:cfv1_integration",
+    "//fuchsia_web/runners/common/modular",
     "//net:test_support",
     "//testing/gtest",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.legacymetrics",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.media",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
@@ -276,29 +315,35 @@ test("cast_runner_browsertests") {
     "//components/cast/message_port:test_message_port_receiver",
     "//content/public/browser",
     "//content/test:test_support",
-    "//fuchsia/base",
-    "//fuchsia/base/test:test_support",
+    "//fuchsia_web/common/test:test_support",
     "//fuchsia_web/webengine:browsertest_core",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/ozone",
   ]
-  use_cfv2 = false
+  use_cfv1 = false
+  test_runner_shard =
+      "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
   additional_manifest_fragments = [
-    "//build/config/fuchsia/test/jit_capabilities.test-cmx",
-    "//build/config/fuchsia/test/network_capabilities.test-cmx",
-    "//build/config/fuchsia/test/vulkan_capabilities.test-cmx",
+    "//build/config/fuchsia/test/network.shard.test-cml",
+    "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
   ]
 }
 
 executable("web_runner_exe") {
+  assert_no_deps = [
+    "//content/public/common",
+    "//media",
+    "//third_party/blink/common",
+  ]
+
   sources = [ "web/main.cc" ]
   deps = [
     ":buildflags",
     ":common",
     "//base",
     "//components/fuchsia_component_support",
-    "//fuchsia/base",
+    "//fuchsia_web/common",
     "//fuchsia_web/webinstance_host",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_inspect_cpp",
   ]
@@ -316,6 +361,7 @@ fuchsia_package("web_runner_pkg") {
 }
 
 fuchsia_package_installer("web_runner") {
+  visibility += [ "//fuchsia_web:gn_all" ]
   package = ":web_runner_pkg"
   package_name = "web_runner"
   package_deps = [ [
@@ -329,9 +375,8 @@ test("web_runner_integration_tests") {
   deps = [
     "//base",
     "//base/test:test_support",
-    "//components/cast/message_port",
-    "//fuchsia/base:modular",
-    "//fuchsia/base:run_all_integration_tests",
+    "//fuchsia_web/common/test:run_all_integration_tests",
+    "//fuchsia_web/runners/common/modular",
     "//net:test_support",
     "//testing/gtest",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",

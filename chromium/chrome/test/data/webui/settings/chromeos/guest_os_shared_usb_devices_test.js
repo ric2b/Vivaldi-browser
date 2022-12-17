@@ -55,16 +55,16 @@ suite('SharedUsbDevices', function() {
         guid: '0002',
         label: 'usb_dev2',
         sharedWith: 'PvmDefault',
-        promptBeforeSharing: true
+        promptBeforeSharing: true,
       },
       {
         guid: '0003',
         label: 'usb_dev3',
         sharedWith: 'otherVm',
-        promptBeforeSharing: true
+        promptBeforeSharing: true,
       },
     ];
-    GuestOsBrowserProxyImpl.setInstance(guestOsBrowserProxy);
+    GuestOsBrowserProxyImpl.setInstanceForTesting(guestOsBrowserProxy);
     PolymerTest.clearBody();
     page = document.createElement('settings-guest-os-shared-usb-devices');
     page.guestOsType = 'pluginVm';
@@ -98,7 +98,7 @@ suite('SharedUsbDevices', function() {
         guid: '0001',
         label: 'usb_dev1',
         sharedWith: 'PvmDefault',
-        promptBeforeSharing: true
+        promptBeforeSharing: true,
       },
     ]);
     flush();

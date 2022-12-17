@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.TimingMetric;
 import org.chromium.chrome.browser.omnibox.action.OmniboxPedalType;
+import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.SuggestTileType;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 
 import java.lang.annotation.Retention;
@@ -19,6 +20,12 @@ import java.lang.annotation.RetentionPolicy;
  * This class collects a variety of different Suggestions related metrics.
  */
 public class SuggestionsMetrics {
+    /**
+     * Maximum number of suggest tile types we want to record.
+     * Anything beyond this will be reported in the overflow bucket.
+     */
+    private static final int MAX_SUGGEST_TILE_TYPE_POSITION = 15;
+
     @IntDef({RefineActionUsage.NOT_USED, RefineActionUsage.SEARCH_WITH_ZERO_PREFIX,
             RefineActionUsage.SEARCH_WITH_PREFIX, RefineActionUsage.SEARCH_WITH_BOTH,
             RefineActionUsage.COUNT})
@@ -60,6 +67,31 @@ public class SuggestionsMetrics {
      */
     static final void recordSuggestionViewReused(boolean reused) {
         RecordHistogram.recordBooleanHistogram("Android.Omnibox.SuggestionView.Reused", reused);
+    }
+
+    /**
+     * Record the type of the suggestion view that had to be constructed.
+     * Recorded view type could not be retrieved from the Recycled View Pool and had to
+     * be re-created.
+     * Relevant for Omnibox recycler view improvements.
+     *
+     * @param type The type of view that needed to be recreated.
+     */
+    static final void recordSuggestionsViewCreatedType(@OmniboxSuggestionUiType int type) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.Omnibox.SuggestionView.CreatedType", type, OmniboxSuggestionUiType.COUNT);
+    }
+
+    /**
+     * Record the type of the suggestion view that was re-used.
+     * Recorded view type was retrieved from the Recycled View Pool.
+     * Relevant for Omnibox recycler view improvements.
+     *
+     * @param type The type of view that was reused from pool.
+     */
+    static final void recordSuggestionsViewReusedType(@OmniboxSuggestionUiType int type) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.Omnibox.SuggestionView.ReusedType", type, OmniboxSuggestionUiType.COUNT);
     }
 
     /**
@@ -137,6 +169,21 @@ public class SuggestionsMetrics {
     }
 
     /**
+     * Record the kind of (MostVisitedURL/OrganicRepeatableSearch) Tile type the User opened.
+     *
+     * @param position The position of a tile in the carousel.
+     * @param isSearchTile Whether tile being opened is a Search tile.
+     */
+    public static final void recordSuggestTileTypeUsed(int position, boolean isSearchTile) {
+        @SuggestTileType
+        int tileType = isSearchTile ? SuggestTileType.SEARCH : SuggestTileType.URL;
+        RecordHistogram.recordExactLinearHistogram(
+                "Omnibox.SuggestTiles.SelectedTileIndex", position, MAX_SUGGEST_TILE_TYPE_POSITION);
+        RecordHistogram.recordEnumeratedHistogram(
+                "Omnibox.SuggestTiles.SelectedTileType", tileType, SuggestTileType.COUNT);
+    }
+
+    /**
      * Translate the pageClass to a histogram suffix.
      *
      * @param histogram Histogram prefix.
@@ -150,8 +197,6 @@ public class SuggestionsMetrics {
             case PageClassification.NTP_VALUE:
             case PageClassification.INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS_VALUE:
             case PageClassification.INSTANT_NTP_WITH_FAKEBOX_AS_STARTING_FOCUS_VALUE:
-            case PageClassification.START_SURFACE_NEW_TAB_VALUE:
-            case PageClassification.START_SURFACE_HOMEPAGE_VALUE:
                 suffix = "NTP";
                 break;
 
@@ -174,7 +219,8 @@ public class SuggestionsMetrics {
             default:
                 // Report an error, but fall back to a default value.
                 // Use this to detect missing new cases.
-                assert false : "Unknown page classification: " + pageClass;
+                // TODO(crbug.com/1314765): This assert fails persistently on tablets.
+                // assert false : "Unknown page classification: " + pageClass;
                 break;
         }
 

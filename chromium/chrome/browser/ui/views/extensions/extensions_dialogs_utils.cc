@@ -6,16 +6,17 @@
 
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/url_formatter/url_formatter.h"
+#include "extensions/common/constants.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/widget/widget.h"
 
 namespace {
 
@@ -24,6 +25,22 @@ ExtensionsToolbarContainer* GetExtensionsToolbarContainer(
   return browser_view ? browser_view->toolbar_button_provider()
                             ->GetExtensionsToolbarContainer()
                       : nullptr;
+}
+
+// Returns the action view corresponding to the extension if a single
+// extension is specified in  extension_ids ; otherwise, returns the
+// extensions button.
+views::View* GetDialogAnchorView(
+    ExtensionsToolbarContainer* container,
+    const std::vector<extensions::ExtensionId>& extension_ids) {
+  DCHECK(container);
+
+  if (extension_ids.size() == 1) {
+    views::View* const action_view = container->GetViewForId(extension_ids[0]);
+    return action_view ? action_view : container->GetExtensionsButton();
+  }
+
+  return container->GetExtensionsButton();
 }
 
 }  // namespace
@@ -47,7 +64,10 @@ ExtensionsToolbarContainer* GetExtensionsToolbarContainer(
 ui::ImageModel GetIcon(ToolbarActionViewController* action,
                        content::WebContents* web_contents) {
   return ui::ImageModel::FromImageSkia(
-      action->GetIcon(web_contents, InstalledExtensionMenuItemView::kIconSize)
+      action
+          ->GetIcon(web_contents,
+                    gfx::Size(extension_misc::EXTENSION_ICON_SMALLISH,
+                              extension_misc::EXTENSION_ICON_SMALLISH))
           .AsImageSkia());
 }
 
@@ -65,33 +85,36 @@ std::u16string GetCurrentHost(content::WebContents* web_contents) {
       base::UnescapeRule::NORMAL, nullptr, nullptr, nullptr);
 }
 
-views::View* GetDialogAnchorView(ExtensionsToolbarContainer* container,
-                                 const extensions::ExtensionId& extension_id) {
-  DCHECK(container);
-  views::View* const action_view = container->GetViewForId(extension_id);
-  return action_view ? action_view : container->GetExtensionsButton();
-}
-
 void ShowDialog(gfx::NativeWindow parent,
                 const extensions::ExtensionId& extension_id,
                 std::unique_ptr<ui::DialogModel> dialog_model) {
   ExtensionsToolbarContainer* container = GetExtensionsToolbarContainer(parent);
   if (container && container->GetVisible()) {
-    ShowDialog(container, extension_id, std::move(dialog_model));
+    ShowDialog(container, {extension_id}, std::move(dialog_model));
   } else {
     constrained_window::ShowBrowserModal(std::move(dialog_model), parent);
   }
 }
 
 void ShowDialog(ExtensionsToolbarContainer* container,
-                const extensions::ExtensionId& extension_id,
+                const std::vector<extensions::ExtensionId>& extension_ids,
                 std::unique_ptr<ui::DialogModel> dialog_model) {
   DCHECK(container);
-  views::View* const anchor_view = GetDialogAnchorView(container, extension_id);
-  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
-      std::move(dialog_model), anchor_view, views::BubbleBorder::TOP_RIGHT);
 
-  container->ShowWidgetForExtension(
-      views::BubbleDialogDelegate::CreateBubble(std::move(bubble)),
-      extension_id);
+  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
+      std::move(dialog_model), GetDialogAnchorView(container, extension_ids),
+      views::BubbleBorder::TOP_RIGHT);
+  views::Widget* widget =
+      views::BubbleDialogDelegate::CreateBubble(std::move(bubble));
+
+  if (extension_ids.size() == 1) {
+    // Show the widget using the anchor view of the specific extension (which
+    // the container may need to popup out).
+    // TODO(emiliapaz): Consider moving showing the widget for extension to the
+    // utils to declutter the container file.
+    container->ShowWidgetForExtension(widget, extension_ids[0]);
+  } else {
+    // Show the widget using the default dialog anchor view.
+    widget->Show();
+  }
 }

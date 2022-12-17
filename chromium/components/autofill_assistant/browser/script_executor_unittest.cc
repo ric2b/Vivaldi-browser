@@ -15,6 +15,7 @@
 #include "components/autofill_assistant/browser/actions/action_test_utils.h"
 #include "components/autofill_assistant/browser/fake_script_executor_delegate.h"
 #include "components/autofill_assistant/browser/fake_script_executor_ui_delegate.h"
+#include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/service/mock_service.h"
 #include "components/autofill_assistant/browser/service/service.h"
 #include "components/autofill_assistant/browser/test_util.h"
@@ -2208,30 +2209,33 @@ TEST_F(ScriptExecutorTest, RoundtripTimingStats) {
   EXPECT_EQ(1000, timing_stats.client_time_ms());
 }
 
-TEST_F(ScriptExecutorTest, RoundtripNetworkStats) {
+TEST_F(ScriptExecutorTest, RoundtripNetworkStatsForSuccessfulRoundtrip) {
   ActionsResponseProto actions_response;
   ActionProto* action = actions_response.add_actions();
   action->mutable_tell()->set_message("Hello world");
 
-  ServiceRequestSender::ResponseInfo response_info;
-  response_info.encoded_body_length = 12;
-
   EXPECT_CALL(mock_service_, GetActions)
-      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, Serialize(actions_response),
-                                   response_info));
+      .WillOnce(RunOnceCallback<5>(
+          net::HTTP_OK, Serialize(actions_response),
+          ServiceRequestSender::ResponseInfo{.encoded_body_length = 76}));
 
   RoundtripNetworkStats captured_network_stats;
   EXPECT_CALL(mock_service_, GetNextActions)
-      .WillOnce(
-          DoAll(SaveArg<5>(&captured_network_stats),
-                RunOnceCallback<6>(net::HTTP_OK, /* response= */ "",
-                                   ServiceRequestSender::ResponseInfo{})));
+      .WillOnce(DoAll(
+          SaveArg<5>(&captured_network_stats),
+          [&]() {
+            EXPECT_EQ(captured_network_stats,
+                      delegate_.GetRoundtripNetworkStats());
+          },
+          RunOnceCallback<6>(
+              net::HTTP_OK, "",
+              ServiceRequestSender::ResponseInfo{.encoded_body_length = 13})));
 
   EXPECT_CALL(executor_callback_,
               Run(Field(&ScriptExecutor::Result::success, true)));
   executor_->Run(&user_data_, executor_callback_.Get());
 
-  EXPECT_EQ(captured_network_stats.roundtrip_encoded_body_size_bytes(), 12);
+  EXPECT_EQ(captured_network_stats.roundtrip_encoded_body_size_bytes(), 76);
   EXPECT_EQ(static_cast<size_t>(
                 captured_network_stats.roundtrip_decoded_body_size_bytes()),
             Serialize(actions_response).size());
@@ -2240,6 +2244,53 @@ TEST_F(ScriptExecutorTest, RoundtripNetworkStats) {
   EXPECT_EQ(static_cast<size_t>(
                 captured_network_stats.action_stats(0).decoded_size_bytes()),
             Serialize(*action).size());
+
+  // Roundtrip accumulation is more comprehensively tested in the controller,
+  // this is just to make sure that GetActions and GetNextActions are both
+  // reported to the delegate.
+  EXPECT_EQ(
+      delegate_.GetRoundtripNetworkStats().roundtrip_encoded_body_size_bytes(),
+      13);
+}
+
+TEST_F(ScriptExecutorTest, RoundtripNetworkStatsForFailedRoundtrip) {
+  EXPECT_CALL(mock_service_, GetActions)
+      .WillOnce(RunOnceCallback<5>(
+          net::HTTP_UNAUTHORIZED, "",
+          ServiceRequestSender::ResponseInfo{.encoded_body_length = 12}));
+
+  EXPECT_CALL(executor_callback_,
+              Run(Field(&ScriptExecutor::Result::success, false)));
+  executor_->Run(&user_data_, executor_callback_.Get());
+
+  EXPECT_EQ(
+      delegate_.GetRoundtripNetworkStats().roundtrip_encoded_body_size_bytes(),
+      12);
+  EXPECT_EQ(
+      delegate_.GetRoundtripNetworkStats().roundtrip_decoded_body_size_bytes(),
+      0);
+  EXPECT_EQ(delegate_.GetRoundtripNetworkStats().num_roundtrips(), 1);
+  EXPECT_EQ(delegate_.GetRoundtripNetworkStats().action_stats().size(), 0);
+}
+
+TEST_F(ScriptExecutorTest, RoundtripNetworkStatsForParsingError) {
+  EXPECT_CALL(mock_service_, GetActions)
+      .WillOnce(RunOnceCallback<5>(
+          net::HTTP_OK, "\xff\xff\xff not a valid proto, 36 bytes long",
+          ServiceRequestSender::ResponseInfo{.encoded_body_length = 12}));
+
+  EXPECT_CALL(executor_callback_,
+              Run(Field(&ScriptExecutor::Result::success, false)));
+  executor_->Run(&user_data_, executor_callback_.Get());
+
+  EXPECT_EQ(
+      delegate_.GetRoundtripNetworkStats().roundtrip_encoded_body_size_bytes(),
+      12);
+  EXPECT_EQ(
+      delegate_.GetRoundtripNetworkStats().roundtrip_decoded_body_size_bytes(),
+      36);
+  EXPECT_EQ(delegate_.GetRoundtripNetworkStats().num_roundtrips(), 1);
+  EXPECT_EQ(delegate_.GetRoundtripNetworkStats().action_stats().size(), 0);
 }
 
 TEST_F(ScriptExecutorTest, ClearPersistentUiOnError) {
@@ -2296,6 +2347,16 @@ TEST_F(ScriptExecutorTest, CollectUserData) {
   EXPECT_EQ(ui_delegate_.GetOptions(), &options);
   EXPECT_EQ(ui_delegate_.GetCollectUserDataUiLoadingField(),
             UserDataEventField::NONE);
+}
+
+TEST_F(ScriptExecutorTest, ShowQrCodeScanUi) {
+  executor_->ShowQrCodeScanUi(
+      std::make_unique<PromptQrCodeScanProto>(PromptQrCodeScanProto()),
+      base::DoNothing());
+  EXPECT_TRUE(ui_delegate_.IsShowingQrCodeScanUi());
+
+  executor_->ClearQrCodeScanUi();
+  EXPECT_FALSE(ui_delegate_.IsShowingQrCodeScanUi());
 }
 
 TEST_F(ScriptExecutorTest, MustUseBackendData) {
@@ -2390,6 +2451,48 @@ TEST_F(ScriptExecutorTest, ExternalActionAppliesAndRestoresTouchableArea) {
   EXPECT_THAT(delegate_.GetStateHistory(),
               ElementsAre(AutofillAssistantState::PROMPT,
                           AutofillAssistantState::RUNNING));
+}
+
+TEST_F(ScriptExecutorTest,
+       TestDelegateIsCalledForExtractValuesFromSingleTagXml) {
+  EXPECT_EQ(executor_->ExtractValuesFromSingleTagXml("some_xml", {"some_key"}),
+            (const std::vector<std::string>){});
+}
+
+TEST_F(ScriptExecutorTest, TestDelegateIsCalledForIsXmlSigned) {
+  EXPECT_EQ(executor_->IsXmlSigned("some_xml"), true);
+}
+
+TEST_F(ScriptExecutorTest, ReportProgress) {
+  EXPECT_CALL(mock_service_, ReportProgress)
+      .WillOnce(RunOnceCallback<2>(net::HTTP_OK, std::string(),
+                                   ServiceRequestSender::ResponseInfo{}));
+
+  base::MockCallback<base::OnceCallback<void(bool)>> mock_callback;
+  EXPECT_CALL(mock_callback, Run(true));
+
+  std::string payload = "payload";
+  executor_->ReportProgress(payload, mock_callback.Get());
+}
+
+TEST_F(ScriptExecutorTest, ReportProgressApplied) {
+  ActionsResponseProto actions_response;
+  *actions_response.add_actions()
+       ->mutable_report_progress()
+       ->mutable_payload() = "payload";
+
+  EXPECT_CALL(mock_service_, GetActions)
+      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, Serialize(actions_response),
+                                   ServiceRequestSender::ResponseInfo{}));
+  EXPECT_CALL(mock_service_, ReportProgress)
+      .WillOnce(RunOnceCallback<2>(net::HTTP_OK, std::string(),
+                                   ServiceRequestSender::ResponseInfo{}));
+  EXPECT_CALL(mock_service_, GetNextActions)
+      .WillRepeatedly(RunOnceCallback<6>(net::HTTP_OK, /* response= */ "",
+                                         ServiceRequestSender::ResponseInfo{}));
+  EXPECT_CALL(executor_callback_,
+              Run(Field(&ScriptExecutor::Result::success, true)));
+  executor_->Run(&user_data_, executor_callback_.Get());
 }
 
 }  // namespace

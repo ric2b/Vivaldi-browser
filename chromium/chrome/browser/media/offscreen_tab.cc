@@ -29,8 +29,6 @@
 #include "ui/aura/window_observer.h"
 #endif  // defined(USE_AURA)
 
-#include "app/vivaldi_apptools.h"
-
 using content::WebContents;
 
 namespace {
@@ -108,11 +106,6 @@ class OffscreenTab::WindowAdoptionAgent final : protected aura::WindowObserver {
         active_browser ? active_browser->window() : nullptr;
     aura::Window* const native_window =
         active_window ? active_window->GetNativeWindow() : nullptr;
-    // NOTE(andre@vivaldi.com): Vivaldi can correctly return a null here when
-    // closing the app-window. This is only to avoid the LOG(DFATAL) below.
-    if (vivaldi::IsVivaldiRunning() && !native_window) {
-      return;
-    }
     aura::Window* const root_window =
         native_window ? native_window->GetRootWindow() : nullptr;
     if (root_window) {

@@ -182,9 +182,10 @@ Node* CSSComputedStyleDeclaration::StyledNode() const {
     return nullptr;
 
   if (auto* node_element = DynamicTo<Element>(node_.Get())) {
-    if (PseudoElement* element =
-            node_element->GetPseudoElement(pseudo_element_specifier_))
+    if (PseudoElement* element = node_element->GetNestedPseudoElement(
+            pseudo_element_specifier_, pseudo_argument_)) {
       return element;
+    }
   }
   return node_.Get();
 }
@@ -463,6 +464,20 @@ const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValueInternal(
 String CSSComputedStyleDeclaration::GetPropertyValueInternal(
     CSSPropertyID property_id) {
   return GetPropertyValue(property_id);
+}
+
+String CSSComputedStyleDeclaration::GetPropertyValueWithHint(
+    const String& property_name,
+    unsigned index) {
+  NOTREACHED();
+  return "";
+}
+
+String CSSComputedStyleDeclaration::GetPropertyPriorityWithHint(
+    const String& property_name,
+    unsigned index) {
+  NOTREACHED();
+  return "";
 }
 
 void CSSComputedStyleDeclaration::SetPropertyInternal(

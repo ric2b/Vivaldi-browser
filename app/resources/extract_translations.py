@@ -1,7 +1,5 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
-from __future__ import print_function
-
 import sys, os
 import argparse
 

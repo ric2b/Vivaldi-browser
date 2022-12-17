@@ -11,7 +11,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
-#include "ash/public/cpp/style/color_provider.h"
+#include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -22,10 +22,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
-#include "chrome/browser/ui/app_list/search/files/justifications.h"
 #include "chrome/browser/ui/app_list/search/search_tags_util.h"
 #include "chrome/browser/ui/ash/thumbnail_loader.h"
-#include "chromeos/components/string_matching/tokenized_string_match.h"
+#include "chromeos/ash/components/string_matching/tokenized_string.h"
+#include "chromeos/ash/components/string_matching/tokenized_string_match.h"
 #include "chromeos/ui/base/file_icon_util.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
@@ -35,8 +35,8 @@ namespace app_list {
 
 namespace {
 
-using chromeos::string_matching::TokenizedString;
-using chromeos::string_matching::TokenizedStringMatch;
+using ::ash::string_matching::TokenizedString;
+using ::ash::string_matching::TokenizedStringMatch;
 
 // The default relevance returned by CalculateRelevance.
 constexpr double kDefaultRelevance = 0.5;
@@ -151,13 +151,13 @@ FileResult::FileResult(const std::string& schema,
 
   UpdateIcon();
 
-  if (ash::ColorProvider::Get())
-    ash::ColorProvider::Get()->AddObserver(this);
+  if (auto* dark_light_mode_controller = ash::DarkLightModeController::Get())
+    dark_light_mode_controller->AddObserver(this);
 }
 
 FileResult::~FileResult() {
-  if (ash::ColorProvider::Get())
-    ash::ColorProvider::Get()->RemoveObserver(this);
+  if (auto* dark_light_mode_controller = ash::DarkLightModeController::Get())
+    dark_light_mode_controller->RemoveObserver(this);
 }
 
 void FileResult::Open(int event_flags) {
@@ -197,9 +197,9 @@ double FileResult::CalculateRelevance(
     return kDefaultRelevance;
 
   TokenizedStringMatch match;
-  match.Calculate(query.value(), title);
+  const double relevance = match.Calculate(query.value(), title);
   if (!last_accessed)
-    return match.relevance();
+    return relevance;
 
   // Apply a gaussian penalty based on the time delta. `time_delta` is converted
   // into millisecond fractions of a day for numerical stability.
@@ -211,7 +211,7 @@ double FileResult::CalculateRelevance(
       kMaxPenalty +
       (1.0 - kMaxPenalty) * std::exp(-kPenaltyCoeff * time_delta * time_delta);
   DCHECK(penalty > 0.0 && penalty <= 1.0);
-  return match.relevance() * penalty;
+  return relevance * penalty;
 }
 
 void FileResult::RequestThumbnail(ash::ThumbnailLoader* thumbnail_loader) {
@@ -249,23 +249,18 @@ void FileResult::OnThumbnailLoaded(const SkBitmap* bitmap,
                                        ash::SearchResultIconShape::kCircle));
 }
 
-void FileResult::SetDetailsToJustificationString() {
-  GetJustificationStringAsync(
-      filepath_, base::BindOnce(&FileResult::OnJustificationStringReturned,
-                                weak_factory_.GetWeakPtr()));
-}
-
 void FileResult::UpdateIcon() {
   // Launcher search results UI is light by default, so use icons for light
   // background if dark/light mode feature is not enabled. Productivity launcher
   // has dark background by default, so use icons for dark background in that
   // case.
   const bool is_dark_light_enabled = ash::features::IsDarkLightModeEnabled();
-  // ColorProvider might be nullptr in tests.
-  auto* color_provider = ash::ColorProvider::Get();
+  // DarkLightModeController might be nullptr in tests.
+  auto* dark_light_mode_controller = ash::DarkLightModeController::Get();
   const bool dark_background =
       is_dark_light_enabled
-          ? color_provider && color_provider->IsDarkModeEnabled()
+          ? dark_light_mode_controller &&
+                dark_light_mode_controller->IsDarkModeEnabled()
           : ash::features::IsProductivityLauncherEnabled();
   if (display_type() == DisplayType::kChip) {
     SetChipIcon(chromeos::GetChipIconForPath(filepath_, dark_background));
@@ -293,12 +288,6 @@ void FileResult::UpdateIcon() {
         break;
     }
   }
-}
-
-void FileResult::OnJustificationStringReturned(
-    absl::optional<std::u16string> justification) {
-  if (justification)
-    SetDetails(justification.value());
 }
 
 ::std::ostream& operator<<(::std::ostream& os, const FileResult& result) {

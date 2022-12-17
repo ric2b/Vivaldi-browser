@@ -2,7 +2,7 @@
 
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
 
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_controller_client.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_interstitial.h"

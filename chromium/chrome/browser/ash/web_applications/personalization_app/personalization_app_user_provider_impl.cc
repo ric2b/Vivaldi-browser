@@ -97,6 +97,10 @@ PersonalizationAppUserProviderImpl::PersonalizationAppUserProviderImpl(
   user_image_manager->DownloadProfileImage();
   user_image_file_selector_ =
       std::make_unique<ash::UserImageFileSelector>(web_ui);
+  camera_presence_notifier_ =
+      std::make_unique<CameraPresenceNotifier>(base::BindRepeating(
+          &PersonalizationAppUserProviderImpl::OnCameraPresenceCheckDone,
+          weak_ptr_factory_.GetWeakPtr()));
 }
 
 PersonalizationAppUserProviderImpl::~PersonalizationAppUserProviderImpl() {
@@ -140,10 +144,7 @@ void PersonalizationAppUserProviderImpl::SetUserImageObserver(
   OnUserImageIsEnterpriseManagedChanged(
       *user, user_image_manager->IsUserImageManaged());
 
-  // Always unbind and rebind the camera check observer to trigger an immediate
-  // |OnCameraPresenceCheckDone|.
-  camera_observer_.Reset();
-  camera_observer_.Observe(ash::CameraPresenceNotifier::GetInstance());
+  camera_presence_notifier_->Start();
 }
 
 void PersonalizationAppUserProviderImpl::GetUserInfo(
@@ -305,7 +306,6 @@ void PersonalizationAppUserProviderImpl::OnUserImageChanged(
         LOG(ERROR) << "Invalid image index received";
         break;
       }
-      // TODO(b/218602268) support deprecated user image text fields.
       UpdateUserImageObserver(
           ash::personalization_app::mojom::UserImage::NewDefaultImage(
               ash::default_user_image::GetDefaultUserImage(image_index)));

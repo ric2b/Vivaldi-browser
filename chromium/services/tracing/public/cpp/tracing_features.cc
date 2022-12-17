@@ -23,7 +23,7 @@ namespace features {
 // Runs the tracing service as an in-process browser service.
 const base::Feature kTracingServiceInProcess {
   "TracingServiceInProcess",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMECAST)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CASTOS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -33,17 +33,6 @@ const base::Feature kTracingServiceInProcess {
 const base::Feature kEnablePerfettoSystemTracing{
   "EnablePerfettoSystemTracing",
 #if BUILDFLAG(IS_CHROMEOS)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
-
-// Controls whether trace points are implemented using Perfetto's client library
-// (enabled) or legacy TraceLog (disabled).
-const base::Feature kEnablePerfettoClientApiProducer {
-  "EnablePerfettoClientApiProducer",
-#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT

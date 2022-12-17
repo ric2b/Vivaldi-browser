@@ -99,6 +99,7 @@ ResourceRequestHead::ResourceRequestHead(const KURL& url)
       skip_service_worker_(false),
       download_to_cache_only_(false),
       site_for_cookies_set_(false),
+      is_form_submission_(false),
       initial_priority_(ResourceLoadPriority::kUnresolved),
       priority_(ResourceLoadPriority::kUnresolved),
       intra_priority_value_(0),
@@ -197,6 +198,7 @@ std::unique_ptr<ResourceRequest> ResourceRequestHead::CreateRedirectRequest(
   request->SetUseStreamOnResponse(UseStreamOnResponse());
   request->SetRequestContext(GetRequestContext());
   request->SetMode(GetMode());
+  request->SetTargetAddressSpace(GetTargetAddressSpace());
   request->SetCredentialsMode(GetCredentialsMode());
   request->SetKeepalive(GetKeepalive());
   request->SetPriority(Priority());

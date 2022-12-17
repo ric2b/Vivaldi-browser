@@ -9,28 +9,33 @@
 
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "components/ad_blocker/adblock_known_sources_handler.h"
+#include "components/ad_blocker/adblock_rule_manager_impl.h"
+#include "components/ad_blocker/adblock_rule_source_handler.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
-#include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
-#include "components/request_filter/adblock_filter/adblock_rule_source_handler.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "components/request_filter/request_filter_manager_factory.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 
 namespace adblock_filter {
-RuleServiceImpl::RuleServiceImpl(content::BrowserContext* context)
-    : context_(context) {}
-RuleServiceImpl::~RuleServiceImpl() {
-  if (delegate_)
-    delegate_->RuleServiceDeleted();
-}
+RuleServiceImpl::RuleServiceImpl(
+    content::BrowserContext* context,
+    RuleSourceHandler::RulesCompiler rules_compiler,
+    std::string locale)
+    : context_(context),
+      rules_compiler_(std::move(rules_compiler)),
+      locale_(std::move(locale)) {}
+RuleServiceImpl::~RuleServiceImpl() {}
 
-void RuleServiceImpl::AddObserver(Observer* observer) {
+void RuleServiceImpl::AddObserver(RuleService::Observer* observer) {
   observers_.AddObserver(observer);
 }
 
-void RuleServiceImpl::RemoveObserver(Observer* observer) {
+void RuleServiceImpl::RemoveObserver(RuleService::Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -41,16 +46,11 @@ void RuleServiceImpl::Load() {
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
   resources_.emplace(file_task_runner_.get());
 
-  state_store_.emplace(context_, this, file_task_runner_.get());
+  state_store_.emplace(context_->GetPath(), this, file_task_runner_);
 
   // Unretained is safe because we own the sources store
   state_store_->Load(
       base::BindOnce(&RuleServiceImpl::OnStateLoaded, base::Unretained(this)));
-}
-
-void RuleServiceImpl::SetDelegate(Delegate* delegate) {
-  DCHECK(!delegate_);
-  delegate_ = delegate;
 }
 
 bool RuleServiceImpl::IsLoaded() const {
@@ -60,6 +60,7 @@ bool RuleServiceImpl::IsLoaded() const {
 void RuleServiceImpl::Shutdown() {
   if (is_loaded_) {
     state_store_->OnRuleServiceShutdown();
+    rule_manager_->RemoveObserver(this);
   }
 }
 
@@ -89,20 +90,10 @@ void RuleServiceImpl::SetRuleGroupEnabled(RuleGroup group, bool enabled) {
     AddRequestFilter(group);
   }
 
-  for (Observer& observer : observers_)
+  for (RuleService::Observer& observer : observers_)
     observer.OnGroupStateChanged(group);
 
   state_store_->ScheduleSave();
-}
-
-std::map<int64_t, std::unique_ptr<RuleSourceHandler>>&
-RuleServiceImpl::GetSourceMap(RuleGroup group) {
-  return rule_sources_[static_cast<size_t>(group)];
-}
-
-const std::map<int64_t, std::unique_ptr<RuleSourceHandler>>&
-RuleServiceImpl::GetSourceMap(RuleGroup group) const {
-  return rule_sources_[static_cast<size_t>(group)];
 }
 
 std::string RuleServiceImpl::GetRulesIndexChecksum(RuleGroup group) {
@@ -111,47 +102,46 @@ std::string RuleServiceImpl::GetRulesIndexChecksum(RuleGroup group) {
 }
 
 void RuleServiceImpl::OnStateLoaded(
-    std::unique_ptr<RuleServiceStorage::LoadResult> load_result) {
+    RuleServiceStorage::LoadResult load_result) {
   // All cases of base::Unretained here are safe. We are generally passing
   // callbacks to objects that we own, calling to either this or other objects
   // that we own.
-
-  active_exceptions_lists_ = load_result->active_exceptions_lists;
   blocked_urls_reporter_.emplace(
-      load_result->blocked_reporting_start,
-      std::move(load_result->blocked_domains_counters),
-      std::move(load_result->blocked_for_origin_counters),
+      load_result.blocked_reporting_start,
+      std::move(load_result.blocked_domains_counters),
+      std::move(load_result.blocked_for_origin_counters),
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())));
 
+  rule_manager_.emplace(
+      file_task_runner_, context_->GetPath(),
+      context_->GetDefaultStoragePartition()
+          ->GetURLLoaderFactoryForBrowserProcess(),
+      std::move(load_result.rule_sources),
+      std::move(load_result.active_exceptions_lists),
+      std::move(load_result.exceptions),
+      base::BindRepeating(&RuleServiceStorage::ScheduleSave,
+                          base::Unretained(&state_store_.value())),
+      rules_compiler_,
+      base::BindRepeating(&BlockedUrlsReporter::OnTrackerInfosUpdated,
+                          base::Unretained(&blocked_urls_reporter_.value())));
+  rule_manager_->AddObserver(this);
+
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-    for (const auto& rule_source :
-         load_result->rule_sources[static_cast<size_t>(group)]) {
-      GetSourceMap(group)[rule_source.id] = std::make_unique<RuleSourceHandler>(
-          context_, rule_source, file_task_runner_,
-          base::BindRepeating(&RuleServiceImpl::OnSourceUpdated,
-                              base::Unretained(this)),
-          base::BindRepeating(
-              &BlockedUrlsReporter::OnTrackerInfosUpdated,
-              base::Unretained(&blocked_urls_reporter_.value())));
-    }
     index_managers_[static_cast<size_t>(group)].emplace(
         context_, this, group,
-        load_result->index_checksums[static_cast<size_t>(group)],
+        load_result.index_checksums[static_cast<size_t>(group)],
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexChanged,
                             base::Unretained(this)),
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexLoaded,
                             base::Unretained(this), group),
-        base::BindRepeating(&RuleServiceImpl::OnRulesBufferReadFailCallback,
-                            base::Unretained(this)),
+        base::BindRepeating(&RuleManager::OnRulesBufferReadFailCallback,
+                            base::Unretained(&rule_manager_.value())),
         file_task_runner_);
 
-    if (load_result->groups_enabled[static_cast<size_t>(group)]) {
+    if (load_result.groups_enabled[static_cast<size_t>(group)]) {
       AddRequestFilter(group);
     }
-
-    exceptions_[static_cast<size_t>(group)].swap(
-        load_result->exceptions[static_cast<size_t>(group)]);
   }
 
   std::array<RulesIndexManager*, kRuleGroupCount> index_manager_ptrs;
@@ -163,208 +153,25 @@ void RuleServiceImpl::OnStateLoaded(
                                       &(resources_.value()));
 
   known_sources_handler_.emplace(
-      this, load_result->storage_version, load_result->known_sources,
-      std::move(load_result->deleted_presets),
+      this, load_result.storage_version, locale_, load_result.known_sources,
+      std::move(load_result.deleted_presets),
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())));
 
   is_loaded_ = true;
-  for (Observer& observer : observers_)
+  for (RuleService::Observer& observer : observers_)
     observer.OnRuleServiceStateLoaded(this);
-}
-
-bool RuleServiceImpl::AddRulesSource(const KnownRuleSource& known_source) {
-  // If a source with the same id exists, that means the corresponding known
-  // source was already added
-  auto& rule_sources = GetSourceMap(known_source.group);
-  if (rule_sources.find(known_source.id) != rule_sources.end())
-    return false;
-  // base::Unretained is safe. We own both the rule_sources and the
-  // blocked_urls_reporter
-  rule_sources[known_source.id] = std::make_unique<RuleSourceHandler>(
-      context_, RuleSource(known_source), file_task_runner_,
-      base::BindRepeating(&RuleServiceImpl::OnSourceUpdated,
-                          base::Unretained(this)),
-      base::BindRepeating(&BlockedUrlsReporter::OnTrackerInfosUpdated,
-                          base::Unretained(&blocked_urls_reporter_.value())));
-  rule_sources[known_source.id]->FetchNow();
-  return known_source.id;
-}
-
-std::map<uint32_t, RuleSource> RuleServiceImpl::GetRuleSources(
-    RuleGroup group) const {
-  std::map<uint32_t, RuleSource> output;
-  for (const auto& context : GetSourceMap(group)) {
-    output.insert({context.first, context.second->rule_source()});
-  }
-
-  return output;
-}
-
-absl::optional<RuleSource> RuleServiceImpl::GetRuleSource(RuleGroup group,
-                                                          uint32_t source_id) {
-  const auto& rule_sources = GetSourceMap(group);
-  const auto& source_context = rule_sources.find(source_id);
-  if (source_context == rule_sources.end())
-    return absl::nullopt;
-  return source_context->second->rule_source();
-}
-
-bool RuleServiceImpl::FetchRuleSourceNow(RuleGroup group, uint32_t source_id) {
-  auto& rule_sources = GetSourceMap(group);
-
-  const auto& rule_source = rule_sources.find(source_id);
-  if (rule_source == rule_sources.end())
-    return false;
-
-  rule_source->second->FetchNow();
-  return true;
-}
-
-void RuleServiceImpl::DeleteRuleSource(const KnownRuleSource& known_source) {
-  auto& rule_sources = GetSourceMap(known_source.group);
-
-  const auto& rule_source = rule_sources.find(known_source.id);
-  if (rule_source == rule_sources.end())
-    return;
-
-  rule_source->second->Clear();
-  rule_sources.erase(rule_source);
-
-  state_store_->ScheduleSave();
-
-  for (Observer& observer : observers_)
-    observer.OnRuleSourceDeleted(known_source.id, known_source.group);
-}
-
-void RuleServiceImpl::SetActiveExceptionList(RuleGroup group,
-                                             ExceptionsList list) {
-  DCHECK(is_loaded_);
-  active_exceptions_lists_[static_cast<size_t>(group)] = list;
-
-  for (Observer& observer : observers_)
-    observer.OnGroupStateChanged(group);
-
-  state_store_->ScheduleSave();
-}
-
-RuleService::ExceptionsList RuleServiceImpl::GetActiveExceptionList(
-    RuleGroup group) const {
-  return active_exceptions_lists_[static_cast<size_t>(group)];
-}
-
-void RuleServiceImpl::AddExceptionForDomain(RuleGroup group,
-                                            ExceptionsList list,
-                                            const std::string& domain) {
-  DCHECK(is_loaded_);
-
-  base::StringPiece canonicalized_domain(domain);
-  if (canonicalized_domain.back() == '.')
-    canonicalized_domain.remove_suffix(1);
-
-  exceptions_[static_cast<size_t>(group)][list].insert(
-      std::string(canonicalized_domain));
-
-  if (request_filters_[static_cast<size_t>(group)]) {
-    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-        ->ClearCacheOnNavigation();
-  }
-
-  for (Observer& observer : observers_)
-    observer.OnExceptionListChanged(group, list);
-
-  state_store_->ScheduleSave();
-}
-void RuleServiceImpl::RemoveExceptionForDomain(RuleGroup group,
-                                               ExceptionsList list,
-                                               const std::string& domain) {
-  DCHECK(is_loaded_);
-
-  base::StringPiece canonicalized_domain(domain);
-  if (canonicalized_domain.back() == '.')
-    canonicalized_domain.remove_suffix(1);
-
-  for (size_t position = 0;; ++position) {
-    const base::StringPiece subdomain = canonicalized_domain.substr(position);
-    exceptions_[static_cast<size_t>(group)][list].erase(std::string(subdomain));
-
-    position = canonicalized_domain.find('.', position);
-    if (position == base::StringPiece::npos)
-      break;
-  }
-
-  if (request_filters_[static_cast<size_t>(group)]) {
-    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-        ->ClearCacheOnNavigation();
-  }
-
-  for (Observer& observer : observers_)
-    observer.OnExceptionListChanged(group, list);
-
-  state_store_->ScheduleSave();
-}
-
-void RuleServiceImpl::RemoveAllExceptions(RuleGroup group,
-                                          ExceptionsList list) {
-  DCHECK(is_loaded_);
-  exceptions_[static_cast<size_t>(group)][list].clear();
-
-  if (request_filters_[static_cast<size_t>(group)]) {
-    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-        ->ClearCacheOnNavigation();
-  }
-
-  for (Observer& observer : observers_)
-    observer.OnExceptionListChanged(group, list);
-
-  state_store_->ScheduleSave();
-}
-
-const std::set<std::string>& RuleServiceImpl::GetExceptions(
-    RuleGroup group,
-    ExceptionsList list) const {
-  return exceptions_[static_cast<size_t>(group)][list];
-}
-
-bool RuleServiceImpl::IsExemptOfFiltering(RuleGroup group,
-                                          url::Origin origin) const {
-  bool default_exempt =
-      active_exceptions_lists_[static_cast<size_t>(group)] == kProcessList;
-  if (origin.opaque())
-    return default_exempt;
-
-  base::StringPiece canonicalized_host(origin.host());
-  if (canonicalized_host.empty())
-    return default_exempt;
-
-  // If the host name ends with a dot, then ignore it.
-  if (canonicalized_host.back() == '.')
-    canonicalized_host.remove_suffix(1);
-
-  for (size_t position = 0;; ++position) {
-    const base::StringPiece subdomain = canonicalized_host.substr(position);
-
-    if (exceptions_[static_cast<size_t>(group)]
-                   [active_exceptions_lists_[static_cast<size_t>(group)]]
-                       .count(std::string(subdomain)) != 0)
-      return !default_exempt;
-
-    position = canonicalized_host.find('.', position);
-    if (position == base::StringPiece::npos)
-      break;
-  }
-
-  return default_exempt;
 }
 
 bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
                                         content::RenderFrameHost* frame,
                                         const GURL& url) const {
+  DCHECK(is_loaded_);
   if (!url.SchemeIs(url::kFtpScheme) && !url.SchemeIsHTTPOrHTTPS())
     return false;
 
   url::Origin origin = url::Origin::Create(url);
-  if (IsExemptOfFiltering(group, origin))
+  if (rule_manager_->IsExemptOfFiltering(group, origin))
     return false;
 
   auto* index = index_managers_[static_cast<size_t>(group)]->rules_index();
@@ -377,6 +184,11 @@ bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
   return (activations.in_block_rules & flat::ActivationType_DOCUMENT) != 0;
 }
 
+RuleManager* RuleServiceImpl::GetRuleManager() {
+  DCHECK(rule_manager_);
+  return &rule_manager_.value();
+}
+
 KnownRuleSourcesHandler* RuleServiceImpl::GetKnownSourcesHandler() {
   DCHECK(known_sources_handler_);
   return &known_sources_handler_.value();
@@ -387,11 +199,12 @@ BlockedUrlsReporter* RuleServiceImpl::GetBlockerUrlsReporter() {
   return &blocked_urls_reporter_.value();
 }
 
-void RuleServiceImpl::OnSourceUpdated(RuleSourceHandler* rule_source_handler) {
-  state_store_->ScheduleSave();
-
-  for (Observer& observer : observers_)
-    observer.OnRulesSourceUpdated(rule_source_handler->rule_source());
+void RuleServiceImpl::OnExceptionListChanged(RuleGroup group,
+                                             RuleManager::ExceptionsList list) {
+  if (request_filters_[static_cast<size_t>(group)]) {
+    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
+        ->ClearCacheOnNavigation();
+  }
 }
 
 void RuleServiceImpl::OnRulesIndexChanged() {
@@ -405,18 +218,6 @@ void RuleServiceImpl::OnRulesIndexLoaded(RuleGroup group) {
     vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
         ->ClearCacheOnNavigation();
   }
-}
-
-void RuleServiceImpl::OnRulesBufferReadFailCallback(RuleGroup rule_group,
-                                                    uint32_t source_id) {
-  const auto& rule_sources = GetSourceMap(rule_group);
-  const auto& source_context = rule_sources.find(source_id);
-  DCHECK(source_context != rule_sources.end());
-  // If the last fetch attempt failed, don't try again immediately to make sure
-  // that we don't end up in an infinite rety loop.
-  if (source_context->second->rule_source().last_fetch_result ==
-      FetchResult::kSuccess)
-    source_context->second->FetchNow();
 }
 
 void RuleServiceImpl::InitializeCosmeticFilter(CosmeticFilter* filter) {

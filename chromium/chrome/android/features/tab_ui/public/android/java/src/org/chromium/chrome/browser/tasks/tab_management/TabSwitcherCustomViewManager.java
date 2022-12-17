@@ -7,9 +7,14 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * A class that supplies custom view to TabSwitcher from other non tab switcher clients.
+ *
+ * TODO(crbug.com/1227656): This manager is only used by the re-auth client and once the re-auth
+ * integration with tab-switcher design is further improved then remove this if no other clients
+ * use this.
  */
 public class TabSwitcherCustomViewManager {
     /**
@@ -21,8 +26,11 @@ public class TabSwitcherCustomViewManager {
          * This is fired when a client has requested a view to be shown.
          *
          * @param customView The {@link View} that is requested to be added.
+         * @param backPressRunnable A {@link Runnable} which can be supplied if clients also wish to
+         *         handle back presses while the custom view is shown. A null value can be passed to
+         *         not intercept back presses.
          */
-        void addCustomView(@NonNull View customView);
+        void addCustomView(@NonNull View customView, @Nullable Runnable backPressRunnable);
         /**
          * This is fired when the same client has made the view unavailable for it to be shown
          * any longer.
@@ -53,9 +61,13 @@ public class TabSwitcherCustomViewManager {
      * A method to request showing a custom view.
      *
      * @param customView The {@link View} that is being requested by the client to be shown.
+     * @param backPressRunnable A {@link Runnable} which can be supplied if clients also wish to
+     *         handle back presses while the custom view is shown. A null value can be passed to not
+     *         intercept back presses.
+     *
      * @return true, if the request to show custom view was relayed successfully, false otherwise.
      */
-    public boolean requestView(@NonNull View customView) {
+    public boolean requestView(@NonNull View customView, @Nullable Runnable backPressRunnable) {
         if (mIsCustomViewRequested) {
             assert false : "Previous request view is in-flight.";
             // assert statements are removed in release builds.
@@ -63,7 +75,7 @@ public class TabSwitcherCustomViewManager {
         }
         mIsCustomViewRequested = true;
         mCustomView = customView;
-        mDelegate.addCustomView(mCustomView);
+        mDelegate.addCustomView(mCustomView, backPressRunnable);
         return true;
     }
 

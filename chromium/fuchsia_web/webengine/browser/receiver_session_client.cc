@@ -6,7 +6,10 @@
 
 #include "base/bind.h"
 #include "components/cast/message_port/fuchsia/message_port_fuchsia.h"
+#include "components/cast/message_port/message_port.h"
+#include "components/cast_streaming/browser/public/receiver_session.h"
 #include "components/cast_streaming/public/config_conversions.h"
+#include "components/cast_streaming/public/mojom/demuxer_connector.mojom.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/video_decoder_config.h"
 
@@ -20,7 +23,7 @@ ReceiverSessionClient::ReceiverSessionClient(
 
 ReceiverSessionClient::~ReceiverSessionClient() = default;
 
-void ReceiverSessionClient::SetCastStreamingReceiver(
+void ReceiverSessionClient::SetDemuxerConnector(
     mojo::AssociatedRemote<cast_streaming::mojom::DemuxerConnector>
         demuxer_connector) {
   DCHECK(message_port_request_);
@@ -31,12 +34,17 @@ void ReceiverSessionClient::SetCastStreamingReceiver(
   // out by build flags.
   auto stream_config =
       std::make_unique<cast_streaming::ReceiverSession::AVConstraints>(
-          cast_streaming::ToVideoCaptureConfigCodecs(media::VideoCodec::kH264,
-                                                     media::VideoCodec::kVP8),
-          video_only_receiver_
-              ? std::vector<openscreen::cast::AudioCodec>()
-              : cast_streaming::ToAudioCaptureConfigCodecs(
-                    media::AudioCodec::kAAC, media::AudioCodec::kOpus));
+          cast_streaming::ToVideoCaptureConfigCodecs(
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+              media::VideoCodec::kH264,
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+              media::VideoCodec::kVP8),
+          video_only_receiver_ ? cast_streaming::ToAudioCaptureConfigCodecs()
+                               : cast_streaming::ToAudioCaptureConfigCodecs(
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+                                     media::AudioCodec::kAAC,
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+                                     media::AudioCodec::kOpus));
 
   receiver_session_ = cast_streaming::ReceiverSession::Create(
       std::move(stream_config),
@@ -48,4 +56,8 @@ void ReceiverSessionClient::SetCastStreamingReceiver(
           },
           std::move(message_port_request_)));
   receiver_session_->StartStreamingAsync(std::move(demuxer_connector));
+}
+
+bool ReceiverSessionClient::HasReceiverSession() {
+  return !!receiver_session_;
 }

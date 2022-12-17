@@ -225,11 +225,6 @@ void ManifestManager::RecordMetrics(const mojom::blink::Manifest& manifest) {
                       WebFeature::kWebAppManifestCaptureLinks);
   }
 
-  if (manifest.handle_links != mojom::blink::HandleLinks::kUndefined) {
-    UseCounter::Count(GetSupplementable(),
-                      WebFeature::kWebAppManifestHandleLinks);
-  }
-
   if (!manifest.launch_handler.is_null()) {
     UseCounter::Count(GetSupplementable(),
                       WebFeature::kWebAppManifestLaunchHandler);
@@ -250,6 +245,8 @@ void ManifestManager::RecordMetrics(const mojom::blink::Manifest& manifest) {
     if (display_override == mojom::blink::DisplayMode::kWindowControlsOverlay) {
       UseCounter::Count(GetSupplementable(),
                         WebFeature::kWebAppWindowControlsOverlay);
+    } else if (display_override == mojom::blink::DisplayMode::kBorderless) {
+      UseCounter::Count(GetSupplementable(), WebFeature::kWebAppBorderless);
     }
   }
 

@@ -1,4 +1,4 @@
-# Danling pointer detector.
+# Dangling pointer detector.
 
 Dangling pointers are not a problem unless they are dereferenced and used.
 However, they are a source of UaF bugs and highly discouraged unless you are
@@ -35,26 +35,42 @@ use_goma = true
 is_debug = false
 dcheck_always_on = true
 use_backup_ref_ptr = true
-use_partition_alloc = true
 enable_dangling_raw_ptr_checks = true
+```
+
+We want to emphasize that `is_debug = false` is important. It is a common
+mistake to set it to true, which in turn turns on component builds, which
+disabled PartitionAlloc-Everywhere. `use_backup_ref_ptr = true` can't be used
+without PartitionAlloc-Everywhere, leading to error:
+```
+ERROR at //base/allocator/allocator.gni:126:3: Assertion failed.
+  assert(!use_backup_ref_ptr || use_allocator == "partition",
 ```
 
 ## Runtime flags
 
 ```bash
-./out/dangling/content_shell --enable-features=PartitionAllocBackupRefPtr
+./out/dangling/content_shell \
+   --enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr
 ```
 
-Chrome will crash on the first dangling raw_ptr detected.
+By default, Chrome will crash on the first dangling raw_ptr detected.
 
-# Record a list of signatures.
+# Runtime flags options:
 
-Instead of immediately crashing, you can list all the dangling raw_ptr
-occurrences. This is gated behind the `PartitionAllocDanglingPtrRecord` feature.
+### Crash (default)
 
-For instance:
 ```bash
-./out/dangling/content_shell --enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtrRecord |& tee output
+--enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr:mode/crash
+```
+
+### Record a list of signatures
+
+Example usage:
+```bash
+./out/dangling/content_shell \
+   --enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr:mode/log_signature \
+   |& tee output
 ```
 
 The logs can be filtered and transformed into a tab separated table:
@@ -69,3 +85,10 @@ cat output \
 ```
 
 This is used to list issues and track progresses.
+
+# DanglingUntriaged
+
+This raw_ptr option means it is allowed to dangle. Contrary to
+`DisableDanglingPtrDetection`, we don't know yet why it dangle. It is meant to
+be either refactored to avoid dangling, or turned into
+"DisableDanglingPtrDetection" with a comment explaining what happens.

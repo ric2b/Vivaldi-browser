@@ -66,7 +66,7 @@ class CORE_EXPORT DisplayLockUtilities {
     FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated() const;
     friend gfx::RectF Range::BoundingRect() const;
     friend DOMRectList* Range::getClientRects() const;
-    friend bool Element::isVisible(IsVisibleOptions*) const;
+    friend bool Element::checkVisibility(CheckVisibilityOptions*) const;
 
     friend class DisplayLockContext;
 
@@ -219,11 +219,6 @@ class CORE_EXPORT DisplayLockUtilities {
   static const HeapVector<Member<Element>> ActivatableLockedInclusiveAncestors(
       const Node& node,
       DisplayLockActivationReason reason);
-
-  // Returns the nearest inclusive ancestor of |element| that has
-  // content-visibility: hidden-matchable.
-  // TODO(crbug.com/1249939): Remove this.
-  static Element* NearestHiddenMatchableInclusiveAncestor(Element& element);
 
   // Ancestor navigation functions.
 

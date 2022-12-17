@@ -59,6 +59,9 @@ class MetricsRotationScheduler;
 class MetricsServiceClient;
 class MetricsStateManager;
 
+// Exposed in the header file for tests.
+extern const base::Feature kConsolidateMetricsServiceInitialLogLogic;
+
 // See metrics_service.cc for a detailed description.
 class MetricsService : public base::HistogramFlattener {
  public:
@@ -135,14 +138,6 @@ class MetricsService : public base::HistogramFlattener {
   // to be interacting with the application.
   void OnApplicationNotIdle();
 
-  // Invoked when we get a WM_SESSIONEND. This places a value in prefs that is
-  // reset when RecordCompletedSessionEnd is invoked.
-  void RecordStartOfSessionEnd();
-
-  // This should be called when the application is shutting down. It records
-  // that session end was successful.
-  void RecordCompletedSessionEnd();
-
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   // Called when the application is going into background mode.
   // If |keep_recording_in_background| is true, UMA is still recorded and
@@ -152,6 +147,10 @@ class MetricsService : public base::HistogramFlattener {
   // Called when the application is coming out of background mode.
   void OnAppEnterForeground(bool force_open_new_log = false);
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+  // Signals that the browser is shutting down cleanly. Intended to be called
+  // during shutdown after critical shutdown tasks have completed.
+  void LogCleanShutdown();
 
   bool recording_active() const;
   bool reporting_active() const;
@@ -370,13 +369,6 @@ class MetricsService : public base::HistogramFlattener {
   // Prepares the initial metrics log, which includes startup histograms and
   // profiler data, as well as incremental stability-related metrics.
   void PrepareInitialMetricsLog();
-
-  // Reads, increments and then sets the specified long preference that is
-  // stored as a string.
-  void IncrementLongPrefsValue(const char* path);
-
-  // Records that the browser was shut down cleanly.
-  void LogCleanShutdown(bool end_completed);
 
   // Creates a new MetricsLog instance with the given |log_type|.
   std::unique_ptr<MetricsLog> CreateLog(MetricsLog::LogType log_type);

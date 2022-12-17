@@ -46,7 +46,6 @@
 #include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/public/renderer/render_view.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -176,14 +175,15 @@ class AutofillAgent::DeferringAutofillDriver : public mojom::AutofillDriver {
   void SelectFieldOptionsDidChange(const FormData& form) override {
     DeferMsg(&mojom::AutofillDriver::SelectFieldOptionsDidChange, form);
   }
-  void AskForValuesToFill(int32_t query_id,
-                          const FormData& form,
+  void AskForValuesToFill(const FormData& form,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box,
+                          int32_t query_id,
                           bool autoselect_first_suggestion,
                           TouchToFillEligible touch_to_fill_eligible) override {
-    DeferMsg(&mojom::AutofillDriver::AskForValuesToFill, query_id, form, field,
-             bounding_box, autoselect_first_suggestion, touch_to_fill_eligible);
+    DeferMsg(&mojom::AutofillDriver::AskForValuesToFill, form, field,
+             bounding_box, query_id, autoselect_first_suggestion,
+             touch_to_fill_eligible);
   }
   void HidePopup() override { DeferMsg(&mojom::AutofillDriver::HidePopup); }
   void FocusNoLongerOnForm(bool had_interacted_form) override {
@@ -238,7 +238,7 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
   render_frame->GetWebFrame()->SetAutofillClient(this);
   password_autofill_agent->SetAutofillAgent(this);
   AddFormObserver(this);
-  registry->AddInterface(base::BindRepeating(
+  registry->AddInterface<mojom::AutofillAgent>(base::BindRepeating(
       &AutofillAgent::BindPendingReceiver, base::Unretained(this)));
 }
 
@@ -255,14 +255,7 @@ void AutofillAgent::BindPendingReceiver(
 }
 
 void AutofillAgent::DidCommitProvisionalLoad(ui::PageTransition transition) {
-  blink::WebFrame* frame = render_frame()->GetWebFrame();
-  // TODO(dvadym): check if we need to check if it is main frame navigation
-  // http://crbug.com/443155
-  if (frame->Parent())
-    return;  // Not a top-level navigation.
-
   // Navigation to a new page or a page refresh.
-
   element_.Reset();
 
   form_cache_.Reset();
@@ -295,14 +288,17 @@ void AutofillAgent::DidChangeScrollOffset() {
 
 void AutofillAgent::DidChangeScrollOffsetImpl(
     const WebFormControlElement& element) {
-  if (element != element_ || element_.IsNull() || focus_requires_scroll_ ||
-      !is_popup_possibly_visible_ || !element_.Focused())
+  if (element != element_ || element.IsNull() || focus_requires_scroll_ ||
+      !is_popup_possibly_visible_ || !element.Focused()) {
     return;
+  }
+
+  DCHECK(IsOwnedByFrame(element, render_frame()));
 
   FormData form;
   FormFieldData field;
   if (FindFormAndFieldForFormControlElement(
-          element_, field_data_manager_.get(),
+          element, field_data_manager_.get(),
           static_cast<ExtractMask>(form_util::EXTRACT_BOUNDS |
                                    GetExtractDatalistMask()),
           &form, &field)) {
@@ -323,11 +319,13 @@ void AutofillAgent::FocusedElementChanged(const WebElement& element) {
     return;
   }
 
-  const WebInputElement input = element.DynamicTo<WebInputElement>();
+  const WebFormControlElement form_control_element =
+      element.DynamicTo<WebFormControlElement>();
 
   bool focus_moved_to_new_form = false;
   if (!last_interacted_form_.IsNull() &&
-      (input.IsNull() || last_interacted_form_ != input.Form())) {
+      (form_control_element.IsNull() ||
+       last_interacted_form_ != form_control_element.Form())) {
     // The focused element is not part of the last interacted form (could be
     // in a different form).
     GetAutofillDriver().FocusNoLongerOnForm(/*had_interacted_form=*/true);
@@ -349,11 +347,13 @@ void AutofillAgent::FocusedElementChanged(const WebElement& element) {
   if (focus_moved_to_new_form)
     return;
 
-  if (input.IsNull() || !input.IsEnabled() || input.IsReadOnly() ||
-      !input.IsTextField())
+  if (form_control_element.IsNull() || !form_control_element.IsEnabled() ||
+      form_control_element.IsReadOnly() ||
+      !form_util::IsTextAreaElementOrTextInput(form_control_element)) {
     return;
+  }
 
-  element_ = input;
+  element_ = form_control_element;
 
   FormData form;
   FormFieldData field;
@@ -526,8 +526,8 @@ void AutofillAgent::TriggerRefillIfNeeded(const FormData& form) {
     WebLocalFrame* frame = render_frame()->GetWebFrame();
     std::vector<FormData> forms;
     forms.push_back(updated_form);
-    // Always communicate to browser process for topmost frame.
-    if (!forms.empty() || !frame->Parent()) {
+    // Always communicate to browser process for the outermost main frame.
+    if (!forms.empty() || frame->IsOutermostMainFrame()) {
       GetAutofillDriver().FormsSeen(forms, {});
     }
   }
@@ -630,9 +630,8 @@ void AutofillAgent::FillFieldWithValue(FieldRendererId field_id,
     return;
   }
 
-  WebInputElement input_element = element_.DynamicTo<WebInputElement>();
-  if (!input_element.IsNull())
-    DoFillFieldWithValue(value, input_element, WebAutofillState::kAutofilled);
+  if (form_util::IsTextAreaElementOrTextInput(element_))
+    DoFillFieldWithValue(value, element_, WebAutofillState::kAutofilled);
 }
 
 void AutofillAgent::PreviewFieldWithValue(FieldRendererId field_id,
@@ -688,14 +687,7 @@ void AutofillAgent::AcceptDataListSuggestion(
 
   WebInputElement input_element = element_.DynamicTo<WebInputElement>();
   if (input_element.IsNull()) {
-    // For reasons not understood yet, this is triggered on elements which are
-    // not input elements.
-
-    // TODO(crbug.com/1048270) Gather debug data.
-    DEBUG_ALIAS_FOR_CSTR(element_name, element_.TagName().Latin1().c_str(), 64);
-    base::debug::DumpWithoutCrashing();
-
-    // Keep this return after removing the TODO(crbug.com/1048270) above.
+    // Early return for non-input fields such as textarea.
     return;
   }
   std::u16string new_value = suggested_value;
@@ -721,7 +713,7 @@ void AutofillAgent::AcceptDataListSuggestion(
 
     new_value = base::JoinString(parts, u",");
   }
-  DoFillFieldWithValue(new_value, input_element, WebAutofillState::kNotFilled);
+  DoFillFieldWithValue(new_value, element_, WebAutofillState::kNotFilled);
 }
 
 void AutofillAgent::FillPasswordSuggestion(const std::u16string& username,
@@ -945,18 +937,24 @@ void AutofillAgent::QueryAutofillSuggestions(
 
   is_popup_possibly_visible_ = true;
   GetAutofillDriver().AskForValuesToFill(
-      autofill_query_id_, form, field, field.bounds,
+      form, field, field.bounds, autofill_query_id_,
       autoselect_first_suggestion, touch_to_fill_eligible);
 }
 
 void AutofillAgent::DoFillFieldWithValue(const std::u16string& value,
-                                         WebInputElement& node,
+                                         blink::WebFormControlElement& element,
                                          WebAutofillState autofill_state) {
-  DCHECK(IsOwnedByFrame(node, render_frame()));
+  DCHECK(IsOwnedByFrame(element, render_frame()));
 
   form_tracker_.set_ignore_control_changes(true);
-  node.SetAutofillValue(blink::WebString::FromUTF16(value), autofill_state);
-  password_autofill_agent_->UpdateStateForTextChange(node);
+
+  element.SetAutofillValue(blink::WebString::FromUTF16(value), autofill_state);
+
+  WebInputElement input_element = element.DynamicTo<WebInputElement>();
+  // `input_element` can be null for textarea elements.
+  if (!input_element.IsNull())
+    password_autofill_agent_->UpdateStateForTextChange(input_element);
+
   form_tracker_.set_ignore_control_changes(false);
 }
 
@@ -984,9 +982,9 @@ void AutofillAgent::ProcessForms() {
   FormCache::UpdateFormCacheResult cache =
       form_cache_.UpdateFormCache(field_data_manager_.get());
 
-  // Always communicate to browser process for topmost frame.
+  // Always communicate to browser process for the outermost main frame.
   if (!cache.updated_forms.empty() || !cache.removed_forms.empty() ||
-      !render_frame()->GetWebFrame()->Parent()) {
+      render_frame()->GetWebFrame()->IsOutermostMainFrame()) {
     GetAutofillDriver().FormsSeen(cache.updated_forms,
                                   std::move(cache.removed_forms).extract());
   }
@@ -1155,10 +1153,11 @@ void AutofillAgent::HandleFocusChangeComplete() {
   // are used, treat the focused node as if it was the last clicked. Also check
   // to ensure focus is on a field where text can be entered.
   if ((focused_node_was_last_clicked_ || is_screen_reader_enabled_) &&
-      !focused_element.IsNull() && focused_element.IsFormControlElement() &&
-      (form_util::IsTextInput(focused_element.DynamicTo<WebInputElement>()) ||
-       focused_element.HasHTMLTagName("textarea"))) {
-    FormControlElementClicked(focused_element.To<WebFormControlElement>());
+      !focused_element.IsNull() && focused_element.IsFormControlElement()) {
+    WebFormControlElement focused_form_control_element =
+        focused_element.To<WebFormControlElement>();
+    if (form_util::IsTextAreaElementOrTextInput(focused_form_control_element))
+      FormControlElementClicked(focused_form_control_element);
   }
 
   focused_node_was_last_clicked_ = false;
@@ -1269,19 +1268,13 @@ void AutofillAgent::OnFormSubmitted(const WebFormElement& form) {
 }
 
 void AutofillAgent::OnInferredFormSubmission(SubmissionSource source) {
-  // Only handle iframe for FRAME_DETACHED or main frame for
-  // SAME_DOCUMENT_NAVIGATION.
-  if ((source == SubmissionSource::FRAME_DETACHED &&
-       !render_frame()->GetWebFrame()->Parent()) ||
-      (source == SubmissionSource::SAME_DOCUMENT_NAVIGATION &&
-       render_frame()->GetWebFrame()->Parent())) {
-    ResetLastInteractedElements();
-    OnFormNoLongerSubmittable();
-    SendPotentiallySubmittedFormToBrowser();
-    return;
-  }
-
-  if (source == SubmissionSource::FRAME_DETACHED) {
+  if (source == SubmissionSource::FRAME_DETACHED &&
+      render_frame()->GetWebFrame()->IsOutermostMainFrame()) {
+    // No op.
+  } else if (source == SubmissionSource::SAME_DOCUMENT_NAVIGATION &&
+             !render_frame()->GetWebFrame()->IsOutermostMainFrame()) {
+    // No op.
+  } else if (source == SubmissionSource::FRAME_DETACHED) {
     // Should not access the frame because it is now detached. Instead, use
     // |provisionally_saved_form_|.
     if (provisionally_saved_form_.has_value())

@@ -80,17 +80,6 @@ struct BLINK_COMMON_EXPORT RendererPreferences {
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui{false};
 
-  // Whether images should be shown or not.
-  bool should_show_images{true};
-
-  // Should plugins be shown after a click. "Click to play."
-  // Note: This will override the host-preferences that
-  // might be allow, block or ask.
-  bool should_ask_plugin_content{false};
-
-  // Should plugins be enabled.
-  bool should_enable_plugin_content{true};
-
   bool serve_resources_only_from_cache{false};
 
   bool allow_access_keys{true};

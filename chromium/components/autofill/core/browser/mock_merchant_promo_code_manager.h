@@ -17,14 +17,12 @@ class MockMerchantPromoCodeManager : public MerchantPromoCodeManager {
   ~MockMerchantPromoCodeManager() override;
 
   MOCK_METHOD(
-      void,
+      bool,
       OnGetSingleFieldSuggestions,
       (int query_id,
        bool is_autocomplete_enabled,
        bool autoselect_first_suggestion,
-       const std::u16string& name,
-       const std::u16string& prefix,
-       const std::string& form_control_type,
+       const FormFieldData& field,
        base::WeakPtr<MerchantPromoCodeManager::SuggestionsHandler> handler,
        const SuggestionsContext& context),
       (override));

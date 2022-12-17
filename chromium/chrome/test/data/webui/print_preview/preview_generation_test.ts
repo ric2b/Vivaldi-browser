@@ -7,7 +7,7 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
-// <if expr="chromeos_ash or chromeos_lacros">
+// <if expr="is_chromeos">
 import {setNativeLayerCrosInstance} from './native_layer_cros_stub.js';
 // </if>
 
@@ -35,19 +35,19 @@ const preview_generation_test = {
     ChangeMarginsByPagesPerSheet: 'change margins by pages per sheet',
     ZeroDefaultMarginsClearsHeaderFooter:
         'zero default margins clears header/footer',
-  }
+  },
 };
 
 Object.assign(window, {preview_generation_test: preview_generation_test});
 
-type ValidateScalingChangeParams = {
-  printTicket: string,
-  scalingTypeKey: string,
-  expectedTicketId: number,
-  expectedTicketScaleFactor: number,
-  expectedScalingValue: string,
-  expectedScalingType: ScalingType,
-};
+interface ValidateScalingChangeParams {
+  printTicket: string;
+  scalingTypeKey: string;
+  expectedTicketId: number;
+  expectedTicketScaleFactor: number;
+  expectedScalingValue: string;
+  expectedScalingType: ScalingType;
+}
 
 suite(preview_generation_test.suiteName, function() {
   let page: PrintPreviewAppElement;
@@ -59,7 +59,7 @@ suite(preview_generation_test.suiteName, function() {
   setup(function() {
     nativeLayer = new NativeLayerStub();
     NativeLayerImpl.setInstance(nativeLayer);
-    // <if expr="chromeos_ash or chromeos_lacros">
+    // <if expr="is_chromeos">
     setNativeLayerCrosInstance();
     // </if>
     document.body.innerHTML = '';
@@ -202,7 +202,7 @@ suite(preview_generation_test.suiteName, function() {
             marginTop: 25,
             marginRight: 40,
             marginBottom: 20,
-            marginLeft: 50
+            marginLeft: 50,
           });
           return nativeLayer.whenCalled('getPreview');
         })
@@ -223,7 +223,7 @@ suite(preview_generation_test.suiteName, function() {
             marginTop: 25,
             marginRight: 40,
             marginBottom: 20,
-            marginLeft: 50
+            marginLeft: 50,
           });
           return nativeLayer.whenCalled('getPreview');
         })

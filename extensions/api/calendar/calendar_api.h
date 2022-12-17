@@ -48,7 +48,7 @@ class CalendarEventRouter : public CalendarModelObserver {
   // Helper to actually dispatch an event to extension listeners.
   void DispatchEvent(Profile* profile,
                      const std::string& event_name,
-                     std::vector<base::Value> event_args);
+                     base::Value::List event_args);
 
   // CalendarModelObserver
   void OnEventCreated(CalendarService* service,

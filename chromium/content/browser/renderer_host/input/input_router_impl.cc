@@ -26,6 +26,7 @@
 #include "services/tracing/public/cpp/perfetto/flow_event_utils.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -149,7 +150,8 @@ void InputRouterImpl::SendGestureEvent(
     TRACE_EVENT_INSTANT0("input", "FilteredForFling", TRACE_EVENT_SCOPE_THREAD);
     disposition_handler_->OnGestureEventAck(
         gesture_event, blink::mojom::InputEventResultSource::kBrowser,
-        blink::mojom::InputEventResultState::kConsumed);
+        blink::mojom::InputEventResultState::kConsumed,
+        /*scroll_result_data=*/nullptr);
     return;
   }
 
@@ -176,7 +178,18 @@ void InputRouterImpl::SendGestureEventWithoutQueueing(
                          TRACE_EVENT_SCOPE_THREAD);
     disposition_handler_->OnGestureEventAck(
         gesture_event, blink::mojom::InputEventResultSource::kBrowser,
-        blink::mojom::InputEventResultState::kConsumed);
+        blink::mojom::InputEventResultState::kConsumed,
+        /*scroll_result_data=*/nullptr);
+    return;
+  }
+
+  // Handle scroll gesture events for stylus writing. If we could not start
+  // writing for any reason, we should not filter the scroll events.
+  if (HandleGestureScrollForStylusWriting(gesture_event.event)) {
+    disposition_handler_->OnGestureEventAck(
+        gesture_event, blink::mojom::InputEventResultSource::kBrowser,
+        blink::mojom::InputEventResultState::kConsumed,
+        /*scroll_result_data=*/nullptr);
     return;
   }
 
@@ -210,8 +223,63 @@ void InputRouterImpl::SendGestureEventWithoutQueueing(
                          TRACE_EVENT_SCOPE_THREAD);
     disposition_handler_->OnGestureEventAck(
         gesture_event, blink::mojom::InputEventResultSource::kBrowser,
-        blink::mojom::InputEventResultState::kConsumed);
+        blink::mojom::InputEventResultState::kConsumed,
+        /*scroll_result_data=*/nullptr);
   }
+}
+
+bool InputRouterImpl::HandleGestureScrollForStylusWriting(
+    const blink::WebGestureEvent& event) {
+  switch (event.GetType()) {
+    case WebInputEvent::Type::kGestureScrollBegin: {
+      if (event.data.scroll_begin.pointer_count != 1)
+        break;
+
+      const float& deltaXHint = event.data.scroll_begin.delta_x_hint;
+      const float& deltaYHint = event.data.scroll_begin.delta_y_hint;
+      if (deltaXHint == 0.0 && deltaYHint == 0.0)
+        break;
+
+      if (!client_->GetRenderWidgetHostViewBase())
+        break;
+
+      absl::optional<cc::TouchAction> allowed_touch_action =
+          AllowedTouchAction();
+      // Don't handle for non-writable areas as kInternalNotWritable bit is set.
+      if (!allowed_touch_action.has_value() ||
+          (allowed_touch_action.value() &
+           cc::TouchAction::kInternalNotWritable) ==
+              cc::TouchAction::kInternalNotWritable)
+        break;
+
+      // Request to start stylus writing as we have detected stylus writing
+      // movement, and treat scroll gesture as stylus input if started.
+      if (client_->GetRenderWidgetHostViewBase()->RequestStartStylusWriting()) {
+        stylus_writing_started_ = true;
+        // The below call is done to Focus the stylus writable input element.
+        client_->OnStartStylusWriting();
+        return true;
+      }
+      break;
+    }
+    case WebInputEvent::Type::kGestureScrollUpdate:
+      // TODO(crbug.com/1330817): Pass the queued scroll delta to stylus
+      // writing recognition system.
+      return stylus_writing_started_;
+    case WebInputEvent::Type::kGestureScrollEnd: {
+      // When stylus writing starts, Touch Move events would be forwarded to
+      // stylus recognition system and gesture detection would be reset. We
+      // would receive the GestureScrollEnd here after that.
+      if (stylus_writing_started_) {
+        stylus_writing_started_ = false;
+        return true;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return false;
 }
 
 void InputRouterImpl::SendTouchEvent(
@@ -277,6 +345,19 @@ void InputRouterImpl::SetTouchActionFromMain(cc::TouchAction touch_action) {
   touch_event_queue_.StopTimeoutMonitor();
   ProcessDeferredGestureEventQueue();
   UpdateTouchAckTimeoutEnabled();
+}
+
+void InputRouterImpl::SetPanAction(blink::mojom::PanAction pan_action) {
+  if (pan_action_ == pan_action)
+    return;
+  pan_action_ = pan_action;
+
+  // TODO(mahesh.ma): Update PanAction state to view, once RenderWidgetHostView
+  // is set again.
+  if (!client_->GetRenderWidgetHostViewBase())
+    return;
+  client_->GetRenderWidgetHostViewBase()->SetHoverActionStylusWritable(
+      pan_action_ == blink::mojom::PanAction::kStylusWritable);
 }
 
 void InputRouterImpl::OnSetCompositorAllowedTouchAction(
@@ -430,9 +511,11 @@ void InputRouterImpl::SendGestureEventImmediately(
 void InputRouterImpl::OnGestureEventAck(
     const GestureEventWithLatencyInfo& event,
     blink::mojom::InputEventResultSource ack_source,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   touch_event_queue_.OnGestureEventAck(event, ack_result);
-  disposition_handler_->OnGestureEventAck(event, ack_source, ack_result);
+  disposition_handler_->OnGestureEventAck(event, ack_source, ack_result,
+                                          std::move(scroll_result_data));
 }
 
 void InputRouterImpl::SendGeneratedWheelEvent(
@@ -486,7 +569,8 @@ void InputRouterImpl::OnGestureEventForPinchAck(
     const GestureEventWithLatencyInfo& event,
     blink::mojom::InputEventResultSource ack_source,
     blink::mojom::InputEventResultState ack_result) {
-  OnGestureEventAck(event, ack_source, ack_result);
+  OnGestureEventAck(event, ack_source, ack_result,
+                    /*scroll_result_data=*/nullptr);
 }
 
 bool InputRouterImpl::IsWheelScrollInProgress() {
@@ -510,11 +594,10 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
                 info->set_trace_id(latency_info.trace_id());
                 info->set_step(ChromeLatencyInfo::STEP_SEND_INPUT_EVENT_UI);
 
-                tracing::FillFlowEvent(
-                    ctx,
-                    perfetto::protos::pbzero::
-                        TrackEvent_LegacyEvent_FlowDirection_FLOW_INOUT,
-                    latency_info.trace_id());
+                tracing::FillFlowEvent(ctx,
+                                       perfetto::protos::pbzero::TrackEvent::
+                                           LegacyEvent::FLOW_INOUT,
+                                       latency_info.trace_id());
               });
 
   output_stream_validator_.Validate(input_event);
@@ -525,7 +608,8 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
                          TRACE_EVENT_SCOPE_THREAD);
     if (filtered_state != blink::mojom::InputEventResultState::kUnknown) {
       std::move(callback).Run(blink::mojom::InputEventResultSource::kBrowser,
-                              latency_info, filtered_state, nullptr, nullptr);
+                              latency_info, filtered_state, nullptr, nullptr,
+                              /*scroll_result_data=*/nullptr);
     }
     return;
   }
@@ -544,7 +628,8 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
                const ui::LatencyInfo& latency,
                blink::mojom::InputEventResultState state,
                blink::mojom::DidOverscrollParamsPtr overscroll,
-               blink::mojom::TouchActionOptionalPtr touch_action) {
+               blink::mojom::TouchActionOptionalPtr touch_action,
+               blink::mojom::ScrollResultDataPtr scroll_result_data) {
               // Filter source to ensure only valid values are sent from the
               // renderer.
               if (source == blink::mojom::InputEventResultSource::kBrowser) {
@@ -553,9 +638,9 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
                 return;
               }
 
-              std::move(callback).Run(source, latency, state,
-                                      std::move(overscroll),
-                                      std::move(touch_action));
+              std::move(callback).Run(
+                  source, latency, state, std::move(overscroll),
+                  std::move(touch_action), std::move(scroll_result_data));
             },
             std::move(callback), weak_this_);
     client_->GetWidgetInputHandler()->DispatchEvent(
@@ -565,9 +650,10 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
                          TRACE_EVENT_SCOPE_THREAD);
     client_->GetWidgetInputHandler()->DispatchNonBlockingEvent(
         std::move(event));
-    std::move(callback).Run(
-        blink::mojom::InputEventResultSource::kBrowser, latency_info,
-        blink::mojom::InputEventResultState::kIgnored, nullptr, nullptr);
+    std::move(callback).Run(blink::mojom::InputEventResultSource::kBrowser,
+                            latency_info,
+                            blink::mojom::InputEventResultState::kIgnored,
+                            nullptr, nullptr, /*scroll_result_data=*/nullptr);
   }
 }
 
@@ -578,7 +664,8 @@ void InputRouterImpl::KeyboardEventHandled(
     const ui::LatencyInfo& latency,
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
-    blink::mojom::TouchActionOptionalPtr touch_action) {
+    blink::mojom::TouchActionOptionalPtr touch_action,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   TRACE_EVENT2("input", "InputRouterImpl::KeyboardEventHandled", "type",
                WebInputEvent::GetName(event.event.GetType()), "ack",
                InputEventResultStateToString(state));
@@ -601,7 +688,8 @@ void InputRouterImpl::MouseEventHandled(
     const ui::LatencyInfo& latency,
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
-    blink::mojom::TouchActionOptionalPtr touch_action) {
+    blink::mojom::TouchActionOptionalPtr touch_action,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   TRACE_EVENT2("input", "InputRouterImpl::MouseEventHandled", "type",
                WebInputEvent::GetName(event.event.GetType()), "ack",
                InputEventResultStateToString(state));
@@ -618,7 +706,8 @@ void InputRouterImpl::TouchEventHandled(
     const ui::LatencyInfo& latency,
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
-    blink::mojom::TouchActionOptionalPtr touch_action) {
+    blink::mojom::TouchActionOptionalPtr touch_action,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   TRACE_EVENT2("input", "InputRouterImpl::TouchEventHandled", "type",
                WebInputEvent::GetName(touch_event.event.GetType()), "ack",
                InputEventResultStateToString(state));
@@ -649,7 +738,8 @@ void InputRouterImpl::GestureEventHandled(
     const ui::LatencyInfo& latency,
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
-    blink::mojom::TouchActionOptionalPtr touch_action) {
+    blink::mojom::TouchActionOptionalPtr touch_action,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   TRACE_EVENT2("input", "InputRouterImpl::GestureEventHandled", "type",
                WebInputEvent::GetName(gesture_event.event.GetType()), "ack",
                InputEventResultStateToString(state));
@@ -663,8 +753,9 @@ void InputRouterImpl::GestureEventHandled(
   }
 
   // |gesture_event_queue_| will forward to OnGestureEventAck when appropriate.
-  gesture_event_queue_.ProcessGestureAck(
-      source, state, gesture_event.event.GetType(), latency);
+  gesture_event_queue_.ProcessGestureAck(source, state,
+                                         gesture_event.event.GetType(), latency,
+                                         std::move(scroll_result_data));
 }
 
 void InputRouterImpl::MouseWheelEventHandled(
@@ -674,7 +765,8 @@ void InputRouterImpl::MouseWheelEventHandled(
     const ui::LatencyInfo& latency,
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
-    blink::mojom::TouchActionOptionalPtr touch_action) {
+    blink::mojom::TouchActionOptionalPtr touch_action,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   TRACE_EVENT2("input", "InputRouterImpl::MouseWheelEventHandled", "type",
                WebInputEvent::GetName(event.event.GetType()), "ack",
                InputEventResultStateToString(state));

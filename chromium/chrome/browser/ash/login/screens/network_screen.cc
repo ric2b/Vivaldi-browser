@@ -16,8 +16,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_handler.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
@@ -36,7 +35,6 @@ std::string NetworkScreen::GetResultString(Result result) {
     case Result::CONNECTED_REGULAR:
     case Result::CONNECTED_DEMO:
     case Result::CONNECTED_REGULAR_CONSOLIDATED_CONSENT:
-    case Result::CONNECTED_DEMO_CONSOLIDATED_CONSENT:
       return "Connected";
     case Result::BACK_REGULAR:
     case Result::BACK_DEMO:
@@ -44,6 +42,7 @@ std::string NetworkScreen::GetResultString(Result result) {
       return "Back";
     case Result::NOT_APPLICABLE:
     case Result::NOT_APPLICABLE_CONSOLIDATED_CONSENT:
+    case Result::NOT_APPLICABLE_CONNECTED_DEMO:
       return BaseScreen::kNotApplicable;
   }
 }
@@ -74,7 +73,7 @@ void NetworkScreen::OnViewDestroyed(NetworkScreenView* view) {
   }
 }
 
-bool NetworkScreen::MaybeSkip(WizardContext* context) {
+bool NetworkScreen::MaybeSkip(WizardContext& context) {
   // Skip this screen if the device is connected to Ethernet for the first time
   // in this session.
   return UpdateStatusIfConnectedToEthernet();
@@ -133,25 +132,21 @@ void NetworkScreen::SetNetworkStateHelperForTest(
 void NetworkScreen::SubscribeNetworkNotification() {
   if (!is_network_subscribed_) {
     is_network_subscribed_ = true;
-    NetworkHandler::Get()->network_state_handler()->AddObserver(this,
-                                                                FROM_HERE);
+    network_state_handler_observer_.Observe(
+        NetworkHandler::Get()->network_state_handler());
   }
 }
 
 void NetworkScreen::UnsubscribeNetworkNotification() {
   if (is_network_subscribed_) {
     is_network_subscribed_ = false;
-    NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
-                                                                   FROM_HERE);
+    network_state_handler_observer_.Reset();
   }
 }
 
 void NetworkScreen::NotifyOnConnection() {
   if (DemoSetupController::IsOobeDemoSetupFlowInProgress()) {
-    if (chromeos::features::IsOobeConsolidatedConsentEnabled())
-      exit_callback_.Run(Result::CONNECTED_DEMO_CONSOLIDATED_CONSENT);
-    else
-      exit_callback_.Run(Result::CONNECTED_DEMO);
+    exit_callback_.Run(Result::CONNECTED_DEMO);
   } else {
     if (chromeos::features::IsOobeConsolidatedConsentEnabled())
       exit_callback_.Run(Result::CONNECTED_REGULAR_CONSOLIDATED_CONSENT);
@@ -262,10 +257,7 @@ bool NetworkScreen::UpdateStatusIfConnectedToEthernet() {
   if (is_hidden()) {
     // Screen not shown yet: skipping it.
     if (DemoSetupController::IsOobeDemoSetupFlowInProgress()) {
-      if (chromeos::features::IsOobeConsolidatedConsentEnabled())
-        exit_callback_.Run(Result::CONNECTED_DEMO_CONSOLIDATED_CONSENT);
-      else
-        exit_callback_.Run(Result::CONNECTED_DEMO);
+      exit_callback_.Run(Result::NOT_APPLICABLE_CONNECTED_DEMO);
     } else {
       if (chromeos::features::IsOobeConsolidatedConsentEnabled()) {
         exit_callback_.Run(Result::NOT_APPLICABLE_CONSOLIDATED_CONSENT);

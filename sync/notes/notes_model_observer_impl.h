@@ -81,6 +81,25 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   // over all children before processing the folder itself.
   void ProcessDelete(const vivaldi::NoteNode* node);
 
+  // Returns current unique_position from sync metadata for the tracked |node|.
+  syncer::UniquePosition GetUniquePositionForNode(
+      const vivaldi::NoteNode* node) const;
+
+  // Updates the unique position in sync metadata for the tracked |node| and
+  // returns the new position. A new position is generated based on the left and
+  // right node's positions. At least one of |prev| and |next| must be valid.
+  syncer::UniquePosition UpdateUniquePositionForNode(
+      const vivaldi::NoteNode* node,
+      vivaldi::NotesModel* model,
+      const syncer::UniquePosition& prev,
+      const syncer::UniquePosition& next);
+
+  // Updates unique positions for all children from |parent| starting from
+  // |start_index| (must not be 0).
+  void UpdateAllUniquePositionsStartingAt(const vivaldi::NoteNode* parent,
+                                          vivaldi::NotesModel* notes_model,
+                                          size_t start_index);
+
   // Points to the tracker owned by the processor. It keeps the mapping between
   // note nodes and corresponding sync server entities.
   const raw_ptr<SyncedNoteTracker> note_tracker_;

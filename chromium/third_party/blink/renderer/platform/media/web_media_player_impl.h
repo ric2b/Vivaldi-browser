@@ -54,9 +54,9 @@
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "url/gurl.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
-#include "platform_media/renderer/pipeline/protocol_sniffer.h"
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
+#include "platform_media/ipc_demuxer/renderer/ipc_media_pipeline_host.h"
+#include "platform_media/ipc_demuxer/renderer/protocol_sniffer.h"
 #endif
 
 namespace base {
@@ -473,7 +473,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   PlayState UpdatePlayState_ComputePlayState(bool is_flinging,
                                              bool can_auto_suspend,
                                              bool is_suspended,
-                                             bool is_backgrounded);
+                                             bool is_backgrounded,
+                                             bool is_in_picture_in_picture);
   void SetDelegateState(DelegateState new_state, bool is_idle);
   void SetMemoryReportingState(bool is_memory_reporting_enabled);
   void SetSuspendState(bool is_suspended);
@@ -673,7 +674,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // Report UMAs when this object instance is destroyed.
   void ReportSessionUMAs() const;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   void SniffProtocol();
   void StartIPCPipeline(std::string mime_type);
   void OnIPCMediaHostInitialized(bool success);
@@ -796,7 +797,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   std::unique_ptr<media::MemoryDumpProviderProxy> main_thread_mem_dumper_;
   std::unique_ptr<media::MemoryDumpProviderProxy> media_thread_mem_dumper_;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   // This is only set for data-urls.
   std::string mime_type_;
 #endif

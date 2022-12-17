@@ -201,19 +201,34 @@ void BuiltinProvider::AddBuiltinMatch(const std::u16string& match_string,
 }
 
 void BuiltinProvider::AddStarterPackMatch(const TemplateURL& template_url) {
+  // The history starter pack engine is disabled in incognito mode.
+  if (client_->IsOffTheRecord() &&
+      template_url.starter_pack_id() == TemplateURLStarterPackData::kHistory) {
+    return;
+  }
+
+  // The starter pack relevance score is currently ranked above
+  // search-what-you-typed suggestion to avoid the keyword mode chip attaching
+  // to the search suggestion instead of these Builtin suggestions.
+  // TODO(yoangela): This should be updated so the keyword chip only attaches to
+  //  STARTER_PACK type suggestions rather than rely on out-scoring all other
+  //  suggestions.
   AutocompleteMatch match(
       this, OmniboxFieldTrial::kSiteSearchStarterPackRelevanceScore.Get(),
-      false, AutocompleteMatchType::SEARCH_OTHER_ENGINE);
+      false, AutocompleteMatchType::STARTER_PACK);
 
+  const std::u16string destination_url =
+      TemplateURLStarterPackData::GetDestinationUrlForStarterPackID(
+          template_url.starter_pack_id());
   match.fill_into_edit = template_url.keyword();
-  match.destination_url =
-      GURL(TemplateURLStarterPackData::GetDestinationUrlForStarterPackID(
-          template_url.starter_pack_id()));
-  match.contents = template_url.short_name();
-  match.contents_class.emplace_back(0, ACMatchClassification::NONE);
+  match.destination_url = GURL(destination_url);
+  match.contents = destination_url;
+  match.contents_class.emplace_back(0, ACMatchClassification::URL);
+  match.description = template_url.short_name();
+  match.description_class.emplace_back(0, ACMatchClassification::NONE);
   match.transition = ui::PAGE_TRANSITION_GENERATED;
   match.keyword = template_url.keyword();
-  match.from_keyword = true;
+  match.allowed_to_be_default_match = true;
   matches_.push_back(match);
 }
 

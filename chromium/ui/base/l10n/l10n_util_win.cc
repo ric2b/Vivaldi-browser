@@ -46,12 +46,12 @@ int GetExtendedStyles() {
   return !base::i18n::IsRTL() ? 0 : WS_EX_LAYOUTRTL | WS_EX_RTLREADING;
 }
 
-int GetExtendedTooltipStyles() {
-  return !base::i18n::IsRTL() ? 0 : WS_EX_LAYOUTRTL;
+DWORD GetExtendedTooltipStyles() {
+  return base::i18n::IsRTL() ? WS_EX_LAYOUTRTL : 0;
 }
 
 void HWNDSetRTLLayout(HWND hwnd) {
-  DWORD ex_style = ::GetWindowLong(hwnd, GWL_EXSTYLE);
+  LONG ex_style = ::GetWindowLong(hwnd, GWL_EXSTYLE);
 
   // We don't have to do anything if the style is already set for the HWND.
   if (!(ex_style & WS_EX_LAYOUTRTL)) {

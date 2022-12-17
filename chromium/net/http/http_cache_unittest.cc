@@ -174,8 +174,8 @@ void DeferCallback(bool* defer) {
 
 class DeleteCacheCompletionCallback : public TestCompletionCallbackBase {
  public:
-  explicit DeleteCacheCompletionCallback(MockHttpCache* cache)
-      : cache_(cache) {}
+  explicit DeleteCacheCompletionCallback(std::unique_ptr<MockHttpCache> cache)
+      : cache_(std::move(cache)) {}
 
   DeleteCacheCompletionCallback(const DeleteCacheCompletionCallback&) = delete;
   DeleteCacheCompletionCallback& operator=(
@@ -188,11 +188,11 @@ class DeleteCacheCompletionCallback : public TestCompletionCallbackBase {
 
  private:
   void OnComplete(int result) {
-    delete cache_;
+    cache_.reset();
     SetResult(result);
   }
 
-  raw_ptr<MockHttpCache> cache_;
+  std::unique_ptr<MockHttpCache> cache_;
 };
 
 //-----------------------------------------------------------------------------
@@ -772,7 +772,7 @@ std::string GenerateCacheKey(const std::string& url) {
 using HttpCacheTest = TestWithTaskEnvironment;
 class HttpCacheIOCallbackTest : public HttpCacheTest {
  public:
-  HttpCacheIOCallbackTest() {}
+  HttpCacheIOCallbackTest() = default;
   ~HttpCacheIOCallbackTest() override = default;
 
   // HttpCache::ActiveEntry is private, doing this allows tests to use it
@@ -814,7 +814,7 @@ class HttpCacheIOCallbackTest : public HttpCacheTest {
 
 class HttpSplitCacheKeyTest : public HttpCacheTest {
  public:
-  HttpSplitCacheKeyTest() {}
+  HttpSplitCacheKeyTest() = default;
   ~HttpSplitCacheKeyTest() override = default;
 
   std::string ComputeCacheKey(const std::string& url_string) {
@@ -825,7 +825,7 @@ class HttpSplitCacheKeyTest : public HttpCacheTest {
     request_info.method = "GET";
     request_info.network_isolation_key = net::NetworkIsolationKey(site, site);
     MockHttpCache cache;
-    return cache.http_cache()->GenerateCacheKeyForTest(&request_info);
+    return *cache.http_cache()->GenerateCacheKeyForRequest(&request_info);
   }
 };
 
@@ -1050,6 +1050,73 @@ TEST_F(HttpCacheTest,
     // Used the cache entry only.
     EXPECT_THAT(connected_handler.transports(),
                 ElementsAre(CachedTestTransportInfo()));
+  }
+
+  {
+    // Request the same resource once more, observe that it is not read from
+    // cache.
+    ConnectedHandler connected_handler;
+
+    std::unique_ptr<HttpTransaction> transaction;
+    EXPECT_THAT(cache.CreateTransaction(&transaction), IsOk());
+    ASSERT_THAT(transaction, NotNull());
+
+    transaction->SetConnectedCallback(connected_handler.Callback());
+
+    TestCompletionCallback callback;
+    ASSERT_THAT(
+        transaction->Start(&request, callback.callback(), NetLogWithSource()),
+        IsError(ERR_IO_PENDING));
+    EXPECT_THAT(callback.WaitForResult(), IsOk());
+
+    // Used the network only.
+    EXPECT_THAT(connected_handler.transports(),
+                ElementsAre(TestTransportInfo()));
+  }
+}
+
+// This test verifies that when the callback passed to SetConnectedCallback()
+// returns
+// `ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY`, the
+// cache entry is invalidated, and we'll retry the connection from the network.
+TEST_F(
+    HttpCacheTest,
+    SimpleGET_ConnectedCallbackOnCacheHitReturnPrivateNetworkAccessBlockedError) {
+  MockHttpCache cache;
+
+  ScopedMockTransaction mock_transaction(kSimpleGET_Transaction);
+  mock_transaction.transport_info = TestTransportInfo();
+
+  // Populate the cache.
+  RunTransactionTest(cache.http_cache(), mock_transaction);
+
+  MockHttpRequest request(kSimpleGET_Transaction);
+
+  {
+    // Attempt to read from cache entry, but abort transaction due to a
+    // connected callback error.
+    ConnectedHandler connected_handler;
+    connected_handler.set_result(
+        ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY);
+
+    std::unique_ptr<HttpTransaction> transaction;
+    EXPECT_THAT(cache.CreateTransaction(&transaction), IsOk());
+    ASSERT_THAT(transaction, NotNull());
+
+    transaction->SetConnectedCallback(connected_handler.Callback());
+
+    TestCompletionCallback callback;
+    ASSERT_THAT(
+        transaction->Start(&request, callback.callback(), NetLogWithSource()),
+        IsError(ERR_IO_PENDING));
+    EXPECT_THAT(
+        callback.WaitForResult(),
+        IsError(
+            ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY));
+
+    // Used the cache entry only.
+    EXPECT_THAT(connected_handler.transports(),
+                ElementsAre(CachedTestTransportInfo(), TestTransportInfo()));
   }
 
   {
@@ -3804,12 +3871,11 @@ TEST_F(HttpCacheTest, SimpleGET_ParallelValidationNoMatch1) {
     EXPECT_EQ(LOAD_STATE_IDLE, context->trans->GetLoadState());
   }
 
-  for (size_t i = 0; i < context_list.size(); i++) {
-    if (context_list[i]->result == ERR_IO_PENDING)
-      context_list[i]->result = context_list[i]->callback.WaitForResult();
+  for (auto& context : context_list) {
+    if (context->result == ERR_IO_PENDING)
+      context->result = context->callback.WaitForResult();
 
-    ReadAndVerifyTransaction(context_list[i]->trans.get(),
-                             kSimpleGET_Transaction);
+    ReadAndVerifyTransaction(context->trans.get(), kSimpleGET_Transaction);
   }
 
   EXPECT_EQ(2, cache.network_layer()->transaction_count());
@@ -5336,7 +5402,8 @@ TEST_F(HttpCacheTest, SimpleGET_ManyWriters_CancelFirst) {
   // Allow all requests to move from the Create queue to the active entry.
   // All would have been added to writers.
   base::RunLoop().RunUntilIdle();
-  std::string cache_key = cache.http_cache()->GenerateCacheKeyForTest(&request);
+  std::string cache_key =
+      *cache.http_cache()->GenerateCacheKeyForRequest(&request);
   EXPECT_EQ(kNumTransactions, cache.GetCountWriterTransactions(cache_key));
 
   // The second transaction skipped validation, thus only one network
@@ -5601,8 +5668,9 @@ TEST_F(HttpCacheTest, SimpleGET_ManyWriters_DeleteCache) {
 
 // Tests that we queue requests when initializing the backend.
 TEST_F(HttpCacheTest, SimpleGET_WaitForBackend) {
-  MockBlockingBackendFactory* factory = new MockBlockingBackendFactory();
-  MockHttpCache cache(base::WrapUnique(factory));
+  auto factory = std::make_unique<MockBlockingBackendFactory>();
+  MockBlockingBackendFactory* factory_ptr = factory.get();
+  MockHttpCache cache(std::move(factory));
 
   MockHttpRequest request0(kSimpleGET_Transaction);
   MockHttpRequest request1(kTypicalGET_Transaction);
@@ -5632,7 +5700,7 @@ TEST_F(HttpCacheTest, SimpleGET_WaitForBackend) {
   // The first request should be creating the disk cache.
   EXPECT_FALSE(context_list[0]->callback.have_result());
 
-  factory->FinishCreation();
+  factory_ptr->FinishCreation();
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(3, cache.network_layer()->transaction_count());
@@ -5647,8 +5715,9 @@ TEST_F(HttpCacheTest, SimpleGET_WaitForBackend) {
 // Tests that we can cancel requests that are queued waiting for the backend
 // to be initialized.
 TEST_F(HttpCacheTest, SimpleGET_WaitForBackend_CancelCreate) {
-  MockBlockingBackendFactory* factory = new MockBlockingBackendFactory();
-  MockHttpCache cache(base::WrapUnique(factory));
+  auto factory = std::make_unique<MockBlockingBackendFactory>();
+  MockBlockingBackendFactory* factory_ptr = factory.get();
+  MockHttpCache cache(std::move(factory));
 
   MockHttpRequest request0(kSimpleGET_Transaction);
   MockHttpRequest request1(kTypicalGET_Transaction);
@@ -5685,7 +5754,7 @@ TEST_F(HttpCacheTest, SimpleGET_WaitForBackend_CancelCreate) {
   context_list[0].reset();
 
   // Complete the last transaction.
-  factory->FinishCreation();
+  factory_ptr->FinishCreation();
 
   context_list[2]->result =
       context_list[2]->callback.GetResult(context_list[2]->result);
@@ -5695,10 +5764,11 @@ TEST_F(HttpCacheTest, SimpleGET_WaitForBackend_CancelCreate) {
   EXPECT_EQ(1, cache.disk_cache()->create_count());
 }
 
-// Tests that we can delete the cache while creating the backend.
+// Tests that we can delete the HttpCache while creating the backend.
 TEST_F(HttpCacheTest, DeleteCacheWaitingForBackend) {
-  MockBlockingBackendFactory* factory = new MockBlockingBackendFactory();
-  auto cache = std::make_unique<MockHttpCache>(base::WrapUnique(factory));
+  auto factory = std::make_unique<MockBlockingBackendFactory>();
+  MockBlockingBackendFactory* factory_ptr = factory.get();
+  auto cache = std::make_unique<MockHttpCache>(std::move(factory));
 
   MockHttpRequest request(kSimpleGET_Transaction);
 
@@ -5714,45 +5784,43 @@ TEST_F(HttpCacheTest, DeleteCacheWaitingForBackend) {
   // The request should be creating the disk cache.
   EXPECT_FALSE(c->callback.have_result());
 
-  // We cannot call FinishCreation because the factory itself will go away with
-  // the cache.
-  CompletionOnceCallback callback = factory->ReleaseCallback();
-  std::unique_ptr<disk_cache::Backend>* backend = factory->backend();
+  // Manually arrange for completion to happen after ~HttpCache.
+  // This can't be done via FinishCreation() since that's in `factory`, and
+  // that's owned by `cache`.
+  disk_cache::BackendResultCallback callback = factory_ptr->ReleaseCallback();
 
   cache.reset();
   base::RunLoop().RunUntilIdle();
 
-  // Even though |HttpCache| is destroyed, the Backend that was passed in to
-  // disk_cache::CreateCacheBackend() must still be valid until the callback is
-  // called.
-  backend->reset();
-  // |callback| will destroy |backend|.
-  std::move(callback).Run(ERR_ABORTED);
+  // Simulate the backend completion callback running now the HttpCache is gone.
+  std::move(callback).Run(disk_cache::BackendResult::MakeError(ERR_ABORTED));
 }
 
 // Tests that we can delete the cache while creating the backend, from within
 // one of the callbacks.
 TEST_F(HttpCacheTest, DeleteCacheWaitingForBackend2) {
-  MockBlockingBackendFactory* factory = new MockBlockingBackendFactory();
-  MockHttpCache* cache = new MockHttpCache(base::WrapUnique(factory));
+  auto factory = std::make_unique<MockBlockingBackendFactory>();
+  MockBlockingBackendFactory* factory_ptr = factory.get();
+  auto cache = std::make_unique<MockHttpCache>(std::move(factory));
+  auto* cache_ptr = cache.get();
 
-  DeleteCacheCompletionCallback cb(cache);
+  DeleteCacheCompletionCallback cb(std::move(cache));
   disk_cache::Backend* backend;
-  int rv = cache->http_cache()->GetBackend(&backend, cb.callback());
+  int rv = cache_ptr->http_cache()->GetBackend(&backend, cb.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   // Now let's queue a regular transaction
   MockHttpRequest request(kSimpleGET_Transaction);
 
   auto c = std::make_unique<Context>();
-  c->result = cache->CreateTransaction(&c->trans);
+  c->result = cache_ptr->CreateTransaction(&c->trans);
   ASSERT_THAT(c->result, IsOk());
 
   c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
 
   // And another direct backend request.
   TestCompletionCallback cb2;
-  rv = cache->http_cache()->GetBackend(&backend, cb2.callback());
+  rv = cache_ptr->http_cache()->GetBackend(&backend, cb2.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   // Just to make sure that everything is still pending.
@@ -5762,7 +5830,7 @@ TEST_F(HttpCacheTest, DeleteCacheWaitingForBackend2) {
   EXPECT_FALSE(c->callback.have_result());
 
   // Generate the callback.
-  factory->FinishCreation();
+  factory_ptr->FinishCreation();
   rv = cb.WaitForResult();
 
   // The cache should be gone by now.
@@ -8309,7 +8377,8 @@ TEST_F(HttpCacheTest, Sparse_WaitForEntry) {
   // Simulate a previous transaction being cancelled.
   disk_cache::Entry* entry;
   MockHttpRequest request(transaction);
-  std::string cache_key = cache.http_cache()->GenerateCacheKeyForTest(&request);
+  std::string cache_key =
+      *cache.http_cache()->GenerateCacheKeyForRequest(&request);
   ASSERT_TRUE(cache.OpenBackendEntry(cache_key, &entry));
   entry->CancelSparseIO();
 
@@ -9737,7 +9806,8 @@ TEST_F(HttpCacheTest, PersistHttpResponseInfo) {
   HttpResponseInfo response1;
   response1.was_cached = false;
   response1.remote_endpoint = expected_endpoint;
-  response1.headers = new HttpResponseHeaders("HTTP/1.1 200 OK");
+  response1.headers =
+      base::MakeRefCounted<HttpResponseHeaders>("HTTP/1.1 200 OK");
 
   // Pickle.
   base::Pickle pickle;
@@ -10916,7 +10986,7 @@ TEST_F(HttpCacheTest, SplitCacheWithNetworkIsolationKey) {
   // Now make a request with an opaque subframe site.  It shouldn't be
   // cached.
   trans_info.network_isolation_key = NetworkIsolationKey(site_a, site_data);
-  EXPECT_TRUE(trans_info.network_isolation_key.ToString().empty());
+  EXPECT_EQ(absl::nullopt, trans_info.network_isolation_key.ToCacheKeyString());
   RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
                                 trans_info, &response);
   EXPECT_FALSE(response.was_cached);
@@ -11140,7 +11210,7 @@ TEST_F(HttpCacheTest, SplitCache) {
   // Now make a request with an opaque top frame origin.  It shouldn't be
   // cached.
   trans_info.network_isolation_key = NetworkIsolationKey(site_data, site_data);
-  EXPECT_TRUE(trans_info.network_isolation_key.ToString().empty());
+  EXPECT_EQ(absl::nullopt, trans_info.network_isolation_key.ToCacheKeyString());
   RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
                                 trans_info, &response);
   EXPECT_FALSE(response.was_cached);
@@ -11811,7 +11881,7 @@ HttpCacheHugeResourceTest::GetTestModes() {
 
   for (const auto phase : kTransactionPhases)
     for (const auto initializer : kInitializers)
-      test_modes.push_back(std::make_pair(phase, initializer));
+      test_modes.emplace_back(phase, initializer);
 
   return test_modes;
 }
@@ -12754,7 +12824,7 @@ TEST_F(HttpCacheTest, GetResourceURLFromHttpCacheKey) {
 
 class TestCompletionCallbackForHttpCache : public TestCompletionCallbackBase {
  public:
-  TestCompletionCallbackForHttpCache() {}
+  TestCompletionCallbackForHttpCache() = default;
   ~TestCompletionCallbackForHttpCache() override = default;
 
   CompletionRepeatingCallback callback() {
@@ -13516,10 +13586,8 @@ class HttpCacheSingleKeyedCacheTest : public HttpCacheTest {
       const MockTransaction& trans_info,
       const NetworkIsolationKey& network_isolation_key,
       const std::string& checksum) {
-    MockTransaction transaction(trans_info);
-    transaction.load_flags |= LOAD_USE_SINGLE_KEYED_CACHE;
+    ScopedMockTransaction transaction(trans_info);
 
-    AddMockTransaction(&transaction);
     MockHttpRequest request(transaction);
     request.network_isolation_key = network_isolation_key;
     request.checksum = checksum;
@@ -13615,6 +13683,38 @@ TEST_F(HttpCacheSingleKeyedCacheTest, GETWithBadResponseCode) {
   MockHttpCache cache;
   MockTransaction transaction = kSimpleGET_Transaction;
   transaction.status = "HTTP/1.1 404 Not Found";
+  const auto site_a = SchemefulSite(GURL("https://a.com/"));
+  // The first request adds the item to the single-keyed cache.
+  {
+    RunTransactionTestForSingleKeyedCache(cache.http_cache(), transaction,
+                                          NetworkIsolationKey(site_a, site_a),
+                                          kChecksumForSimpleGET);
+
+    EXPECT_EQ(1, cache.network_layer()->transaction_count());
+    EXPECT_EQ(0, cache.disk_cache()->open_count());
+    EXPECT_EQ(1, cache.disk_cache()->create_count());
+  }
+
+  // The second request verifies that the cache entry is not re-used
+  // but a new one is created in the split cache.
+  {
+    RunTransactionTestForSingleKeyedCache(cache.http_cache(), transaction,
+                                          NetworkIsolationKey(site_a, site_a),
+                                          kChecksumForSimpleGET);
+
+    EXPECT_EQ(2, cache.network_layer()->transaction_count());
+    EXPECT_EQ(1, cache.disk_cache()->open_count());
+    EXPECT_EQ(2, cache.disk_cache()->create_count());
+  }
+}
+
+// This is identical to GETWithBadResponseCode but with a different response
+// code. It's not very realistic as it doesn't call DoneReading(), but it covers
+// the relevant code path.
+TEST_F(HttpCacheSingleKeyedCacheTest, RedirectUnusable) {
+  MockHttpCache cache;
+  MockTransaction transaction = kSimpleGET_Transaction;
+  transaction.status = "HTTP/1.1 301 Moved Permanently";
   const auto site_a = SchemefulSite(GURL("https://a.com/"));
   // The first request adds the item to the single-keyed cache.
   {

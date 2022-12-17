@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
 #include "content/public/browser/browser_context.h"
@@ -160,6 +161,23 @@ void ServiceWorkerTaskQueue::DidStartWorkerForScope(
     // TODO(lazyboy): Add a DCHECK that the worker in question is actually
     // shutting down soon.
     DCHECK(!GetWorkerState(context_id));
+    return;
+  }
+
+  // HACK: The service worker layer might invoke this callback with an ID for a
+  // RenderProcessHost that has already terminated. This isn't the right fix for
+  // this, because it results in the internal state here stalling out - we'll
+  // wait on the browser side to be ready, which will never happen. This should
+  // be cleaned up on the next activation sequence, but this still isn't good.
+  // The proper fix here is that the service worker layer shouldn't be invoking
+  // this callback with stale processes.
+  // https://crbug.com/1335821.
+  if (!content::RenderProcessHost::FromID(process_id)) {
+    // NOTE: The following is an antipattern [1]. We have this as a temporary
+    // hack to avoid crashing for stable users while the bug is addressed.
+    // [1]
+    // https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/c++/c++-dos-and-donts.md#guarding-with-dcheck_is_on
+    NOTREACHED();
     return;
   }
 
@@ -521,8 +539,11 @@ void ServiceWorkerTaskQueue::DidRegisterServiceWorker(
   }
 
   if (!success) {
+    std::string msg = base::StringPrintf(
+        "Service worker registration failed. Status code: %d",
+        static_cast<int>(status_code));
     auto error = std::make_unique<ManifestError>(
-        extension_id, u"Service worker registration failed",
+        extension_id, base::UTF8ToUTF16(msg),
         base::UTF8ToUTF16(manifest_keys::kBackground),
         base::UTF8ToUTF16(
             BackgroundInfo::GetBackgroundServiceWorkerScript(extension)));

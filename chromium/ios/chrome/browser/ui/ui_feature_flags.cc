@@ -24,13 +24,10 @@ const base::Feature kEnableFREUIModuleIOS{"EnableFREUIModuleIOSV3",
 const base::Feature kModernTabStrip{"ModernTabStrip",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kIncognitoBrandConsistencyForIOS{
-    "IncognitoBrandConsistencyForIOS", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kIncognitoNtpRevamp{"IncognitoNtpRevamp",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kIOS3PIntentsInIncognito{"kIOS3pIntentsInIncognito",
+const base::Feature kIOS3PIntentsInIncognito{"IOS3pIntentsInIncognito",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kDefaultBrowserFullscreenPromoExperiment{
@@ -50,15 +47,28 @@ const char kIOSOmniboxUpdatedPopupUIVariationName[] = "PopupUIVariant";
 
 extern const char kIOSOmniboxUpdatedPopupUIVariation1[] = "variant-one";
 extern const char kIOSOmniboxUpdatedPopupUIVariation2[] = "variant-two";
+extern const char kIOSOmniboxUpdatedPopupUIVariation1UIKit[] =
+    "variant-one-UIKit";
+extern const char kIOSOmniboxUpdatedPopupUIVariation2UIKit[] =
+    "variant-two-UIKit";
 
 const base::Feature kIOSLocationBarUseNativeContextMenu{
     "IOSLocationBarUseNativeContextMenu", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUpdateHistoryEntryPointsInIncognito{
-    "UpdateHistoryEntryPointsInIncognito", base::FEATURE_DISABLED_BY_DEFAULT};
+    "UpdateHistoryEntryPointsInIncognito", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUseLensToSearchForImage{"UseLensToSearchForImage",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableLensInHomeScreenWidget{
+    "EnableLensInHomeScreenWidget", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableLensInKeyboard{"EnableLensInKeyboard",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableLensInNTP{"EnableLensInNTP",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kRemoveExcessNTPs{"RemoveExcessNTPs",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
@@ -78,3 +88,15 @@ const base::Feature kCalendarExperienceKit{"CalendarExperienceKit",
 
 const base::Feature kEnableExpKitAppleCalendar{
     "EnableExpKitAppleCalendar", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnablePhoneNumbers{"EnablePhoneNumbers",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kMapsExperienceKit{"MapsExperienceKit",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableMiniMap{"EnableMiniMap",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSendVariationDataWithSearchByImage{
+    "SendVariationDataWithSearchByImage", base::FEATURE_ENABLED_BY_DEFAULT};

@@ -40,9 +40,6 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/themes/theme_syncable_service.h"
 #include "chrome/browser/ui/read_later/reading_list_model_factory.h"
-#include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
@@ -97,6 +94,9 @@
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/sync/glue/extension_model_type_controller.h"
 #include "chrome/browser/sync/glue/extension_setting_model_type_controller.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -127,6 +127,8 @@
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/printing/oauth2/authorization_zones_manager.h"
+#include "chrome/browser/ash/printing/oauth2/authorization_zones_manager_factory.h"
 #include "chrome/browser/ash/printing/printers_sync_bridge.h"
 #include "chrome/browser/ash/printing/synced_printers_manager.h"
 #include "chrome/browser/ash/printing/synced_printers_manager_factory.h"
@@ -139,7 +141,7 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_sync_model_type_controller.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
-#include "chromeos/components/sync_wifi/wifi_configuration_sync_service.h"
+#include "chromeos/ash/components/sync_wifi/wifi_configuration_sync_service.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #include "sync/note_sync_service_factory.h"
@@ -251,19 +253,21 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile)
       BookmarkSyncServiceFactory::GetForProfile(profile_),
       vivaldi::NoteSyncServiceFactory::GetForProfile(profile_));
 
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
+
 #if BUILDFLAG(IS_ANDROID)
-  trusted_vault_client_ = std::make_unique<TrustedVaultClientAndroid>();
+  trusted_vault_client_ = std::make_unique<TrustedVaultClientAndroid>(
+      /*gaia_account_info_by_gaia_id_cb=*/base::BindRepeating(
+          [](signin::IdentityManager* identity_manager,
+             const std::string& gaia_id) -> CoreAccountInfo {
+            return identity_manager->FindExtendedAccountInfoByGaiaId(gaia_id);
+          },
+          identity_manager));
 #else
-  // TODO(crbug.com/1113597): consider destroying/notifying
-  // |trusted_vault_client_| upon IdentityManager shutdown, to avoid its usages
-  // afterwards. This can be done by tranferring |trusted_vault_client_|
-  // ownership to SyncServiceImpl and acting on
-  // SyncServiceImpl::Shutdown() or by handling
-  // IdentityManagerFactory::Observer::IdentityManagerShutdown().
   trusted_vault_client_ =
       std::make_unique<syncer::StandaloneTrustedVaultClient>(
-          profile_->GetPath().Append(kTrustedVaultFilename),
-          IdentityManagerFactory::GetForProfile(profile_),
+          profile_->GetPath().Append(kTrustedVaultFilename), identity_manager,
           profile_->GetDefaultStoragePartition()
               ->GetURLLoaderFactoryForBrowserProcess());
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -511,6 +515,18 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
       syncer::WORKSPACE_DESK,
       std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
           workspace_desk_delegate)));
+
+  if (chromeos::features::IsOAuthIppEnabled()) {
+    syncer::ModelTypeControllerDelegate*
+        printers_authorization_servers_delegate =
+            GetControllerDelegateForModelType(
+                syncer::PRINTERS_AUTHORIZATION_SERVERS)
+                .get();
+    controllers.push_back(std::make_unique<syncer::ModelTypeController>(
+        syncer::PRINTERS_AUTHORIZATION_SERVERS,
+        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+            printers_authorization_servers_delegate)));
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return controllers;
@@ -608,6 +624,12 @@ ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
           ->GetSyncBridge()
           ->change_processor()
           ->GetControllerDelegate();
+    case syncer::PRINTERS_AUTHORIZATION_SERVERS:
+      return ash::printing::oauth2::AuthorizationZonesManagerFactory::
+          GetForBrowserContext(profile_)
+              ->GetModelTypeSyncBridge()
+              ->change_processor()
+              ->GetControllerDelegate();
     case syncer::WIFI_CONFIGURATIONS:
       return WifiConfigurationSyncServiceFactory::GetForProfile(profile_,
                                                                 /*create=*/true)

@@ -13,8 +13,8 @@
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/usb/usb_tab_helper.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -54,8 +54,7 @@ std::vector<TabAlertState> GetTabAlertStatesForContents(
   if (contents->IsScanningForBluetoothDevices())
     states.push_back(TabAlertState::BLUETOOTH_SCAN_ACTIVE);
 
-  UsbTabHelper* usb_tab_helper = UsbTabHelper::FromWebContents(contents);
-  if (usb_tab_helper && usb_tab_helper->IsDeviceConnected())
+  if (contents->IsConnectedToUsbDevice())
     states.push_back(TabAlertState::USB_CONNECTED);
 
   if (contents->IsConnectedToHidDevice())

@@ -45,6 +45,7 @@ source_set("web") {
     "//components/search_engines",
     "//components/strings",
     "//components/ukm/ios:ukm_url_recorder",
+    "//components/variations/net",
     "//ios/chrome/app/application_delegate:observing_app_state_agent",
     "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser",
@@ -87,6 +88,7 @@ source_set("delegate") {
     ":tab_helper_delegates",
     ":web",
     "//base",
+    "//components/url_param_filter/core",
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/overlays",
     "//ios/chrome/browser/overlays/public/web_content_area",
@@ -195,7 +197,7 @@ source_set("unit_tests") {
   ]
 }
 
-optimize_js("chrome_bundle_main_frame") {
+optimize_js("language_detection_js") {
   primary_script =
       "//components/translate/ios/browser/resources/language_detection.js"
   sources =
@@ -209,7 +211,7 @@ source_set("web_internal") {
     "chrome_web_client.mm",
   ]
   deps = [
-    ":chrome_bundle_main_frame",
+    ":language_detection_js",
     ":web",
     "//base",
     "//components/autofill/ios/browser",
@@ -230,7 +232,7 @@ source_set("web_internal") {
     "//ios/chrome/browser:browser_impl",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/content_settings",
-    "//ios/chrome/browser/follow",
+    "//ios/chrome/browser/follow:javascript_feature",
     "//ios/chrome/browser/https_upgrades",
     "//ios/chrome/browser/link_to_text",
     "//ios/chrome/browser/ntp",
@@ -303,6 +305,7 @@ source_set("unit_tests_internal") {
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/infobars:public",
     "//ios/chrome/browser/passwords",
+    "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/safe_browsing",
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/web",
@@ -431,7 +434,6 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/ui/infobars/banners:public",
     "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/start_surface:feature_flags",
-    "//ios/chrome/browser/ui/tab_switcher/tab_grid:features",
     "//ios/chrome/browser/web:feature_flags",
     "//ios/chrome/test:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",

@@ -40,7 +40,6 @@ import org.chromium.components.policy.CombinedPolicyProvider;
 import org.chromium.components.policy.test.PolicyData;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHistory;
-import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnPageStartedHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -644,6 +643,27 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
         Assert.assertFalse(mShouldOverrideUrlLoadingHelper.isOutermostMainFrame());
     }
 
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Navigation"})
+    public void testNotCalledForIframeUuidInPackageSchemeNavigations() throws Throwable {
+        standardSetup();
+
+        final String uuidInPackageSchemeUrl =
+                "uuid-in-package:f81d4fae-7dec-11d0-a765-00a0c91e6bf6";
+        final String pageWithIframeUrl = addPageToTestServer("/iframe_intercept.html",
+                makeHtmlPageFrom("", "<iframe src=\"" + uuidInPackageSchemeUrl + "\" />"));
+
+        final int shouldOverrideUrlLoadingCallCount =
+                mShouldOverrideUrlLoadingHelper.getCallCount();
+
+        mActivityTestRule.loadUrlSync(
+                mAwContents, mContentsClient.getOnPageFinishedHelper(), pageWithIframeUrl);
+
+        Assert.assertEquals(
+                shouldOverrideUrlLoadingCallCount, mShouldOverrideUrlLoadingHelper.getCallCount());
+    }
+
     /**
      * Worker method for the various redirect tests.
      *
@@ -713,7 +733,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
         Assert.assertEquals(indirectLoadCallCount, mShouldOverrideUrlLoadingHelper.getCallCount());
 
         // Simulate touch, hasUserGesture must be true only on the first call.
-        DOMUtils.clickNode(mAwContents.getWebContents(), "link");
+        JSUtils.clickNodeWithUserGesture(mAwContents.getWebContents(), "link");
 
         mShouldOverrideUrlLoadingHelper.waitForCallback(indirectLoadCallCount, 1);
         Assert.assertEquals(

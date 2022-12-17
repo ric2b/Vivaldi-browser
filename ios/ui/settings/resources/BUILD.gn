@@ -1,0 +1,11 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("chrome_icon") {
+  sources = [
+    "chrome_icon.imageset/Contents.json",
+    "chrome_icon.imageset/chrome_icon@2x.png",
+    "chrome_icon.imageset/chrome_icon@3x.png",
+  ]
+}

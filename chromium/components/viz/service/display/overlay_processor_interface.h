@@ -15,8 +15,8 @@
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_candidate.h"
 #include "components/viz/service/viz_service_export.h"
+#include "gpu/command_buffer/service/gpu_task_scheduler_helper.h"
 #include "gpu/ipc/common/surface_handle.h"
-#include "gpu/ipc/gpu_task_scheduler_helper.h"
 #include "ui/gfx/ca_layer_result.h"
 #include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/overlay_priority_hint.h"
@@ -173,12 +173,11 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
 
   // Before the overlay refactor to use OverlayProcessorOnGpu, overlay
   // candidates are stored inside DirectRenderer. Those overlay candidates are
-  // later sent over to the GPU thread by GLRenderer or SkiaRenderer. This
-  // helper function will be called by DirectRenderer to take these overlay
-  // candidates inside overlay processor to avoid sending over DirectRenderer
-  // implementation. This is overridden by each platform that is ready to send
-  // overlay candidates inside |OverlayProcessor|. Must be called before
-  // ScheduleOverlays().
+  // later sent over to the GPU thread by SkiaRenderer. This helper function
+  // will be called by DirectRenderer to take these overlay candidates inside
+  // overlay processor to avoid sending over DirectRenderer implementation. This
+  // is overridden by each platform that is ready to send overlay candidates
+  // inside |OverlayProcessor|. Must be called before ScheduleOverlays().
   virtual void TakeOverlayCandidates(CandidateList* candidate_list) {}
 
   // TODO(weiliangc): Make it pure virtual after it is implemented by every
@@ -200,6 +199,9 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
 
   // If true, video capture is enabled for this frame.
   virtual void SetIsVideoCaptureEnabled(bool enabled) {}
+
+  // If true, video fullscreen mode is enabled for this frame.
+  virtual void SetIsVideoFullscreen(bool enabled) {}
 
   virtual gfx::CALayerResult GetCALayerErrorCode() const;
 

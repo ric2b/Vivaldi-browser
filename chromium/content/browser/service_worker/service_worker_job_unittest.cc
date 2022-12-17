@@ -243,6 +243,7 @@ scoped_refptr<ServiceWorkerRegistration> ServiceWorkerJobTest::RunRegisterJob(
   job_coordinator()->Register(
       script_url, options, key, std::move(outside_fetch_client_settings_object),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(expected_status, &registration, run_loop.QuitClosure()));
   run_loop.Run();
   return registration;
@@ -314,8 +315,7 @@ ServiceWorkerJobTest::CreateRegistrationWithControllee(const GURL& script_url,
   observer.RunUntilActivated(registration->installing_version(), runner);
 
   ServiceWorkerContainerHost* container_host = CreateControllee();
-  container_host->UpdateUrls(scope_url, net::SiteForCookies::FromUrl(scope_url),
-                             url::Origin::Create(scope_url),
+  container_host->UpdateUrls(scope_url, url::Origin::Create(scope_url),
                              blink::StorageKey(url::Origin::Create(scope_url)));
   container_host->SetControllerRegistration(registration,
                                             /*notify_controllerchange=*/false);
@@ -752,6 +752,7 @@ TEST_F(ServiceWorkerJobTest, AbortAll_Register) {
       script_url1, options1, key1,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kErrorAbort,
                        &registration1, barrier_closure));
 
@@ -760,6 +761,7 @@ TEST_F(ServiceWorkerJobTest, AbortAll_Register) {
       script_url2, options2, key2,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kErrorAbort,
                        &registration2, barrier_closure));
 
@@ -815,6 +817,7 @@ TEST_F(ServiceWorkerJobTest, AbortAll_RegUnreg) {
   job_coordinator()->Register(
       script_url, options, key, blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kErrorAbort,
                        &registration, barrier_closure));
 
@@ -850,6 +853,7 @@ TEST_F(ServiceWorkerJobTest, AbortScope) {
       script_url, options1, key1,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kErrorAbort,
                        &registration1, barrier_closure));
 
@@ -858,6 +862,7 @@ TEST_F(ServiceWorkerJobTest, AbortScope) {
       script_url, options2, key2,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kOk, &registration2,
                        barrier_closure));
 
@@ -1260,23 +1265,25 @@ class FetchHandlerInstanceClient : public FakeEmbeddedWorkerInstanceClient {
       : FakeEmbeddedWorkerInstanceClient(helper) {}
   ~FetchHandlerInstanceClient() override = default;
 
-  void set_has_fetch_handler(bool has_fetch_handler) {
-    has_fetch_handler_ = has_fetch_handler;
+  void set_fetch_handler_type(
+      blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type) {
+    fetch_handler_type_ = fetch_handler_type;
   }
 
  protected:
   void EvaluateScript() override {
     host()->OnScriptEvaluationStart();
     host()->OnStarted(blink::mojom::ServiceWorkerStartStatus::kNormalCompletion,
-                      has_fetch_handler_, helper()->GetNextThreadId(),
+                      fetch_handler_type_, helper()->GetNextThreadId(),
                       blink::mojom::EmbeddedWorkerStartTiming::New());
   }
 
  private:
-  bool has_fetch_handler_ = false;
+  blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type_ =
+      blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler;
 };
 
-TEST_F(ServiceWorkerJobTest, HasFetchHandler) {
+TEST_F(ServiceWorkerJobTest, FetchHandlerType) {
   GURL script("https://www.example.com/service_worker.js");
   blink::mojom::ServiceWorkerRegistrationOptions options;
   options.scope = GURL("https://www.example.com/");
@@ -1286,7 +1293,8 @@ TEST_F(ServiceWorkerJobTest, HasFetchHandler) {
   auto* fetch_handler_worker =
       helper_->AddNewPendingInstanceClient<FetchHandlerInstanceClient>(
           helper_.get());
-  fetch_handler_worker->set_has_fetch_handler(true);
+  fetch_handler_worker->set_fetch_handler_type(
+      blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable);
   RunRegisterJob(script, key, options);
   // Wait until the worker becomes active.
   base::RunLoop().RunUntilIdle();
@@ -1298,7 +1306,8 @@ TEST_F(ServiceWorkerJobTest, HasFetchHandler) {
   auto* no_fetch_handler_worker =
       helper_->AddNewPendingInstanceClient<FetchHandlerInstanceClient>(
           helper_.get());
-  no_fetch_handler_worker->set_has_fetch_handler(false);
+  no_fetch_handler_worker->set_fetch_handler_type(
+      blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler);
   RunRegisterJob(script, key, options);
   // Wait until the worker becomes active.
   base::RunLoop().RunUntilIdle();
@@ -1318,8 +1327,7 @@ TEST_F(ServiceWorkerJobTest, AddRegistrationToMatchingerHosts) {
 
   // Make an in-scope client.
   ServiceWorkerContainerHost* client = CreateControllee();
-  client->UpdateUrls(in_scope, net::SiteForCookies::FromUrl(in_scope),
-                     url::Origin::Create(in_scope),
+  client->UpdateUrls(in_scope, url::Origin::Create(in_scope),
                      blink::StorageKey(url::Origin::Create(in_scope)));
 
   // Make an in-scope reserved client.
@@ -1328,15 +1336,13 @@ TEST_F(ServiceWorkerJobTest, AddRegistrationToMatchingerHosts) {
                                           /*are_ancestors_secure=*/true);
   base::WeakPtr<ServiceWorkerContainerHost> reserved_client =
       host_and_info->host;
-  reserved_client->UpdateUrls(in_scope, net::SiteForCookies::FromUrl(in_scope),
-                              url::Origin::Create(in_scope),
+  reserved_client->UpdateUrls(in_scope, url::Origin::Create(in_scope),
                               blink::StorageKey(url::Origin::Create(in_scope)));
 
   // Make an out-scope client.
   ServiceWorkerContainerHost* out_scope_client = CreateControllee();
   out_scope_client->UpdateUrls(
-      out_scope, net::SiteForCookies::FromUrl(out_scope),
-      url::Origin::Create(out_scope),
+      out_scope, url::Origin::Create(out_scope),
       blink::StorageKey(url::Origin::Create(out_scope)));
 
   // Make a new registration.
@@ -1457,7 +1463,8 @@ class UpdateJobTestHelper : public EmbeddedWorkerTestHelper,
       host()->OnScriptEvaluationStart();
       host()->OnStarted(
           blink::mojom::ServiceWorkerStartStatus::kAbruptCompletion,
-          /*has_fetch_handler=*/false, helper()->GetNextThreadId(),
+          blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler,
+          helper()->GetNextThreadId(),
           blink::mojom::EmbeddedWorkerStartTiming::New());
     }
 
@@ -1477,7 +1484,8 @@ class UpdateJobTestHelper : public EmbeddedWorkerTestHelper,
         blink::mojom::ServiceWorkerRegistrationObjectInfoPtr,
         blink::mojom::ServiceWorkerObjectInfoPtr,
         blink::mojom::FetchHandlerExistence,
-        mojo::PendingReceiver<blink::mojom::ReportingObserver>) override {
+        mojo::PendingReceiver<blink::mojom::ReportingObserver>,
+        blink::mojom::AncestorFrameType) override {
       client_->SimulateFailureOfScriptEvaluation();
     }
 
@@ -1504,6 +1512,7 @@ class UpdateJobTestHelper : public EmbeddedWorkerTestHelper,
         blink::StorageKey(url::Origin::Create(options.scope)),
         blink::mojom::FetchClientSettingsObject::New(),
         /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+        /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
         SaveRegistration(blink::ServiceWorkerStatusCode::kOk, &registration,
                          run_loop.QuitClosure()));
     run_loop.Run();
@@ -2319,6 +2328,7 @@ TEST_F(ServiceWorkerJobTest, TimeoutBadJobs) {
       GURL("https://www.example.com/service_worker1.js"), options, key,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kErrorTimeout,
                        &registration1, loop1.QuitClosure()));
 
@@ -2335,6 +2345,7 @@ TEST_F(ServiceWorkerJobTest, TimeoutBadJobs) {
       GURL("https://www.example.com/service_worker2.js"), options, key,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kOk, &registration2,
                        loop2.QuitClosure()));
 
@@ -2347,6 +2358,7 @@ TEST_F(ServiceWorkerJobTest, TimeoutBadJobs) {
       GURL("https://www.example.com/service_worker3.js"), options, key,
       blink::mojom::FetchClientSettingsObject::New(),
       /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      /*ancestor_frame_type=*/blink::mojom::AncestorFrameType::kNormalFrame,
       SaveRegistration(blink::ServiceWorkerStatusCode::kOk, &registration3,
                        loop3.QuitClosure()));
 

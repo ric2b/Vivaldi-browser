@@ -337,8 +337,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   // Creates a ThroughputTracker for tracking this Compositor.
   ThroughputTracker RequestNewThroughputTracker();
 
-  // Returns a percentage representing average throughput of last X seconds.
-  uint32_t GetAverageThroughput() const;
+  // Returns a percentage of dropped frames of the last second.
+  double GetPercentDroppedFrames() const;
 
   // Activates a scoped monitor for the current event to track its metrics.
   // `done_callback` is called when the monitor goes out of scope.
@@ -350,7 +350,10 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   void WillBeginMainFrame() override {}
   void DidBeginMainFrame() override {}
   void OnDeferMainFrameUpdatesChanged(bool) override {}
-  void OnDeferCommitsChanged(bool, cc::PaintHoldingReason) override {}
+  void OnDeferCommitsChanged(
+      bool,
+      cc::PaintHoldingReason,
+      absl::optional<cc::PaintHoldingCommitTrigger>) override {}
   void WillUpdateLayers() override {}
   void DidUpdateLayers() override;
   void BeginMainFrame(const viz::BeginFrameArgs& args) override;
@@ -472,7 +475,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   //
   // These pointers are owned by |context_factory_|, and must be reset before
   // calling RemoveCompositor();
-  raw_ptr<viz::mojom::DisplayPrivate> display_private_ = nullptr;
+  raw_ptr<viz::mojom::DisplayPrivate, DanglingUntriaged> display_private_ =
+      nullptr;
   raw_ptr<viz::mojom::ExternalBeginFrameController>
       external_begin_frame_controller_ = nullptr;
 

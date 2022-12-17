@@ -27,7 +27,7 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill_assistant/browser/client_status.h"
-#include "components/autofill_assistant/browser/rectf.h"
+#include "components/autofill_assistant/browser/public/rectf.h"
 #include "components/autofill_assistant/browser/string_conversions_util.h"
 #include "components/autofill_assistant/browser/user_data_util.h"
 #include "components/autofill_assistant/browser/web/element.h"
@@ -528,7 +528,7 @@ void WebController::OnJavaScriptResultForStringArray(
     return;
   }
 
-  auto values = remote_object->GetValue()->GetListDeprecated();
+  const base::Value::List& values = remote_object->GetValue()->GetList();
   std::vector<std::string> v;
   for (const base::Value& value : values) {
     if (!value.is_string()) {
@@ -938,17 +938,19 @@ void WebController::OnSelectorObserverFinished(SelectorObserver* observer) {
 
 void WebController::FillAddressForm(
     std::unique_ptr<autofill::AutofillProfile> profile,
+    const AutofillAssistantIntent intent,
     const ElementFinderResult& element,
     base::OnceCallback<void(const ClientStatus&)> callback) {
   autofill::AutofillableData data_to_autofill(profile.get());
   GetElementFormAndFieldData(
       element, base::BindOnce(&WebController::OnGetFormAndFieldDataForFilling,
                               weak_ptr_factory_.GetWeakPtr(), data_to_autofill,
-                              std::move(profile), std::move(callback)));
+                              std::move(profile), intent, std::move(callback)));
 }
 
 void WebController::FillCardForm(
     std::unique_ptr<autofill::CreditCard> card,
+    const AutofillAssistantIntent intent,
     const std::u16string& cvc,
     const ElementFinderResult& element,
     base::OnceCallback<void(const ClientStatus&)> callback) {
@@ -956,12 +958,13 @@ void WebController::FillCardForm(
   GetElementFormAndFieldData(
       element, base::BindOnce(&WebController::OnGetFormAndFieldDataForFilling,
                               weak_ptr_factory_.GetWeakPtr(), data_to_autofill,
-                              std::move(card), std::move(callback)));
+                              std::move(card), intent, std::move(callback)));
 }
 
 void WebController::RetrieveElementFormAndFieldData(
     const Selector& selector,
     base::OnceCallback<void(const ClientStatus&,
+                            content::RenderFrameHost* rfh,
                             const autofill::FormData& form_data,
                             const autofill::FormFieldData& field_data)>
         callback) {
@@ -975,6 +978,7 @@ void WebController::RetrieveElementFormAndFieldData(
 
 void WebController::OnFindElementForRetrieveElementFormAndFieldData(
     base::OnceCallback<void(const ClientStatus&,
+                            content::RenderFrameHost* rfh,
                             const autofill::FormData& form_data,
                             const autofill::FormFieldData& field_data)>
         callback,
@@ -983,8 +987,8 @@ void WebController::OnFindElementForRetrieveElementFormAndFieldData(
   if (!element_status.ok()) {
     DVLOG(1) << __func__
              << " Failed to find the element for getting Autofill data.";
-    std::move(callback).Run(element_status, autofill::FormData(),
-                            autofill::FormFieldData());
+    std::move(callback).Run(element_status, element_result->render_frame_host(),
+                            autofill::FormData(), autofill::FormFieldData());
     return;
   }
 
@@ -1073,6 +1077,7 @@ void WebController::OnGetFormAndFieldData(
 void WebController::OnGetFormAndFieldDataForFilling(
     const autofill::AutofillableData& data_to_autofill,
     std::unique_ptr<autofill::AutofillDataModel> retain_data,
+    const AutofillAssistantIntent intent,
     base::OnceCallback<void(const ClientStatus&)> callback,
     const ClientStatus& form_status,
     ContentAutofillDriver* driver,
@@ -1082,13 +1087,14 @@ void WebController::OnGetFormAndFieldDataForFilling(
     std::move(callback).Run(form_status);
     return;
   }
-  driver->FillFormForAssistant(data_to_autofill, form_data, form_field);
+  driver->FillFormForAssistant(data_to_autofill, form_data, form_field, intent);
   std::move(callback).Run(OkClientStatus());
 }
 
 void WebController::OnGetFormAndFieldDataForRetrieving(
     std::unique_ptr<ElementFinderResult> element,
     base::OnceCallback<void(const ClientStatus&,
+                            content::RenderFrameHost* rfh,
                             const autofill::FormData& form_data,
                             const autofill::FormFieldData& field_data)>
         callback,
@@ -1096,7 +1102,8 @@ void WebController::OnGetFormAndFieldDataForRetrieving(
     ContentAutofillDriver* driver,
     const autofill::FormData& form_data,
     const autofill::FormFieldData& form_field) {
-  std::move(callback).Run(form_status, form_data, form_field);
+  std::move(callback).Run(form_status, element->render_frame_host(), form_data,
+                          form_field);
 }
 
 void WebController::SelectOption(
@@ -1277,13 +1284,13 @@ void WebController::GetStringAttribute(
     std::move(callback).Run(error_status, "");
     return;
   }
-  base::Value::ListStorage attribute_values;
+  base::Value::List attribute_values;
   for (const std::string& attribute : attributes) {
-    attribute_values.emplace_back(base::Value(attribute));
+    attribute_values.Append(attribute);
   }
 
   std::vector<std::unique_ptr<runtime::CallArgument>> arguments;
-  AddRuntimeCallArgument(attribute_values, &arguments);
+  AddRuntimeCallArgument(std::move(attribute_values), &arguments);
   devtools_client_->GetRuntime()->CallFunctionOn(
       runtime::CallFunctionOnParams::Builder()
           .SetObjectId(element.object_id())
@@ -1343,13 +1350,13 @@ void WebController::SetAttribute(
     std::move(callback).Run(error_status);
     return;
   }
-  base::Value::ListStorage attribute_values;
+  base::Value::List attribute_values;
   for (const std::string& attribute : attributes) {
-    attribute_values.emplace_back(base::Value(attribute));
+    attribute_values.Append(attribute);
   }
 
   std::vector<std::unique_ptr<runtime::CallArgument>> arguments;
-  AddRuntimeCallArgument(attribute_values, &arguments);
+  AddRuntimeCallArgument(std::move(attribute_values), &arguments);
   AddRuntimeCallArgument(value, &arguments);
   devtools_client_->GetRuntime()->CallFunctionOn(
       runtime::CallFunctionOnParams::Builder()
@@ -1460,14 +1467,14 @@ void WebController::OnGetVisualViewport(
       CheckJavaScriptResult(reply_status, result.get(), __FILE__, __LINE__);
   if (!status.ok() || !result->GetResult()->HasValue() ||
       !result->GetResult()->GetValue()->is_list() ||
-      result->GetResult()->GetValue()->GetListDeprecated().size() != 4u) {
+      result->GetResult()->GetValue()->GetList().size() != 4u) {
     VLOG(1) << __func__ << " Failed to get visual viewport: " << status;
     std::move(callback).Run(
         JavaScriptErrorStatus(reply_status, __FILE__, __LINE__, nullptr),
         RectF());
     return;
   }
-  const auto& list = result->GetResult()->GetValue()->GetListDeprecated();
+  const auto& list = result->GetResult()->GetValue()->GetList();
   // Value::GetDouble() is safe to call without checking the value type; it'll
   // return 0.0 if the value has the wrong type.
 
@@ -1625,21 +1632,26 @@ void WebController::ExecuteJS(
       WebControllerErrorInfoProto::EXECUTE_JS, std::move(callback));
 }
 
-void WebController::SetNativeValue(
-    const std::string& value,
-    const ElementFinderResult& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
+ContentAutofillAssistantDriver* WebController::GetDriverForElement(
+    const ElementFinderResult& element) const {
   if (!element.backend_node_id()) {
     DVLOG(1) << __func__
              << "No backend node id on element intended for native execution.";
-    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__));
-    return;
+    return nullptr;
   }
 
   auto* render_frame_host = element.render_frame_host();
   DCHECK(render_frame_host);
-  auto* driver = ContentAutofillAssistantDriver::GetOrCreateForRenderFrameHost(
+
+  return ContentAutofillAssistantDriver::GetOrCreateForRenderFrameHost(
       render_frame_host, annotate_dom_model_service_);
+}
+
+void WebController::SetNativeValue(
+    const std::string& value,
+    const ElementFinderResult& element,
+    base::OnceCallback<void(const ClientStatus&)> callback) {
+  ContentAutofillAssistantDriver* driver = GetDriverForElement(element);
   if (!driver) {
     std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__));
     return;
@@ -1647,11 +1659,27 @@ void WebController::SetNativeValue(
   driver->GetAutofillAssistantAgent()->SetElementValue(
       *element.backend_node_id(), base::UTF8ToUTF16(value),
       /* send_events= */ true,
-      base::BindOnce(&WebController::OnSetElementValue,
+      base::BindOnce(&WebController::OnSetNativeExecution,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void WebController::OnSetElementValue(
+void WebController::SetNativeChecked(
+    bool checked,
+    const ElementFinderResult& element,
+    base::OnceCallback<void(const ClientStatus&)> callback) {
+  ContentAutofillAssistantDriver* driver = GetDriverForElement(element);
+  if (!driver) {
+    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__));
+    return;
+  }
+  driver->GetAutofillAssistantAgent()->SetElementChecked(
+      *element.backend_node_id(), checked,
+      /* send_events= */ true,
+      base::BindOnce(&WebController::OnSetNativeExecution,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void WebController::OnSetNativeExecution(
     base::OnceCallback<void(const ClientStatus&)> callback,
     bool success) const {
   std::move(callback).Run(success ? OkClientStatus()

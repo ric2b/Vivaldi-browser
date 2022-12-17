@@ -12,14 +12,11 @@
 #include "base/json/values_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile.h"
 #include "components/invalidation/impl/invalidation_service_util.h"
 #include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/invalidation/public/topic_data.h"
 #include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/prefs/pref_service.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 // The sender id is only used to storeand retrieve prefs related to the
@@ -60,12 +57,17 @@ constexpr char kNotificationChannelPrefix[] = "/exchange/notify:";
 
 namespace vivaldi {
 
-VivaldiInvalidationService::VivaldiInvalidationService(Profile* profile)
-    : profile_(profile),
+VivaldiInvalidationService::VivaldiInvalidationService(
+    PrefService* prefs,
+    const std::string& notification_server_url,
+    VivaldiAccountManager* account_manager,
+    NetworkContextProvider network_context_provider)
+    : notification_server_url_(notification_server_url),
+      account_manager_(account_manager),
+      network_context_provider_(network_context_provider),
       websocket_backoff_(&kBackoffPolicy),
       client_id_(invalidation::GenerateInvalidatorClientId()),
-      invalidator_registrar_(profile->GetPrefs(), kDummySenderId, false) {
-  account_manager_ = VivaldiAccountManagerFactory::GetForProfile(profile);
+      invalidator_registrar_(prefs, kDummySenderId, false) {
   DCHECK(account_manager_);
   account_manager_->AddObserver(this);
 }
@@ -78,9 +80,6 @@ bool VivaldiInvalidationService::ConnectionAllowed() {
 }
 
 void VivaldiInvalidationService::ToggleConnectionIfNeeded() {
-  const GURL notification_server_url(
-      g_browser_process->local_state()->GetString(
-          vivaldiprefs::kVivaldiSyncNotificationsServerUrl));
   if (websocket_backoff_timer_.IsRunning())
     return;
   DCHECK(!websocket_backoff_.ShouldRejectRequest());
@@ -88,7 +87,7 @@ void VivaldiInvalidationService::ToggleConnectionIfNeeded() {
     stomp_web_socket_.reset();
   else if (!stomp_web_socket_ && ConnectionAllowed())
     stomp_web_socket_ = std::make_unique<InvalidationServiceStompWebsocket>(
-        profile_, notification_server_url, this);
+        network_context_provider_.Run(), notification_server_url_, this);
 }
 
 void VivaldiInvalidationService::RegisterInvalidationHandler(
@@ -137,9 +136,9 @@ VivaldiInvalidationService::GetInvalidationLogger() {
 }
 
 void VivaldiInvalidationService::RequestDetailedStatus(
-    base::RepeatingCallback<void(const base::DictionaryValue&)> caller) const {
-  base::DictionaryValue value;
-  std::move(caller).Run(value);
+    base::RepeatingCallback<void(base::Value::Dict)> caller) const {
+  base::Value::Dict value;
+  std::move(caller).Run(std::move(value));
 }
 
 void VivaldiInvalidationService::PerformInvalidation(

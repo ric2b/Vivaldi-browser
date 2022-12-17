@@ -56,18 +56,20 @@ class GLOzoneEGLScenic : public GLOzoneEGL {
 
   // GLOzone:
   scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLDisplay* display,
       gfx::AcceleratedWidget window) override {
     // GL rendering to Flatland views is not supported. This function is
     // used only for unittests. Return an off-screen surface, so the tests pass.
     // TODO(crbug.com/1271760): Use Vulkan in unittests and remove this hack.
     return gl::InitializeGLSurface(base::MakeRefCounted<gl::SurfacelessEGL>(
-        gl::GLSurfaceEGL::GetGLDisplayEGL(), gfx::Size(100, 100)));
+        display->GetAs<gl::GLDisplayEGL>(), gfx::Size(100, 100)));
   }
 
   scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLDisplay* display,
       const gfx::Size& size) override {
     return gl::InitializeGLSurface(base::MakeRefCounted<gl::SurfacelessEGL>(
-        gl::GLSurfaceEGL::GetGLDisplayEGL(), size));
+        display->GetAs<gl::GLDisplayEGL>(), size));
   }
 
   gl::EGLDisplayPlatform GetNativeDisplay() override {
@@ -188,7 +190,7 @@ scoped_refptr<gfx::NativePixmap> ScenicSurfaceFactory::CreateNativePixmap(
   if (!collection)
     return nullptr;
 
-  return collection->CreateNativePixmap(0);
+  return collection->CreateNativePixmap(0, size);
 }
 
 void ScenicSurfaceFactory::CreateNativePixmapAsync(
@@ -213,7 +215,7 @@ ScenicSurfaceFactory::CreateNativePixmapFromHandle(
   if (!collection)
     return nullptr;
 
-  return collection->CreateNativePixmap(handle.buffer_index);
+  return collection->CreateNativePixmap(handle.buffer_index, size);
 }
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -221,7 +223,7 @@ std::unique_ptr<gpu::VulkanImplementation>
 ScenicSurfaceFactory::CreateVulkanImplementation(bool use_swiftshader,
                                                  bool allow_protected_memory) {
   return std::make_unique<ui::VulkanImplementationScenic>(
-      this, &sysmem_buffer_manager_, allow_protected_memory);
+      this, &sysmem_buffer_manager_, use_swiftshader, allow_protected_memory);
 }
 #endif
 

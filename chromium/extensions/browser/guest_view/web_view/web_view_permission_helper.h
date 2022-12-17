@@ -19,12 +19,6 @@
 
 #include "content/public/browser/web_contents_delegate.h"
 
-namespace guest_view {
-class GuestViewBase;
-}
-
-using guest_view::GuestViewBase;
-
 namespace base {
 class DictionaryValue;
 }
@@ -41,7 +35,6 @@ class WebViewPermissionHelperDelegate;
 class WebViewPermissionHelper {
  public:
   explicit WebViewPermissionHelper(WebViewGuest* guest);
-  explicit WebViewPermissionHelper(GuestViewBase* guest);
 
   WebViewPermissionHelper(const WebViewPermissionHelper&) = delete;
   WebViewPermissionHelper& operator=(const WebViewPermissionHelper&) = delete;
@@ -114,7 +107,7 @@ class WebViewPermissionHelper {
 
   void CancelPendingPermissionRequest(int request_id);
 
-  guest_view::GuestViewBase* web_view_guest() { return web_view_guest_; }
+  WebViewGuest* web_view_guest() { return web_view_guest_; }
 
   WebViewPermissionHelperDelegate* delegate() {
     return web_view_permission_helper_delegate_.get();
@@ -145,7 +138,7 @@ class WebViewPermissionHelper {
   std::unique_ptr<WebViewPermissionHelperDelegate>
       web_view_permission_helper_delegate_;
 
-  const raw_ptr<GuestViewBase> web_view_guest_;
+  const raw_ptr<WebViewGuest> web_view_guest_;
 
   bool default_media_access_permission_;
 

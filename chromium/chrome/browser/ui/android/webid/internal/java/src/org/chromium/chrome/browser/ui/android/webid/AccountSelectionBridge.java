@@ -16,6 +16,7 @@ import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
+import org.chromium.content.webid.IdentityRequestDialogDismissReason;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
 
@@ -26,14 +27,19 @@ import java.util.Arrays;
  * forwards native calls to it.
  */
 class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
+    /**
+     * The size of the maskable icon's safe zone as a fraction of the icon's edge size as defined
+     * in https://www.w3.org/TR/appmanifest/
+     */
+    public static final float MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO = 0.8f;
+
     private long mNativeView;
     private final AccountSelectionComponent mAccountSelectionComponent;
 
     private AccountSelectionBridge(long nativeView, WindowAndroid windowAndroid,
             BottomSheetController bottomSheetController) {
         mNativeView = nativeView;
-        mAccountSelectionComponent = new AccountSelectionCoordinator();
-        mAccountSelectionComponent.initialize(
+        mAccountSelectionComponent = new AccountSelectionCoordinator(
                 windowAndroid.getContext().get(), bottomSheetController, this);
     }
 
@@ -50,7 +56,8 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
     @CalledByNative
     static int getBrandIconIdealSize() {
         Resources resources = ContextUtils.getApplicationContext().getResources();
-        return Math.round(resources.getDimension(R.dimen.account_selection_sheet_icon_size));
+        return Math.round(resources.getDimension(R.dimen.account_selection_sheet_icon_size)
+                / MASKABLE_ICON_SAFE_ZONE_DIAMETER_RATIO);
     }
 
     @CalledByNative
@@ -64,7 +71,7 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
 
     @CalledByNative
     private void destroy() {
-        mAccountSelectionComponent.hideBottomSheet();
+        mAccountSelectionComponent.close();
         mNativeView = 0;
     }
 
@@ -85,9 +92,9 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
     }
 
     @Override
-    public void onDismissed(boolean shouldEmbargo) {
+    public void onDismissed(@IdentityRequestDialogDismissReason int dismissReason) {
         if (mNativeView != 0) {
-            AccountSelectionBridgeJni.get().onDismiss(mNativeView, shouldEmbargo);
+            AccountSelectionBridgeJni.get().onDismiss(mNativeView, dismissReason);
         }
     }
 
@@ -116,7 +123,8 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
     interface Natives {
         void onAccountSelected(long nativeAccountSelectionViewAndroid, String[] accountFields,
                 GURL accountPictureUrl, boolean isSignedIn);
-        void onDismiss(long nativeAccountSelectionViewAndroid, boolean shouldEmbargo);
+        void onDismiss(long nativeAccountSelectionViewAndroid,
+                @IdentityRequestDialogDismissReason int dismissReason);
         void onAutoSignInCancelled(long nativeAccountSelectionViewAndroid);
     }
 }

@@ -36,6 +36,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/animation/tween.h"
@@ -243,6 +244,7 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf,
   views::FocusRing::Get(this)->SetPathGenerator(
       std::make_unique<HighlightPathGenerator>(this,
                                                kTrayBackgroundFocusPadding));
+  views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
   SetFocusPainter(nullptr);
 
   views::HighlightPathGenerator::Install(
@@ -302,6 +304,12 @@ bool TrayBackgroundView::IsShowingMenu() const {
   return context_menu_runner_ && context_menu_runner_->IsRunning();
 }
 
+void TrayBackgroundView::SetRoundedCornerBehavior(
+    RoundedCornerBehavior corner_behavior) {
+  corner_behavior_ = corner_behavior;
+  UpdateBackground();
+}
+
 gfx::RoundedCornersF TrayBackgroundView::GetRoundedCorners() {
   const float radius = ShelfConfig::Get()->control_border_radius();
   if (shelf_->IsHorizontalAlignment()) {
@@ -312,6 +320,10 @@ gfx::RoundedCornersF TrayBackgroundView::GetRoundedCorners() {
                                         radius, radius,
                                         kUnifiedTrayNonRoundedSideRadius};
     switch (corner_behavior_) {
+      case kNotRounded:
+        return {
+            kUnifiedTrayNonRoundedSideRadius, kUnifiedTrayNonRoundedSideRadius,
+            kUnifiedTrayNonRoundedSideRadius, kUnifiedTrayNonRoundedSideRadius};
       case kAllRounded:
         return {radius, radius, radius, radius};
       case kStartRounded:
@@ -322,6 +334,10 @@ gfx::RoundedCornersF TrayBackgroundView::GetRoundedCorners() {
   }
 
   switch (corner_behavior_) {
+    case kNotRounded:
+      return {
+          kUnifiedTrayNonRoundedSideRadius, kUnifiedTrayNonRoundedSideRadius,
+          kUnifiedTrayNonRoundedSideRadius, kUnifiedTrayNonRoundedSideRadius};
     case kAllRounded:
       return {radius, radius, radius, radius};
     case kStartRounded:
@@ -492,9 +508,6 @@ void TrayBackgroundView::OnThemeChanged() {
   StyleUtil::ConfigureInkDropAttributes(this, StyleUtil::kBaseColor |
                                                   StyleUtil::kInkDropOpacity |
                                                   StyleUtil::kHighlightOpacity);
-  views::FocusRing::Get(this)->SetColor(
-      AshColorProvider::Get()->GetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kFocusRingColor));
 }
 
 void TrayBackgroundView::OnVirtualKeyboardVisibilityChanged() {
@@ -531,6 +544,10 @@ void TrayBackgroundView::UpdateAfterStatusAreaCollapseChange() {
 }
 
 void TrayBackgroundView::BubbleResized(const TrayBubbleView* bubble_view) {}
+
+void TrayBackgroundView::OnAnyBubbleVisibilityChanged(
+    views::Widget* bubble_widget,
+    bool visible) {}
 
 void TrayBackgroundView::UpdateBackground() {
   layer()->SetRoundedCornerRadius(GetRoundedCorners());

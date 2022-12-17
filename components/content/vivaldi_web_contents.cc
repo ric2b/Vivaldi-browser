@@ -49,9 +49,10 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {
       // TODO(igor@vivaldi.com): This method is called after the code in
       // ~WebContentsImpl() run and, since the declaration of the frame_tree_
       // field comes after the node_ field in WebContentsImpl, after the
-      // destructor for FrameTree. So current_web_contents_->GetPrimaryFrameTree()
-      // returns a pointer to FrameTree after its destructor is run. Figure out
-      // if this is safe to call here.
+      // destructor for FrameTree. So
+      // current_web_contents_->GetPrimaryFrameTree() returns a pointer to
+      // FrameTree after its destructor is run. Figure out if this is safe to
+      // call here.
       current_web_contents_->GetPrimaryFrameTree().RemoveFrame(outernode);
     }
 
@@ -94,6 +95,9 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
     outermost->SetAsFocusedWebContentsIfNecessary();
   }
 
+  // Make sure this isn't freed here. It is owned by the TabStrip or DevTools.
+  current_web_contents_->DetachFromOuterWebContents().release();
+
   // Disconnect the view hierarhy from the text_input.
   // NOTE(igor@vivaldi.com) This also clears the text input state for each
   // view that is stored is a hash map in TextInputManager. It seems
@@ -111,9 +115,6 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
       }
     }
   }
-
-  // Make sure this isn't freed here. It is owned by the TabStrip or DevTools.
-  current_web_contents_->DetachFromOuterWebContents().release();
 
   node->RemoveObserver(this);
 

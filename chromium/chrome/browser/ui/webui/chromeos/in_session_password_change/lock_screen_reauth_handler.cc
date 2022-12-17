@@ -7,9 +7,10 @@
 #include <memory>
 
 #include "ash/components/login/auth/challenge_response/cert_utils.h"
-#include "ash/components/login/auth/cryptohome_key_constants.h"
+#include "ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "ash/constants/ash_features.h"
 #include "base/notreached.h"
+#include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/saml/in_session_password_sync_manager.h"
 #include "chrome/browser/ash/login/saml/in_session_password_sync_manager_factory.h"
 #include "chrome/browser/ash/login/signin_partition_manager.h"
@@ -22,7 +23,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
-#include "chromeos/dbus/util/version_loader.h"
+#include "chromeos/version/version_loader.h"
 #include "components/account_id/account_id.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/user_manager/known_user.h"
@@ -30,6 +31,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "net/base/net_errors.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -132,12 +134,16 @@ void LockScreenReauthHandler::LoadAuthenticatorParam() {
 }
 
 void LockScreenReauthHandler::LoadGaia(const login::GaiaContext& context) {
+  LOG_ASSERT(Profile::FromWebUI(web_ui()) ==
+             ProfileHelper::Get()->GetLockScreenProfile());
   // Start a new session with SigninPartitionManager, generating a unique
   // StoragePartition.
   login::SigninPartitionManager* signin_partition_manager =
       login::SigninPartitionManager::Factory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));
 
+  // TODO(http://crbug/1348126): we should also close signin session after the
+  // flow is finished.
   signin_partition_manager->StartSigninSession(
       web_ui()->GetWebContents(),
       base::BindOnce(&LockScreenReauthHandler::LoadGaiaWithPartition,
@@ -205,8 +211,13 @@ void LockScreenReauthHandler::OnSetCookieForLoadGaiaWithPartition(
                     login::ExtractSamlPasswordAttributesEnabled());
   params.SetStringKey("clientVersion", version_info::GetVersionNumber());
   params.SetBoolKey("readOnlyEmail", true);
-  params.SetBoolKey("enableAzureADIntegration",
-                    ash::features::IsAzureADIntegrationEnabled());
+  PrefService* local_state = g_browser_process->local_state();
+  if (local_state->IsManagedPreference(
+          ash::prefs::kUrlParameterToAutofillSAMLUsername)) {
+    params.SetStringKey("urlParameterToAutofillSAMLUsername",
+                        local_state->GetString(
+                            ash::prefs::kUrlParameterToAutofillSAMLUsername));
+  }
 
   CallJavascript("loadAuthenticator", params);
   if (features::IsNewLockScreenReauthLayoutEnabled()) {
@@ -383,6 +394,24 @@ void LockScreenReauthHandler::SamlConfirmPassword(
                          weak_factory_.GetWeakPtr()));
 }
 
+void LockScreenReauthHandler::HandleWebviewLoadAborted(int error_code) {
+  if (error_code == net::ERR_INVALID_AUTH_CREDENTIALS) {
+    // Silently ignore this error - it is used as an intermediate state for
+    // committed interstitials (see https://crbug.com/1049349 for details).
+    return;
+  }
+
+  if (error_code == net::ERR_ABORTED) {
+    LOG(WARNING) << "Ignoring Gaia webview error: "
+                 << net::ErrorToShortString(error_code);
+    return;
+  }
+
+  LOG(ERROR) << "Gaia webview error: " << net::ErrorToShortString(error_code);
+  auto* password_sync_manager = GetInSessionPasswordSyncManager();
+  password_sync_manager->OnWebviewLoadAborted();
+}
+
 void LockScreenReauthHandler::ReloadGaia() {
   CallJavascriptFunction(std::string(kMainElement) + "reloadAuthenticator");
 }
@@ -409,6 +438,10 @@ void LockScreenReauthHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "onPasswordTyped",
       base::BindRepeating(&LockScreenReauthHandler::HandleOnPasswordTyped,
+                          weak_factory_.GetWeakPtr()));
+  web_ui()->RegisterHandlerCallback(
+      "webviewLoadAborted",
+      base::BindRepeating(&LockScreenReauthHandler::HandleWebviewLoadAborted,
                           weak_factory_.GetWeakPtr()));
 }
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -10,8 +10,6 @@ It exercises the low-level parser all the way up to the
 code generator and ensures the output matches a golden
 file.
 """
-
-from __future__ import print_function
 
 import collections
 import difflib
@@ -64,6 +62,7 @@ class TestOptions(object):
     self.always_mangle = False
     self.unchecked_exceptions = False
     self.split_name = None
+    self.include_test_only = True
 
 
 class BaseTest(unittest.TestCase):
@@ -585,6 +584,9 @@ class TestGenerator(BaseTest):
 
     @CalledByNative
     public List<Bitmap.CompressFormat> getCompressFormatList();
+
+    @CalledByNativeForTesting
+    public int[] returnIntArrayForTesting();
     """
     jni_params = jni_generator.JniParams('org/chromium/Foo')
     jni_params.ExtractImportsAndInnerClasses(test_data)
@@ -819,6 +821,17 @@ class TestGenerator(BaseTest):
             static=False,
             name='getCompressFormatList',
             method_id_var_name='getCompressFormatList',
+            java_class_name='',
+            params=[],
+            env_call=('Void', ''),
+            unchecked=False,
+        ),
+        CalledByNative(
+            return_type='int[]',
+            system_class=False,
+            static=False,
+            name='returnIntArrayForTesting',
+            method_id_var_name='returnIntArrayForTesting',
             java_class_name='',
             params=[],
             env_call=('Void', ''),
@@ -1387,6 +1400,59 @@ class ProxyTestGenerator(BaseTest):
     ]
 
     self.AssertListEquals(_RemoveHashedNames(natives), golden_natives)
+
+  def testForTestingKept(self):
+    test_data = """
+    class SampleProxyJni {
+      @NativeMethods
+      interface Natives {
+        void fooForTesting();
+        void fooForTest();
+      }
+    }
+    """
+    qualified_clazz = 'org/chromium/example/SampleProxyJni'
+
+    natives = jni_generator.ProxyHelpers.ExtractStaticProxyNatives(
+        qualified_clazz, test_data, 'long', True)
+
+    golden_natives = [
+        NativeMethod(
+            return_type='void',
+            static=True,
+            name='fooForTesting',
+            params=[],
+            java_class_name=None,
+            is_proxy=True,
+            proxy_name='org_chromium_example_SampleProxyJni_fooForTesting'),
+        NativeMethod(
+            return_type='void',
+            static=True,
+            name='fooForTest',
+            params=[],
+            java_class_name=None,
+            is_proxy=True,
+            proxy_name='org_chromium_example_SampleProxyJni_fooForTest'),
+    ]
+
+    self.AssertListEquals(_RemoveHashedNames(natives), golden_natives)
+
+  def testForTestingRemoved(self):
+    test_data = """
+    class SampleProxyJni {
+      @NativeMethods
+      interface Natives {
+        void fooForTesting();
+        void fooForTest();
+      }
+    }
+    """
+    qualified_clazz = 'org/chromium/example/SampleProxyJni'
+
+    natives = jni_generator.ProxyHelpers.ExtractStaticProxyNatives(
+        qualified_clazz, test_data, 'long', False)
+
+    self.AssertListEquals(_RemoveHashedNames(natives), [])
 
   def testProxyNativesMainDex(self):
     test_data = """

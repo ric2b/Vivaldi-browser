@@ -129,7 +129,7 @@ Element* MediaControlTextTrackListElement::CreateTextTrackListItem(
   } else {
     // If there are multiple text tracks set to showing, they must all have
     // checkmarks displayed.
-    if (track && track->mode() == TextTrack::ShowingKeyword()) {
+    if (track && track->mode() == TextTrackMode::kShowing) {
       track_item_input->SetChecked(true);
       track_item->setAttribute(html_names::kAriaCheckedAttr, "true");
     } else {
@@ -161,7 +161,12 @@ Element* MediaControlTextTrackListElement::CreateTextTrackListItem(
     if (track->kind() == track->CaptionsKeyword()) {
       track_kind_marker->SetShadowPseudoId(AtomicString(
           "-internal-media-controls-text-track-list-kind-captions"));
+    } else if (track->kind() == track->DescriptionsKeyword()) {
+      track_kind_marker->SetShadowPseudoId(AtomicString(
+          "-internal-media-controls-text-track-list-kind-descriptions"));
     } else {
+      // Aside from Captions and Descriptions, Subtitles is the only other
+      // supported keyword.
       DCHECK_EQ(track->kind(), track->SubtitlesKeyword());
       track_kind_marker->SetShadowPseudoId(AtomicString(
           "-internal-media-controls-text-track-list-kind-subtitles"));

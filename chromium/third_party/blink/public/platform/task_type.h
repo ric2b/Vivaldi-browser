@@ -51,6 +51,8 @@ enum class TaskType : unsigned char {
   kNetworkingUnfreezable = 75,
   // This task source is used for control messages between kNetworking tasks.
   kNetworkingControl = 4,
+  // Tasks used to run low priority scripts.
+  kLowPriorityScriptExecution = 81,
   // This task source is used to queue calls to history.back() and similar APIs.
   kHistoryTraversal = 5,
 
@@ -262,6 +264,9 @@ enum class TaskType : unsigned char {
   // Cross-process PostMessage IPCs that are deferred in the current task.
   kInternalPostMessageForwarding = 79,
 
+  // Tasks related to renderer-initiated navigation cancellation.
+  kInternalNavigationCancellation = 80,
+
   ///////////////////////////////////////
   // The following task types are only for thread-local queues.
   ///////////////////////////////////////
@@ -289,7 +294,7 @@ enum class TaskType : unsigned char {
   kWorkerThreadTaskQueueV8 = 47,
   kWorkerThreadTaskQueueCompositor = 48,
 
-  kMaxValue = kInternalPostMessageForwarding,
+  kMaxValue = kLowPriorityScriptExecution,
 };
 
 }  // namespace blink

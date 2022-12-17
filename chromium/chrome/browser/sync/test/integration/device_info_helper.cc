@@ -4,7 +4,7 @@
 
 #include "chrome/browser/sync/test/integration/device_info_helper.h"
 #include "components/sync/protocol/sync_entity.pb.h"
-#include "components/sync/test/fake_server/fake_server.h"
+#include "components/sync/test/fake_server.h"
 
 ServerDeviceInfoMatchChecker::ServerDeviceInfoMatchChecker(
     const Matcher& matcher)
@@ -30,3 +30,14 @@ bool ServerDeviceInfoMatchChecker::IsExitConditionSatisfied(std::ostream* os) {
   *os << result_listener.str();
   return matches;
 }
+
+namespace device_info_helper {
+
+bool WaitForFullDeviceInfoCommitted(const std::string& cache_guid) {
+  return ServerDeviceInfoMatchChecker(
+             testing::Contains(
+                 testing::AllOf(HasCacheGuid(cache_guid), HasSharingFields())))
+      .Wait();
+}
+
+}  // namespace device_info_helper

@@ -7,8 +7,11 @@
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_disable_side_effects_scope.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
@@ -191,13 +194,14 @@ NGTableTypes::Row ComputeMinimumRowBlockSize(
        cell = To<NGBlockNode>(cell.NextSibling())) {
     colspan_cell_tabulator->FindNextFreeColumn();
     const ComputedStyle& cell_style = cell.Style();
+    const auto cell_writing_direction = cell_style.GetWritingDirection();
     const NGBoxStrut cell_borders = table_borders.CellBorder(
         cell, row_index, colspan_cell_tabulator->CurrentColumn(), section_index,
         table_writing_direction);
 
     NGConstraintSpaceBuilder space_builder(
-        table_writing_direction.GetWritingMode(),
-        cell.Style().GetWritingDirection(), /* is_new_fc */ true);
+        table_writing_direction.GetWritingMode(), cell_writing_direction,
+        /* is_new_fc */ true);
 
     // We want these values to match the "layout" pass as close as possible.
     NGTableAlgorithmUtils::SetupTableCellConstraintSpaceBuilder(
@@ -384,14 +388,12 @@ void ComputeSectionInlineConstraints(
     const NGBlockNode& section,
     bool is_fixed_layout,
     bool is_first_section,
-    WritingMode table_writing_mode,
+    WritingDirectionMode table_writing_direction,
     const NGTableBorders& table_borders,
     wtf_size_t section_index,
     wtf_size_t* row_index,
     NGTableTypes::CellInlineConstraints* cell_inline_constraints,
     NGTableTypes::ColspanCells* colspan_cell_inline_constraints) {
-  WritingDirectionMode table_writing_direction =
-      section.Style().GetWritingDirection();
   NGColspanCellTabulator colspan_cell_tabulator;
   bool is_first_row = true;
   for (NGBlockNode row = To<NGBlockNode>(section.FirstChild()); row;
@@ -419,9 +421,9 @@ void ComputeSectionInlineConstraints(
         NGBoxStrut cell_padding = table_borders.CellPaddingForMeasure(
             cell.Style(), table_writing_direction);
         NGTableTypes::CellInlineConstraint cell_constraint =
-            NGTableTypes::CreateCellInlineConstraint(cell, table_writing_mode,
-                                                     is_fixed_layout,
-                                                     cell_border, cell_padding);
+            NGTableTypes::CreateCellInlineConstraint(
+                cell, table_writing_direction, is_fixed_layout, cell_border,
+                cell_padding);
         if (colspan == 1) {
           absl::optional<NGTableTypes::CellInlineConstraint>& constraint =
               (*cell_inline_constraints)[colspan_cell_tabulator
@@ -531,7 +533,8 @@ void NGTableAlgorithmUtils::SetupTableCellConstraintSpaceBuilder(
   builder->SetPercentageResolutionSize(
       {percentage_inline_size, kIndefiniteSize});
 
-  builder->SetTableCellBorders(cell_borders);
+  builder->SetTableCellBorders(cell_borders, cell_style.GetWritingDirection(),
+                               table_writing_direction);
   builder->SetTableCellAlignmentBaseline(alignment_baseline);
   builder->SetTableCellColumnIndex(start_column);
   builder->SetIsRestrictedBlockSizeTableCell(
@@ -572,9 +575,8 @@ NGTableAlgorithmUtils::ComputeColumnConstraints(
     const NGTableGroupedChildren& grouped_children,
     const NGTableBorders& table_borders,
     const NGBoxStrut& border_padding) {
-  bool is_fixed_layout = table.Style().IsFixedTableLayout();
-  WritingMode table_writing_mode = table.Style().GetWritingMode();
-  LogicalSize border_spacing = table.Style().TableBorderSpacing();
+  const auto& table_style = table.Style();
+  bool is_fixed_layout = table_style.IsFixedTableLayout();
 
   NGTableTypes::CellInlineConstraints cell_inline_constraints;
   NGTableTypes::ColspanCells colspan_cell_constraints;
@@ -591,16 +593,16 @@ NGTableAlgorithmUtils::ComputeColumnConstraints(
   for (NGBlockNode section : grouped_children) {
     if (!section.IsEmptyTableSection()) {
       ComputeSectionInlineConstraints(
-          section, is_fixed_layout, is_first_section, table_writing_mode,
-          table_borders, section_index, &row_index, &cell_inline_constraints,
-          &colspan_cell_constraints);
+          section, is_fixed_layout, is_first_section,
+          table_style.GetWritingDirection(), table_borders, section_index,
+          &row_index, &cell_inline_constraints, &colspan_cell_constraints);
       is_first_section = false;
     }
     section_index++;
   }
   ApplyCellConstraintsToColumnConstraints(
-      cell_inline_constraints, border_spacing.inline_size, is_fixed_layout,
-      &colspan_cell_constraints, column_constraints.get());
+      cell_inline_constraints, table_style.TableBorderSpacing().inline_size,
+      is_fixed_layout, &colspan_cell_constraints, column_constraints.get());
 
   return column_constraints;
 }
@@ -692,6 +694,73 @@ void NGTableAlgorithmUtils::ComputeSectionMinimumRowBlockSizes(
   sections->push_back(
       NGTableTypes::CreateSection(section, start_row, current_row - start_row,
                                   section_block_size, treat_section_as_tbody));
+}
+
+void NGTableAlgorithmUtils::FinalizeTableCellLayout(
+    LayoutUnit unconstrained_intrinsic_block_size,
+    NGBoxFragmentBuilder* builder) {
+  const NGBlockNode& node = builder->Node();
+  const NGConstraintSpace& space = builder->ConstraintSpace();
+  const bool has_inflow_children = !builder->Children().IsEmpty();
+
+  // Hide table-cells if:
+  //  - They are within a collapsed column(s).
+  //  - They have "empty-cells: hide", non-collapsed borders, and no children.
+  builder->SetIsHiddenForPaint(
+      space.IsTableCellHiddenForPaint() ||
+      (space.HideTableCellIfEmpty() && !has_inflow_children));
+
+  builder->SetHasCollapsedBorders(space.IsTableCellWithCollapsedBorders());
+
+  builder->SetIsTableNGPart();
+
+  builder->SetTableCellColumnIndex(space.TableCellColumnIndex());
+
+  // If we're resuming after a break, there'll be no alignment, since the
+  // fragment will start at the block-start edge of the fragmentainer then.
+  if (IsResumingLayout(builder->PreviousBreakToken()))
+    return;
+
+  switch (node.Style().VerticalAlign()) {
+    case EVerticalAlign::kTop:
+      // Do nothing for 'top' vertical alignment.
+      break;
+    case EVerticalAlign::kBaselineMiddle:
+    case EVerticalAlign::kSub:
+    case EVerticalAlign::kSuper:
+    case EVerticalAlign::kTextTop:
+    case EVerticalAlign::kTextBottom:
+    case EVerticalAlign::kLength:
+      // All of the above are treated as 'baseline' for the purposes of
+      // table-cell vertical alignment.
+    case EVerticalAlign::kBaseline:
+      // Table-cells (with baseline vertical alignment) always produce a
+      // baseline of their end-content edge (even if the content doesn't have
+      // any baselines).
+      if (!builder->Baseline() || node.ShouldApplyLayoutContainment()) {
+        builder->SetBaseline(unconstrained_intrinsic_block_size -
+                             builder->BorderScrollbarPadding().block_end);
+      }
+
+      // Only adjust if we have *inflow* children. If we only have
+      // OOF-positioned children don't align them to the alignment baseline.
+      if (has_inflow_children) {
+        if (auto alignment_baseline = space.TableCellAlignmentBaseline()) {
+          builder->MoveChildrenInBlockDirection(*alignment_baseline -
+                                                *builder->Baseline());
+        }
+      }
+      break;
+    case EVerticalAlign::kMiddle:
+      builder->MoveChildrenInBlockDirection(
+          (builder->FragmentBlockSize() - unconstrained_intrinsic_block_size) /
+          2);
+      break;
+    case EVerticalAlign::kBottom:
+      builder->MoveChildrenInBlockDirection(builder->FragmentBlockSize() -
+                                            unconstrained_intrinsic_block_size);
+      break;
+  };
 }
 
 void NGColspanCellTabulator::StartRow() {

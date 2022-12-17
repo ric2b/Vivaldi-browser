@@ -63,8 +63,8 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
   data: {
     passwords: chrome.passwordsPrivate.PasswordUiEntry[],
     exceptions: chrome.passwordsPrivate.ExceptionEntry[],
-    leakedCredentials: chrome.passwordsPrivate.InsecureCredential[],
-    weakCredentials: chrome.passwordsPrivate.InsecureCredential[],
+    leakedCredentials: chrome.passwordsPrivate.PasswordUiEntry[],
+    weakCredentials: chrome.passwordsPrivate.PasswordUiEntry[],
     checkStatus: chrome.passwordsPrivate.PasswordCheckStatus,
   };
 
@@ -81,37 +81,48 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
   };
 
   private plaintextPassword_: string = '';
+  private importResults_: chrome.passwordsPrivate.ImportResults = {
+    status: chrome.passwordsPrivate.ImportResultsStatus.SUCCESS,
+    numberImported: 0,
+    failedImports: [],
+    fileName: '',
+  };
   private isOptedInForAccountStorage_: boolean = false;
   private isAccountStoreDefault_: boolean = false;
   private getUrlCollectionResponse_: chrome.passwordsPrivate.UrlCollection|
       null = null;
+  private changeSavedPasswordResponse_: number|null = null;
+  private requestCredentialDetailsResponse_:
+      chrome.passwordsPrivate.PasswordUiEntry|null = null;
 
   constructor() {
     super([
-      'requestPlaintextPassword',
-      'startBulkPasswordCheck',
-      'stopBulkPasswordCheck',
+      'addPassword',
+      'cancelExportPasswords',
+      'changeSavedPassword',
+      'exportPasswords',
       'getCompromisedCredentials',
-      'getWeakCredentials',
       'getPasswordCheckStatus',
-      'getPlaintextInsecurePassword',
-      'changeInsecureCredential',
-      'removeInsecureCredential',
+      'getUrlCollection',
+      'getWeakCredentials',
+      'importPasswords',
+      'isAccountStoreDefault',
+      'isOptedInForAccountStorage',
+      'movePasswordsToAccount',
+      'muteInsecureCredential',
+      'recordChangePasswordFlowStarted',
       'recordPasswordCheckInteraction',
       'recordPasswordCheckReferrer',
-      'isOptedInForAccountStorage',
-      'removeSavedPassword',
-      'removeSavedPasswords',
-      'movePasswordsToAccount',
+      'refreshScriptsIfNecessary',
       'removeException',
-      'removeExceptions',
-      'changeSavedPassword',
-      'isAccountStoreDefault',
-      'getUrlCollection',
-      'addPassword',
-      'muteInsecureCredential',
+      'removeSavedPassword',
+      'requestExportProgressStatus',
+      'requestPlaintextPassword',
+      'requestCredentialDetails',
+      'startAutomatedPasswordChange',
+      'startBulkPasswordCheck',
+      'stopBulkPasswordCheck',
       'unmuteInsecureCredential',
-      'recordChangePasswordFlowStarted',
     ]);
 
     /** @private {!PasswordManagerExpectations} */
@@ -156,18 +167,14 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
 
   recordPasswordsPageAccessInSettings() {}
 
-  removeSavedPassword(id: number) {
+  removeSavedPassword(
+      id: number, fromStores: chrome.passwordsPrivate.PasswordStoreSet) {
     this.actual_.removed.passwords++;
-    this.methodCalled('removeSavedPassword', id);
+    this.methodCalled('removeSavedPassword', {id, fromStores});
   }
 
-  movePasswordsToAccount(ids: Array<number>) {
+  movePasswordsToAccount(ids: number[]) {
     this.methodCalled('movePasswordsToAccount', ids);
-  }
-
-  removeSavedPasswords(ids: Array<number>) {
-    this.actual_.removed.passwords += ids.length;
-    this.methodCalled('removeSavedPasswords', ids);
   }
 
   addExceptionListChangedListener(listener:
@@ -191,11 +198,6 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     this.methodCalled('removeException', id);
   }
 
-  removeExceptions(ids: Array<number>) {
-    this.actual_.removed.exceptions += ids.length;
-    this.methodCalled('removeExceptions', ids);
-  }
-
   requestPlaintextPassword(
       id: number, reason: chrome.passwordsPrivate.PlaintextReason) {
     this.methodCalled('requestPlaintextPassword', {id, reason});
@@ -207,6 +209,19 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
 
   setPlaintextPassword(plaintextPassword: string) {
     this.plaintextPassword_ = plaintextPassword;
+  }
+
+  requestCredentialDetails(id: number) {
+    this.methodCalled('requestCredentialDetails', {id});
+    if (!this.requestCredentialDetailsResponse_) {
+      return Promise.reject(new Error('Could not obtain credential details'));
+    }
+    return Promise.resolve(this.requestCredentialDetailsResponse_);
+  }
+
+  setRequestCredentialDetailsResponse(
+      credential: chrome.passwordsPrivate.PasswordUiEntry) {
+    this.requestCredentialDetailsResponse_ = credential;
   }
 
   // Sets the return value of isOptedInForAccountStorage calls and notifies
@@ -261,6 +276,11 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
         actual.listening.accountStorageOptInState);
   }
 
+  refreshScriptsIfNecessary() {
+    this.methodCalled('refreshScriptsIfNecessary');
+    return Promise.resolve();
+  }
+
   startBulkPasswordCheck() {
     this.methodCalled('startBulkPasswordCheck');
     if (this.data.checkStatus.state ===
@@ -289,6 +309,13 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     return Promise.resolve(this.data.checkStatus);
   }
 
+  startAutomatedPasswordChange(credential:
+                                   chrome.passwordsPrivate.PasswordUiEntry) {
+    this.methodCalled('startAutomatedPasswordChange', credential);
+    // Return `false` for empty origins for testing purposes.
+    return Promise.resolve(!!credential.changePasswordUrl);
+  }
+
   addCompromisedCredentialsListener(listener: CredentialsChangedListener) {
     this.lastCallback.addCompromisedCredentialsListener = listener;
   }
@@ -308,33 +335,6 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
   removePasswordCheckStatusListener(_listener:
                                         PasswordCheckStatusChangedListener) {}
 
-  getPlaintextInsecurePassword(
-      credential: chrome.passwordsPrivate.InsecureCredential,
-      reason: chrome.passwordsPrivate.PlaintextReason) {
-    this.methodCalled('getPlaintextInsecurePassword', {credential, reason});
-    if (!this.plaintextPassword_) {
-      return Promise.reject(new Error('Could not obtain plaintext password'));
-    }
-
-    const newCredential =
-        /** @type {chrome.passwordsPrivate.InsecureCredential} */ (
-            Object.assign({}, credential));
-    newCredential.password = this.plaintextPassword_;
-    return Promise.resolve(newCredential);
-  }
-
-  changeInsecureCredential(
-      credential: chrome.passwordsPrivate.InsecureCredential,
-      newPassword: string) {
-    this.methodCalled('changeInsecureCredential', {credential, newPassword});
-    return Promise.resolve();
-  }
-
-  removeInsecureCredential(insecureCredential:
-                               chrome.passwordsPrivate.InsecureCredential) {
-    this.methodCalled('removeInsecureCredential', insecureCredential);
-  }
-
   recordPasswordCheckInteraction(interaction: PasswordCheckInteraction) {
     this.methodCalled('recordPasswordCheckInteraction', interaction);
   }
@@ -343,11 +343,16 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     this.methodCalled('recordPasswordCheckReferrer', referrer);
   }
 
+  setChangeSavedPasswordResponse(newId: number) {
+    this.changeSavedPasswordResponse_ = newId;
+  }
+
   changeSavedPassword(
-      ids: Array<number>,
-      params: chrome.passwordsPrivate.ChangeSavedPasswordParams) {
-    this.methodCalled('changeSavedPassword', {ids, params});
-    return Promise.resolve();
+      id: number, params: chrome.passwordsPrivate.ChangeSavedPasswordParams) {
+    this.methodCalled('changeSavedPassword', {id, params});
+    return !this.changeSavedPasswordResponse_ ?
+        Promise.reject(new Error('Could not change password.')) :
+        Promise.resolve(this.changeSavedPasswordResponse_);
   }
 
   /**
@@ -361,6 +366,8 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     this.methodCalled('isAccountStoreDefault');
     return Promise.resolve(this.isAccountStoreDefault_);
   }
+
+  optInForAccountStorage(_optIn: boolean) {}
 
   /**
    * Sets the value to be returned by getUrlCollection.
@@ -386,36 +393,51 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
   }
 
   muteInsecureCredential(insecureCredential:
-                             chrome.passwordsPrivate.InsecureCredential) {
+                             chrome.passwordsPrivate.PasswordUiEntry) {
     this.methodCalled('muteInsecureCredential', insecureCredential);
   }
 
   unmuteInsecureCredential(insecureCredential:
-                               chrome.passwordsPrivate.InsecureCredential) {
+                               chrome.passwordsPrivate.PasswordUiEntry) {
     this.methodCalled('unmuteInsecureCredential', insecureCredential);
   }
 
   recordChangePasswordFlowStarted(
-      insecureCredential: chrome.passwordsPrivate.InsecureCredential,
+      insecureCredential: chrome.passwordsPrivate.PasswordUiEntry,
       isManualFlow: boolean) {
     this.methodCalled(
         'recordChangePasswordFlowStarted', insecureCredential, isManualFlow);
   }
 
-  cancelExportPasswords() {}
+  importPasswords(toStore: chrome.passwordsPrivate.PasswordStoreSet) {
+    this.methodCalled('importPasswords', toStore);
+    return Promise.resolve(this.importResults_);
+  }
 
-  exportPasswords(_callback: () => void) {}
+  /**
+   * Sets the value to be returned by importPasswords.
+   */
+  setImportResults(results: chrome.passwordsPrivate.ImportResults) {
+    this.importResults_ = results;
+  }
 
-  importPasswords() {}
+  exportPasswords() {
+    this.methodCalled('exportPasswords');
+    return Promise.resolve();
+  }
 
-  optInForAccountStorage(_optIn: boolean) {}
+  cancelExportPasswords() {
+    this.methodCalled('cancelExportPasswords');
+  }
 
   removePasswordsFileExportProgressListener(
       _listener: PasswordsFileExportProgressListener) {}
 
-  requestExportProgressStatus(
-      _callback:
-          (status: chrome.passwordsPrivate.ExportProgressStatus) => void) {}
+  requestExportProgressStatus() {
+    this.methodCalled('requestExportProgressStatus');
+    return Promise.resolve(
+        chrome.passwordsPrivate.ExportProgressStatus.NOT_STARTED);
+  }
 
   undoRemoveSavedPasswordOrException() {}
 }

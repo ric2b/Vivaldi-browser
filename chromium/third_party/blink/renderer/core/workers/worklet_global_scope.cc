@@ -105,8 +105,8 @@ WorkletGlobalScope::WorkletGlobalScope(
           creation_params->parent_context_token->GetAs<LocalFrameToken>()),
       parent_cross_origin_isolated_capability_(
           creation_params->parent_cross_origin_isolated_capability),
-      parent_direct_socket_capability_(
-          creation_params->parent_direct_socket_capability) {
+      parent_isolated_application_capability_(
+          creation_params->parent_isolated_application_capability) {
   DCHECK((thread_type_ == ThreadType::kMainThread && frame_) ||
          (thread_type_ == ThreadType::kOffMainThread && worker_thread_));
 
@@ -308,8 +308,8 @@ bool WorkletGlobalScope::CrossOriginIsolatedCapability() const {
   return parent_cross_origin_isolated_capability_;
 }
 
-bool WorkletGlobalScope::DirectSocketCapability() const {
-  return parent_direct_socket_capability_;
+bool WorkletGlobalScope::IsolatedApplicationCapability() const {
+  return parent_isolated_application_capability_;
 }
 
 ukm::UkmRecorder* WorkletGlobalScope::UkmRecorder() {
@@ -322,6 +322,10 @@ ukm::UkmRecorder* WorkletGlobalScope::UkmRecorder() {
   ukm_recorder_ = std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
 
   return ukm_recorder_.get();
+}
+
+ukm::SourceId WorkletGlobalScope::UkmSourceID() const {
+  return ukm::kInvalidSourceId;
 }
 
 void WorkletGlobalScope::Trace(Visitor* visitor) const {

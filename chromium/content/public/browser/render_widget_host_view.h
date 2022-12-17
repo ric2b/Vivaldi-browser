@@ -133,14 +133,6 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // Whether the view is showing.
   virtual bool IsShowing() = 0;
 
-  // Whether the derived class is Aura or not. The type check, using IsAura(),
-  // is done in WebContentsImpl::ShowCreatedWidget() to determine if we have a
-  // RenderWidgetHostViewAura view or a RenderWidgetHostViewGuest view passed
-  // into this method. Since we can't use RTTI and dynamic_cast/typeid in
-  // Chromium, this is a way to determine the object type at runtime.
-  // Ref. VB-12348.
-  virtual bool IsAura() const = 0;
-
   // Indicates if the view is currently occluded (e.g, not visible because it's
   // covered up by other windows), and as a result the view's renderer may be
   // suspended. Calling Show()/Hide() overrides the state set by these methods.
@@ -186,6 +178,9 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // Get the pointer lock unadjusted movement setting for testing.
   // Returns true if mouse is locked and is in unadjusted movement mode.
   virtual bool GetIsMouseLockedUnadjustedMovementForTesting() = 0;
+  // Whether the view can trigger pointer lock. This is the same as `HasFocus`
+  // on non-Mac platforms, but on Mac it also ensures that the window is key.
+  virtual bool CanBeMouseLocked() = 0;
 
   // Start/Stop intercepting future system keyboard events.
   virtual bool LockKeyboard(
@@ -214,24 +209,25 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // Copies the given subset of the view's surface, optionally scales it, and
   // returns the result as a bitmap via the provided callback. This is meant for
   // one-off snapshots. For continuous video capture of the surface, please use
-  // CreateVideoCapturer() instead.
+  // `CreateVideoCapturer()` instead.
   //
-  // |src_rect| is either the subset of the view's surface, in view coordinates,
+  // `src_rect` is either the subset of the view's surface, in view coordinates,
   // or empty to indicate that all of it should be copied. This is NOT the same
-  // coordinate system as that used GetViewBounds() (https://crbug.com/73362).
+  // coordinate system as that used `GetViewBounds()` (https://crbug.com/73362).
   //
-  // |output_size| is the size of the resulting bitmap, or empty to indicate no
+  // `output_size` is the size of the resulting bitmap, or empty to indicate no
   // scaling is desired. If an empty size is provided, note that the resulting
-  // bitmap's size may not be the same as |src_rect.size()| due to the pixel
+  // bitmap's size may not be the same as `src_rect.size()` due to the pixel
   // scale used by the underlying device.
   //
-  // |callback| is guaranteed to be run, either synchronously or at some point
+  // `callback` is guaranteed to be run, either synchronously or at some point
   // in the future (depending on the platform implementation and the current
-  // state of the Surface). If the copy failed, the bitmap's drawsNothing()
-  // method will return true.
+  // state of the Surface). If the copy failed, the bitmap's `drawsNothing()`
+  // method will return true. `callback` isn't guaranteed to run on the same
+  // task sequence as this method was called from.
   //
-  // If the view's renderer is suspended (see WasOccluded()), this may result in
-  // copying old data or failing.
+  // If the view's renderer is suspended (see `WasOccluded()`), this may result
+  // in copying old data or failing.
   virtual void CopyFromSurface(
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,

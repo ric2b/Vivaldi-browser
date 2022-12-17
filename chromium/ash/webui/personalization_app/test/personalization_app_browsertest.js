@@ -26,10 +26,9 @@ class PersonalizationAppBrowserTest extends testing.Test {
   get featureList() {
     return {
       enabled: [
-        'ash::features::kWallpaperWebUI',
         'ash::features::kPersonalizationHub',
         'chromeos::features::kDarkLightMode',
-      ]
+      ],
     };
   }
 

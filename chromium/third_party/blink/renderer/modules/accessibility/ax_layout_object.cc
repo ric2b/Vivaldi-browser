@@ -448,10 +448,12 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   DCHECK(initialized_);
 #endif
 
-  // All nodes must have an unignored parent within their tree under
-  // the root node of the web area, so force that node to always be unignored.
+  // All nodes must have an unignored parent within their tree under the root
+  // node of the main web area, so force that node to always be unignored.
+  // The web area for a <select>'s' popup document is ignored, because the
+  // popup object hierarchy is constructed without the document root.
   if (IsWebArea())
-    return false;
+    return CachedParentObject() && CachedParentObject()->IsMenuList();
 
   const Node* node = GetNode();
   if (IsA<HTMLHtmlElement>(node))
@@ -588,8 +590,6 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (alt_text)
     return alt_text->IsEmpty();
 
-  if (IsWebArea())
-    return false;
   if (layout_object_->IsListMarkerIncludingAll()) {
     // Ignore TextAlternative of the list marker for SUMMARY because:
     //  - TextAlternatives for disclosure-* are triangle symbol characters used
@@ -1271,7 +1271,7 @@ bool AXLayoutObject::IsDataTable() const {
   // When a section of the document is contentEditable, all tables should be
   // treated as data tables, otherwise users may not be able to work with rich
   // text editors that allow creating and editing tables.
-  if (GetNode() && HasEditableStyle(*GetNode()))
+  if (GetNode() && blink::IsEditable(*GetNode()))
     return true;
 
   // This employs a heuristic to determine if this table should appear.

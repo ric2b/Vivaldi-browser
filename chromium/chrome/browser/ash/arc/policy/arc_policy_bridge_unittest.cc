@@ -37,7 +37,6 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/upstart/fake_upstart_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -166,6 +165,7 @@ class MockArcPolicyBridgeObserver : public ArcPolicyBridge::Observer {
 
   MOCK_METHOD1(OnPolicySent, void(const std::string&));
   MOCK_METHOD1(OnComplianceReportReceived, void(const base::Value*));
+  MOCK_METHOD1(OnReportDPCVersion, void(const std::string&));
 };
 
 // Helper class to define callbacks that verify that they were run.
@@ -209,11 +209,10 @@ arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
 }
 
 arc::ArcPolicyBridge::ReportComplianceCallback PolicyComplianceCallback(
-    base::OnceClosure quit_closure,
-    const std::string& expected) {
+    base::OnceClosure quit_closure) {
   auto was_run = std::make_unique<CheckedBoolean>();
   return base::BindOnce(&ExpectStringWithClosure, std::move(quit_closure),
-                        std::move(was_run), expected);
+                        std::move(was_run), kPolicyCompliantResponse);
 }
 
 }  // namespace
@@ -295,26 +294,35 @@ class ArcPolicyBridgeTestBase {
     Mock::VerifyAndClearExpectations(&observer_);
   }
 
+  void ReportDPCVersionAndVerifyObserverCallback(const std::string& version) {
+    Mock::VerifyAndClearExpectations(&observer_);
+    EXPECT_CALL(observer_, OnReportDPCVersion(version));
+
+    policy_bridge()->ReportDPCVersion(version);
+
+    EXPECT_EQ(version, policy_bridge()->get_arc_dpc_version());
+    Mock::VerifyAndClearExpectations(&observer_);
+  }
+
   void ReportComplianceAndVerifyObserverCallback(
       const std::string& compliance_report) {
     Mock::VerifyAndClearExpectations(&observer_);
-    std::unique_ptr<base::Value> compliance_report_value =
-        base::JSONReader::ReadDeprecated(compliance_report);
+    absl::optional<base::Value> compliance_report_value =
+        base::JSONReader::Read(compliance_report);
     if (compliance_report_value && compliance_report_value->is_dict()) {
       EXPECT_CALL(observer_, OnComplianceReportReceived(
-                                 ValueEquals(compliance_report_value.get())));
+                                 ValueEquals(&*compliance_report_value)));
     } else {
       EXPECT_CALL(observer_, OnComplianceReportReceived(_)).Times(0);
     }
     policy_bridge()->ReportCompliance(
-        compliance_report, PolicyComplianceCallback(run_loop().QuitClosure(),
-                                                    kPolicyCompliantResponse));
+        compliance_report, PolicyComplianceCallback(run_loop().QuitClosure()));
     run_loop().Run();
     Mock::VerifyAndClearExpectations(&observer_);
 
     if (compliance_report_value) {
-      std::unique_ptr<base::Value> saved_compliance_report_value =
-          base::JSONReader::ReadDeprecated(
+      absl::optional<base::Value> saved_compliance_report_value =
+          base::JSONReader::Read(
               policy_bridge()->get_arc_policy_compliance_report());
       ASSERT_TRUE(saved_compliance_report_value);
       EXPECT_EQ(*compliance_report_value, *saved_compliance_report_value);
@@ -721,6 +729,10 @@ TEST_F(ArcPolicyBridgeTest, ReportComplianceTest_WithNonCompliantDetails) {
       profile()->GetPrefs()->GetBoolean(prefs::kArcPolicyComplianceReported));
 }
 
+TEST_F(ArcPolicyBridgeTest, ReportDPCVersionTest) {
+  ReportDPCVersionAndVerifyObserverCallback("100");
+}
+
 // This and the following test send the policies through a mojo connection
 // between a PolicyInstance and the PolicyBridge.
 TEST_F(ArcPolicyBridgeTest, PolicyInstanceUnmanagedTest) {
@@ -807,7 +819,6 @@ TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
   constexpr char kFalse[] = "false";
   constexpr char kTrue[] = "true";
 
-  chromeos::DBusThreadManager::Initialize();
   ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
 
   auto upstart_client = std::make_unique<ash::FakeUpstartClient>();
@@ -845,7 +856,6 @@ TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
   upstart_client.reset();
   arc_session_manager.reset();
   ash::ConciergeClient::Shutdown();
-  chromeos::DBusThreadManager::Shutdown();
 }
 
 TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {

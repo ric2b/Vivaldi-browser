@@ -26,7 +26,11 @@ const base::FilePath::CharType kProductDirName[] =
     FILE_PATH_LITERAL("Google/Chrome");
 #else
 const base::FilePath::CharType kProductDirName[] =
+#if defined(VIVALDI_BUILD)
+    FILE_PATH_LITERAL("Vivaldi");
+#else
     FILE_PATH_LITERAL("Chromium");
+#endif
 #endif
 
 bool GetDefaultUserDataDirectory(base::FilePath* result) {

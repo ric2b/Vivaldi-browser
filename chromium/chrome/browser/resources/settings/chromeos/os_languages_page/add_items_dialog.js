@@ -7,18 +7,18 @@
  * unordered set of items at a time. The component supports suggested items, as
  * well as items being disabled by policy.
  */
-import '//resources/cr_elements/cr_button/cr_button.m.js';
-import '//resources/cr_elements/cr_search_field/cr_search_field.js';
-import '//resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '//resources/polymer/v3_0/iron-list/iron-list.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_search_field/cr_search_field.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
+import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import './cr_checkbox_with_policy.js';
 import './shared_style.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 
-import {CrScrollableBehavior, CrScrollableBehaviorInterface} from '//resources/cr_elements/cr_scrollable_behavior.m.js';
-import {FindShortcutBehavior, FindShortcutBehaviorInterface} from '//resources/cr_elements/find_shortcut_behavior.js';
-import {afterNextRender, html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrScrollableBehavior, CrScrollableBehaviorInterface} from 'chrome://resources/cr_elements/cr_scrollable_behavior.m.js';
+import {FindShortcutBehavior, FindShortcutBehaviorInterface} from 'chrome://resources/cr_elements/find_shortcut_behavior.js';
+import {afterNextRender, html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 /**
  * `id` must unique.
@@ -118,7 +118,7 @@ class OsSettingsAddItemsDialogElement extends
       suggestedItems_: {
         type: Array,
         computed: 'getSuggestedItems_(suggestedItemIds.*, itemIdsToItems_)',
-        value: []
+        value: [],
       },
 
       /** @private */
@@ -151,7 +151,7 @@ class OsSettingsAddItemsDialogElement extends
       `updateSuggestedListScrollOffset_(showSuggestedList_,
           suggestedItemsLabel)`,
       `updateFilteredListScrollOffset_(showSuggestedList_,
-          suggestedItemsLabel, suggestedItems_.length, showFilteredList_)`
+          suggestedItemsLabel, suggestedItems_.length, showFilteredList_)`,
     ];
   }
 

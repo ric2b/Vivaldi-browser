@@ -302,7 +302,7 @@ void NGBoxFragmentBuilder::RemoveOldLegacyOOFFlexItem(
   DCHECK(object.Parent()->IsFlexibleBox());
   DCHECK(object.Parent()->IsOutOfFlowPositioned());
   for (wtf_size_t idx = 0; idx < children_.size(); idx++) {
-    const ChildWithOffset& child = children_[idx];
+    const NGLogicalLink& child = children_[idx];
     if (child.fragment->GetLayoutObject() == &object) {
       children_.EraseAt(idx);
       return;
@@ -338,6 +338,17 @@ NGPhysicalFragment::NGBoxType NGBoxFragmentBuilder::BoxType() const {
   return NGPhysicalFragment::NGBoxType::kNormalBox;
 }
 
+void NGBoxFragmentBuilder::PropagateSpaceShortage(
+    absl::optional<LayoutUnit> space_shortage) {
+  // Space shortage should only be reported when we already have a tentative
+  // fragmentainer block-size. It's meaningless to talk about space shortage
+  // in the initial column balancing pass, because then we have no
+  // fragmentainer block-size at all, so who's to tell what's too short or
+  // not?
+  DCHECK(!IsInitialColumnBalancingPass());
+  UpdateMinimalSpaceShortage(space_shortage, &minimal_space_shortage_);
+}
+
 EBreakBetween NGBoxFragmentBuilder::JoinedBreakBetweenValue(
     EBreakBetween break_before) const {
   return JoinFragmentainerBreakValues(previous_break_after_, break_before);
@@ -345,7 +356,6 @@ EBreakBetween NGBoxFragmentBuilder::JoinedBreakBetweenValue(
 
 void NGBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta) {
   DCHECK(is_new_fc_);
-  DCHECK(!has_oof_candidate_that_needs_block_offset_adjustment_);
   DCHECK_NE(FragmentBlockSize(), kIndefiniteSize);
   DCHECK(oof_positioned_descendants_.IsEmpty());
 
@@ -491,7 +501,7 @@ const NGLayoutResult* NGBoxFragmentBuilder::ToBoxFragment(
     WritingMode block_or_line_writing_mode) {
 #if DCHECK_IS_ON()
   if (ItemsBuilder()) {
-    for (const ChildWithOffset& child : Children()) {
+    for (const NGLogicalLink& child : Children()) {
       DCHECK(child.fragment);
       const NGPhysicalFragment& fragment = *child.fragment;
       DCHECK(fragment.IsLineBox() ||
@@ -672,7 +682,7 @@ void NGBoxFragmentBuilder::CheckNoBlockFragmentation() const {
   DCHECK(!HasInflowChildBreakInside());
   DCHECK(!DidBreakSelf());
   DCHECK(!has_forced_break_);
-  DCHECK(ConstraintSpace().IsRepeatable() || !HasBreakTokenData());
+  DCHECK(ConstraintSpace().ShouldRepeat() || !HasBreakTokenData());
   DCHECK_EQ(minimal_space_shortage_, kIndefiniteSize);
   if (!ConstraintSpace().ShouldPropagateChildBreakValues()) {
     DCHECK(!initial_break_before_);

@@ -37,6 +37,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
@@ -223,20 +224,18 @@ class TestDownloadManagerDelegate : public ChromeDownloadManagerDelegate {
     return true;
   }
 
-  static void SetDangerous(
-      content::DownloadTargetCallback callback,
-      const base::FilePath& target_path,
-      download::DownloadItem::TargetDisposition disp,
-      download::DownloadDangerType danger_type,
-      download::DownloadItem::MixedContentStatus mcs,
-      const base::FilePath& intermediate_path,
-      const base::FilePath& display_name,
-      const std::string& mime_type,
-      absl::optional<download::DownloadSchedule> download_schedule,
-      download::DownloadInterruptReason reason) {
-    std::move(callback).Run(
-        target_path, disp, download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, mcs,
-        intermediate_path, display_name, mime_type, download_schedule, reason);
+  static void SetDangerous(content::DownloadTargetCallback callback,
+                           const base::FilePath& target_path,
+                           download::DownloadItem::TargetDisposition disp,
+                           download::DownloadDangerType danger_type,
+                           download::DownloadItem::MixedContentStatus mcs,
+                           const base::FilePath& intermediate_path,
+                           const base::FilePath& display_name,
+                           const std::string& mime_type,
+                           download::DownloadInterruptReason reason) {
+    std::move(callback).Run(target_path, disp,
+                            download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, mcs,
+                            intermediate_path, display_name, mime_type, reason);
   }
 };
 
@@ -380,8 +379,8 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest, PRE_TestSessionRestore) {
   cancel_observer.Wait();
   EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
 
-  browser()->tab_strip_model()
-      ->CloseWebContentsAt(1, TabStripModel::CLOSE_USER_GESTURE);
+  browser()->tab_strip_model()->CloseWebContentsAt(
+      1, TabCloseTypes::CLOSE_USER_GESTURE);
   content::TestNavigationObserver navigation_observer(
       browser()->tab_strip_model()->GetActiveWebContents(), 1);
   ASSERT_NO_FATAL_FAILURE(NavigateToURLWithDisposition(

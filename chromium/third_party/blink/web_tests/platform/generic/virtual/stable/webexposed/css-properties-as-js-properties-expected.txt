@@ -135,6 +135,9 @@ containIntrinsicHeight
 containIntrinsicInlineSize
 containIntrinsicSize
 containIntrinsicWidth
+container
+containerName
+containerType
 content
 contentVisibility
 counterIncrement
@@ -210,6 +213,7 @@ gridTemplateAreas
 gridTemplateColumns
 gridTemplateRows
 height
+hyphenateCharacter
 hyphens
 imageOrientation
 imageRendering
@@ -321,6 +325,8 @@ placeContent
 placeItems
 placeSelf
 pointerEvents
+popUpHideDelay
+popUpShowDelay
 position
 prefix
 quotes

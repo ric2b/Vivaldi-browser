@@ -11,7 +11,7 @@ import {SettingsPrefsElement} from 'chrome://settings/settings.js';
 import {FakeChromeEvent} from 'chrome://webui-test/fake_chrome_event.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
-type StringArrayCallback = (strings: Array<string>) => void;
+type StringArrayCallback = (strings: string[]) => void;
 
 /**
  * Fake of the chrome.languageSettingsPrivate API.
@@ -88,7 +88,7 @@ export class FakeLanguageSettingsPrivate extends TestBrowserProxy {
         // A standalone language that doesn't support anything.
         code: 'tk',
         displayName: 'Turkmen',
-        nativeDisplayName: 'Turkmen'
+        nativeDisplayName: 'Turkmen',
       },
       {
         // Edge cases:
@@ -163,7 +163,10 @@ export class FakeLanguageSettingsPrivate extends TestBrowserProxy {
         displayName: 'US Swahili keyboard',
         languageCodes: ['en', 'en-US', 'sw'],
         tags: [
-          'US Swahili keyboard', 'English', 'English(United States)', 'Swahili'
+          'US Swahili keyboard',
+          'English',
+          'English(United States)',
+          'Swahili',
         ],
         enabled: false,
       },
@@ -196,7 +199,7 @@ export class FakeLanguageSettingsPrivate extends TestBrowserProxy {
    */
   getLanguageList(
       callback:
-          (languages: Array<chrome.languageSettingsPrivate.Language>) => void) {
+          (languages: chrome.languageSettingsPrivate.Language[]) => void) {
     setTimeout(() => {
       callback(JSON.parse(JSON.stringify(this.languages)));
     });
@@ -353,7 +356,7 @@ export class FakeLanguageSettingsPrivate extends TestBrowserProxy {
    * Sets the translate target language.
    */
   setTranslateTargetLanguage(languageCode: string) {
-    this.settingsPrefs_!.push(
+    this.settingsPrefs_!.set(
         'prefs.translate_recent_target.value', languageCode);
   }
 
@@ -361,8 +364,8 @@ export class FakeLanguageSettingsPrivate extends TestBrowserProxy {
    * Gets the current status of the chosen spell check dictionaries.
    */
   getSpellcheckDictionaryStatuses(
-      callback: (statuses: Array<chrome.languageSettingsPrivate
-                                     .SpellcheckDictionaryStatus>) => void) {
+      callback: (statuses: chrome.languageSettingsPrivate
+                     .SpellcheckDictionaryStatus[]) => void) {
     callback([]);
   }
 
@@ -465,7 +468,7 @@ export function getFakeLanguagePrefs() {
     {
       key: 'translate_recent_target',
       type: chrome.settingsPrivate.PrefType.STRING,
-      value: 'en-US',
-    }
+      value: 'en',
+    },
   ];
 }

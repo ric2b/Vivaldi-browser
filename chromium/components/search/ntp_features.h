@@ -22,6 +22,7 @@ namespace ntp_features {
 
 extern const base::Feature kConfirmSuggestionRemovals;
 extern const base::Feature kCacheOneGoogleBar;
+extern const base::Feature kCustomizeChromeSidePanel;
 extern const base::Feature kCwsScrimRemoval;
 extern const base::Feature kDismissPromos;
 extern const base::Feature kIframeOneGoogleBar;
@@ -29,30 +30,31 @@ extern const base::Feature kOneGoogleBarModalOverlays;
 extern const base::Feature kRealboxMatchOmniboxTheme;
 extern const base::Feature kRealboxMatchSearchboxTheme;
 extern const base::Feature kRealboxUseGoogleGIcon;
-extern const base::Feature kNtpOneGoogleBar;
-extern const base::Feature kNtpLogo;
-extern const base::Feature kNtpShortcuts;
-extern const base::Feature kNtpMiddleSlotPromo;
-extern const base::Feature kNtpModulesLoadTimeoutMilliseconds;
-extern const base::Feature kNtpModulesOrder;
-extern const base::Feature kNtpModulesLoad;
-extern const base::Feature kNtpRecipeTasksModule;
 extern const base::Feature kNtpChromeCartModule;
-extern const base::Feature kNtpModulesRedesigned;
-extern const base::Feature kNtpModulesRedesignedLayout;
 extern const base::Feature kNtpDriveModule;
 #if !defined(OFFICIAL_BUILD)
 extern const base::Feature kNtpDummyModules;
 #endif
+extern const base::Feature kNtpLogo;
+extern const base::Feature kNtpMiddleSlotPromo;
+extern const base::Feature kNtpMiddleSlotPromoDismissal;
+extern const base::Feature kNtpModulesLoadTimeoutMilliseconds;
+extern const base::Feature kNtpModulesOrder;
+extern const base::Feature kNtpModulesDragAndDrop;
+extern const base::Feature kNtpModulesFirstRunExperience;
+extern const base::Feature kNtpModulesLoad;
+extern const base::Feature kNtpModulesRedesigned;
+extern const base::Feature kNtpModulesRedesignedLayout;
 extern const base::Feature kNtpPhotosModule;
 extern const base::Feature kNtpPhotosModuleSoftOptOut;
-
 extern const base::Feature kNtpPhotosModuleCustomizedOptInTitle;
 extern const base::Feature kNtpPhotosModuleCustomizedOptInArtWork;
 extern const base::Feature kNtpPhotosModuleSplitSvgOptInArtWork;
+extern const base::Feature kNtpFeedModule;
+extern const base::Feature kNtpOneGoogleBar;
+extern const base::Feature kNtpRecipeTasksModule;
 extern const base::Feature kNtpSafeBrowsingModule;
-extern const base::Feature kNtpModulesDragAndDrop;
-extern const base::Feature kNtpModulesFirstRunExperience;
+extern const base::Feature kNtpShortcuts;
 
 extern const base::Feature kNtpHandleMostVisitedNavigationExplicitly;
 
@@ -60,14 +62,6 @@ extern const base::Feature kNtpHandleMostVisitedNavigationExplicitly;
 extern const char kNtpModulesLoadTimeoutMillisecondsParam[];
 // Parameter determining the module order.
 extern const char kNtpModulesOrderParam[];
-// Parameter determining the type of recipe data to request.
-extern const char kNtpRecipeTasksModuleDataParam[];
-// Parameter determining the max age in seconds of the cache for recipe tasks
-// data.
-extern const char kNtpRecipeTasksModuleCacheMaxAgeSParam[];
-// Parameter for communicating the experiment group of the recipe tasks module
-// experiment.
-extern const char kNtpRecipeTasksModuleExperimentGroupParam[];
 // Parameter determining the type of cart data used to render module.
 extern const char kNtpChromeCartModuleDataParam[];
 // Parameter for enabling the abandoned cart discount.
@@ -88,6 +82,8 @@ extern const char kNtpDriveModuleCacheMaxAgeSParam[];
 // Parameter for communicating the experiment group of the Drive module
 // experiment.
 extern const char kNtpDriveModuleExperimentGroupParam[];
+// Parameter determining the type of middle slot promo data to render.
+extern const char kNtpMiddleSlotPromoDismissalParam[];
 // Parameter determining the type of Photos data to render.
 extern const char kNtpPhotosModuleDataParam[];
 // Parameter determining the art work in opt-in card.
@@ -103,6 +99,14 @@ extern const char kNtpSafeBrowsingModuleCooldownPeriodDaysParam[];
 extern const char kRealboxMatchOmniboxThemeVariantParam[];
 // Parameter determining the variations of searchbox theme matching.
 extern const char kRealboxMatchSearchboxThemeParam[];
+// Parameter determining the type of recipe data to request.
+extern const char kNtpRecipeTasksModuleDataParam[];
+// Parameter determining the max age in seconds of the cache for recipe tasks
+// data.
+extern const char kNtpRecipeTasksModuleCacheMaxAgeSParam[];
+// Parameter for communicating the experiment group of the recipe tasks module
+// experiment.
+extern const char kNtpRecipeTasksModuleExperimentGroupParam[];
 
 // Returns the timeout after which the load of a module should be aborted.
 base::TimeDelta GetModulesLoadTimeout();

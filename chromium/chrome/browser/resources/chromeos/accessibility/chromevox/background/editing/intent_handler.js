@@ -6,18 +6,21 @@
  * @fileoverview Handles automation intents for speech feedback.
  * Braille is *not* handled in this module.
  */
-import {EditableLine} from '/chromevox/background/editing/editable_line.js';
-import {Output} from '/chromevox/background/output/output.js';
+import {AutomationPredicate} from '../../../common/automation_predicate.js';
+import {AutomationUtil} from '../../../common/automation_util.js';
+import {constants} from '../../../common/constants.js';
+import {CursorRange} from '../../../common/cursors/range.js';
+import {Output} from '../output/output.js';
+import {OutputRoleInfo} from '../output/output_role_info.js';
+import {OutputEventType} from '../output/output_types.js';
+
+import {EditableLine} from './editable_line.js';
 
 const AutomationIntent = chrome.automation.AutomationIntent;
-const Cursor = cursors.Cursor;
 const Dir = constants.Dir;
 const IntentCommandType = chrome.automation.IntentCommandType;
 const IntentTextBoundaryType = chrome.automation.IntentTextBoundaryType;
-const Movement = cursors.Movement;
-const Range = cursors.Range;
 const RoleType = chrome.automation.RoleType;
-const Unit = cursors.Unit;
 
 /**
  * A stateless class that turns intents into speech.
@@ -158,7 +161,7 @@ export class IntentHandler {
 
         new Output()
             .withRichSpeech(
-                cursors.Range.fromNode(node), null, OutputEventType.NAVIGATE)
+                CursorRange.fromNode(node), null, OutputEventType.NAVIGATE)
             .go();
         return true;
       }

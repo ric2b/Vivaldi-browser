@@ -149,7 +149,6 @@ class StartupPageTest : public InProcessBrowserTest {
   // InProcessBrowserTest:
   void CreatedBrowserMainParts(
       content::BrowserMainParts* browser_main_parts) override {
-    InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
     const std::vector<GURL> urls = {ui_test_utils::GetTestUrl(
         base::FilePath(FILE_PATH_LITERAL("focus")),
         base::FilePath(FILE_PATH_LITERAL("page_with_focus.html")))};

@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing/content/browser/password_protection/password_protection_request_content.h"
 
+#include "base/callback.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/thread_pool.h"
@@ -36,6 +37,17 @@ namespace {
 // The maximum time to wait for DOM features to be collected, in milliseconds.
 const int kDomFeatureTimeoutMs = 3000;
 #endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+void ExtractVisualFeaturesAndReplyOnUIThread(
+    const SkBitmap& bitmap,
+    base::OnceCallback<void(std::unique_ptr<VisualFeatures>)>
+        ui_thread_callback) {
+  std::unique_ptr<VisualFeatures> visual_features =
+      visual_utils::ExtractVisualFeatures(bitmap);
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(ui_thread_callback),
+                                std::move(visual_features)));
+}
 
 }  // namespace
 
@@ -143,7 +155,6 @@ void PasswordProtectionRequestContent::GetDomFeatures() {
               &PasswordProtectionRequestContent::OnGetDomFeatureTimeout,
               AsWeakPtr()),
           base::Milliseconds(kDomFeatureTimeoutMs));
-  dom_feature_start_time_ = base::TimeTicks::Now();
 }
 
 void PasswordProtectionRequestContent::OnGetDomFeatures(
@@ -181,9 +192,6 @@ void PasswordProtectionRequestContent::OnGetDomFeatures(
     request_proto_->mutable_dom_features()->set_model_version(
         dom_features_request.model_version());
   }
-
-  UMA_HISTOGRAM_TIMES("PasswordProtection.DomFeatureExtractionDuration",
-                      base::TimeTicks::Now() - dom_feature_start_time_);
 
   if (IsVisualFeaturesEnabled()) {
     MaybeCollectVisualFeatures();
@@ -267,14 +275,15 @@ void PasswordProtectionRequestContent::CollectVisualFeatures() {
 void PasswordProtectionRequestContent::OnScreenshotTaken(
     const SkBitmap& screenshot) {
   // Do the feature extraction on a worker thread, to avoid blocking the UI.
-  base::ThreadPool::PostTaskAndReplyWithResult(
+  auto ui_thread_callback = base::BindOnce(
+      &PasswordProtectionRequestContent::OnVisualFeatureCollectionDone,
+      AsWeakPtr());
+  base::ThreadPool::PostTask(
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&visual_utils::ExtractVisualFeatures, screenshot),
-      base::BindOnce(
-          &PasswordProtectionRequestContent::OnVisualFeatureCollectionDone,
-          AsWeakPtr()));
+      base::BindOnce(&ExtractVisualFeaturesAndReplyOnUIThread, screenshot,
+                     std::move(ui_thread_callback)));
 }
 
 void PasswordProtectionRequestContent::OnVisualFeatureCollectionDone(

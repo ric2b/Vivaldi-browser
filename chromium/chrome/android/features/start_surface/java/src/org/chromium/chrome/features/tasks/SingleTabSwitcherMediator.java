@@ -22,7 +22,6 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -44,6 +43,8 @@ import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
+
+import java.util.List;
 
 /** Mediator of the single tab tab switcher. */
 public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
@@ -104,6 +105,21 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
                     return;
                 }
                 mTabSelectingListener.onTabSelecting(LayoutManagerImpl.time(), tab.getId());
+            }
+
+            @Override
+            public void tabPendingClosure(Tab tab) {
+                mBackPressChangedSupplier.set(shouldInterceptBackPress());
+            }
+
+            @Override
+            public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
+                mBackPressChangedSupplier.set(shouldInterceptBackPress());
+            }
+
+            @Override
+            public void tabClosureUndone(Tab tab) {
+                mBackPressChangedSupplier.set(shouldInterceptBackPress());
             }
         };
         mTabModelSelectorObserver = new TabModelSelectorObserver() {
@@ -183,6 +199,9 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
     }
 
     @Override
+    public void prepareHideTabSwitcherView() {}
+
+    @Override
     public void hideTabSwitcherView(boolean animate) {
         mShouldIgnoreNextSelect = false;
         mTabModelSelector.getTabModelFilterProvider().removeTabModelFilterObserver(
@@ -206,7 +225,7 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
         mSelectedTabDidNotChangedAfterShown = true;
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
 
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+        if (ChromeFeatureList.sInstantStart.isEnabled()
                 && !mTabModelSelector.isTabStateInitialized()) {
             mAddNormalTabModelObserverPending = true;
 

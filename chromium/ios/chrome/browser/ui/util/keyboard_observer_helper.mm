@@ -6,6 +6,7 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ui/base/device_form_factor.h"
 
@@ -16,8 +17,7 @@
 @interface KeyboardObserverHelper ()
 
 // Flag that indicates if the keyboard is on screen.
-@property(nonatomic, readwrite, getter=isKeyboardOnScreen)
-    BOOL keyboardOnScreen;
+@property(nonatomic, readwrite, getter=isKeyboardVisible) BOOL keyboardVisible;
 
 // Current keyboard state.
 @property(nonatomic, readwrite, getter=getKeyboardState)
@@ -55,7 +55,15 @@
 - (CGFloat)visibleKeyboardHeight {
   if (self.keyboardState.isVisible && !self.keyboardState.isHardware &&
       !self.keyboardState.isUndocked) {
+    // Software keyboard is visible and covers the full width of the screen
+    // (docked). Returns the keyboard + accessory height.
     return CGRectGetHeight(self.keyboardView.frame);
+  } else if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE &&
+             self.keyboardState.isVisible && !self.keyboardState.isUndocked) {
+    // Keyboard is visible but hardware, only the accessory covers the full
+    // width of the display, the keyboard is hidden below the display. Returns
+    // the accessory's height.
+    return CurrentScreenHeight() - self.keyboardView.frame.origin.y;
   } else {
     return 0;
   }
@@ -122,14 +130,19 @@
   return nil;
 }
 
++ (UIScreen*)keyboardScreen {
+  UIView* keyboardView = [self keyboardView];
+  return keyboardView.window.screen;
+}
+
 #pragma mark - Keyboard Notifications
 
 - (void)keyboardWillShow:(NSNotification*)notification {
-  self.keyboardOnScreen = YES;
+  self.keyboardVisible = YES;
 }
 
 - (void)keyboardWillHide:(NSNotification*)notification {
-  self.keyboardOnScreen = NO;
+  self.keyboardVisible = NO;
 }
 
 - (void)keyboardWillDidChangeFrame:(NSNotification*)notification {

@@ -25,6 +25,8 @@
 #include "third_party/blink/renderer/core/layout/layout_text.h"
 
 #include <algorithm>
+
+#include "base/numerics/safe_conversions.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -1854,57 +1856,6 @@ void LayoutText::LogicalStartingPointAndHeight(
   }
 }
 
-LayoutUnit LayoutText::PhysicalAreaSize() const {
-  NOT_DESTROYED();
-  // This is not accurate when |this| starts or ends at the middle of a line,
-  // but we prefer performance over accuracy.
-  if (IsInLayoutNGInlineFormattingContext()) {
-    NGInlineCursor cursor;
-    cursor.MoveTo(*this);
-    if (!cursor)
-      return LayoutUnit(0);
-    PhysicalRect rect = cursor.Current().RectInContainerFragment();
-    cursor.MoveToLastForSameLayoutObject();
-    rect.Unite(cursor.Current().RectInContainerFragment());
-    return rect.Width() * rect.Height();
-  }
-
-  if (const auto* first_text_box = FirstTextBox()) {
-    if (const auto* last_text_box = LastTextBox()) {
-      LayoutUnit width =
-          std::max(first_text_box->LogicalRight(),
-                   last_text_box->LogicalRight()) -
-          std::min(first_text_box->LogicalLeft(), last_text_box->LogicalLeft());
-      LayoutUnit height =
-          last_text_box->LogicalBottom() - first_text_box->LogicalTop();
-      return width * height;
-    }
-  }
-  return LayoutUnit(0);
-}
-
-LayoutUnit LayoutText::PhysicalRightOffset() const {
-  NOT_DESTROYED();
-  // This is not accurate when |this| starts or ends at the middle of a line,
-  // but we prefer performance over accuracy.
-  if (IsInLayoutNGInlineFormattingContext()) {
-    NGInlineCursor cursor;
-    cursor.MoveTo(*this);
-    if (!cursor)
-      return LayoutUnit(0);
-    PhysicalRect rect = cursor.Current().RectInContainerFragment();
-    return rect.offset.left + rect.size.width;
-  }
-
-  if (const auto* first_text_box = FirstTextBox()) {
-    if (const auto* last_text_box = LastTextBox()) {
-      return std::max(first_text_box->FrameRect().MaxX(),
-                      last_text_box->FrameRect().MaxX());
-    }
-  }
-  return LayoutUnit(0);
-}
-
 bool LayoutText::CanOptimizeSetText() const {
   NOT_DESTROYED();
   // If we have only one line of text and "contain: layout size" we can avoid
@@ -2904,8 +2855,10 @@ void LayoutText::SetInlineItems(NGInlineItemsData* data,
                                 size_t size) {
   NOT_DESTROYED();
 #if DCHECK_IS_ON()
-  for (size_t i = begin; i < begin + size; i++)
-    DCHECK_EQ(data->items[SafeCast<wtf_size_t>(i)].GetLayoutObject(), this);
+  for (size_t i = begin; i < begin + size; i++) {
+    DCHECK_EQ(data->items[base::checked_cast<wtf_size_t>(i)].GetLayoutObject(),
+              this);
+  }
 #endif
   auto* items = GetNGInlineItems();
   if (!items)

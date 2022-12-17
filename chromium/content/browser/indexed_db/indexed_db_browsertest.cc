@@ -205,11 +205,11 @@ class IndexedDBBrowserTest : public ContentBrowserTest {
     base::RunLoop loop;
     auto& control = GetControl(browser);
     bool result = false;
-    control.DeleteForBucket(storage_key,
-                            base::BindLambdaForTesting([&](bool success) {
-                              result = success;
-                              loop.Quit();
-                            }));
+    control.DeleteForStorageKey(storage_key,
+                                base::BindLambdaForTesting([&](bool success) {
+                                  result = success;
+                                  loop.Quit();
+                                }));
     loop.Run();
     return result;
   }
@@ -1175,7 +1175,7 @@ IN_PROC_BROWSER_TEST_F(
   std::u16string expected_title16(u"setVersion(3) complete");
   TitleWatcher title_watcher(new_shell->web_contents(), expected_title16);
 
-  shell()->web_contents()->GetMainFrame()->GetProcess()->Shutdown(0);
+  shell()->web_contents()->GetPrimaryMainFrame()->GetProcess()->Shutdown(0);
   shell()->Close();
 
   EXPECT_EQ(expected_title16, title_watcher.WaitAndGetTitle());

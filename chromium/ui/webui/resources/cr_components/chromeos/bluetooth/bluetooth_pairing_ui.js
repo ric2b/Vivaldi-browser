@@ -7,7 +7,7 @@
  * Root UI element for Bluetooth pairing dialog.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import './bluetooth_pairing_device_selection_page.js';
 import './bluetooth_pairing_enter_code_page.js';
 import './bluetooth_pairing_request_code_page.js';
@@ -20,6 +20,7 @@ import {BluetoothDeviceProperties, BluetoothDiscoveryDelegateInterface, Bluetoot
 import {assert, assertNotReached} from '../../../js/assert.m.js';
 
 import {PairingAuthType} from './bluetooth_types.js';
+import {mojoString16ToString} from './bluetooth_utils.js';
 import {getBluetoothConfig} from './cros_bluetooth_config.js';
 
 /** @implements {KeyEnteredHandlerInterface} */
@@ -684,6 +685,17 @@ export class SettingsBluetoothPairingUiElement extends PolymerElement {
       // necessary here to make sure the promise is resolved.
       this.confirmCodeCallback_.reject();
     }
+  }
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getDeviceName_() {
+    if (!this.devicePendingPairing_) {
+      return '';
+    }
+    return mojoString16ToString(this.devicePendingPairing_.publicName);
   }
 }
 

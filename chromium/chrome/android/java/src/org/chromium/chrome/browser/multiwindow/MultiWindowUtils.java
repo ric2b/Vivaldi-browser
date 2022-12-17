@@ -35,7 +35,6 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -100,7 +99,7 @@ public class MultiWindowUtils implements ActivityStateListener {
         // Instance switcher is supported on S, and on some R platforms where the new
         // launch mode is backported.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false;
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANCE_SWITCHER);
+        return ChromeFeatureList.sInstanceSwitcher.isEnabled();
     }
 
     /**
@@ -707,12 +706,12 @@ public class MultiWindowUtils implements ActivityStateListener {
                     SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
                     long startTime = prefs.readLong(ChromePreferenceKeys.MULTI_WINDOW_START_TIME);
                     if (startTime == 0) {
-                        RecordUserAction.record("Android.MultiWindowMode.Enter");
+                        RecordUserAction.record("Android.MultiWindowMode.Enter2");
                         long current = System.currentTimeMillis();
                         prefs.writeLong(ChromePreferenceKeys.MULTI_WINDOW_START_TIME, current);
                     }
                 } else {
-                    RecordUserAction.record("Android.MultiWindowMode.Enter");
+                    RecordUserAction.record("Android.MultiWindowMode.Enter2");
                 }
             } else {
                 if (mMultiInstanceApi31Enabled) {
@@ -720,13 +719,13 @@ public class MultiWindowUtils implements ActivityStateListener {
                     long startTime = prefs.readLong(ChromePreferenceKeys.MULTI_WINDOW_START_TIME);
                     if (startTime > 0) {
                         long current = System.currentTimeMillis();
-                        RecordUserAction.record("Android.MultiWindowMode.Exit");
+                        RecordUserAction.record("Android.MultiWindowMode.Exit2");
                         RecordHistogram.recordLongTimesHistogram(
                                 "Android.MultiWindowMode.TotalDuration", current - startTime);
                         prefs.writeLong(ChromePreferenceKeys.MULTI_WINDOW_START_TIME, 0);
                     }
                 } else {
-                    RecordUserAction.record("Android.MultiWindowMode.Exit");
+                    RecordUserAction.record("Android.MultiWindowMode.Exit2");
                 }
             }
         } else {

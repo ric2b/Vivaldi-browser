@@ -7,9 +7,9 @@
  * ring location.
  */
 
-goog.provide('FocusBounds');
+import {constants} from '../../common/constants.js';
 
-FocusBounds = {
+export const FocusBounds = {
   /** @return {!Array<!chrome.accessibilityPrivate.ScreenRect>} */
   get() {
     return FocusBounds.current_;
@@ -21,9 +21,9 @@ FocusBounds = {
     chrome.accessibilityPrivate.setFocusRings([{
       rects: bounds,
       type: chrome.accessibilityPrivate.FocusType.GLOW,
-      color: constants.FOCUS_COLOR
+      color: constants.FOCUS_COLOR,
     }]);
-  }
+  },
 };
 
 /** @private {!Array<!chrome.accessibilityPrivate.ScreenRect>} */

@@ -55,14 +55,13 @@ void AddWebApk(Profile* profile,
 
 absl::optional<std::string> GetWebApkPackageName(Profile* profile,
                                                  const std::string& app_id) {
-  const base::Value* app_dict = profile->GetPrefs()
-                                    ->GetDictionary(kGeneratedWebApksPref)
-                                    ->FindDictKey(app_id);
+  const base::Value::Dict* app_dict =
+      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref).FindDict(app_id);
   if (!app_dict) {
     return absl::nullopt;
   }
 
-  const std::string* package_name = app_dict->FindStringKey(kPackageNameKey);
+  const std::string* package_name = app_dict->FindString(kPackageNameKey);
   if (!package_name) {
     return absl::nullopt;
   }
@@ -72,10 +71,10 @@ absl::optional<std::string> GetWebApkPackageName(Profile* profile,
 
 base::flat_set<std::string> GetWebApkAppIds(Profile* profile) {
   base::flat_set<std::string> ids;
-  const base::Value* generated_webapks =
-      profile->GetPrefs()->GetDictionary(kGeneratedWebApksPref);
+  const base::Value::Dict& generated_webapks =
+      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref);
 
-  for (const auto kv : generated_webapks->DictItems()) {
+  for (const auto kv : generated_webapks) {
     ids.insert(kv.first);
   }
 
@@ -85,10 +84,10 @@ base::flat_set<std::string> GetWebApkAppIds(Profile* profile) {
 base::flat_set<std::string> GetInstalledWebApkPackageNames(Profile* profile) {
   base::flat_set<std::string> package_names;
 
-  const base::Value* generated_webapks =
-      profile->GetPrefs()->GetDictionary(kGeneratedWebApksPref);
+  const base::Value::Dict& generated_webapks =
+      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref);
 
-  for (const auto kv : generated_webapks->DictItems()) {
+  for (const auto kv : generated_webapks) {
     const std::string* package_name = kv.second.FindStringKey(kPackageNameKey);
     DCHECK(package_name);
     package_names.insert(*package_name);
@@ -129,10 +128,10 @@ void SetUpdateNeededForApp(Profile* profile,
 
 base::flat_set<std::string> GetUpdateNeededAppIds(Profile* profile) {
   base::flat_set<std::string> ids;
-  const base::Value* generated_webapks =
-      profile->GetPrefs()->GetDictionary(kGeneratedWebApksPref);
+  const base::Value::Dict& generated_webapks =
+      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref);
 
-  for (auto kv : generated_webapks->DictItems()) {
+  for (auto kv : generated_webapks) {
     absl::optional<bool> update_needed =
         kv.second.FindBoolKey(kUpdateNeededKey);
     if (update_needed.has_value() && update_needed.value()) {

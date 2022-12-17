@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "base/test/scoped_feature_list.h"
-#include "components/autofill/core/browser/autofill_regex_constants.h"
-#include "components/autofill/core/browser/autofill_regexes.h"
 #include "components/autofill/core/browser/form_parsing/parsing_test_utils.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_regex_constants.h"
+#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/form_field_data.h"
 
 namespace autofill {
@@ -39,9 +39,9 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn(PatternProviderFeatureState::All()));
 
 TEST_P(NameFieldTest, FirstMiddleLast) {
-  AddTextFormFieldData("First Name", "First", NAME_FIRST);
-  AddTextFormFieldData("Name Middle", "Middle", NAME_MIDDLE);
-  AddTextFormFieldData("Last Name", "Last", NAME_LAST);
+  AddTextFormFieldData("First", "First Name", NAME_FIRST);
+  AddTextFormFieldData("Middle", "Name Middle", NAME_MIDDLE);
+  AddTextFormFieldData("Last", "Last Name", NAME_LAST);
 
   ClassifyAndVerify(ParseResult::PARSED);
 }
@@ -185,9 +185,9 @@ TEST_P(NameFieldTest, FirstNameAndOptionalMiddleNameAndHispanicLastNames) {
       features::kAutofillEnableSupportForMoreStructureInNames);
 
   AddTextFormFieldData("nombre", "nombre", NAME_FIRST);
-  AddTextFormFieldData("middle name", "middle_name", NAME_MIDDLE);
-  AddTextFormFieldData("apellido paterno", "apellido_paterno", NAME_LAST_FIRST);
-  AddTextFormFieldData("segunda apellido", "segunda_apellido",
+  AddTextFormFieldData("middle_name", "middle name", NAME_MIDDLE);
+  AddTextFormFieldData("apellido_paterno", "apellido paterno", NAME_LAST_FIRST);
+  AddTextFormFieldData("segunda_apellido", "segunda apellido",
                        NAME_LAST_SECOND);
 
   ClassifyAndVerify(ParseResult::PARSED);
@@ -221,18 +221,18 @@ TEST_P(NameFieldTest, HispanicLastNameRegexConverage) {
 
   for (const auto& string : first_last_name_strings) {
     SCOPED_TRACE(string);
-    EXPECT_TRUE(MatchesPattern(string, kNameLastFirstRe, nullptr));
+    EXPECT_TRUE(MatchesRegex<kNameLastFirstRe>(string));
   }
 
   for (const auto& string : second_last_name_strings) {
     SCOPED_TRACE(string);
-    EXPECT_TRUE(MatchesPattern(string, kNameLastSecondRe, nullptr));
+    EXPECT_TRUE(MatchesRegex<kNameLastSecondRe>(string));
   }
 
   for (const auto& string : neither_first_or_second_last_name_strings) {
     SCOPED_TRACE(string);
-    EXPECT_FALSE(MatchesPattern(string, kNameLastFirstRe, nullptr));
-    EXPECT_FALSE(MatchesPattern(string, kNameLastSecondRe, nullptr));
+    EXPECT_FALSE(MatchesRegex<kNameLastFirstRe>(string));
+    EXPECT_FALSE(MatchesRegex<kNameLastSecondRe>(string));
   }
 }
 

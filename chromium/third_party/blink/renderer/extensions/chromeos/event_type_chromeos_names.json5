@@ -6,5 +6,7 @@
 
   data: [
     "acceleratordown",
+    "acceleratorup",
+    "windowclosed",
   ]
 }

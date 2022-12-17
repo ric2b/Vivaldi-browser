@@ -6,27 +6,30 @@
 
 #include <vector>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "ash/components/cryptohome/cryptohome_util.h"
-#include "ash/components/cryptohome/system_salt_getter.h"
-#include "ash/components/login/auth/cryptohome_key_constants.h"
-#include "ash/components/login/auth/user_context.h"
+#include "ash/components/login/auth/public/cryptohome_key_constants.h"
+#include "ash/components/login/auth/public/user_context.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "chrome/browser/ash/login/quick_unlock/fake_pin_salt_storage.h"
 #include "chrome/browser/ash/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
-#include "chromeos/dbus/cryptohome/rpc.pb.h"
-#include "chromeos/dbus/userdataauth/fake_cryptohome_misc_client.h"
-#include "chromeos/dbus/userdataauth/fake_userdataauth_client.h"
+#include "chromeos/ash/components/cryptohome/common_types.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_util.h"
+#include "chromeos/ash/components/cryptohome/system_salt_getter.h"
+#include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_cryptohome_misc_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
 #include "components/account_id/account_id.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace ash {
-namespace quick_unlock {
+namespace ash::quick_unlock {
+
 namespace {
+
+using ::cryptohome::KeyLabel;
 
 constexpr char kDummyPin[] = "123456";
 
@@ -126,14 +129,15 @@ class PinStorageCryptohomeUnitTest : public testing::Test {
 
     const cryptohome::KeyDefinition key_def =
         cryptohome::KeyDefinition::CreateForPassword(
-            password, kCryptohomeGaiaKeyLabel, cryptohome::PRIV_MIGRATE);
+            password, KeyLabel(kCryptohomeGaiaKeyLabel),
+            cryptohome::PRIV_MIGRATE);
     cryptohome::KeyDefinitionToKey(key_def, request.mutable_key());
     *request.mutable_account_id() =
         cryptohome::CreateAccountIdentifierFromAccountId(test_account_id_);
     // Ensure that has_authorization_request() would return true.
     request.mutable_authorization_request();
     base::RunLoop run_loop;
-    chromeos::UserDataAuthClient::Get()->AddKey(
+    UserDataAuthClient::Get()->AddKey(
         request, base::BindOnce(
                      [](base::OnceClosure closure,
                         absl::optional<::user_data_auth::AddKeyReply> reply) {
@@ -149,28 +153,30 @@ class PinStorageCryptohomeUnitTest : public testing::Test {
     ::user_data_auth::AddKeyRequest request;
 
     const cryptohome::KeyDefinition key_def =
-        cryptohome::KeyDefinition::CreateForPassword(pin, kCryptohomePinLabel,
-                                                     cryptohome::PRIV_MIGRATE);
+        cryptohome::KeyDefinition::CreateForPassword(
+            pin, KeyLabel(kCryptohomePinLabel), cryptohome::PRIV_MIGRATE);
     cryptohome::KeyDefinitionToKey(key_def, request.mutable_key());
     request.mutable_key()
         ->mutable_data()
         ->mutable_policy()
         ->set_low_entropy_credential(true);
-    request.mutable_key()->mutable_data()->mutable_policy()->set_auth_locked(
-        true);
     *request.mutable_account_id() =
         cryptohome::CreateAccountIdentifierFromAccountId(test_account_id_);
     // Ensure that has_authorization_request() would return true.
     request.mutable_authorization_request();
     base::RunLoop run_loop;
-    chromeos::UserDataAuthClient::Get()->AddKey(
+    UserDataAuthClient::Get()->AddKey(
         request, base::BindOnce(
                      [](base::OnceClosure closure,
                         absl::optional<::user_data_auth::AddKeyReply> reply) {
                        std::move(closure).Run();
                      },
                      run_loop.QuitClosure()));
+
     run_loop.Run();
+    FakeUserDataAuthClient::TestApi::Get()->SetPinLocked(
+        cryptohome::CreateAccountIdentifierFromAccountId(test_account_id_),
+        kCryptohomePinLabel, true);
   }
 
   bool RemovePin(const std::string& pin) const {
@@ -273,5 +279,4 @@ TEST_F(PinStorageCryptohomeUnitTest, UnlockWebAuthnSecret) {
       FakeUserDataAuthClient::Get()->get_last_unlock_webauthn_secret());
 }
 
-}  // namespace quick_unlock
-}  // namespace ash
+}  // namespace ash::quick_unlock

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/cr_elements/cr_page_host_style.css.js';
 import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
@@ -20,14 +20,14 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {getTemplate} from './management_ui.html.js';
 
 import {BrowserReportingResponse, Extension, ManagementBrowserProxy, ManagementBrowserProxyImpl, ReportingType, ThreatProtectionInfo} from './management_browser_proxy.js';
-// <if expr="chromeos_ash">
+// <if expr="is_chromeos">
 import {DeviceReportingResponse, DeviceReportingType} from './management_browser_proxy.js';
 // </if>
 
-type BrowserReportingData = {
-  messageIds: string[],
-  icon: string,
-};
+interface BrowserReportingData {
+  messageIds: string[];
+  icon: string;
+}
 
 const ManagementUiElementBase = WebUIListenerMixin(I18nMixin(PolymerElement));
 
@@ -59,7 +59,7 @@ class ManagementUiElement extends ManagementUiElementBase {
 
       managedWebsitesSubtitle_: String,
 
-      // <if expr="chromeos_ash">
+      // <if expr="is_chromeos">
       /**
        * List of messages related to device reporting.
        */
@@ -90,13 +90,13 @@ class ManagementUiElement extends ManagementUiElementBase {
     };
   }
 
-  private browserReportingInfo_: Array<BrowserReportingData>|null;
-  private extensions_: Array<Extension>|null;
+  private browserReportingInfo_: BrowserReportingData[]|null;
+  private extensions_: Extension[]|null;
   private managedWebsites_: string[]|null;
   private managedWebsitesSubtitle_: string;
 
-  // <if expr="chromeos_ash">
-  private deviceReportingInfo_: Array<DeviceReportingResponse>|null;
+  // <if expr="is_chromeos">
+  private deviceReportingInfo_: DeviceReportingResponse[]|null;
   private localTrustRoots_: string;
   private customerLogo_: string;
   private managementOverview_: string;
@@ -129,10 +129,10 @@ class ManagementUiElement extends ManagementUiElementBase {
 
     this.addWebUIListener(
         'browser-reporting-info-updated',
-        (reportingInfo: Array<BrowserReportingResponse>) =>
+        (reportingInfo: BrowserReportingResponse[]) =>
             this.onBrowserReportingInfoReceived_(reportingInfo));
 
-    // <if expr="chromeos_ash">
+    // <if expr="is_chromeos">
     this.addWebUIListener(
         'plugin-vm-data-collection-updated',
         (enabled: boolean) => this.pluginVmDataCollectionEnabled_ = enabled);
@@ -148,7 +148,7 @@ class ManagementUiElement extends ManagementUiElementBase {
 
     this.getExtensions_();
     this.getManagedWebsites_();
-    // <if expr="chromeos_ash">
+    // <if expr="is_chromeos">
     this.getDeviceReportingInfo_();
     this.getPluginVmDataCollectionStatus_();
     this.getLocalTrustRootsInfo_();
@@ -161,23 +161,23 @@ class ManagementUiElement extends ManagementUiElementBase {
   }
 
   private onBrowserReportingInfoReceived_(reportingInfo:
-                                              Array<BrowserReportingResponse>) {
+                                              BrowserReportingResponse[]) {
     const reportingInfoMap = reportingInfo.reduce((info, response) => {
       info[response.reportingType] = info[response.reportingType] || {
         icon: this.getIconForReportingType_(response.reportingType),
-        messageIds: []
+        messageIds: [],
       };
       info[response.reportingType].messageIds.push(response.messageId);
       return info;
     }, {} as {[k: string]: {icon: string, messageIds: string[]}});
 
-    const reportingTypeOrder = {
+    const reportingTypeOrder: {[k: string]: number} = {
       [ReportingType.SECURITY]: 1,
       [ReportingType.EXTENSIONS]: 2,
       [ReportingType.USER]: 3,
       [ReportingType.USER_ACTIVITY]: 4,
       [ReportingType.DEVICE]: 5,
-    } as {[k: string]: number};
+    };
 
     this.browserReportingInfo_ =
         Object.keys(reportingInfoMap)
@@ -211,7 +211,7 @@ class ManagementUiElement extends ManagementUiElementBase {
         this.threatProtectionInfo_.info.length > 0;
   }
 
-  // <if expr="chromeos_ash">
+  // <if expr="is_chromeos">
   private getLocalTrustRootsInfo_() {
     this.browserProxy_!.getLocalTrustRootsInfo().then(trustRootsConfigured => {
       this.localTrustRoots_ = trustRootsConfigured ?

@@ -6,6 +6,8 @@
  * @fileoverview Helpers for APIs used within Files app.
  */
 
+import {util} from './util.js';
+
 /**
  * Calls the `fn` function which should expect the callback as last argument.
  *
@@ -79,6 +81,16 @@ export async function getSizeStats(volumeId) {
 }
 
 /**
+ * Wrap the chrome.fileManagerPrivate.getDriveQuotaMetadata function in an
+ * async/await compatible style.
+ * @returns {!Promise<(
+ * !chrome.fileManagerPrivate.DriveQuotaMetadata|undefined)>}
+ */
+export async function getDriveQuotaMetadata() {
+  return promisify(chrome.fileManagerPrivate.getDriveQuotaMetadata);
+}
+
+/**
  * Retrieves the current holding space state, for example the list of items the
  * holding space currently contains.
  *  @returns {!Promise<(!chrome.fileManagerPrivate.HoldingSpaceState|undefined)>}
@@ -96,8 +108,22 @@ export async function getHoldingSpaceState() {
  */
 export async function getDisallowedTransfers(entries, destinationEntry) {
   return promisify(
-      chrome.fileManagerPrivate.getDisallowedTransfers, entries,
-      destinationEntry);
+      chrome.fileManagerPrivate.getDisallowedTransfers,
+      entries.map(e => util.unwrapEntry(e)),
+      util.unwrapEntry(destinationEntry));
+}
+
+/**
+ * Wrap the chrome.fileManagerPrivate.getDlpMetadata function in an async/await
+ * compatible style.
+ * @param {!Array<!Entry>} entries entries to be checked
+ * @return {!Promise<!Array<!chrome.fileManagerPrivate.DlpMetadata>>} list of
+ *     DlpMetadata
+ */
+export async function getDlpMetadata(entries) {
+  return promisify(
+      chrome.fileManagerPrivate.getDlpMetadata,
+      entries.map(e => util.unwrapEntry(e)));
 }
 
 /**
@@ -203,4 +229,15 @@ export async function getFrameColor() {
 export async function startIOTask(type, entries, params) {
   return promisify(
       chrome.fileManagerPrivate.startIOTask, type, entries, params);
+}
+
+/**
+ * Parses .trashinfo files to retrieve the restore path and deletion date.
+ * @param {!Array<!Entry>} entries
+ * @returns {!Promise<!Array<!chrome.fileManagerPrivate.ParsedTrashInfoFile>>}
+ */
+export async function parseTrashInfoFiles(entries) {
+  return promisify(
+      chrome.fileManagerPrivate.parseTrashInfoFiles,
+      entries.map(e => util.unwrapEntry(e)));
 }

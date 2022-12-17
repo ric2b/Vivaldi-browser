@@ -113,6 +113,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   void CloseBubble() override;
 
  private:
+  // IDs used by TranslateBubbleViewTest to simulate button presses.
   enum ButtonID {
     BUTTON_ID_DONE = 1,
     BUTTON_ID_TRY_AGAIN,
@@ -129,7 +130,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   friend void ::translate::test_utils::SelectTargetLanguageByDisplayName(
       ::Browser*,
       const ::std::u16string&);
-  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, TranslateButton);
+  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
+                           TargetLanguageTabTriggersTranslate);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            AlwaysTranslateCheckboxShortcut);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
@@ -159,7 +161,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            AlwaysTranslateWithNeverTranslateSite);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
-                           ShowOriginalUpdatesViewState);
+                           SourceLanguageTabUpdatesViewState);
 
   // views::TabbedPaneListener:
   void TabSelectedAt(int index) override;
@@ -286,8 +288,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   raw_ptr<views::LabelButton> advanced_done_button_target_ = nullptr;
 
   // Default source/target language without user interaction.
-  int previous_source_language_index_;
-  int previous_target_language_index_;
+  size_t previous_source_language_index_;
+  size_t previous_target_language_index_;
 
   std::unique_ptr<ui::SimpleMenuModel> options_menu_model_;
   std::unique_ptr<views::MenuRunner> options_menu_runner_;

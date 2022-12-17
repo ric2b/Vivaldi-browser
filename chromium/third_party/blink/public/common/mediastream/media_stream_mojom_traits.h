@@ -104,9 +104,17 @@ struct BLINK_COMMON_EXPORT
     return controls.disable_local_echo;
   }
 
+  static bool exclude_system_audio(const blink::StreamControls& controls) {
+    return controls.exclude_system_audio;
+  }
+
   static bool request_pan_tilt_zoom_permission(
       const blink::StreamControls& controls) {
     return controls.request_pan_tilt_zoom_permission;
+  }
+
+  static bool request_all_screens(const blink::StreamControls& controls) {
+    return controls.request_all_screens;
   }
 
   static bool Read(blink::mojom::StreamControlsDataView input,

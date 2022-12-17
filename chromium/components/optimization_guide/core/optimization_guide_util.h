@@ -14,15 +14,15 @@
 #include "components/optimization_guide/proto/models.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#define OPTIMIZATION_GUIDE_LOG(optimization_guide_logger, message) \
-  do {                                                             \
-    if (optimization_guide_logger &&                               \
-        optimization_guide_logger->ShouldEnableDebugLogs()) {      \
-      optimization_guide_logger->OnLogMessageAdded(                \
-          base::Time::Now(), __FILE__, __LINE__, message);         \
-    }                                                              \
-    if (optimization_guide::switches::IsDebugLogsEnabled())        \
-      DVLOG(0) << message;                                         \
+#define OPTIMIZATION_GUIDE_LOG(log_source, optimization_guide_logger, message) \
+  do {                                                                         \
+    if (optimization_guide_logger &&                                           \
+        optimization_guide_logger->ShouldEnableDebugLogs()) {                  \
+      optimization_guide_logger->OnLogMessageAdded(                            \
+          base::Time::Now(), log_source, __FILE__, __LINE__, message);         \
+    }                                                                          \
+    if (optimization_guide::switches::IsDebugLogsEnabled())                    \
+      DVLOG(0) << message;                                                     \
   } while (0)
 
 namespace optimization_guide {
@@ -32,11 +32,6 @@ enum class OptimizationGuideDecision;
 // Returns false if the host is an IP address, localhosts, or an invalid
 // host that is not supported by the remote optimization guide.
 bool IsHostValidToFetchFromRemoteOptimizationGuide(const std::string& host);
-
-// Returns the set of active field trials that are allowed to be sent to the
-// remote Optimization Guide Service.
-google::protobuf::RepeatedPtrField<proto::FieldTrial>
-GetActiveFieldTrialsAllowedForFetch();
 
 // Validates that the metadata stored in |any_metadata_| is of the same type
 // and is parseable as |T|. Will return metadata if all checks pass.
@@ -71,6 +66,9 @@ absl::optional<T> ParsedAnyMetadata(const proto::Any& any_metadata) {
 // Returns a debug string for OptimizationGuideDecision.
 std::string GetStringForOptimizationGuideDecision(
     OptimizationGuideDecision decision);
+
+// Returns client's origin info, including platform and milestone.
+proto::OriginInfo GetClientOriginInfo();
 
 }  // namespace optimization_guide
 

@@ -22,6 +22,7 @@
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/net/cross_origin_embedder_policy_reporter.h"
+#include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_consts.h"
@@ -37,6 +38,7 @@
 #include "content/common/url_schemes.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/hid_delegate.h"
 #include "content/public/browser/web_ui_url_loader_factory.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
@@ -56,6 +58,10 @@
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "url/gurl.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "content/browser/hid/hid_service.h"
+#endif
 
 #include "app/vivaldi_constants.h"
 
@@ -292,9 +298,6 @@ void EmbeddedWorkerInstance::Start(
   // rph->IsInitializedAndNotDead().
   CHECK(rph);
 
-  GetContentClient()->browser()->WillStartServiceWorker(
-      process_manager->browser_context(), params->script_url, rph);
-
   rph->BindReceiver(client_.BindNewPipeAndPassReceiver());
   client_.set_disconnect_handler(
       base::BindOnce(&EmbeddedWorkerInstance::Detach, base::Unretained(this)));
@@ -391,6 +394,22 @@ void EmbeddedWorkerInstance::Start(
         params->devtools_worker_token.ToString());
   }
 
+  // To enable runtime features, the render process must be locked to the site.
+  // These features are highly privileged, so the renderer process with such
+  // features enabled shouldn't be used for other sites.
+  //
+  // WebUI schemes are process isolated already. To isolate other sites, the
+  // embedder can override ContentBrowserClient::ShouldLockProcessToSite().
+  if (rph->GetProcessLock().is_locked_to_site()) {
+    GetContentClient()
+        ->browser()
+        ->UpdateEnabledBlinkRuntimeFeaturesInIsolatedWorker(
+            process_manager->browser_context(), params->script_url,
+            params->forced_enabled_runtime_features);
+  }
+  CHECK(params->forced_enabled_runtime_features.empty() ||
+        rph->GetProcessLock().is_locked_to_site());
+
   // TODO(crbug.com/862854): Support changes to blink::RendererPreferences while
   // the worker is running.
   DCHECK(process_manager->browser_context() || process_manager->IsShutdown());
@@ -441,7 +460,12 @@ void EmbeddedWorkerInstance::Start(
   // Create cache storage now as an optimization, so the service worker can
   // use the Cache Storage API immediately on startup.
   if (base::FeatureList::IsEnabled(
-          blink::features::kEagerCacheStorageSetupForServiceWorkers)) {
+          blink::features::kEagerCacheStorageSetupForServiceWorkers) &&
+      // Without COEP, BindCacheStorage won't bind the cache storage,
+      // which make cache storage set up in the install handler get stuck.
+      // Since this is a performance improvement feature, fallback to the slow
+      // path should be better than making the execution get stuck.
+      owner_version_->cross_origin_embedder_policy()) {
     BindCacheStorage(
         params->provider_info->cache_storage.InitWithNewPipeAndPassReceiver());
   }
@@ -649,7 +673,7 @@ void EmbeddedWorkerInstance::OnScriptEvaluationStart() {
 
 void EmbeddedWorkerInstance::OnStarted(
     blink::mojom::ServiceWorkerStartStatus start_status,
-    bool has_fetch_handler,
+    blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type,
     int thread_id,
     blink::mojom::EmbeddedWorkerStartTimingPtr start_timing) {
   TRACE_EVENT0("ServiceWorker", "EmbeddedWorkerInstance::OnStarted");
@@ -689,7 +713,7 @@ void EmbeddedWorkerInstance::OnStarted(
   thread_id_ = thread_id;
   inflight_start_info_.reset();
   for (auto& observer : listener_list_) {
-    observer.OnStarted(start_status, has_fetch_handler);
+    observer.OnStarted(start_status, fetch_handler_type);
     // |this| may be destroyed here. Fortunately we know there is only one
     // observer in production code.
   }
@@ -753,6 +777,26 @@ void EmbeddedWorkerInstance::BindCacheStorage(
   pending_cache_storage_receivers_.push_back(std::move(receiver));
   BindCacheStorageInternal();
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void EmbeddedWorkerInstance::BindHidService(
+    const url::Origin& origin,
+    mojo::PendingReceiver<blink::mojom::HidService> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* rph = static_cast<RenderProcessHostImpl*>(
+      RenderProcessHost::FromID(process_id()));
+  if (!rph)
+    return;
+
+  HidDelegate* hid_delegate = GetContentClient()->browser()->GetHidDelegate();
+  if (!hid_delegate) {
+    return;
+  }
+  if (hid_delegate->IsServiceWorkerAllowedForOrigin(origin)) {
+    HidService::Create(context_, origin, std::move(receiver));
+  }
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 base::WeakPtr<EmbeddedWorkerInstance> EmbeddedWorkerInstance::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();

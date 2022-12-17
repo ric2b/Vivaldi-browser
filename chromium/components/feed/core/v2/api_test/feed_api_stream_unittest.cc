@@ -39,6 +39,8 @@ namespace feed {
 namespace test {
 namespace {
 
+using ::feedwire::webfeed::WebFeedChangeReason;
+
 const int kTestInfoCardType1 = 101;
 const int kTestInfoCardType2 = 8888;
 const int kMinimumViewIntervalSeconds = 5 * 60;
@@ -326,6 +328,22 @@ TEST_P(FeedStreamTestForAllStreamTypes, LoadFromNetwork) {
                        ModelStateFor(GetStreamType(), store_.get()));
 }
 
+TEST_P(FeedStreamTestForAllStreamTypes, UseFeedQueryOverride) {
+  Config config = GetFeedConfig();
+  config.use_feed_query_requests = true;
+  SetFeedConfigForTesting(config);
+
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+  ASSERT_TRUE(network_.query_request_sent);
+  // There should be no API refresh requests when using use_feed_query_requests.
+  auto api_request_counts = network_.GetApiRequestCounts();
+  api_request_counts.erase(NetworkRequestType::kListWebFeeds);  // ignore
+  EXPECT_EQ((std::map<NetworkRequestType, int>()), api_request_counts);
+  EXPECT_EQ("loading -> [user@foo] 2 slices", surface.DescribeUpdates());
+}
+
 TEST_F(FeedApiTest, OnboardingFetchAfterStartup) {
   // Enable WebFeed and WebFeedOnboarding flags.
   base::test::ScopedFeatureList features;
@@ -443,7 +461,7 @@ TEST_F(FeedApiTest, LoadFromNetworkDiscoFeedEnabled) {
 }
 
 TEST_P(FeedNetworkEndpointTest, TestAllNetworkEndpointConfigs) {
-  SetUseFeedQueryRequestsForWebFeeds(GetWebFeedUsesFeedQueryRequests());
+  SetUseFeedQueryRequests(GetUseFeedQueryRequests());
 
   // Enable WebFeed and subscribe to a page, so that we can check if the WebFeed
   // is refreshed by ForceRefreshForDebugging.
@@ -474,10 +492,10 @@ TEST_P(FeedNetworkEndpointTest, TestAllNetworkEndpointConfigs) {
   // Total 2 queries (Web + For You).
   EXPECT_EQ(2, network_.send_query_call_count);
   // API request to DiscoFeed (For You) - if enabled by feature
-  EXPECT_EQ(GetDiscoFeedEnabled() ? 1 : 0,
+  EXPECT_EQ((!GetUseFeedQueryRequests() && GetDiscoFeedEnabled()) ? 1 : 0,
             network_.GetApiRequestCount<QueryInteractiveFeedDiscoverApi>());
   // API request to WebFeedList if FeedQuery not enabled by config.
-  EXPECT_EQ(GetWebFeedUsesFeedQueryRequests() ? 0 : 1,
+  EXPECT_EQ(GetUseFeedQueryRequests() ? 0 : 1,
             network_.GetApiRequestCount<WebFeedListContentsDiscoverApi>());
 }
 
@@ -1110,12 +1128,30 @@ TEST_F(FeedApiTest, ReportOpenInNewTabAction) {
 
   base::UserActionTester user_actions;
 
-  stream_->ReportOpenInNewTabAction(
+  stream_->ReportOpenAction(
       GURL(), surface.GetStreamType(),
-      surface.initial_state->updated_slices(1).slice().slice_id());
+      surface.initial_state->updated_slices(1).slice().slice_id(),
+      OpenActionType::kNewTab);
 
   EXPECT_EQ(1, user_actions.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.OpenInNewTab"));
+}
+
+TEST_F(FeedApiTest, ReportOpenInNewTabInGroupAction) {
+  store_->OverwriteStream(kForYouStream, MakeTypicalInitialModelState(),
+                          base::DoNothing());
+  TestForYouSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  base::UserActionTester user_actions;
+
+  stream_->ReportOpenAction(
+      GURL(), surface.GetStreamType(),
+      surface.initial_state->updated_slices(1).slice().slice_id(),
+      OpenActionType::kNewTabInGroup);
+
+  EXPECT_EQ(1, user_actions.GetActionCount(
+                   "ContentSuggestions.Feed.CardAction.OpenInNewTabInGroup"));
 }
 
 TEST_F(FeedApiTest, HasUnreadContentAfterLoadFromNetwork) {
@@ -1222,7 +1258,8 @@ TEST_F(FeedApiTest, FollowForcesRefreshWhileSurfaceAttached_NotWorking) {
   WebFeedPageInformation page_info =
       MakeWebFeedPageInformation("http://dogs.com");
   CallbackReceiver<WebFeedSubscriptions::FollowWebFeedResult> callback;
-  stream_->subscriptions().FollowWebFeed(page_info, callback.Bind());
+  stream_->subscriptions().FollowWebFeed(
+      page_info, WebFeedChangeReason::WEB_PAGE_MENU, callback.Bind());
 
   ASSERT_EQ(WebFeedSubscriptionRequestStatus::kSuccess,
             callback.RunAndGetResult().request_status);
@@ -1255,7 +1292,8 @@ TEST_F(FeedApiTest, FollowForcesRefresh) {
   WebFeedPageInformation page_info =
       MakeWebFeedPageInformation("http://dogs.com");
   CallbackReceiver<WebFeedSubscriptions::FollowWebFeedResult> callback;
-  stream_->subscriptions().FollowWebFeed(page_info, callback.Bind());
+  stream_->subscriptions().FollowWebFeed(
+      page_info, WebFeedChangeReason::WEB_PAGE_MENU, callback.Bind());
 
   ASSERT_EQ(WebFeedSubscriptionRequestStatus::kSuccess,
             callback.RunAndGetResult().request_status);
@@ -1866,8 +1904,7 @@ TEST_F(FeedApiTest, LoadMoreDoesNotUpdateLoggingEnabled) {
   for (bool waa_on : {true, false}) {
     for (bool privacy_notice_fulfilled : {true, false}) {
       response_translator_.InjectResponse(MakeTypicalNextPageState(
-          page++, kTestTimeEpoch, kTestTimeEpoch, signed_in, waa_on,
-          privacy_notice_fulfilled));
+          page++, kTestTimeEpoch, signed_in, waa_on, privacy_notice_fulfilled));
       stream_->LoadMore(surface, base::DoNothing());
       WaitForIdleTaskQueue();
       EXPECT_TRUE(surface.update->logging_parameters().logging_enabled());
@@ -2618,8 +2655,10 @@ TEST_F(FeedApiTest, WasUrlRecentlyNavigatedFromFeed) {
   EXPECT_FALSE(stream_->WasUrlRecentlyNavigatedFromFeed(url1));
   EXPECT_FALSE(stream_->WasUrlRecentlyNavigatedFromFeed(url2));
 
-  stream_->ReportOpenAction(url1, kForYouStream, "slice");
-  stream_->ReportOpenInNewTabAction(url2, kForYouStream, "slice");
+  stream_->ReportOpenAction(url1, kForYouStream, "slice",
+                            OpenActionType::kDefault);
+  stream_->ReportOpenAction(url2, kForYouStream, "slice",
+                            OpenActionType::kNewTab);
 
   EXPECT_TRUE(stream_->WasUrlRecentlyNavigatedFromFeed(url1));
   EXPECT_TRUE(stream_->WasUrlRecentlyNavigatedFromFeed(url2));
@@ -2632,7 +2671,8 @@ TEST_F(FeedApiTest, WasUrlRecentlyNavigatedFromFeedMaxHistory) {
     urls.emplace_back("https://someurl" + base::NumberToString(i));
 
   for (const GURL& url : urls)
-    stream_->ReportOpenAction(url, kForYouStream, "slice");
+    stream_->ReportOpenAction(url, kForYouStream, "slice",
+                              OpenActionType::kDefault);
 
   EXPECT_FALSE(stream_->WasUrlRecentlyNavigatedFromFeed(urls[0]));
   for (size_t i = 1; i < urls.size(); ++i) {
@@ -2683,6 +2723,7 @@ TEST_F(FeedApiTest, ReportUserSettingsFromMetadataWaaOnDpOff) {
     RefreshResponseData response;
     response.model_update_request = MakeTypicalInitialModelState();
     response.web_and_app_activity_enabled = true;
+    response.last_fetch_timestamp = base::Time::Now();
     response_translator_.InjectResponse(std::move(response));
   }
   TestForYouSurface surface(stream_.get());
@@ -2704,6 +2745,7 @@ TEST_F(FeedApiTest, ReportUserSettingsFromMetadataWaaOffDpOn) {
     RefreshResponseData response;
     response.model_update_request = MakeTypicalInitialModelState();
     response.discover_personalization_enabled = true;
+    response.last_fetch_timestamp = base::Time::Now();
     response_translator_.InjectResponse(std::move(response));
   }
   TestForYouSurface surface(stream_.get());
@@ -3065,8 +3107,11 @@ TEST_F(FeedApiTest, InfoCardTrackingActions) {
   task_environment_.AdvanceClock(base::Seconds(200));
 
   // Load the initial page.
-  response_translator_.InjectResponse(
-      MakeTypicalInitialModelState(0, client_timestamp, server_timestamp));
+  RefreshResponseData response;
+  response.model_update_request = MakeTypicalInitialModelState();
+  response.last_fetch_timestamp = client_timestamp;
+  response.server_response_sent_timestamp = server_timestamp;
+  response_translator_.InjectResponse(std::move(response));
   TestForYouSurface surface(stream_.get());
   WaitForIdleTaskQueue();
 
@@ -3112,8 +3157,11 @@ TEST_F(FeedApiTest, InfoCardTrackingActions) {
                                kTestInfoCardType1, 1);
 
   // Refresh the page so that a feed query including the info card tracking
-  // states is sent.
+  // states is sent. Call "CreateStream()" before the refresh to simulate
+  // Chrome restart. This is used to test that info card tracking states are
+  // sent in the initial page load when stream model is not loaded yet.
   response_translator_.InjectResponse(MakeTypicalRefreshModelState());
+  CreateStream();
   stream_->ManualRefresh(kForYouStream, base::DoNothing());
   WaitForIdleTaskQueue();
 
@@ -3317,7 +3365,8 @@ TEST_F(FeedApiTest, FeedCloseRefresh_Open) {
   WaitForIdleTaskQueue();
 
   // Opening should cause a refresh to be scheduled.
-  stream_->ReportOpenAction(GURL("http://example.com"), kForYouStream, "");
+  stream_->ReportOpenAction(GURL("http://example.com"), kForYouStream, "",
+                            OpenActionType::kDefault);
   EXPECT_EQ(base::Minutes(30),
             refresh_scheduler_
                 .scheduled_run_times[RefreshTaskId::kRefreshForYouFeed]);
@@ -3334,8 +3383,8 @@ TEST_F(FeedApiTest, FeedCloseRefresh_OpenInNewTab) {
   WaitForIdleTaskQueue();
 
   // Should cause a refresh to be scheduled.
-  stream_->ReportOpenInNewTabAction(GURL("http://example.com"), kForYouStream,
-                                    "");
+  stream_->ReportOpenAction(GURL("http://example.com"), kForYouStream, "",
+                            OpenActionType::kNewTab);
   EXPECT_EQ(base::Minutes(30),
             refresh_scheduler_
                 .scheduled_run_times[RefreshTaskId::kRefreshForYouFeed]);
@@ -3520,7 +3569,8 @@ TEST_F(FeedApiTest, FeedCloseRefresh_RequestType) {
   WaitForIdleTaskQueue();
 
   // Opening should cause a refresh to be scheduled.
-  stream_->ReportOpenAction(GURL("http://example.com"), kForYouStream, "");
+  stream_->ReportOpenAction(GURL("http://example.com"), kForYouStream, "",
+                            OpenActionType::kDefault);
   EXPECT_EQ(base::Minutes(30),
             refresh_scheduler_
                 .scheduled_run_times[RefreshTaskId::kRefreshForYouFeed]);

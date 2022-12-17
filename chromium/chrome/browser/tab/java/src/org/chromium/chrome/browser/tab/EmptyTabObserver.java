@@ -57,7 +57,7 @@ public class EmptyTabObserver implements TabObserver {
     public void onRestoreFailed(Tab tab) {}
 
     @Override
-    public void onFaviconUpdated(Tab tab, Bitmap icon) {}
+    public void onFaviconUpdated(Tab tab, Bitmap icon, GURL iconUrl) {}
 
     @Override
     public void onTitleUpdated(Tab tab) {}
@@ -96,7 +96,11 @@ public class EmptyTabObserver implements TabObserver {
     public void onUpdateUrl(Tab tab, GURL url) {}
 
     @Override
-    public void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle) {}
+    public void onDidStartNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigationHandle) {
+    }
+
+    @Override
+    public void onDidStartNavigationNoop(Tab tab, NavigationHandle navigationHandle) {}
 
     @Override
     public void onDidRedirectNavigation(Tab tab, NavigationHandle navigationHandle) {}

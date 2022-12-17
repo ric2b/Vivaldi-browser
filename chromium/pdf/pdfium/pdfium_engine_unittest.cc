@@ -60,6 +60,16 @@ MATCHER_P(LayoutWithOptions, options, "") {
   return arg.options() == options;
 }
 
+blink::WebMouseEvent CreateRightClickWebMouseEventAtPosition(
+    const gfx::PointF& position) {
+  return blink::WebMouseEvent(
+      blink::WebInputEvent::Type::kMouseDown, /*position=*/position,
+      /*global_position=*/position, blink::WebPointerProperties::Button::kRight,
+      /*click_count_param=*/1,
+      blink::WebInputEvent::Modifiers::kRightButtonDown,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+}
+
 class MockTestClient : public TestClient {
  public:
   MockTestClient() {
@@ -183,7 +193,7 @@ TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdfInTwoUpView) {
   options.set_page_spread(DocumentLayout::PageSpread::kTwoUpOdd);
   EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithOptions(options)))
       .WillOnce(Return());
-  engine->SetTwoUpView(true);
+  engine->SetDocumentLayout(DocumentLayout::PageSpread::kTwoUpOdd);
 
   engine->ApplyDocumentLayout(options);
 
@@ -678,23 +688,43 @@ TEST_F(PDFiumEngineTest, HandleInputEventRawKeyDown) {
   EXPECT_TRUE(engine->HandleInputEvent(raw_key_down_event));
 }
 
+namespace {
+#if BUILDFLAG(IS_WIN)
+constexpr char kSelectTextExpectedText[] =
+    "Hello, world!\r\nGoodbye, world!\r\nHello, world!\r\nGoodbye, world!";
+#else
+constexpr char kSelectTextExpectedText[] =
+    "Hello, world!\nGoodbye, world!\nHello, world!\nGoodbye, world!";
+#endif
+}  // namespace
+
 TEST_F(PDFiumEngineTest, SelectText) {
   NiceMock<MockTestClient> client;
   std::unique_ptr<PDFiumEngine> engine =
       InitializeEngine(&client, FILE_PATH_LITERAL("hello_world2.pdf"));
   ASSERT_TRUE(engine);
 
+  EXPECT_TRUE(engine->HasPermission(DocumentPermission::kCopy));
+
   EXPECT_THAT(engine->GetSelectedText(), IsEmpty());
 
   engine->SelectAll();
-#if BUILDFLAG(IS_WIN)
-  constexpr char kExpectedText[] =
-      "Hello, world!\r\nGoodbye, world!\r\nHello, world!\r\nGoodbye, world!";
-#else
-  constexpr char kExpectedText[] =
-      "Hello, world!\nGoodbye, world!\nHello, world!\nGoodbye, world!";
-#endif
-  EXPECT_EQ(kExpectedText, engine->GetSelectedText());
+  EXPECT_EQ(kSelectTextExpectedText, engine->GetSelectedText());
+}
+
+TEST_F(PDFiumEngineTest, SelectTextWithCopyRestriction) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("hello_world2_with_copy_restriction.pdf"));
+  ASSERT_TRUE(engine);
+
+  EXPECT_FALSE(engine->HasPermission(DocumentPermission::kCopy));
+
+  // The copy restriction should not affect the text selection hehavior.
+  EXPECT_THAT(engine->GetSelectedText(), IsEmpty());
+
+  engine->SelectAll();
+  EXPECT_EQ(kSelectTextExpectedText, engine->GetSelectedText());
 }
 
 TEST_F(PDFiumEngineTest, SelectCroppedText) {
@@ -780,7 +810,7 @@ class PDFiumEngineTabbingTest : public PDFiumTestBase {
   }
 };
 
-TEST_F(PDFiumEngineTabbingTest, LinkUnderCursorTest) {
+TEST_F(PDFiumEngineTabbingTest, LinkUnderCursor) {
   /*
    * Document structure
    * Document
@@ -823,6 +853,50 @@ TEST_F(PDFiumEngineTabbingTest, LinkUnderCursorTest) {
   EXPECT_CALL(client, SetLinkUnderCursor(""));
   ASSERT_TRUE(
       HandleTabEvent(engine.get(), blink::WebInputEvent::Modifiers::kShiftKey));
+}
+
+// Test case for crbug.com/1088296
+TEST_F(PDFiumEngineTabbingTest, LinkUnderCursorAfterTabAndRightClick) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("annots.pdf"));
+  ASSERT_TRUE(engine);
+
+  // Ensure the plugin has a pre-determined size, to enable the hit tests below.
+  engine->PluginSizeUpdated({612, 792});
+
+  // Tab to right before the first non-link annotation.
+  EXPECT_CALL(client, DocumentFocusChanged(true));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), /*modifiers=*/0));
+
+  // Tab through non-link annotations and validate link under cursor.
+  {
+    InSequence sequence;
+    EXPECT_CALL(client, SetLinkUnderCursor(""));
+    EXPECT_CALL(client, DocumentFocusChanged(false));
+  }
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), /*modifiers=*/0));
+  EXPECT_CALL(client, SetLinkUnderCursor(""));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), /*modifiers=*/0));
+  EXPECT_CALL(client, SetLinkUnderCursor(""));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), /*modifiers=*/0));
+
+  // Tab to Link annotation.
+  EXPECT_CALL(client, SetLinkUnderCursor("https://www.google.com/"));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), /*modifiers=*/0));
+
+  // Right click somewhere far away should reset the link.
+  constexpr gfx::PointF kOffScreenPosition(0, 0);
+  EXPECT_CALL(client, SetLinkUnderCursor(""));
+  EXPECT_FALSE(engine->HandleInputEvent(
+      CreateRightClickWebMouseEventAtPosition(kOffScreenPosition)));
+
+  // Right click on the link should set it again.
+  constexpr gfx::PointF kLinkPosition(170, 595);
+  EXPECT_CALL(client, SetLinkUnderCursor("https://www.google.com/"));
+  EXPECT_FALSE(engine->HandleInputEvent(
+      CreateRightClickWebMouseEventAtPosition(kLinkPosition)));
 }
 
 TEST_F(PDFiumEngineTabbingTest, TabbingSupportedAnnots) {
@@ -881,7 +955,7 @@ TEST_F(PDFiumEngineTabbingTest, TabbingSupportedAnnots) {
             GetFocusedElementType(engine.get()));
 }
 
-TEST_F(PDFiumEngineTabbingTest, TabbingForwardTest) {
+TEST_F(PDFiumEngineTabbingTest, TabbingForward) {
   /*
    * Document structure
    * Document
@@ -933,7 +1007,7 @@ TEST_F(PDFiumEngineTabbingTest, TabbingForwardTest) {
             GetFocusedElementType(engine.get()));
 }
 
-TEST_F(PDFiumEngineTabbingTest, TabbingBackwardTest) {
+TEST_F(PDFiumEngineTabbingTest, TabbingBackward) {
   /*
    * Document structure
    * Document
@@ -1043,7 +1117,7 @@ TEST_F(PDFiumEngineTabbingTest, TabbingWithModifiers) {
       HandleTabEvent(engine.get(), blink::WebInputEvent::Modifiers::kAltKey));
 }
 
-TEST_F(PDFiumEngineTabbingTest, NoFocusableElementTabbingTest) {
+TEST_F(PDFiumEngineTabbingTest, NoFocusableElementTabbing) {
   /*
    * Document structure
    * Document
@@ -1089,7 +1163,7 @@ TEST_F(PDFiumEngineTabbingTest, NoFocusableElementTabbingTest) {
             GetFocusedElementType(engine.get()));
 }
 
-TEST_F(PDFiumEngineTabbingTest, RestoringDocumentFocusTest) {
+TEST_F(PDFiumEngineTabbingTest, RestoringDocumentFocus) {
   /*
    * Document structure
    * Document
@@ -1134,7 +1208,7 @@ TEST_F(PDFiumEngineTabbingTest, RestoringDocumentFocusTest) {
             GetFocusedElementType(engine.get()));
 }
 
-TEST_F(PDFiumEngineTabbingTest, RestoringAnnotFocusTest) {
+TEST_F(PDFiumEngineTabbingTest, RestoringAnnotFocus) {
   /*
    * Document structure
    * Document

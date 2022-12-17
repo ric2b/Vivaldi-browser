@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
 <translation id="1397811292916898096">Pesquisar com <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tocar e procurar é uma funcionalidade que apenas está disponível quando o Google é o motor de busca padrão no Vivaldi. Envia a palavra selecionada e a página atual como contexto à Pesquisa Google. Pode desligá-la nas <ph name="BEGIN_LINK" />Definições<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alternar separadores normais/privados</translation>
 <translation id="1644574205037202324">Histórico</translation>
 <translation id="17513872634828108">Separadores abertos</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Novo separador privado</translation>
 <translation id="4243710787042215766">Abrir num separador privado</translation>
 <translation id="4526803704855831732">Separadores privados</translation>
+<translation id="4719086422742491124">Saiba mais sobre o tema dos websites sem sair da página. Selecione uma ou mais palavras na página para pesquisar por elas.
+
+Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhido o Google como motor de busca padrão no Vivaldi.</translation>
 <translation id="4759238208242260848">Transferências</translation>
 <translation id="4883379392681899581">Deixar o modo privado</translation>
 <translation id="4943872375798546930">Sem resultados</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
 <translation id="5233638681132016545">Novo separador</translation>
-<translation id="572328651809341494">Separadores recentes</translation>
-<translation id="5840488417521835756">Saiba mais acerca dos tópicos nos websites sem sair da página. A funcionalidade Tocar para pesquisar só está disponível quando o Google está definido como motor de busca predefinido no Vivaldi. Esta funcionalidade envia uma palavra e o seu contexto para a Pesquisa Google, que devolve definições, imagens, resultados de pesquisa e outros detalhes.
+<translation id="5375131951310889874">Saiba mais sobre o tema dos websites sem sair da página. Selecione uma ou mais palavras na página para pesquisar por elas. Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhido o Google como motor de busca padrão no Vivaldi. Envia à Pesquisa Google a palavra e o contexto que a rodeia, devolvendo definições, imagens, resultados de pesquisa e outros detalhes.
 
-Para ajustar o termo de pesquisa, mantenha-o premido para selecionar. Para refinar a pesquisa, arraste o painel totalmente para cima e toque na caixa de pesquisa.</translation>
+Para ajustar o seu termo de pesquisa, faça um toque longo para selecionar. Para refinar a sua pesquisa, deslize o painel completamente para cima e toque na caixa de pesquisa.</translation>
+<translation id="572328651809341494">Separadores recentes</translation>
 <translation id="6150320133806434356">Favorito guardado</translation>
 <translation id="6336451774241870485">Novo separador privado</translation>
 <translation id="6585139692466700358">Propor tradução de páginas noutros idiomas utilizando o serviço de tradução do Vivaldi</translation>
@@ -53,7 +57,6 @@ Para ajustar o termo de pesquisa, mantenha-o premido para selecionar. Para refin
 <translation id="732145680195464316">Favorito guardado em <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Acerca do Vivaldi</translation>
 <translation id="7465104139234185284">Fechar todos os separadores privados</translation>
-<translation id="7519434535192513364">A funcionalidade Tocar para pesquisar só está disponível quando o Google está definido como motor de busca predefinido no Vivaldi. Envia a palavra selecionada e a página atual como contexto para a Pesquisa Google. Pode desativá-la nas <ph name="BEGIN_LINK" />Definições<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Condições de Utilização do Vivaldi</translation>
 <translation id="85991616550051997">Ir para a página inicial</translation>
 <translation id="8820817407110198400">Favoritos</translation>

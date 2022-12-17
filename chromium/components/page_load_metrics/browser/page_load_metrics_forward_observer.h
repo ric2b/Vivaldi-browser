@@ -64,11 +64,13 @@ class PageLoadMetricsForwardObserver final
       const std::string& mime_type) const override;
   void OnTimingUpdate(content::RenderFrameHost* subframe_rfh,
                       const mojom::PageLoadTiming& timing) override;
+  void OnSoftNavigationCountUpdated() override;
   void OnMobileFriendlinessUpdate(
       const blink::MobileFriendliness& mobile_friendliness) override;
   void OnInputTimingUpdate(
       content::RenderFrameHost* subframe_rfh,
       const mojom::InputTiming& input_timing_delta) override;
+  void OnPageInputTimingUpdate(uint64_t num_input_events) override;
   void OnSubFrameRenderDataUpdate(
       content::RenderFrameHost* subframe_rfh,
       const mojom::FrameRenderDataUpdate& render_data) override;
@@ -79,7 +81,6 @@ class PageLoadMetricsForwardObserver final
   void OnDomContentLoadedEventStart(
       const mojom::PageLoadTiming& timing) override;
   void OnLoadEventStart(const mojom::PageLoadTiming& timing) override;
-  void OnFirstLayout(const mojom::PageLoadTiming& timing) override;
   void OnParseStart(const mojom::PageLoadTiming& timing) override;
   void OnParseStop(const mojom::PageLoadTiming& timing) override;
   void OnFirstPaintInPage(const mojom::PageLoadTiming& timing) override;

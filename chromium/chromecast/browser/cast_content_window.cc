@@ -54,9 +54,7 @@ void CastContentWindow::Show() {
   RequestVisibility(VisibilityPriority::STICKY_ACTIVITY);
 }
 
-void CastContentWindow::Hide() {
-  RequestMoveOut();
-}
+void CastContentWindow::Hide() {}
 
 void CastContentWindow::NotifyVisibilityChange(VisibilityType visibility_type) {
   for (auto& observer : observers_) {
@@ -65,10 +63,6 @@ void CastContentWindow::NotifyVisibilityChange(VisibilityType visibility_type) {
   for (Observer& observer : sync_observers_) {
     observer.OnVisibilityChange(visibility_type);
   }
-}
-
-mojom::MediaControlUi* CastContentWindow::media_controls() {
-  return nullptr;
 }
 
 }  // namespace chromecast

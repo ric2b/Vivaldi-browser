@@ -43,6 +43,7 @@
 #include "content/web_test/browser/fake_bluetooth_delegate.h"
 #include "content/web_test/browser/mojo_echo.h"
 #include "content/web_test/browser/mojo_web_test_helper.h"
+#include "content/web_test/browser/web_test_attribution_manager.h"
 #include "content/web_test/browser/web_test_bluetooth_fake_adapter_setter_impl.h"
 #include "content/web_test/browser/web_test_browser_context.h"
 #include "content/web_test/browser/web_test_browser_main_parts.h"
@@ -60,16 +61,25 @@
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/net_buildflags.h"
+#include "net/proxy_resolution/proxy_config_with_annotation.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/proxy_resolver/proxy_resolver_factory_impl.h"  // nogncheck
+#include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/manifest.h"
 #include "services/service_manager/public/cpp/manifest_builder.h"
+#include "services/service_manager/public/mojom/connector.mojom.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/conversions/attribution_reporting_automation.mojom.h"
 #include "ui/base/ui_base_switches.h"
 #include "url/origin.h"
 
@@ -216,6 +226,39 @@ class MojoWebTestCounterImpl : public mojo_bindings_test::mojom::Counter {
   mojo::AssociatedRemoteSet<CounterObserver> observers_;
 };
 
+class MojoWebTestProxyResolverFactory
+    : public proxy_resolver::mojom::ProxyResolverFactory {
+ public:
+  MojoWebTestProxyResolverFactory() = default;
+
+  static mojo::PendingRemote<proxy_resolver::mojom::ProxyResolverFactory>
+  CreateWithSelfOwnedReceiver() {
+    mojo::PendingRemote<proxy_resolver::mojom::ProxyResolverFactory> remote;
+    mojo::MakeSelfOwnedReceiver(
+        std::make_unique<MojoWebTestProxyResolverFactory>(),
+        remote.InitWithNewPipeAndPassReceiver());
+    return remote;
+  }
+
+  void CreateResolver(
+      const std::string& pac_script,
+      mojo::PendingReceiver<proxy_resolver::mojom::ProxyResolver> receiver,
+      mojo::PendingRemote<
+          proxy_resolver::mojom::ProxyResolverFactoryRequestClient> client)
+      override {
+    static base::NoDestructor<
+        mojo::Remote<proxy_resolver::mojom::ProxyResolverFactory>>
+        remote;
+    if (!remote->is_bound()) {
+      static base::NoDestructor<proxy_resolver::ProxyResolverFactoryImpl>
+          factory(remote->BindNewPipeAndPassReceiver());
+    }
+
+    remote->get()->CreateResolver(pac_script, std::move(receiver),
+                                  std::move(client));
+  }
+};
+
 }  // namespace
 
 WebTestContentBrowserClient::WebTestContentBrowserClient() {
@@ -308,9 +351,10 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
           base::Unretained(this)),
       ui_task_runner);
 
-  associated_registry->AddInterface(base::BindRepeating(
-      &WebTestContentBrowserClient::BindWebTestControlHost,
-      base::Unretained(this), render_process_host->GetID()));
+  associated_registry->AddInterface<mojom::WebTestControlHost>(
+      base::BindRepeating(&WebTestContentBrowserClient::BindWebTestControlHost,
+                          base::Unretained(this),
+                          render_process_host->GetID()));
 }
 
 void WebTestContentBrowserClient::BindPermissionAutomation(
@@ -471,6 +515,10 @@ void WebTestContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
   map->Add<blink::test::mojom::CookieManagerAutomation>(base::BindRepeating(
       &WebTestContentBrowserClient::BindCookieManagerAutomation,
       base::Unretained(this)));
+  map->Add<blink::test::mojom::AttributionReportingAutomation>(
+      base::BindRepeating(
+          &WebTestContentBrowserClient::BindAttributionReportingAutomation,
+          base::Unretained(this)));
 }
 
 bool WebTestContentBrowserClient::CanAcceptUntrustedExchangesIfNeeded() {
@@ -523,6 +571,16 @@ void WebTestContentBrowserClient::BindCookieManagerAutomation(
                        std::move(receiver));
 }
 
+void WebTestContentBrowserClient::BindAttributionReportingAutomation(
+    RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::test::mojom::AttributionReportingAutomation>
+        receiver) {
+  attribution_reporting_receivers_.Add(
+      std::make_unique<WebTestAttributionManager>(
+          *GetWebTestBrowserContext()->GetDefaultStoragePartition()),
+      std::move(receiver));
+}
+
 std::unique_ptr<LoginDelegate> WebTestContentBrowserClient::CreateLoginDelegate(
     const net::AuthChallengeInfo& auth_info,
     content::WebContents* web_contents,
@@ -551,6 +609,18 @@ void WebTestContentBrowserClient::ConfigureNetworkContextParamsForShell(
   context_params->reporting_delivery_interval =
       kReportingDeliveryIntervalTimeForWebTests;
   context_params->skip_reporting_send_permission_check = true;
+
+  const char* kProxyPacUrl = "proxy-pac-url";
+  auto pac_url =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(kProxyPacUrl);
+
+  if (!pac_url.empty()) {
+    auto proxy_config = net::ProxyConfig::CreateFromCustomPacURL(GURL(pac_url));
+    context_params->proxy_resolver_factory =
+        MojoWebTestProxyResolverFactory::CreateWithSelfOwnedReceiver();
+    context_params->initial_proxy_config = net::ProxyConfigWithAnnotation(
+        proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS);
+  }
 }
 
 void WebTestContentBrowserClient::CreateFakeBluetoothChooserFactory(
@@ -574,14 +644,17 @@ bool WebTestContentBrowserClient::PreSpawnChild(
     sandbox::mojom::Sandbox sandbox_type,
     ChildSpawnFlags flags) {
   if (sandbox_type == sandbox::mojom::Sandbox::kRenderer) {
+    if (policy->GetConfig()->IsConfigured())
+      return true;
+
     // Add sideloaded font files for testing. See also DIR_WINDOWS_FONTS
     // addition in |StartSandboxedProcess|.
     std::vector<std::string> font_files = switches::GetSideloadFontFiles();
     for (std::vector<std::string>::const_iterator i(font_files.begin());
          i != font_files.end(); ++i) {
-      policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
-                      sandbox::TargetPolicy::FILES_ALLOW_READONLY,
-                      base::UTF8ToWide(*i).c_str());
+      policy->GetConfig()->AddRule(sandbox::SubSystem::kFiles,
+                                   sandbox::Semantics::kFilesAllowReadonly,
+                                   base::UTF8ToWide(*i).c_str());
     }
   }
   return true;

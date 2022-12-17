@@ -1,4 +1,5 @@
 
+
 config("prefs_include_dirs") {
   include_dirs=["$root_gen_dir/vivaldi"]
 }
@@ -64,6 +65,11 @@ static_library("prefs") {
       "vivaldi_browser_prefs_mac.mm",
     ]
   }
+  if (is_ios) {
+    sources += [
+      "vivaldi_browser_prefs_ios.mm",
+    ]
+  }
   if (is_win) {
     sources += [
       "vivaldi_browser_prefs_win.cc",
@@ -74,15 +80,19 @@ static_library("prefs") {
   ]
   deps = [
     "//base",
-    "//chrome/common:constants",
     "//components/pref_registry",
     "//components/prefs",
     "//components/version_info",
     "//skia",
     ":prefs_strings",
   ]
-  if(!is_android) {
+  if(!is_android && !is_ios) {
     deps += [ "//apps:apps" ]
+  }
+  if(!is_ios) {
+    deps += [
+    "//chrome/common:constants",
+    ]
   }
 }
 
@@ -125,16 +135,27 @@ static_library("browser_prefs") {
   public_deps = [
     ":prefs_strings",
     ":prefs_files_generator",
-    "//chrome/common:buildflags",
   ]
   deps = [
     "//components/prefs",
-    "//content/public/browser",
     "//skia",
   ]
-  if (!is_android) {
+  if (!is_android && !is_ios) {
     deps += [
       "//vivaldi/extensions/schema",
     ]
+  }
+  if(!is_ios) {
+    deps += [
+      "//chrome/common:buildflags",
+      "//content/public/browser",
+    ]
+  }
+}
+
+if(is_ios) {
+  bundle_data("prefs_definitions") {
+    sources = [ "//vivaldi/vivapp/src/prefs_definitions.json" ]
+    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}"]
   }
 }

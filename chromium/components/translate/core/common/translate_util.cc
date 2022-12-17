@@ -45,6 +45,9 @@ const base::Feature kTFLiteLanguageDetectionEnabled{
 #endif
 };
 
+const base::Feature kDesktopPartialTranslate{"DesktopPartialTranslate",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 GURL GetTranslateSecurityOrigin() {
   std::string security_origin(kSecurityOrigin);
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -72,6 +75,33 @@ bool IsTFLiteLanguageDetectionEnabled() {
 float GetTFLiteLanguageDetectionThreshold() {
   return base::GetFieldTrialParamByFeatureAsDouble(
       kTFLiteLanguageDetectionEnabled, "reliability_threshold", .7);
+}
+
+const base::Feature kTranslateAutoSnackbars{"TranslateAutoSnackbars",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+int GetAutoAlwaysThreshold() {
+  static constexpr base::FeatureParam<int> auto_always_threshold{
+      &kTranslateAutoSnackbars, "AutoAlwaysThreshold", 5};
+  return auto_always_threshold.Get();
+}
+
+int GetAutoNeverThreshold() {
+  static constexpr base::FeatureParam<int> auto_never_threshold{
+      &kTranslateAutoSnackbars, "AutoNeverThreshold", 20};
+  return auto_never_threshold.Get();
+}
+
+int GetMaximumNumberOfAutoAlways() {
+  static constexpr base::FeatureParam<int> auto_always_maximum{
+      &kTranslateAutoSnackbars, "AutoAlwaysMaximum", 2};
+  return auto_always_maximum.Get();
+}
+
+int GetMaximumNumberOfAutoNever() {
+  static constexpr base::FeatureParam<int> auto_never_maximum{
+      &kTranslateAutoSnackbars, "AutoNeverMaximum", 2};
+  return auto_never_maximum.Get();
 }
 
 }  // namespace translate

@@ -26,11 +26,11 @@ import {SettingsSubpageElement} from './settings_page/settings_subpage.js';
    * A data structure used by callers to combine the results of multiple search
    * requests.
    */
-  export type SearchResult = {
-    canceled: boolean,
-    didFindMatches: boolean,
-    wasClearSearch: boolean,
-  };
+  export interface SearchResult {
+    canceled: boolean;
+    didFindMatches: boolean;
+    wasClearSearch: boolean;
+  }
 
   /**
    * A CSS attribute indicating that a node should be ignored during searching.
@@ -71,7 +71,7 @@ import {SettingsSubpageElement} from './settings_page/settings_subpage.js';
   function findAndHighlightMatches(
       request: SearchRequest, root: Node): boolean {
     let foundMatches = false;
-    const highlights: Array<HTMLElement> = [];
+    const highlights: HTMLElement[] = [];
 
     function doSearch(node: Node) {
       // NOTE: For subpage wrappers <template route-path="..."> when |no-search|
@@ -293,11 +293,11 @@ import {SettingsSubpageElement} from './settings_page/settings_subpage.js';
     }
   }
 
-  type Queues = {
-    high: Array<Task>,
-    middle: Array<Task>,
-    low: Array<Task>,
-  };
+  interface Queues {
+    high: Task[];
+    middle: Task[];
+    low: Task[];
+  }
 
   class TaskQueue {
     private request_: SearchRequest;
@@ -385,7 +385,7 @@ import {SettingsSubpageElement} from './settings_page/settings_subpage.js';
     resolver: PromiseResolver<SearchRequest>;
     queue: TaskQueue;
     private textObservers_: Set<MutationObserver>;
-    private highlights_: Array<HTMLElement>;
+    private highlights_: HTMLElement[];
     bubbles: Map<HTMLElement, number>;
 
     constructor(rawQuery: string, root: Element) {
@@ -412,7 +412,7 @@ import {SettingsSubpageElement} from './settings_page/settings_subpage.js';
     }
 
     /** @param highlights The highlight wrappers to add */
-    addHighlights(highlights: Array<HTMLElement>) {
+    addHighlights(highlights: HTMLElement[]) {
       this.highlights_.push(...highlights);
     }
 

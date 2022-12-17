@@ -42,7 +42,6 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
 import org.chromium.chrome.browser.flags.ActivityType;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
@@ -54,6 +53,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * A model class that parses the incoming intent for Custom Tabs specific customization data.
@@ -285,6 +285,22 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     /**
+     * Get the package name from {@link #getReferrerUriString(Activity)}. If the referrer format
+     * is invalid, return an empty string.
+     * TODO(https://crbug.com/1350252): Move this to IntentHandler.
+     * */
+    static String getReferrerPackageName(Activity activity) {
+        String referrer =
+                CustomTabActivityLifecycleUmaTracker.getReferrerUriString(activity).toLowerCase(
+                        Locale.US);
+        if (TextUtils.isEmpty(referrer)) return "";
+
+        Uri uri = Uri.parse(referrer);
+        return TextUtils.equals(UrlConstants.APP_INTENT_SCHEME, uri.getScheme()) ? uri.getHost()
+                                                                                 : "";
+    }
+
+    /**
      * Constructs a {@link CustomTabIntentDataProvider}.
      *
      * The colorScheme parameter specifies which color scheme the Custom Tab should use.
@@ -379,7 +395,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                 IntentUtils.safeGetIntExtra(intent, EXTRA_INITIAL_ACTIVITY_HEIGHT_IN_PIXEL, 0);
         int defaultToolbarCornerRadius = context.getResources().getDimensionPixelSize(
                 R.dimen.custom_tabs_default_corner_radius);
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.CCT_TOOLBAR_CUSTOMIZATIONS)) {
+        if (ChromeFeatureList.sCctToolbarCustomizations.isEnabled()) {
             mPartialTabToolbarCornerRadius = IntentUtils.safeGetIntExtra(
                     intent, EXTRA_TOOLBAR_CORNER_RADIUS_IN_PIXEL, defaultToolbarCornerRadius);
         } else {
@@ -847,10 +863,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     @Override
     public @Px int getInitialActivityHeight() {
-        boolean enabledDueToFirstParty = mIsTrustedIntent
-                && CachedFeatureFlags.isEnabled(ChromeFeatureList.CCT_RESIZABLE_FOR_FIRST_PARTIES);
-        boolean enabledDueToThirdParty =
-                CachedFeatureFlags.isEnabled(ChromeFeatureList.CCT_RESIZABLE_FOR_THIRD_PARTIES)
+        boolean enabledDueToFirstParty =
+                mIsTrustedIntent && ChromeFeatureList.sCctResizableForFirstParties.isEnabled();
+        boolean enabledDueToThirdParty = ChromeFeatureList.sCctResizableForThirdParties.isEnabled()
                 && isAllowedThirdParty(getClientPackageName());
         if (enabledDueToThirdParty || enabledDueToFirstParty) {
             return mInitialActivityHeight;
@@ -882,7 +897,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     @Override
     public @CloseButtonPosition int getCloseButtonPosition() {
-        if (!CachedFeatureFlags.isEnabled(ChromeFeatureList.CCT_TOOLBAR_CUSTOMIZATIONS)) {
+        if (!ChromeFeatureList.sCctToolbarCustomizations.isEnabled()) {
             return CLOSE_BUTTON_POSITION_DEFAULT;
         }
         return IntentUtils.safeGetIntExtra(

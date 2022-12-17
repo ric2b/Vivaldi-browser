@@ -11,9 +11,8 @@
 
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "ash/components/cryptohome/cryptohome_util.h"
-#include "ash/components/login/auth/key.h"
+#include "ash/components/login/auth/public/auth_failure.h"
+#include "ash/components/login/auth/public/key.h"
 #include "ash/components/login/session/session_termination_manager.h"
 #include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_features.h"
@@ -98,10 +97,12 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_util.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/hibernate/buildflags.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
 #include "components/google/core/common/google_util.h"
@@ -856,7 +857,9 @@ void ExistingUserController::OnAuthSuccess(const UserContext& user_context) {
 
   // If the hibernate service is supported, call it to initiate resume.
 #if BUILDFLAG(ENABLE_HIBERNATE)
-  if (features::IsHibernateEnabled()) {
+  if (features::IsHibernateEnabled() &&
+      !base::FeatureList::IsEnabled(
+          ash::features::kUseAuthsessionAuthentication)) {
     HibermanClient::Get()->WaitForServiceToBeAvailable(
         base::BindOnce(&ExistingUserController::OnHibernateServiceAvailable,
                        weak_factory_.GetWeakPtr(), user_context));

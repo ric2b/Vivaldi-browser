@@ -120,7 +120,7 @@ SpellcheckService::SpellcheckService(content::BrowserContext* context)
     // load a non-existent Hunspell dictionary, and so that Hunspell
     // spellchecking isn't broken because of the failed load.
     ListPrefUpdate update(prefs, spellcheck::prefs::kSpellCheckDictionaries);
-    update->EraseListValueIf([](const base::Value& entry) {
+    update->GetList().EraseIf([](const base::Value& entry) {
       return spellcheck::GetCorrespondingSpellCheckLanguage(entry.GetString())
           .empty();
     });
@@ -191,8 +191,7 @@ void SpellcheckService::GetDictionaries(
   PrefService* prefs = user_prefs::UserPrefs::Get(browser_context);
   std::set<std::string> spellcheck_dictionaries;
   for (const auto& value :
-       prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries)
-           ->GetListDeprecated()) {
+       prefs->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)) {
     const std::string* dictionary = value.GetIfString();
     if (dictionary)
       spellcheck_dictionaries.insert(*dictionary);
@@ -330,8 +329,8 @@ void SpellcheckService::EnableFirstUserLanguageForSpellcheck(
     PrefService* prefs) {
   // Ensure that spellcheck is enabled for the first language in the
   // accept languages list.
-  base::Value user_dictionaries =
-      prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries)->Clone();
+  base::Value::List user_dictionaries =
+      prefs->GetValueList(spellcheck::prefs::kSpellCheckDictionaries).Clone();
   std::vector<std::string> user_languages =
       base::SplitString(prefs->GetString(language::prefs::kAcceptLanguages),
                         ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -353,7 +352,7 @@ void SpellcheckService::EnableFirstUserLanguageForSpellcheck(
   }
 
   bool first_user_language_spellchecked = false;
-  for (const auto& dictionary_value : user_dictionaries.GetListDeprecated()) {
+  for (const auto& dictionary_value : user_dictionaries) {
     first_user_language_spellchecked =
         base::Contains(dictionary_value.GetString(), first_user_language);
     if (first_user_language_spellchecked)
@@ -361,9 +360,10 @@ void SpellcheckService::EnableFirstUserLanguageForSpellcheck(
   }
 
   if (!first_user_language_spellchecked) {
-    user_dictionaries.Insert(user_dictionaries.GetListDeprecated().begin(),
+    user_dictionaries.Insert(user_dictionaries.begin(),
                              base::Value(first_user_language));
-    prefs->Set(spellcheck::prefs::kSpellCheckDictionaries, user_dictionaries);
+    prefs->SetList(spellcheck::prefs::kSpellCheckDictionaries,
+                   std::move(user_dictionaries));
   }
 }
 #endif  // BUILDFLAG(IS_WIN)
@@ -423,28 +423,27 @@ void SpellcheckService::LoadDictionaries() {
   PrefService* prefs = user_prefs::UserPrefs::Get(context_);
   DCHECK(prefs);
 
-  const base::Value* user_dictionaries =
-      prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries);
-  const base::Value* forced_dictionaries =
-      prefs->GetList(spellcheck::prefs::kSpellCheckForcedDictionaries);
+  const base::Value::List& user_dictionaries =
+      prefs->GetValueList(spellcheck::prefs::kSpellCheckDictionaries);
+  const base::Value::List& forced_dictionaries =
+      prefs->GetValueList(spellcheck::prefs::kSpellCheckForcedDictionaries);
 
   // Build a lookup of blocked dictionaries to skip loading them.
-  const base::Value* blocked_dictionaries =
-      prefs->GetList(spellcheck::prefs::kSpellCheckBlocklistedDictionaries);
+  const base::Value::List& blocked_dictionaries = prefs->GetValueList(
+      spellcheck::prefs::kSpellCheckBlocklistedDictionaries);
   std::unordered_set<std::string> blocked_dictionaries_lookup;
-  for (const auto& blocked_dict : blocked_dictionaries->GetListDeprecated()) {
+  for (const auto& blocked_dict : blocked_dictionaries) {
     blocked_dictionaries_lookup.insert(blocked_dict.GetString());
   }
 
   // Merge both lists of dictionaries. Use a set to avoid duplicates.
   std::set<std::string> dictionaries;
-  for (const auto& dictionary_value : user_dictionaries->GetListDeprecated()) {
+  for (const auto& dictionary_value : user_dictionaries) {
     if (blocked_dictionaries_lookup.find(dictionary_value.GetString()) ==
         blocked_dictionaries_lookup.end())
       dictionaries.insert(dictionary_value.GetString());
   }
-  for (const auto& dictionary_value :
-       forced_dictionaries->GetListDeprecated()) {
+  for (const auto& dictionary_value : forced_dictionaries) {
     dictionaries.insert(dictionary_value.GetString());
   }
 
@@ -655,7 +654,7 @@ void SpellcheckService::InitWindowsDictionaryLanguages(
   // When following object goes out of scope, preference change observers will
   // be notified (even if there is no preference change).
   ListPrefUpdate update(prefs, spellcheck::prefs::kSpellCheckDictionaries);
-  update->EraseListValueIf([this](const base::Value& entry) {
+  update->GetList().EraseIf([this](const base::Value& entry) {
     const std::string dictionary_name = entry.GetString();
     return (!UsesWindowsDictionary(dictionary_name) &&
             spellcheck::GetCorrespondingSpellCheckLanguage(dictionary_name)
@@ -845,13 +844,8 @@ void SpellcheckService::OnUseSpellingServiceChanged() {
 }
 
 void SpellcheckService::OnAcceptLanguagesChanged() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Accept-Languages and spell check are decoupled in LSV2 Update 2.
-  if (base::FeatureList::IsEnabled(ash::features::kLanguageSettingsUpdate2)) {
-    return;
-  }
-#endif
-
+  // Accept-Languages and spell check are decoupled on CrOS.
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   std::vector<std::string> accept_languages = GetNormalizedAcceptLanguages();
 
   StringListPrefMember dictionaries_pref;
@@ -871,6 +865,7 @@ void SpellcheckService::OnAcceptLanguagesChanged() {
 #if BUILDFLAG(IS_WIN)
   RecordChromeLocalesStats();
 #endif  // BUILDFLAG(IS_WIN)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 std::vector<std::string> SpellcheckService::GetNormalizedAcceptLanguages(

@@ -70,11 +70,11 @@ void ClipboardRestrictionService::UpdateSettings() {
     return;
   }
 
-  const base::Value* settings = pref_service_->GetDictionary(
-      enterprise::content::kCopyPreventionSettings);
-  const base::Value* enable = settings->FindListKey(
+  const base::Value::Dict& settings =
+      pref_service_->GetValueDict(enterprise::content::kCopyPreventionSettings);
+  const base::Value::List* enable = settings.FindList(
       enterprise::content::kCopyPreventionSettingsEnableFieldName);
-  const base::Value* disable = settings->FindListKey(
+  const base::Value::List* disable = settings.FindList(
       enterprise::content::kCopyPreventionSettingsDisableFieldName);
 
   DCHECK(enable);
@@ -82,11 +82,6 @@ void ClipboardRestrictionService::UpdateSettings() {
 
   enable_url_matcher_ = std::make_unique<url_matcher::URLMatcher>();
   disable_url_matcher_ = std::make_unique<url_matcher::URLMatcher>();
-
-  // Convert the `base::Value`s to `base::ListValue`s because that's what
-  // AddFilters expects.
-  const base::ListValue* enable_list = &base::Value::AsListValue(*enable);
-  const base::ListValue* disable_list = &base::Value::AsListValue(*disable);
 
   // For the following 2 calls, the second param is a bool called `allow`. In
   // this context, we're not concerned about a URL being "allowed" or not, but
@@ -98,11 +93,11 @@ void ClipboardRestrictionService::UpdateSettings() {
   // same policy format as the content analysis connector, which also has
   // "enable" and "disable" lists used in this way.
   url_matcher::util::AddFilters(enable_url_matcher_.get(), true, &next_id_,
-                                enable_list);
+                                *enable);
   url_matcher::util::AddFilters(disable_url_matcher_.get(), false, &next_id_,
-                                disable_list);
+                                *disable);
 
-  absl::optional<int> min_data_size = settings->FindIntKey(
+  absl::optional<int> min_data_size = settings.FindInt(
       enterprise::content::kCopyPreventionSettingsMinDataSizeFieldName);
   DCHECK(min_data_size);
   DCHECK(min_data_size >= 0);

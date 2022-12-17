@@ -5,25 +5,24 @@
 #include "ash/app_list/views/paged_apps_grid_view.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_util.h"
+#include "ash/app_list/apps_grid_row_change_animator.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/views/app_list_folder_view.h"
 #include "ash/app_list/views/app_list_item_view.h"
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
-#include "ash/app_list/views/apps_container_view.h"
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/ghost_image_view.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
-#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/pagination/pagination_controller.h"
-#include "ash/style/ash_color_provider.h"
-#include "base/barrier_closure.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check.h"
@@ -47,9 +46,8 @@
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
-#include "ui/gfx/skia_paint_util.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/animation/bounds_animator.h"
-#include "ui/views/paint_info.h"
 #include "ui/views/view.h"
 #include "ui/views/view_model_utils.h"
 
@@ -131,31 +129,6 @@ int GetFadeoutMaskHeight() {
   return features::IsBackgroundBlurEnabled() ? kDefaultFadeoutMaskHeight : 0;
 }
 
-// CardifiedAnimationObserver is used to observe the animation for toggling the
-// cardified state of the apps grid view. We used this to ensure app icons are
-// repainted with the correct bounds and scale.
-class CardifiedAnimationObserver : public ui::ImplicitAnimationObserver {
- public:
-  explicit CardifiedAnimationObserver(base::OnceClosure callback)
-      : callback_(std::move(callback)) {}
-  CardifiedAnimationObserver(const CardifiedAnimationObserver&) = delete;
-  CardifiedAnimationObserver& operator=(const CardifiedAnimationObserver&) =
-      delete;
-  ~CardifiedAnimationObserver() override {
-    if (callback_)
-      std::move(callback_).Run();
-  }
-
-  // ui::ImplicitAnimationObserver:
-  void OnImplicitAnimationsCompleted() override {
-    if (callback_)
-      std::move(callback_).Run();
-  }
-
- private:
-  base::OnceClosure callback_;
-};
-
 }  // namespace
 
 class PagedAppsGridView::BackgroundCardLayer : public ui::Layer,
@@ -198,7 +171,8 @@ class PagedAppsGridView::BackgroundCardLayer : public ui::Layer,
 
     if (features::IsProductivityLauncherEnabled() && is_active_page_) {
       // Draw a border around the active page.
-      const bool dark_mode = AshColorProvider::Get()->IsDarkModeEnabled();
+      const bool dark_mode =
+          DarkLightModeControllerImpl::Get()->IsDarkModeEnabled();
       flags.setColor(dark_mode ? SK_ColorWHITE : SK_ColorBLACK);
       flags.setAlpha(dark_mode ? 0x29 /*16%*/ : 0x1F /*12%*/);
       flags.setStyle(cc::PaintFlags::kStroke_Style);
@@ -220,12 +194,13 @@ PagedAppsGridView::PagedAppsGridView(
     AppListA11yAnnouncer* a11y_announcer,
     AppsGridViewFolderDelegate* folder_delegate,
     AppListFolderController* folder_controller,
-    ContainerDelegate* container_delegate)
+    ContainerDelegate* container_delegate,
+    AppListKeyboardController* keyboard_controller)
     : AppsGridView(a11y_announcer,
                    contents_view->GetAppListMainView()->view_delegate(),
                    folder_delegate,
                    folder_controller,
-                   /*focus_delegate=*/nullptr),
+                   keyboard_controller),
       contents_view_(contents_view),
       container_delegate_(container_delegate),
       page_flip_delay_(kPageFlipDelay),
@@ -272,7 +247,7 @@ void PagedAppsGridView::OnTabletModeChanged(bool started) {
   CancelContextMenusOnCurrentPage();
 
   // Abort the running reorder animation when the tablet mode updates.
-  MaybeAbortReorderAnimation();
+  MaybeAbortWholeGridAnimation();
 }
 
 void PagedAppsGridView::HandleScrollFromParentView(const gfx::Vector2d& offset,
@@ -292,7 +267,7 @@ void PagedAppsGridView::UpdateOpacity(bool restore_opacity,
     return;
 
   // Do not update opacity when reorder animation is running.
-  if (IsUnderReorderAnimation())
+  if (IsUnderWholeGridAnimation())
     return;
 
   // Return early if the opacity is locked.
@@ -315,8 +290,7 @@ void PagedAppsGridView::UpdateOpacity(bool restore_opacity,
     // opacity (the layers will be deleted when they are no longer needed).
     if (ItemViewsRequireLayers()) {
       for (const auto& entry : view_model()->entries()) {
-        if (!IsViewHiddenForDrag(entry.view) &&
-            !IsViewHiddenForFolderReorder(entry.view) && entry.view->layer())
+        if (!IsViewExplicitlyHidden(entry.view) && entry.view->layer())
           entry.view->layer()->SetOpacity(1.0f);
       }
       return;
@@ -547,7 +521,7 @@ void PagedAppsGridView::Layout() {
   }
 
   CalculateIdealBounds();
-  for (int i = 0; i < view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < view_model()->view_size(); ++i) {
     AppListItemView* view = GetItemViewAt(i);
     view->SetBoundsRect(view_model()->ideal_bounds(i));
   }
@@ -704,9 +678,9 @@ void PagedAppsGridView::UpdatePaging() {
 
   // Folders have the same number of tiles on every page, while the root
   // level grid can have a different number of tiles per page.
-  int tiles = view_model()->view_size();
+  size_t tiles = view_model()->view_size();
   int total_pages = 1;
-  int tiles_on_page = TilesPerPage(0);
+  size_t tiles_on_page = TilesPerPage(0);
   while (tiles > tiles_on_page) {
     tiles -= tiles_on_page;
     ++total_pages;
@@ -936,19 +910,6 @@ void PagedAppsGridView::ScrollEnded() {
   presentation_time_recorder_.reset();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// ui::ImplicitAnimationObserver:
-
-void PagedAppsGridView::OnImplicitAnimationsCompleted() {
-  if (layer()->opacity() == 0.0f)
-    SetVisible(false);
-  if (cardified_state_) {
-    MaskContainerToBackgroundBounds();
-    return;
-  }
-  RemoveAllBackgroundCards();
-}
-
 bool PagedAppsGridView::DoesIntersectRect(const views::View* target,
                                           const gfx::Rect& rect) const {
   gfx::Rect target_bounds(target->GetLocalBounds());
@@ -1127,11 +1088,17 @@ void PagedAppsGridView::StopPageFlipTimer() {
   page_flip_target_ = -1;
 }
 
+void PagedAppsGridView::MaybeAbortExistingCardifiedAnimations() {
+  if (cardified_animation_abort_handle_) {
+    cardified_animation_abort_handle_.reset();
+  }
+}
+
 void PagedAppsGridView::StartAppsGridCardifiedView() {
   if (IsInFolder())
     return;
   DCHECK(!cardified_state_);
-  StopObservingImplicitAnimations();
+  MaybeAbortExistingCardifiedAnimations();
   RemoveAllBackgroundCards();
   // Calculate background bounds for a normal grid so it animates from the
   // normal to the cardified bounds with the icons.
@@ -1152,7 +1119,7 @@ void PagedAppsGridView::EndAppsGridCardifiedView() {
   if (IsInFolder())
     return;
   DCHECK(cardified_state_);
-  StopObservingImplicitAnimations();
+  MaybeAbortExistingCardifiedAnimations();
   cardified_state_ = false;
   // Update the padding between tiles, so we can animate back the apps grid
   // elements to their original positions.
@@ -1172,6 +1139,13 @@ void PagedAppsGridView::AnimateCardifiedState() {
     GetWidget()->LayoutRootViewIfNecessary();
   }
 
+  // Resizing of AppListItemView icons can invalidate layout and cause a layout
+  // while exiting cardified state. Keep ignoring layouts when exiting
+  // cardified state, so that any row change animations that need to take place
+  // while exiting do not get interrupted by a layout.
+  if (!cardified_state_)
+    ignore_layout_ = true;
+
   CalculateIdealBounds();
 
   // Cache the current item container position, as RecenterItemsContainer() may
@@ -1179,77 +1153,40 @@ void PagedAppsGridView::AnimateCardifiedState() {
   gfx::Point start_position = items_container()->origin();
   RecenterItemsContainer();
 
-  // Drag view can be nullptr or moved from the model by EndDrag.
-  const int number_of_views_to_animate = view_model()->view_size();
-
-  base::RepeatingClosure on_bounds_animator_callback;
-  if (number_of_views_to_animate > 0) {
-    on_bounds_animator_callback = base::BarrierClosure(
-        number_of_views_to_animate,
-        base::BindOnce(&PagedAppsGridView::MaybeCallOnBoundsAnimatorDone,
-                       weak_ptr_factory_.GetWeakPtr()));
-    bounds_animation_for_cardified_state_in_progress_++;
-  }
-
-  auto animation_settings = [this](ui::Layer* layer)
-      -> std::unique_ptr<ui::ScopedLayerAnimationSettings> {
-    auto settings = std::make_unique<ui::ScopedLayerAnimationSettings>(
-        layer->GetAnimator());
-    settings->SetPreemptionStrategy(
-        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-    settings->SetTweenType(kCardifiedStateTweenType);
-    if (!cardified_state_) {
-      settings->SetTransitionDuration(
-          base::Milliseconds(kDefaultAnimationDuration));
-    }
-    return settings;
-  };
-
   // Apps might be animating due to drag reorder. Cancel any active animations
   // so that the cardified state animation can be applied.
   bounds_animator()->Cancel();
 
   gfx::Vector2d translate_offset(
       0, start_position.y() - items_container()->origin().y());
-  for (int i = 0; i < view_model()->view_size(); ++i) {
-    AppListItemView* entry_view = view_model()->view_at(i);
-    // Reposition view bounds to compensate for the translation offset.
-    gfx::Rect current_bounds = entry_view->bounds();
-    current_bounds.Offset(translate_offset);
 
-    entry_view->EnsureLayer();
-
-    if (cardified_state_)
-      entry_view->EnterCardifyState();
-    else
-      entry_view->ExitCardifyState();
-
-    gfx::Rect target_bounds(view_model()->ideal_bounds(i));
-    entry_view->SetBoundsRect(target_bounds);
-
-    if (IsViewHiddenForDrag(entry_view)) {
-      on_bounds_animator_callback.Run();
-      continue;
-    }
-
-    // View bounds are currently |target_bounds|. Transform the view so it
-    // appears in |current_bounds|. Note that bounds are flipped by views in
-    // RTL UI direction, which is not taken into account by
-    // `gfx::TransformBetweenRects()` - use mirrored rects to calculate
-    // transition transform when needed.
-    gfx::Transform transform = gfx::TransformBetweenRects(
-        gfx::RectF(items_container()->GetMirroredRect(target_bounds)),
-        gfx::RectF(items_container()->GetMirroredRect(current_bounds)));
-    entry_view->layer()->SetTransform(transform);
-
-    auto animator = animation_settings(entry_view->layer());
-    // When the animations are done, discard the layer and reset view to
-    // proper scale.
-    animation_observers_.push_back(std::make_unique<CardifiedAnimationObserver>(
-        on_bounds_animator_callback));
-    animator->AddObserver(animation_observers_.back().get());
-    entry_view->layer()->SetTransform(gfx::Transform());
+  // Create background card animation metric reporters.
+  std::vector<std::unique_ptr<ui::AnimationThroughputReporter>> reporters;
+  for (auto& background_card : background_cards_) {
+    reporters.push_back(std::make_unique<ui::AnimationThroughputReporter>(
+        background_card->GetAnimator(),
+        metrics_util::ForSmoothness(base::BindRepeating(
+            &ReportCardifiedSmoothness, cardified_state_))));
   }
+
+  views::AnimationBuilder animations;
+  cardified_animation_abort_handle_ = animations.GetAbortHandle();
+  animations
+      .OnEnded(base::BindOnce(&PagedAppsGridView::MaybeCallOnBoundsAnimatorDone,
+                              weak_ptr_factory_.GetWeakPtr()))
+      .OnAborted(
+          base::BindOnce(&PagedAppsGridView::MaybeCallOnBoundsAnimatorDone,
+                         weak_ptr_factory_.GetWeakPtr()))
+      .SetPreemptionStrategy(
+          ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
+      .Once()
+      .SetDuration(base::Milliseconds(kDefaultAnimationDuration));
+
+  DCHECK(!bounds_animation_for_cardified_state_in_progress_);
+  bounds_animation_for_cardified_state_in_progress_ = true;
+
+  AnimateAppListItemsForCardifiedState(&animations.GetCurrentSequence(),
+                                       translate_offset);
 
   if (current_ghost_view_) {
     auto index = current_ghost_view_->index();
@@ -1264,8 +1201,9 @@ void PagedAppsGridView::AnimateCardifiedState() {
         gfx::RectF(items_container()->GetMirroredRect(current_bounds)));
     current_ghost_view_->layer()->SetTransform(transform);
 
-    auto animator = animation_settings(current_ghost_view_->layer());
-    current_ghost_view_->layer()->SetTransform(gfx::Transform());
+    animations.GetCurrentSequence().SetTransform(current_ghost_view_->layer(),
+                                                 gfx::Transform(),
+                                                 kCardifiedStateTweenType);
   }
 
   for (size_t i = 0; i < background_cards_.size(); i++) {
@@ -1274,36 +1212,105 @@ void PagedAppsGridView::AnimateCardifiedState() {
     gfx::Rect background_bounds = background_card->bounds();
     background_bounds.Offset(translate_offset);
     background_card->SetBounds(background_bounds);
-    auto animator = animation_settings(background_card.get());
-    animator->AddObserver(this);
-    ui::AnimationThroughputReporter reporter(
-        background_card->GetAnimator(),
-        metrics_util::ForSmoothness(
-            base::BindRepeating(&ReportCardifiedSmoothness, cardified_state_)));
     if (cardified_state_) {
       const bool is_active_page =
           background_cards_[pagination_model_.selected_page()] ==
           background_card;
       background_card->SetIsActivePage(is_active_page);
     } else {
-      background_card->SetOpacity(kBackgroundCardOpacityHide);
+      animations.GetCurrentSequence().SetOpacity(background_card.get(),
+                                                 kBackgroundCardOpacityHide);
     }
-    background_card->SetBounds(BackgroundCardBounds(i));
+    animations.GetCurrentSequence().SetBounds(background_card.get(),
+                                              BackgroundCardBounds(i),
+                                              kCardifiedStateTweenType);
   }
   highlighted_page_ = pagination_model_.selected_page();
 }
 
-void PagedAppsGridView::MaybeCallOnBoundsAnimatorDone() {
-  --bounds_animation_for_cardified_state_in_progress_;
-  if (bounds_animation_for_cardified_state_in_progress_ == 0) {
-    animation_observers_.clear();
-    DestroyLayerItemsIfNotNeeded();
-
-    // Notify container that cardified state has ended once ending animations
-    // are complete.
-    if (!cardified_state_)
-      container_delegate_->OnCardifiedStateEnded();
+void PagedAppsGridView::AnimateAppListItemsForCardifiedState(
+    views::AnimationSequenceBlock* animation_sequence,
+    const gfx::Vector2d& translate_offset) {
+  // Check that at least one item needs animating to avoid creating an animation
+  // builder when no views need animating.
+  bool items_need_animating = false;
+  for (size_t i = 0; i < view_model()->view_size(); ++i) {
+    AppListItemView* item_view = view_model()->view_at(i);
+    if (!IsViewExplicitlyHidden(item_view)) {
+      items_need_animating = true;
+      break;
+    }
   }
+
+  if (!items_need_animating)
+    return;
+
+  for (size_t i = 0; i < view_model()->view_size(); ++i) {
+    AppListItemView* entry_view = view_model()->view_at(i);
+    // Reposition view bounds to compensate for the translation offset.
+    gfx::Rect current_bounds = entry_view->bounds();
+    current_bounds.Offset(translate_offset);
+
+    entry_view->EnsureLayer();
+
+    if (cardified_state_)
+      entry_view->EnterCardifyState();
+    else
+      entry_view->ExitCardifyState();
+
+    gfx::Rect target_bounds(view_model()->ideal_bounds(i));
+
+    if (entry_view->has_pending_row_change()) {
+      entry_view->reset_has_pending_row_change();
+      row_change_animator_->AnimateBetweenRows(entry_view, current_bounds,
+                                               target_bounds);
+      continue;
+    }
+
+    entry_view->SetBoundsRect(target_bounds);
+
+    // Skip animating the item view if it is already hidden.
+    if (IsViewExplicitlyHidden(entry_view))
+      continue;
+
+    // View bounds are currently |target_bounds|. Transform the view so it
+    // appears in |current_bounds|. Note that bounds are flipped by views in
+    // RTL UI direction, which is not taken into account by
+    // `gfx::TransformBetweenRects()` - use mirrored rects to calculate
+    // transition transform when needed.
+    gfx::Transform transform = gfx::TransformBetweenRects(
+        gfx::RectF(items_container()->GetMirroredRect(target_bounds)),
+        gfx::RectF(items_container()->GetMirroredRect(current_bounds)));
+    entry_view->layer()->SetTransform(transform);
+
+    animation_sequence->SetTransform(entry_view->layer(), gfx::Transform(),
+                                     kCardifiedStateTweenType);
+  }
+}
+
+void PagedAppsGridView::MaybeCallOnBoundsAnimatorDone() {
+  DCHECK(bounds_animation_for_cardified_state_in_progress_);
+  bounds_animation_for_cardified_state_in_progress_ = false;
+
+  DestroyLayerItemsIfNotNeeded();
+
+  if (layer()->opacity() == 0.0f)
+    SetVisible(false);
+
+  if (cardified_state_) {
+    MaskContainerToBackgroundBounds();
+  } else {
+    OnCardifiedStateEnded();
+  }
+}
+
+void PagedAppsGridView::OnCardifiedStateEnded() {
+  ignore_layout_ = false;
+  RemoveAllBackgroundCards();
+
+  if (cardified_state_ended_test_callback_)
+    cardified_state_ended_test_callback_.Run();
+  container_delegate_->OnCardifiedStateEnded();
 }
 
 void PagedAppsGridView::RecenterItemsContainer() {
@@ -1557,6 +1564,11 @@ void PagedAppsGridView::AnimateOnNudgeRemoved() {
 
   PrepareItemsForBoundsAnimation();
   AnimateToIdealBounds();
+}
+
+void PagedAppsGridView::SetCardifiedStateEndedTestCallback(
+    base::RepeatingClosure cardified_ended_callback) {
+  cardified_state_ended_test_callback_ = std::move(cardified_ended_callback);
 }
 
 int PagedAppsGridView::GetTotalTopPaddingOnFirstPage() const {

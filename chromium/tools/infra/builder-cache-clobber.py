@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2019 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -33,7 +33,7 @@ def main(raw_args):
 
   clobber_cache_utils.clobber_caches(args.swarming_server,
                                      pool,
-                                     'chromium:%s' % args.bucket,
+                                     '%s:%s' % (args.project, args.bucket),
                                      cache,
                                      'cache/builder',
                                      args.dry_run,

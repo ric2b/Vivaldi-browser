@@ -69,6 +69,7 @@
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -297,7 +298,8 @@ class SessionRestoreImpl : public BrowserListObserver {
 
     if (use_new_window) {
       browser->tab_strip_model()->ActivateTabAt(
-          0, {TabStripModel::GestureType::kOther});
+          0, TabStripUserGestureDetails(
+                 TabStripUserGestureDetails::GestureType::kOther));
       browser->window()->Show();
     }
     NotifySessionServiceOfRestoredTabs(browser,
@@ -872,11 +874,9 @@ class SessionRestoreImpl : public BrowserListObserver {
     params.initial_workspace = workspace;
     params.initial_visible_on_all_workspaces_state = visible_on_all_workspaces;
     params.creation_source = Browser::CreationSource::kSessionRestore;
-    params.is_vivaldi = (type != Browser::Type::TYPE_APP) &&
-        vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
+    params.is_vivaldi =
+        (type != Browser::Type::TYPE_APP) && vivaldi::IsVivaldiRunning();
     Browser* browser = Browser::Create(params);
-
-    browser->window()->MaybeRestoreSideSearchStatePerWindow(extra_data);
 
     return browser;
   }
@@ -887,7 +887,9 @@ class SessionRestoreImpl : public BrowserListObserver {
 
     if (!browser->is_vivaldi()) {
     browser->tab_strip_model()->ActivateTabAt(
-        selected_tab_index, {TabStripModel::GestureType::kOther});
+        selected_tab_index,
+        TabStripUserGestureDetails(
+            TabStripUserGestureDetails::GestureType::kOther));
     }
 
     if (browser_ == browser)
@@ -906,9 +908,9 @@ class SessionRestoreImpl : public BrowserListObserver {
         whats_new::StartWhatsNewFetch(browser);
         continue;
       }
-      int add_types = TabStripModel::ADD_FORCE_INDEX;
+      int add_types = AddTabTypes::ADD_FORCE_INDEX;
       if (is_first_tab)
-        add_types |= TabStripModel::ADD_ACTIVE;
+        add_types |= AddTabTypes::ADD_ACTIVE;
       NavigateParams params(browser, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
       params.disposition = is_first_tab
                                ? WindowOpenDisposition::NEW_FOREGROUND_TAB

@@ -7,10 +7,17 @@ package org.chromium.chrome.browser.history_clusters;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.view.View;
+import android.widget.ImageView;
 
+import androidx.appcompat.content.res.AppCompatResources;
+
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableListUtils;
 
 class HistoryClustersItemView extends SelectableItemView<ClusterVisit> {
+    private DividerView mDividerView;
     /**
      * Constructor for inflating from XML.
      */
@@ -21,7 +28,21 @@ class HistoryClustersItemView extends SelectableItemView<ClusterVisit> {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mEndButtonView.setVisibility(GONE);
+        mDividerView = new DividerView(getContext(), null, 0, R.style.HorizontalDivider);
+        mDividerView.addToParent(this, generateDefaultLayoutParams());
+        mEndButtonView.setVisibility(VISIBLE);
+        mEndButtonView.setImageResource(R.drawable.btn_delete_24dp);
+        mEndButtonView.setContentDescription(getContext().getString((R.string.remove)));
+        ApiCompatibilityUtils.setImageTintList(mEndButtonView,
+                AppCompatResources.getColorStateList(
+                        getContext(), R.color.default_icon_color_secondary_tint_list));
+        mEndButtonView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        mEndButtonView.setPaddingRelative(getResources().getDimensionPixelSize(
+                                                  R.dimen.visit_item_remove_button_lateral_padding),
+                getPaddingTop(),
+                getResources().getDimensionPixelSize(
+                        R.dimen.visit_item_remove_button_lateral_padding),
+                getPaddingBottom());
     }
 
     @Override
@@ -29,6 +50,8 @@ class HistoryClustersItemView extends SelectableItemView<ClusterVisit> {
 
     void setTitleText(CharSequence text) {
         mTitleView.setText(text);
+        SelectableListUtils.setContentDescriptionContext(getContext(), mEndButtonView,
+                text.toString(), SelectableListUtils.ContentDescriptionSource.REMOVE_BUTTON);
     }
 
     void setHostText(CharSequence text) {
@@ -37,5 +60,21 @@ class HistoryClustersItemView extends SelectableItemView<ClusterVisit> {
 
     void setIconDrawable(Drawable drawable) {
         super.setStartIconDrawable(drawable);
+    }
+
+    void setEndButtonClickHandler(OnClickListener onClickListener) {
+        mEndButtonView.setOnClickListener(onClickListener);
+    }
+
+    void setDividerVisibility(boolean visible) {
+        mDividerView.setVisibility(visible ? VISIBLE : GONE);
+    }
+
+    void setHasThickDivider(boolean hasThickDivider) {
+        mDividerView.setIsThickDivider(hasThickDivider);
+    }
+
+    void setEndButtonVisibility(boolean visible) {
+        mEndButtonView.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 }

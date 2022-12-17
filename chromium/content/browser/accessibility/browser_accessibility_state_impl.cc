@@ -137,6 +137,13 @@ void BrowserAccessibilityStateImpl::ResetAccessibilityModeValue() {
 void BrowserAccessibilityStateImpl::ResetAccessibilityMode() {
   ResetAccessibilityModeValue();
 
+  // AXPlatformNode has its own AXMode. If we don't reset it when accessibility
+  // support is auto-disabled, the next time a screen reader is detected
+  // |AXPlatformNode::NotifyAddAXModeFlags| will return early due to the
+  // AXPlatformNode's AXMode being unchanged (kAXModeComplete). As a result,
+  // the observers are never notified and screen reader support fails to work.
+  ui::AXPlatformNode::SetAXMode(accessibility_mode_);
+
   std::vector<WebContentsImpl*> web_contents_vector =
       WebContentsImpl::GetAllWebContents();
   for (size_t i = 0; i < web_contents_vector.size(); ++i)
@@ -351,6 +358,15 @@ void BrowserAccessibilityStateImpl::AddAccessibilityModeFlags(ui::AXMode mode) {
   if (new_mode_flags & ui::AXMode::kHTML)
     RecordNewAccessibilityModeFlags(
         ui::AXMode::ModeFlagHistogramValue::UMA_AX_MODE_HTML);
+  if (new_mode_flags & ui::AXMode::kHTMLMetadata)
+    RecordNewAccessibilityModeFlags(
+        ui::AXMode::ModeFlagHistogramValue::UMA_AX_MODE_HTML_METADATA);
+  if (new_mode_flags & ui::AXMode::kLabelImages)
+    RecordNewAccessibilityModeFlags(
+        ui::AXMode::ModeFlagHistogramValue::UMA_AX_MODE_LABEL_IMAGES);
+  if (new_mode_flags & ui::AXMode::kPDF)
+    RecordNewAccessibilityModeFlags(
+        ui::AXMode::ModeFlagHistogramValue::UMA_AX_MODE_PDF);
 
   std::vector<WebContentsImpl*> web_contents_vector =
       WebContentsImpl::GetAllWebContents();

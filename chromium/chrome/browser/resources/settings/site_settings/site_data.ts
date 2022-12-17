@@ -7,18 +7,18 @@
  * 'site-data' handles showing the local storage summary list for all sites.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_search_field/cr_search_field.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import './site_data_entry.js';
 
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {ListPropertyUpdateMixin} from 'chrome://resources/js/list_property_update_mixin.js';
@@ -27,6 +27,7 @@ import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-li
 import {DomRepeatEvent, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
+import {FocusConfig} from '../focus_config.js';
 import {GlobalScrollTargetMixin} from '../global_scroll_target_mixin.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxyImpl, PrivacyElementInteractions} from '../metrics_browser_proxy.js';
@@ -36,12 +37,10 @@ import {Route, Router} from '../router.js';
 import {LocalDataBrowserProxy, LocalDataBrowserProxyImpl, LocalDataItem} from './local_data_browser_proxy.js';
 import {getTemplate} from './site_data.html.js';
 
-type FocusConfig = Map<string, string|(() => void)>;
-
-type SelectedItem = {
-  item: LocalDataItem,
-  index: number,
-};
+interface SelectedItem {
+  item: LocalDataItem;
+  index: number;
+}
 
 export interface SiteDataElement {
   $: {
@@ -106,7 +105,7 @@ export class SiteDataElement extends SiteDataElementBase {
   filter: string;
   focusConfig: FocusConfig;
   private isLoading_: boolean;
-  sites: Array<LocalDataItem>;
+  sites: LocalDataItem[];
   subpageRoute: Route;
   private listBlurred_: boolean;
   private browserProxy_: LocalDataBrowserProxy =
@@ -252,7 +251,7 @@ export class SiteDataElement extends SiteDataElementBase {
   /**
    * Shows a dialog to confirm the deletion of multiple sites.
    */
-  onRemoveShowingSitesTap_(e: Event) {
+  private onRemoveShowingSitesTap_(e: Event) {
     e.preventDefault();
     this.$.confirmDeleteDialog.showModal();
   }

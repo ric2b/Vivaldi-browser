@@ -47,7 +47,6 @@ import org.chromium.chrome.browser.sync.settings.SignInPreference;
 import org.chromium.chrome.browser.sync.settings.SyncPromoPreference;
 import org.chromium.chrome.browser.sync.settings.SyncPromoPreference.State;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.chrome.browser.ui.signin.TangibleSyncCoordinator;
@@ -78,12 +77,12 @@ import org.chromium.ui.base.DeviceFormFactor;
 
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.AdsAndTrackerPreference;
+import org.vivaldi.browser.preferences.AutomaticCloseTabsMainPreference;
 import org.vivaldi.browser.preferences.NewTabPositionMainPreference;
 import org.vivaldi.browser.preferences.StartPageModePreference;
 import org.vivaldi.browser.preferences.StatusBarVisibilityPreference;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiSyncPreference;
-import org.vivaldi.browser.preferences.VivaldiThemePreference;
 
 /**
  * The main settings screen, shown when the user first opens Settings.
@@ -255,9 +254,7 @@ public class MainSettings extends PreferenceFragmentCompat
         if (!ChromeApplicationImpl.isVivaldi())
         new AdaptiveToolbarStatePredictor(null).recomputeUiState(uiState -> {
             // We don't show the toolbar shortcut settings page if disabled from finch.
-            // Note, we can still have the old data collection experiment running for which
-            // |canShowUi| might be true. In that case, just hide the settings page.
-            if (uiState.canShowUi && !AdaptiveToolbarFeatures.isSingleVariantModeEnabled()) return;
+            if (uiState.canShowUi) return;
             getPreferenceScreen().removePreference(findPreference(PREF_TOOLBAR_SHORTCUT));
         });
     }
@@ -323,9 +320,6 @@ public class MainSettings extends PreferenceFragmentCompat
         pref = getPreferenceScreen().findPreference(PREF_STATUS_BAR_VISIBILITY);
         if (pref != null)
             pref.setSummary(StatusBarVisibilityPreference.updateSummary());
-        pref = getPreferenceScreen().findPreference("ui_theme");
-        String themeSummary = getString(VivaldiThemePreference.updateSummary()).replace("\n", " ");
-        pref.setSummary(themeSummary);
         pref = getPreferenceScreen().findPreference("start_page");
         pref.setSummary(StartPageModePreference.updateSummary());
         pref = getPreferenceScreen().findPreference("ads_and_tracker");
@@ -334,6 +328,8 @@ public class MainSettings extends PreferenceFragmentCompat
             if (TextUtils.equals(key, VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM))
                 updateSummary();
         });
+        pref = getPreferenceScreen().findPreference("automatic_close_tabs");
+        pref.setSummary(AutomaticCloseTabsMainPreference.updateSummary());
         updateSummary();
     }
 

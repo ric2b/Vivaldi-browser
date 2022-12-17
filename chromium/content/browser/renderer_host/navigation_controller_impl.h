@@ -217,9 +217,11 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       const std::string& extra_headers,
       network::mojom::SourceLocationPtr source_location,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
+      bool is_form_submission,
       const absl::optional<blink::Impression>& impression,
       base::TimeTicks navigation_start_time,
-      absl::optional<bool> is_fenced_frame_opaque_url = absl::nullopt);
+      bool is_embedder_initiated_fenced_frame_navigation = false,
+      bool is_unfenced_top_navigation = false);
 
   // Navigates to the history entry associated with the given navigation API
   // |key|. Searches |entries_| for a FrameNavigationEntry associated with
@@ -250,8 +252,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // case, we know there is no content displayed in the page.
   bool IsUnmodifiedBlankTab();
 
-  // The session storage namespace that all child RenderViews associated with
-  // |partition_config| should use.
+  // The session storage namespace that all child `blink::WebView`s associated
+  // with `partition_config` should use.
   SessionStorageNamespace* GetSessionStorageNamespace(
       const StoragePartitionConfig& partition_config);
 
@@ -289,10 +291,12 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // For use by WebContentsImpl ------------------------------------------------
 
   // Visit all FrameNavigationEntries as well as all frame trees and register
-  // any instances of |origin| as non-isolated with their respective
-  // BrowsingInstances. This is important when |origin| requests isolation, so
-  // that we only do so in BrowsingInstances that haven't seen it before.
-  void RegisterExistingOriginToPreventOptInIsolation(const url::Origin& origin);
+  // any instances of |origin| as having the default isolation state with their
+  // respective BrowsingInstances. This is important when |origin| is seen with
+  // an OriginAgentCluster header, so that we only accept such requests in
+  // BrowsingInstances that haven't seen it before.
+  void RegisterExistingOriginAsHavingDefaultIsolation(
+      const url::Origin& origin);
 
   // Allow renderer-initiated navigations to create a pending entry when the
   // provisional load starts.
@@ -577,7 +581,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       NavigationEntryImpl* entry,
       FrameNavigationEntry* frame_entry,
       base::TimeTicks navigation_start_time,
-      absl::optional<bool> is_fenced_frame_opaque_url = absl::nullopt);
+      bool is_embedder_initiated_fenced_frame_navigation = false,
+      bool is_unfenced_top_navigation = false);
 
   // Creates and returns a NavigationRequest for a navigation to |entry|. Will
   // return nullptr if the parameters are invalid and the navigation cannot
@@ -684,8 +689,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // Removes all entries except the last committed entry.  If there is a new
   // pending navigation it is preserved. In contrast to
   // PruneAllButLastCommitted() this does not update the session history of the
-  // RenderView.  Callers must ensure that |CanPruneAllButLastCommitted| returns
-  // true before calling this.
+  // `blink::WebView`.  Callers must ensure that `CanPruneAllButLastCommitted`
+  // returns true before calling this.
   void PruneAllButLastCommittedInternal();
 
   // Inserts up to |max_index| entries from |source| into this. This does NOT

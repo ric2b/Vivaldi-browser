@@ -38,8 +38,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 
-namespace net {
-namespace test_server {
+namespace net::test_server {
 namespace {
 
 const char kDefaultRealm[] = "testrealm";
@@ -734,7 +733,7 @@ std::unique_ptr<HttpResponse> HandleHungAfterHeadersResponse(
 // A HttpResponse that is almost never ending (with an Exabyte content-length).
 class ExabyteResponse : public BasicHttpResponse {
  public:
-  ExabyteResponse() {}
+  ExabyteResponse() = default;
 
   ExabyteResponse(const ExabyteResponse&) = delete;
   ExabyteResponse& operator=(const ExabyteResponse&) = delete;
@@ -794,6 +793,7 @@ std::unique_ptr<HttpResponse> HandleGzipBody(const HttpRequest& request) {
   http_response->set_content(
       std::string(compressed_body.data(), compressed_size));
   http_response->AddCustomHeader("Content-Encoding", "gzip");
+  http_response->AddCustomHeader("Cache-Control", "max-age=60");
   return http_response;
 }
 
@@ -1031,5 +1031,4 @@ void RegisterDefaultHandlers(EmbeddedTestServer* server) {
 
 #undef PREFIXED_HANDLER
 
-}  // namespace test_server
-}  // namespace net
+}  // namespace net::test_server

@@ -28,6 +28,10 @@ Destination DestinationForStringName(std::string destination) {
     return overflow_menu::Destination::SiteInfo;
   } else if (destination == "overflow_menu::Destination::Settings") {
     return overflow_menu::Destination::Settings;
+  // Vivaldi
+  } else if (destination == "overflow_menu::Destination::Notes") {
+      return overflow_menu::Destination::Bookmarks;
+  // End Vivaldi
   } else {
     NOTREACHED();
     // Randomly chosen destination which should never be returned due to
@@ -40,7 +44,7 @@ std::string StringNameForDestination(Destination destination) {
   switch (destination) {
     case overflow_menu::Destination::Bookmarks:
       return "overflow_menu::Destination::Bookmarks";
-    case overflow_menu::Destination::History:
+     case overflow_menu::Destination::History:
       return "overflow_menu::Destination::History";
     case overflow_menu::Destination::ReadingList:
       return "overflow_menu::Destination::ReadingList";
@@ -54,6 +58,10 @@ std::string StringNameForDestination(Destination destination) {
       return "overflow_menu::Destination::SiteInfo";
     case overflow_menu::Destination::Settings:
       return "overflow_menu::Destination::Settings";
+    // Vivaldi
+    case overflow_menu::Destination::Notes:
+      return "overflow_menu::Destination::Notes";
+    // End Vivaldi
   }
 }
 
@@ -84,6 +92,10 @@ void RecordUmaActionForDestination(Destination destination) {
     case Destination::Settings:
       base::RecordAction(base::UserMetricsAction("MobileMenuSettings"));
       break;
+    // Vivaldi
+    case Destination::Notes:
+      break;
+    // End Vivaldi
   }
 }
 }  // namespace overflow_menu

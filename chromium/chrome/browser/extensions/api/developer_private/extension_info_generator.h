@@ -64,6 +64,12 @@ class ExtensionInfoGenerator {
                             bool include_terminated,
                             ExtensionInfosCallback callback);
 
+  // Creates and synchronously returns a RuntimeHostPermissions object with the
+  // given extension's host permissions.
+  static api::developer_private::RuntimeHostPermissions
+  CreateRuntimeHostPermissionsInfo(content::BrowserContext* browser_context,
+                                   const Extension& extension);
+
  private:
   // Creates an ExtensionInfo for the given |extension| and |state|, and
   // asynchronously adds it to the |list|.
@@ -91,7 +97,7 @@ class ExtensionInfoGenerator {
   raw_ptr<ErrorConsole> error_console_;
   raw_ptr<ImageLoader> image_loader_;
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  SupervisedUserService* supervised_user_service_;
+  raw_ptr<SupervisedUserService> supervised_user_service_;
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
   // The number of pending image loads.

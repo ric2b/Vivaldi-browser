@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_data.h"
+#include "third_party/blink/renderer/core/layout/ng/frame_set_layout_data.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
@@ -371,23 +372,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // Report space shortage, i.e. how much more space would have been sufficient
   // to prevent some piece of content from breaking. This information may be
   // used by the column balancer to stretch columns.
-  void PropagateSpaceShortage(absl::optional<LayoutUnit> space_shortage) {
-    if (!space_shortage || *space_shortage <= LayoutUnit())
-      return;
+  void PropagateSpaceShortage(absl::optional<LayoutUnit> space_shortage);
 
-    // Space shortage should only be reported when we already have a tentative
-    // fragmentainer block-size. It's meaningless to talk about space shortage
-    // in the initial column balancing pass, because then we have no
-    // fragmentainer block-size at all, so who's to tell what's too short or
-    // not?
-    DCHECK(!IsInitialColumnBalancingPass());
-    if (minimal_space_shortage_ == kIndefiniteSize) {
-      minimal_space_shortage_ = *space_shortage;
-    } else {
-      minimal_space_shortage_ =
-          std::min(minimal_space_shortage_, *space_shortage);
-    }
-  }
   absl::optional<LayoutUnit> MinimalSpaceShortage() const {
     if (minimal_space_shortage_ == kIndefiniteSize)
       return absl::nullopt;
@@ -622,6 +608,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final
       std::unique_ptr<DevtoolsFlexInfo> flex_layout_data) {
     flex_layout_data_ = std::move(flex_layout_data);
   }
+  void TransferFrameSetLayoutData(std::unique_ptr<FrameSetLayoutData> data) {
+    frame_set_layout_data_ = std::move(data);
+  }
 
   const NGGridLayoutData& GridLayoutData() const {
     DCHECK(grid_layout_data_);
@@ -791,6 +780,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   std::unique_ptr<NGGridLayoutData> grid_layout_data_;
 
   std::unique_ptr<DevtoolsFlexInfo> flex_layout_data_;
+  std::unique_ptr<FrameSetLayoutData> frame_set_layout_data_;
 
   LogicalBoxSides sides_to_include_;
 

@@ -17,6 +17,7 @@
 
 #include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -82,8 +83,11 @@ const uint32_t kSpdyMaxHeaderListSize = 256 * 1024;
 // Specifies the maximum concurrent streams server could send (via push).
 const uint32_t kSpdyMaxConcurrentPushedStreams = 1000;
 
-  // Self-contained structure with all the simple configuration options
-  // supported by the HttpNetworkSession.
+// Specifies the the default value for the push setting, which is disabled.
+const uint32_t kSpdyDisablePush = 0;
+
+// Self-contained structure with all the simple configuration options
+// supported by the HttpNetworkSession.
 struct NET_EXPORT HttpNetworkSessionParams {
   HttpNetworkSessionParams();
   HttpNetworkSessionParams(const HttpNetworkSessionParams& other);
@@ -178,6 +182,9 @@ struct NET_EXPORT HttpNetworkSessionParams {
   // default network does (hence underlying objects should not drop their
   // state).
   bool ignore_ip_address_changes = false;
+
+  // Whether to use the ALPN information in the DNS HTTPS record.
+  bool use_dns_https_svcb_alpn = false;
 };
 
   // Structure with pointers to the dependencies of the HttpNetworkSession.
@@ -204,8 +211,9 @@ struct NET_EXPORT HttpNetworkSessionContext {
   raw_ptr<NetworkQualityEstimator> network_quality_estimator;
   raw_ptr<QuicContext> quic_context;
 #if BUILDFLAG(ENABLE_REPORTING)
-  raw_ptr<ReportingService> reporting_service;
-  raw_ptr<NetworkErrorLoggingService> network_error_logging_service;
+  raw_ptr<ReportingService, DanglingUntriaged> reporting_service;
+  raw_ptr<NetworkErrorLoggingService, DanglingUntriaged>
+      network_error_logging_service;
 #endif
 
     // Optional factory to use for creating QuicCryptoClientStreams.
@@ -228,9 +236,9 @@ class NET_EXPORT HttpNetworkSession {
   HttpAuthCache* http_auth_cache() { return &http_auth_cache_; }
   SSLClientContext* ssl_client_context() { return &ssl_client_context_; }
 
-  void AddResponseDrainer(std::unique_ptr<HttpResponseBodyDrainer> drainer);
+  void StartResponseDrainer(std::unique_ptr<HttpResponseBodyDrainer> drainer);
 
-  // Removes the drainer from the session. Does not dispose of it.
+  // Removes the drainer from the session.
   void RemoveResponseDrainer(HttpResponseBodyDrainer* drainer);
 
   // Returns the socket pool of the given type for use with the specified
@@ -330,8 +338,9 @@ class NET_EXPORT HttpNetworkSession {
   const raw_ptr<HostResolver> host_resolver_;
 
 #if BUILDFLAG(ENABLE_REPORTING)
-  const raw_ptr<ReportingService> reporting_service_;
-  const raw_ptr<NetworkErrorLoggingService> network_error_logging_service_;
+  const raw_ptr<ReportingService, DanglingUntriaged> reporting_service_;
+  const raw_ptr<NetworkErrorLoggingService, DanglingUntriaged>
+      network_error_logging_service_;
 #endif
   const raw_ptr<ProxyResolutionService> proxy_resolution_service_;
   const raw_ptr<SSLConfigService> ssl_config_service_;
@@ -346,7 +355,7 @@ class NET_EXPORT HttpNetworkSession {
   QuicStreamFactory quic_stream_factory_;
   SpdySessionPool spdy_session_pool_;
   std::unique_ptr<HttpStreamFactory> http_stream_factory_;
-  std::map<HttpResponseBodyDrainer*, std::unique_ptr<HttpResponseBodyDrainer>>
+  std::set<std::unique_ptr<HttpResponseBodyDrainer>, base::UniquePtrComparator>
       response_drainers_;
   NextProtoVector next_protos_;
   SSLConfig::ApplicationSettings application_settings_;

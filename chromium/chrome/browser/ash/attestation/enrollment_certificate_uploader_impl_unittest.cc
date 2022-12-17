@@ -6,8 +6,6 @@
 
 #include <string>
 
-#include "ash/components/attestation/fake_certificate.h"
-#include "ash/components/attestation/mock_attestation_flow.h"
 #include "ash/components/settings/cros_settings_names.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -20,6 +18,8 @@
 #include "chrome/browser/ash/attestation/attestation_key_payload.pb.h"
 #include "chrome/browser/ash/attestation/enrollment_certificate_uploader_impl.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
+#include "chromeos/ash/components/attestation/fake_certificate.h"
+#include "chromeos/ash/components/attestation/mock_attestation_flow.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -107,7 +107,7 @@ TEST_F(EnrollmentCertificateUploaderTest, UnregisteredPolicyClient) {
       .Times(0);
 
   policy_client_.SetDMToken("");
-  Run(/*expected_status=*/CertStatus::kFailedToFetch);
+  Run(/*expected_status=*/CertStatus::kInvalidClient);
 }
 
 TEST_F(EnrollmentCertificateUploaderTest, GetCertificateUnspecifiedFailure) {
@@ -153,7 +153,7 @@ TEST_F(EnrollmentCertificateUploaderTest,
 
   EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _, _)).Times(0);
 
-  Run(/*expected_status=*/CertStatus::kFailedToFetch);
+  Run(/*expected_status=*/CertStatus::kInvalidClient);
 }
 
 TEST_F(EnrollmentCertificateUploaderTest, UploadCertificateFailure) {
@@ -209,7 +209,51 @@ TEST_F(EnrollmentCertificateUploaderTest,
                              /*force_new_key=*/false, _, _))
       .Times(0);
 
-  Run(/*expected_status=*/CertStatus::kFailedToFetch);
+  Run(/*expected_status=*/CertStatus::kInvalidClient);
+}
+
+TEST_F(EnrollmentCertificateUploaderTest,
+       UnregisteredClientAfterValidCertificateRequested) {
+  std::string valid_certificate;
+  ASSERT_TRUE(GetFakeCertificatePEM(base::Days(1), &valid_certificate));
+  InSequence s;
+
+  // Shall fail on |CloudPolicyClient::is_registered()| check and not retry.
+  EXPECT_CALL(attestation_flow_,
+              GetCertificate(PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
+                             /*force_new_key=*/false, _, _))
+      .WillOnce(
+          WithArgs<5>(Invoke([this, valid_certificate](CertCallback callback) {
+            policy_client_.SetDMToken("");
+            CertCallbackSuccess(std::move(callback), valid_certificate);
+          })));
+
+  EXPECT_CALL(policy_client_, UploadEnterpriseEnrollmentCertificate(_, _))
+      .Times(0);
+
+  Run(/*expected_status=*/CertStatus::kInvalidClient);
+}
+
+TEST_F(EnrollmentCertificateUploaderTest,
+       UnregisteredClientAfterExpiredCertificateRequested) {
+  std::string expired_certificate;
+  ASSERT_TRUE(GetFakeCertificatePEM(base::Days(-1), &expired_certificate));
+  InSequence s;
+
+  // Shall fail on |CloudPolicyClient::is_registered()| check and not retry.
+  EXPECT_CALL(attestation_flow_,
+              GetCertificate(PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
+                             /*force_new_key=*/false, _, _))
+      .WillOnce(WithArgs<5>(
+          Invoke([this, expired_certificate](CertCallback callback) {
+            policy_client_.SetDMToken("");
+            CertCallbackSuccess(std::move(callback), expired_certificate);
+          })));
+
+  EXPECT_CALL(policy_client_, UploadEnterpriseEnrollmentCertificate(_, _))
+      .Times(0);
+
+  Run(/*expected_status=*/CertStatus::kInvalidClient);
 }
 
 TEST_F(EnrollmentCertificateUploaderTest, UploadValidCertificate) {

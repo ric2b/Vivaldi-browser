@@ -152,8 +152,8 @@ class RTree {
 
   // This is the count of data elements (rather than total nodes in the tree)
   size_t num_data_elements_ = 0u;
-  Branch<T> root_;
   std::vector<Node<T>> nodes_;
+  Branch<T> root_;
 
   // If false, the rtree encountered overflow does not have reliable bounds.
   bool has_valid_bounds_ = true;
@@ -432,6 +432,7 @@ void RTree<T>::GetAllBoundsRecursive(Node<T>* node,
 template <typename T>
 void RTree<T>::Reset() {
   num_data_elements_ = 0;
+  root_.subtree = nullptr;
   nodes_.clear();
   root_.bounds = gfx::Rect();
   has_valid_bounds_ = true;

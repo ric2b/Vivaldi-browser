@@ -213,9 +213,9 @@ class RenderWidgetHostTouchEmulatorBrowserTest : public ContentBrowserTest {
   RenderWidgetHostViewBase* view() { return view_; }
 
  private:
-  raw_ptr<RenderWidgetHostViewBase> view_;
-  raw_ptr<RenderWidgetHostImpl> host_;
-  raw_ptr<RenderWidgetHostInputEventRouter> router_;
+  raw_ptr<RenderWidgetHostViewBase, DanglingUntriaged> view_;
+  raw_ptr<RenderWidgetHostImpl, DanglingUntriaged> host_;
+  raw_ptr<RenderWidgetHostInputEventRouter, DanglingUntriaged> router_;
 
   base::TimeTicks last_simulated_event_time_;
   const base::TimeDelta simulated_event_time_delta_;
@@ -923,8 +923,16 @@ class RenderWidgetHostDelegatedInkMetadataTest
 
 // Confirm that using the |updateInkTrailStartPoint| JS API results in the
 // |request_points_for_delegated_ink_| flag being set on the RWHVB.
+// TODO(crbug.com/1344023). Flaky on Linux.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_FlagGetsSetFromRenderFrameMetadata \
+  DISABLED_FlagGetsSetFromRenderFrameMetadata
+#else
+#define MAYBE_FlagGetsSetFromRenderFrameMetadata \
+  FlagGetsSetFromRenderFrameMetadata
+#endif
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
-                       FlagGetsSetFromRenderFrameMetadata) {
+                       MAYBE_FlagGetsSetFromRenderFrameMetadata) {
   ASSERT_TRUE(ExecJs(shell()->web_contents(), R"(
       let presenter = null;
       navigator.ink.requestPresenter().then(e => { presenter = e; });
@@ -976,6 +984,49 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
   EXPECT_EQ(
       last_metadata,
       host()->render_frame_metadata_provider()->LastRenderFrameMetadata());
+}
+
+// If the DelegatedInkTrailPresenter creates a metadata that has the same
+// timestamp as the previous one, it does not set the metadata.
+// TODO(crbug.com/1344023). Flaky.
+IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
+                       DISABLED_DuplicateMetadata) {
+  ASSERT_TRUE(ExecJs(shell()->web_contents(), R"(
+      let presenter = null;
+      navigator.ink.requestPresenter().then(e => { presenter = e; });
+      let style = { color: 'green', diameter: 21 };
+      let first_move_event = null;
+
+      window.addEventListener('pointermove' , evt => {
+        if (first_move_event == null) {
+          first_move_event = evt;
+        }
+        presenter.updateInkTrailStartPoint(first_move_event, style);
+      });
+      )"));
+  SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 10, 10, 0,
+                           false);
+  RunUntilInputProcessed(host());
+
+  {
+    const cc::RenderFrameMetadata& last_metadata =
+        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
+    EXPECT_TRUE(last_metadata.delegated_ink_metadata.has_value());
+    EXPECT_TRUE(
+        last_metadata.delegated_ink_metadata.value().delegated_ink_is_hovering);
+  }
+
+  // Confirm metadata has no value when updateInkTrailStartPoint is called
+  // with the same event.
+  SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 20, 20,
+                           blink::WebInputEvent::kLeftButtonDown, false);
+  RunUntilInputProcessed(host());
+
+  {
+    const cc::RenderFrameMetadata& last_metadata =
+        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
+    EXPECT_FALSE(last_metadata.delegated_ink_metadata.has_value());
+  }
 }
 
 }  // namespace content

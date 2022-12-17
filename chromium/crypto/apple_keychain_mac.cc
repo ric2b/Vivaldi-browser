@@ -4,6 +4,7 @@
 
 #include "crypto/apple_keychain.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/synchronization/lock.h"
 #include "crypto/mac_security_services_lock.h"
 
@@ -34,11 +35,17 @@ class OptionalOutParameter {
   operator T() const { return value_; }
 
  private:
-  T* const out_;
+  const raw_ptr<T> out_;
   T value_;
 };
 
 }  // namespace
+
+// Much of the Keychain API was marked deprecated as of the macOS 13 SDK.
+// Removal of its use is tracked in https://crbug.com/1348251 but deprecation
+// warnings are disabled in the meanwhile.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 namespace crypto {
 
@@ -107,5 +114,7 @@ ScopedKeychainUserInteractionAllowed::~ScopedKeychainUserInteractionAllowed() {
     SecKeychainSetUserInteractionAllowed(*was_allowed_);
   }
 }
+
+#pragma clang diagnostic pop
 
 }  // namespace crypto

@@ -10,6 +10,11 @@ typedef NS_ENUM(NSUInteger, TabGridPage) {
   TabGridPageIncognitoTabs = 0,
   TabGridPageRegularTabs = 1,
   TabGridPageRemoteTabs = 2,
+
+  // Vivaldi: Recently closed tabs
+  TabGridPageClosedTabs = 3,
+  // End Vivaldi
+
 };
 
 // Page enumerates the modes of the tab grid.

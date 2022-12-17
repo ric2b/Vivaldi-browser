@@ -15,14 +15,20 @@
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/viz/common/buildflags.h"
 #include "components/viz/common/features.h"
 #include "components/viz/service/display/overlay_strategy_fullscreen.h"
 #include "components/viz/service/display/overlay_strategy_single_on_top.h"
 #include "components/viz/service/display/overlay_strategy_underlay.h"
-#include "components/viz/service/display/overlay_strategy_underlay_cast.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
-#include "gpu/command_buffer/service/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
+#include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/size_conversions.h"
+
+#if BUILDFLAG(ENABLE_CAST_OVERLAY_STRATEGY)
+#include "components/viz/service/display/overlay_strategy_underlay_cast.h"
+#endif
 
 namespace viz {
 
@@ -35,6 +41,7 @@ void ConvertToOzoneOverlaySurface(
     ui::OverlaySurfaceCandidate* ozone_candidate) {
   ozone_candidate->transform = primary_plane.transform;
   ozone_candidate->format = primary_plane.format;
+  ozone_candidate->color_space = primary_plane.color_space;
   ozone_candidate->display_rect = primary_plane.display_rect;
   ozone_candidate->crop_rect = primary_plane.uv_rect;
   ozone_candidate->clip_rect.reset();
@@ -51,6 +58,7 @@ void ConvertToOzoneOverlaySurface(
     ui::OverlaySurfaceCandidate* ozone_candidate) {
   ozone_candidate->transform = overlay_candidate.transform;
   ozone_candidate->format = overlay_candidate.format;
+  ozone_candidate->color_space = overlay_candidate.color_space;
   ozone_candidate->display_rect = overlay_candidate.display_rect;
   ozone_candidate->crop_rect = overlay_candidate.uv_rect;
   ozone_candidate->clip_rect = overlay_candidate.clip_rect;
@@ -61,9 +69,12 @@ void ConvertToOzoneOverlaySurface(
   ozone_candidate->requires_overlay = overlay_candidate.requires_overlay;
   ozone_candidate->priority_hint = overlay_candidate.priority_hint;
   ozone_candidate->rounded_corners = overlay_candidate.rounded_corners;
+  // TODO(crbug.com/1308932): OverlaySurfaceCandidate to SkColor4f
   // That can be a solid color quad.
-  if (!overlay_candidate.is_solid_color)
-    ozone_candidate->background_color = overlay_candidate.color;
+  if (!overlay_candidate.is_solid_color && ozone_candidate->background_color &&
+      overlay_candidate.color) {
+    ozone_candidate->background_color = overlay_candidate.color->toSkColor();
+  }
 }
 
 uint32_t MailboxToUInt32(const gpu::Mailbox& mailbox) {
@@ -120,10 +131,12 @@ OverlayProcessorOzone::OverlayProcessorOzone(
       case OverlayStrategy::kUnderlay:
         strategies_.push_back(std::make_unique<OverlayStrategyUnderlay>(this));
         break;
+#if BUILDFLAG(ENABLE_CAST_OVERLAY_STRATEGY)
       case OverlayStrategy::kUnderlayCast:
         strategies_.push_back(
             std::make_unique<OverlayStrategyUnderlayCast>(this));
         break;
+#endif
       default:
         NOTREACHED();
     }
@@ -229,6 +242,31 @@ void OverlayProcessorOzone::CheckOverlaySupportImpl(
         }
       }
     }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // Some platforms (e.g. AMD) do not provide a dedicated cursor plane, and
+    // the display hardware will need to blit the cursor to the topmost plane.
+    // If the topmost plane is scaled/translated, the cursor will then be
+    // transformed along with it. Thus, we need to reject the topmost candidate
+    // if the buffer size is transformed at all.
+    if (!has_independent_cursor_plane_) {
+      auto highest_zindex_surface =
+          std::max_element(ozone_surface_list.begin(), ozone_surface_list.end(),
+                           [](const auto& a, const auto& b) {
+                             return a.plane_z_order < b.plane_z_order;
+                           });
+      if (highest_zindex_surface != ozone_surface_list.end()) {
+        gfx::RectF display_rect = highest_zindex_surface->display_rect;
+        gfx::Size buffer_size = highest_zindex_surface->buffer_size;
+        if (!display_rect.origin().IsOrigin() ||
+            buffer_size != gfx::ToFlooredSize(display_rect.size())) {
+          int zindex = highest_zindex_surface->plane_z_order;
+          *highest_zindex_surface = ui::OverlaySurfaceCandidate();
+          highest_zindex_surface->plane_z_order = zindex;
+        }
+      }
+    }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
   overlay_candidates_->CheckOverlaySupport(&ozone_surface_list);
 
@@ -258,10 +296,6 @@ void OverlayProcessorOzone::MaybeObserveHardwareCapabilities() {
   }
   tried_observing_hardware_capabilities_ = true;
 
-  // HardwareCapabilities isn't necessary unless attempting multiple overlays.
-  if (max_overlays_config_ <= 1) {
-    return;
-  }
   if (overlay_candidates_) {
     overlay_candidates_->ObserveHardwareCapabilities(
         base::BindRepeating(&OverlayProcessorOzone::ReceiveHardwareCapabilities,
@@ -281,6 +315,8 @@ void OverlayProcessorOzone::ReceiveHardwareCapabilities(
         hardware_capabilities.num_overlay_capable_planes - 1;
     max_overlays_considered_ =
         std::min(max_overlays_supported, max_overlays_config_);
+    has_independent_cursor_plane_ =
+        hardware_capabilities.has_independent_cursor_plane;
 
     UMA_HISTOGRAM_COUNTS_100(
         "Compositing.Display.OverlayProcessorOzone.MaxPlanesSupported",

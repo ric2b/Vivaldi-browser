@@ -5,6 +5,13 @@
 #ifndef CHROME_BROWSER_APP_CONTROLLER_MAC_H_
 #define CHROME_BROWSER_APP_CONTROLLER_MAC_H_
 
+#include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/sessions/core/session_id.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
+
 #if defined(__OBJC__)
 
 #import <AuthenticationServices/AuthenticationServices.h>
@@ -26,6 +33,7 @@
 #endif
 
 class AppControllerProfileObserver;
+class AppControllerNativeThemeObserver;
 @class AppShimMenuController;
 class BookmarkMenuBridge;
 class CommandUpdater;
@@ -42,7 +50,7 @@ class TabMenuBridge;
 enum class AutoUpdateStatus;
 
 namespace ui {
-class ThemeProvider;
+class ColorProvider;
 }  // namespace ui
 
 // The application controller object, created by loading the MainMenu nib.
@@ -59,19 +67,28 @@ class ThemeProvider;
 
   // The profile last used by a Browser. It is this profile that was used to
   // build the user-data specific main menu items.
-  Profile* _lastProfile;
+  raw_ptr<Profile> _lastProfile;
+
+  // NOTE(tomas@vivaldi.com): VB-91558
+  // When there is only one profile loaded: this prevents it from being deleted,
+  // so |_lastProfile| is always valid.
+  std::unique_ptr<ScopedProfileKeepAlive> _lastProfileKeepAlive;
 
   // The ProfileObserver observes the ProfileAttrbutesStorage and gets notified
   // when a profile has been deleted.
   std::unique_ptr<AppControllerProfileObserver>
       _profileAttributesStorageObserver;
 
+  // The NativeThemeObserver observes system-wide theme related settings
+  // change.
+  std::unique_ptr<AppControllerNativeThemeObserver> _nativeThemeObserver;
+
   // Management of the bookmark menu which spans across all windows
   // (and Browser*s). |profileBookmarkMenuBridgeMap_| is a cache that owns one
   // pointer to a BookmarkMenuBridge for each profile. |bookmarkMenuBridge_| is
   // a weak pointer that is updated to match the corresponding cache entry
   // during a profile switch.
-  BookmarkMenuBridge* _bookmarkMenuBridge;
+  raw_ptr<BookmarkMenuBridge> _bookmarkMenuBridge;
   std::map<base::FilePath, std::unique_ptr<BookmarkMenuBridge>>
       _profileBookmarkMenuBridgeMap;
 
@@ -129,6 +146,9 @@ class ThemeProvider;
   // By remembering this bit, Chromium knows whether to enable or disable
   // Cmd+Shift+T and the related "File > Reopen Closed Tab" entry.
   BOOL _tabRestoreWasEnabled;
+
+  // The color provider associated with the last active browser view.
+  raw_ptr<const ui::ColorProvider> _lastActiveColorProvider;
 
 #ifndef VIVALDI_SPARKLE_DISABLED
   SparkleUpdaterDelegate* _sparkle_updater_delegate;
@@ -215,9 +235,11 @@ class ThemeProvider;
 // the original or the incognito profile.
 - (void)setLastProfile:(Profile*)profile;
 
-// Returns the last active ThemeProvider. It is only valid to call this with a
-// last available profile.
-- (const ui::ThemeProvider&)lastActiveThemeProvider;
+// Returns the last active ColorProvider.
+- (const ui::ColorProvider&)lastActiveColorProvider;
+
+// This is called when the system wide light or dark mode changes.
+- (void)nativeThemeDidChange;
 
 // Certain NSMenuItems [Close Tab and Close Window] have different
 // keyEquivalents depending on context. This must be invoked in two locations:
@@ -248,6 +270,7 @@ class ThemeProvider;
 - (void)setVivaldiScrollType:(int)val;
 - (void)swipeWithEvent:(NSEvent*)event;
 - (void)commandDispatchUsingKeyModifiers:(id)sender;
+- (void)vivInitShareMenu:(NSMenuItem*)menuItem;
 
 @end
 
@@ -269,6 +292,67 @@ void CreateGuestProfileIfNeeded();
 // Called when Enterprise startup dialog is close and repost
 // applicationDidFinished notification.
 void EnterpriseStartupDialogClosed();
+
+// Tells RunInSafeProfile() or RunInSpecificSafeProfile() what to do if the
+// profile cannot be loaded from disk.
+enum ProfileLoadFailureBehavior {
+  // Silently fail, and run |callback| with nullptr.
+  kIgnoreOnFailure,
+  // Show the profile picker, and run |callback| with nullptr.
+  kShowProfilePickerOnFailure,
+};
+
+// Tries to load the profile returned by |-safeProfileForNewWindows:|. If it
+// succeeds, calls |callback| with it.
+//
+// |callback| must be valid.
+void RunInLastProfileSafely(base::OnceCallback<void(Profile*)> callback,
+                            ProfileLoadFailureBehavior on_failure);
+
+// Tries to load the profile in |profile_dir|. If it succeeds, calls
+// |callback| with it. If the profile was already loaded, |callback| runs
+// immediately.
+//
+// |callback| must be valid.
+void RunInProfileSafely(const base::FilePath& profile_dir,
+                        base::OnceCallback<void(Profile*)> callback,
+                        ProfileLoadFailureBehavior on_failure);
+
+// Waits for the TabRestoreService to have loaded its entries, then calls
+// OpenWindowWithRestoredTabs().
+//
+// Owned by itself.
+class TabRestorer : public sessions::TabRestoreServiceObserver {
+ public:
+  // Restore the most recent tab in |profile|, e.g. for Cmd+Shift+T.
+  static void RestoreMostRecent(Profile* profile);
+
+  // Restore a specific tab in |profile|, e.g. for a History menu item.
+  // |session_id| can be a |TabRestoreService::Entry::id|, or a
+  // |TabRestoreEntryService::Entry::original_id|.
+  static void RestoreByID(Profile* profile, SessionID session_id);
+
+  ~TabRestorer() override;
+
+  // sessions::TabRestoreServiceObserver:
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
+  void TabRestoreServiceLoaded(sessions::TabRestoreService* service) override;
+
+ private:
+  TabRestorer(Profile* profile, SessionID session_id);
+
+  // Performs the tab restore. Called either in TabRestoreServiceLoaded(), or
+  // directly from RestoreMostRecent()/RestoreByID() if the service was already
+  // loaded.
+  static void DoRestoreTab(Profile* profile, SessionID session_id);
+
+  base::ScopedObservation<sessions::TabRestoreService,
+                          sessions::TabRestoreServiceObserver>
+      observation_{this};
+  raw_ptr<Profile> profile_;
+  SessionID session_id_;
+};
 
 }  // namespace app_controller_mac
 

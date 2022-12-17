@@ -10,6 +10,7 @@
 
 #include "ash/components/login/auth/auth_attempt_state.h"
 #include "ash/components/login/auth/authenticator.h"
+#include "ash/components/login/auth/public/auth_failure.h"
 #include "ash/components/login/auth/safe_mode_delegate.h"
 #include "ash/components/login/auth/test_attempt_state.h"
 #include "base/compiler_specific.h"
@@ -18,7 +19,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chromeos/dbus/cryptohome/UserDataAuth.pb.h"
+#include "chromeos/ash/components/dbus/cryptohome/UserDataAuth.pb.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 

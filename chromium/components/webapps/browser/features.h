@@ -5,11 +5,9 @@
 #ifndef COMPONENTS_WEBAPPS_BROWSER_FEATURES_H_
 #define COMPONENTS_WEBAPPS_BROWSER_FEATURES_H_
 
+#include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
-
-namespace base {
-struct Feature;
-}  // namespace base
 
 namespace webapps {
 namespace features {
@@ -18,10 +16,15 @@ namespace features {
 extern const base::Feature kAddToHomescreenMessaging;
 extern const base::Feature kInstallableAmbientBadgeInfoBar;
 extern const base::Feature kInstallableAmbientBadgeMessage;
+extern const base::FeatureParam<int>
+    kInstallableAmbientBadgeMessage_ThrottleDomainsCapacity;
+extern const base::Feature kWebApkUniqueId;
 #endif  // BUILDFLAG(IS_ANDROID)
 
+extern const base::Feature kCreateShortcutIgnoresManifest;
 extern const base::Feature kSkipServiceWorkerCheckAll;
 extern const base::Feature kSkipServiceWorkerCheckInstallOnly;
+extern const base::Feature kDesktopPWAsDetailedInstallDialog;
 
 bool SkipBannerServiceWorkerCheck();
 bool SkipInstallServiceWorkerCheck();

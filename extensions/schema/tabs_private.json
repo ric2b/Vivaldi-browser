@@ -54,11 +54,6 @@
             "optional": true,
             "description": "Only load the page from cache. Default is false."
           },
-          "enablePlugins": {
-            "type": "boolean",
-            "optional": true,
-            "description": "Enable plugins on this tab. Default is true."
-          },
           "mimeType": {
             "type": "string",
             "optional": true,
@@ -719,12 +714,6 @@
             "type": "integer",
             "name": "windowId",
             "description": "WindowId of the embedder."
-          },
-          {
-            "name": "tabState",
-            "type": "array",
-            "items": { "$ref": "TabAlertState" },
-            "description": "All the active media states for this tab."
           }
         ]
       },

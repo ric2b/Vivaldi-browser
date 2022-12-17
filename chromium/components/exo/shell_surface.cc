@@ -124,8 +124,10 @@ ShellSurface::~ShellSurface() {
   // Client is gone by now, so don't call callback.
   configure_callback_.Reset();
   origin_change_callback_.Reset();
-  if (widget_)
-    ash::WindowState::Get(widget_->GetNativeWindow())->RemoveObserver(this);
+  ash::WindowState* window_state =
+      widget_ ? ash::WindowState::Get(widget_->GetNativeWindow()) : nullptr;
+  if (window_state)
+    window_state->RemoveObserver(this);
 
   for (auto& observer : observers_)
     observer.OnShellSurfaceDestroyed();
@@ -282,6 +284,16 @@ void ShellSurface::RemoveObserver(ShellSurfaceObserver* observer) {
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceDelegate overrides:
 
+void ShellSurface::OnSetFrame(SurfaceFrameType type) {
+  ShellSurfaceBase::OnSetFrame(type);
+
+  if (!widget_)
+    return;
+  widget_->GetNativeWindow()->SetProperty(
+      aura::client::kUseWindowBoundsForShadow,
+      frame_type_ != SurfaceFrameType::SHADOW);
+}
+
 void ShellSurface::OnSetParent(Surface* parent, const gfx::Point& position) {
   views::Widget* parent_widget =
       parent ? views::Widget::GetTopLevelWidgetForNativeView(parent->window())
@@ -307,8 +319,8 @@ void ShellSurface::OnSetParent(Surface* parent, const gfx::Point& position) {
     gfx::Rect widget_bounds = widget_->GetWindowBoundsInScreen();
     gfx::Rect new_widget_bounds(origin_, widget_bounds.size());
     if (new_widget_bounds != widget_bounds) {
-      base::AutoReset<bool> auto_ignore_window_bounds_changes(
-          &ignore_window_bounds_changes_, true);
+      base::AutoReset<bool> notify_bounds_changes(&notify_bounds_changes_,
+                                                  false);
       widget_->SetBounds(new_widget_bounds);
       UpdateSurfaceBounds();
     }
@@ -392,10 +404,18 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
                                          const gfx::Rect& old_bounds,
                                          const gfx::Rect& new_bounds,
                                          ui::PropertyChangeReason reason) {
-  if (!widget_ || !root_surface() || ignore_window_bounds_changes_)
+  if (!widget_ || !root_surface() || !notify_bounds_changes_)
     return;
 
   if (window == widget_->GetNativeWindow()) {
+    auto* window_state = ash::WindowState::Get(window);
+    if (window_state && window_state->is_moving_to_another_display()) {
+      old_screen_bounds_for_pending_move_ = old_bounds;
+      wm::ConvertRectToScreen(window->parent(),
+                              &old_screen_bounds_for_pending_move_);
+      return;
+    }
+
     if (new_bounds.size() == old_bounds.size()) {
       if (!origin_change_callback_.is_null())
         origin_change_callback_.Run(GetClientBoundsInScreen(widget_).origin());
@@ -416,7 +436,10 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
     // being notified of the change before |this|.
     UpdateShadow();
 
-    Configure();
+    // A window state change will send a configuration event. Avoid sending
+    // two configuration events for the same change.
+    if (!window_state_is_changing_)
+      Configure();
   }
 }
 
@@ -424,8 +447,27 @@ void ShellSurface::OnWindowAddedToRootWindow(aura::Window* window) {
   ShellSurfaceBase::OnWindowAddedToRootWindow(window);
   if (window != widget_->GetNativeWindow())
     return;
-  if (!origin_change_callback_.is_null())
-    origin_change_callback_.Run(GetClientBoundsInScreen(widget_).origin());
+  auto* window_state = ash::WindowState::Get(window);
+  if (window_state && window_state->is_moving_to_another_display() &&
+      !old_screen_bounds_for_pending_move_.IsEmpty()) {
+    gfx::Rect new_bounds_in_screen = window->bounds();
+    wm::ConvertRectToScreen(window->parent(), &new_bounds_in_screen);
+
+    gfx::Vector2d delta = new_bounds_in_screen.origin() -
+                          old_screen_bounds_for_pending_move_.origin();
+    old_screen_bounds_for_pending_move_ = gfx::Rect();
+    origin_offset_ -= delta;
+    pending_origin_offset_accumulator_ += delta;
+    UpdateSurfaceBounds();
+    UpdateShadow();
+
+    if (!window_state_is_changing_)
+      Configure();
+
+  } else {
+    if (!origin_change_callback_.is_null())
+      origin_change_callback_.Run(GetClientBoundsInScreen(widget_).origin());
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -434,6 +476,7 @@ void ShellSurface::OnWindowAddedToRootWindow(aura::Window* window) {
 void ShellSurface::OnPreWindowStateTypeChange(
     ash::WindowState* window_state,
     chromeos::WindowStateType old_type) {
+  window_state_is_changing_ = true;
   chromeos::WindowStateType new_type = window_state->GetStateType();
   if (chromeos::IsMinimizedWindowStateType(old_type) ||
       chromeos::IsMinimizedWindowStateType(new_type)) {
@@ -467,14 +510,16 @@ void ShellSurface::OnPreWindowStateTypeChange(
 void ShellSurface::OnPostWindowStateTypeChange(
     ash::WindowState* window_state,
     chromeos::WindowStateType old_type) {
-  chromeos::WindowStateType new_type = window_state->GetStateType();
-  // For exo-client using client-side decoration, window-state information is
-  // needed to toggle the maximize and restore buttons. When the window is
-  // restored, we show a maximized button; otherwise we show a restore button.
-  if (chromeos::IsMaximizedOrFullscreenOrPinnedWindowStateType(old_type) ||
-      chromeos::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
-    Configure();
-  }
+  // Send the new state to the exo-client when the state changes. This is
+  // important for client presentation. For example exo-client using client-side
+  // decoration, window-state information is needed to toggle the maximize and
+  // restore buttons. When the window is restored, we show a maximized button;
+  // otherwise we show a restore button.
+  //
+  // Note that configuration events on bounds change is suppressed during state
+  // change, because it is assumed that a configuration event will always be
+  // sent at the end of a state change.
+  Configure();
 
   if (widget_) {
     UpdateWidgetBounds();
@@ -483,6 +528,7 @@ void ShellSurface::OnPostWindowStateTypeChange(
 
   // Re-enable animations if they were disabled in pre state change handler.
   animations_disabler_.reset();
+  window_state_is_changing_ = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -505,19 +551,40 @@ void ShellSurface::OnWindowActivated(ActivationReason reason,
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurfaceBase overrides:
 
-void ShellSurface::SetWidgetBounds(const gfx::Rect& bounds) {
-  if (bounds == widget_->GetWindowBoundsInScreen())
+gfx::Rect ShellSurface::ComputeAdjustedBounds(const gfx::Rect& bounds) const {
+  DCHECK(widget_);
+  auto min_size = widget_->GetMinimumSize();
+  auto max_size = widget_->GetMaximumSize();
+  gfx::Size size = bounds.size();
+  // use `minimum_size_` as the GetMinimumSize always return min size
+  // bigger or equal to 1x1.
+  if (!minimum_size_.IsEmpty() && !min_size.IsEmpty()) {
+    size.SetToMax(min_size);
+  }
+  if (!max_size.IsEmpty()) {
+    size.SetToMin(max_size);
+  }
+  // Keep the origin instead of center.
+  return gfx::Rect(bounds.origin(), size);
+}
+
+void ShellSurface::SetWidgetBounds(const gfx::Rect& bounds,
+                                   bool adjusted_by_server) {
+  if (bounds == widget_->GetWindowBoundsInScreen() && !adjusted_by_server)
     return;
 
-  // Set |ignore_window_bounds_changes_| as this change to window bounds
-  // should not result in a configure request.
-  DCHECK(!ignore_window_bounds_changes_);
-  ignore_window_bounds_changes_ = true;
+  // Set |notify_bounds_changes_| as this change to window bounds
+  // should not result in a configure request unless the bounds is modified by
+  // the server.
+  DCHECK(notify_bounds_changes_);
+  notify_bounds_changes_ = adjusted_by_server;
+
+  // TODO(oshima): Probably ignore while dragging.
 
   widget_->SetBounds(bounds);
   UpdateSurfaceBounds();
 
-  ignore_window_bounds_changes_ = false;
+  notify_bounds_changes_ = true;
 }
 
 bool ShellSurface::OnPreWidgetCommit() {

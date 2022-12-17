@@ -96,8 +96,6 @@ static_library("browser") {
     "http_auth_observer.h",
     "http_password_store_migrator.cc",
     "http_password_store_migrator.h",
-    "import/password_importer.cc",
-    "import/password_importer.h",
     "insecure_credentials_helper.cc",
     "insecure_credentials_helper.h",
     "insecure_credentials_table.cc",
@@ -130,6 +128,7 @@ static_library("browser") {
     "password_change_success_tracker.h",
     "password_change_success_tracker_impl.cc",
     "password_change_success_tracker_impl.h",
+    "password_check_referrer_android.h",
     "password_feature_manager.h",
     "password_feature_manager_impl.cc",
     "password_feature_manager_impl.h",
@@ -249,14 +248,13 @@ static_library("browser") {
     "ui/credential_ui_entry.cc",
     "ui/credential_ui_entry.h",
     "ui/credential_utils.h",
-    "ui/export_flow.h",
     "ui/export_progress_status.h",
-    "ui/import_flow.h",
     "ui/insecure_credentials_manager.cc",
     "ui/insecure_credentials_manager.h",
     "ui/password_check_referrer.cc",
     "ui/password_check_referrer.h",
-    "ui/plaintext_reason.h",
+    "ui/password_undo_helper.cc",
+    "ui/password_undo_helper.h",
     "ui/post_save_compromised_helper.cc",
     "ui/post_save_compromised_helper.h",
     "ui/saved_passwords_presenter.cc",
@@ -281,12 +279,12 @@ static_library("browser") {
   deps = [
     ":affiliation",
     ":affiliation_proto",
-    ":csv",
     ":hash_password_manager",
     ":password_generator",
     ":password_hash_data",
     "//base",
     "//base:i18n",
+    "//build:branding_buildflags",
     "//build:chromeos_buildflags",
     "//components/autofill/core/browser",
     "//components/autofill/core/browser/proto",
@@ -298,6 +296,7 @@ static_library("browser") {
     "//components/keyed_service/core",
     "//components/os_crypt",
     "//components/password_manager/core/browser/form_parsing",
+    "//components/password_manager/core/browser/import:csv",
     "//components/password_manager/core/browser/leak_detection:leak_detection",
     "//components/password_manager/core/browser/leak_detection:leak_detection_interface_headers",
     "//components/password_manager/core/common",
@@ -313,6 +312,7 @@ static_library("browser") {
     "//components/strings:components_strings",
     "//components/sync",
     "//components/sync_preferences",
+    "//components/undo",
     "//components/url_formatter",
     "//components/variations/net",
     "//components/version_info:channel",
@@ -341,24 +341,20 @@ static_library("browser") {
       "password_store_backend_migration_decorator.h",
       "password_store_proxy_backend.cc",
       "password_store_proxy_backend.h",
+      "unified_password_manager_proto_utils.cc",
+      "unified_password_manager_proto_utils.h",
     ]
     deps += [ ":unified_password_manager_proto" ]
   }
 
   if (!is_ios) {
     sources += [
-      "capabilities_service.h",
-      "capabilities_service_impl.cc",
-      "capabilities_service_impl.h",
       "http_credentials_cleaner.cc",
       "http_credentials_cleaner.h",
       "password_scripts_fetcher.h",
       "password_scripts_fetcher_impl.cc",
       "password_scripts_fetcher_impl.h",
-      "saved_passwords_capabilities_fetcher.cc",
-      "saved_passwords_capabilities_fetcher.h",
     ]
-    deps += [ "//components/autofill_assistant/browser/public" ]
   }
 
   if (!is_android && !is_ios) {
@@ -366,7 +362,10 @@ static_library("browser") {
       "ui/weak_check_utility.cc",
       "ui/weak_check_utility.h",
     ]
-    deps += [ "//third_party/zxcvbn-cpp" ]
+    deps += [
+      "//components/password_manager/services/password_strength:service",
+      "//third_party/zxcvbn-cpp",
+    ]
   }
 
   if ((is_posix && !is_apple) || is_fuchsia) {
@@ -393,48 +392,30 @@ static_library("browser") {
   }
 }
 
-# TODO(crbug.com/974822): Ideally, all of the "import/" subdirectory would be
-# in a separate BUILD.gn file inside that subdirectory. However, this requires
-# the big "browser" target here to be split in multiple sub-targets to avoid
-# circular dependencies. For now, at least the files from "import" which can be
-# separated are made so, to limit the growth of this technical debt.
-static_library("csv") {
-  sources = [
-    "import/csv_field_parser.cc",
-    "import/csv_field_parser.h",
-    "import/csv_password.cc",
-    "import/csv_password.h",
-    "import/csv_password_iterator.cc",
-    "import/csv_password_iterator.h",
-    "import/csv_password_sequence.cc",
-    "import/csv_password_sequence.h",
-  ]
-  public_deps = [
-    ":password_form",
-    "//base",
-  ]
-
-  deps = [
-    ":affiliation",
-    "//components/password_manager/core/browser/form_parsing",
-    "//url",
-  ]
+source_set("capabilities") {
+  if (!is_ios) {
+    sources = [
+      "capabilities_service.h",
+      "capabilities_service_impl.cc",
+      "capabilities_service_impl.h",
+      "saved_passwords_capabilities_fetcher.cc",
+      "saved_passwords_capabilities_fetcher.h",
+    ]
+    deps = [
+      ":browser",
+      "//base",
+      "//components/autofill_assistant/browser/public",
+      "//components/password_manager/core/common:features",
+      "//components/password_manager/services/csv_password:service",
+      "//url",
+    ]
+  }
 }
 
-source_set("csv_unittests") {
-  testonly = true
+source_set("import_results") {
   sources = [
-    "import/csv_field_parser_unittest.cc",
-    "import/csv_password_iterator_unittest.cc",
-    "import/csv_password_sequence_unittest.cc",
-    "import/csv_password_unittest.cc",
-  ]
-  deps = [
-    ":csv",
-    "//base/test:test_support",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//url",
+    "ui/import_results.cc",
+    "ui/import_results.h",
   ]
 }
 
@@ -475,6 +456,7 @@ if (is_android) {
     sources = [
       "android_backend_error.h",
       "manage_passwords_referrer.h",
+      "password_check_referrer_android.h",
       "password_manager_metrics_util.h",
       "password_manager_setting.h",
     ]
@@ -544,6 +526,8 @@ static_library("test_support") {
     "mock_password_manager_settings_service.h",
     "mock_password_reuse_manager.cc",
     "mock_password_reuse_manager.h",
+    "mock_password_scripts_fetcher.cc",
+    "mock_password_scripts_fetcher.h",
     "mock_password_store_backend.cc",
     "mock_password_store_backend.h",
     "mock_password_store_interface.cc",
@@ -684,7 +668,6 @@ source_set("unit_tests") {
     "hsts_query_unittest.cc",
     "http_auth_manager_unittest.cc",
     "http_password_store_migrator_unittest.cc",
-    "import/password_importer_unittest.cc",
     "insecure_credentials_helper_unittest.cc",
     "insecure_credentials_table_unittest.cc",
     "leak_detection_delegate_helper_unittest.cc",
@@ -737,6 +720,7 @@ source_set("unit_tests") {
     "sync_credentials_filter_unittest.cc",
     "ui/bulk_leak_check_service_adapter_unittest.cc",
     "ui/insecure_credentials_manager_unittest.cc",
+    "ui/password_undo_helper_unittest.cc",
     "ui/post_save_compromised_helper_unittest.cc",
     "ui/saved_passwords_presenter_unittest.cc",
     "vote_uploads_test_matchers.h",
@@ -750,6 +734,7 @@ source_set("unit_tests") {
       "password_store_backend_metrics_recorder_unittest.cc",
       "password_store_backend_migration_decorator_unittest.cc",
       "password_store_proxy_backend_unittest.cc",
+      "unified_password_manager_proto_utils_unittest.cc",
     ]
   }
   if (is_ios) {
@@ -778,14 +763,14 @@ source_set("unit_tests") {
   deps = [
     ":affiliation",
     ":affiliation_unittests",
-    ":csv",
-    ":csv_unittests",
+    ":capabilities",
     ":hash_password_manager",
     ":password_generator",
     ":password_hash_data",
     ":test_support",
     ":unit_tests_bundle_data",
     "//base/test:test_support",
+    "//build:branding_buildflags",
     "//build:chromeos_buildflags",
     "//components/autofill/core/browser:test_support",
     "//components/autofill/core/browser/proto",
@@ -799,6 +784,8 @@ source_set("unit_tests") {
     "//components/password_manager/core/browser/form_parsing:form_parsing",
     "//components/password_manager/core/browser/form_parsing:unit_tests",
     "//components/password_manager/core/browser/form_parsing/fuzzer:unit_tests",
+    "//components/password_manager/core/browser/import:csv",
+    "//components/password_manager/core/browser/import:csv_unit_tests",
     "//components/password_manager/core/browser/leak_detection",
     "//components/password_manager/core/browser/leak_detection:leak_detection_interface_headers",
     "//components/password_manager/core/browser/leak_detection:test_support",
@@ -834,22 +821,16 @@ source_set("unit_tests") {
 
   if (!is_ios) {
     deps += [
-      "//components/autofill_assistant/browser/public:public",
+      "//components/autofill_assistant/browser/public",
       "//components/autofill_assistant/browser/public:unit_test_support",
+      "//components/password_manager/core/browser/import:importer",
+      "//components/password_manager/core/browser/import:importer_unit_tests",
     ]
   }
-}
 
-fuzzer_test("csv_reader_fuzzer") {
-  sources = [ "import/password_csv_reader_fuzzer.cc" ]
-  deps = [
-    ":browser",
-    ":csv",
-    "//base:i18n",
-    "//components/autofill/core/common:common",
-  ]
-  seed_corpus = "import/password_csv_reader_corpus"
-  dict = "import/password_csv_reader_fuzzer.dict"
+  if (is_android) {
+    deps += [ "//components/password_manager/core/browser:unified_password_manager_proto" ]
+  }
 }
 
 if (use_libfuzzer) {

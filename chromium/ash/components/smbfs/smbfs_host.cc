@@ -107,9 +107,9 @@ void SmbFsHost::Unmount(SmbFsHost::UnmountCallback callback) {
 }
 
 void SmbFsHost::OnUnmountDone(SmbFsHost::UnmountCallback callback,
-                              chromeos::MountError result) {
-  LOG_IF(ERROR, result != chromeos::MountError::MOUNT_ERROR_NONE)
-      << "Could not unmount smbfs share: " << static_cast<int>(result);
+                              ash::MountError result) {
+  LOG_IF(ERROR, result != ash::MountError::kNone)
+      << "Could not unmount smbfs share: " << result;
   std::move(callback).Run(result);
 }
 

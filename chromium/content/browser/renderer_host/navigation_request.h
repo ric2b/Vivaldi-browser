@@ -23,7 +23,7 @@
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/browser/navigation_subresource_loader_params.h"
-#include "content/browser/prerender/prerender_host.h"
+#include "content/browser/preloading/prerender/prerender_host.h"
 #include "content/browser/renderer_host/commit_deferring_condition_runner.h"
 #include "content/browser/renderer_host/cross_origin_opener_policy_status.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
@@ -55,7 +55,6 @@
 #include "net/dns/public/resolve_error_info.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/content_security_policy/csp_context.h"
-#include "services/network/public/cpp/origin_policy.h"
 #include "services/network/public/mojom/blocked_by_response_reason.mojom-shared.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
@@ -80,7 +79,6 @@ class TracedValue;
 }  // namespace base
 
 namespace network {
-class ResourceRequestBody;
 struct URLLoaderCompletionStatus;
 }  // namespace network
 
@@ -113,6 +111,7 @@ class CONTENT_EXPORT NavigationRequest
       public NavigationThrottleRunner::Delegate,
       public CommitDeferringConditionRunner::Delegate,
       public FencedFrameURLMapping::MappingResultObserver,
+      public mojom::NavigationRendererCancellationListener,
       private RenderProcessHostObserver,
       private network::mojom::CookieAccessObserver {
  public:
@@ -175,13 +174,16 @@ class CONTENT_EXPORT NavigationRequest
     DID_COMMIT_ERROR_PAGE,
   };
 
-  // The SiteInstance currently associated with the navigation. Note that the
+  // The RenderFrameHost currently associated with the navigation. Note that the
   // final value will only be known when the response is received, or the
-  // navigation fails, as server redirects can modify the SiteInstance to use
+  // navigation fails, as server redirects can modify the RenderFrameHost to use
   // for the navigation.
-  enum class AssociatedSiteInstanceType {
+  enum class AssociatedRenderFrameHostType {
     NONE = 0,
+    // The navigation reuses the current RenderFrameHost.
     CURRENT,
+    // The navigation uses a new RenderFrameHost, the speculative
+    // RenderFrameHost.
     SPECULATIVE,
   };
 
@@ -219,11 +221,11 @@ class CONTENT_EXPORT NavigationRequest
       const std::string& extra_headers,
       FrameNavigationEntry* frame_entry,
       NavigationEntryImpl* entry,
-      const scoped_refptr<network::ResourceRequestBody>& post_body,
+      bool is_form_submission,
       std::unique_ptr<NavigationUIData> navigation_ui_data,
       const absl::optional<blink::Impression>& impression,
       bool is_pdf,
-      absl::optional<bool> is_fenced_frame_opaque_url = absl::nullopt);
+      bool is_embedder_initiated_fenced_frame_navigation = false);
 
   // Creates a request for a renderer-initiated navigation.
   static std::unique_ptr<NavigationRequest> CreateRendererInitiated(
@@ -238,7 +240,9 @@ class CONTENT_EXPORT NavigationRequest
       mojo::PendingAssociatedRemote<mojom::NavigationClient> navigation_client,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
-      std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker);
+      std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker,
+      mojo::PendingReceiver<mojom::NavigationRendererCancellationListener>
+          renderer_cancellation_listener);
 
   // Creates a NavigationRequest for synchronous navigation that have committed
   // in the renderer process. Those are:
@@ -328,7 +332,7 @@ class CONTENT_EXPORT NavigationRequest
   bool HasSubframeNavigationEntryCommitted() override;
   bool DidReplaceEntry() override;
   bool ShouldUpdateHistory() override;
-  const GURL& GetPreviousMainFrameURL() override;
+  const GURL& GetPreviousPrimaryMainFrameURL() override;
   net::IPEndPoint GetSocketAddress() override;
   const net::HttpRequestHeaders& GetRequestHeaders() override;
   void RemoveRequestHeader(const std::string& header_name) override;
@@ -390,6 +394,10 @@ class CONTENT_EXPORT NavigationRequest
   const base::android::JavaRef<jobject>& GetJavaNavigationHandle() override;
 #endif
   base::SafeRef<NavigationHandle> GetSafeRef() override;
+  bool ExistingDocumentWasDiscarded() const override;
+
+  // mojom::NavigationRendererCancellationListener implementation
+  void RendererCancellationWindowEnded() override;
 
   void RegisterCommitDeferringConditionForTesting(
       std::unique_ptr<CommitDeferringCondition> condition);
@@ -443,11 +451,11 @@ class CONTENT_EXPORT NavigationRequest
 
   bool from_begin_navigation() const { return from_begin_navigation_; }
 
-  AssociatedSiteInstanceType associated_site_instance_type() const {
-    return associated_site_instance_type_;
+  AssociatedRenderFrameHostType associated_rfh_type() const {
+    return associated_rfh_type_;
   }
-  void set_associated_site_instance_type(AssociatedSiteInstanceType type) {
-    associated_site_instance_type_ = type;
+  void set_associated_rfh_type(AssociatedRenderFrameHostType type) {
+    associated_rfh_type_ = type;
   }
 
   void set_was_discarded() { commit_params_->was_discarded = true; }
@@ -545,8 +553,8 @@ class CONTENT_EXPORT NavigationRequest
     return throttle_runner_.get();
   }
 
-  // Simulates renderer aborting navigation.
-  void RendererAbortedNavigationForTesting();
+  // Simulates renderer cancelling the navigation.
+  void RendererRequestedNavigationCancellationForTesting();
 
   typedef base::OnceCallback<bool(NavigationThrottle::ThrottleCheckResult)>
       ThrottleChecksFinishedCallback;
@@ -628,6 +636,22 @@ class CONTENT_EXPORT NavigationRequest
     ready_to_commit_callback_for_testing_ = std::move(callback);
   }
 
+  void set_renderer_cancellation_window_ended_callback(
+      base::OnceClosure callback) {
+    DCHECK(!renderer_cancellation_window_ended());
+    renderer_cancellation_window_ended_callback_ = std::move(callback);
+  }
+
+  bool renderer_cancellation_window_ended() const {
+    return renderer_cancellation_window_ended_;
+  }
+
+  // Returns true if this navigation should wait for the renderer-initiated
+  // navigation cancellation window to end before committing, and returns false
+  // otherwise. See comment for `renderer_cancellation_listener_` for more
+  // details.
+  bool ShouldWaitForRendererCancellationWindowToEnd();
+
   // Sets the READY_TO_COMMIT -> DID_COMMIT timeout. Resets the timeout to the
   // default value if |timeout| is zero.
   static void SetCommitTimeoutForTesting(const base::TimeDelta& timeout);
@@ -693,10 +717,10 @@ class CONTENT_EXPORT NavigationRequest
   void SetRequiredCSP(network::mojom::ContentSecurityPolicyPtr csp);
   network::mojom::ContentSecurityPolicyPtr TakeRequiredCSP();
 
-  bool anonymous() const { return anonymous_; }
+  bool is_anonymous() const { return is_anonymous_; }
 
-  bool is_fenced_frame_opaque_url() const {
-    return is_fenced_frame_opaque_url_;
+  bool is_target_fenced_frame_root_originating_from_opaque_url() const {
+    return is_target_fenced_frame_root_originating_from_opaque_url_;
   }
 
   // Returns a pointer to the policies copied from the navigation initiator.
@@ -768,6 +792,13 @@ class CONTENT_EXPORT NavigationRequest
   // called after a response has been delivered for processing, or after the
   // navigation fails with an error page.
   url::Origin GetOriginToCommit();
+
+  // Same as `GetOriginToCommit()`, except that includes information about how
+  // the origin gets calculated, to help debug if the browser-side calculated
+  // origin for this navigation differs from the origin calculated on the
+  // renderer side.
+  // TODO(https://crbug.com/1220238): Remove this.
+  std::pair<url::Origin, std::string> GetOriginToCommitWithDebugInfo();
 
   // If this navigation fails with net::ERR_BLOCKED_BY_CLIENT, act as if it were
   // cancelled by the user and do not commit an error page.
@@ -846,6 +877,10 @@ class CONTENT_EXPORT NavigationRequest
   // |commit_params_|, which is always set to the first destination URL for this
   // navigation.
   const GURL& GetOriginalRequestURL();
+
+  // The previous main frame URL. This may be empty if there was no last
+  // committed entry.
+  const GURL& GetPreviousMainFrameURL() const;
 
   // This is the same as |NavigationHandle::IsServedFromBackForwardCache|, but
   // adds a const qualifier.
@@ -982,7 +1017,9 @@ class CONTENT_EXPORT NavigationRequest
       int initiator_process_id,
       bool was_opener_suppressed,
       bool is_pdf,
-      absl::optional<bool> is_fenced_frame_opaque_url = absl::nullopt);
+      bool is_embedder_initiated_fenced_frame_navigation = false,
+      mojo::PendingReceiver<mojom::NavigationRendererCancellationListener>
+          renderer_cancellation_listener = mojo::NullReceiver());
 
   // Checks if this navigation may activate a prerendered page. If it's
   // possible, schedules to start running CommitDeferringConditions for
@@ -1005,11 +1042,8 @@ class CONTENT_EXPORT NavigationRequest
   // Called from `FencedFrameURLMapping` when the mapping decision is made, and
   // resume the deferred navigation.
   void OnFencedFrameURLMappingComplete(
-      absl::optional<GURL> mapped_url,
-      absl::optional<AdAuctionData> ad_auction_data,
-      absl::optional<FencedFrameURLMapping::PendingAdComponentsMap>
-          pending_ad_components_map,
-      ReportingMetadata& reporting_metadata) override;
+      const absl::optional<FencedFrameURLMapping::FencedFrameProperties>&
+          properties) override;
 
   // Called from BeginNavigation(), OnPrerenderingActivationChecksComplete(),
   // or OnFencedFrameURLMappingComplete().
@@ -1019,17 +1053,24 @@ class CONTENT_EXPORT NavigationRequest
   // Origin-Agent-Cluster header, and if so opts in the origin to be isolated.
   void CheckForIsolationOptIn(const GURL& url);
 
-  // Use to manually opt an origin into Origin-keyed Agent Cluster (OAC) in the
-  // event that process-isolation isn't being used for OAC.
+  // Use to manually set Origin-keyed Agent Cluster (OAC) isolation state in
+  // the event that process-isolation isn't being used for OAC, or
+  // OAC-by-default means that we're tracking explicit opt-out requests (which
+  // by definition are same-process).
   // TODO(wjmaclean): When we switch to using separate SiteInstances even for
   // same-process OAC, then this function can be removed.
-  void AddSameProcessOriginAgentClusterOptInIfNecessary(
+  void AddSameProcessOriginAgentClusterStateIfNecessary(
       const IsolationContext& isolation_context,
       const GURL& url);
 
   // Returns whether this navigation request is requesting opt-in
   // origin-isolation.
-  bool IsOptInIsolationRequested();
+  bool IsOriginAgentClusterOptInRequested();
+
+  // Returns whether this navigation request is requesting opt-out from
+  // origin-isolation. Always returns false if
+  // AreOriginAgentClustersEnabledByDefault() is false.
+  bool IsOriginAgentClusterOptOutRequested();
 
   // Returns whether defaulting to origin-keyed agent cluster (without
   // necessarily an origin-keyed process) is enabled.
@@ -1232,8 +1273,9 @@ class CONTENT_EXPORT NavigationRequest
   // renderer process.
   void UpdateCommitNavigationParamsHistory();
 
-  // Called when an ongoing renderer-initiated navigation is aborted.
-  void OnRendererAbortedNavigation();
+  // Called when the renderer requesting a navigation cancellation, or because
+  // the renderer crashed.
+  void OnRendererRequestedNavigationCancellation();
 
   // Binds the given error_handler to be called when an interface disconnection
   // happens on the renderer side.
@@ -1407,6 +1449,11 @@ class CONTENT_EXPORT NavigationRequest
   // If they aren't, this returns false and emits a crash report.
   bool CoopCoepSanityCheck();
 
+  // Checks if all of the permissions policies that a fenced frame requires to
+  // be enabled for its origin are enabled. If not, it logs a console message
+  // and returns false.
+  bool CheckPermissionsPoliciesForFencedFrames(const url::Origin&);
+
   // Returns the user-agent override, or an empty string if one isn't set.
   std::string GetUserAgentOverride();
 
@@ -1500,6 +1547,17 @@ class CONTENT_EXPORT NavigationRequest
   // the origin with information from the final frame host. Can be called only
   // after the final response is received or ready.
   url::Origin GetOriginForURLLoaderFactoryWithFinalFrameHost();
+
+  // These functions are the same as their non-WithDebugInfo counterparts,
+  // except that they include information about how the origin gets calculated,
+  // to help debug if the browser-side calculated origin for this navigation
+  // differs from the origin calculated on the renderer side.
+  // TODO(https://crbug.com/1220238): Remove this.
+  std::pair<url::Origin, std::string>
+  GetOriginForURLLoaderFactoryWithoutFinalFrameHostWithDebugInfo(
+      network::mojom::WebSandboxFlags sandbox_flags);
+  std::pair<url::Origin, std::string>
+  GetOriginForURLLoaderFactoryWithFinalFrameHostWithDebugInfo();
 
   // Computes the web-exposed isolation information based on `coop_status_` and
   // current `frame_tree_node_` info.
@@ -1598,9 +1656,13 @@ class CONTENT_EXPORT NavigationRequest
   // Whether devtools overrides were applied on the User-Agent request header.
   bool devtools_user_agent_override_ = false;
 
-  // The type of SiteInstance associated with this navigation.
-  AssociatedSiteInstanceType associated_site_instance_type_ =
-      AssociatedSiteInstanceType::NONE;
+  // Whether devtools overrides were applied on the Accept-Language request
+  // header.
+  bool devtools_accept_language_override_ = false;
+
+  // The type of RenderFrameHost associated with this navigation.
+  AssociatedRenderFrameHostType associated_rfh_type_ =
+      AssociatedRenderFrameHostType::NONE;
 
   // Stores the SiteInstance created on redirects to check if there is an
   // existing RenderProcessHost that can commit the navigation so that the
@@ -1888,7 +1950,7 @@ class CONTENT_EXPORT NavigationRequest
   // Whether the document loaded by this navigation will be committed inside an
   // anonymous iframe. Documents loaded inside anonymous iframes get partitioned
   // storage and use a transient NetworkIsolationKey.
-  const bool anonymous_;
+  const bool is_anonymous_;
 
   // Non-nullopt from construction until |TakePolicyContainerHost()| is called.
   absl::optional<NavigationPolicyContainerBuilder> policy_container_builder_;
@@ -2020,12 +2082,38 @@ class CONTENT_EXPORT NavigationRequest
   // Indicates that this navigation is for PDF content in a renderer.
   bool is_pdf_ = false;
 
-  // Indicates whether the fenced frame is navigated to an opaque url. This flag
-  // can only change when the embedder navigates the fenced frame. Any
-  // subsequent navigation from within the fenced frame tree will keep the same
-  // flag. Note that this flag is only relevant for fenced frames based on
-  // MPArch.
-  const bool is_fenced_frame_opaque_url_ = false;
+  // Only for fenced frames based on MPArch:
+  // Indicates that this navigation is an embedder-initiated navigation of a
+  // fenced frame root. That is to say, the navigation is caused by a `src`
+  // attribute mutation on the <fencedframe> element, which cannot be performed
+  // from inside the fenced frame tree.
+  const bool is_embedder_initiated_fenced_frame_navigation_ = false;
+
+  // Only for fenced frames based on MPArch:
+  // Indicates that this navigation is to an opaque url (urn:uuid). This value
+  // may only be true when `is_embedder_initiated_fenced_frame_navigation` is
+  // true.
+  const bool is_embedder_initiated_fenced_frame_opaque_url_navigation_ = false;
+
+  // Only for fenced frames based on MPArch:
+  // Indicates that the target of this navigation is the root of a fenced frame
+  // tree whose most recent embedder-initiated navigation was to an opaque URL
+  // (urn:uuid). The most recent navigation may be the current
+  // NavigationRequest.
+  const bool is_target_fenced_frame_root_originating_from_opaque_url_ = false;
+
+  // On every embedder-initiated navigation of a fenced frame, we reinitialize
+  // the fenced frame properties.
+  // If the embedder-initiated navigation is to an opaque url (urn:uuid), i.e.
+  // `is_embedder_initiated_fenced_frame_opaque_url_navigation_`, then
+  // this will be non-empty (containing the properties bound to the opaque url),
+  // and we will store this new set of fenced frame properties in the fenced
+  // frame root FrameTreeNode.
+  // If the embedder-initiated navigation is not to an opaque url, then
+  // this will be nullopt, and we will install it in order to clear the old
+  // fenced frame properties.
+  absl::optional<FencedFrameURLMapping::FencedFrameProperties>
+      fenced_frame_properties_;
 
   // If this navigation is a load in a fenced frame of a URN URL that resulted
   // from an interest group auction, this contains some information about the
@@ -2065,6 +2153,23 @@ class CONTENT_EXPORT NavigationRequest
   bool force_new_browsing_instance_ = false;
 
   scoped_refptr<NavigationOrDocumentHandle> navigation_or_document_handle_;
+
+  // Renderer-initiated navigations can be canceled until the JS task that
+  // started the navigation finishes. See RendererCancellationThrottle for more
+  // details. The window of time in which the renderer can cancel the navigation
+  // is called the "cancellation window" and the navigation can't commit until
+  // the cancellation window ended, which `renderer_cancellation_listener_`
+  // listens to. `renderer_cancellation_window_ended_` is true if the
+  // cancellation window had ended. If
+  // `renderer_cancellation_window_ended_callback_` is set, the navigation is
+  // being deferred by RendererCancellationThrottle to wait for the cancellation
+  // window to finish or for the navigation to get canceled. If it is set when
+  // the cancellation window ended, the callback will be run, to resume the
+  // navigation.
+  mojo::Receiver<mojom::NavigationRendererCancellationListener>
+      renderer_cancellation_listener_{this};
+  bool renderer_cancellation_window_ended_ = false;
+  base::OnceClosure renderer_cancellation_window_ended_callback_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_{this};
 };

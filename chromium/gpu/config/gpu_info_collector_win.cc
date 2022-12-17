@@ -35,9 +35,11 @@
 #include "base/win/windows_version.h"
 #include "build/branding_buildflags.h"
 #include "gpu/config/gpu_util.h"
-#include "ui/gl/direct_composition_surface_win.h"
+#include "ui/gl/direct_composition_support.h"
 #include "ui/gl/gl_angle_util_win.h"
+#include "ui/gl/gl_display.h"
 #include "ui/gl/gl_surface_egl.h"
+#include "ui/gl/gl_utils.h"
 
 namespace gpu {
 
@@ -182,26 +184,22 @@ bool GetAMDSwitchableInfo(bool* is_switchable,
 // finalized because this function depends on GL is ANGLE's GLES or not.
 void CollectHardwareOverlayInfo(OverlayInfo* overlay_info) {
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE) {
-    overlay_info->direct_composition =
-        gl::DirectCompositionSurfaceWin::IsDirectCompositionSupported();
-    overlay_info->supports_overlays =
-        gl::DirectCompositionSurfaceWin::AreOverlaysSupported();
+    overlay_info->direct_composition = gl::DirectCompositionSupported();
+    overlay_info->supports_overlays = gl::DirectCompositionOverlaysSupported();
     overlay_info->nv12_overlay_support = FlagsToOverlaySupport(
         overlay_info->supports_overlays,
-        gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
-            DXGI_FORMAT_NV12));
+        gl::GetDirectCompositionOverlaySupportFlags(DXGI_FORMAT_NV12));
     overlay_info->yuy2_overlay_support = FlagsToOverlaySupport(
         overlay_info->supports_overlays,
-        gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
-            DXGI_FORMAT_YUY2));
-    overlay_info->bgra8_overlay_support = FlagsToOverlaySupport(
-        overlay_info->supports_overlays,
-        gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
-            DXGI_FORMAT_B8G8R8A8_UNORM));
-    overlay_info->rgb10a2_overlay_support = FlagsToOverlaySupport(
-        overlay_info->supports_overlays,
-        gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(
-            DXGI_FORMAT_R10G10B10A2_UNORM));
+        gl::GetDirectCompositionOverlaySupportFlags(DXGI_FORMAT_YUY2));
+    overlay_info->bgra8_overlay_support =
+        FlagsToOverlaySupport(overlay_info->supports_overlays,
+                              gl::GetDirectCompositionOverlaySupportFlags(
+                                  DXGI_FORMAT_B8G8R8A8_UNORM));
+    overlay_info->rgb10a2_overlay_support =
+        FlagsToOverlaySupport(overlay_info->supports_overlays,
+                              gl::GetDirectCompositionOverlaySupportFlags(
+                                  DXGI_FORMAT_R10G10B10A2_UNORM));
   }
 }
 
@@ -398,14 +396,25 @@ void GetGpuSupportedD3D12Version(uint32_t& d3d12_feature_level,
 
   // Query the maximum supported shader model version.
   if (d3d12_device) {
-    D3D12_FEATURE_DATA_SHADER_MODEL shader_model_data = {};
-    // TODO(crbug.com/1312519): Setting the HighestShaderModel to 6_7 will cause
-    // failure in CheckFeatureSupport(). Use D3D_SHADER_MODEL_6_6 for now.
-    shader_model_data.HighestShaderModel = D3D_SHADER_MODEL_6_6;
-    if (SUCCEEDED(d3d12_device->CheckFeatureSupport(
-            D3D12_FEATURE_SHADER_MODEL, &shader_model_data,
-            sizeof(shader_model_data)))) {
-      highest_shader_model_version = shader_model_data.HighestShaderModel;
+    // As per the documentation, CheckFeatureSupport will return E_INVALIDARG if
+    // the shader model is not known by the current runtime, so we loop in
+    // decreasing shader model version to determine the highest supported model:
+    // https://docs.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_feature_data_shader_model.
+    const D3D_SHADER_MODEL shader_models[] = {
+        D3D_SHADER_MODEL_6_7, D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5,
+        D3D_SHADER_MODEL_6_4, D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2,
+        D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0, D3D_SHADER_MODEL_5_1,
+    };
+
+    for (auto model : shader_models) {
+      D3D12_FEATURE_DATA_SHADER_MODEL shader_model_data = {};
+      shader_model_data.HighestShaderModel = model;
+      if (SUCCEEDED(d3d12_device->CheckFeatureSupport(
+              D3D12_FEATURE_SHADER_MODEL, &shader_model_data,
+              sizeof(shader_model_data)))) {
+        highest_shader_model_version = shader_model_data.HighestShaderModel;
+        break;
+      }
     }
   }
 }
@@ -638,7 +647,7 @@ void RecordGpuSupportedDx12VersionHistograms(
       ConvertToHistogramFeatureLevel(d3d12_feature_level));
 
   UMA_HISTOGRAM_ENUMERATION(
-      "GPU.D3D12HighestShaderModel",
+      "GPU.D3D12HighestShaderModel2",
       ConvertToHistogramShaderVersion(highest_shader_model_version));
 }
 
@@ -714,7 +723,7 @@ bool CollectContextGraphicsInfo(GPUInfo* gpu_info) {
 
   DCHECK(gpu_info);
 
-  if (!CollectGraphicsInfoGL(gpu_info))
+  if (!CollectGraphicsInfoGL(gpu_info, gl::GetDefaultDisplayEGL()))
     return false;
 
   // ANGLE's renderer strings are of the form:

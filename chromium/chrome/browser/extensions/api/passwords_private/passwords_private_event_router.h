@@ -66,17 +66,20 @@ class PasswordsPrivateEventRouter : public KeyedService {
   // Notifies listeners about a change to the information about compromised
   // credentials.
   void OnCompromisedCredentialsChanged(
-      std::vector<api::passwords_private::InsecureCredential>
+      std::vector<api::passwords_private::PasswordUiEntry>
           compromised_credentials);
 
   // Notifies listeners about a change to the information about weak
   // credentials.
   void OnWeakCredentialsChanged(
-      std::vector<api::passwords_private::InsecureCredential> weak_credentials);
+      std::vector<api::passwords_private::PasswordUiEntry> weak_credentials);
 
   // Notifies listeners about a change to the status of the password check.
   void OnPasswordCheckStatusChanged(
       const api::passwords_private::PasswordCheckStatus& status);
+
+  // Notifies listeners about the timeout for password manager access.
+  void OnPasswordManagerAuthTimeout();
 
  protected:
   explicit PasswordsPrivateEventRouter(content::BrowserContext* context);
@@ -91,9 +94,8 @@ class PasswordsPrivateEventRouter : public KeyedService {
 
   // Cached parameters which are saved so that when new listeners are added, the
   // most up-to-date lists can be sent to them immediately.
-  absl::optional<std::vector<base::Value>> cached_saved_password_parameters_;
-  absl::optional<std::vector<base::Value>>
-      cached_password_exception_parameters_;
+  absl::optional<base::Value::List> cached_saved_password_parameters_;
+  absl::optional<base::Value::List> cached_password_exception_parameters_;
 };
 
 }  // namespace extensions

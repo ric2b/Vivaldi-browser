@@ -15,16 +15,16 @@
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "chrome/android/chrome_jni_headers/ContextualSearchManager_jni.h"
-#include "chrome/browser/android/contextualsearch/contextual_search_delegate.h"
-#include "chrome/browser/android/contextualsearch/resolved_search_term.h"
+#include "chrome/browser/android/contextualsearch/native_contextual_search_context.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/contextual_search/core/browser/contextual_search_delegate.h"
+#include "components/contextual_search/core/browser/resolved_search_term.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "net/url_request/url_fetcher_impl.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using base::android::JavaParamRef;
@@ -43,13 +43,7 @@ ContextualSearchManager::ContextualSearchManager(JNIEnv* env,
   Profile* profile = ProfileManager::GetActiveUserProfile();
   delegate_ = std::make_unique<ContextualSearchDelegate>(
       profile->GetURLLoaderFactory(),
-      TemplateURLServiceFactory::GetForProfile(profile),
-      base::BindRepeating(
-          &ContextualSearchManager::OnSearchTermResolutionResponse,
-          base::Unretained(this)),
-      base::BindRepeating(
-          &ContextualSearchManager::OnTextSurroundingSelectionAvailable,
-          base::Unretained(this)));
+      TemplateURLServiceFactory::GetForProfile(profile));
 }
 
 ContextualSearchManager::~ContextualSearchManager() {
@@ -70,12 +64,15 @@ void ContextualSearchManager::StartSearchTermResolutionRequest(
   WebContents* base_web_contents =
       WebContents::FromJavaWebContents(j_base_web_contents);
   DCHECK(base_web_contents);
-  base::WeakPtr<ContextualSearchContext> contextual_search_context =
-      ContextualSearchContext::FromJavaContextualSearchContext(
+  base::WeakPtr<NativeContextualSearchContext> contextual_search_context =
+      NativeContextualSearchContext::FromJavaContextualSearchContext(
           j_contextual_search_context);
   // Calls back to OnSearchTermResolutionResponse.
-  delegate_->StartSearchTermResolutionRequest(contextual_search_context,
-                                              base_web_contents);
+  delegate_->StartSearchTermResolutionRequest(
+      contextual_search_context, base_web_contents,
+      base::BindRepeating(
+          &ContextualSearchManager::OnSearchTermResolutionResponse,
+          base::Unretained(this)));
 }
 
 void ContextualSearchManager::GatherSurroundingText(
@@ -86,11 +83,14 @@ void ContextualSearchManager::GatherSurroundingText(
   WebContents* base_web_contents =
       WebContents::FromJavaWebContents(j_base_web_contents);
   DCHECK(base_web_contents);
-  base::WeakPtr<ContextualSearchContext> contextual_search_context =
-      ContextualSearchContext::FromJavaContextualSearchContext(
+  base::WeakPtr<NativeContextualSearchContext> contextual_search_context =
+      NativeContextualSearchContext::FromJavaContextualSearchContext(
           j_contextual_search_context);
-  delegate_->GatherAndSaveSurroundingText(contextual_search_context,
-                                          base_web_contents);
+  delegate_->GatherAndSaveSurroundingText(
+      contextual_search_context, base_web_contents,
+      base::BindRepeating(
+          &ContextualSearchManager::OnTextSurroundingSelectionAvailable,
+          base::Unretained(this)));
 }
 
 void ContextualSearchManager::OnSearchTermResolutionResponse(

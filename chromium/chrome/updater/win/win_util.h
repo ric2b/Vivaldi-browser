@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
@@ -58,13 +59,6 @@ class ScHandleTraits {
 using ScopedScHandle =
     base::win::GenericScopedHandle<ScHandleTraits,
                                    base::win::DummyVerifierTraits>;
-
-struct LocalAllocTraits {
-  static HLOCAL InvalidValue() { return nullptr; }
-  static void Free(HLOCAL mem) { ::LocalFree(mem); }
-};
-
-using ScopedLocalAlloc = base::ScopedGeneric<HLOCAL, LocalAllocTraits>;
 
 class ProcessFilterName : public base::ProcessFilter {
  public:
@@ -159,6 +153,20 @@ void GetAdminDaclSecurityAttributes(CSecurityAttributes* sec_attr,
 // to admins and system.
 void GetAdminDaclSecurityDescriptor(CSecurityDesc* sd, ACCESS_MASK accessmask);
 
+// Returns the registry path `Software\{CompanyName}\Update\Clients\{app_id}`.
+std::wstring GetAppClientsKey(const std::string& app_id);
+std::wstring GetAppClientsKey(const std::wstring& app_id);
+
+// Returns the registry path
+// `Software\{CompanyName}\Update\ClientState\{app_id}`.
+std::wstring GetAppClientStateKey(const std::string& app_id);
+std::wstring GetAppClientStateKey(const std::wstring& app_id);
+
+// Returns the registry path
+// `Software\{CompanyName}\Update\Clients\{app_id}\Commands\{command_id}`.
+std::wstring GetAppCommandKey(const std::wstring& app_id,
+                              const std::wstring& command_id);
+
 // Returns the registry path for the Updater app id under the |Clients| subkey.
 // The path does not include the registry root hive prefix.
 std::wstring GetRegistryKeyClientsUpdater();
@@ -174,6 +182,10 @@ int GetDownloadProgress(int64_t downloaded_bytes, int64_t total_bytes);
 // Returns a logged on user token handle from the current session.
 base::win::ScopedHandle GetUserTokenFromCurrentSessionId();
 
+// Sets `is_token_admin` to `true` if the token is an elevated administrator. If
+// `token` is `NULL`, the current thread token is used.
+HRESULT IsTokenAdmin(HANDLE token, bool& is_token_admin);
+
 // Sets `is_user_admin` to true if the user is running as an elevated
 // administrator.
 HRESULT IsUserAdmin(bool& is_user_admin);
@@ -181,6 +193,9 @@ HRESULT IsUserAdmin(bool& is_user_admin);
 // Sets `is_user_non_elevated_admin` to true if the user is running as a
 // non-elevated administrator.
 HRESULT IsUserNonElevatedAdmin(bool& is_user_non_elevated_admin);
+
+// Sets `is_com_caller_admin` to `true` if the COM caller is an admin.
+HRESULT IsCOMCallerAdmin(bool& is_com_caller_admin);
 
 // Sets `is_uac_on` to true if the UAC is enabled.
 HRESULT IsUACOn(bool& is_uac_on);
@@ -255,6 +270,27 @@ bool IsServiceRunning(const std::wstring& service_name);
 // * scope == UpdaterScope::kSystem == HKEY_LOCAL_MACHINE
 // * scope == UpdaterScope::kUser == HKEY_CURRENT_USER
 HKEY UpdaterScopeToHKeyRoot(UpdaterScope scope);
+
+// Returns an OSVERSIONINFOEX for the current OS version.
+absl::optional<OSVERSIONINFOEX> GetOSVersion();
+
+// Compares the current OS to the supplied version.  The value of `oper` should
+// be one of the predicate values from `::VerSetConditionMask()`, for example,
+// `VER_GREATER` or `VER_GREATER_EQUAL`. `os_version` is usually from a prior
+// call to `::GetVersionEx` or `::RtlGetVersion`.
+bool CompareOSVersions(const OSVERSIONINFOEX& os, BYTE oper);
+
+// This function calls ::SetDefaultDllDirectories to restrict DLL loads to
+// either full paths or %SYSTEM32%. ::SetDefaultDllDirectories is available on
+// Windows 8.1 and above, and on Windows Vista and above when KB2533623 is
+// applied.
+[[nodiscard]] bool EnableSecureDllLoading();
+
+// Enables metadata protection in the heap manager. This allows for the process
+// to be terminated immediately when a buffer overflow or illegal heap
+// operations are detected. This call enables protection for the entire process
+// and cannot be reversed.
+bool EnableProcessHeapMetadataProtection();
 
 }  // namespace updater
 

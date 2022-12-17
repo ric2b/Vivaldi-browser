@@ -1,0 +1,46 @@
+
+assert(is_mac)
+
+action("generate_sb_files") {
+  script = "//vivaldi/scripts/cat_files.py"
+  chromium_sb_file = "//sandbox/policy/mac/renderer.sb"
+  vivaldi_sb_files = "//vivaldi/platform_media/sandbox/mac/vivaldi_renderer.sb"
+
+  files_sb_target = "$target_gen_dir/renderer.sb"
+
+  inputs = [
+    script,
+    chromium_sb_file,
+    vivaldi_sb_files,
+  ]
+
+  outputs = [files_sb_target]
+
+  args = rebase_path([
+    files_sb_target,
+    chromium_sb_file,
+    vivaldi_sb_files,
+  ], root_build_dir)
+}
+
+action("generate_gpu_sb_files") {
+  script = "//vivaldi/scripts/cat_files.py"
+  chromium_sb_file = "//sandbox/policy/mac/gpu.sb"
+  vivaldi_sb_files = "//vivaldi/platform_media/sandbox/mac/vivaldi_gpu.sb"
+
+  files_sb_target = "$target_gen_dir/gpu.sb"
+
+  inputs = [
+    script,
+    chromium_sb_file,
+    vivaldi_sb_files,
+  ]
+
+  outputs = [files_sb_target]
+
+  args = rebase_path([
+    files_sb_target,
+    chromium_sb_file,
+    vivaldi_sb_files,
+  ], root_build_dir)
+}

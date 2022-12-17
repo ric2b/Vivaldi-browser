@@ -55,6 +55,7 @@
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -106,6 +107,7 @@
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
+#include "third_party/blink/renderer/core/frame/dom_window.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/fullscreen_controller.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -158,6 +160,7 @@
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
+#include "third_party/blink/renderer/core/timing/performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/generic_font_family_settings.h"
@@ -389,7 +392,7 @@ ui::mojom::blink::WindowOpenDisposition NavigationPolicyToDisposition(
     case kNavigationPolicyNewPopup:
       return ui::mojom::blink::WindowOpenDisposition::NEW_POPUP;
     case kNavigationPolicyPictureInPicture:
-      DCHECK(RuntimeEnabledFeatures::PictureInPictureV2Enabled());
+      DCHECK(RuntimeEnabledFeatures::DocumentPictureInPictureAPIEnabled());
       return ui::mojom::blink::WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
   }
   NOTREACHED() << "Unexpected NavigationPolicy";
@@ -513,8 +516,8 @@ void WebViewImpl::CloseWindowSoon() {
   // could be called from deep in Javascript.  If we ask the RenderViewHost to
   // close now, the window could be closed before the JS finishes executing,
   // thanks to nested message loops running and handling the resulting
-  // DestroyView IPC. So instead, post a message back to the message loop, which
-  // won't run until the JS is complete, and then the
+  // disconnecting `page_broadcast_`. So instead, post a message back to the
+  // message loop, which won't run until the JS is complete, and then the
   // RouteCloseEvent/RequestClose request can be sent.
   GetPage()
       ->GetPageScheduler()
@@ -564,6 +567,15 @@ WebViewImpl::WebViewImpl(
                 std::move(page_handle),
                 agent_group_scheduler.DefaultTaskRunner()),
       session_storage_namespace_id_(session_storage_namespace_id) {
+  if (receiver_) {
+    // Typically, the browser process closes the corresponding peer handle
+    // to signal the renderer process to destroy `this`. In certain
+    // situations where the lifetime of `this` is not controlled by a
+    // corresponding browser-side `RenderViewHostImpl` (e.g. tests or
+    // printing), call `Close()` directly instead to delete `this`.
+    receiver_.set_disconnect_handler(
+        WTF::Bind(&WebViewImpl::MojoDisconnected, WTF::Unretained(this)));
+  }
   if (!web_view_client_)
     DCHECK(!does_composite_);
   page_ = Page::CreateOrdinary(*chrome_client_,
@@ -835,7 +847,7 @@ Node* WebViewImpl::BestTapNode(
   }
 
   // Editable nodes should not be highlighted (e.g., <input>)
-  if (HasEditableStyle(*best_touch_node))
+  if (IsEditable(*best_touch_node))
     return nullptr;
 
   Node* hand_cursor_ancestor = FindLinkHighlightAncestor(best_touch_node);
@@ -1011,15 +1023,10 @@ WebPagePopupImpl* WebViewImpl::OpenPagePopup(PagePopupClient* client) {
   // The returned WebPagePopup is self-referencing, so the pointer here is not
   // an owning pointer. It is de-referenced by the PopupWidgetHost disconnecting
   // and calling Close().
-  WebPagePopup* popup_widget = WebPagePopup::Create(
+  page_popup_ = WebPagePopupImpl::Create(
       std::move(popup_widget_host), std::move(widget_host),
-      std::move(widget_receiver), agent_group_scheduler.DefaultTaskRunner());
-  popup_widget->InitializeCompositing(agent_group_scheduler,
-                                      opener_widget->GetOriginalScreenInfos(),
-                                      /*settings=*/nullptr);
-
-  page_popup_ = To<WebPagePopupImpl>(popup_widget);
-  page_popup_->Initialize(this, client);
+      std::move(widget_receiver), this, agent_group_scheduler,
+      opener_widget->GetOriginalScreenInfos(), client);
   EnablePopupMouseWheelEventListener(web_opener_frame->LocalRoot());
   return page_popup_.get();
 }
@@ -1101,12 +1108,16 @@ void WebViewImpl::Close() {
 
   // Invalidate any weak ptrs as we are starting to shutdown.
   weak_ptr_factory_.InvalidateWeakPtrs();
+  receiver_.reset();
 
   // Initiate shutdown for the entire frameset.  This will cause a lot of
   // notifications to be sent. This will detach all frames in this WebView's
   // frame tree.
   page_->WillBeDestroyed();
   page_.Clear();
+
+  if (web_view_client_)
+    web_view_client_->OnDestruct();
 
   // Reset the delegate to prevent notifications being sent as we're being
   // deleted.
@@ -1250,7 +1261,7 @@ void WebViewImpl::ResizeViewWhileAnchored(
     gfx::Size old_size = frame_view->Size();
     UpdateICBAndResizeViewport(visible_viewport_size);
     gfx::Size new_size = frame_view->Size();
-    frame_view->MarkViewportConstrainedObjectsForLayout(
+    frame_view->MarkFixedPositionObjectsForLayout(
         old_size.width() != new_size.width(),
         old_size.height() != new_size.height());
   }
@@ -1340,6 +1351,12 @@ void WebViewImpl::ResizeWithBrowserControls(
     ResizeViewportAnchor::ResizeScope resize_scope(*resize_viewport_anchor_);
     ResizeViewWhileAnchored(browser_controls_params, visible_viewport_size);
   }
+
+  // TODO(bokan): This will send a resize event even if the innerHeight on the
+  // page didn't change (e.g. virtual keyboard causes resize of only visual
+  // viewport). Lets remove this and have the frame send this event when its
+  // frame rect is resized (as noted by the ancient FIXME inside this method).
+  // https://crbug.com/1353728.
   SendResizeEventForMainFrame();
 }
 
@@ -1365,10 +1382,6 @@ void WebViewImpl::SetScreenOrientationOverrideForTesting(
       }
     }
   }
-}
-
-void WebViewImpl::UseSynchronousResizeModeForTesting(bool enable) {
-  web_widget_->UseSynchronousResizeModeForTesting(enable);
 }
 
 void WebViewImpl::SetWindowRectSynchronouslyForTesting(
@@ -1504,6 +1517,9 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
 
   settings->SetHideScrollbars(prefs.hide_scrollbars);
 
+  RuntimeEnabledFeatures::SetWebKitScrollbarStylingEnabled(
+      prefs.enable_webkit_scrollbar_styling);
+
   // Enable gpu-accelerated 2d canvas if requested on the command line.
   RuntimeEnabledFeatures::SetAccelerated2dCanvasEnabled(
       prefs.accelerated_2d_canvas_enabled);
@@ -1524,6 +1540,8 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   // ChromeClient::tabsToLinks which is part of the glue code.
   web_view_impl->SetTabsToLinks(prefs.tabs_to_links);
 
+  DCHECK(!(web_view_impl->IsFencedFrameRoot() &&
+           prefs.allow_running_insecure_content));
   settings->SetAllowRunningOfInsecureContent(
       prefs.allow_running_insecure_content);
   settings->SetDisableReadingFromCanvas(prefs.disable_reading_from_canvas);
@@ -1560,6 +1578,9 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetSupportsMultipleWindows(prefs.supports_multiple_windows);
 
   settings->SetMainFrameClipsContent(!prefs.record_whole_document);
+
+  RuntimeEnabledFeatures::SetStylusHandwritingEnabled(
+      prefs.stylus_handwriting_enabled);
 
   settings->SetSmartInsertDeleteEnabled(prefs.smart_insert_delete_enabled);
 
@@ -1606,8 +1627,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetTextTrackMarginPercentage(prefs.text_track_margin_percentage);
   settings->SetTextTrackWindowColor(
       WebString::FromASCII(prefs.text_track_window_color));
-  settings->SetTextTrackWindowPadding(
-      WebString::FromASCII(prefs.text_track_window_padding));
   settings->SetTextTrackWindowRadius(
       WebString::FromASCII(prefs.text_track_window_radius));
 
@@ -1871,7 +1890,7 @@ void WebViewImpl::SetPageFocus(bool enable) {
         focused_frame->GetDocument()->UpdateStyleAndLayoutTree();
         if (element->IsTextControl()) {
           element->UpdateSelectionOnFocus(SelectionBehaviorOnFocus::kRestore);
-        } else if (HasEditableStyle(*element)) {
+        } else if (IsEditable(*element)) {
           // updateFocusAppearance() selects all the text of
           // contentseditable DIVs. So we set the selection explicitly
           // instead. Note that this has the side effect of moving the
@@ -1974,12 +1993,12 @@ void WebViewImpl::DidAttachLocalMainFrame() {
               ->GetAgentGroupScheduler()
               .DefaultTaskRunner()));
 
+  auto& viewport = GetPage()->GetVisualViewport();
   if (does_composite_) {
     // When attaching a local main frame, set up any state on the compositor.
     MainFrameImpl()->FrameWidgetImpl()->SetBackgroundColor(BackgroundColor());
     MainFrameImpl()->FrameWidgetImpl()->SetPrefersReducedMotion(
         web_preferences_.prefers_reduced_motion);
-    auto& viewport = GetPage()->GetVisualViewport();
     MainFrameImpl()->FrameWidgetImpl()->SetPageScaleStateAndLimits(
         viewport.Scale(), viewport.IsPinchGestureActive(),
         MinimumPageScaleFactor(), MaximumPageScaleFactor());
@@ -1987,6 +2006,19 @@ void WebViewImpl::DidAttachLocalMainFrame() {
     // progress is made and BeginMainFrames are explicitly asked for.
     scoped_defer_main_frame_update_ =
         MainFrameImpl()->FrameWidgetImpl()->DeferMainFrameUpdate();
+  }
+
+  // It's possible that at the time that `local_frame` attached its document it
+  // was provisional so it couldn't initialize the root scroller. Try again now
+  // that the frame has been attached; this is a no-op if the root scroller is
+  // already initialized.
+  if (viewport.IsActiveViewport()) {
+    DCHECK(local_frame->GetDocument());
+    // DidAttachLocalMainFrame can be called before a new document is attached
+    // so ensure we don't try to initialize the root scroller on a stopped
+    // document.
+    if (local_frame->GetDocument()->IsActive())
+      local_frame->View()->InitializeRootScroller();
   }
 }
 
@@ -2454,26 +2486,28 @@ void WebViewImpl::SetPageLifecycleStateInternal(
   if (showing_page) {
     SetVisibilityState(new_state->visibility, /*is_initial_state=*/false);
   }
-  if (dispatching_pageshow) {
-    DCHECK(restoring_from_bfcache);
-    DispatchPageshow(page_restore_params->navigation_start);
-  }
   if (restoring_from_bfcache) {
     DCHECK(dispatching_pageshow);
     DCHECK(page_restore_params);
-    Scheduler()->SetPageBackForwardCached(new_state->is_in_back_forward_cache);
-    if (MainFrame()->IsWebLocalFrame()) {
-      LocalFrame* local_frame = To<LocalFrame>(page->MainFrame());
-      probe::DidRestoreFromBackForwardCache(local_frame);
-    }
     // Increment the navigation counter on the main frame and all nested frames
     // in its frame tree.
+    // Navigation Id increment should happen before a
+    // BackForwardCacheRestoration instance is created which happens inside the
+    // DispatchPageshow method.
     for (Frame* frame = page->MainFrame(); frame;
          frame = frame->Tree().TraverseNext()) {
       auto* local_frame = DynamicTo<LocalFrame>(frame);
       if (local_frame && local_frame->View()) {
         local_frame->IncrementNavigationId();
       }
+    }
+
+    DispatchPageshow(page_restore_params->navigation_start);
+
+    Scheduler()->SetPageBackForwardCached(new_state->is_in_back_forward_cache);
+    if (MainFrame()->IsWebLocalFrame()) {
+      LocalFrame* local_frame = To<LocalFrame>(page->MainFrame());
+      probe::DidRestoreFromBackForwardCache(local_frame);
     }
   }
 
@@ -2562,13 +2596,26 @@ void WebViewImpl::DispatchPageshow(base::TimeTicks navigation_start) {
       }
       DocumentLoader* loader = local_frame->Loader().GetDocumentLoader();
       if (loader) {
-        loader->GetTiming().MarkBackForwardCacheRestoreNavigationStart(
+        loader->GetTiming().SetBackForwardCacheRestoreNavigationStart(
             navigation_start);
       }
     }
     if (frame->DomWindow() && frame->DomWindow()->IsLocalDOMWindow()) {
+      auto pageshow_start_time = base::TimeTicks::Now();
+
       frame->DomWindow()->ToLocalDOMWindow()->DispatchPersistedPageshowEvent(
           navigation_start);
+
+      if (RuntimeEnabledFeatures::NavigationIdEnabled()) {
+        auto pageshow_end_time = base::TimeTicks::Now();
+
+        WindowPerformance* performance = DOMWindowPerformance::performance(
+            *frame->DomWindow()->ToLocalDOMWindow());
+        DCHECK(performance);
+
+        performance->AddBackForwardCacheRestoration(
+            navigation_start, pageshow_start_time, pageshow_end_time);
+      }
       if (frame->IsOutermostMainFrame()) {
         UMA_HISTOGRAM_BOOLEAN(
             "BackForwardCache.MainFrameHasPageshowListenersOnRestore",
@@ -3119,12 +3166,16 @@ SkColor WebViewImpl::BackgroundColor() const {
 
 Color WebViewImpl::BaseBackgroundColor() const {
   if (override_base_background_color_to_transparent_)
-    return SK_ColorTRANSPARENT;
-  if (base_background_color_override_for_inspector_)
-    return base_background_color_override_for_inspector_.value();
+    return Color::kTransparent;
+  // TODO(https://crbug.com/1351544): The base background color override should
+  // be an SkColor4f or a Color.
+  if (base_background_color_override_for_inspector_) {
+    return Color::FromSkColor(
+        base_background_color_override_for_inspector_.value());
+  }
   // Use the page background color if this is the WebView of the main frame.
   if (MainFrameImpl())
-    return page_base_background_color_;
+    return Color::FromSkColor(page_base_background_color_);
   return Color::kWhite;
 }
 
@@ -3324,8 +3375,7 @@ void WebViewImpl::UpdateRendererPreferences(
       renderer_preferences_.explicitly_allowed_network_ports);
 
   // Vivaldi specific.
-  web_view_client_->DidUpdateRendererPreferences();
-
+  UpdateVivaldiRendererPreferences();
 }
 
 void WebViewImpl::SetHistoryOffsetAndLength(int32_t history_offset,
@@ -3393,6 +3443,9 @@ void WebViewImpl::UpdateWebPreferences(
     web_preferences_.shrinks_viewport_contents_to_fit = false;
     web_preferences_.main_frame_resizes_are_orientation_changes = false;
     web_preferences_.text_autosizing_enabled = false;
+
+    // Insecure content should not be allowed in a fenced frame.
+    web_preferences_.allow_running_insecure_content = false;
 
 #if BUILDFLAG(IS_ANDROID)
     // Reusing the global for unowned main frame is only used for
@@ -3529,17 +3582,23 @@ void WebViewImpl::PageScaleFactorChanged() {
   local_main_frame_host_remote_->ScaleFactorChanged(viewport.Scale());
 
   if (dev_tools_emulator_->HasViewportOverride()) {
-    TransformationMatrix device_emulation_transform =
-        dev_tools_emulator_->MainFrameScrollOrScaleChanged();
-    SetDeviceEmulationTransform(device_emulation_transform);
+    // TODO(bokan): Can HasViewportOverride be set on a nested main frame? If
+    // not, we can enforce that when setting it and DCHECK IsOutermostMainFrame
+    // instead.
+    if (MainFrameImpl()->IsOutermostMainFrame()) {
+      TransformationMatrix device_emulation_transform =
+          dev_tools_emulator_->OutermostMainFrameScrollOrScaleChanged();
+      SetDeviceEmulationTransform(device_emulation_transform);
+    }
   }
 }
 
-void WebViewImpl::MainFrameScrollOffsetChanged() {
+void WebViewImpl::OutermostMainFrameScrollOffsetChanged() {
   DCHECK(MainFrameImpl());
+  DCHECK(MainFrameImpl()->IsOutermostMainFrame());
   if (dev_tools_emulator_->HasViewportOverride()) {
     TransformationMatrix device_emulation_transform =
-        dev_tools_emulator_->MainFrameScrollOrScaleChanged();
+        dev_tools_emulator_->OutermostMainFrameScrollOrScaleChanged();
     SetDeviceEmulationTransform(device_emulation_transform);
   }
 }
@@ -3785,7 +3844,6 @@ gfx::Size WebViewImpl::GetPreferredSizeForTest() {
 }
 
 void WebViewImpl::StopDeferringMainFrameUpdate() {
-  DCHECK(MainFrameImpl());
   scoped_defer_main_frame_update_ = nullptr;
 }
 
@@ -3801,6 +3859,41 @@ const SessionStorageNamespaceId& WebViewImpl::GetSessionStorageNamespaceId() {
 
 bool WebViewImpl::IsFencedFrameRoot() const {
   return GetPage()->IsMainFrameFencedFrameRoot();
+}
+
+void WebViewImpl::MojoDisconnected() {
+  // This IPC can be called from re-entrant contexts. We can't destroy a
+  // RenderViewImpl while references still exist on the stack, so we dispatch a
+  // non-nestable task. This method is called exactly once by the browser
+  // process, and is used to release ownership of the corresponding
+  // RenderViewImpl instance. https://crbug.com/1000035.
+  GetPage()->GetAgentGroupScheduler().DefaultTaskRunner()->PostNonNestableTask(
+      FROM_HERE, WTF::Bind(&WebViewImpl::Close, WTF::Unretained(this)));
+}
+
+void WebViewImpl::CreateRemoteMainFrame(
+    const RemoteFrameToken& frame_token,
+    const absl::optional<FrameToken>& opener_frame_token,
+    mojom::blink::FrameReplicationStatePtr replicated_state,
+    const base::UnguessableToken& devtools_frame_token,
+    mojom::blink::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces,
+    mojom::blink::RemoteMainFrameInterfacesPtr remote_main_frame_interfaces) {
+  blink::WebFrame* opener = nullptr;
+  if (opener_frame_token)
+    opener = WebFrame::FromFrameToken(*opener_frame_token);
+  // Create a top level WebRemoteFrame.
+  WebRemoteFrameImpl::CreateMainFrame(
+      this, frame_token, devtools_frame_token, opener,
+      std::move(remote_frame_interfaces->frame_host),
+      std::move(remote_frame_interfaces->frame_receiver),
+      std::move(replicated_state));
+  // Root frame proxy has no ancestors to point to their RenderWidget.
+
+  // The WebRemoteFrame created here was already attached to the Page as its
+  // main frame, so we can call WebView's DidAttachRemoteMainFrame().
+  DidAttachRemoteMainFrame(
+      std::move(remote_main_frame_interfaces->main_frame_host),
+      std::move(remote_main_frame_interfaces->main_frame));
 }
 
 }  // namespace blink

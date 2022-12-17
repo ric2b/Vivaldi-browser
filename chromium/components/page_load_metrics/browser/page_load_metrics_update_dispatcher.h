@@ -13,6 +13,7 @@
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/browser/layout_shift_normalization.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
+#include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/browser/responsiveness_metrics_normalization.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
 
@@ -92,6 +93,10 @@ enum PageLoadTimingStatus {
   // Longest input delay cannot be less than first input delay.
   INVALID_LONGEST_INPUT_DELAY_LESS_THAN_FIRST_INPUT_DELAY,
 
+  // Activation start should be occur between parse start and first paint.
+  INVALID_ORDER_PARSE_START_ACTIVATION_START,
+  INVALID_ORDER_ACTIVATION_START_FIRST_PAINT,
+
   // New values should be added before this final entry.
   LAST_PAGE_LOAD_TIMING_STATUS
 };
@@ -112,8 +117,10 @@ class PageLoadMetricsUpdateDispatcher {
    public:
     virtual ~Client() {}
 
+    virtual PrerenderingState GetPrerenderingState() const = 0;
     virtual bool IsPageMainFrame(content::RenderFrameHost* rfh) const = 0;
     virtual void OnTimingChanged() = 0;
+    virtual void OnPageInputTimingChanged(uint64_t num_input_events) = 0;
     virtual void OnSubFrameTimingChanged(
         content::RenderFrameHost* rfh,
         const mojom::PageLoadTiming& timing) = 0;
@@ -129,6 +136,8 @@ class PageLoadMetricsUpdateDispatcher {
         const mojom::FrameRenderDataUpdate& render_data) = 0;
     virtual void OnSubFrameMobileFriendlinessChanged(
         const blink::MobileFriendliness& mobile_friendliness) = 0;
+    virtual void OnSoftNavigationCountChanged(
+        uint32_t soft_navigation_count) = 0;
     virtual void UpdateFeaturesUsage(
         content::RenderFrameHost* rfh,
         const std::vector<blink::UseCounterFeature>& new_features) = 0;
@@ -168,7 +177,8 @@ class PageLoadMetricsUpdateDispatcher {
       mojom::FrameRenderDataUpdatePtr render_data,
       mojom::CpuTimingPtr new_cpu_timing,
       mojom::InputTimingPtr input_timing_delta,
-      const absl::optional<blink::MobileFriendliness>& mobile_friendliness);
+      const absl::optional<blink::MobileFriendliness>& mobile_friendliness,
+      uint32_t soft_navigation_count);
 
   void SetUpSharedMemoryForSmoothness(
       content::RenderFrameHost* render_frame_host,
@@ -252,7 +262,10 @@ class PageLoadMetricsUpdateDispatcher {
   void UpdateSubFrameMobileFriendliness(
       const blink::MobileFriendliness& mobile_friendliness);
 
+  void UpdateSoftNavigationCount(uint32_t soft_navigation_count);
+
   void UpdatePageInputTiming(const mojom::InputTiming& input_timing_delta);
+
   void MaybeUpdateMainFrameIntersectionRect(
       content::RenderFrameHost* render_frame_host,
       const mojom::FrameMetadataPtr& frame_metadata);

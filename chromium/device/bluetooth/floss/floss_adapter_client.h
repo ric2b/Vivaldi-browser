@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "dbus/exported_object.h"
@@ -19,8 +20,6 @@
 
 namespace dbus {
 class ErrorResponse;
-class MessageReader;
-class MessageWriter;
 class ObjectPath;
 class Response;
 }  // namespace dbus
@@ -59,23 +58,26 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
     kBonded = 2,
   };
 
-  // Adopted from bt_status_t in system/include/hardware/bluetooth.h
-  enum class BtifStatus {
-    kSuccess = 0,
-    kFail,
-    kNotReady,
-    kNomem,
-    kBusy,
-    kDone,
-    kUnsupported,
-    kParmInvalid,
-    kUnhandled,
-    kAuthFailure,
-    kRmtDevDown,
-    kAuthRejected,
-    kJniEnvironmentError,
-    kJniThreadAttachError,
-    kWakelockError,
+  enum class BtPropertyType {
+    kBdName = 0x1,
+    kBdAddr,
+    kUuids,
+    kClassOfDevice,
+    kTypeOfDevice,
+    kServiceRecord,
+    kAdapterScanMode,
+    kAdapterBondedDevices,
+    kAdapterDiscoverableTimeout,
+    kRemoteFriendlyName,
+    kRemoteRssi,
+    kRemoteVersionInfo,
+    kLocalLeFeatures,
+    kLocalIoCaps,
+    kLocalIoCapsBle,
+    kDynamicAudioBuffer,
+
+    kUnknown = 0xFE,
+    kRemoteDeviceTimestamp = 0xFF,
   };
 
   class Observer : public base::CheckedObserver {
@@ -129,20 +131,6 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
 
   // Creates the instance.
   static std::unique_ptr<FlossAdapterClient> Create();
-
-  // Parses |FlossDeviceId| from a property map in DBus. The data is provided as
-  // an array of dict entries (with a signature of a{sv}).
-  static bool ParseFlossDeviceId(dbus::MessageReader* reader,
-                                 FlossDeviceId* device);
-
-  // Serializes |FlossDeviceId| as a property map in DBus (written as an array
-  // of dict entries with a signature of a{sv}).
-  static void SerializeFlossDeviceId(dbus::MessageWriter* writer,
-                                     const FlossDeviceId& device);
-
-  // Parses |BluetoothUUID| from DBus.
-  static bool ParseUUID(dbus::MessageReader* reader,
-                        device::BluetoothUUID* uuid);
 
   FlossAdapterClient(const FlossAdapterClient&) = delete;
   FlossAdapterClient& operator=(const FlossAdapterClient&) = delete;
@@ -239,8 +227,7 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
                           const std::vector<uint8_t>& passkey);
 
   // Returns bonded devices.
-  virtual void GetBondedDevices(
-      ResponseCallback<std::vector<FlossDeviceId>> callback);
+  virtual void GetBondedDevices();
 
   // Get the object path for this adapter.
   const dbus::ObjectPath* GetObjectPath() const { return &adapter_path_; }
@@ -256,6 +243,11 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
   // Handle response to |GetAddress| DBus method call.
   void HandleGetAddress(dbus::Response* response,
                         dbus::ErrorResponse* error_response);
+
+  // Handle callback |OnAdapterPropertyChanged| on exported object path.
+  void OnAdapterPropertyChanged(
+      dbus::MethodCall* method_call,
+      dbus::ExportedObject::ResponseSender response_sender);
 
   // Handle callback |OnAddressChanged| on exported object path.
   void OnAddressChanged(dbus::MethodCall* method_call,
@@ -308,11 +300,14 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
       dbus::MethodCall* method_call,
       dbus::ExportedObject::ResponseSender response_sender);
 
+  // Handle GetBondedDevices
+  void OnGetBondedDevices(DBusResult<std::vector<FlossDeviceId>> ret);
+
   // List of observers interested in event notifications from this client.
   base::ObserverList<Observer> observers_;
 
   // Managed by FlossDBusManager - we keep local pointer to access object proxy.
-  dbus::Bus* bus_ = nullptr;
+  raw_ptr<dbus::Bus> bus_ = nullptr;
 
   // Adapter managed by this client.
   dbus::ObjectPath adapter_path_;
@@ -332,34 +327,13 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
  private:
   FRIEND_TEST_ALL_PREFIXES(FlossAdapterClientTest, CallAdapterMethods);
 
-  template <typename T>
-  static void WriteDBusParam(dbus::MessageWriter* writer, const T& data);
-
-  template <typename R, typename F>
+  template <typename R, typename... Args>
   void CallAdapterMethod(ResponseCallback<R> callback,
                          const char* member,
-                         F write_data);
-
-  template <typename R>
-  void CallAdapterMethod0(ResponseCallback<R> callback, const char* member);
-
-  template <typename R, typename T1>
-  void CallAdapterMethod1(ResponseCallback<R> callback,
-                          const char* member,
-                          const T1& arg1);
-
-  template <typename R, typename T1, typename T2>
-  void CallAdapterMethod2(ResponseCallback<R> callback,
-                          const char* member,
-                          const T1& arg1,
-                          const T2& arg2);
-
-  template <typename R, typename T1, typename T2, typename T3>
-  void CallAdapterMethod3(ResponseCallback<R> callback,
-                          const char* member,
-                          const T1& arg1,
-                          const T2& arg2,
-                          const T3& arg3);
+                         Args... args) {
+    CallMethod(std::move(callback), bus_, service_name_, kAdapterInterface,
+               adapter_path_, member, args...);
+  }
 
   // Object path for exported callbacks registered against adapter interface.
   static const char kExportedCallbacksPath[];

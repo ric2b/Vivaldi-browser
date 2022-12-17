@@ -73,14 +73,11 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
+#include "chrome/browser/ash/printing/oauth2/authorization_zones_manager_factory.h"
 #include "chrome/browser/ash/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/sync/desk_sync_service_factory.h"
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "components/signin/public/base/signin_switches.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #include "app/vivaldi_apptools.h"
 #include "sync/vivaldi_sync_service_impl.h"
@@ -156,12 +153,6 @@ std::unique_ptr<KeyedService> BuildSyncService(
     // need to take care that SyncServiceImpl doesn't get tripped up between
     // those two cases. Bug 88109.
     bool is_auto_start = browser_defaults::kSyncAutoStarts;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    if (profile->IsMainProfile() &&
-        !base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles)) {
-      is_auto_start = true;
-    }
-#endif
     init_params.start_behavior = is_auto_start
                                      ? syncer::SyncServiceImpl::AUTO_START
                                      : syncer::SyncServiceImpl::MANUAL_START;
@@ -216,8 +207,8 @@ syncer::SyncService* SyncServiceFactory::GetForProfile(Profile* profile) {
 }
 
 // static
-syncer::SyncServiceImpl* SyncServiceFactory::GetAsSyncServiceImplForProfile(
-    Profile* profile) {
+syncer::SyncServiceImpl*
+SyncServiceFactory::GetAsSyncServiceImplForProfileForTesting(Profile* profile) {
   return static_cast<syncer::SyncServiceImpl*>(GetForProfile(profile));
 }
 
@@ -267,6 +258,8 @@ SyncServiceFactory::SyncServiceFactory()
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   DependsOn(ash::SyncedPrintersManagerFactory::GetInstance());
+  DependsOn(
+      ash::printing::oauth2::AuthorizationZonesManagerFactory::GetInstance());
   DependsOn(DeskSyncServiceFactory::GetInstance());
   DependsOn(WifiConfigurationSyncServiceFactory::GetInstance());
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -302,7 +295,7 @@ bool SyncServiceFactory::IsSyncAllowed(Profile* profile) {
   // infer the accessible state by looking at prefs/command line flags.
   syncer::SyncPrefs prefs(profile->GetPrefs());
   return syncer::IsSyncAllowedByFlag() &&
-         (!prefs.IsManaged() || prefs.IsLocalSyncEnabled());
+         (!prefs.IsSyncClientDisabledByPolicy() || prefs.IsLocalSyncEnabled());
 }
 
 // static

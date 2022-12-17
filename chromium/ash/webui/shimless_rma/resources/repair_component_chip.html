@@ -25,8 +25,9 @@
 
   #componentButton {
     --vertical-padding: 24px;
+    border: none;
     border-radius: 8px;
-    box-shadow: var(--cros-elevation-1-shadow);
+    box-shadow: var(--cros-elevation-2-shadow);
     height: calc((2 * var(--vertical-padding)) +
         var(--shimless-component-line-height) +
         var(--shimless-component-description-line-height));
@@ -80,8 +81,9 @@
 
 <div id="componentButtonWrapper">
   <cr-button id="componentButton" disabled="[[disabled]]"
-      on-click="onComponentButtonClicked_">
-    <div id="labelDiv">
+      on-click="onComponentButtonClicked_"
+      aria-labelledby="componentName componentIdentifier">
+    <div id="labelDiv" aria-hidden="true">
       <span id="componentName">[[componentName]]</span>
       <div id="componentIdentifier">[[componentIdentifier]]</div>
     </div>
@@ -93,6 +95,7 @@
     </iron-icon>
   </cr-button>
 </div>
-<paper-tooltip for="componentButtonWrapper" hidden="[[!disabled]]">
+<paper-tooltip for="componentButtonWrapper" hidden="[[!disabled]]"
+    aria-hidden="true">
   [[i18n('undetectedComponentText')]]
 </paper-tooltip>

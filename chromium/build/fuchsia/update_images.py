@@ -154,8 +154,10 @@ def DownloadBootImages(bucket, image_hash, boot_image_names, image_root_dir):
     logging.info('Downloading Fuchsia boot images for %s.%s...' %
                  (device_type, arch))
 
-    # Images use different formats. See fxbug.dev/85552.
-    if bucket == 'fuchsia-sdk' or device_type == "workstation":
+    # Legacy images use different naming conventions. See fxbug.dev/85552.
+    legacy_delimiter_device_types = ['qemu', 'generic']
+    if bucket == 'fuchsia-sdk' or \
+       device_type not in legacy_delimiter_device_types:
       type_arch_connector = '.'
     else:
       type_arch_connector = '-'
@@ -164,7 +166,11 @@ def DownloadBootImages(bucket, image_hash, boot_image_names, image_root_dir):
         '{device_type}{type_arch_connector}{arch}.tgz'.format(
             bucket=bucket, image_hash=image_hash, device_type=device_type,
             type_arch_connector=type_arch_connector, arch=arch)
-    DownloadAndUnpackFromCloudStorage(images_tarball_url, image_output_dir)
+    try:
+      DownloadAndUnpackFromCloudStorage(images_tarball_url, image_output_dir)
+    except subprocess.CalledProcessError as e:
+      logging.exception('Failed to download image %s from URL: %s',
+                        image_to_download, images_tarball_url)
 
 
 def main():

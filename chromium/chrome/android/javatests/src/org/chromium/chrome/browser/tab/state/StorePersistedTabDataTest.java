@@ -26,6 +26,7 @@ import org.mockito.stubbing.Answer;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.endpoint_fetcher.EndpointFetcher;
@@ -34,7 +35,6 @@ import org.chromium.chrome.browser.endpoint_fetcher.EndpointResponse;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -46,10 +46,8 @@ import java.util.concurrent.TimeoutException;
  * Test relating to {@link StorePersistedTabData}
  */
 @RunWith(BaseJUnit4ClassRunner.class)
+@Batch(Batch.UNIT_TESTS)
 public class StorePersistedTabDataTest {
-    @Rule
-    public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
-
     @Rule
     public JniMocker mMocker = new JniMocker();
 
@@ -294,7 +292,7 @@ public class StorePersistedTabDataTest {
         StorePersistedTabData storePersistedTabData = new StorePersistedTabData(tab,
                 new StorePersistedTabData.StoreHours(
                         SERIALIZE_DESERIALIZE_OPENING_TIME, SERIALIZE_DESERIALIZE_CLOSING_TIME));
-        ByteBuffer serialized = storePersistedTabData.getSerializeSupplier().get();
+        ByteBuffer serialized = storePersistedTabData.getSerializer().get();
         StorePersistedTabData deserialized = new StorePersistedTabData(tab);
         deserialized.deserialize(serialized);
         Assert.assertEquals(

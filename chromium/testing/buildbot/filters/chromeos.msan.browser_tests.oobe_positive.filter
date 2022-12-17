@@ -87,7 +87,9 @@ FamilyLinkNoticeScreenTest.*
 FingerprintSetupTest.*
 ForceMaximizeOnFirstRunTest.*
 ForceMaximizePolicyFalseTest.*
+HIDDetectionDeviceOwnedTest.*
 HIDDetectionScreenChromebookTest.*
+HidDetectionSkipTestLegacy.*
 HidDetectionSkipTest.*
 HidDetectionTest.*
 InitialEnrollmentTest.*
@@ -161,6 +163,7 @@ UserCreationScreenLoginTest.*
 UserCreationScreenTest.*
 UserSelectionScreenBlockOfflineTest.*
 WebKioskTest.*
+WebUIWebViewBrowserTest.*
 WebviewChildLoginTest.*
 WebviewClientCertsLoginTest.*
 WebviewClientCertsLoginTestBase.*

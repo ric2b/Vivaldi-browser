@@ -19,7 +19,9 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
@@ -42,6 +44,7 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_provider.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/view.h"
@@ -72,7 +75,7 @@ std::string FindURLMimeType(const GURL& url) {
 }
 
 void OnFindURLMimeType(const GURL& url,
-                       int process_id,
+                       content::BrowserContext* browser_context,
                        FileSupportedCallback callback,
                        const std::string& mime_type) {
   // Check whether the mime type, if given, is known to be supported or whether
@@ -83,9 +86,9 @@ void OnFindURLMimeType(const GURL& url,
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   content::WebPluginInfo plugin;
-  result = result ||
-           content::PluginService::GetInstance()->GetPluginInfo(
-               process_id, url, mime_type, false, nullptr, &plugin, nullptr);
+  result = result || content::PluginService::GetInstance()->GetPluginInfo(
+                         browser_context, url, mime_type, false, nullptr,
+                         &plugin, nullptr);
 #endif
 
   std::move(callback).Run(url, result);
@@ -182,11 +185,11 @@ void BrowserRootView::OnDragEntered(const ui::DropTargetEvent& event) {
         return;
       }
 
-      content::RenderFrameHost* rfh = web_contents->GetPrimaryMainFrame();
       base::ThreadPool::PostTaskAndReplyWithResult(
           FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
           base::BindOnce(&FindURLMimeType, url),
-          base::BindOnce(&OnFindURLMimeType, url, rfh->GetProcess()->GetID(),
+          base::BindOnce(&OnFindURLMimeType, url,
+                         browser_view_->browser()->profile(),
                          base::BindOnce(&BrowserRootView::OnFileSupported,
                                         weak_ptr_factory_.GetWeakPtr())));
     }
@@ -278,7 +281,9 @@ bool BrowserRootView::OnMouseWheel(const ui::MouseWheelEvent& event) {
       if (whole_scroll_offset < 0 &&
           model->active_index() + 1 < model->count()) {
         chrome::SelectNextTab(
-            browser, {TabStripModel::GestureType::kWheel, event.time_stamp()});
+            browser, TabStripUserGestureDetails(
+                         TabStripUserGestureDetails::GestureType::kWheel,
+                         event.time_stamp()));
         return true;
       }
 
@@ -286,7 +291,9 @@ bool BrowserRootView::OnMouseWheel(const ui::MouseWheelEvent& event) {
       // tab-strip.
       if (whole_scroll_offset > 0 && model->active_index() > 0) {
         chrome::SelectPreviousTab(
-            browser, {TabStripModel::GestureType::kWheel, event.time_stamp()});
+            browser, TabStripUserGestureDetails(
+                         TabStripUserGestureDetails::GestureType::kWheel,
+                         event.time_stamp()));
         return true;
       }
     }
@@ -329,11 +336,18 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
 
     gfx::ScopedCanvas scoped_canvas(canvas);
     int active_tab_index = tabstrip()->GetActiveIndex();
-    if (active_tab_index != ui::ListSelectionModel::kUnselectedIndex) {
+    if (active_tab_index != TabStripModel::kNoTab) {
       Tab* active_tab = tabstrip()->tab_at(active_tab_index);
       if (active_tab && active_tab->GetVisible()) {
         gfx::RectF bounds(active_tab->GetMirroredBounds());
-        ConvertRectToTarget(tabstrip(), this, &bounds);
+        views::View* tabstrip_root = this;
+#if BUILDFLAG(IS_MAC)
+        // In immersive fullscreen, the top container is hosted in
+        // `overlay_widget`, which has its own root view.
+        if (browser_view_->immersive_mode_controller()->IsRevealed())
+          tabstrip_root = browser_view_->overlay_widget()->GetRootView();
+#endif
+        ConvertRectToTarget(tabstrip(), tabstrip_root, &bounds);
         canvas->ClipRect(bounds, SkClipOp::kDifference);
       }
     }
@@ -342,10 +356,10 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
     const auto* widget = GetWidget();
     DCHECK(widget);
     const SkColor toolbar_top_separator_color =
-        widget->GetThemeProvider()->GetColor(
+        widget->GetColorProvider()->GetColor(
             tabstrip()->ShouldPaintAsActiveFrame()
-                ? ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_FRAME_ACTIVE
-                : ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_FRAME_INACTIVE);
+                ? kColorToolbarTopSeparatorFrameActive
+                : kColorToolbarTopSeparatorFrameInactive);
 
     cc::PaintFlags flags;
     flags.setColor(toolbar_top_separator_color);

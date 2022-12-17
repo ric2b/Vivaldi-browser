@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Հարձակվողները կարող են փորձել գողանալ Ձեր տեղեկույթը <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />-ից (օրինակ՝ գաղտնաբառեր, հաղորդագրություններ կամ բանկային քարտերի տվյալներ)։ <ph name="BEGIN_LEARN_MORE_LINK" />Իմանալ ավելին<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Հայտնաբերված է ցանցի փոփոխություն։</translation>
 <translation id="2948083400971632585">Միացման համար կարգավորված ցանկացած պրոքսի Դուք կարող եք անջատել կարգավորումների էջից։</translation>
+<translation id="2953943267837858202">Թույլատրված չէ ավտոմատ նվագարկել տեսանյութերը</translation>
 <translation id="2991571918955627853">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ այդ կայքն օգտագործում է HSTS մեխանիզմը։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="3005723025932146533">Ցույց տալ պահպանված օրինակը</translation>
 <translation id="301521992641321250">Ավտոմատ արգելափակված է</translation>
@@ -72,6 +73,7 @@
 <translation id="3566021033012934673">Ձեր միացումն անվտանգ չէ</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Թաքցնել մանրամասները</translation>
+<translation id="3620979700683094848">Կայքերը կարող են ավտոմատ նվագարկել տեսանյութերը</translation>
 <translation id="3630155396527302611">Եթե ծրագիրն ընդգրկված է այն ծրագրերի ցանկում, որոնց թույլատրված է ցանցից օգտվել,
 փորձեք հեռացնել այն այդ ցանկից և կրկին ավելացնել։</translation>
 <translation id="3658742229777143148">Վերստուգում</translation>
@@ -149,6 +151,7 @@
 <translation id="6321917430147971392">Ստուգեք Ձեր DNS կարգավորումները</translation>
 <translation id="6328639280570009161">Փորձեք անջատել ցանցային կանխատեսումը</translation>
 <translation id="6328786501058569169">Այս կայքը մոլորեցնող է</translation>
+<translation id="6348220984832452017">Ակտիվ վարիացիաներ</translation>
 <translation id="6358450015545214790">Ի՞նչ է սա նշանակում։</translation>
 <translation id="6433595998831338502">Միացումը մերժվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
 <translation id="6447842834002726250">Քուքիներ</translation>
@@ -167,6 +170,7 @@
 <translation id="7113310725918019676">Թույլատրել <ph name="BLOCKED_TYPE" /> <ph name="DOMAIN" />-ից</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />-ը չի համապատասխանում անվտանգության ստանդարտներին։</translation>
 <translation id="7219179957768738017">Միացումն օգտագործում է <ph name="SSL_VERSION" />։</translation>
+<translation id="7221855153210829124">Ցույց տալ ծանուցումներ</translation>
 <translation id="7260504762447901703">Չեղարկել օգտվելու արտոնությունը</translation>
 <translation id="7353601530677266744">Հրամանի տող</translation>
 <translation id="7364115444476960850">Էջը, որը փորձում եք մուտք գործել, արգելափակված է Vivaldi-ի <ph name="BLOCKER_NAME" />ի կողմից</translation>
@@ -209,6 +213,7 @@
 <translation id="8503813439785031346">Օգտվողի անուն</translation>
 <translation id="8703575177326907206">Ձեր միացումը <ph name="DOMAIN" />-ի հետ գաղտնագրված չէ։</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
+<translation id="8774017153185436870">Կայքերը հնարավորություն կունենան ավտոմատ նվագարկելու տեսանյութերը</translation>
 <translation id="8820817407110198400">Էջանիշեր</translation>
 <translation id="8940028675168378100">Արգելափակված է <ph name="BLOCKER_NAME" />ի կողմից</translation>
 <translation id="8963117664422609631">Անցնել կայքի կարգավորումներին</translation>

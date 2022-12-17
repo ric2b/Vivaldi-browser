@@ -60,6 +60,29 @@ source_set("item_icons") {
   frameworks = [ "UIKit.framework" ]
 }
 
+source_set("custom_symbols") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "custom_symbol.h",
+    "custom_symbol.mm",
+  ]
+  deps = [
+    "//ios/chrome/common/ui/table_view:cells_constants",
+    "//ios/chrome/common/ui/util:image_util",
+  ]
+  frameworks = [ "UIKit.framework" ]
+}
+
+source_set("settings_icons") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "settings_icon.h",
+    "settings_icon.mm",
+  ]
+  deps = [ ":symbols" ]
+  frameworks = [ "UIKit.framework" ]
+}
+
 source_set("symbols") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -75,6 +98,8 @@ source_set("symbols") {
     "//ios/chrome/browser/ui/icons/resources:camera_fill",
     "//ios/chrome/browser/ui/icons/resources:incognito",
     "//ios/chrome/browser/ui/icons/resources:incognito_circle_fill",
+    "//ios/chrome/browser/ui/icons/resources:photo_badge_magnifyingglass",
+    "//ios/chrome/browser/ui/icons/resources:photo_badge_plus",
     "//ios/chrome/browser/ui/icons/resources:plus_circle_fill",
     "//ios/chrome/browser/ui/icons/resources:popup_badge_minus",
     "//ios/chrome/browser/ui/icons/resources:square_number",

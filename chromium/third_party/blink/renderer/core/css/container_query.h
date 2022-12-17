@@ -19,11 +19,13 @@ namespace blink {
 // https://drafts.csswg.org/css-contain-3/#container-rule
 class CORE_EXPORT ContainerSelector {
  public:
-  using FeatureFlags = MediaQueryExpNode::FeatureFlags;
-
   ContainerSelector() = default;
   ContainerSelector(const ContainerSelector&) = default;
   explicit ContainerSelector(AtomicString name) : name_(std::move(name)) {}
+  explicit ContainerSelector(PhysicalAxes physical_axes)
+      : physical_axes_(physical_axes) {}
+  ContainerSelector(AtomicString name, LogicalAxes physical_axes)
+      : name_(std::move(name)), logical_axes_(physical_axes) {}
   ContainerSelector(AtomicString name, const MediaQueryExpNode&);
 
   const AtomicString& Name() const { return name_; }
@@ -32,9 +34,18 @@ class CORE_EXPORT ContainerSelector {
   // for this selector to match.
   unsigned Type(WritingMode) const;
 
+  bool SelectsSizeContainers() const {
+    return physical_axes_ != kPhysicalAxisNone ||
+           logical_axes_ != kLogicalAxisNone;
+  }
+
+  bool SelectsStyleContainers() const { return has_style_query_; }
+
  private:
   AtomicString name_;
-  FeatureFlags feature_flags_ = 0;
+  PhysicalAxes physical_axes_{kPhysicalAxisNone};
+  LogicalAxes logical_axes_{kLogicalAxisNone};
+  bool has_style_query_{false};
 };
 
 class CORE_EXPORT ContainerQuery final

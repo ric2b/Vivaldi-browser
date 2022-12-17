@@ -32,6 +32,7 @@
 #define IDC_VIV_BOOKMARK_CONTAINER              54105
 #define IDC_VIV_SUBSTITUTIONS_MENU_MAC          54106
 #define IDC_VIV_SPEECH_MENU_MAC                 54107
+#define IDC_VIV_SHARE_MENU_MAC                  54108
 // Special separator ids we need in some mac menus
 #define IDC_VIV_EDIT_SEPARATOR_MAC              54150
 #define IDC_VIV_WINDOW_SEPARATOR_MAC            54151

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "base/values.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -20,7 +21,6 @@ class WebContents;
 }  // namespace content
 
 namespace base {
-class Value;
 class Time;
 }  // namespace base
 
@@ -39,11 +39,11 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
 Browser* FindVivaldiBrowser();
 
 void BroadcastEvent(const std::string& eventname,
-                    std::vector<base::Value> args,
+                    base::Value::List args,
                     content::BrowserContext* context);
 
 void BroadcastEventToAllProfiles(const std::string& eventname,
-                                 std::vector<base::Value> args = {});
+                                 base::Value::List args = {});
 
 // Return number of milliseconds for time
 double MilliSecondsFromTime(const base::Time& time);

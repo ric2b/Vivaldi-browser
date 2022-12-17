@@ -3,10 +3,11 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/cros_healthd_metric_sampler.h"
+#include <vector>
 
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
-#include "chromeos/services/cros_healthd/public/cpp/fake_cros_healthd.h"
+#include "chromeos/ash/services/cros_healthd/public/cpp/fake_cros_healthd.h"
 #include "components/reporting/util/test_support_callbacks.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -14,6 +15,7 @@
 
 namespace cros_healthd = chromeos::cros_healthd::mojom;
 using ::testing::Eq;
+using ::testing::StrEq;
 
 struct TbtTestCase {
   std::string test_name;
@@ -149,6 +151,17 @@ cros_healthd::TelemetryInfoPtr CreateBootPerformanceResult(
   return telemetry_info;
 }
 
+cros_healthd::TelemetryInfoPtr CreateInputInfo(
+    std::string library_name,
+    std::vector<cros_healthd::TouchscreenDevicePtr> touchscreen_devices) {
+  auto telemetry_info = cros_healthd::TelemetryInfo::New();
+  telemetry_info->input_result =
+      cros_healthd::InputResult::NewInputInfo(cros_healthd::InputInfo::New(
+          library_name, std::move(touchscreen_devices)));
+
+  return telemetry_info;
+}
+
 absl::optional<MetricData> CollectData(
     cros_healthd::TelemetryInfoPtr telemetry_info,
     cros_healthd::ProbeCategoryEnum probe_category,
@@ -193,6 +206,7 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetryMultipleEntries) {
   constexpr uint16_t kProductId = 1;
   constexpr char kVendorName[] = "VendorName";
   constexpr char kProductName[] = "ProductName";
+  constexpr char kFirmwareVersion[] = "FirmwareVersion";
 
   constexpr uint8_t kClassIdSecond = 1;
   constexpr uint8_t kSubclassIdSecond = 255;
@@ -211,11 +225,14 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetryMultipleEntries) {
       cros_healthd::BusInfo::NewUsbBusInfo(cros_healthd::UsbBusInfo::New(
           kClassId, kSubclassId, /*protocol_id=*/0, kVendorId, kProductId,
           /*interfaces = */
-          std::vector<cros_healthd::UsbBusInterfaceInfoPtr>()));
+          std::vector<cros_healthd::UsbBusInterfaceInfoPtr>(),
+          cros_healthd::FwupdFirmwareVersionInfo::New(
+              kFirmwareVersion, cros_healthd::FwupdVersionFormat::kPlain)));
 
   cros_healthd::BusDevicePtr usb_device_second = cros_healthd::BusDevice::New();
   usb_device_second->vendor_name = kVendorNameSecond;
   usb_device_second->product_name = kProductNameSecond;
+  // Omit firmware version this time since it's an optional mojo field
   usb_device_second->bus_info =
       cros_healthd::BusInfo::NewUsbBusInfo(cros_healthd::UsbBusInfo::New(
           kClassIdSecond, kSubclassIdSecond, /*protocol_id=*/0, kVendorIdSecond,
@@ -254,6 +271,8 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetryMultipleEntries) {
   EXPECT_EQ(usb_telemetry_first.pid(), kProductId);
   EXPECT_EQ(usb_telemetry_first.name(), kProductName);
   EXPECT_EQ(usb_telemetry_first.vendor(), kVendorName);
+  EXPECT_TRUE(usb_telemetry_first.has_firmware_version());
+  EXPECT_EQ(usb_telemetry_first.firmware_version(), kFirmwareVersion);
 
   EXPECT_EQ(usb_telemetry_second.class_id(), kClassIdSecond);
   EXPECT_EQ(usb_telemetry_second.subclass_id(), kSubclassIdSecond);
@@ -261,6 +280,9 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetryMultipleEntries) {
   EXPECT_EQ(usb_telemetry_second.pid(), kProductIdSecond);
   EXPECT_EQ(usb_telemetry_second.name(), kProductNameSecond);
   EXPECT_EQ(usb_telemetry_second.vendor(), kVendorNameSecond);
+  // Firmware version shouldn't exist in telemetry when it doesn't exist in bus
+  // result
+  EXPECT_FALSE(usb_telemetry_second.has_firmware_version());
 }
 
 TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetry) {
@@ -272,6 +294,7 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetry) {
   constexpr uint16_t kProductId = 1;
   constexpr char kVendorName[] = "VendorName";
   constexpr char kProductName[] = "ProductName";
+  constexpr char kFirmwareVersion[] = "FirmwareVersion";
   constexpr int kExpectedUsbTelemetrySize = 1;
   constexpr int kIndexOfUsbTelemetry = 0;
 
@@ -282,7 +305,9 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetry) {
       cros_healthd::BusInfo::NewUsbBusInfo(cros_healthd::UsbBusInfo::New(
           kClassId, kSubclassId, /*protocol_id=*/0, kVendorId, kProductId,
           /*interfaces = */
-          std::vector<cros_healthd::UsbBusInterfaceInfoPtr>()));
+          std::vector<cros_healthd::UsbBusInterfaceInfoPtr>(),
+          cros_healthd::FwupdFirmwareVersionInfo::New(
+              kFirmwareVersion, cros_healthd::FwupdVersionFormat::kPlain)));
 
   std::vector<cros_healthd::BusDevicePtr> usb_devices;
   usb_devices.push_back(std::move(usb_device));
@@ -310,6 +335,7 @@ TEST_F(CrosHealthdMetricSamplerTest, TestUsbTelemetry) {
   EXPECT_EQ(usb_telemetry.pid(), kProductId);
   EXPECT_EQ(usb_telemetry.name(), kProductName);
   EXPECT_EQ(usb_telemetry.vendor(), kVendorName);
+  EXPECT_EQ(usb_telemetry.firmware_version(), kFirmwareVersion);
 }
 
 TEST_P(CrosHealthdMetricSamplerMemoryEncryptionTest,
@@ -446,6 +472,15 @@ TEST_F(CrosHealthdMetricSamplerTest, TestMojomError) {
                   cros_healthd::ProbeCategoryEnum::kBootPerformance,
                   CrosHealthdMetricSampler::MetricType::kTelemetry);
   EXPECT_FALSE(boot_performance_data.has_value());
+
+  telemetry_info = cros_healthd::TelemetryInfo::New();
+  telemetry_info->input_result =
+      cros_healthd::InputResult::NewError(cros_healthd::ProbeError::New(
+          cros_healthd::ErrorType::kFileReadError, ""));
+  const absl::optional<MetricData> input_data = CollectData(
+      std::move(telemetry_info), cros_healthd::ProbeCategoryEnum::kInput,
+      CrosHealthdMetricSampler::MetricType::kInfo);
+  EXPECT_FALSE(input_data.has_value());
 }
 
 TEST_F(CrosHealthdMetricSamplerTest, TestAudioNormalTest) {
@@ -551,6 +586,161 @@ TEST_F(CrosHealthdMetricSamplerTest, BootPerformanceShutdownReasonNA) {
   EXPECT_EQ(
       result.telemetry_data().boot_performance_telemetry().shutdown_reason(),
       kShutdownReasonNotApplicable);
+}
+
+TEST_F(CrosHealthdMetricSamplerTest, TestTouchScreenInfoInternalSingle) {
+  constexpr char kSampleLibrary[] = "SampleLibrary";
+  constexpr char kSampleDevice[] = "SampleDevice";
+  constexpr int kTouchPoints = 10;
+
+  auto input_device = cros_healthd::TouchscreenDevice::New(
+      cros_healthd::InputDevice::New(
+          kSampleDevice, cros_healthd::InputDevice_ConnectionType::kInternal,
+          /*physical_location*/ "", /*is_enabled*/ true),
+      kTouchPoints, /*has_stylus*/ true,
+      /*has_stylus_garage_switch*/ false);
+
+  std::vector<cros_healthd::TouchscreenDevicePtr> touchscreen_devices;
+  touchscreen_devices.push_back(std::move(input_device));
+
+  const absl::optional<MetricData> optional_result = CollectData(
+      CreateInputInfo(kSampleLibrary, std::move(touchscreen_devices)),
+      cros_healthd::ProbeCategoryEnum::kInput,
+      CrosHealthdMetricSampler::MetricType::kInfo);
+
+  ASSERT_TRUE(optional_result.has_value());
+  const MetricData& result = optional_result.value();
+
+  ASSERT_TRUE(result.has_info_data());
+  ASSERT_TRUE(result.info_data().has_touch_screen_info());
+  ASSERT_TRUE(result.info_data().touch_screen_info().has_library_name());
+  EXPECT_THAT(result.info_data().touch_screen_info().library_name(),
+              StrEq(kSampleLibrary));
+  ASSERT_EQ(
+      result.info_data().touch_screen_info().touch_screen_devices().size(), 1);
+  EXPECT_THAT(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(0)
+                  .display_name(),
+              StrEq(kSampleDevice));
+  EXPECT_THAT(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(0)
+                  .touch_points(),
+              Eq(kTouchPoints));
+  EXPECT_TRUE(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(0)
+                  .has_stylus());
+}
+
+TEST_F(CrosHealthdMetricSamplerTest, TestTouchScreenInfoInternalMultiple) {
+  constexpr char kSampleLibrary[] = "SampleLibrary";
+  constexpr char kSampleDevice[] = "SampleDevice";
+  constexpr char kSampleDevice2[] = "SampleDevice2";
+  constexpr int kTouchPoints = 10;
+  constexpr int kTouchPoints2 = 5;
+
+  auto input_device_first = cros_healthd::TouchscreenDevice::New(
+      cros_healthd::InputDevice::New(
+          kSampleDevice, cros_healthd::InputDevice_ConnectionType::kInternal,
+          /*physical_location*/ "", /*is_enabled*/ true),
+      kTouchPoints, /*has_stylus*/ true,
+      /*has_stylus_garage_switch*/ false);
+
+  auto input_device_second = cros_healthd::TouchscreenDevice::New(
+      cros_healthd::InputDevice::New(
+          kSampleDevice2, cros_healthd::InputDevice_ConnectionType::kInternal,
+          /*physical_location*/ "", /*is_enabled*/ true),
+      kTouchPoints2, /*has_stylus*/ false,
+      /*has_stylus_garage_switch*/ false);
+
+  std::vector<cros_healthd::TouchscreenDevicePtr> touchscreen_devices;
+  touchscreen_devices.push_back(std::move(input_device_first));
+  touchscreen_devices.push_back(std::move(input_device_second));
+
+  const absl::optional<MetricData> optional_result = CollectData(
+      CreateInputInfo(kSampleLibrary, std::move(touchscreen_devices)),
+      cros_healthd::ProbeCategoryEnum::kInput,
+      CrosHealthdMetricSampler::MetricType::kInfo);
+
+  ASSERT_TRUE(optional_result.has_value());
+  const MetricData& result = optional_result.value();
+
+  ASSERT_TRUE(result.has_info_data());
+  ASSERT_TRUE(result.info_data().has_touch_screen_info());
+  ASSERT_TRUE(result.info_data().touch_screen_info().has_library_name());
+  EXPECT_THAT(result.info_data().touch_screen_info().library_name(),
+              StrEq(kSampleLibrary));
+  ASSERT_EQ(
+      result.info_data().touch_screen_info().touch_screen_devices().size(), 2);
+  EXPECT_THAT(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(0)
+                  .display_name(),
+              StrEq(kSampleDevice));
+  EXPECT_THAT(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(0)
+                  .touch_points(),
+              Eq(kTouchPoints));
+  EXPECT_TRUE(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(0)
+                  .has_stylus());
+
+  EXPECT_THAT(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(1)
+                  .display_name(),
+              StrEq(kSampleDevice2));
+  EXPECT_THAT(result.info_data()
+                  .touch_screen_info()
+                  .touch_screen_devices(1)
+                  .touch_points(),
+              Eq(kTouchPoints2));
+  EXPECT_FALSE(result.info_data()
+                   .touch_screen_info()
+                   .touch_screen_devices(1)
+                   .has_stylus());
+}
+
+TEST_F(CrosHealthdMetricSamplerTest, TestTouchScreenInfoExternal) {
+  auto input_device = cros_healthd::TouchscreenDevice::New(
+      cros_healthd::InputDevice::New(
+          "SampleDevice", cros_healthd::InputDevice_ConnectionType::kUSB,
+          /*physical_location*/ "", /*is_enabled*/ true),
+      /*touch_points*/ 5, /*has_stylus*/ true,
+      /*has_stylus_garage_switch*/ false);
+
+  std::vector<cros_healthd::TouchscreenDevicePtr> touchscreen_devices;
+  touchscreen_devices.push_back(std::move(input_device));
+
+  const absl::optional<MetricData> optional_result = CollectData(
+      CreateInputInfo("SampleLibrary", std::move(touchscreen_devices)),
+      cros_healthd::ProbeCategoryEnum::kInput,
+      CrosHealthdMetricSampler::MetricType::kInfo);
+
+  ASSERT_FALSE(optional_result.has_value());
+}
+
+TEST_F(CrosHealthdMetricSamplerTest, TestTouchScreenInfoDisabled) {
+  auto input_device = cros_healthd::TouchscreenDevice::New(
+      cros_healthd::InputDevice::New(
+          "SampleDevice", cros_healthd::InputDevice_ConnectionType::kInternal,
+          /*physical_location*/ "", /*is_enabled*/ false),
+      /*touch_points*/ 5, /*has_stylus*/ true,
+      /*has_stylus_garage_switch*/ false);
+
+  std::vector<cros_healthd::TouchscreenDevicePtr> touchscreen_devices;
+  touchscreen_devices.push_back(std::move(input_device));
+
+  const absl::optional<MetricData> optional_result = CollectData(
+      CreateInputInfo("SampleLibrary", std::move(touchscreen_devices)),
+      cros_healthd::ProbeCategoryEnum::kInput,
+      CrosHealthdMetricSampler::MetricType::kInfo);
+
+  ASSERT_FALSE(optional_result.has_value());
 }
 
 INSTANTIATE_TEST_SUITE_P(

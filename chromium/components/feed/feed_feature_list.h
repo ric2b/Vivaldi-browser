@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
+#include "components/signin/public/base/consent_level.h"
 
 // TODO(crbug.com/1165828): Clean up feedv1 features.
 
@@ -41,9 +42,6 @@ extern const base::Feature kInterestFeedV2ClicksAndViewsConditionalUpload;
 #if BUILDFLAG(IS_IOS)
 extern const base::Feature kInterestFeedNoticeCardAutoDismiss;
 #endif
-
-// Used for A:B testing of a bug fix (crbug.com/1151391).
-extern const base::Feature kInterestFeedSpinnerAlwaysAnimate;
 
 // Feature that allows users to keep up with and consume web content.
 extern const base::Feature kWebFeed;
@@ -100,13 +98,19 @@ extern const base::Feature kEnableOpenInNewTabFromStartSurfaceFeed;
 
 // Feature that causes the WebUI version of the Feed to be enabled.
 extern const base::Feature kWebUiFeed;
-extern const base::FeatureParam<std::string> kWebUiScriptFetchUrl;
+extern const base::FeatureParam<std::string> kWebUiFeedUrl;
 extern const base::FeatureParam<bool> kWebUiDisableContentSecurityPolicy;
 
 std::string GetFeedReferrerUrl();
 
 // Personalize feed for unsigned users.
 extern const base::Feature kPersonalizeFeedUnsignedUsers;
+
+// Personalize feed for signed in users who haven't enabled sync.
+extern const base::Feature kPersonalizeFeedNonSyncUsers;
+
+// Returns the consent level needed to request a personalized feed.
+signin::ConsentLevel GetConsentLevelNeededForPersonalizedFeed();
 
 // Feature that enables tracking the acknowledgement state for the info cards.
 extern const base::Feature kInfoCardAcknowledgementTracking;
@@ -128,6 +132,14 @@ extern const base::FeatureParam<int> kFeedCloseRefreshDelayMinutes;
 // If true, schedule the refresh only when the user scrolls or interacts. If
 // false, schedule only when the feed surface is opened to content.
 extern const base::FeatureParam<bool> kFeedCloseRefreshRequireInteraction;
+
+// When enabled, no view cache is used.
+extern const base::Feature kFeedNoViewCache;
+// When enabled, replace all items.
+extern const base::Feature kFeedReplaceAll;
+
+// When enabled, play the feed video via inline playback.
+extern const base::Feature kFeedVideoInlinePlayback;
 
 }  // namespace feed
 

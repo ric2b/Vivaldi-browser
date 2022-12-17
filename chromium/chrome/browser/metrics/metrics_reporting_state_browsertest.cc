@@ -37,11 +37,15 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/tpm/stub_install_attributes.h"
 #include "chrome/browser/ash/settings/device_settings_cache.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #endif
+
+#if BUILDFLAG(IS_WIN)
+#include "base/test/test_reg_util_win.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 struct MetricsReportingStateTestParameterizedParams {
   bool initial_value;
@@ -86,6 +90,21 @@ class MetricsReportingStateTest : public InProcessBrowserTest {
 
   virtual bool IsMetricsReportingEnabledInitialValue() const = 0;
 
+#if BUILDFLAG(IS_WIN)
+  void SetUp() override {
+    // Override HKCU to prevent writing to real keys. On Windows, the metrics
+    // reporting consent is stored in the registry, and it is used to determine
+    // the metrics reporting state when it is unset (e.g. during tests, which
+    // start with fresh user data dirs). Otherwise, this may cause flakiness
+    // since tests will sometimes start with metrics reporting enabled and
+    // sometimes disabled.
+    ASSERT_NO_FATAL_FAILURE(
+        override_manager_.OverrideRegistry(HKEY_CURRENT_USER));
+
+    InProcessBrowserTest::SetUp();
+  }
+#endif  // BUILDFLAG(IS_WIN)
+
   // InProcessBrowserTest overrides:
   bool SetUpUserDataDirectory() override {
     local_state_path_ = metrics::SetUpUserDataDirectoryForTesting(
@@ -109,6 +128,11 @@ class MetricsReportingStateTest : public InProcessBrowserTest {
   MetricsReportingStateTest() = default;
 
   base::FilePath local_state_path_;
+
+#if BUILDFLAG(IS_WIN)
+ private:
+  registry_util::RegistryOverrideManager override_manager_;
+#endif  // BUILDFLAG(IS_WIN)
 };
 
 // Used to verify the value for IsMetricsAndCrashReportingEnabled() is correctly
@@ -222,9 +246,9 @@ IN_PROC_BROWSER_TEST_P(MetricsReportingStateTestParameterized,
 // metrics reporting from a settings page.
 IN_PROC_BROWSER_TEST_P(MetricsReportingStateClearDataTest,
                        ClearPreviouslyCollectedMetricsData) {
-  // Set Stablity Crash Count metric to 1.
+  // Set a stability-related count stored in Local State.
   g_browser_process->local_state()->SetInteger(
-      metrics::prefs::kStabilityCrashCount, 1);
+      metrics::prefs::kStabilityFileMetricsUnsentFilesCount, 1);
   // Emit to two histograms.
   ASSERT_FALSE(HistogramExists("Test.Before.Histogram"));
   ASSERT_FALSE(HistogramExists("Test.Before.StabilityHistogram"));
@@ -250,9 +274,9 @@ IN_PROC_BROWSER_TEST_P(MetricsReportingStateClearDataTest,
   base::UmaHistogramBoolean("Test.After.Histogram", true);
   ASSERT_TRUE(HistogramExists("Test.After.Histogram"));
 
-  // Verify that stability metrics were cleared.
+  // Verify that the stability-related metric in Local State was cleared.
   EXPECT_EQ(0, g_browser_process->local_state()->GetInteger(
-                   metrics::prefs::kStabilityCrashCount));
+                   metrics::prefs::kStabilityFileMetricsUnsentFilesCount));
   // Verify that histogram data that came before clearing data are not included
   // in the next snapshot if metrics reporting was enabled from a settings page.
   bool called_from_settings_page =

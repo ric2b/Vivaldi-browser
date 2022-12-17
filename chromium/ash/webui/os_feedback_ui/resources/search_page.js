@@ -5,7 +5,7 @@
 import './help_content.js';
 import './help_resources_icons.js';
 import './os_feedback_shared_css.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
 import {stringToMojoString16} from 'chrome://resources/ash/common/mojo_utils.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
@@ -57,8 +57,21 @@ export class SearchPageElement extends SearchPageElementBase {
     return html`{__html_template__}`;
   }
 
+  static get properties() {
+    return {
+      descriptionTemplate: {
+        type: String,
+        readonly: true,
+        observer: SearchPageElement.prototype.descriptionTemplateChanged_,
+      },
+    };
+  }
+
   constructor() {
     super();
+
+    /** @type {string} */
+    this.descriptionTemplate = '';
 
     /**
      * Record the most recent number of characters in the input for which a
@@ -84,6 +97,9 @@ export class SearchPageElement extends SearchPageElementBase {
     this.iframeLoaded_ = new Promise(resolve => {
       this.resolveIframeLoaded_ = resolve;
     });
+
+    // Set focus on the input field after iframe is loaded.
+    this.iframeLoaded_.then(() => this.focusInputElement());
 
     /** @private {?HTMLIFrameElement} */
     this.iframe_ = null;
@@ -166,7 +182,7 @@ export class SearchPageElement extends SearchPageElementBase {
           isPopularContent ? this.popularHelpContentList_ :
                              response.response.results),
       isQueryEmpty: isQueryEmpty,
-      isPopularContent: isPopularContent
+      isPopularContent: isPopularContent,
     };
 
     // Wait for the iframe to complete loading before postMessage.
@@ -186,9 +202,8 @@ export class SearchPageElement extends SearchPageElementBase {
 
   /**
    * Focus on the textarea element.
-   * @private
    */
-  focusInputElement_() {
+  focusInputElement() {
     this.getInputElement_().focus();
   }
 
@@ -197,7 +212,16 @@ export class SearchPageElement extends SearchPageElementBase {
    */
   onInputInvalid_() {
     this.showError_();
-    this.focusInputElement_();
+    this.focusInputElement();
+  }
+
+  /**
+   * @return {!HTMLElement}
+   * @private
+   */
+  getDescriptionTextElement_() {
+    return /** @type {!HTMLElement} */ (
+        this.shadowRoot.querySelector('#descriptionText'));
   }
 
   /**
@@ -220,6 +244,9 @@ export class SearchPageElement extends SearchPageElementBase {
     const errorElement = this.getErrorElement_();
     errorElement.hidden = false;
     errorElement.setAttribute('aria-hidden', false);
+
+    const descriptionTextElement = this.getDescriptionTextElement_();
+    descriptionTextElement.classList.add('has-error');
   }
 
   /**
@@ -229,6 +256,9 @@ export class SearchPageElement extends SearchPageElementBase {
     const errorElement = this.getErrorElement_();
     errorElement.hidden = true;
     errorElement.setAttribute('aria-hidden', true);
+
+    const descriptionTextElement = this.getDescriptionTextElement_();
+    descriptionTextElement.classList.remove('has-error');
   }
 
   /**
@@ -255,7 +285,8 @@ export class SearchPageElement extends SearchPageElementBase {
       this.dispatchEvent(new CustomEvent('continue-click', {
         composed: true,
         bubbles: true,
-        detail: {currentState: FeedbackFlowState.SEARCH, description: textInput}
+        detail:
+            {currentState: FeedbackFlowState.SEARCH, description: textInput},
       }));
     }
   }
@@ -265,6 +296,14 @@ export class SearchPageElement extends SearchPageElementBase {
    */
   setDescription(text) {
     this.getInputElement_().value = text;
+  }
+
+  /**
+   * @param {string} currentTemplate
+   * @protected
+   */
+  descriptionTemplateChanged_(currentTemplate) {
+    this.getInputElement_().value = currentTemplate;
   }
 }
 

@@ -47,10 +47,9 @@
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_tracker.h"
 #include "third_party/blink/renderer/modules/peerconnection/testing/fake_resource_listener.h"
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
-#include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_track.h"
-#include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component_impl.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_dtmf_sender_handler.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_ice_candidate_platform.h"
@@ -282,14 +281,12 @@ class RTCPeerConnectionHandlerUnderTest : public RTCPeerConnectionHandler {
   RTCPeerConnectionHandlerUnderTest(
       RTCPeerConnectionHandlerClient* client,
       blink::PeerConnectionDependencyFactory* dependency_factory,
-      bool force_encoded_audio_insertable_streams = false,
-      bool force_encoded_video_insertable_streams = false)
+      bool encoded_insertable_streams = false)
       : RTCPeerConnectionHandler(
             client,
             dependency_factory,
             blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
-            force_encoded_audio_insertable_streams,
-            force_encoded_video_insertable_streams) {}
+            encoded_insertable_streams) {}
 
   blink::MockPeerConnectionImpl* native_peer_connection() {
     return static_cast<blink::MockPeerConnectionImpl*>(
@@ -319,10 +316,9 @@ class RTCPeerConnectionHandlerTest : public SimTest {
     mock_tracker_ = MakeGarbageCollected<NiceMock<MockPeerConnectionTracker>>();
     webrtc::PeerConnectionInterface::RTCConfiguration config;
     config.sdp_semantics = webrtc::SdpSemantics::kPlanB;
-    MediaConstraints constraints;
     DummyExceptionStateForTesting exception_state;
-    EXPECT_TRUE(pc_handler_->InitializeForTest(
-        config, constraints, mock_tracker_.Get(), exception_state));
+    EXPECT_TRUE(pc_handler_->InitializeForTest(config, mock_tracker_.Get(),
+                                               exception_state));
     mock_peer_connection_ = pc_handler_->native_peer_connection();
     ASSERT_TRUE(mock_peer_connection_);
     EXPECT_CALL(*mock_peer_connection_, Close());
@@ -380,7 +376,7 @@ class RTCPeerConnectionHandlerTest : public SimTest {
 
     HeapVector<Member<MediaStreamComponent>> audio_components(
         static_cast<size_t>(1));
-    audio_components[0] = MakeGarbageCollected<MediaStreamComponent>(
+    audio_components[0] = MakeGarbageCollected<MediaStreamComponentImpl>(
         audio_source->Id(), audio_source);
     EXPECT_CALL(
         *webrtc_audio_device_platform_support_->mock_audio_capturer_source(),
@@ -1313,17 +1309,12 @@ TEST_F(RTCPeerConnectionHandlerTest, CreateDataChannel) {
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, CheckInsertableStreamsConfig) {
-  for (bool force_encoded_audio_insertable_streams : {true, false}) {
-    for (bool force_encoded_video_insertable_streams : {true, false}) {
-      auto handler = std::make_unique<RTCPeerConnectionHandlerUnderTest>(
-          mock_client_.get(), mock_dependency_factory_.Get(),
-          force_encoded_audio_insertable_streams,
-          force_encoded_video_insertable_streams);
-      EXPECT_EQ(handler->force_encoded_audio_insertable_streams(),
-                force_encoded_audio_insertable_streams);
-      EXPECT_EQ(handler->force_encoded_video_insertable_streams(),
-                force_encoded_video_insertable_streams);
-    }
+  for (bool encoded_insertable_streams : {true, false}) {
+    auto handler = std::make_unique<RTCPeerConnectionHandlerUnderTest>(
+        mock_client_.get(), mock_dependency_factory_.Get(),
+        encoded_insertable_streams);
+    EXPECT_EQ(handler->encoded_insertable_streams(),
+              encoded_insertable_streams);
   }
 }
 

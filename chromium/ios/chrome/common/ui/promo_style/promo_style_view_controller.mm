@@ -17,6 +17,7 @@
 #include "ios/chrome/common/ui/util/dynamic_type_util.h"
 #include "ios/chrome/common/ui/util/image_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+#import "ios/chrome/common/ui/util/text_view_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -73,6 +74,11 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 // of buttons changes on scroll.
 @property(nonatomic, strong)
     NSArray<NSLayoutConstraint*>* buttonsVerticalAnchorConstraints;
+
+// Vertical constraints for banner; used to deactivate these constraints when
+// the banner is hidden.
+@property(nonatomic, strong) NSArray<NSLayoutConstraint*>* bannerConstraints;
+
 @end
 
 @implementation PromoStyleViewController
@@ -80,6 +86,16 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 @synthesize learnMoreButton = _learnMoreButton;
 
 #pragma mark - Public
+
+- (instancetype)initWithNibName:(NSString*)nibNameOrNil
+                         bundle:(NSBundle*)nibBundleOrNil {
+  self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+  if (self) {
+    _titleHorizontalMargin = kTitleHorizontalMargin;
+  }
+
+  return self;
+}
 
 - (void)viewDidLoad {
   [super viewDidLoad];
@@ -197,15 +213,6 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
     [self.scrollContentView.heightAnchor
         constraintGreaterThanOrEqualToAnchor:self.scrollView.heightAnchor],
 
-    // Banner image constraints. Scale the image vertically so its height takes
-    // a certain % of the view height while maintaining its aspect ratio. Don't
-    // constrain the width so that the image extends all the way to the edges of
-    // the view, outside the scrollContentView.
-    [self.imageView.topAnchor
-        constraintEqualToAnchor:self.scrollContentView.topAnchor],
-    [self.imageView.centerXAnchor
-        constraintEqualToAnchor:self.view.centerXAnchor],
-
     // Labels contraints. Attach them to the top of the scroll content view, and
     // center them horizontally.
     [self.titleLabel.topAnchor
@@ -214,7 +221,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
         constraintEqualToAnchor:self.scrollContentView.centerXAnchor],
     [self.titleLabel.widthAnchor
         constraintLessThanOrEqualToAnchor:self.scrollContentView.widthAnchor
-                                 constant:-2 * kTitleHorizontalMargin],
+                                 constant:-2 * self.titleHorizontalMargin],
     [self.subtitleLabel.topAnchor
         constraintEqualToAnchor:self.titleLabel.bottomAnchor
                        constant:kDefaultMargin],
@@ -244,6 +251,8 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
     [self.actionStackView.trailingAnchor
         constraintEqualToAnchor:widthLayoutGuide.trailingAnchor],
   ]];
+
+  [self setupBannerConstraints];
 
   self.buttonsVerticalAnchorConstraints = @[
     [self.scrollView.bottomAnchor
@@ -385,6 +394,22 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 
 #pragma mark - Accessors
 
+- (void)setShouldBannerFillTopSpace:(BOOL)shouldBannerFillTopSpace {
+  _shouldBannerFillTopSpace = shouldBannerFillTopSpace;
+  [self setupBannerConstraints];
+  self.imageView.image =
+      [self scaleBannerWithCurrentImage:self.imageView.image
+                                 toSize:[self computeBannerImageSize]];
+}
+
+- (void)setShouldHideBanner:(BOOL)shouldHideBanner {
+  _shouldHideBanner = shouldHideBanner;
+  [self setupBannerConstraints];
+  self.imageView.image =
+      [self scaleBannerWithCurrentImage:self.imageView.image
+                                 toSize:[self computeBannerImageSize]];
+}
+
 - (void)setPrimaryActionString:(NSString*)text {
   _primaryActionString = text;
   // Change the button's label, unless scrolling to the end is mandatory and the
@@ -480,7 +505,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 
     // Use |primaryActionString| even if scrolling to the end is mandatory
     // because at the viewDidLoad stage, the scroll view hasn't computed its
-    // content height, so there is no way to know if scrolling is needed. This
+    // content height, so there is no way to knOow if scrolling is needed. This
     // label will be updated at the viewDidAppear stage if necessary.
     [_primaryActionButton setTitle:self.primaryActionString
                           forState:UIControlStateNormal];
@@ -506,7 +531,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
   }
   if (!_disclaimerView) {
     // Set up disclaimer view.
-    _disclaimerView = [[UITextView alloc] init];
+    _disclaimerView = CreateUITextViewWithTextKit1();
     _disclaimerView.accessibilityIdentifier =
         kPromoStyleDisclaimerViewAccessibilityIdentifier;
     _disclaimerView.textContainerInset = UIEdgeInsetsMake(0, 0, 0, 0);
@@ -592,20 +617,84 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 
 #pragma mark - Private
 
+// Updates banner constraints.
+- (void)setupBannerConstraints {
+  if (self.scrollContentView == nil) {
+    return;
+  }
+
+  if (self.bannerConstraints != nil) {
+    [NSLayoutConstraint deactivateConstraints:self.bannerConstraints];
+  }
+
+  self.bannerConstraints = @[
+    // Common banner image constraints, further constraints are added below.
+    // This one ensures the banner is well centered within the view.
+    [self.imageView.centerXAnchor
+        constraintEqualToAnchor:self.view.centerXAnchor],
+  ];
+
+  if (self.shouldHideBanner) {
+    self.bannerConstraints =
+        [self.bannerConstraints arrayByAddingObjectsFromArray:@[
+          [self.imageView.heightAnchor constraintEqualToConstant:0],
+          [self.imageView.topAnchor
+              constraintEqualToAnchor:self.scrollContentView.topAnchor
+                             constant:kDefaultMargin]
+        ]];
+  } else if (self.shouldBannerFillTopSpace) {
+    NSLayoutDimension* dimFromToOfViewToBottomOfBanner = [self.view.topAnchor
+        anchorWithOffsetToAnchor:self.imageView.bottomAnchor];
+    // Constrain bottom of banner to top of view + C * height of view
+    // where C = isTallBanner ? tallMultiplier : defaultMultiplier.
+    self.bannerConstraints =
+        [self.bannerConstraints arrayByAddingObjectsFromArray:@[
+          [dimFromToOfViewToBottomOfBanner
+              constraintEqualToAnchor:self.view.heightAnchor
+                           multiplier:self.isTallBanner
+                                          ? kTallBannerMultiplier
+                                          : kDefaultBannerMultiplier]
+        ]];
+  } else {
+    // Default.
+    self.bannerConstraints =
+        [self.bannerConstraints arrayByAddingObjectsFromArray:@[
+          [self.imageView.topAnchor
+              constraintEqualToAnchor:self.scrollContentView.topAnchor],
+        ]];
+  }
+
+  [NSLayoutConstraint activateConstraints:self.bannerConstraints];
+}
+
 - (UIImage*)bannerImage {
   return [UIImage imageNamed:self.bannerName];
 }
 
 // Computes banner's image size.
 - (CGSize)computeBannerImageSize {
+  if (self.shouldHideBanner) {
+    return CGSizeZero;
+  }
   CGFloat bannerMultiplier =
       self.isTallBanner ? kTallBannerMultiplier : kDefaultBannerMultiplier;
+  CGFloat bannerAspectRatio =
+      [self bannerImage].size.width / [self bannerImage].size.height;
 
-  CGFloat destinationHeight =
-      roundf(self.view.bounds.size.height * bannerMultiplier);
-  CGFloat destinationWidth =
-      roundf([self bannerImage].size.width / [self bannerImage].size.height *
-             destinationHeight);
+  CGFloat destinationHeight = 0;
+  CGFloat destinationWidth = 0;
+
+  if (!self.shouldBannerFillTopSpace) {
+    destinationHeight = roundf(self.view.bounds.size.height * bannerMultiplier);
+    destinationWidth = roundf(bannerAspectRatio * destinationHeight);
+  } else {
+    CGFloat minBannerWidth = self.view.bounds.size.width;
+    CGFloat minBannerHeight = self.view.bounds.size.height * bannerMultiplier;
+    destinationWidth =
+        roundf(fmax(minBannerWidth, bannerAspectRatio * minBannerHeight));
+    destinationHeight = roundf(bannerAspectRatio * destinationWidth);
+  }
+
   CGSize newSize = CGSizeMake(destinationWidth, destinationHeight);
   return newSize;
 }
@@ -703,6 +792,8 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
   [attributedString
       appendAttributedString:[NSAttributedString
                                  attributedStringWithAttachment:attachment]];
+  self.primaryActionButton.accessibilityIdentifier =
+      kPromoStyleReadMoreActionAccessibilityIdentifier;
 
   // Make the title change without animation, as the UIButton's default
   // animation when using setTitle:forState: doesn't handle adding a
@@ -775,6 +866,8 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
                                       forState:UIControlStateNormal];
   [self.primaryActionButton setTitle:self.primaryActionString
                             forState:UIControlStateNormal];
+  self.primaryActionButton.accessibilityIdentifier =
+      kPromoStylePrimaryActionAccessibilityIdentifier;
   // Reset the font to make sure it is properly scaled.
   [self setPrimaryActionButtonFont:self.primaryActionButton];
 

@@ -8,6 +8,7 @@
 #include "chromeos/dbus/init/initialize_dbus_client.h"
 #include "chromeos/dbus/missive/missive_client.h"
 #include "chromeos/dbus/permission_broker/permission_broker_client.h"
+#include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/dbus/u2f/u2f_client.h"
 #include "chromeos/lacros/dbus/lacros_dbus_thread_manager.h"
@@ -31,6 +32,8 @@ void LacrosInitializeDBus() {
 
   InitializeDBusClient<MissiveClient>(bus);
 
+  InitializeDBusClient<chromeos::PowerManagerClient>(bus);
+
   InitializeDBusClient<TpmManagerClient>(bus);
 
   InitializeDBusClient<U2FClient>(bus);
@@ -38,7 +41,7 @@ void LacrosInitializeDBus() {
 
 void LacrosInitializeFeatureListDependentDBus() {
   dbus::Bus* bus = LacrosDBusThreadManager::Get()->GetSystemBus();
-  if (base::FeatureList::IsEnabled(floss::features::kFlossEnabled)) {
+  if (floss::features::IsFlossEnabled()) {
     InitializeDBusClient<floss::FlossDBusManager>(bus);
   } else {
     InitializeDBusClient<bluez::BluezDBusManager>(bus);
@@ -47,7 +50,7 @@ void LacrosInitializeFeatureListDependentDBus() {
 
 void LacrosShutdownDBus() {
   // Shut down D-Bus clients in reverse order of initialization.
-  if (base::FeatureList::IsEnabled(floss::features::kFlossEnabled)) {
+  if (floss::features::IsFlossEnabled()) {
     floss::FlossDBusManager::Shutdown();
   } else {
     bluez::BluezDBusManager::Shutdown();

@@ -27,7 +27,6 @@ import org.chromium.chrome.browser.compositor.layouts.eventfilter.AreaGestureEve
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureHandler;
 import org.chromium.chrome.browser.compositor.scene_layer.TabStripSceneLayer;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
@@ -43,11 +42,13 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -158,7 +159,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 if (mModelSelectorButton.onUpOrCancel()) return;
             else
             if (mModelSelectorButton.onUpOrCancel() && mTabModelSelector != null) {
-                getActiveStripLayoutHelper().finishAnimation();
+                getActiveStripLayoutHelper().finishAnimationsAndPushTabUpdates();
                 if (!mModelSelectorButton.isVisible()) return;
                 mTabModelSelector.selectModel(!mTabModelSelector.isIncognitoSelected());
                 return;
@@ -233,6 +234,11 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 @LayoutType int layoutType, boolean showToolbar, boolean delayAnimation) {
             if (layoutType != LayoutType.TAB_SWITCHER) return;
             updateScrimVisibility(false);
+        }
+
+        @Override
+        public void onTabSelectionHinted(int tabId) {
+            LayoutStateObserver.super.onTabSelectionHinted(tabId);
         }
 
         private void updateScrimVisibility(boolean visibility) {
@@ -391,7 +397,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             return;
         }
         if (mTabModelSelector == null) return;
-        getActiveStripLayoutHelper().finishAnimation();
+        getActiveStripLayoutHelper().finishAnimationsAndPushTabUpdates();
         if (!mModelSelectorButton.isVisible()) return;
         mTabModelSelector.selectModel(!mTabModelSelector.isIncognitoSelected());
     }
@@ -577,20 +583,6 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
         return getActiveStripLayoutHelper().getRightFadeOpacity();
     }
 
-    /**
-     * @return The brightness of background tabs in the tabstrip.
-     */
-    public float getBackgroundTabBrightness() {
-        return getActiveStripLayoutHelper().getBackgroundTabBrightness();
-    }
-
-    /**
-     * @return The brightness of the entire tabstrip.
-     */
-    public float getBrightness() {
-        return getActiveStripLayoutHelper().getBrightness();
-    }
-
     /** Update the title cache for the available tabs in the model. */
     private void updateTitleCacheForInit() {
         LayerTitleCache titleCache = mLayerTitleCacheSupplier.get();
@@ -655,6 +647,13 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 tabCreatorManager.getTabCreator(false));
         mIncognitoHelper.setTabModel(mTabModelSelector.getModel(true),
                 tabCreatorManager.getTabCreator(true));
+        if (TabUiFeatureUtilities.isTabletTabGroupsEnabled(mContext)) {
+            TabModelFilterProvider provider = mTabModelSelector.getTabModelFilterProvider();
+            mNormalHelper.setTabGroupModelFilter(
+                    (TabGroupModelFilter) provider.getTabModelFilter(false));
+            mIncognitoHelper.setTabGroupModelFilter(
+                    (TabGroupModelFilter) provider.getTabModelFilter(true));
+        }
         tabModelSwitched(mTabModelSelector.isIncognitoSelected());
 
         mTabModelSelectorTabModelObserver = new TabModelSelectorTabModelObserver(modelSelector) {
@@ -703,7 +702,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             }
 
             @Override
-            public void didCloseTab(Tab tab) {
+            public void onFinishingTabClosure(Tab tab) {
                 getStripLayoutHelper(tab.isIncognito()).tabClosed(time(), tab.getId());
                 updateModelSwitcherButton();
             }
@@ -734,16 +733,18 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             public void didAddTab(Tab tab, int type, int creationState) {
                 boolean selected = type != TabLaunchType.FROM_LONGPRESS_BACKGROUND
                         || (mTabModelSelector.isIncognitoSelected() && tab.isIncognito());
+                boolean onStartup = type == TabLaunchType.FROM_RESTORE;
                 getStripLayoutHelper(tab.isIncognito())
                         .tabCreated(time(), tab.getId(), mTabModelSelector.getCurrentTabId(),
-                                selected, false);
+                                selected, false, onStartup);
+
                 // Vivaldi
                 updateModelSwitcherButton();
             }
 
             /** Vivaldi **/
             @Override
-            public void willCloseTab(Tab tab, boolean animate) {
+            public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
                 // Make sure we update the title of all related tabs.
                 List<Tab> tabs = modelSelector.getTabModelFilterProvider()
                                          .getCurrentTabModelFilter()
@@ -799,7 +800,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             }
 
             @Override
-            public void onFaviconUpdated(Tab tab, Bitmap icon) {
+            public void onFaviconUpdated(Tab tab, Bitmap icon, GURL iconUrl) {
                 updateTitleForTab(tab);
             }
 
@@ -871,7 +872,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
 
     @Override
     public boolean updateOverlay(long time, long dt) {
-        getInactiveStripLayoutHelper().finishAnimation();
+        getInactiveStripLayoutHelper().finishAnimationsAndPushTabUpdates();
         return getActiveStripLayoutHelper().updateLayout(time);
     }
 
@@ -919,12 +920,12 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     }
 
     private boolean isGridTabSwitcherPolishEnabled() {
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS)
+        return ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled()
                 && TabUiFeatureUtilities.GRID_TAB_SWITCHER_FOR_TABLETS_POLISH.getValue();
     }
 
     private boolean isGridTabSwitcherNonPolishEnabled() {
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS)
+        return ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled()
                 && !TabUiFeatureUtilities.GRID_TAB_SWITCHER_FOR_TABLETS_POLISH.getValue();
     }
 

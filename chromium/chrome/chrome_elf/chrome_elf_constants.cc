@@ -4,16 +4,11 @@
 
 #include "chrome/chrome_elf/chrome_elf_constants.h"
 
-namespace blocklist {
+namespace chrome {
 
-const wchar_t kRegistryBeaconKeyName[] = L"\\BLBeacon";
-const wchar_t kBeaconVersion[] = L"version";
-const wchar_t kBeaconState[] = L"state";
-const wchar_t kBeaconAttemptCount[] = L"failed_count";
+const wchar_t kWerDll[] = L"chrome_wer.dll";
 
-const DWORD kBeaconMaxAttempts = 2;
-
-}  // namespace blocklist
+}  // namespace chrome
 
 namespace elf_sec {
 

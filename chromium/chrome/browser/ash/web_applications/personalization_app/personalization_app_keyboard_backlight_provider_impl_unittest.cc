@@ -5,9 +5,10 @@
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_keyboard_backlight_provider_impl.h"
 
 #include "ash/constants/ash_features.h"
-#include "ash/constants/ash_pref_names.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_metrics.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -23,6 +24,8 @@ namespace personalization_app {
 namespace {
 
 constexpr char kFakeTestEmail[] = "fakeemail@personalization";
+const AccountId account_id =
+    AccountId::FromUserEmailGaiaId(kFakeTestEmail, kFakeTestEmail);
 
 class TestKeyboardBacklightObserver
     : public ash::personalization_app::mojom::KeyboardBacklightObserver {
@@ -88,6 +91,11 @@ class PersonalizationAppKeyboardBacklightProviderImplTest
     ASSERT_TRUE(profile_manager_.SetUp());
     profile_ = profile_manager_.CreateTestingProfile(kFakeTestEmail);
 
+    ash::FakeChromeUserManager* user_manager =
+        static_cast<ash::FakeChromeUserManager*>(
+            user_manager::UserManager::Get());
+    user_manager->AddUser(account_id);
+
     web_contents_ = content::WebContents::Create(
         content::WebContents::CreateParams(profile_));
     web_ui_.set_web_contents(web_contents_.get());
@@ -102,6 +110,10 @@ class PersonalizationAppKeyboardBacklightProviderImplTest
   void TearDown() override {
     keyboard_backlight_provider_.reset();
     ChromeAshTestBase::TearDown();
+  }
+
+  const base::HistogramTester& histogram_tester() const {
+    return histogram_tester_;
   }
 
   TestingProfile* profile() { return profile_; }
@@ -143,10 +155,11 @@ class PersonalizationAppKeyboardBacklightProviderImplTest
   std::unique_ptr<PersonalizationAppKeyboardBacklightProviderImpl>
       keyboard_backlight_provider_;
   TestKeyboardBacklightObserver test_keyboard_backlight_observer_;
+  base::HistogramTester histogram_tester_;
 };
 
-TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest,
-       SetBackgroundColor) {
+TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest, SetBacklightColor) {
+  SimulateUserLogin(account_id);
   SetKeyboardBacklightObserver();
   keyboard_backlight_provider_remote()->FlushForTesting();
   keyboard_backlight_provider()->SetBacklightColor(
@@ -154,10 +167,14 @@ TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest,
 
   // Verify JS side is notified.
   EXPECT_EQ(mojom::BacklightColor::kBlue, ObservedBacklightColor());
+  histogram_tester().ExpectBucketCount(
+      kPersonalizationKeyboardBacklightColorHistogramName,
+      mojom::BacklightColor::kBlue, 1);
 }
 
 TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest,
        ObserveWallpaperColor) {
+  SimulateUserLogin(account_id);
   SetKeyboardBacklightObserver();
   keyboard_backlight_provider_remote()->FlushForTesting();
   keyboard_backlight_provider()->OnWallpaperColorsChanged();

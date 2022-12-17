@@ -31,7 +31,6 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/base/tablet_state.h"
@@ -60,9 +59,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/animation/animation_builder.h"
-#include "ui/views/background.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/rect_based_targeting_utils.h"
 #include "ui/views/widget/widget.h"
@@ -78,6 +75,7 @@
 #include "ash/wm/window_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/session_util.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -89,6 +87,7 @@ namespace {
 // The indicator for teleported windows has 8 DIPs before and below it.
 constexpr int kProfileIndicatorPadding = 8;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Returns the layer for the specified `web_view`'s native view.
 ui::Layer* GetNativeViewLayer(views::WebView* web_view) {
   if (web_view) {
@@ -110,6 +109,7 @@ content::RenderWidgetHost* GetRenderWidgetHost(views::WebView* web_view) {
   }
   return nullptr;
 }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Returns true if the header should be painted so that it looks the same as
 // the header used for packaged apps.
@@ -131,19 +131,6 @@ BrowserNonClientFrameViewChromeOS::BrowserNonClientFrameViewChromeOS(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::window_util::InstallResizeHandleWindowTargeterForWindow(
       frame->GetNativeWindow());
-
-  if (chromeos::features::IsDarkLightModeEnabled()) {
-    // To differentiate browser windows in dark/light mode, set a highlight
-    // border to the non client frame view. To avoid the border being covered by
-    // the client view, we should use a half insets border.
-    SetBorder(std::make_unique<views::HighlightBorder>(
-        0, views::HighlightBorder::Type::kHighlightBorder1,
-        /*use_light_colors=*/false,
-        views::HighlightBorder::InsetsType::kHalfInsets));
-    // Since highlight border has an inner border with opacity, we need to set a
-    // background underneath with frame color.
-    SetBackground(views::CreateSolidBackground(chromeos::kDefaultFrameColor));
-  }
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -205,6 +192,9 @@ void BrowserNonClientFrameViewChromeOS::Init() {
     set_web_app_frame_toolbar(AddChildView(
         std::make_unique<WebAppFrameToolbarView>(frame(), browser_view())));
   }
+
+  if (AppIsBorderlessPwa())
+    UpdateBorderlessModeEnabled();
 
   browser_view()->immersive_mode_controller()->AddObserver(this);
 }
@@ -340,17 +330,7 @@ gfx::Rect BrowserNonClientFrameViewChromeOS::GetBoundsForClientView() const {
   // and the top-of-window views are revealed, the TopContainerView paints the
   // window header by redirecting paints from its background to
   // BrowserNonClientFrameViewChromeOS.
-  gfx::Rect client_bounds(bounds());
-  if (chromeos::TabletState::Get()->InTabletMode() ||
-      browser_view()->IsFullscreen() || browser_view()->IsMaximized()) {
-    return client_bounds;
-  }
-
-  // If there is a border, inset the client bounds to show the border when the
-  // browser window is not fullscreened, maximized or in tablet mode.
-  if (auto* border = GetBorder())
-    client_bounds.Inset(border->GetInsets());
-  return client_bounds;
+  return bounds();
 }
 
 gfx::Rect BrowserNonClientFrameViewChromeOS::GetWindowBoundsForClientBounds(
@@ -432,9 +412,6 @@ void BrowserNonClientFrameViewChromeOS::OnPaint(gfx::Canvas* canvas) {
 
   if (frame_header_)
     frame_header_->PaintHeader(canvas);
-
-  OnPaintBackground(canvas);
-  OnPaintBorder(canvas);
 }
 
 void BrowserNonClientFrameViewChromeOS::LayoutWindowControlsOverlay() {
@@ -452,6 +429,18 @@ void BrowserNonClientFrameViewChromeOS::LayoutWindowControlsOverlay() {
         GetMirroredRect(gfx::Rect(bounding_rect_width, overlay_height));
     web_contents->UpdateWindowControlsOverlay(bounding_rect);
   }
+}
+
+void BrowserNonClientFrameViewChromeOS::UpdateBorderlessModeEnabled() {
+  web_app_frame_toolbar()->UpdateBorderlessModeEnabled();
+  caption_button_container_->UpdateBorderlessModeEnabled(
+      browser_view()->IsBorderlessModeEnabled());
+}
+
+bool BrowserNonClientFrameViewChromeOS::AppIsBorderlessPwa() {
+  return browser_view()->GetIsWebAppType() &&
+         browser_view()->AppUsesBorderlessMode() &&
+         browser_view()->IsBorderlessModeEnabled();
 }
 
 void BrowserNonClientFrameViewChromeOS::Layout() {
@@ -474,6 +463,8 @@ void BrowserNonClientFrameViewChromeOS::Layout() {
   if (web_app_frame_toolbar()) {
     if (browser_view()->IsWindowControlsOverlayEnabled()) {
       LayoutWindowControlsOverlay();
+    } else if (AppIsBorderlessPwa()) {
+      UpdateBorderlessModeEnabled();
     } else {
       web_app_frame_toolbar()->LayoutInContainer(GetToolbarLeftInset(),
                                                  caption_button_container_->x(),
@@ -498,13 +489,15 @@ void BrowserNonClientFrameViewChromeOS::GetAccessibleNodeData(
 }
 
 gfx::Size BrowserNonClientFrameViewChromeOS::GetMinimumSize() const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // System web apps (e.g. Settings) may have a fixed minimum size.
   Browser* browser = browser_view()->browser();
-  if (web_app::IsSystemWebApp(browser)) {
-    gfx::Size minimum_size = web_app::GetSystemWebAppMinimumWindowSize(browser);
+  if (ash::IsSystemWebApp(browser)) {
+    gfx::Size minimum_size = ash::GetSystemWebAppMinimumWindowSize(browser);
     if (!minimum_size.IsEmpty())
       return minimum_size;
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   gfx::Size min_client_view_size(frame()->client_view()->GetMinimumSize());
   const int min_frame_width =
@@ -519,7 +512,16 @@ gfx::Size BrowserNonClientFrameViewChromeOS::GetMinimumSize() const {
         std::max(min_width, min_tabstrip_width + GetTabStripLeftInset() +
                                 GetTabStripRightInset());
   }
-  return gfx::Size(min_width, min_client_view_size.height());
+
+  int min_height = min_client_view_size.height();
+  if (browser_view()->IsWindowControlsOverlayEnabled()) {
+    // Ensure that the minimum height is at least the height of the caption
+    // button container, which contains the WCO toggle and other windowing
+    // controls.
+    min_height = min_height + caption_button_container_->size().height();
+  }
+
+  return gfx::Size(min_width, min_height);
 }
 
 void BrowserNonClientFrameViewChromeOS::OnThemeChanged() {
@@ -632,25 +634,14 @@ void BrowserNonClientFrameViewChromeOS::OnTabletModeToggled(bool enabled) {
   if (web_app_frame_toolbar())
     web_app_frame_toolbar()->SetVisible(should_show_caption_buttons);
 
-  if (enabled) {
-    // Enter immersive mode if the feature is enabled and the widget is not
-    // already in fullscreen mode. Popups that are not activated but not
-    // minimized are still put in immersive mode, since they may still be
-    // visible but not activated due to something transparent and/or not
-    // fullscreen (ie. fullscreen launcher).
-    if (!frame()->IsFullscreen() && !browser_view()->GetSupportsTabStrip() &&
-        !frame()->IsMinimized()) {
-      browser_view()->immersive_mode_controller()->SetEnabled(true);
-      return;
-    }
-  } else {
-    // Exit immersive mode if the feature is enabled and the widget is not in
-    // fullscreen mode.
-    if (!frame()->IsFullscreen() && !browser_view()->GetSupportsTabStrip()) {
-      browser_view()->immersive_mode_controller()->SetEnabled(false);
-      return;
-    }
-  }
+  ImmersiveModeController* immersive_mode_controller =
+      browser_view()->immersive_mode_controller();
+  const bool was_enabled = immersive_mode_controller->IsEnabled();
+  immersive_mode_controller->SetEnabled(ShouldEnableImmersiveModeController());
+
+  // Do not relayout if immersive mode has not changed.
+  if (was_enabled == immersive_mode_controller->IsEnabled())
+    return;
 
   InvalidateLayout();
   // Can be null in tests.
@@ -697,6 +688,35 @@ void BrowserNonClientFrameViewChromeOS::OnWindowPropertyChanged(
     // when exiting fullscreen.
     if (enter_fullscreen || exit_fullscreen)
       ResetWindowControls();
+
+    // The client view (in particular the tab strip) has different layout in
+    // restored vs. maximized/fullscreen. Invalidate the layout because the
+    // window bounds may not have changed. https://crbug.com/1342414
+    if (frame()->client_view())
+      frame()->client_view()->InvalidateLayout();
+  }
+
+  if (key == chromeos::kWindowStateTypeKey) {
+    // Update the window controls if we are entering or exiting float state.
+    const bool enter_floated = IsFloated();
+    const bool exit_floated = static_cast<chromeos::WindowStateType>(old) ==
+                              chromeos::WindowStateType::kFloated;
+    if (!enter_floated && !exit_floated)
+      return;
+
+    if (frame_header_)
+      frame_header_->OnFloatStateChanged();
+    ResetWindowControls();
+
+    if (!chromeos::TabletState::Get()->InTabletMode())
+      return;
+
+    // Additionally updates immersive mode for PWA/SWA so that we show the title
+    // bar when floated, and hide the title bar otherwise.
+    browser_view()->immersive_mode_controller()->SetEnabled(
+        ShouldEnableImmersiveModeController());
+
+    return;
   }
 
   if (key == chromeos::kIsShowingInOverviewKey) {
@@ -730,7 +750,7 @@ void BrowserNonClientFrameViewChromeOS::OnImmersiveRevealStarted() {
   // temporarily children of the TopContainerView while they're all painting to
   // their layers.
   auto* container = browser_view()->top_container();
-  container->AddChildViewAt(caption_button_container_, 0);
+  container->AddChildViewAt(caption_button_container_.get(), 0);
   if (web_app_frame_toolbar())
     container->AddChildViewAt(web_app_frame_toolbar(), 0);
 
@@ -750,7 +770,7 @@ void BrowserNonClientFrameViewChromeOS::OnImmersiveRevealStarted() {
 
 void BrowserNonClientFrameViewChromeOS::OnImmersiveRevealEnded() {
   ResetWindowControls();
-  AddChildViewAt(caption_button_container_, 0);
+  AddChildViewAt(caption_button_container_.get(), 0);
 
   if (web_app_frame_toolbar()) {
     views::ClientView* client_view =
@@ -758,8 +778,11 @@ void BrowserNonClientFrameViewChromeOS::OnImmersiveRevealEnded() {
 
     // Add the web app frame toolbar at the end, but before the client view if
     // it exists.
-    if (client_view && GetIndexOf(client_view) >= 0)
-      AddChildViewAt(web_app_frame_toolbar(), GetIndexOf(client_view));
+    absl::optional<size_t> index;
+    if (client_view)
+      index = GetIndexOf(client_view);
+    if (index.has_value())
+      AddChildViewAt(web_app_frame_toolbar(), index.value());
     else
       AddChildView(web_app_frame_toolbar());
   }
@@ -777,14 +800,20 @@ void BrowserNonClientFrameViewChromeOS::PaintAsActiveChanged() {
 
   if (frame_header_)
     frame_header_->SetPaintAsActive(ShouldPaintAsActive());
-
-  UpdateBackgroundColor();
 }
 
 void BrowserNonClientFrameViewChromeOS::OnProfileAvatarChanged(
     const base::FilePath& profile_path) {
   BrowserNonClientFrameView::OnProfileAvatarChanged(profile_path);
   UpdateProfileIcons();
+}
+
+void BrowserNonClientFrameViewChromeOS::AddedToWidget() {
+  if (!chromeos::features::IsDarkLightModeEnabled())
+    return;
+
+  highlight_border_overlay_ =
+      std::make_unique<HighlightBorderOverlay>(GetWidget());
 }
 
 bool BrowserNonClientFrameViewChromeOS::GetShowCaptionButtons() const {
@@ -794,8 +823,11 @@ bool BrowserNonClientFrameViewChromeOS::GetShowCaptionButtons() const {
 
 bool BrowserNonClientFrameViewChromeOS::GetShowCaptionButtonsWhenNotInOverview()
     const {
-  return UsePackagedAppHeaderStyle(browser_view()->browser()) ||
-         !chromeos::TabletState::Get()->InTabletMode();
+  if (UsePackagedAppHeaderStyle(browser_view()->browser()))
+    return true;
+  if (!chromeos::TabletState::Get()->InTabletMode())
+    return true;
+  return IsFloated();
 }
 
 int BrowserNonClientFrameViewChromeOS::GetToolbarLeftInset() const {
@@ -823,6 +855,10 @@ int BrowserNonClientFrameViewChromeOS::GetTabStripRightInset() const {
 }
 
 bool BrowserNonClientFrameViewChromeOS::GetShouldPaint() const {
+  // Floated windows show their frame as they need to be dragged or hidden.
+  if (IsFloated())
+    return true;
+
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
   // Normal windows that have a WebUI-based tab strip do not need a browser
   // frame as no tab strip is drawn on top of the browser frame.
@@ -871,8 +907,9 @@ void BrowserNonClientFrameViewChromeOS::UpdateTopViewInset() {
   const bool immersive =
       browser_view()->immersive_mode_controller()->IsEnabled();
   const bool tab_strip_visible = browser_view()->GetTabStripVisible();
-  const int inset =
-      (tab_strip_visible || immersive) ? 0 : GetTopInset(/*restored=*/false);
+  const int inset = (tab_strip_visible || immersive || AppIsBorderlessPwa())
+                        ? 0
+                        : GetTopInset(/*restored=*/false);
   frame()->GetNativeWindow()->SetProperty(aura::client::kTopViewInset, inset);
 }
 
@@ -912,7 +949,7 @@ void BrowserNonClientFrameViewChromeOS::UpdateProfileIcons() {
     bool needs_layout = !profile_indicator_icon_;
     if (!profile_indicator_icon_) {
       profile_indicator_icon_ = new ProfileIndicatorIcon();
-      AddChildView(profile_indicator_icon_);
+      AddChildView(profile_indicator_icon_.get());
     }
 
     gfx::Image image(
@@ -974,29 +1011,24 @@ void BrowserNonClientFrameViewChromeOS::OnUpdateFrameColor() {
 
   if (frame_header_)
     frame_header_->UpdateFrameColors();
-
-  UpdateBackgroundColor();
-}
-
-void BrowserNonClientFrameViewChromeOS::UpdateBackgroundColor() {
-  // Update background color to current frame color.
-  if (auto* background = GetBackground()) {
-    background->SetNativeControlColor(
-        GetFrameColor(BrowserFrameActiveState::kUseCurrent));
-  }
 }
 
 void BrowserNonClientFrameViewChromeOS::MaybeAnimateThemeChanged() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!browser_view())
+    return;
+
+  Browser* browser = browser_view()->browser();
+  if (!browser)
     return;
 
   // Theme change events are only animated for system web apps which explicitly
   // request the behavior.
-  Browser* browser = browser_view()->browser();
-  if (!browser || !web_app::IsSystemWebApp(browser) ||
-      !browser->app_controller()->system_app()->ShouldAnimateThemeChanges()) {
+  bool animate_theme_change_for_swa =
+      ash::IsSystemWebApp(browser) &&
+      browser->app_controller()->system_app()->ShouldAnimateThemeChanges();
+  if (!animate_theme_change_for_swa)
     return;
-  }
 
   views::WebView* web_view = browser_view()->contents_web_view();
   ui::Layer* layer = GetNativeViewLayer(web_view);
@@ -1047,6 +1079,33 @@ void BrowserNonClientFrameViewChromeOS::MaybeAnimateThemeChanged() {
   // repainting theme changes.
   render_widget_host->InsertVisualStateCallback(
       theme_changed_animation_callback_.callback());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
+bool BrowserNonClientFrameViewChromeOS::IsFloated() const {
+  return GetFrameWindow()->GetProperty(chromeos::kWindowStateTypeKey) ==
+         chromeos::WindowStateType::kFloated;
+}
+
+bool BrowserNonClientFrameViewChromeOS::ShouldEnableImmersiveModeController()
+    const {
+  if (chromeos::TabletState::Get()->InTabletMode()) {
+    // Tabbed browsers do not support immersive mode in tablet mode. We use the
+    // web ui touchable tabstrip, which has its own sliding mechanism to view
+    // the tabs.
+    if (browser_view()->GetSupportsTabStrip())
+      return false;
+
+    // No immersive mode for minimized windows as they aren't visible, and
+    // floated windows need a permanent header to drag.
+    if (frame()->IsMinimized() || IsFloated())
+      return false;
+
+    return true;
+  }
+
+  // In clamshell mode, we want immersive mode if fullscreen.
+  return frame()->IsFullscreen();
 }
 
 const aura::Window* BrowserNonClientFrameViewChromeOS::GetFrameWindow() const {

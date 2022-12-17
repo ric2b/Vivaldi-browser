@@ -38,12 +38,6 @@ NSString* GetAppIdForUpdaterAsNSString() {
 
 @implementation CRUUpdateClientOnDemandImpl
 
-- (instancetype)init {
-  return [self initWithScope:ShouldUseSystemLevelUpdater()
-                                 ? updater::UpdaterScope::kSystem
-                                 : updater::UpdaterScope::kUser];
-}
-
 - (instancetype)initWithScope:(updater::UpdaterScope)scope {
   // If the system-level updater exists, and the browser is registered to the
   // system-level updater, then connect using NSXPCConnectionPrivileged.
@@ -129,7 +123,7 @@ NSString* GetAppIdForUpdaterAsNSString() {
 
 // Checks for update of a given app, with specified priority. Sends repeated
 // updates of progress and returns the result in the reply block.
-- (void)checkForUpdateWithAppID:(NSString* _Nonnull)appID
+- (void)checkForUpdateWithAppId:(NSString* _Nonnull)appID
                installDataIndex:(NSString* _Nullable)installDataIndex
                        priority:(CRUPriorityWrapper* _Nonnull)priority
         policySameVersionUpdate:
@@ -144,7 +138,7 @@ NSString* GetAppIdForUpdaterAsNSString() {
   };
 
   [[_xpcConnection remoteObjectProxyWithErrorHandler:errorHandler]
-      checkForUpdateWithAppID:appID
+      checkForUpdateWithAppId:appID
              installDataIndex:installDataIndex
                      priority:priority
       policySameVersionUpdate:policySameVersionUpdate
@@ -177,12 +171,29 @@ NSString* GetAppIdForUpdaterAsNSString() {
   NOTIMPLEMENTED();
 }
 
+- (void)cancelInstallsWithAppId:(NSString* _Nonnull)appId {
+  NOTIMPLEMENTED();
+}
+
+- (void)installWithAppId:(NSString* _Nonnull)appId
+               brandCode:(NSString* _Nullable)brandCode
+               brandPath:(NSString* _Nullable)brandPath
+                     tag:(NSString* _Nullable)ap
+                 version:(NSString* _Nullable)version
+    existenceCheckerPath:(NSString* _Nullable)existenceCheckerPath
+        installDataIndex:(NSString* _Nullable)installDataIndex
+                priority:(CRUPriorityWrapper* _Nonnull)priority
+             updateState:(CRUUpdateStateObserver* _Nonnull)updateState
+                   reply:(void (^_Nonnull)(int rc))reply {
+  NOTIMPLEMENTED();
+}
+
 @end
 
-BrowserUpdaterClientMac::BrowserUpdaterClientMac()
+BrowserUpdaterClientMac::BrowserUpdaterClientMac(updater::UpdaterScope scope)
     : BrowserUpdaterClientMac(
           base::scoped_nsobject<CRUUpdateClientOnDemandImpl>(
-              [[CRUUpdateClientOnDemandImpl alloc] init])) {}
+              [[CRUUpdateClientOnDemandImpl alloc] initWithScope:scope])) {}
 
 BrowserUpdaterClientMac::BrowserUpdaterClientMac(
     base::scoped_nsobject<CRUUpdateClientOnDemandImpl> client)
@@ -193,7 +204,11 @@ BrowserUpdaterClientMac::~BrowserUpdaterClientMac() = default;
 void BrowserUpdaterClientMac::GetUpdaterVersion(
     base::OnceCallback<void(const std::string&)> callback) {
   __block base::OnceCallback<void(const std::string&)> block_callback =
-      std::move(callback);
+      base::BindOnce(
+          [](base::OnceCallback<void(const std::string&)> callback,
+             scoped_refptr<BrowserUpdaterClientMac> keep_alive,
+             const std::string& version) { std::move(callback).Run(version); },
+          std::move(callback), base::WrapRefCounted(this));
 
   auto reply = ^(NSString* version) {
     std::string result = base::SysNSStringToUTF8(version);
@@ -202,10 +217,6 @@ void BrowserUpdaterClientMac::GetUpdaterVersion(
   };
 
   [client_ getVersionWithReply:reply];
-}
-
-void BrowserUpdaterClientMac::ResetConnection(updater::UpdaterScope scope) {
-  client_.reset([[CRUUpdateClientOnDemandImpl alloc] initWithScope:scope]);
 }
 
 void BrowserUpdaterClientMac::BeginRegister(
@@ -255,7 +266,7 @@ void BrowserUpdaterClientMac::BeginUpdateCheck(
       policySameVersionUpdateWrapper([[CRUPolicySameVersionUpdateWrapper alloc]
           initWithPolicySameVersionUpdate:
               updater::UpdateService::PolicySameVersionUpdate::kNotAllowed]);
-  [client_ checkForUpdateWithAppID:GetAppIdForUpdaterAsNSString()
+  [client_ checkForUpdateWithAppId:GetAppIdForUpdaterAsNSString()
                   installDataIndex:nil
                           priority:priority_wrapper.get()
            policySameVersionUpdate:policySameVersionUpdateWrapper.get()
@@ -264,6 +275,7 @@ void BrowserUpdaterClientMac::BeginUpdateCheck(
 }
 
 // static
-scoped_refptr<BrowserUpdaterClient> BrowserUpdaterClient::Create() {
-  return base::MakeRefCounted<BrowserUpdaterClientMac>();
+scoped_refptr<BrowserUpdaterClient> BrowserUpdaterClient::Create(
+    updater::UpdaterScope scope) {
+  return base::MakeRefCounted<BrowserUpdaterClientMac>(scope);
 }

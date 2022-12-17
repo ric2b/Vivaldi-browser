@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo_handle.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/color/color_provider_manager.h"
@@ -121,7 +122,7 @@ const ui::ColorProvider* TestBrowserWindow::GetColorProvider() const {
       {ui::ColorProviderManager::ColorMode::kLight,
        ui::ColorProviderManager::ContrastMode::kNormal,
        ui::ColorProviderManager::SystemTheme::kDefault,
-       ui::ColorProviderManager::FrameType::kChromium, nullptr});
+       ui::ColorProviderManager::FrameType::kChromium});
 }
 
 ui::ElementContext TestBrowserWindow::GetElementContext() {
@@ -246,6 +247,13 @@ ShowTranslateBubbleResult TestBrowserWindow::ShowTranslateBubble(
   return ShowTranslateBubbleResult::SUCCESS;
 }
 
+void TestBrowserWindow::ShowPartialTranslateBubble(
+    PartialTranslateBubbleModel::ViewState view_state,
+    const std::string& source_language,
+    const std::string& target_language,
+    const std::u16string& text_selection,
+    translate::TranslateErrors::Type error_type) {}
+
 qrcode_generator::QRCodeGeneratorBubbleView*
 TestBrowserWindow::ShowQRCodeGeneratorBubble(content::WebContents* contents,
                                              const GURL& url,
@@ -337,13 +345,6 @@ void TestBrowserWindow::SetCloseCallback(base::OnceClosure close_callback) {
   close_callback_ = std::move(close_callback);
 }
 
-bool TestBrowserWindow::IsSideSearchPanelVisible() const {
-  return false;
-}
-
-void TestBrowserWindow::MaybeRestoreSideSearchStatePerWindow(
-    const std::map<std::string, std::string>& extra_data) {}
-
 user_education::FeaturePromoController*
 TestBrowserWindow::GetFeaturePromoController() {
   return feature_promo_controller_.get();
@@ -373,13 +374,13 @@ bool TestBrowserWindow::CloseFeaturePromo(const base::Feature& iph_feature) {
          feature_promo_controller_->CloseBubble(iph_feature);
 }
 
-user_education::FeaturePromoController::PromoHandle
+user_education::FeaturePromoHandle
 TestBrowserWindow::CloseFeaturePromoAndContinue(
     const base::Feature& iph_feature) {
   return feature_promo_controller_
              ? feature_promo_controller_->CloseBubbleAndContinuePromo(
                    iph_feature)
-             : user_education::FeaturePromoController::PromoHandle();
+             : user_education::FeaturePromoHandle();
 }
 
 void TestBrowserWindow::NotifyFeatureEngagementEvent(const char* event_name) {}

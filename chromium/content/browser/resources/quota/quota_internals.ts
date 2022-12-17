@@ -8,49 +8,52 @@ import {Time} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-we
 
 import {QuotaInternalsBrowserProxy} from './quota_internals_browser_proxy.js';
 
-type BucketTableEntry = {
-  'bucketId': bigint,
-  'storageKey': string,
-  'host': string,
-  'type': string,
-  'name': string,
-  'useCount': bigint,
-  'lastAccessed': Time,
-  'lastModified': Time,
-};
+enum StorageType {
+  TEMPORARY,
+  PERSISTENT,
+  SYNCABLE,
+}
 
-type RetrieveBucketsTableResult = {
-  entries: BucketTableEntry[],
-};
+interface BucketTableEntry {
+  'bucketId': bigint;
+  'storageKey': string;
+  'type': StorageType;
+  'name': string;
+  'usage': bigint;
+  'useCount': bigint;
+  'lastAccessed': Time;
+  'lastModified': Time;
+}
 
-type HostAndStorageTypeBucketTableEntry = {
-  'bucketId': string,
-  'storageKey': string,
-  'name': string,
-  'useCount': string,
-  'lastAccessed': string,
-  'lastModified': string,
-};
+interface RetrieveBucketsTableResult {
+  entries: BucketTableEntry[];
+}
 
-type StorageTypeHostUsageAndEntries = {
-  'hostUsage': string,
-  'entries': HostAndStorageTypeBucketTableEntry[],
-};
+interface StorageTypeBucketTableEntry {
+  'bucketId': string;
+  'name': string;
+  'usage': string;
+  'useCount': string;
+  'lastAccessed': string;
+  'lastModified': string;
+}
 
-type StorageTypeEntries = {
+type EntriesForStorageType = StorageTypeBucketTableEntry[];
+
+interface StorageTypeEntries {
   // key = storageType
-  [key: string]: StorageTypeHostUsageAndEntries,
-};
+  [key: string]: EntriesForStorageType;
+}
 
-type HostData = {
-  'bucketCount': number,
-  'hostEntries': StorageTypeEntries,
-};
+interface StorageKeyData {
+  'bucketCount': number;
+  'storageKeyEntries': StorageTypeEntries;
+}
 
-type BucketTableEntriesByHost = {
-  // key = host
-  [key: string]: HostData,
-};
+interface BucketTableEntriesByStorageKey {
+  // key = storageKey
+  [key: string]: StorageKeyData;
+}
 
 // Converts a mojo time to a JS time.
 function convertMojoTimeToJS(mojoTime: Time): Date {
@@ -73,12 +76,6 @@ function convertMojoTimeToJS(mojoTime: Time): Date {
 
 function getProxy(): QuotaInternalsBrowserProxy {
   return QuotaInternalsBrowserProxy.getInstance();
-}
-
-async function getHostUsageString(host: string, type: string): Promise<string> {
-  const currentTotalUsageObj =
-      await getProxy().getHostUsageForInternals(host, type);
-  return currentTotalUsageObj.hostUsage.toString();
 }
 
 async function renderDiskAvailabilityAndTempPoolSize() {
@@ -148,24 +145,20 @@ async function renderUsageAndQuotaStats() {
   const bucketTable: RetrieveBucketsTableResult =
       await getProxy().retrieveBucketsTable();
   const bucketTableEntries: BucketTableEntry[] = bucketTable.entries;
-  const bucketTableEntriesByHost: BucketTableEntriesByHost = {};
+  const bucketTableEntriesByStorageKey: BucketTableEntriesByStorageKey = {};
 
-  /* Re-structure bucketTableEntries data to be accessible by a host key.
-   * bucketTableEntriesByHost = {
-   *   <host_string>: {
+  /* Re-structure bucketTableEntries data to be accessible by a storage key.
+   * bucketTableEntriesByStorageKey = {
+   *   <storage_key_string>: {
    *     bucketCount: <number>,
-   *     hostEntries: {
-   *       <storage_type_string>: {
-   *         hostUsage: <string>,
-   *         entries: [{
-   *           bucketId: <bigint>,
-   *           storageKey: <string>,
-   *           host: <string>,
-   *           type: <string>,
-   *           name: <string>,
-   *           useCount: <bigint>,
-   *           lastAccessed: <Time>,
-   *           lastModified: <Time>
+   *     storageKeyEntries: {
+   *       <storage_type>: [{
+   *         bucketId: <bigint>,
+   *         name: <string>,
+   *         usage: <bigint>,
+   *         useCount: <bigint>,
+   *         lastAccessed: <Time>,
+   *         lastModified: <Time>
    *          }]
    *        }
    *      }
@@ -174,10 +167,10 @@ async function renderUsageAndQuotaStats() {
 
   for (let i = 0; i < bucketTableEntries.length; i++) {
     const entry = bucketTableEntries[i];
-    const bucketTableEntryObj: HostAndStorageTypeBucketTableEntry = {
+    const bucketTableEntryObj: StorageTypeBucketTableEntry = {
       bucketId: entry.bucketId.toString(),
-      storageKey: entry.storageKey,
       name: entry.name,
+      usage: entry.usage.toString(),
       useCount: entry.useCount.toString(),
       lastAccessed: convertMojoTimeToJS(entry.lastAccessed)
                         .toLocaleString('en-US', {timeZoneName: 'short'}),
@@ -185,51 +178,56 @@ async function renderUsageAndQuotaStats() {
                         .toLocaleString('en-US', {timeZoneName: 'short'}),
     };
 
-    if (!(entry.host in bucketTableEntriesByHost)) {
-      bucketTableEntriesByHost[entry.host] = {
+    if (!(entry.storageKey in bucketTableEntriesByStorageKey)) {
+      bucketTableEntriesByStorageKey[entry.storageKey] = {
         'bucketCount': 0,
-        'hostEntries': {}
+        'storageKeyEntries': {},
       };
     }
-    if (!(entry.type in bucketTableEntriesByHost[entry.host]['hostEntries'])) {
-      bucketTableEntriesByHost[entry.host]['hostEntries'][entry.type] = {
-        'hostUsage': await getHostUsageString(entry.host, entry.type),
-        'entries': [bucketTableEntryObj]
-      };
-      bucketTableEntriesByHost[entry.host]['bucketCount'] += 1;
+    if (!(entry.type in bucketTableEntriesByStorageKey[entry.storageKey]
+                                                      ['storageKeyEntries'])) {
+      bucketTableEntriesByStorageKey[entry
+                                         .storageKey]['storageKeyEntries'][entry
+                                                                               .type] =
+          [bucketTableEntryObj];
+      bucketTableEntriesByStorageKey[entry.storageKey]['bucketCount'] += 1;
     } else {
-      bucketTableEntriesByHost[entry.host]['hostEntries'][entry.type]['entries']
+      bucketTableEntriesByStorageKey[entry
+                                         .storageKey]['storageKeyEntries'][entry
+                                                                               .type]
           .push(bucketTableEntryObj);
-      bucketTableEntriesByHost[entry.host]['bucketCount'] += 1;
+      bucketTableEntriesByStorageKey[entry.storageKey]['bucketCount'] += 1;
     }
   }
 
-  const hostKeys: string[] = Object.keys(bucketTableEntriesByHost);
+  const storageKeys: string[] = Object.keys(bucketTableEntriesByStorageKey);
 
   /* Populate the rows of the Usage and Quota table by iterating over:
-   * each host in bucketTableEntryByHost,
-   * each host's storage type(s),
+   * each storage key in bucketTableEntriesByStorageKey,
+   * each storage key's storage type(s),
    * and each storage type's bucket(s). */
 
-  // Iterate over each host key in bucketTableEntriesByHost.
-  for (let i = 0; i < hostKeys.length; i++) {
-    const host: string = hostKeys[i];
-    const hostRowSpan = bucketTableEntriesByHost[host]['bucketCount'];
-    const hostStorageTypes: StorageTypeEntries =
-        bucketTableEntriesByHost[host]['hostEntries'];
-    const storageTypes: string[] = Object.keys(hostStorageTypes);
+  // Iterate over each storageKey in bucketTableEntriesByStorageKey.
+  for (let i = 0; i < storageKeys.length; i++) {
+    const storageKey: string = storageKeys[i];
+    const storageKeyRowSpan =
+        bucketTableEntriesByStorageKey[storageKey]['bucketCount'];
+    const bucketsByStorageType: StorageTypeEntries =
+        bucketTableEntriesByStorageKey[storageKey]['storageKeyEntries'];
+    const storageTypes: StorageType[] =
+        Object.keys(bucketsByStorageType).map(typeStr => Number(typeStr));
 
-    // Iterate over each storageType key for a given host.
+    // Iterate over each storageType for a given storage key.
     for (let j = 0; j < storageTypes.length; j++) {
-      const storageType: string = storageTypes[j];
-      const bucketsForStorageType: HostAndStorageTypeBucketTableEntry[] =
-          hostStorageTypes[storageType]['entries'];
-      const usageAndStorageTypeRowSpan: number =
-          hostStorageTypes[storageType]['entries'].length;
+      const storageType: StorageType = storageTypes[j];
+      const bucketsForStorageType: StorageTypeBucketTableEntry[] =
+          bucketsByStorageType[storageType];
+      const storageTypeRowSpan: number =
+          bucketsByStorageType[storageType].length;
 
-      // Iterate over each bucket for a given host and storageType.
+      // Iterate over each bucket for a given storageKey and storageType.
       for (let k = 0; k < bucketsForStorageType.length; k++) {
-        const isFirstHostRow: boolean = (j === 0 && k === 0);
+        const isFirstStorageKeyRow: boolean = (j === 0 && k === 0);
         const isFirstStorageType: boolean = (k === 0);
 
         // Initialize a Usage and Quota table row template.
@@ -243,21 +241,18 @@ async function renderUsageAndQuotaStats() {
             rowTemplate.cloneNode(true) as HTMLTemplateElement;
         const usageAndQuotaRow = usageAndQuotaRowTemplate.content;
 
-        usageAndQuotaRow.querySelector('.host')!.textContent = host;
-        usageAndQuotaRow.querySelector('.host')!.setAttribute(
-            'rowspan', `${hostRowSpan}`);
-        usageAndQuotaRow.querySelector('.total-usage')!.textContent =
-            hostStorageTypes[storageType]['hostUsage'];
-        usageAndQuotaRow.querySelector('.total-usage')!.setAttribute(
-            'rowspan', `${usageAndStorageTypeRowSpan}`);
-        usageAndQuotaRow.querySelector('.storage-type')!.textContent =
-            storageType;
-        usageAndQuotaRow.querySelector('.storage-type')!.setAttribute(
-            'rowspan', `${usageAndStorageTypeRowSpan}`);
         usageAndQuotaRow.querySelector('.storage-key')!.textContent =
-            bucketsForStorageType[k].storageKey;
+            storageKey;
+        usageAndQuotaRow.querySelector('.storage-key')!.setAttribute(
+            'rowspan', `${storageKeyRowSpan}`);
+        usageAndQuotaRow.querySelector('.storage-type')!.textContent =
+            StorageType[storageType];
+        usageAndQuotaRow.querySelector('.storage-type')!.setAttribute(
+            'rowspan', `${storageTypeRowSpan}`);
         usageAndQuotaRow.querySelector('.bucket')!.textContent =
-            bucketsForStorageType[k].bucketId;
+            bucketsForStorageType[k].name;
+        usageAndQuotaRow.querySelector('.usage')!.textContent =
+            bucketsForStorageType[k].usage;
         usageAndQuotaRow.querySelector('.use-count')!.textContent =
             bucketsForStorageType[k].useCount;
         usageAndQuotaRow.querySelector('.last-accessed')!.textContent =
@@ -265,20 +260,20 @@ async function renderUsageAndQuotaStats() {
         usageAndQuotaRow.querySelector('.last-modified')!.textContent =
             bucketsForStorageType[k].lastModified;
 
-        /* If the current row is not the first of its kind for a given host,
-         * remove the host cell when appending the row to the table body.
-         * This creates a nested row to the right of the host cell. */
-        if (!isFirstHostRow) {
-          usageAndQuotaRow.querySelector('.host')!.remove();
+        /* If the current row is not the first of its kind for a given storage
+         * key, remove the storage key cell when appending the row to the table
+         * body. This creates a nested row to the right of the storage key cell.
+         */
+        if (!isFirstStorageKeyRow) {
+          usageAndQuotaRow.querySelector('.storage-key')!.remove();
         }
 
         /* If the current storage type (temporary, persistent, syncable) is not
-         * the first of its kind for a given host and storage type,
-         * remove the Total Usage and Storage Type cells from the row before
+         * the first of its kind for a given storage key and storage type,
+         * remove the Storage Type cells from the row before
          * appending the row to the table body.
          * This creates a nested row to the right of the Storage Type cell. */
         if (!isFirstStorageType) {
-          usageAndQuotaRow.querySelector('.total-usage')!.remove();
           usageAndQuotaRow.querySelector('.storage-type')!.remove();
         }
         tableBody.appendChild(usageAndQuotaRow);

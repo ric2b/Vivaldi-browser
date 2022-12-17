@@ -276,10 +276,6 @@ id<GREYMatcher> ConfirmClearBrowsingDataButton() {
   return [ChromeMatchersAppInterface confirmClearBrowsingDataButton];
 }
 
-id<GREYMatcher> SettingsMenuButton() {
-  return [ChromeMatchersAppInterface settingsMenuButton];
-}
-
 id<GREYMatcher> SettingsDoneButton() {
   return [ChromeMatchersAppInterface settingsDoneButton];
 }
@@ -306,10 +302,6 @@ id<GREYMatcher> LanguagesButton() {
 
 id<GREYMatcher> AddCreditCardView() {
   return [ChromeMatchersAppInterface addCreditCardView];
-}
-
-id<GREYMatcher> AddPaymentMethodButton() {
-  return [ChromeMatchersAppInterface addPaymentMethodButton];
 }
 
 id<GREYMatcher> AddCreditCardButton() {
@@ -362,6 +354,10 @@ id<GREYMatcher> SettingsSafetyCheckTableView() {
 
 id<GREYMatcher> SettingsPrivacyTableView() {
   return [ChromeMatchersAppInterface settingsPrivacyTableView];
+}
+
+id<GREYMatcher> SettingsPrivacySafeBrowsingTableView() {
+  return [ChromeMatchersAppInterface settingsPrivacySafeBrowsingTableView];
 }
 
 id<GREYMatcher> ContentSettingsButton() {
@@ -475,18 +471,6 @@ id<GREYMatcher> PaymentRequestPickerSearchBar() {
 
 id<GREYMatcher> OpenNewWindowMenuButton() {
   return [ChromeMatchersAppInterface openNewWindowMenuButton];
-}
-
-id<GREYMatcher> ReadingListMenuButton() {
-  return [ChromeMatchersAppInterface readingListMenuButton];
-}
-
-id<GREYMatcher> BookmarksMenuButton() {
-  return [ChromeMatchersAppInterface bookmarksMenuButton];
-}
-
-id<GREYMatcher> RecentTabsMenuButton() {
-  return [ChromeMatchersAppInterface recentTabsMenuButton];
 }
 
 id<GREYMatcher> SystemSelectionCallout() {
@@ -678,6 +662,80 @@ id<GREYMatcher> HistoryEntry(const std::string& url, const std::string& title) {
 
 id<GREYMatcher> SettingsToolbarAddButton() {
   return [ChromeMatchersAppInterface settingsToolbarAddButton];
+}
+
+#pragma mark - Overflow Menu Destinations
+
+id<GREYMatcher> BookmarksDestinationButton() {
+  return [ChromeMatchersAppInterface bookmarksDestinationButton];
+}
+
+id<GREYMatcher> HistoryDestinationButton() {
+  return [ChromeMatchersAppInterface historyDestinationButton];
+}
+
+id<GREYMatcher> ReadingListDestinationButton() {
+  return [ChromeMatchersAppInterface readingListDestinationButton];
+}
+
+id<GREYMatcher> PasswordsDestinationButton() {
+  return [ChromeMatchersAppInterface passwordsDestinationButton];
+}
+
+id<GREYMatcher> DownloadsDestinationButton() {
+  return [ChromeMatchersAppInterface downloadsDestinationButton];
+}
+
+id<GREYMatcher> RecentTabsDestinationButton() {
+  return [ChromeMatchersAppInterface recentTabsDestinationButton];
+}
+
+id<GREYMatcher> SiteInfoDestinationButton() {
+  return [ChromeMatchersAppInterface siteInfoDestinationButton];
+}
+
+id<GREYMatcher> SettingsDestinationButton() {
+  return [ChromeMatchersAppInterface settingsDestinationButton];
+}
+
+#pragma mark - Overflow Menu Actions
+
+id<GREYMatcher> SettingsActionButton() {
+  return [ChromeMatchersAppInterface settingsActionButton];
+}
+
+#pragma mark - Promo style view controller
+
+id<GREYMatcher> PromoStylePrimaryActionButtonMatcher() {
+  return [ChromeMatchersAppInterface promoStylePrimaryActionButtonMatcher];
+}
+
+id<GREYMatcher> PromoStyleSecondaryActionButtonMatcher() {
+  return [ChromeMatchersAppInterface promoStyleSecondaryActionButtonMatcher];
+}
+
+#pragma mark - Incognito Interstitial
+
+id<GREYMatcher> IncognitoInterstitialMatcher() {
+  return [ChromeMatchersAppInterface incognitoInterstitial];
+}
+
+id<GREYMatcher> IncognitoInterstitialLabelForURL(const std::string& url) {
+  return [ChromeMatchersAppInterface
+      incognitoInterstitialLabelForURL:base::SysUTF8ToNSString(url)];
+}
+
+id<GREYMatcher> IncognitoInterstitialOpenInChromeIncognitoButton() {
+  return [ChromeMatchersAppInterface
+      incognitoInterstitialOpenInChromeIncognitoButton];
+}
+
+id<GREYMatcher> IncognitoInterstitialOpenInChromeButton() {
+  return [ChromeMatchersAppInterface incognitoInterstitialOpenInChromeButton];
+}
+
+id<GREYMatcher> IncognitoInterstitialCancelButton() {
+  return [ChromeMatchersAppInterface incognitoInterstitialCancelButton];
 }
 
 #pragma mark - Manual Fallback

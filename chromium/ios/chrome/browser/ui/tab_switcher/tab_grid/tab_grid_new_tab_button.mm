@@ -20,7 +20,7 @@
 namespace {
 
 // The size of the symbol image.
-NSInteger kSymbolNewTabPointSize = 24;
+const CGFloat kSymbolNewTabPointSize = 24;
 
 }  // namespace
 
@@ -116,6 +116,11 @@ NSInteger kSymbolNewTabPointSize = 24;
           imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
       break;
     case TabGridPageRemoteTabs:
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+    // End Vivaldi
+
       break;
   }
   _page = page;
@@ -138,6 +143,11 @@ NSInteger kSymbolNewTabPointSize = 24;
       self.circleBackgroundView.backgroundColor = UIColor.whiteColor;
       break;
     case TabGridPageRemoteTabs:
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+    // End Vivaldi
+
       break;
   }
   _page = page;

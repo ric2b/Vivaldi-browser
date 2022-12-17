@@ -68,7 +68,7 @@ def generate_framework_tests_and_coverage(
         actions_csv, enums, platform_supported_actions)
 
     required_coverage_tests = read_unprocessed_coverage_tests_file(
-        coverage_required_file.readlines(), actions,
+        coverage_required_file.readlines(), actions, enums,
         action_base_name_to_default_param)
 
     required_coverage_tests = expand_parameterized_tests(
@@ -203,13 +203,13 @@ def main():
             action_name_prefixes={"switch_profile_clients", "sync_"},
             browsertest_dir=sync_tests_location,
             test_file_prefix="two_client_web_apps_integration_test",
-            test_fixture="TwoClientWebAppsIntegrationTest")
+            test_fixture="WebAppIntegration")
     ]
     default_partition = TestPartitionDescription(
         action_name_prefixes=set(),
         browsertest_dir=default_tests_location,
         test_file_prefix="web_app_integration_browsertest",
-        test_fixture="WebAppIntegrationBrowserTest")
+        test_fixture="WebAppIntegration")
 
     graph_output_dir = None
     if options.graphs:

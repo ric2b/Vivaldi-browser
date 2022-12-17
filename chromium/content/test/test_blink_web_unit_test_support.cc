@@ -116,8 +116,9 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport(
   gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
 #endif
 
-  // Test shell always exposes the GC.
-  std::string v8_flags("--expose-gc");
+  // Test shell always exposes the GC, and some tests need to modify flags so do
+  // not freeze them on initialization.
+  std::string v8_flags("--expose-gc --no-freeze-flags-after-init");
 
   blink::Platform::InitializeBlink();
   scoped_refptr<base::SingleThreadTaskRunner> dummy_task_runner;
@@ -263,10 +264,6 @@ TestBlinkWebUnitTestSupport::GetIOTaskRunner() const {
 
 bool TestBlinkWebUnitTestSupport::IsThreadedAnimationEnabled() {
   return threaded_animation_;
-}
-
-cc::TaskGraphRunner* TestBlinkWebUnitTestSupport::GetTaskGraphRunner() {
-  return &test_task_graph_runner_;
 }
 
 // static

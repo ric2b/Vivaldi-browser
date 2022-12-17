@@ -9,6 +9,7 @@ alignSelf
 alignmentBaseline
 all
 anchorName
+anchorScroll
 animation
 animationDelay
 animationDirection
@@ -217,6 +218,7 @@ gridTemplateAreas
 gridTemplateColumns
 gridTemplateRows
 height
+hyphenateCharacter
 hyphens
 imageOrientation
 imageRendering
@@ -336,6 +338,8 @@ placeContent
 placeItems
 placeSelf
 pointerEvents
+popUpHideDelay
+popUpShowDelay
 position
 positionFallback
 prefix

@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/css/css_selector_list.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser_selector.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
@@ -94,17 +95,21 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
   }
 
   template <unsigned length>
-  void CheckCacheResults(Document* document,
-                         String query_name,
-                         const char* selector_text,
-                         unsigned expected_result_cache_count,
-                         const ExpectedResultCacheEntry (
-                             &expected_result_cache_entries)[length]) const {
-    CSSSelectorList selector_list = CSSParser::ParseSelector(
+  void CheckCacheResults(
+      Document* document,
+      String query_name,
+      const char* selector_text,
+      unsigned expected_result_cache_count,
+      const ExpectedResultCacheEntry (&expected_result_cache_entries)[length],
+      unsigned expected_fast_reject_filter_cache_count,
+      unsigned expected_bloom_filter_allocation_count) const {
+    CSSSelectorVector selector_vector = CSSParser::ParseSelector(
         MakeGarbageCollected<CSSParserContext>(
             *document, NullURL(), true /* origin_clean */, Referrer(),
             WTF::TextEncoding(), CSSParserContext::kSnapshotProfile),
         nullptr, selector_text);
+    CSSSelectorList selector_list =
+        CSSSelectorList::AdoptSelectorVector(selector_vector);
     const CSSSelector* selector = nullptr;
     for (selector = selector_list.First();
          selector && selector->GetPseudoType() != CSSSelector::kPseudoHas;
@@ -121,7 +126,8 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
     CheckPseudoHasCacheScope::Context cache_scope_context(document,
                                                           argument_context);
 
-    EXPECT_EQ(expected_result_cache_count, cache_scope_context.GetCacheCount())
+    EXPECT_EQ(expected_result_cache_count,
+              cache_scope_context.GetResultCacheCountForTesting())
         << "Failed : " << query_name;
 
     for (ExpectedResultCacheEntry expected_result_cache_entry :
@@ -158,6 +164,14 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
           break;
       }
     }
+
+    EXPECT_EQ(expected_fast_reject_filter_cache_count,
+              cache_scope_context.GetFastRejectFilterCacheCountForTesting())
+        << "Failed : " << query_name;
+
+    EXPECT_EQ(expected_bloom_filter_allocation_count,
+              cache_scope_context.GetBloomFilterAllocationCountForTesting())
+        << "Failed : " << query_name;
   }
 
   template <unsigned cache_size>
@@ -167,7 +181,9 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
                    bool expected_match_result,
                    unsigned expected_result_cache_count,
                    const ExpectedResultCacheEntry (
-                       &expected_result_cache_entries)[cache_size]) const {
+                       &expected_result_cache_entries)[cache_size],
+                   unsigned expected_fast_reject_filter_cache_count,
+                   unsigned expected_bloom_filter_allocation_count) const {
     Element* query_scope_element =
         document->getElementById(query_scope_element_id);
     ASSERT_TRUE(query_scope_element);
@@ -181,9 +197,10 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
               query_scope_element->matches(selector_text))
         << "Failed : " << query_name;
 
-    CheckCacheResults(document, query_name, selector_text,
-                      expected_result_cache_count,
-                      expected_result_cache_entries);
+    CheckCacheResults(
+        document, query_name, selector_text, expected_result_cache_count,
+        expected_result_cache_entries, expected_fast_reject_filter_cache_count,
+        expected_bloom_filter_allocation_count);
   }
 
   template <unsigned query_result_size, unsigned cache_size>
@@ -194,7 +211,9 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
       const String (&expected_results)[query_result_size],
       unsigned expected_result_cache_count,
       const ExpectedResultCacheEntry (
-          &expected_result_cache_entries)[cache_size]) const {
+          &expected_result_cache_entries)[cache_size],
+      unsigned expected_fast_reject_filter_cache_count,
+      unsigned expected_bloom_filter_allocation_count) const {
     Element* query_scope_element =
         document->getElementById(query_scope_element_id);
     ASSERT_TRUE(query_scope_element);
@@ -217,9 +236,10 @@ class CheckPseudoHasCacheScopeContextTest : public PageTestBase {
           << "Failed :" << query_name << " result at index " << i;
     }
 
-    CheckCacheResults(document, query_name, selector_text,
-                      expected_result_cache_count,
-                      expected_result_cache_entries);
+    CheckCacheResults(
+        document, query_name, selector_text, expected_result_cache_count,
+        expected_result_cache_entries, expected_fast_reject_filter_cache_count,
+        expected_bloom_filter_allocation_count);
   }
 };
 
@@ -299,7 +319,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div2", ":has(.b)",
               /* expected_match_result */ true,
@@ -330,7 +352,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div2", ":has(.c)",
               /* expected_match_result */ false,
@@ -360,7 +384,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, Case1StartsWithChildCombinator) {
@@ -474,7 +500,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case1StartsWithChildCombinator) {
                {"#div231", kNotCached, kNotYetChecked},
                {"#div24", kNotCached, kNotYetChecked},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div31", kNotCached, kNotYetChecked}});
+               {"#div31", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div2", ":has(> .a .b)",
               /* expected_match_result */ false,
@@ -519,7 +547,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case1StartsWithChildCombinator) {
                {"#div231", kNotCached, kAlreadyNotMatched},
                {"#div24", kNotCached, kAlreadyNotMatched},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div31", kNotCached, kNotYetChecked}});
+               {"#div31", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div2", ":has(> .a .c)",
               /* expected_match_result */ false,
@@ -564,7 +594,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case1StartsWithChildCombinator) {
                {"#div231", kNotCached, kAlreadyNotMatched},
                {"#div24", kNotCached, kAlreadyNotMatched},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div31", kNotCached, kNotYetChecked}});
+               {"#div31", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithIndirectAdjacent) {
@@ -629,7 +661,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithIndirectAdjacent) {
                {"#div251", kNotCached, kNotYetChecked},
                {"#div252", kNotCached, kNotYetChecked},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div31", kNotCached, kNotYetChecked}});
+               {"#div31", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div22", ":has(~ .b)",
               /* expected_match_result */ false,
@@ -655,7 +689,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithIndirectAdjacent) {
                {"#div251", kNotCached, kNotYetChecked},
                {"#div252", kNotCached, kNotYetChecked},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div31", kNotCached, kNotYetChecked}});
+               {"#div31", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithDirectAdjacent) {
@@ -753,7 +789,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithDirectAdjacent) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div22", ":has(+ .a ~ .b)",
               /* expected_match_result */ false,
@@ -794,7 +832,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithDirectAdjacent) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div22", ":has(+ .a ~ .c)",
               /* expected_match_result */ false,
@@ -835,7 +875,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case2StartsWithDirectAdjacent) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, Case3) {
@@ -942,7 +984,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case3) {
                {"#div241", kNotCached, kNotYetChecked},
                {"#div25", kNotCached, kNotYetChecked},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div4", kNotCached, kNotYetChecked}});
+               {"#div4", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div1", ":has(+ .a .b)",
               /* expected_match_result */ false,
@@ -985,7 +1029,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case3) {
                {"#div241", kNotCached, kAlreadyNotMatched},
                {"#div25", kNotCached, kAlreadyNotMatched},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div4", kNotCached, kNotYetChecked}});
+               {"#div4", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div22", ":has(+ .a .c)",
               /* expected_match_result */ false,
@@ -1028,7 +1074,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case3) {
                {"#div241", kNotCached, kNotYetChecked},
                {"#div25", kNotCached, kNotYetChecked},
                {"#div3", kNotCached, kNotYetChecked},
-               {"#div4", kNotCached, kNotYetChecked}});
+               {"#div4", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, Case4) {
@@ -1148,7 +1196,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case4) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div21", ":has(~ .a .b)",
               /* expected_match_result */ true,
@@ -1198,7 +1248,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case4) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div1", ":has(~ .a .b)",
               /* expected_match_result */ false,
@@ -1246,7 +1298,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case4) {
                {"#div3", kNotCached, kAlreadyNotMatched},
                {"#div31", kNotCached, kAlreadyNotMatched},
                {"#div4", kNotCached, kAlreadyNotMatched},
-               {"#div41", kNotCached, kAlreadyNotMatched}});
+               {"#div41", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div22", ":has(~ .a .c)",
               /* expected_match_result */ false,
@@ -1294,7 +1348,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, Case4) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div4", kNotCached, kNotYetChecked},
-               {"#div41", kNotCached, kNotYetChecked}});
+               {"#div41", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest,
@@ -1338,12 +1394,16 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div131", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
                 kSameAsCached},
                {"#div14", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
-                kSameAsCached}});
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div11", ":has(.a .b)",
               /* expected_match_result */ false,
               /* expected_result_cache_count */ 1,
-              {{"#div11", kNotMatched, kSameAsCached}});
+              {{"#div11", kNotMatched, kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div12", ":has(.a .b)",
               /* expected_match_result */ true,
@@ -1360,7 +1420,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                 kSameAsCached},
                {"#div13", kNotCached, kNotYetChecked},
                {"#div131", kNotCached, kNotYetChecked},
-               {"#div14", kNotCached, kNotYetChecked}});
+               {"#div14", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   // ':has(.a .b)' does not match #div1211 but this caches possibly matched
   // elements because argument selector checking can cross over the :has()
@@ -1380,7 +1442,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                 kSameAsCached},
                {"#div13", kNotCached, kNotYetChecked},
                {"#div131", kNotCached, kNotYetChecked},
-               {"#div14", kNotCached, kNotYetChecked}});
+               {"#div14", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   // ':has(.a .b)' does not match #div13 but this caches possibly matched
   // elements because argument selector checking can cross over the :has()
@@ -1400,7 +1464,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div13", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
                {"#div131", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
                 kSameAsCached},
-               {"#div14", kNotCached, kNotYetChecked}});
+               {"#div14", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(
       document, "main", ":has(.a .b)", {"div1", "div12", "div121"},
@@ -1419,7 +1485,30 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
        {"#div131", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
         kSameAsCached},
        {"#div14", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
-        kSameAsCached}});
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 5,
+      /* expected_bloom_filter_allocation_count */ 0);
+
+  TestQuerySelectorAll(
+      document, "main", ":has(.a .b), :has(.c .d)", {"div1", "div12", "div121"},
+      /* expected_result_cache_count */ 12,
+      {{"html", kMatched, kSameAsCached},
+       {"body", kMatched, kSameAsCached},
+       {"#main", kMatched, kSameAsCached},
+       {"#div1", kMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div11", kNotMatched, kSameAsCached},
+       {"#div12", kMatched, kSameAsCached},
+       {"#div121", kMatched, kSameAsCached},
+       {"#div1211", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div12111", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div13", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div131", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div14", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 6,
+      /* expected_bloom_filter_allocation_count */ 3);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest,
@@ -1450,7 +1539,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div111", kMatched, kSameAsCached},
                {"#div1111", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
                {"#div11111", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
-                kSameAsCached}});
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div11", ":has(> .a .b)",
               /* expected_match_result */ false,
@@ -1460,7 +1551,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div111", kMatchedAndAllDescendantsOrNextSiblingsChecked,
                 kSameAsCached},
                {"#div1111", kNotCached, kAlreadyNotMatched},
-               {"#div11111", kNotCached, kAlreadyNotMatched}});
+               {"#div11111", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(
       document, "main", ":has(> .a .b)", {"div1", "div111"},
@@ -1471,7 +1564,22 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
         kSameAsCached},
        {"#div1111", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
        {"#div11111", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
-        kSameAsCached}});
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 2,
+      /* expected_bloom_filter_allocation_count */ 0);
+
+  TestQuerySelectorAll(
+      document, "main", ":has(> .a .b), :has(> .c .d)", {"div1", "div111"},
+      /* expected_result_cache_count */ 5,
+      {{"#div1", kMatched, kSameAsCached},
+       {"#div11", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div111", kMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div1111", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div11111", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 2,
+      /* expected_bloom_filter_allocation_count */ 1);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest,
@@ -1512,7 +1620,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
               /* expected_result_cache_count */ 2,
               {{"#div112", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
                {"#div1121", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
-                kSameAsCached}});
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div111", ":has(> .a .b)",
               /* expected_match_result */ true,
@@ -1522,7 +1632,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div11111", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
                 kSameAsCached},
                {"#div1112", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
-                kSameAsCached}});
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div11", ":has(> .a .b)",
               /* expected_match_result */ true,
@@ -1538,7 +1650,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                 kSameAsCached},
                {"#div1121", kNotCached, kAlreadyNotMatched},
                {"#div113", kNotCached, kAlreadyNotMatched},
-               {"#div1131", kNotCached, kAlreadyNotMatched}});
+               {"#div1131", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div1", ":has(> .a .b)",
               /* expected_match_result */ false,
@@ -1555,7 +1669,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div113", kNotCached, kAlreadyNotMatched},
                {"#div1131", kNotCached, kAlreadyNotMatched},
                {"#div12", kNotCached, kAlreadyNotMatched},
-               {"#div121", kNotCached, kAlreadyNotMatched}});
+               {"#div121", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(
       document, "main", ":has(> .a .b) ~ .c .d", {"div1131", "div121"},
@@ -1580,7 +1696,260 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
        {"#div12", kNotCached, kAlreadyNotMatched},
        {"#div121", kNotCached, kAlreadyNotMatched},
        {"#div2", kNotCached, kNotYetChecked},
-       {"#div21", kNotCached, kNotYetChecked}});
+       {"#div21", kNotCached, kNotYetChecked}},
+      /* expected_fast_reject_filter_cache_count */ 4,
+      /* expected_bloom_filter_allocation_count */ 0);
+}
+
+TEST_F(CheckPseudoHasCacheScopeContextTest,
+       QuerySelectorAllCase2NonSubjectHas) {
+  // CheckPseudoHasArgumentTraversalScope::kAllNextSiblings
+
+  auto* document = HTMLDocument::CreateForTest();
+  document->write(R"HTML(
+    <!DOCTYPE html>
+    <main id=main>
+      <div id=div1>
+        <div id=div11 class=a>
+          <div id=div111>
+            <div id=div1111 class=b></div>
+          </div>
+          <div id=div112 class=a></div>
+        </div>
+        <div id=div12>
+          <div id=div121>
+            <div id=div1211 class=b></div>
+          </div>
+          <div id=div122></div>
+        </div>
+        <div id=div13></div>
+      </div>
+      <div id=div2 class=a></div>
+    </main>
+  )HTML");
+
+  TestMatches(document, "div1111", ":has(~ .a) .b",
+              /* expected_match_result */ true,
+              /* expected_result_cache_count */ 3,
+              {{"main", kNotCached, kNotYetChecked},
+               {"#div1", kNotCached, kNotYetChecked},
+               {"#div11", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+               {"#div111", kMatched, kSameAsCached},
+               {"#div1111", kNotCached, kNotYetChecked},
+               {"#div112", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached},
+               {"#div12", kNotCached, kNotYetChecked},
+               {"#div121", kNotCached, kNotYetChecked},
+               {"#div1211", kNotCached, kNotYetChecked},
+               {"#div122", kNotCached, kNotYetChecked},
+               {"#div13", kNotCached, kNotYetChecked},
+               {"#div2", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
+
+  TestMatches(document, "div1211", ":has(~ .a) .b",
+              /* expected_match_result */ true,
+              /* expected_result_cache_count */ 7,
+              {{"main", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+               {"#div1", kMatchedAndSomeChildrenChecked, kSameAsCached},
+               {"#div11", kNotCached, kNotYetChecked},
+               {"#div111", kNotCached, kNotYetChecked},
+               {"#div1111", kNotCached, kNotYetChecked},
+               {"#div112", kNotCached, kNotYetChecked},
+               {"#div12", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+               {"#div121", kNotMatched, kSameAsCached},
+               {"#div1211", kNotCached, kNotYetChecked},
+               {"#div122", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached},
+               {"#div13", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached},
+               {"#div2", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 3,
+              /* expected_bloom_filter_allocation_count */ 0);
+
+  TestQuerySelectorAll(
+      document, "main", ":has(~ .a) .b", {"div1111", "div1211"},
+      /* expected_result_cache_count */ 10,
+      {{"main", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div1", kMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div11", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div111", kMatched, kSameAsCached},
+       {"#div1111", kNotCached, kNotYetChecked},
+       {"#div112", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div12", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div121", kNotMatched, kSameAsCached},
+       {"#div1211", kNotCached, kNotYetChecked},
+       {"#div122", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div13", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div2", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 4,
+      /* expected_bloom_filter_allocation_count */ 0);
+}
+
+TEST_F(CheckPseudoHasCacheScopeContextTest,
+       QuerySelectorAllCase3NonSubjectHas) {
+  // CheckPseudoHasArgumentTraversalScope::kOneNextSiblingSubtree
+
+  auto* document = HTMLDocument::CreateForTest();
+  document->write(R"HTML(
+    <!DOCTYPE html>
+    <main id=main>
+      <div id=div1>
+        <div id=div11 class=c></div>
+      </div>
+      <div id=div2 class=a>
+        <div id=div21>
+          <div id=div211 class=c></div>
+        </div>
+        <div id=div22 class=a>
+          <div id=div221 class=b></div>
+        </div>
+        <div id=div23>
+          <div id=div231 class=b></div>
+        </div>
+      </div>
+    </main>
+  )HTML");
+
+  TestMatches(document, "div11", ":has(+ .a .b) .c",
+              /* expected_match_result */ true,
+              /* expected_result_cache_count */ 3,
+              {{"main", kNotCached, kNotYetChecked},
+               {"#div1", kMatched, kSameAsCached},
+               {"#div11", kNotCached, kNotYetChecked},
+               {"#div2", kNotCached, kNotYetChecked},
+               {"#div21", kNotCached, kNotYetChecked},
+               {"#div211", kNotCached, kNotYetChecked},
+               {"#div22", kNotCached, kNotYetChecked},
+               {"#div221", kNotCached, kNotYetChecked},
+               {"#div23", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+               {"#div231", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
+
+  TestMatches(document, "div211", ":has(+ .a .b) .c",
+              /* expected_match_result */ true,
+              /* expected_result_cache_count */ 3,
+              {{"main", kNotCached, kNotYetChecked},
+               {"#div1", kNotCached, kNotYetChecked},
+               {"#div11", kNotCached, kNotYetChecked},
+               {"#div2", kNotCached, kNotYetChecked},
+               {"#div21", kMatched, kSameAsCached},
+               {"#div211", kNotCached, kNotYetChecked},
+               {"#div22", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+               {"#div221", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached},
+               {"#div23", kNotCached, kNotYetChecked},
+               {"#div231", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
+
+  TestQuerySelectorAll(
+      document, "main", ":has(+ .a .b) .c", {"div11", "div211"},
+      /* expected_result_cache_count */ 6,
+      {{"main", kNotCached, kNotYetChecked},
+       {"#div1", kMatched, kSameAsCached},
+       {"#div11", kNotCached, kNotYetChecked},
+       {"#div2", kNotCached, kNotYetChecked},
+       {"#div21", kMatched, kSameAsCached},
+       {"#div211", kNotCached, kNotYetChecked},
+       {"#div22", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div221", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div23", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div231", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 2,
+      /* expected_bloom_filter_allocation_count */ 0);
+}
+
+TEST_F(CheckPseudoHasCacheScopeContextTest,
+       QuerySelectorAllCase4NonSubjectHas) {
+  // CheckPseudoHasArgumentTraversalScope::kAllNextSiblingSubtrees
+
+  auto* document = HTMLDocument::CreateForTest();
+  document->write(R"HTML(
+    <!DOCTYPE html>
+    <main id=main>
+      <div id=div1>
+        <div id=div11 class=c></div>
+      </div>
+      <div id=div2 class=a>
+        <div id=div21>
+          <div id=div211>
+            <div id=div2111 class=c></div>
+          </div>
+          <div id=div212 class=a>
+            <div id=div2121 class=b></div>
+          </div>
+        </div>
+        <div id=div22>
+          <div id=div221 class=b></div>
+        </div>
+      </div>
+    </main>
+  )HTML");
+
+  TestMatches(document, "div11", ":has(~ .a .b) .c",
+              /* expected_match_result */ true,
+              /* expected_result_cache_count */ 3,
+              {{"main", kNotCached, kNotYetChecked},
+               {"#div1", kMatched, kSameAsCached},
+               {"#div11", kNotCached, kNotYetChecked},
+               {"#div2", kNotCached, kNotYetChecked},
+               {"#div21", kNotCached, kNotYetChecked},
+               {"#div211", kNotCached, kNotYetChecked},
+               {"#div2111", kNotCached, kNotYetChecked},
+               {"#div212", kNotCached, kNotYetChecked},
+               {"#div2121", kNotCached, kNotYetChecked},
+               {"#div22", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+               {"#div221", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
+
+  TestMatches(document, "div2111", ":has(~ .a .b) .c",
+              /* expected_match_result */ true,
+              /* expected_result_cache_count */ 3,
+              {{"main", kNotCached, kNotYetChecked},
+               {"#div1", kNotCached, kNotYetChecked},
+               {"#div11", kNotCached, kNotYetChecked},
+               {"#div2", kNotCached, kNotYetChecked},
+               {"#div21", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+               {"#div211", kMatched, kSameAsCached},
+               {"#div2111", kNotCached, kNotYetChecked},
+               {"#div212", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+                kSameAsCached},
+               {"#div2121", kNotCached, kAlreadyNotMatched},
+               {"#div22", kNotCached, kNotYetChecked},
+               {"#div221", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
+
+  TestQuerySelectorAll(
+      document, "main", ":has(~ .a .b) .c", {"div11", "div2111"},
+      /* expected_result_cache_count */ 6,
+      {{"main", kNotCached, kNotYetChecked},
+       {"#div1", kMatched, kSameAsCached},
+       {"#div11", kNotCached, kNotYetChecked},
+       {"#div2", kNotCached, kNotYetChecked},
+       {"#div21", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div211", kMatched, kSameAsCached},
+       {"#div2111", kNotCached, kNotYetChecked},
+       {"#div212", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div2121", kNotCached, kAlreadyNotMatched},
+       {"#div22", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div221", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached}},
+      /* expected_fast_reject_filter_cache_count */ 2,
+      /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest,
@@ -1644,7 +2013,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div5", kNotCached, kAlreadyNotMatched},
                {"#div51", kNotCached, kAlreadyNotMatched},
                {"#div6", kNotCached, kAlreadyNotMatched},
-               {"#div61", kNotCached, kAlreadyNotMatched}});
+               {"#div61", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div11", ":has(+ .a ~ .b .c)",
               /* expected_match_result */ true,
@@ -1659,7 +2030,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div14", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
                 kSameAsCached},
                {"#div141", kNotCached, kAlreadyNotMatched},
-               {"#div15", kNotCached, kAlreadyNotMatched}});
+               {"#div15", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div12", ":has(+ .a ~ .b .c)",
               /* expected_match_result */ false,
@@ -1673,7 +2046,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
                {"#div132", kNotCached, kAlreadyNotMatched},
                {"#div14", kNotCached, kAlreadyNotMatched},
                {"#div141", kNotCached, kAlreadyNotMatched},
-               {"#div15", kNotCached, kAlreadyNotMatched}});
+               {"#div15", kNotCached, kAlreadyNotMatched}},
+              /* expected_fast_reject_filter_cache_count */ 1,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(
       document, "main", ":has(+ .a ~ .b .c)", {"div11", "div4"},
@@ -1702,7 +2077,40 @@ TEST_F(CheckPseudoHasCacheScopeContextTest,
        {"#div5", kNotCached, kAlreadyNotMatched},
        {"#div51", kNotCached, kAlreadyNotMatched},
        {"#div6", kNotCached, kAlreadyNotMatched},
-       {"#div61", kNotCached, kAlreadyNotMatched}});
+       {"#div61", kNotCached, kAlreadyNotMatched}},
+      /* expected_fast_reject_filter_cache_count */ 3,
+      /* expected_bloom_filter_allocation_count */ 0);
+
+  TestQuerySelectorAll(
+      document, "main", ":has(+ .a ~ .b .c), :has(+ .d ~ .e .f)",
+      {"div11", "div4"}, /* expected_result_cache_count */ 9,
+      {{"main", kNotCheckedAndSomeChildrenChecked, kNotYetChecked},
+       {"#div1", kNotMatchedAndSomeChildrenChecked, kSameAsCached},
+       {"#div11", kMatched, kSameAsCached},
+       {"#div12", kNotMatched, kSameAsCached},
+       {"#div13",
+        kNotMatchedAndAllDescendantsOrNextSiblingsCheckedAndSomeChildrenChecked,
+        kSameAsCached},
+       {"#div131", kNotCached, kAlreadyNotMatched},
+       {"#div132", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div14", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div141", kNotCached, kAlreadyNotMatched},
+       {"#div15", kNotCached, kAlreadyNotMatched},
+       {"#div2", kNotMatchedAndAllDescendantsOrNextSiblingsChecked,
+        kSameAsCached},
+       {"#div21", kNotCached, kAlreadyNotMatched},
+       {"#div3", kNotCached, kAlreadyNotMatched},
+       {"#div31", kNotCached, kAlreadyNotMatched},
+       {"#div4", kMatched, kSameAsCached},
+       {"#div41", kNotCached, kAlreadyNotMatched},
+       {"#div5", kNotCached, kAlreadyNotMatched},
+       {"#div51", kNotCached, kAlreadyNotMatched},
+       {"#div6", kNotCached, kAlreadyNotMatched},
+       {"#div61", kNotCached, kAlreadyNotMatched}},
+      /* expected_fast_reject_filter_cache_count */ 3,
+      /* expected_bloom_filter_allocation_count */ 2);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase5) {
@@ -1745,7 +2153,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase5) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div32", kNotCached, kNotYetChecked},
-               {"#div33", kNotCached, kNotYetChecked}});
+               {"#div33", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div21", ":has(+ .a)",
               /* expected_match_result */ true,
@@ -1762,7 +2172,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase5) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div32", kNotCached, kNotYetChecked},
-               {"#div33", kNotCached, kNotYetChecked}});
+               {"#div33", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(document, "main", ":has(+ .a)", {"div2", "div21"},
                        /* expected_result_cache_count */ 0,
@@ -1778,7 +2190,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase5) {
                         {"#div3", kNotCached, kNotYetChecked},
                         {"#div31", kNotCached, kNotYetChecked},
                         {"#div32", kNotCached, kNotYetChecked},
-                        {"#div33", kNotCached, kNotYetChecked}});
+                        {"#div33", kNotCached, kNotYetChecked}},
+                       /* expected_fast_reject_filter_cache_count */ 0,
+                       /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase6) {
@@ -1822,7 +2236,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase6) {
                {"#div12", kNotCached, kNotYetChecked},
                {"#div121", kNotCached, kNotYetChecked},
                {"#div122", kNotCached, kNotYetChecked},
-               {"#div123", kNotCached, kNotYetChecked}});
+               {"#div123", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div112", ":has(> .a)",
               /* expected_match_result */ true,
@@ -1839,7 +2255,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase6) {
                {"#div12", kNotCached, kNotYetChecked},
                {"#div121", kNotCached, kNotYetChecked},
                {"#div122", kNotCached, kNotYetChecked},
-               {"#div123", kNotCached, kNotYetChecked}});
+               {"#div123", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div12", ":has(> .a)",
               /* expected_match_result */ true,
@@ -1856,7 +2274,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase6) {
                {"#div12", kNotCached, kNotYetChecked},
                {"#div121", kNotCached, kNotYetChecked},
                {"#div122", kNotCached, kNotYetChecked},
-               {"#div123", kNotCached, kNotYetChecked}});
+               {"#div123", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(document, "main", ":has(> .a)",
                        {"div1", "div112", "div12"},
@@ -1873,7 +2293,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase6) {
                         {"#div12", kNotCached, kNotYetChecked},
                         {"#div121", kNotCached, kNotYetChecked},
                         {"#div122", kNotCached, kNotYetChecked},
-                        {"#div123", kNotCached, kNotYetChecked}});
+                        {"#div123", kNotCached, kNotYetChecked}},
+                       /* expected_fast_reject_filter_cache_count */ 0,
+                       /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase7) {
@@ -1914,7 +2336,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase7) {
                {"#div23", kNotCached, kNotYetChecked},
                {"#div231", kNotCached, kNotYetChecked},
                {"#div232", kNotCached, kNotYetChecked},
-               {"#div233", kNotCached, kNotYetChecked}});
+               {"#div233", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div22", ":has(+ .a > .b)",
               /* expected_match_result */ true,
@@ -1930,7 +2354,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase7) {
                {"#div23", kNotCached, kNotYetChecked},
                {"#div231", kNotCached, kNotYetChecked},
                {"#div232", kNotCached, kNotYetChecked},
-               {"#div233", kNotCached, kNotYetChecked}});
+               {"#div233", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(document, "main", ":has(+ .a > .b)", {"div1", "div22"},
                        /* expected_result_cache_count */ 0,
@@ -1945,7 +2371,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase7) {
                         {"#div23", kNotCached, kNotYetChecked},
                         {"#div231", kNotCached, kNotYetChecked},
                         {"#div232", kNotCached, kNotYetChecked},
-                        {"#div233", kNotCached, kNotYetChecked}});
+                        {"#div233", kNotCached, kNotYetChecked}},
+                       /* expected_fast_reject_filter_cache_count */ 0,
+                       /* expected_bloom_filter_allocation_count */ 0);
 }
 
 TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase8) {
@@ -1995,7 +2423,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase8) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div32", kNotCached, kNotYetChecked},
-               {"#div33", kNotCached, kNotYetChecked}});
+               {"#div33", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div2", ":has(~ .a > .b)",
               /* expected_match_result */ true,
@@ -2015,7 +2445,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase8) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div32", kNotCached, kNotYetChecked},
-               {"#div33", kNotCached, kNotYetChecked}});
+               {"#div33", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestMatches(document, "div21", ":has(~ .a > .b)",
               /* expected_match_result */ true,
@@ -2035,7 +2467,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase8) {
                {"#div3", kNotCached, kNotYetChecked},
                {"#div31", kNotCached, kNotYetChecked},
                {"#div32", kNotCached, kNotYetChecked},
-               {"#div33", kNotCached, kNotYetChecked}});
+               {"#div33", kNotCached, kNotYetChecked}},
+              /* expected_fast_reject_filter_cache_count */ 0,
+              /* expected_bloom_filter_allocation_count */ 0);
 
   TestQuerySelectorAll(document, "main", ":has(~ .a > .b)",
                        {"div1", "div2", "div21"},
@@ -2055,7 +2489,9 @@ TEST_F(CheckPseudoHasCacheScopeContextTest, QuerySelectorAllCase8) {
                         {"#div3", kNotCached, kNotYetChecked},
                         {"#div31", kNotCached, kNotYetChecked},
                         {"#div32", kNotCached, kNotYetChecked},
-                        {"#div33", kNotCached, kNotYetChecked}});
+                        {"#div33", kNotCached, kNotYetChecked}},
+                       /* expected_fast_reject_filter_cache_count */ 0,
+                       /* expected_bloom_filter_allocation_count */ 0);
 }
 
 }  // namespace blink

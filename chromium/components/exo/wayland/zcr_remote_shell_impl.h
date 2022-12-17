@@ -28,14 +28,16 @@ using chromeos::WindowStateType;
 class WaylandRemoteOutput : public WaylandDisplayObserver {
  public:
   WaylandRemoteOutput(wl_resource* resource,
-                      WaylandRemoteOutputEventMapping event_mapping)
-      : resource_(resource), event_mapping_(event_mapping) {}
+                      WaylandRemoteOutputEventMapping event_mapping,
+                      WaylandDisplayHandler* display_handler);
   WaylandRemoteOutput(const WaylandRemoteOutput&) = delete;
   WaylandRemoteOutput& operator=(const WaylandRemoteOutput&) = delete;
+  ~WaylandRemoteOutput() override;
 
   // Overridden from WaylandDisplayObserver:
   bool SendDisplayMetrics(const display::Display& display,
                           uint32_t changed_metrics) override;
+  void OnOutputDestroyed() override;
 
  private:
   wl_resource* const resource_;
@@ -43,6 +45,8 @@ class WaylandRemoteOutput : public WaylandDisplayObserver {
   bool initial_config_sent_ = false;
 
   WaylandRemoteOutputEventMapping const event_mapping_;
+
+  WaylandDisplayHandler* display_handler_;
 };
 
 // Implements remote shell interface and monitors workspace state needed
@@ -89,6 +93,8 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   void OnRemoteSurfaceDestroyed(wl_resource* resource);
 
   // Overridden from display::DisplayObserver:
+  void OnWillProcessDisplayChanges() override;
+  void OnDidProcessDisplayChanges() override;
   void OnDisplayAdded(const display::Display& new_display) override;
   void OnDisplayRemoved(const display::Display& old_display) override;
   void OnDisplayTabletStateChanged(display::TabletState state) override;
@@ -108,6 +114,8 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   WaylandRemoteShellEventMapping const event_mapping_;
 
  private:
+  friend class WaylandRemoteShellTest;
+
   void ScheduleSendDisplayMetrics(int delay_ms);
 
   // Returns the transform that a display's output is currently adjusted for.
@@ -165,6 +173,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   // in v2 this is always false.
   bool use_default_scale_cancellation_;
 
+  bool in_display_update_;
   bool needs_send_display_metrics_ = true;
 
   int layout_mode_ = ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;

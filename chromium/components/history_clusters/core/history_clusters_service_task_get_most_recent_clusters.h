@@ -10,15 +10,25 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
-#include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history_clusters/core/clustering_backend.h"
 #include "components/history_clusters/core/history_clusters_types.h"
+
+namespace history {
+class HistoryService;
+}
 
 namespace history_clusters {
 
 class HistoryClustersService;
 
+// `HistoryClustersServiceTaskGetMostRecentClusters` 1st gets newly generated
+// clusters from the clustering backend using unclustered visits from the
+// history backend. Then, once the unclustered visits are exhausted, it switches
+// to getting persisted clusters from the history backend.
+// It is an extension of `HistoryClustersService`; rather than pollute the
+// latter's namespace with a bunch of callbacks, this class groups those
+// callbacks.
 class HistoryClustersServiceTaskGetMostRecentClusters {
  public:
   HistoryClustersServiceTaskGetMostRecentClusters(
@@ -29,26 +39,51 @@ class HistoryClustersServiceTaskGetMostRecentClusters {
       ClusteringRequestSource clustering_request_source,
       base::Time begin_time,
       QueryClustersContinuationParams continuation_params,
+      bool recluster,
       QueryClustersCallback callback);
   ~HistoryClustersServiceTaskGetMostRecentClusters();
 
   bool Done() { return done_; }
 
  private:
+  // When there remain unclustered visits, cluster them (possibly in combination
+  // with clustered visits) and return the newly created clusters:
+  //   Start() ->
+  //   OnGotAnnotatedVisitsToCluster() ->
+  //   OnGotModelClusters()
+  // But when unclustered visits are or were exhausted, return persisted
+  // clusters:
+  //   Start() ->
+  //   [optional] OnGotAnnotatedVisitsToCluster() ->
+  //   ReturnMostRecentPersistedClusters() ->
+  //   OnGotMostRecentPersistedClusters()
+
   // Invoked during construction. Will asyncly request annotated visits from
-  // `GetAnnotatedVisitsToCluster`.
+  // `GetAnnotatedVisitsToCluster`. May instead asyncly request persisted
+  // clusters if there's no `ClusteringBackend` or all visits are exhausted.
   void Start();
 
   // Invoked after `Start()` asyncly fetches annotated visits. Will asyncly
-  // request clusters from `ClusteringBackend`.
+  // request clusters from `ClusteringBackend`. May instead asyncly request
+  // persisted clusters if no annotated visits were fetched
   void OnGotAnnotatedVisitsToCluster(
+      // Unused because clusters aren't persisted in this flow.
+      std::vector<int64_t> old_clusters_unused,
       std::vector<history::AnnotatedVisit> annotated_visits,
       QueryClustersContinuationParams continuation_params);
 
   // Invoked after `OnGotAnnotatedVisitsToCluster()` asyncly obtains clusters.
-  // Will synchronously invoke `callback_`.
+  // Will syncly invoke `callback_`.
   void OnGotModelClusters(QueryClustersContinuationParams continuation_params,
                           std::vector<history::Cluster> clusters);
+
+  // Invoked syncly when there are no unclustered visits to cluster. Will
+  // asyncly request existing (i.e. persisted) clusters from `HistoryService`.
+  void ReturnMostRecentPersistedClusters(base::Time exclusive_max_time);
+
+  // Invoked after `ReturnMostRecentPersistedClusters()` asyncly fetches
+  // clusters. Will syncly invoke `callback_`.
+  void OnGotMostRecentPersistedClusters(std::vector<history::Cluster> clusters);
 
   // Never nullptr.
   base::WeakPtr<HistoryClustersService> weak_history_clusters_service_;
@@ -61,12 +96,15 @@ class HistoryClustersServiceTaskGetMostRecentClusters {
   // Used to make requests to `ClusteringBackend`.
   ClusteringRequestSource clustering_request_source_;
 
-  // Used to make requests to `GetAnnotatedVisitsToCluster`.
+  // Used to make requests to `GetAnnotatedVisitsToCluster` and
+  // `HistoryService`.
   base::Time begin_time_;
   QueryClustersContinuationParams continuation_params_;
+  bool recluster_;
   base::CancelableTaskTracker task_tracker_;
 
-  // Invoked after `OnGotModelClusters().
+  // Invoked after either `OnGotModelClusters()` or
+  // `OnGotMostRecentPersistedClusters()`.
   QueryClustersCallback callback_;
 
   // When `Start()` kicked off the request to fetch visits to cluster.

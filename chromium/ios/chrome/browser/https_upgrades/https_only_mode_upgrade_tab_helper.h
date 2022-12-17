@@ -37,8 +37,6 @@ class HttpsOnlyModeUpgradeTabHelper
   HttpsOnlyModeUpgradeTabHelper& operator=(
       const HttpsOnlyModeUpgradeTabHelper&) = delete;
 
-  // Sets the fallback delay for tests.
-  void SetFallbackDelayForTesting(base::TimeDelta delay);
   // Returns true if the upgrade timer is running.
   bool IsTimerRunningForTesting() const;
   // Clears the allowlist that contains domains allowed over HTTP.
@@ -46,7 +44,8 @@ class HttpsOnlyModeUpgradeTabHelper
 
  private:
   enum class State {
-    // Initial state.
+    // Initial state. The navigation hasn't started yet, or started but hasn't
+    // been upgraded because it's already HTTPS or a non-HTTP scheme.
     kNone,
     // The navigation is stopped to start an upgraded navigation.
     kStoppedToUpgrade,
@@ -89,14 +88,14 @@ class HttpsOnlyModeUpgradeTabHelper
   // Sets the initial state and clears the timer.
   void ResetState();
 
-  // web::WebStatePolicyDecider implementation
+  // web::WebStatePolicyDecider implementation:
   void ShouldAllowResponse(
       NSURLResponse* response,
       WebStatePolicyDecider::ResponseInfo response_info,
       web::WebStatePolicyDecider::PolicyDecisionCallback callback) override;
   void WebStateDestroyed() override;
 
-  // web::WebStateObserver implementation.
+  // web::WebStateObserver implementation:
   void DidStartNavigation(web::WebState* web_state,
                           web::NavigationContext* context) override;
   void DidFinishNavigation(web::WebState* web_state,
@@ -115,7 +114,6 @@ class HttpsOnlyModeUpgradeTabHelper
   bool navigation_is_renderer_initiated_ = false;
   web::Referrer referrer_;
 
-  base::TimeDelta fallback_delay_ = base::Seconds(3);
   base::OneShotTimer timer_;
 
   PrefService* prefs_;

@@ -14,22 +14,22 @@ namespace functions_on_types = test::api::functions_on_types;
 
 TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetParamsCreate) {
   {
-    std::vector<base::Value> params_value;
+    base::Value::List params_value;
     std::unique_ptr<functions_on_types::StorageArea::Get::Params> params(
         functions_on_types::StorageArea::Get::Params::Create(params_value));
     ASSERT_TRUE(params);
     EXPECT_FALSE(params->keys);
   }
   {
-    std::vector<base::Value> params_value;
-    params_value.emplace_back(9);
+    base::Value::List params_value;
+    params_value.Append(9);
     std::unique_ptr<functions_on_types::StorageArea::Get::Params> params(
         functions_on_types::StorageArea::Get::Params::Create(params_value));
     EXPECT_FALSE(params);
   }
   {
-    std::vector<base::Value> params_value;
-    params_value.emplace_back("test");
+    base::Value::List params_value;
+    params_value.Append("test");
     std::unique_ptr<functions_on_types::StorageArea::Get::Params> params(
         functions_on_types::StorageArea::Get::Params::Create(params_value));
     ASSERT_TRUE(params);
@@ -40,8 +40,8 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetParamsCreate) {
     base::Value keys_object_value(base::Value::Type::DICTIONARY);
     keys_object_value.SetIntKey("integer", 5);
     keys_object_value.SetStringKey("string", "string");
-    std::vector<base::Value> params_value;
-    params_value.push_back(keys_object_value.Clone());
+    base::Value::List params_value;
+    params_value.Append(keys_object_value.Clone());
     std::unique_ptr<functions_on_types::StorageArea::Get::Params> params(
         functions_on_types::StorageArea::Get::Params::Create(params_value));
     ASSERT_TRUE(params);
@@ -53,7 +53,7 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetParamsCreate) {
 
 TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetResultCreate) {
   functions_on_types::StorageArea::Get::Results::Items items;
-  items.additional_properties.SetDouble("asdf", 0.1);
+  items.additional_properties.GetDict().Set("asdf", 0.1);
   items.additional_properties.SetString("sdfg", "zxcv");
   base::Value results(
       functions_on_types::StorageArea::Get::Results::Create(items));
@@ -65,8 +65,8 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetResultCreate) {
 TEST(JsonSchemaCompilerFunctionsOnTypesTest, ChromeSettingGetParamsCreate) {
   base::Value details_value(base::Value::Type::DICTIONARY);
   details_value.SetBoolKey("incognito", true);
-  std::vector<base::Value> params_value;
-  params_value.push_back(std::move(details_value));
+  base::Value::List params_value;
+  params_value.Append(std::move(details_value));
   std::unique_ptr<functions_on_types::ChromeSetting::Get::Params> params(
       functions_on_types::ChromeSetting::Get::Params::Create(params_value));
   EXPECT_TRUE(params.get());

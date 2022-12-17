@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Tétlen aktiválások</translation>
 <translation id="119944043368869598">Összes törlése</translation>
 <translation id="1221825588892235038">Csak a kijelölt</translation>
+<translation id="1234736487471201993">QR-kód létrehozása ehhez a képhez</translation>
 <translation id="1244303850296295656">Bővítménnyel kapcsolatos hiba</translation>
 <translation id="125220115284141797">Alapértelmezett</translation>
 <translation id="1297175357211070620">Cél</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Lap átküldése</translation>
 <translation id="2150139952286079145">Célhelyek keresése</translation>
 <translation id="215753907730220065">Kilépés a teljes képernyős módból</translation>
+<translation id="2158475082070321257">Kiemelt szöveghez vezető hivatkozás másolása</translation>
 <translation id="2177950615300672361">Inkognitólap: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Natív kliensmodul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Beillesztés egyszerű szövegként</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">A webhelyeknek is fel kell ismerniük, hogy eszközöd azonosítót használ</translation>
 <translation id="2445081178310039857">A bővítmény gyökérkönyvtárát kötelező megadni.</translation>
 <translation id="2470702053775288986">Nem támogatott kiterjesztések kikapcsolva</translation>
-<translation id="2476578072172137802">Webhelybeállítások</translation>
+<translation id="2485422356828889247">Eltávolítás</translation>
 <translation id="2498539833203011245">Kis méret</translation>
 <translation id="2509495747794740764">Az átméretezési értéknek 10 és 200 közötti számnak kell lennie.</translation>
 <translation id="253557089021624350">Életben tartási számláló</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Visszaélés bejelentése</translation>
 <translation id="2941112035454246133">Alacsony</translation>
 <translation id="2972581237482394796">&amp;Újra</translation>
+<translation id="2993517869960930405">Alkalmazásadatok</translation>
 <translation id="3003623123441819449">CSS-gyorsítótár</translation>
 <translation id="3008272652534848354">Engedélyek visszavonása</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Hivatkozás megnyitása mint</translation>
 <translation id="3222066309010235055">Előmegjelenítés: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Válassza ki a bővítmény gyökérkönyvtárát. A bővítmény frissítéséhez meg kell adni az ismét használandó privátkulcs-fájlt is.</translation>
+<translation id="3275778913554317645">Megnyitás ablakként</translation>
 <translation id="3280237271814976245">Mentés &amp;másként...</translation>
 <translation id="3285322247471302225">Új &amp;lap</translation>
 <translation id="3288047731229977326">A fejlesztői módban futó bővítmények kárt okozhatnak számítógépén. Ha Ön nem fejlesztő, akkor a biztonság kedvéért kapcsolja ki a fejlesztői módban futó bővítményeket.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">PDF megnyitása előnézetben</translation>
 <translation id="3308134619352333507">Gomb elrejtése</translation>
 <translation id="3317459757438853210">Kétoldalas</translation>
+<translation id="3331974543021145906">Alkalmazásadatok</translation>
 <translation id="3341703758641437857">Hozzáférés engedélyezése a fájl URL-hez</translation>
 <translation id="3347086966102161372">Képcím más&amp;olása</translation>
 <translation id="3360297538363969800">A nyomtatás sikertelen. Ellenőrizd a nyomtatót, majd próbáld újra.</translation>
 <translation id="3378572629723696641">Lehet, hogy ez a bővítmény sérült.</translation>
 <translation id="3387614642886316601">Továbbfejlesztett helyesírás-ellenőrzés használata</translation>
+<translation id="3390013585654699824">Az alkalmazás adatai</translation>
 <translation id="3393582007140394275">Nem sikerült átküldeni a képernyő tartalmát.</translation>
 <translation id="3432227430032737297">Az összes megjelenített eltávolítása</translation>
 <translation id="345693547134384690">Kép &amp;megnyitása új lapon</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">Képkere&amp;sés ezzel: <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Engedélyezi a webhelyek számára a védett tartalmak lejátszását (ajánlott)</translation>
 <translation id="3979395879372752341">Új bővítmény hozzáadva (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kiemelt szöveghez vezető hivatkozás másolása</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">Hozzá&amp;adás a szótárhoz</translation>
 <translation id="407520071244661467">Átméretezés</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Importálás előtt zárd be a böngészőt</translation>
 <translation id="4130207949184424187">Ez a bővítmény módosította, hogy melyik oldal jelenjen meg a cím- és keresősávban indított kereséskor.</translation>
 <translation id="4131410914670010031">Fekete-fehér</translation>
+<translation id="4165986682804962316">Webhelybeállítások</translation>
 <translation id="4176463684765177261">Kikapcsolva</translation>
 <translation id="4200983522494130825">Új &amp;lap</translation>
 <translation id="4225397296022057997">Az összes webhelyen</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">A beállítások visszaállítása</translation>
 <translation id="4726710629007580002">Figyelmeztetések jelentkeztek a bővítmény telepítési kísérletekor:</translation>
 <translation id="479536056609751218">Weboldal, csak HTML</translation>
+<translation id="4827904420700932487">QR-kód létrehozása ehhez a képhez</translation>
 <translation id="4839303808932127586">Vi&amp;deo mentése másként...</translation>
 <translation id="4840096453115567876">Mindenképp kilépsz az inkognitó módból?</translation>
 <translation id="488785315393301722">Részletek megjelenítése</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Kérdezzen rá hozzáférés előtt (ajánlott)</translation>
 <translation id="5677928146339483299">Letiltva</translation>
 <translation id="5707185214361380026">Sikertelen bővítmény betöltés:</translation>
+<translation id="5713171467967533494">Megnyitás a Vivaldi böngészőben</translation>
 <translation id="5715711091495208045">Beépülő modul közvetítője: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Mentés PDF-ként</translation>
 <translation id="5747809636523347288"><ph name="URL" /> beille&amp;sztése és felkeresése</translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Beállítások</translation>
 <translation id="6579369886355986318">Az összes &amp;vezérlő megjelenítése</translation>
 <translation id="6639554308659482635">SQLite memória</translation>
+<translation id="666731172850799929">Megnyitás itt: <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Jelszó mentése</translation>
 <translation id="6691936601825168937">&amp;Következő</translation>
 <translation id="6798954102094737107">Beépülő modul: <ph name="PLUGIN_NAME" /></translation>
@@ -430,6 +441,7 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="9003647077635673607">Engedélyezés minden weboldalon</translation>
 <translation id="9027459031423301635">Hivatkozás megnyitása új &amp;lapon</translation>
 <translation id="9056810968620647706">Nincs találat.</translation>
+<translation id="9084064520949870008">Megnyitás ablakként</translation>
 <translation id="9137916601698928395">Hivatkozás megnyitása mint <ph name="USER" /></translation>
 <translation id="91568222606626347">Parancsikon létrehozása...</translation>
 <translation id="916607977885256133">Kép a képben</translation>

@@ -67,7 +67,7 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   infobar.tab_id = tab_id_;
   infobar.identifier = delegate->GetIdentifier();
 
-  std::vector<base::Value> args(
+  base::Value::List args(
       extensions::vivaldi::infobars::OnInfobarCreated::Create(infobar));
   vivaldi::BroadcastEvent(
       extensions::vivaldi::infobars::OnInfobarCreated::kEventName,
@@ -100,7 +100,7 @@ void InfoBarContainerWebProxy::PlatformSpecificRemoveInfoBar(
       static_cast<ConfirmInfoBarWebProxy*>(infobar);
   ConfirmInfoBarDelegate* delegate = infobar_proxy->GetDelegate();
 
-  std::vector<base::Value> args(
+  base::Value::List args(
       extensions::vivaldi::infobars::OnInfobarRemoved::Create(
           infobar_proxy->tab_id(), delegate->GetIdentifier()));
   ::vivaldi::BroadcastEvent(

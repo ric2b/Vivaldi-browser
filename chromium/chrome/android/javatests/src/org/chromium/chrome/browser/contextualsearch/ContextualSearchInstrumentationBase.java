@@ -284,9 +284,11 @@ public class ContextualSearchInstrumentationBase {
         @Override
         public Iterable<ParameterSet> getParameters() {
             return Arrays.asList(new ParameterSet().value(EnabledFeature.NONE).name("default"),
+                    new ParameterSet().value(EnabledFeature.RELATED_SEARCHES).name("rsearches"),
+                    new ParameterSet().value(EnabledFeature.FORCE_CAPTION).name("caption"),
                     new ParameterSet()
-                            .value(EnabledFeature.TRANSLATIONS)
-                            .name("enableTranslations"));
+                            .value(EnabledFeature.FORCE_CAPTION_WITH_RELATED_SEARCHES)
+                            .name("rs+caption"));
         }
     }
 
@@ -342,13 +344,21 @@ public class ContextualSearchInstrumentationBase {
             ChromeFeatureList.CONTEXTUAL_SEARCH_FORCE_CAPTION, false,
             ChromeFeatureList.CONTEXTUAL_TRIGGERS_SELECTION_HANDLES, false);
 
-    /** This is the helper-test Feature. */
+    /** This is the helper-text Feature. */
     private static final ImmutableMap<String, Boolean> ENABLE_FORCE_CAPTION = ImmutableMap.of(
             ChromeFeatureList.RELATED_SEARCHES, false, ChromeFeatureList.RELATED_SEARCHES_IN_BAR,
             false, ChromeFeatureList.RELATED_SEARCHES_UI, false,
             // Just this one enabled:
             ChromeFeatureList.CONTEXTUAL_SEARCH_FORCE_CAPTION, true,
             ChromeFeatureList.CONTEXTUAL_TRIGGERS_SELECTION_HANDLES, false);
+
+    /** This is the helper-text Feature with Related Searches */
+    private static final ImmutableMap<String, Boolean> ENABLE_FORCE_CAPTION_WITH_RELATED_SEARCHES =
+            ImmutableMap.of(ChromeFeatureList.RELATED_SEARCHES, true,
+                    ChromeFeatureList.RELATED_SEARCHES_IN_BAR, true,
+                    ChromeFeatureList.RELATED_SEARCHES_UI, true,
+                    ChromeFeatureList.CONTEXTUAL_SEARCH_FORCE_CAPTION, true,
+                    ChromeFeatureList.CONTEXTUAL_TRIGGERS_SELECTION_HANDLES, false);
 
     /** This is the contextual triggers feature set that alters tap to show selection handles. */
     private static final ImmutableMap<String, Boolean> ENABLE_CONTEXTUAL_TRIGGERS = ImmutableMap.of(
@@ -386,15 +396,14 @@ public class ContextualSearchInstrumentationBase {
     // State for an individual test.
     private FakeSlowResolveSearch mLatestSlowResolveSearch;
 
-    @IntDef({EnabledFeature.NONE, EnabledFeature.TRANSLATIONS, EnabledFeature.PRIVACY_NEUTRAL,
-            EnabledFeature.PRIVACY_NEUTRAL_WITH_RELATED_SEARCHES,
-            EnabledFeature.CONTEXTUAL_TRIGGERS})
+    @IntDef({EnabledFeature.NONE, EnabledFeature.RELATED_SEARCHES, EnabledFeature.FORCE_CAPTION,
+            EnabledFeature.FORCE_CAPTION_WITH_RELATED_SEARCHES, EnabledFeature.CONTEXTUAL_TRIGGERS})
     @Retention(RetentionPolicy.SOURCE)
     @interface EnabledFeature {
         int NONE = 0;
-        int TRANSLATIONS = 1;
-        int PRIVACY_NEUTRAL = 2;
-        int PRIVACY_NEUTRAL_WITH_RELATED_SEARCHES = 3;
+        int RELATED_SEARCHES = 1;
+        int FORCE_CAPTION = 2;
+        int FORCE_CAPTION_WITH_RELATED_SEARCHES = 3;
         int CONTEXTUAL_TRIGGERS = 4;
     }
 
@@ -470,11 +479,14 @@ public class ContextualSearchInstrumentationBase {
             case EnabledFeature.NONE:
                 whichFeature = ENABLE_NONE;
                 break;
-            case EnabledFeature.PRIVACY_NEUTRAL:
+            case EnabledFeature.RELATED_SEARCHES:
+                whichFeature = ENABLE_RELATED_SEARCHES;
+                break;
+            case EnabledFeature.FORCE_CAPTION:
                 whichFeature = ENABLE_FORCE_CAPTION;
                 break;
-            case EnabledFeature.PRIVACY_NEUTRAL_WITH_RELATED_SEARCHES:
-                whichFeature = ENABLE_RELATED_SEARCHES;
+            case EnabledFeature.FORCE_CAPTION_WITH_RELATED_SEARCHES:
+                whichFeature = ENABLE_FORCE_CAPTION_WITH_RELATED_SEARCHES;
                 break;
             case EnabledFeature.CONTEXTUAL_TRIGGERS:
                 whichFeature = ENABLE_CONTEXTUAL_TRIGGERS;
@@ -485,7 +497,8 @@ public class ContextualSearchInstrumentationBase {
         FeatureList.setTestFeatures(whichFeature);
         // If Related Searches is enabled we need to also set that it's OK to send page content.
         // TODO(donnd): Find a better way to discern if we need to establish sendingUrlOK is needed.
-        if (mEnabledFeature == EnabledFeature.PRIVACY_NEUTRAL_WITH_RELATED_SEARCHES) {
+        if (mEnabledFeature == EnabledFeature.RELATED_SEARCHES
+                || mEnabledFeature == EnabledFeature.FORCE_CAPTION_WITH_RELATED_SEARCHES) {
             mPolicy.overrideAllowSendingPageUrlForTesting(true);
         }
     }
@@ -975,11 +988,7 @@ public class ContextualSearchInstrumentationBase {
      * @param nodeId A string containing the node ID.
      */
     public void triggerNode(Tab tab, String nodeId) throws TimeoutException {
-        if (mPolicy.canResolveLongpress()) {
-            DOMUtils.longPressNode(tab.getWebContents(), nodeId);
-        } else {
-            DOMUtils.clickNode(tab.getWebContents(), nodeId);
-        }
+        DOMUtils.longPressNode(tab.getWebContents(), nodeId);
     }
 
     /**
@@ -1392,7 +1401,7 @@ public class ContextualSearchInstrumentationBase {
      */
     protected void expandPanelAndAssert() throws TimeoutException {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mManager.setVisibilityStateForTesting(true);
+            mPanel.notifyBarTouched(0);
             mFakeServer.getContentsObserver().wasShown();
             mPanel.animatePanelToState(PanelState.EXPANDED, StateChangeReason.UNKNOWN,
                     PANEL_INTERACTION_RETRY_DELAY_MS);
@@ -1479,16 +1488,5 @@ public class ContextualSearchInstrumentationBase {
      */
     protected void waitForSelectActionBarVisible() {
         assertWaitForSelectActionBarVisible(true);
-    }
-
-    /**
-     * Returns whether all the supported gestures for opted-in users trigger a Resolve request,
-     * aka intelligent search.
-     */
-    protected boolean isConfigurationForResolvingGesturesOnly() {
-        // The current interpretation of the ability to resolve Longpress (which is forced by the
-        // Translations Feature as well as the LongpressResolve Feature) preserves a resolving Tap
-        // so there is no non-resolving gesture for opted-in users.
-        return mPolicy.canResolveLongpress();
     }
 }

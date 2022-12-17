@@ -419,13 +419,12 @@ AppActivityRegistry::GenerateAppActivityReport(
     return AppActivityReportInterface::ReportParams{timestamp, false};
   }
 
-  const base::Value* value =
-      pref_service_->GetList(prefs::kPerAppTimeLimitsAppActivities);
-  DCHECK(value);
+  const base::Value::List& list =
+      pref_service_->GetValueList(prefs::kPerAppTimeLimitsAppActivities);
 
   const std::vector<PersistedAppInfo> applications_info =
       PersistedAppInfo::PersistedAppInfosFromList(
-          value,
+          list,
           /* include_app_activity_array */ true);
 
   const base::Time timestamp = base::Time::Now();
@@ -702,12 +701,10 @@ void AppActivityRegistry::CleanRegistry(base::Time timestamp) {
 
   base::Value* list_value = update.Get();
 
-  // base::Value::ListStorage is an alias for std::vector<base::Value>.
-  base::Value::ListStorage list_storage =
-      std::move(*list_value).TakeListDeprecated();
+  base::Value::List& list = list_value->GetList();
 
-  for (size_t index = 0; index < list_storage.size();) {
-    base::Value& entry = list_storage[index];
+  for (size_t index = 0; index < list.size();) {
+    base::Value& entry = list[index];
     absl::optional<PersistedAppInfo> info =
         PersistedAppInfo::PersistedAppInfoFromDict(&entry, true);
     DCHECK(info.has_value());
@@ -720,15 +717,13 @@ void AppActivityRegistry::CleanRegistry(base::Time timestamp) {
 
       // To efficiently remove the entry, swap it with the last element and pop
       // back.
-      if (index < list_storage.size() - 1)
-        std::swap(list_storage[index], list_storage[list_storage.size() - 1]);
-      list_storage.pop_back();
+      if (index < list.size() - 1)
+        std::swap(list[index], list[list.size() - 1]);
+      list.erase(list.end() - 1);
     } else {
       ++index;
     }
   }
-
-  *list_value = base::Value(std::move(list_storage));
 }
 
 void AppActivityRegistry::OnAppReinstalled(const AppId& app_id) {
@@ -1072,13 +1067,12 @@ void AppActivityRegistry::InitializeRegistryFromPref() {
 }
 
 void AppActivityRegistry::InitializeAppActivities() {
-  const base::Value* value =
-      pref_service_->GetList(prefs::kPerAppTimeLimitsAppActivities);
-  DCHECK(value);
+  const base::Value::List& list =
+      pref_service_->GetValueList(prefs::kPerAppTimeLimitsAppActivities);
 
   const std::vector<PersistedAppInfo> applications_info =
       PersistedAppInfo::PersistedAppInfosFromList(
-          value,
+          list,
           /* include_app_activity_array */ false);
 
   for (const auto& app_info : applications_info) {

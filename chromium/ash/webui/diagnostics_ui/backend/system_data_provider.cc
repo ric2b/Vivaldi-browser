@@ -16,9 +16,9 @@
 #include "base/i18n/time_formatting.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/services/cros_healthd/public/cpp/service_connection.h"
+#include "chromeos/ash/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
-#include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
-#include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
@@ -38,19 +38,20 @@ constexpr int kMilliampsInAnAmp = 1000;
 
 void PopulateBoardName(const healthd::SystemInfo& system_info,
                        mojom::SystemInfo& out_system_info) {
-  const absl::optional<std::string>& product_name = system_info.product_name;
-
-  if (!product_name.has_value()) {
-    DVLOG(1) << "No board name in SystemInfo response.";
-    return;
-  }
-
-  out_system_info.board_name = product_name.value();
+  out_system_info.board_name = system_info.os_info->code_name;
 }
 
 void PopulateMarketingName(const healthd::SystemInfo& system_info,
                            mojom::SystemInfo& out_system_info) {
-  out_system_info.marketing_name = system_info.marketing_name;
+  const absl::optional<std::string>& marketing_name =
+      system_info.os_info->marketing_name;
+
+  if (!marketing_name.has_value()) {
+    DVLOG(1) << "No marketing name in SystemInfo response.";
+    return;
+  }
+
+  out_system_info.marketing_name = marketing_name.value();
 }
 
 void PopulateCpuInfo(const healthd::CpuInfo& cpu_info,
@@ -85,11 +86,12 @@ void PopulateCpuInfo(const healthd::CpuInfo& cpu_info,
 
 void PopulateVersionInfo(const healthd::SystemInfo& system_info,
                          mojom::SystemInfo& out_system_info) {
-  const std::string full_version = system_info.os_version->release_milestone +
-                                   '.' + system_info.os_version->build_number +
-                                   '.' + system_info.os_version->patch_number;
+  const std::string full_version =
+      system_info.os_info->os_version->release_milestone + '.' +
+      system_info.os_info->os_version->build_number + '.' +
+      system_info.os_info->os_version->patch_number;
   out_system_info.version_info = mojom::VersionInfo::New(
-      system_info.os_version->release_milestone, full_version);
+      system_info.os_info->os_version->release_milestone, full_version);
 }
 
 void PopulateMemorySize(const healthd::MemoryInfo& memory_info,
@@ -350,18 +352,8 @@ void SystemDataProvider::PowerChanged(
 
 void SystemDataProvider::BindInterface(
     mojo::PendingReceiver<mojom::SystemDataProvider> pending_receiver) {
-  DCHECK(!ReceiverIsBound());
-  receiver_.Bind(std::move(pending_receiver));
-  receiver_.set_disconnect_handler(base::BindOnce(
-      &SystemDataProvider::OnBoundInterfaceDisconnect, base::Unretained(this)));
-}
-
-bool SystemDataProvider::ReceiverIsBound() {
-  return receiver_.is_bound();
-}
-
-void SystemDataProvider::OnBoundInterfaceDisconnect() {
   receiver_.reset();
+  receiver_.Bind(std::move(pending_receiver));
 }
 
 void SystemDataProvider::SetBatteryChargeStatusTimerForTesting(

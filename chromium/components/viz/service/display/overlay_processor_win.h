@@ -46,8 +46,11 @@ class VIZ_SERVICE_EXPORT OverlayProcessorWin
   // processor.
   bool NeedsSurfaceDamageRectList() const override;
 
-  // Set |is_video_capture_enabled_|.
+  // Sets |is_video_capture_enabled_|.
   void SetIsVideoCaptureEnabled(bool enabled) override;
+
+  // Sets |is_video_fullscreen_mode_|.
+  void SetIsVideoFullscreen(bool enabled) override;
 
   void AdjustOutputSurfaceOverlay(absl::optional<OutputSurfaceOverlayPlane>*
                                       output_surface_plane) override {}
@@ -67,6 +70,10 @@ class VIZ_SERVICE_EXPORT OverlayProcessorWin
       std::vector<gfx::Rect>* content_bounds) override;
 
   void set_using_dc_layers_for_testing(bool value) { using_dc_layers_ = value; }
+  void set_frames_since_last_qualified_multi_overlays_for_testing(int value) {
+    GetOverlayProcessor()
+        ->set_frames_since_last_qualified_multi_overlays_for_testing(value);
+  }
 
  protected:
   // For testing.
@@ -85,6 +92,8 @@ class VIZ_SERVICE_EXPORT OverlayProcessorWin
   std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor_;
 
   bool is_video_capture_enabled_ = false;
+
+  bool is_video_fullscreen_mode_ = false;
 };
 
 }  // namespace viz

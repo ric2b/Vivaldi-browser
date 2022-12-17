@@ -9,7 +9,7 @@ if (is_android) {
 }
 
 proto_library("proto") {
-  proto_in_dir = "//components/autofill_assistant/"
+  proto_in_dir = "//"
   sources = [
     "action_strategy.proto",
     "action_value.proto",
@@ -27,11 +27,8 @@ proto_library("proto") {
 }
 
 proto_library("test_proto") {
-  sources = [
-    "external_action_extension_test.proto",
-    "parse_jspb_test.proto",
-  ]
-  link_deps = [ "//components/autofill_assistant/browser/public:proto" ]
+  proto_in_dir = "//"
+  sources = [ "parse_jspb_test.proto" ]
 }
 
 static_library("browser") {
@@ -77,6 +74,8 @@ static_library("browser") {
     "actions/js_flow_action.h",
     "actions/navigate_action.cc",
     "actions/navigate_action.h",
+    "actions/parse_single_tag_xml_action.cc",
+    "actions/parse_single_tag_xml_action.h",
     "actions/perform_on_single_element_action.cc",
     "actions/perform_on_single_element_action.h",
     "actions/popup_message_action.cc",
@@ -85,10 +84,14 @@ static_library("browser") {
     "actions/presave_generated_password_action.h",
     "actions/prompt_action.cc",
     "actions/prompt_action.h",
+    "actions/prompt_qr_code_scan_action.cc",
+    "actions/prompt_qr_code_scan_action.h",
     "actions/register_password_reset_request_action.cc",
     "actions/register_password_reset_request_action.h",
     "actions/release_elements_action.cc",
     "actions/release_elements_action.h",
+    "actions/report_progress_action.cc",
+    "actions/report_progress_action.h",
     "actions/reset_pending_credentials_action.cc",
     "actions/reset_pending_credentials_action.h",
     "actions/save_generated_password_action.cc",
@@ -139,6 +142,7 @@ static_library("browser") {
     "actions/wait_for_dom_action.h",
     "actions/wait_for_navigation_action.cc",
     "actions/wait_for_navigation_action.h",
+    "assistant_field_trial_util.cc",
     "assistant_field_trial_util.h",
     "autofill_assistant_factory.cc",
     "autofill_assistant_impl.cc",
@@ -182,8 +186,7 @@ static_library("browser") {
     "display_strings_util.h",
     "element_area.cc",
     "element_area.h",
-    "empty_website_login_manager_impl.cc",
-    "empty_website_login_manager_impl.h",
+    "empty_controller_observer.h",
     "event_handler.cc",
     "event_handler.h",
     "execution_delegate.h",
@@ -198,8 +201,8 @@ static_library("browser") {
     "generic_ui_replace_placeholders.h",
     "headless/client_headless.cc",
     "headless/client_headless.h",
-    "headless/external_script_controller_impl.cc",
-    "headless/external_script_controller_impl.h",
+    "headless/headless_script_controller_impl.cc",
+    "headless/headless_script_controller_impl.h",
     "headless/headless_ui_controller.cc",
     "headless/headless_ui_controller.h",
     "info_box.cc",
@@ -225,12 +228,8 @@ static_library("browser") {
     "protocol_utils.h",
     "radio_button_controller.cc",
     "radio_button_controller.h",
-    "rectf.cc",
-    "rectf.h",
     "retry_timer.cc",
     "retry_timer.h",
-    "save_password_leak_detection_delegate.cc",
-    "save_password_leak_detection_delegate.h",
     "script.cc",
     "script.h",
     "script_executor.cc",
@@ -272,6 +271,11 @@ static_library("browser") {
     "starter.h",
     "starter_heuristic.cc",
     "starter_heuristic.h",
+    "starter_heuristic_configs/finch_starter_heuristic_config.cc",
+    "starter_heuristic_configs/finch_starter_heuristic_config.h",
+    "starter_heuristic_configs/legacy_starter_heuristic_config.cc",
+    "starter_heuristic_configs/legacy_starter_heuristic_config.h",
+    "starter_heuristic_configs/starter_heuristic_config.h",
     "starter_platform_delegate.h",
     "startup_util.cc",
     "startup_util.h",
@@ -361,10 +365,6 @@ static_library("browser") {
     "web/web_controller_util.cc",
     "web/web_controller_util.h",
     "web/web_controller_worker.h",
-    "website_login_manager.cc",
-    "website_login_manager.h",
-    "website_login_manager_impl.cc",
-    "website_login_manager_impl.h",
   ]
 
   deps = [
@@ -375,17 +375,17 @@ static_library("browser") {
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/autofill_assistant/browser/devtools",
+    "//components/autofill_assistant/browser/public:password_change",
     "//components/autofill_assistant/browser/public:public",
     "//components/autofill_assistant/content/browser",
     "//components/autofill_assistant/content/common",
     "//components/autofill_assistant/content/common:mojo_interfaces",
+    "//components/autofill_assistant/core/public:public",
     "//components/client_update_protocol",
     "//components/google/core/common:common",
     "//components/keyed_service/core",
     "//components/password_manager/content/browser:browser",
     "//components/password_manager/core/browser:browser",
-    "//components/password_manager/core/browser/form_parsing:form_parsing",
-    "//components/password_manager/core/browser/leak_detection:leak_detection",
     "//components/signin/public/identity_manager",
     "//components/strings:components_strings_grit",
     "//components/ukm/content:content",
@@ -408,6 +408,10 @@ static_library("unit_test_support") {
     "actions/mock_action_delegate.h",
     "actions/wait_for_dom_test_base.cc",
     "actions/wait_for_dom_test_base.h",
+    "fake_common_dependencies.cc",
+    "fake_common_dependencies.h",
+    "fake_platform_dependencies.cc",
+    "fake_platform_dependencies.h",
     "fake_script_executor_delegate.cc",
     "fake_script_executor_delegate.h",
     "fake_script_executor_ui_delegate.cc",
@@ -430,10 +434,10 @@ static_library("unit_test_support") {
     "mock_personal_data_manager.h",
     "mock_ui_controller_observer.cc",
     "mock_ui_controller_observer.h",
+    "mock_user_model.cc",
+    "mock_user_model.h",
     "mock_user_model_observer.cc",
     "mock_user_model_observer.h",
-    "mock_website_login_manager.cc",
-    "mock_website_login_manager.h",
     "service/mock_service.cc",
     "service/mock_service.h",
     "web/fake_element_store.cc",
@@ -448,6 +452,9 @@ static_library("unit_test_support") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser:test_support",
+    "//components/autofill_assistant/browser/public:password_change",
+    "//components/autofill_assistant/browser/public:public",
+    "//components/autofill_assistant/core/public:public",
     "//components/password_manager/core/browser:browser",
     "//components/version_info",
     "//testing/gmock",
@@ -467,6 +474,7 @@ source_set("unit_tests") {
     "actions/clear_persistent_ui_action_unittest.cc",
     "actions/collect_user_data_action_unittest.cc",
     "actions/configure_bottom_sheet_action_unittest.cc",
+    "actions/configure_ui_state_action_unittest.cc",
     "actions/delete_password_action_unittest.cc",
     "actions/dispatch_js_event_action_unittest.cc",
     "actions/edit_password_action_unittest.cc",
@@ -479,12 +487,15 @@ source_set("unit_tests") {
     "actions/get_element_status_action_unittest.cc",
     "actions/js_flow_action_unittest.cc",
     "actions/navigate_action_unittest.cc",
+    "actions/parse_single_tag_xml_action_unittest.cc",
     "actions/perform_on_single_element_action_unittest.cc",
     "actions/popup_message_action_unittest.cc",
     "actions/presave_generated_password_action_unittest.cc",
     "actions/prompt_action_unittest.cc",
+    "actions/prompt_qr_code_scan_action_unittest.cc",
     "actions/register_password_reset_request_action_unittest.cc",
     "actions/release_elements_action_unittest.cc",
+    "actions/report_progress_action_unittest.cc",
     "actions/reset_pending_credentials_action_unittest.cc",
     "actions/save_generated_password_action_unittest.cc",
     "actions/save_submitted_password_action_unittest.cc",
@@ -502,6 +513,7 @@ source_set("unit_tests") {
     "actions/stop_action_unittest.cc",
     "actions/stopwatch_unittest.cc",
     "actions/tell_action_unittest.cc",
+    "actions/unsupported_action_unittest.cc",
     "actions/update_client_settings_action_unittest.cc",
     "actions/upload_dom_action_unittest.cc",
     "actions/use_address_action_unittest.cc",
@@ -524,6 +536,7 @@ source_set("unit_tests") {
     "field_formatter_unittest.cc",
     "full_card_requester_unittest.cc",
     "generic_ui_replace_placeholders_unittest.cc",
+    "headless/headless_script_controller_impl_unittest.cc",
     "js_flow_util_unittest.cc",
     "mock_client_context.cc",
     "mock_client_context.h",
@@ -531,7 +544,6 @@ source_set("unit_tests") {
     "protocol_utils_unittest.cc",
     "radio_button_controller_unittest.cc",
     "retry_timer_unittest.cc",
-    "save_password_leak_detection_delegate_unittest.cc",
     "script_executor_unittest.cc",
     "script_parameters_unittest.cc",
     "script_precondition_unittest.cc",
@@ -555,6 +567,8 @@ source_set("unit_tests") {
     "service/service_impl_unittest.cc",
     "service/service_request_sender_impl_unittest.cc",
     "service/service_request_sender_local_impl_unittest.cc",
+    "starter_heuristic_configs/finch_starter_heuristic_config_unittest.cc",
+    "starter_heuristic_configs/legacy_starter_heuristic_config_unittest.cc",
     "starter_heuristic_unittest.cc",
     "starter_unittest.cc",
     "startup_util_unittest.cc",
@@ -585,11 +599,6 @@ source_set("unit_tests") {
     "web/send_keyboard_input_worker_unittest.cc",
   ]
 
-  # TODO(crbug.com/1329148): enable these tests on desktop.
-  if (is_android) {
-    sources += [ "website_login_manager_impl_unittest.cc" ]
-  }
-
   deps = [
     ":browser",
     ":proto",
@@ -598,14 +607,12 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser:test_support",
+    "//components/autofill_assistant/browser/public:password_change",
+    "//components/autofill_assistant/browser/public:public",
     "//components/autofill_assistant/browser/public:unit_test_support",
     "//components/password_manager/core/browser:test_support",
     "//components/password_manager/core/browser/leak_detection:test_support",
     "//components/password_manager/core/common",
-    "//components/prefs:prefs",
-    "//components/prefs:test_support",
-    "//components/safe_browsing/core/common:common",
-    "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/strings:components_strings_grit",
     "//components/ukm:test_support",
     "//components/ukm/content:content",
@@ -622,7 +629,7 @@ source_set("unit_tests") {
 
 if (is_android) {
   proto_java_library("proto_java") {
-    proto_path = "//components/autofill_assistant/"
+    proto_path = "//"
     sources = [
       "action_strategy.proto",
       "action_value.proto",

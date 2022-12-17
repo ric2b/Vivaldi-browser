@@ -34,6 +34,7 @@ if (optimize_webui) {
     deps = [
       ":preprocess",
       ":preprocess_generated",
+      "../../../../../ui/webui/resources:library",
       "../../../../../ui/webui/resources:preprocess",
     ]
   }
@@ -63,7 +64,6 @@ generate_grd("build_grd") {
 }
 
 preprocess_if_expr("preprocess") {
-  in_folder = "./"
   out_folder = "$target_gen_dir/$preprocess_folder"
   out_manifest = "$target_gen_dir/$preprocess_manifest"
   in_files = [ "post_oobe_delegate.js" ]

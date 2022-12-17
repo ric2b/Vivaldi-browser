@@ -5,14 +5,19 @@
 #include "ui/ozone/platform/wayland/host/wayland_output.h"
 
 #include <aura-shell-client-protocol.h>
+#include <chrome-color-management-client-protocol.h>
 #include <xdg-output-unstable-v1-client-protocol.h>
 
 #include "base/logging.h"
+#include "base/strings/string_util.h"
 #include "ui/display/display.h"
 #include "ui/gfx/color_space.h"
+#include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_zaura_output.h"
+#include "ui/ozone/platform/wayland/host/wayland_zcr_color_management_output.h"
+#include "ui/ozone/platform/wayland/host/wayland_zcr_color_manager.h"
 #include "ui/ozone/platform/wayland/host/xdg_output.h"
 
 namespace ui {
@@ -74,6 +79,13 @@ void WaylandOutput::InitializeZAuraOutput(zaura_shell* aura_shell) {
       zaura_shell_get_aura_output(aura_shell, output_.get()));
 }
 
+void WaylandOutput::InitializeColorManagementOutput(
+    WaylandZcrColorManager* zcr_color_manager) {
+  DCHECK(!color_management_output_);
+  color_management_output_ = std::make_unique<WaylandZcrColorManagementOutput>(
+      zcr_color_manager->CreateColorManagementOutput(output_.get()).release());
+}
+
 void WaylandOutput::Initialize(Delegate* delegate) {
   DCHECK(!delegate_);
   delegate_ = delegate;
@@ -114,8 +126,20 @@ gfx::Insets WaylandOutput::insets() const {
   return aura_output_ ? aura_output_->insets() : gfx::Insets();
 }
 
+const std::string& WaylandOutput::label() const {
+  return xdg_output_ ? xdg_output_->description() : base::EmptyString();
+}
+
+const std::string& WaylandOutput::name() const {
+  return xdg_output_ ? xdg_output_->name() : base::EmptyString();
+}
+
 zaura_output* WaylandOutput::get_zaura_output() {
   return aura_output_ ? aura_output_->wl_object() : nullptr;
+}
+
+void WaylandOutput::SetScaleFactorForTesting(float scale_factor) {
+  scale_factor_ = scale_factor;
 }
 
 void WaylandOutput::TriggerDelegateNotifications() {
@@ -132,9 +156,9 @@ void WaylandOutput::TriggerDelegateNotifications() {
       scale_factor_ = max_physical_side / max_logical_side;
     }
   }
-  delegate_->OnOutputHandleMetrics(output_id_, origin(), logical_size(),
-                                   physical_size_, insets(), scale_factor_,
-                                   panel_transform_, logical_transform());
+  delegate_->OnOutputHandleMetrics(
+      output_id_, origin(), logical_size(), physical_size_, insets(),
+      scale_factor_, panel_transform_, logical_transform(), label());
 }
 
 // static

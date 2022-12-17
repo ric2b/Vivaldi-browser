@@ -86,7 +86,7 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
   RenderWidgetHostImpl* GetWidgetHost() {
     return RenderWidgetHostImpl::From(shell()
                                           ->web_contents()
-                                          ->GetMainFrame()
+                                          ->GetPrimaryMainFrame()
                                           ->GetRenderViewHost()
                                           ->GetWidget());
   }
@@ -302,8 +302,8 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
   }
 
   std::unique_ptr<base::RunLoop> run_loop_;
-  raw_ptr<RenderWidgetHostViewBase> child_view_ = nullptr;
-  raw_ptr<RenderWidgetHostViewBase> root_view_ = nullptr;
+  raw_ptr<RenderWidgetHostViewBase, DanglingUntriaged> child_view_ = nullptr;
+  raw_ptr<RenderWidgetHostViewBase, DanglingUntriaged> root_view_ = nullptr;
 };
 
 // On Mac we don't have any touchscreen/touchpad fling events (GFS/GFC).
@@ -351,25 +351,19 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(GetWidgetHost()->GetView()->view_stopped_flinging_for_test());
 }
 
-// Flaky on Linux ASAN and TSAN. https://crbug.com/1269960
-#if BUILDFLAG(IS_LINUX) && \
-    (defined(THREAD_SANITIZER) || defined(ADDRESS_SANITIZER))
-#define MAYBE_FlingingStopsAfterNavigation DISABLED_FlingingStopsAfterNavigation
-#else
-#define MAYBE_FlingingStopsAfterNavigation FlingingStopsAfterNavigation
-#endif
+// TODO(crbug.com/1347271,crbug.com/269960): TODO: Re-enable this test.
 
 // Tests that flinging does not continue after navigating to a page that uses
 // the same renderer.
 IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
-                       MAYBE_FlingingStopsAfterNavigation) {
+                       DISABLED_FlingingStopsAfterNavigation) {
   GURL first_url(embedded_test_server()->GetURL(
       "b.a.com", "/scrollable_page_with_iframe.html"));
   EXPECT_TRUE(NavigateToURL(shell(), first_url));
   // The test below only makes sense for same-site same-RFH navigations, so we
   // need to ensure that we won't trigger a same-site cross-RFH navigation.
   DisableProactiveBrowsingInstanceSwapFor(
-      shell()->web_contents()->GetMainFrame());
+      shell()->web_contents()->GetPrimaryMainFrame());
 
   SynchronizeThreads();
   SimulateTouchscreenFling(GetWidgetHost());
@@ -390,18 +384,28 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
       0, EvalJs(root->current_frame_host(), "window.scrollY").ExtractDouble());
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest, TouchscreenFlingInOOPIF) {
+// TODO(crbug.com/1352412): Re-enable on Linux MSAN once not flaky.
+#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
+#define MAYBE_TouchscreenFlingInOOPIF DISABLED_TouchscreenFlingInOOPIF
+#else
+#define MAYBE_TouchscreenFlingInOOPIF TouchscreenFlingInOOPIF
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
+                       MAYBE_TouchscreenFlingInOOPIF) {
   LoadPageWithOOPIF();
   SimulateTouchscreenFling(child_view_->host());
   WaitForFrameScroll(GetChildNode());
 }
-IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest, TouchpadFlingInOOPIF) {
+// TODO(crbug.com/1340285): flaky.
+IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
+                       DISABLED_TouchpadFlingInOOPIF) {
   LoadPageWithOOPIF();
   SimulateTouchpadFling(child_view_->host());
   WaitForFrameScroll(GetChildNode());
 }
+// TODO(crbug.com/1340285): flaky.
 IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
-                       TouchscreenInertialGSUsBubbleFromOOPIF) {
+                       DISABLED_TouchscreenInertialGSUsBubbleFromOOPIF) {
   LoadPageWithOOPIF();
   // Scroll the parent down so that it is scrollable upward.
   EXPECT_TRUE(
@@ -440,8 +444,9 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+// TODO(crbug.com/1340285): flaky.
 IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
-                       InertialGSEGetsBubbledFromOOPIF) {
+                       DISABLED_InertialGSEGetsBubbledFromOOPIF) {
   LoadPageWithOOPIF();
   // Scroll the parent down so that it is scrollable upward.
   EXPECT_TRUE(

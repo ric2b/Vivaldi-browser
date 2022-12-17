@@ -9,6 +9,8 @@
 #include "components/version_info/version_info.h"
 #include "ios/chrome/common/ios_app_bundle_id_prefix_buildflags.h"
 
+#include "app/vivaldi_apptools.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -69,6 +71,10 @@ NSString* const kOpenCommandSourceCredentialsExtension =
 NSString* const kSuggestedItems = @"SuggestedItems";
 
 NSString* ApplicationGroup() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return [NSString stringWithFormat:@"group.%s.browser",
+                                    BUILDFLAG(IOS_APP_BUNDLE_ID_PREFIX), nil];
+  }
   NSBundle* bundle = [NSBundle mainBundle];
   NSString* group = [bundle objectForInfoDictionaryKey:@"KSApplicationGroup"];
   if (![group length]) {

@@ -13,7 +13,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync_sessions/sync_sessions_client.h"
-#include "components/sync_sessions/synced_tab_delegate.h"
 
 namespace sync_sessions {
 
@@ -101,7 +100,7 @@ void PopulateSyncedSessionWindowFromSpecifics(
   synced_session_window->window_type = specifics.browser_type();
   if (specifics.has_browser_type()) {
     if (specifics.browser_type() ==
-        sync_pb::SessionWindow_BrowserType_TYPE_TABBED) {
+        sync_pb::SyncEnums_BrowserType_TYPE_TABBED) {
       session_window->type = sessions::SessionWindow::TYPE_NORMAL;
     } else {
       // Note: custom tabs are treated like popup windows on restore, as you can
@@ -227,7 +226,7 @@ const sessions::SessionTab* SyncedSessionTracker::LookupSessionTab(
   return tab_iter->second;
 }
 
-absl::optional<sync_pb::SessionWindow::BrowserType>
+absl::optional<sync_pb::SyncEnums::BrowserType>
 SyncedSessionTracker::LookupWindowType(const std::string& session_tag,
                                        SessionID window_id) const {
   const TrackedSession* session = LookupTrackedSession(session_tag);
@@ -482,11 +481,9 @@ void SyncedSessionTracker::PutTabInWindow(const std::string& session_tag,
     // window.
     for (auto& [existing_window_id, existing_window] :
          GetSession(session_tag)->windows) {
-      auto existing_tab_iter = base::ranges::find(
-          existing_window->wrapped_window.tabs, tab_ptr,
-          [](const std::unique_ptr<sessions::SessionTab>& tab) {
-            return tab.get();
-          });
+      auto existing_tab_iter =
+          base::ranges::find(existing_window->wrapped_window.tabs, tab_ptr,
+                             &std::unique_ptr<sessions::SessionTab>::get);
       if (existing_tab_iter != existing_window->wrapped_window.tabs.end()) {
         tab = std::move(*existing_tab_iter);
         existing_window->wrapped_window.tabs.erase(existing_tab_iter);
@@ -651,11 +648,9 @@ void SyncedSessionTracker::ReassociateLocalTab(int tab_node_id,
         for (auto& [existing_window_id, existing_window] :
              session->synced_session.windows) {
           auto& existing_window_tabs = existing_window->wrapped_window.tabs;
-          auto tab_iter = base::ranges::find(
-              existing_window_tabs, new_tab_ptr,
-              [](const std::unique_ptr<sessions::SessionTab>& tab) {
-                return tab.get();
-              });
+          auto tab_iter =
+              base::ranges::find(existing_window_tabs, new_tab_ptr,
+                                 &std::unique_ptr<sessions::SessionTab>::get);
           if (tab_iter != existing_window_tabs.end()) {
             existing_window_tabs.erase(tab_iter);
             break;

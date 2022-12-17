@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 
-#include "ash/components/tpm/stub_install_attributes.h"
 #include "base/bind.h"
 #include "chromeos/ash/components/dbus/authpolicy/fake_authpolicy_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/userdataauth/fake_install_attributes_client.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_install_attributes_client.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {

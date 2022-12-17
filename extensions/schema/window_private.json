@@ -13,7 +13,8 @@
         "type": "object",
         "description": "Object passed to the |create| function.",
         "properties": {
-          "bounds" : {
+          "bounds": {
+            "optional": true,
             "type": "object",
             "properties": {
               "left": {
@@ -40,22 +41,22 @@
               }
             }
           },
-          "windowDecoration" : {
+          "windowDecoration": {
             "type": "boolean",
             "optional": true,
             "description": "Enable window decoration. Defaults to false."
           },
-          "incognito" : {
+          "incognito": {
             "type": "boolean",
             "optional": true,
             "description": "Incogito window. Default is false."
           },
-          "focused" : {
+          "focused": {
             "type": "boolean",
             "optional": true,
             "description": "If true, opens a active window. Default is true."
           },
-          "tabUrl" : {
+          "tabUrl": {
             "type": "string",
             "optional": true,
             "description": "The url to be added as a new tab, this will be added to the tab model. Not used for settings, popups, etc."
@@ -71,34 +72,43 @@
         "id": "WindowState",
         "type": "string",
         "description": "The state of this browser window.",
-        "enum": [{
-          "name": "normal",
-          "description": "Normal window state (i.e. not minimized, maximized, or fullscreen)."
-        }, {
-          "name": "minimized",
-          "description": "Minimized window state."
-        }, {
-          "name": "maximized",
-          "description": "Maximized window state."
-        }, {
-          "name": "fullscreen",
-          "description": "Fullscreen window state."
-        }]
+        "enum": [
+          {
+            "name": "normal",
+            "description": "Normal window state (i.e. not minimized, maximized, or fullscreen)."
+          },
+          {
+            "name": "minimized",
+            "description": "Minimized window state."
+          },
+          {
+            "name": "maximized",
+            "description": "Maximized window state."
+          },
+          {
+            "name": "fullscreen",
+            "description": "Fullscreen window state."
+          }
+        ]
       },
       {
         "id": "WindowType",
         "type": "string",
         "description": "The type of this browser window.",
-        "enum": [{
-          "name": "normal",
-          "description": "This is a normal browser window."
-        }, {
-          "name": "settings",
-          "description": "This is a settings window."
-        }, {
-          "name": "popup",
-          "description": "This is a popup window."
-        }]
+        "enum": [
+          {
+            "name": "normal",
+            "description": "This is a normal browser window."
+          },
+          {
+            "name": "settings",
+            "description": "This is a settings window."
+          },
+          {
+            "name": "popup",
+            "description": "This is a popup window."
+          }
+        ]
       },
       {
         "id": "FocusedElementInfo",
@@ -192,6 +202,34 @@
         ]
       },
       {
+        "name": "updateMaximizeButtonPosition",
+        "type": "function",
+        "description": "Notify C++ about the position of the maximize button to show extra native GUI like the split window menu in Windows 11.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "The window id of the window to update the coordinates of the maximize button."
+          },
+          {
+            "type": "number",
+            "name": "left"
+          },
+          {
+            "type": "number",
+            "name": "top"
+          },
+          {
+            "type": "number",
+            "name": "width"
+          },
+          {
+            "type": "number",
+            "name": "height"
+          }
+        ]
+      },
+      {
         "name": "getFocusedElementInfo",
         "type": "function",
         "description": "Get information about currently focused element in Vivaldi window or any of its webviews.",
@@ -273,17 +311,6 @@
         ]
       },
       {
-        "name": "onWindowCreated",
-        "type": "function",
-        "description": "Fired when a window is created, even for guest windows.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          }
-        ]
-      },
-      {
         "name": "onBeforeUnloadDialogOpened",
         "type": "function",
         "description": "Fired when a beforeunload dialog is shown for a tab.",
@@ -310,6 +337,21 @@
         ]
       },
       {
+        "name": "onPageInfoPopupChanged",
+        "type": "function",
+        "description": "Fired when a page information popup visibility changes.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "visible"
+          }
+        ]
+      },
+      {
         "name": "onActiveTabStatusText",
         "type": "function",
         "description": "Fired when the active tab has new loadstate text. Will reset to <empty> string",
@@ -325,9 +367,9 @@
         ]
       },
       {
-        "name": "onWebContentsDidStartNavigation",
+        "name": "onWebContentsHasWindow",
         "type": "function",
-        "description": "Fired when the webcontents mainframe embedded by the VivaldiBrowserWindow start loading. Happens reloaded and first load.",
+        "description": "Fired when the webcontents has a window object. chrome.windows.getviews find this now.",
         "parameters": [
           {
             "type": "integer",

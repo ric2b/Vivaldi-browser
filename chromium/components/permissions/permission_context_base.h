@@ -21,8 +21,6 @@
 #include "components/permissions/permission_result.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
 
-#include <map>
-
 class GURL;
 
 namespace permissions {
@@ -223,17 +221,11 @@ class PermissionContextBase : public KeyedService,
                          ContentSetting content_setting,
                          bool is_one_time);
 
-  // Vivaldi
-  int RemoveBridgeID(int bridge_id);
-
   raw_ptr<content::BrowserContext> browser_context_;
   const ContentSettingsType content_settings_type_;
   const blink::mojom::PermissionsPolicyFeature permissions_policy_feature_;
   std::unordered_map<std::string, std::unique_ptr<PermissionRequest>>
       pending_requests_;
-
-  // Vivaldi
-  std::map<int, int> bridge_id_to_request_id_map_;
 
   // Must be the last member, to ensure that it will be
   // destroyed first, which will invalidate weak pointers

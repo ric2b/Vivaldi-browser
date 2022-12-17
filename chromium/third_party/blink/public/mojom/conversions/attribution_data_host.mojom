@@ -40,7 +40,7 @@ struct AttributionSourceData {
   url.mojom.Origin reporting_origin;
 
   // Data that will be sent in attribution reports to identify this source.
-  uint64 source_event_id;
+  uint64 source_event_id = 0;
 
   // Specifies how long this source is eligible for attribution
   mojo_base.mojom.TimeDelta? expiry;
@@ -105,6 +105,10 @@ struct AttributionTriggerData {
   // If non-empty, this trigger will be ignored unless the attributed source's
   // filter data matches.
   AttributionFilterData filters;
+
+  // If non-empty, this trigger will be ignored unless the attributed source's
+  // filter data does *NOT* match.
+  AttributionFilterData not_filters;
 
   // List of all aggregatable trigger data objects declared by the trigger
   // header.

@@ -43,8 +43,7 @@ base::Time PrefValueToTime(int64_t value) {
 // TODO: Hook up to browser clearing data delegate so we clear the pref when
 // user clears data from Chrome settings.
 UserActionsCollector::UserActionsCollector(PrefService* profile_prefs)
-    : visit_metadata_string_list_pref_(base::Value::Type::LIST),
-      profile_prefs_(profile_prefs) {
+    : profile_prefs_(profile_prefs) {
   if (!base::FeatureList::IsEnabled(kPersonalizeFeedUnsignedUsers))
     return;
   InitStoreFromPrefs();
@@ -63,19 +62,19 @@ void UserActionsCollector::UpdateUserProfileOnLinkClick(
 
   visit_metadata_string_list_pref_.Append(EntryToString(url, entity_mids));
 
-  profile_prefs_->Set(prefs::kFeedOnDeviceUserActionsCollector,
-                      visit_metadata_string_list_pref_);
+  profile_prefs_->SetList(prefs::kFeedOnDeviceUserActionsCollector,
+                          visit_metadata_string_list_pref_.Clone());
   profile_prefs_->SchedulePendingLossyWrites();
   UMA_HISTOGRAM_COUNTS(
       "ContentSuggestions.Feed.UnsignedUserPersonalization.LinkClicked", 1);
 }
 
 void UserActionsCollector::InitStoreFromPrefs() {
-  const base::Value* list_value_from_disk =
-      profile_prefs_->GetList(prefs::kFeedOnDeviceUserActionsCollector);
+  const base::Value::List& list_value_from_disk =
+      profile_prefs_->GetValueList(prefs::kFeedOnDeviceUserActionsCollector);
   size_t count_values_during_store_initialization = 0;
 
-  const size_t entries_in_pref = list_value_from_disk->GetList().size();
+  const size_t entries_in_pref = list_value_from_disk.size();
 
   // If the store size exceeds its capacity, then skip some of the earlier
   // entries to reduce store size to its capacity.
@@ -90,8 +89,8 @@ void UserActionsCollector::InitStoreFromPrefs() {
 
   // Skip first |entries_to_skip| number of entries to reduce the size of
   // store.
-  for (auto iter = list_value_from_disk->GetList().begin() + entries_to_skip;
-       iter != list_value_from_disk->GetList().end(); ++iter) {
+  for (auto iter = list_value_from_disk.begin() + entries_to_skip;
+       iter != list_value_from_disk.end(); ++iter) {
     if (!iter->is_string()) {
       rewrite_prefs = true;
       continue;
@@ -112,8 +111,8 @@ void UserActionsCollector::InitStoreFromPrefs() {
       count_values_during_store_initialization);
 
   if (rewrite_prefs) {
-    profile_prefs_->Set(prefs::kFeedOnDeviceUserActionsCollector,
-                        visit_metadata_string_list_pref_);
+    profile_prefs_->SetList(prefs::kFeedOnDeviceUserActionsCollector,
+                            visit_metadata_string_list_pref_.Clone());
     profile_prefs_->SchedulePendingLossyWrites();
   }
 }

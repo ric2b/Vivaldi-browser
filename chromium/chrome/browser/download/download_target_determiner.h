@@ -93,6 +93,15 @@ class DownloadTargetDeterminer : public download::DownloadItem::Observer {
   static bool IsAdobeReaderUpToDate();
 #endif
 
+  // Determine if the file type can be handled safely by the browser if it were
+  // to be opened via a file:// URL. Execute the callback with the determined
+  // value.
+  static void DetermineIfHandledSafelyHelper(
+      download::DownloadItem* download,
+      const base::FilePath& local_path,
+      const std::string& mime_type,
+      base::OnceCallback<void(bool)> callback);
+
  private:
   // The main workflow is controlled via a set of state transitions. Each state
   // has an associated handler. The handler for STATE_FOO is DoFoo. Each handler
@@ -210,11 +219,14 @@ class DownloadTargetDeterminer : public download::DownloadItem::Observer {
 
   // Callback invoked after the file picker completes. Cancels the download if
   // the user cancels the file picker.
-  void RequestConfirmationDone(
-      DownloadConfirmationResult result,
-      const base::FilePath& virtual_path,
-      absl::optional<download::DownloadSchedule> download_schedule);
+  void RequestConfirmationDone(DownloadConfirmationResult result,
+                               const base::FilePath& virtual_path);
 
+#if BUILDFLAG(IS_ANDROID)
+  // Callback invoked after the incognito message has been accepted/rejected
+  // from the user.
+  void RequestIncognitoWarningConfirmationDone(bool accepted);
+#endif
   // Up until this point, the path that was used is considered to be a virtual
   // path. This step determines the local file system path corresponding to this
   // virtual path. The translation is done by invoking the DetermineLocalPath()
@@ -249,11 +261,9 @@ class DownloadTargetDeterminer : public download::DownloadItem::Observer {
   // - STATE_DETERMINE_IF_ADOBE_READER_UP_TO_DATE.
   Result DoDetermineIfHandledSafely();
 
-#if BUILDFLAG(ENABLE_PLUGINS)
   // Callback invoked when a decision is available about whether the file type
   // can be handled safely by the browser.
   void DetermineIfHandledSafelyDone(bool is_handled_safely);
-#endif
 
   // Determine if Adobe Reader is up to date. Only do the check on Windows for
   // .pdf file targets.
@@ -369,7 +379,6 @@ class DownloadTargetDeterminer : public download::DownloadItem::Observer {
   raw_ptr<DownloadTargetDeterminerDelegate> delegate_;
   CompletionCallback completion_callback_;
   base::CancelableTaskTracker history_tracker_;
-  absl::optional<download::DownloadSchedule> download_schedule_;
 
   base::WeakPtrFactory<DownloadTargetDeterminer> weak_ptr_factory_{this};
 };

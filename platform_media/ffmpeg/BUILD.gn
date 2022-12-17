@@ -14,74 +14,64 @@ ffmpeg_config_root =
 # via platform API. Chromium builds those configs during uptake of FFmpeg
 # changes from the upstream and commit the result under $ffmpeg_config_root.
 #
-# At some point we simply patched the relevant config files and placed them into
-# a directory under gen. Then in ../source_updated.gni we inserted this
-# directory as the first element to the compiler include list. This way the
-# compiler would resolve the path for the include statement of the config file
-# to that directory while it would find the rest of config in the original
-# $ffmpeg_config_root.
+# *******************************
+# *    VERY IMPORTANT NOTE!     *
+# *******************************
 #
-# But that lead to hard to figure out issue with Byggmakker builds that use the
-# compilation cache. The caching code assumed that the location of an included
-# header file would not change after the compilation. This was presumably to
-# avoid potentially expensive include file re-lookup when deciding to use the
-# cached version of the compilation result. This broke the above scheme when we
-# needed to patch a new config file. For that commit for many FFmpeg sources the
-# new location of the config file was the only change. Thus Byggmakker used the
-# old cached result instead of recompiling the source resulting in the
-# executable using the old config.
+# Whenever adding or removing an FFmpeg config file that is placed into the
+# generated directory *always* remember to update with a new timestamp in
+# `platform_media/source_update.gni` the line that modifies the include
+# list with VIVALDI_FFMPEG_REBUILD define.
 #
-# To prevent this from happening again we place the whole config tree into
-# $target_gen_dir. The files that we do not change are simply copied. Thus even
-# if we need to patch a new config or remove the changes, the location of the
-# affected file will not change and Byggmakker will properly recompile the
-# relevant sources.
+# Otherwise you may get a hard to figure out issue with Byggmakker builds
+# that use the compilation cache. The caching code assumes that the location
+# of an included header file does not change after the compilation. This
+# is presumably to avoid potentially expensive include file re-lookup when
+# deciding to use the cached version of the compilation result. But then
+# Byggmakker uses the old cached result instead of recompiling the
+# source when the only change was due to a new location of the config file.
+# This results in an  executable using the old config.
 #
-# As Chromium does not allow to copy a tree outside the target directory if the
-# tree contains subdirectories, we use several copy targets to copy individual
-# subdirectories.
-#
+# Altering the value of `VIVALDI_FFMPEG_REBUILD` changes the command line
+# thus forcing the recompilation addressing this issue.
 
 group("generate_config") {
   deps = [
     ":generate_decoder_list",
     ":generate_redirected_log",
-    ":copy_ffmpeg_config",
-    ":copy_ffmpeg_config_libavcodec",
-    ":copy_ffmpeg_config_libavformat",
-    ":copy_ffmpeg_config_libavutil",
   ]
 }
 
-# Adjust the decoder list.
 generated_file("generate_decoder_list") {
   codec_subpath = "/libavcodec/codec_list.c"
   decoder_list_file = ffmpeg_config_root  + codec_subpath
   decoder_list_lines = read_file(decoder_list_file, "list lines")
 
-  # Disable h264 software decoder
+  # Check the expected lines with FFmpeg software decoders before we
+  # patched them out to replace with platform specific one or to remove.
   assert(
       "&ff_h264_decoder," == decoder_list_lines[1],
       "Unexpected format of $decoder_list_file"
   )
-  decoder_list_lines[1] = "//" + decoder_list_lines[1]
-
-  # Replace FFmpeg AAC software decoder with decoders using system API if any.
   assert(
       "&ff_aac_decoder," == decoder_list_lines[5],
       "Unexpected format of $decoder_list_file"
   )
   if (is_linux) {
-    # No decoder on Linux
+    decoder_list_lines[1] = "//" + decoder_list_lines[1]
     decoder_list_lines[5] = "//" + decoder_list_lines[5]
-  } else if (is_mac) {
+  }
+  if (is_mac) {
+    decoder_list_lines[1] = "//" + decoder_list_lines[1]
     decoder_list_lines[5] = "&ff_aac_at_decoder,"
-  } else if (is_win) {
+  }
+  if (is_win) {
+    # Declare first the decoder. On Mac it is not necessary as our decoder
+    # is a fork of the decoder that FFmpeg already declared.
     decoder_list_lines[0] = "extern const AVCodec ffwmf_aac_decoder;" +
         decoder_list_lines[0]
+    decoder_list_lines[1] = "//" + decoder_list_lines[1]
     decoder_list_lines[5] = "&ffwmf_aac_decoder,"
-  } else {
-    assert(false, "Unsupported platform")
   }
 
   outputs = [target_gen_dir + codec_subpath]
@@ -97,42 +87,4 @@ generated_file("generate_redirected_log") {
     "#include \"platform_media/ffmpeg/ffviv_log.h\""
   ]
   output_conversion = "list lines"
-}
-
-#
-# Targets to copy individual config subdirectories.
-#
-
-copy("copy_ffmpeg_config") {
-  sources = [
-    "$ffmpeg_config_root/config.h",
-    "$ffmpeg_config_root/config_components.h",
-  ]
-  outputs = ["$target_gen_dir/{{source_file_part}}"]
-}
-
-copy("copy_ffmpeg_config_libavcodec") {
-  sources = [
-    # The remaining libavcodec files are patched above
-    "$ffmpeg_config_root/libavcodec/bsf_list.c",
-    "$ffmpeg_config_root/libavcodec/parser_list.c",
-  ]
-  outputs = ["$target_gen_dir/libavcodec/{{source_file_part}}"]
-}
-
-copy("copy_ffmpeg_config_libavformat") {
-  sources = [
-    "$ffmpeg_config_root/libavformat/demuxer_list.c",
-    "$ffmpeg_config_root/libavformat/muxer_list.c",
-    "$ffmpeg_config_root/libavformat/protocol_list.c",
-  ]
-  outputs = ["$target_gen_dir/libavformat/{{source_file_part}}"]
-}
-
-copy("copy_ffmpeg_config_libavutil") {
-  sources = [
-    "$ffmpeg_config_root/libavutil/avconfig.h",
-    "$ffmpeg_config_root/libavutil/ffversion.h",
-  ]
-  outputs = ["$target_gen_dir/libavutil/{{source_file_part}}"]
 }

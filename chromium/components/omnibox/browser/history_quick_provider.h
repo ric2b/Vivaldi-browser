@@ -43,18 +43,6 @@ class HistoryQuickProvider : public HistoryProvider {
 
  private:
   friend class HistoryQuickProviderTest;
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, Spans);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, Relevance);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, DoTrimHttpScheme);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
-                           DontTrimHttpSchemeIfInputHasScheme);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
-                           DontTrimHttpSchemeIfInputMatches);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
-                           DontTrimHttpsSchemeIfInputHasScheme);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest, DoTrimHttpsScheme);
-  FRIEND_TEST_ALL_PREFIXES(HistoryQuickProviderTest,
-                           CorrectAutocompleteWithTrailingSlash);
 
   ~HistoryQuickProvider() override;
 
@@ -72,6 +60,7 @@ class HistoryQuickProvider : public HistoryProvider {
 
   AutocompleteInput autocomplete_input_;
   raw_ptr<InMemoryURLIndex> in_memory_url_index_;  // Not owned by this class.
+  const TemplateURL* starter_pack_engine_;
 
   // This provider is disabled when true.
   static bool disabled_;

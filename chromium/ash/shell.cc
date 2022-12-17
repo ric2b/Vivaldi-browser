@@ -33,6 +33,7 @@
 #include "ash/child_accounts/parent_access_controller_impl.h"
 #include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/clipboard/control_v_histogram_recorder.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/controls/contextual_tooltip.h"
 #include "ash/dbus/ash_dbus_services.h"
@@ -53,6 +54,7 @@
 #include "ash/display/persistent_window_controller.h"
 #include "ash/display/privacy_screen_controller.h"
 #include "ash/display/projecting_observer.h"
+#include "ash/display/refresh_rate_throttle_controller.h"
 #include "ash/display/resolution_notification_controller.h"
 #include "ash/display/screen_ash.h"
 #include "ash/display/screen_orientation_controller.h"
@@ -65,6 +67,7 @@
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/frame/snap_controller_impl.h"
 #include "ash/frame_throttler/frame_throttling_controller.h"
+#include "ash/glanceables/glanceables_controller.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/highlighter/highlighter_controller.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
@@ -80,6 +83,7 @@
 #include "ash/metrics/feature_discovery_duration_reporter_impl.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/multi_capture/multi_capture_service_client.h"
 #include "ash/multi_device_setup/multi_device_notification_presenter.h"
 #include "ash/policy/policy_recommendation_restorer.h"
 #include "ash/projector/projector_controller_impl.h"
@@ -105,7 +109,7 @@
 #include "ash/shutdown_controller_impl.h"
 #include "ash/style/ash_color_mixer.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/dark_mode_controller.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/audio/display_speaker_controller.h"
 #include "ash/system/bluetooth/bluetooth_device_status_ui_handler.h"
 #include "ash/system/bluetooth/bluetooth_notification_controller.h"
@@ -114,6 +118,7 @@
 #include "ash/system/bluetooth/tray_bluetooth_helper_legacy.h"
 #include "ash/system/brightness/brightness_controller_chromeos.h"
 #include "ash/system/brightness_control_delegate.h"
+#include "ash/system/camera/autozoom_controller_impl.h"
 #include "ash/system/caps_lock_notification_controller.h"
 #include "ash/system/diagnostics/diagnostics_log_controller.h"
 #include "ash/system/firmware_update/firmware_update_notification_controller.h"
@@ -142,6 +147,7 @@
 #include "ash/system/power/power_prefs.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/video_activity_notifier.h"
+#include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "ash/system/screen_layout_observer.h"
 #include "ash/system/screen_security/screen_switch_check_controller.h"
 #include "ash/system/session/logout_confirmation_controller.h"
@@ -196,15 +202,17 @@
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ash/components/dbus/usb/usbguard_client.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/dbus/init/initialize_dbus_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/system/devicemode.h"
 #include "chromeos/ui/wm/features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "dbus/bus.h"
+#include "media/capture/video/chromeos/video_capture_features_chromeos.h"
+#include "services/video_capture/public/mojom/multi_capture_service.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
@@ -420,12 +428,6 @@ Shell::CreateDefaultNonClientFrameView(views::Widget* widget) {
   return std::make_unique<NonClientFrameViewAsh>(widget);
 }
 
-void Shell::SetDisplayWorkAreaInsets(Window* contains,
-                                     const gfx::Insets& insets) {
-  window_tree_host_manager_->UpdateWorkAreaOfDisplayNearestWindow(contains,
-                                                                  insets);
-}
-
 void Shell::OnCastingSessionStartedOrStopped(bool started) {
   for (auto& observer : shell_observers_)
     observer.OnCastingSessionStartedOrStopped(started);
@@ -434,6 +436,11 @@ void Shell::OnCastingSessionStartedOrStopped(bool started) {
 void Shell::OnRootWindowAdded(aura::Window* root_window) {
   for (auto& observer : shell_observers_)
     observer.OnRootWindowAdded(root_window);
+}
+
+void Shell::OnRootWindowWillShutdown(aura::Window* root_window) {
+  for (auto& observer : shell_observers_)
+    observer.OnRootWindowWillShutdown(root_window);
 }
 
 void Shell::OnDictationStarted() {
@@ -585,6 +592,10 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
       native_cursor_manager_(nullptr) {
   AccelerometerReader::GetInstance()->Initialize();
 
+  if (features::AreGlanceablesEnabled()) {
+    glanceables_controller_ = std::make_unique<GlanceablesController>();
+  }
+
   login_screen_controller_ =
       std::make_unique<LoginScreenController>(system_tray_notifier_.get());
   display_manager_ = ScreenAsh::CreateDisplayManager();
@@ -624,6 +635,9 @@ Shell::~Shell() {
 
   hud_display::HUDDisplayView::Destroy();
 
+  // Observes `SessionController` and must be destroyed before it.
+  privacy_hub_controller_.reset();
+
   for (auto& observer : shell_observers_)
     observer.OnShellDestroying();
 
@@ -638,6 +652,7 @@ Shell::~Shell() {
   display_configuration_observer_.reset();
   display_prefs_.reset();
   display_alignment_controller_.reset();
+  refresh_rate_throttle_controller_.reset();
 
   // Remove the focus from any window. This will prevent overhead and side
   // effects (e.g. crashes) from changing focus during shutdown.
@@ -706,6 +721,11 @@ Shell::~Shell() {
   // Accelerometer file reader stops listening to tablet mode controller.
   AccelerometerReader::GetInstance()->StopListenToTabletModeController();
 
+  if (features::AreGlanceablesEnabled()) {
+    // Close all glanceables so that all widgets are destroyed.
+    glanceables_controller_->DestroyUi();
+  }
+
   // Destroy |ambient_controller_| before |assistant_controller_|.
   ambient_controller_.reset();
 
@@ -717,10 +737,6 @@ Shell::~Shell() {
   // Because this function will call |TabletModeController::RemoveObserver|, do
   // it before destroying |tablet_mode_controller_|.
   accessibility_controller_->Shutdown();
-
-  // Because this function will call |SessionController::RemoveObserver|, do it
-  // before destroying |session_controller_|.
-  accelerator_controller_->Shutdown();
 
   // Must be destructed before human_presence_orientation_controller_.
   power_prefs_.reset();
@@ -775,11 +791,16 @@ Shell::~Shell() {
   window_cycle_controller_.reset();
   overview_controller_.reset();
 
+  // This must be destroyed before deleting all the windows below in
+  // `CloseAllRootWindowChildWindows()`, since shutting down the session will
+  // need to access those windows and it will be a UAF.
+  // https://crbug.com/1350711.
+  capture_mode_controller_.reset();
+
   // Close all widgets (including the shelf) and destroy all window containers.
   CloseAllRootWindowChildWindows();
 
   multitask_menu_nudge_controller_.reset();
-  capture_mode_controller_.reset();
   tablet_mode_controller_.reset();
   login_screen_controller_.reset();
   system_notification_controller_.reset();
@@ -829,9 +850,12 @@ Shell::~Shell() {
   keyboard_backlight_color_controller_.reset();
   rgb_keyboard_manager_.reset();
 
-  // `AshColorProvider` observes `WallPaperController` and must be destructed
-  // before it.
   ash_color_provider_.reset();
+
+  // Depends on `geolocation_controller_` and `wallpaper_controller_`, so it
+  // must be destructed before the geolocation controller and wallpaper
+  // controller.
+  dark_light_mode_controller_.reset();
 
   // These members access Shell in their destructors.
   wallpaper_controller_.reset();
@@ -859,10 +883,8 @@ Shell::~Shell() {
   docked_magnifier_controller_ = nullptr;
   // Similarly for PrivacyScreenController.
   privacy_screen_controller_ = nullptr;
-
-  // Depends on `geolocation_controller_`, so it must be destructed before the
-  // geolocation controller.
-  dark_mode_controller_.reset();
+  // Similarly for AutozoomControllerImpl
+  autozoom_controller_ = nullptr;
 
   geolocation_controller_.reset();
 
@@ -958,6 +980,8 @@ Shell::~Shell() {
 
   shell_delegate_.reset();
 
+  multi_capture_service_client_.reset();
+
   UsbguardClient::Shutdown();
 
   // Must be shut down after detachable_base_handler_.
@@ -993,6 +1017,7 @@ void Shell::Init(
 
   // These controllers call Shell::Get() in their constructors, so they cannot
   // be in the member initialization list.
+  privacy_hub_controller_ = std::make_unique<PrivacyHubController>();
   touch_devices_controller_ = std::make_unique<TouchDevicesController>();
   if (!ash::features::IsBluetoothRevampEnabled()) {
     bluetooth_power_controller_ =
@@ -1107,7 +1132,8 @@ void Shell::Init(
     env->set_context_factory(context_factory);
 
   ash_color_provider_ = std::make_unique<AshColorProvider>();
-
+  ui::ColorProviderManager::Get().AppendColorProviderInitializer(
+      base::BindRepeating(AddCrosStylesColorMixer));
   ui::ColorProviderManager::Get().AppendColorProviderInitializer(
       base::BindRepeating(AddAshColorMixer));
 
@@ -1123,11 +1149,14 @@ void Shell::Init(
   // been initialized.
   night_light_controller_ = std::make_unique<NightLightControllerImpl>();
 
-  dark_mode_controller_ = std::make_unique<DarkModeController>();
+  dark_light_mode_controller_ = std::make_unique<DarkLightModeControllerImpl>();
 
   // Privacy Screen depends on the display manager, so initialize it after
   // display manager was properly initialized.
   privacy_screen_controller_ = std::make_unique<PrivacyScreenController>();
+
+  if (media::ShouldEnableAutoFraming())
+    autozoom_controller_ = std::make_unique<AutozoomControllerImpl>();
 
   // Fast Pair depends on the display manager, so initialize it after
   // display manager was properly initialized.
@@ -1286,6 +1315,13 @@ void Shell::Init(
         std::make_unique<AmbientController>(std::move(fingerprint));
   }
 
+  mojo::PendingRemote<video_capture::mojom::MultiCaptureService>
+      multi_capture_service;
+  shell_delegate_->BindMultiCaptureService(
+      multi_capture_service.InitWithNewPipeAndPassReceiver());
+  multi_capture_service_client_ = std::make_unique<MultiCaptureServiceClient>(
+      std::move(multi_capture_service));
+
   // |tablet_mode_controller_| |mru_window_tracker_|, and
   // |assistant_controller_| are put before |app_list_controller_| as they are
   // used in its constructor.
@@ -1443,10 +1479,6 @@ void Shell::Init(
   // Initialize the D-Bus bus and services for ash.
   dbus_bus_ = dbus_bus;
   ash_dbus_services_ = std::make_unique<AshDBusServices>(dbus_bus.get());
-
-  // By this point ash shell should have initialized its D-Bus signal
-  // listeners, so inform the session manager that Ash is initialized.
-  session_controller_->EmitAshInitialized();
 }
 
 void Shell::InitializeDisplayManager() {
@@ -1463,6 +1495,12 @@ void Shell::InitializeDisplayManager() {
 
   projecting_observer_ =
       std::make_unique<ProjectingObserver>(display_manager_->configurator());
+
+  if (base::FeatureList::IsEnabled(features::kSeamlessRefreshRateSwitching)) {
+    refresh_rate_throttle_controller_ =
+        std::make_unique<RefreshRateThrottleController>(
+            display_manager_->configurator(), PowerStatus::Get());
+  }
 
   display_prefs_ = std::make_unique<DisplayPrefs>(local_state_);
 
@@ -1580,6 +1618,13 @@ void Shell::OnFirstSessionStarted() {
   // the session starts.
   app_list_feature_usage_metrics_ =
       std::make_unique<AppListFeatureUsageMetrics>();
+
+  if (features::AreGlanceablesEnabled()) {
+    // Show glanceables after signin.
+    // TODO(crbug.com/1353119): Show only when session restore would trigger.
+    glanceables_controller_->CreateUi();
+    glanceables_controller_->FetchData();
+  }
 }
 
 void Shell::OnSessionStateChanged(session_manager::SessionState state) {

@@ -48,14 +48,14 @@
     // HTMLElement includes ElementContentEditable
     // https://html.spec.whatwg.org/C/#contenteditable
     [CEReactions, RaisesException=Setter] attribute DOMString contentEditable;
-    [RuntimeEnabled=EnterKeyHintAttribute, CEReactions, Reflect, ReflectOnly=("enter","done","go","next","previous","search","send")] attribute DOMString enterKeyHint;
+    [CEReactions, Reflect, ReflectOnly=("enter","done","go","next","previous","search","send")] attribute DOMString enterKeyHint;
     [ImplementedAs=isContentEditableForBinding] readonly attribute boolean isContentEditable;
     [CEReactions, Reflect, ReflectOnly=("none","text","tel","url","email","numeric","decimal","search")] attribute DOMString inputMode;
 
     // Explainers:
     // https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/master/VirtualKeyboardPolicy/explainer.md
     // https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/master/VirtualKeyboardAPI/explainer.md
-    [RuntimeEnabled=VirtualKeyboard, CEReactions, Reflect, ReflectOnly=("auto","manual")] attribute DOMString virtualKeyboardPolicy;
+    [CEReactions, Reflect, ReflectOnly=("auto","manual")] attribute DOMString virtualKeyboardPolicy;
 
     // CSSOM View Module
     // https://drafts.csswg.org/cssom-view/#extensions-to-the-htmlelement-interface

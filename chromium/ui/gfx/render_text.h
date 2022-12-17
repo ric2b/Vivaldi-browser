@@ -297,10 +297,10 @@ class GFX_EXPORT RenderText {
 
   // Makes a char in obscured text at |index| to be revealed. |index| should be
   // a UTF16 text index. If there is a previous revealed index, the previous one
-  // is cleared and only the last set index will be revealed. If |index| is -1
-  // or out of range, no char will be revealed. The revealed index is also
-  // cleared when SetText or SetObscured is called.
-  void SetObscuredRevealIndex(int index);
+  // is cleared and only the last set index will be revealed. If |index| is
+  // nullopt or out of range, no char will be revealed. The revealed index is
+  // also cleared when SetText or SetObscured is called.
+  void SetObscuredRevealIndex(absl::optional<size_t> index);
 
   // For obscured (password) fields, the extra spacing between glyphs.
   int obscured_glyph_spacing() const { return obscured_glyph_spacing_; }
@@ -768,9 +768,6 @@ class GFX_EXPORT RenderText {
   // Update the display text.
   void UpdateDisplayText(float text_width);
 
-  // Returns display text positions that are suitable for breaking lines.
-  const BreakList<size_t>& GetLineBreaks();
-
   // Convert points from the text space to the view space. Handles the display
   // area, display offset, application LTR/RTL mode and multiline. |line| is the
   // index of the line in which |point| is found, and is required to be passed
@@ -971,7 +968,7 @@ class GFX_EXPORT RenderText {
   // A flag to obscure actual text with asterisks for password fields.
   bool obscured_ = false;
   // The index at which the char should be revealed in the obscured text.
-  int obscured_reveal_index_ = -1;
+  absl::optional<size_t> obscured_reveal_index_;
 
   // The maximum length of text to display, 0 forgoes a hard limit.
   size_t truncate_length_ = 0;
@@ -1037,9 +1034,6 @@ class GFX_EXPORT RenderText {
 
   // Text shadows to be drawn.
   ShadowValues shadows_;
-
-  // A list of valid display text line break positions.
-  BreakList<size_t> line_breaks_;
 
   // Text shaping computed by EnsureLayout. This should be invalidated upon
   // OnLayoutTextAttributeChanged and OnDisplayTextAttributeChanged calls.

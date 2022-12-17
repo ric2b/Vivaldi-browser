@@ -8,41 +8,25 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
-#include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
-#include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/browser/extension_registry_observer.h"
-#include "ui/base/accelerators/accelerator.h"
+#include "components/web_modal/modal_dialog_host.h"
+#include "extensions/common/draggable_region.h"
 #include "ui/base/ui_base_types.h"  // WindowShowState
 #include "ui/gfx/image/image_family.h"
-#include "ui/infobar_container_web_proxy.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
-#include "ui/vivaldi_rootdocument_handler.h"
+#include "ui/views/widget/widget.h"
+
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#include "ui/views/win/scoped_fullscreen_visibility.h"
-#endif
-
 class ScopedKeepAlive;
+class SkRegion;
 
-#if BUILDFLAG(IS_WIN)
-class JumpList;
-#endif
-
-class VivaldiBrowserWindow;
 class VivaldiLocationBar;
-class VivaldiNativeAppWindowViews;
-
-namespace autofill {
-class AutofillBubbleHandler;
-}
+class VivaldiWindowWidgetDelegate;
 
 namespace ui {
 class Accelerator;
@@ -50,7 +34,8 @@ class Accelerator;
 
 namespace views {
 class View;
-}
+class Widget;
+}  // namespace views
 
 namespace content {
 class RenderFrameHost;
@@ -58,14 +43,12 @@ class RenderFrameHost;
 
 namespace extensions {
 class Extension;
-}
+class VivaldiRootDocumentHandler;
+}  // namespace extensions
 
-namespace autofill {
-class AutofillBubbleBase;
-class LocalCardMigrationBubble;
-class SaveCardBubbleController;
-class LocalCardMigrationBubbleController;
-}  // namespace autofill
+namespace vivaldi {
+class InfoBarContainerWebProxy;
+}
 
 struct VivaldiBrowserWindowParams {
   static constexpr int kUnspecifiedPosition = INT_MIN;
@@ -97,70 +80,52 @@ struct VivaldiBrowserWindowParams {
   content::RenderFrameHost* creator_frame = nullptr;
 };
 
-class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
- public:
-  VivaldiAutofillBubbleHandler();
-  ~VivaldiAutofillBubbleHandler() override;
-  VivaldiAutofillBubbleHandler(const VivaldiAutofillBubbleHandler&) = delete;
-  VivaldiAutofillBubbleHandler& operator=(const VivaldiAutofillBubbleHandler&) =
-      delete;
-
-  autofill::AutofillBubbleBase* ShowSaveCreditCardBubble(
-      content::WebContents* web_contents,
-      autofill::SaveCardBubbleController* controller,
-      bool is_user_gesture) override;
-
-  autofill::AutofillBubbleBase* ShowLocalCardMigrationBubble(
-      content::WebContents* web_contents,
-      autofill::LocalCardMigrationBubbleController* controller,
-      bool is_user_gesture) override;
-
-  autofill::AutofillBubbleBase* ShowOfferNotificationBubble(
-      content::WebContents* web_contents,
-      autofill::OfferNotificationBubbleController* controller,
-      bool is_user_gesture) override;
-
-  autofill::SaveUPIBubble* ShowSaveUPIBubble(
-      content::WebContents* contents,
-      autofill::SaveUPIBubbleController* controller) override;
-
-  autofill::AutofillBubbleBase* ShowSaveAddressProfileBubble(
-      content::WebContents* web_contents,
-      autofill::SaveUpdateAddressProfileBubbleController* controller,
-      bool is_user_gesture) override;
-
-  autofill::AutofillBubbleBase* ShowUpdateAddressProfileBubble(
-      content::WebContents* web_contents,
-      autofill::SaveUpdateAddressProfileBubbleController* controller,
-      bool is_user_gesture) override;
-
-  autofill::AutofillBubbleBase* ShowEditAddressProfileDialog(
-      content::WebContents* web_contents,
-      autofill::EditAddressProfileDialogController* controller) override;
-
-  autofill::AutofillBubbleBase* ShowVirtualCardManualFallbackBubble(
-      content::WebContents* web_contents,
-      autofill::VirtualCardManualFallbackBubbleController* controller,
-      bool is_user_gesture) override;
-
-  autofill::AutofillBubbleBase* ShowVirtualCardEnrollBubble(
-      content::WebContents* web_contents,
-      autofill::VirtualCardEnrollBubbleController* controller,
-      bool is_user_gesture) override;
-
-  void OnPasswordSaved() override {}
-};
-
-// An implementation of BrowserWindow used for Vivaldi.
-class VivaldiBrowserWindow final
-    : public BrowserWindow,
-      public web_modal::WebContentsModalDialogManagerDelegate,
-      public ExclusiveAccessContext,
-      public ui::AcceleratorProvider,
-      public infobars::InfoBarContainer::Delegate,
-      public extensions::ExtensionFunctionDispatcher::Delegate,
-      public extensions::ExtensionRegistryObserver,
-      public extensions::VivaldiRootDocumentHandlerObserver {
+// The class that binds BrowserWindow with native UI. Initially it started as a
+// fork of deprecated NativeAppWindow from
+// chromium/extensions/components/native_app_window/native_app_window.h, but
+// these days it follows mostly views::BrowserViews. Compared with the latter
+// this class owns single WebContents where out UI runs which in turn uses
+// <webview> tags to show web pages.
+//
+// Another key difference is that while BrowserView subclasses
+// views::ClientView, this class owns views::Widget (widget_ field) that
+// represents the whole OS window. The picture below adapted from
+// chromium/ui/views/window/non_client_view.h shows the hierarhy of Chromium UI
+// classes that we use.
+//
+//  +- views::Widget (widget_ field for OS window)-----+ |
+//  | +- views::RootView ------------------------------+ |
+//  | | +- views::NonClientView----------------------+ | |
+//  | | | +- views::NonClientFrameView subclass ---+ | | |
+//  | | | |                                        | | | |
+//  | | | | << all painting and event receiving >> | | | |
+//  | | | | << of the non-client areas of a     >> | | | |
+//  | | | | << views::Widget.                   >> | | | |
+//  | | | |                                        | | | |
+//  | | | | +- views::ClientView subclass -------+ | | | |
+//  | | | | | +- views::WebView ---------------+ | | | | |
+//  | | | | | | +- views::NativeViewHost ----+ | | | | | |
+//  | | | | +------------------------------------+ | | | |
+//  | | | | +------------------------------------+ | | | |
+//  | | | +----------------------------------------+ | | |
+//  | | +--------------------------------------------+ | |
+//  | +------------------------------------------------+ |
+//  +----------------------------------------------------+
+//
+// In addition, we also subclass views::WidgetDelegate and views::NativeWidget
+// and related classes.
+//
+// TODO(igor@vivaldi.com) As we draw everything in JS consider simplifying this
+// like replacing NonClientView with WebView or NativeViewHost or even
+// eliminating the whole views::* hierarhy and just coupling gfx::NativeView
+// with WebContext on each platform. But that could have resulted into
+// forking even more Chromium code compared with what we have now.
+//
+// views::BrowserView directly extends various helper interfaces in addition to
+// BrowserWindow. To keep the public interface of this class small we implement
+// those using separated classes like InterfaceHelper below.
+//
+class VivaldiBrowserWindow final : public BrowserWindow {
  public:
   VivaldiBrowserWindow();
   ~VivaldiBrowserWindow() override;
@@ -169,6 +134,7 @@ class VivaldiBrowserWindow final
 
   enum WindowType {
     NORMAL,
+    POPUP,
     SETTINGS,
   };
 
@@ -195,37 +161,95 @@ class VivaldiBrowserWindow final
   // window.
   SessionID::id_type id() const { return browser()->session_id().id(); }
 
-  VivaldiNativeAppWindowViews* views() const { return views_.get(); }
+  bool is_hidden() { return is_hidden_; }
+
+  WindowType type() { return window_type_; }
+
+  const extensions::Extension* extension() { return extension_; }
+
+  bool with_native_frame() const { return with_native_frame_; }
+
+  int resize_inside_bounds_size() const { return resize_inside_bounds_size_; }
+
+  int resize_area_corner_size() const { return resize_area_corner_size_; }
+
+  gfx::Size minimum_size() const { return minimum_size_; }
+
+  const SkRegion* draggable_region() const { return draggable_region_.get(); }
+
+  views::Widget* GetWidget() const { return widget_; }
+
+  views::View* GetWebView() const;
+
+  // TODO(pettern): fix
+  bool requested_alpha_enabled() { return false; }
+
+  void SetWindowState(ui::WindowShowState show_state) {
+    window_state_data_.state = show_state;
+  }
+  ui::WindowShowState GetWindowState() { return window_state_data_.state; }
 
   // Takes ownership of |browser|.
   void CreateWebContents(std::unique_ptr<Browser> browser,
                          const VivaldiBrowserWindowParams& params);
 
+  // DidStartNavigation for the window contents.
   void ContentsDidStartNavigation();
+  // DocumentOnLoadCompletedInPrimaryMainFrame for the window webcontents.
+  void ContentsLoadCompletedInMainFrame();
 
-  // ExtensionRegistryObserver implementation.
-  void OnExtensionUnloaded(content::BrowserContext* browser_context,
-                           const extensions::Extension* extension,
-                           extensions::UnloadedExtensionReason reason) override;
-
-  // ExtensionFunctionDispatcher::Delegate implementation.
-  extensions::WindowController* GetExtensionWindowController() const override;
-  content::WebContents* GetAssociatedWebContents() const override;
-
-  // infobars::InfoBarContainer::Delegate
-  void InfoBarContainerStateChanged(bool is_animating) override;
-
-  // VivaldiRootDocumentHandlerObserver
-  void OnRootDocumentDidFinishNavigation() override;
-  content::WebContents* GetRootDocumentWebContents() override;
+  bool ConfirmWindowClose();
 
   void HandleMouseChange(bool motion);
 
-  bool ConfirmWindowClose();
+  // If moved is true, the change is caused by a move
+  void OnNativeWindowChanged(bool moved = false);
+  void OnNativeClose();
+  void OnNativeWindowActivationChanged(bool active);
+
+  void NavigationStateChanged(content::WebContents* source,
+                              content::InvalidateTypes changed_flags);
+
+  // Enable or disable fullscreen mode.
+  void SetFullscreen(bool enable);
+
+  Profile* GetProfile() const;
+
+  std::u16string GetTitle();
+
+  views::View* GetContentsView() const;
+
+  gfx::NativeView GetNativeView();
+
+  ui::AcceleratorProvider* GetAcceleratorProvider();
+
+  // View to pass to BubbleDialogDelegateView and its sublasses.
+  views::View* GetBubbleDialogAnchor() const;
+
+  void ResetDockingState(int tab_id);
+
+  // window for the callback is null on errors or if the user closed the
+  // window before the initial content was loaded.
+  using DidFinishNavigationCallback =
+      base::OnceCallback<void(VivaldiBrowserWindow* window)>;
+  void SetDidFinishNavigationCallback(DidFinishNavigationCallback callback);
+
+  void SetWindowURL(std::string s) { resource_relative_url_ = std::move(s); }
+
+  void UpdateDraggableRegions(
+      const std::vector<extensions::DraggableRegion>& regions);
+
+  const gfx::Rect& GetMaximizeButtonBounds() const {
+    return maximize_button_bounds_;
+  }
+
+  void UpdateMaximizeButtonPosition(const gfx::Rect& rect);
 
   //
   // BrowserWindow overrides
   //
+  void DestroyBrowser() override;
+  ExclusiveAccessContext* GetExclusiveAccessContext() override;
   void Show() override;
   void ShowInactive() override {}
   void Hide() override;
@@ -268,6 +292,8 @@ class VivaldiBrowserWindow final
   void SetFocusToLocationBar(bool select_all) override {}
   void UpdateReloadStopState(bool is_loading, bool force) override {}
   void UpdateToolbar(content::WebContents* contents) override;
+  bool IsToolbarShowing() const override;
+  void MaybeShowProfileSwitchIPH() override {}
   void FocusToolbar() override {}
   void ToolbarSizeChanged(bool is_animating) override {}
   void FocusAppMenu() override {}
@@ -301,9 +327,9 @@ class VivaldiBrowserWindow final
       bool show_back_button) override;
   send_tab_to_self::SendTabToSelfBubbleView*
   ShowSendTabToSelfDevicePickerBubble(content::WebContents* contents) override;
-  send_tab_to_self::SendTabToSelfBubbleView*
-  ShowSendTabToSelfPromoBubble(content::WebContents* contents,
-                             bool show_signin_button) override;
+  send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfPromoBubble(
+      content::WebContents* contents,
+      bool show_signin_button) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
@@ -311,6 +337,13 @@ class VivaldiBrowserWindow final
       const std::string& target_language,
       translate::TranslateErrors::Type error_type,
       bool is_user_gesture) override;
+  void ShowPartialTranslateBubble(
+      PartialTranslateBubbleModel::ViewState view_state,
+      const std::string& source_language,
+      const std::string& target_language,
+      const std::u16string& text_selection,
+      translate::TranslateErrors::Type error_type) override {}
+  void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
   DownloadBubbleUIController* GetDownloadBubbleUIController() override;
@@ -335,7 +368,6 @@ class VivaldiBrowserWindow final
   ui::ElementContext GetElementContext() override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override {}
-  bool CanUserExitFullscreen() const override;
   std::unique_ptr<FindBar> CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
@@ -385,18 +417,13 @@ class VivaldiBrowserWindow final
       user_education::FeaturePromoSpecification::StringReplacements
           body_text_replacements = {},
       user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback =
-          base::DoNothing()) override;
+          close_callback = base::DoNothing()) override;
   bool CloseFeaturePromo(const base::Feature& iph_feature) override;
-  user_education::FeaturePromoController::PromoHandle
-  CloseFeaturePromoAndContinue(
-      const base::Feature& iph_feature) override;
+  user_education::FeaturePromoHandle
+  CloseFeaturePromoAndContinue(const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
-  bool IsSideSearchPanelVisible() const override;
-  void MaybeRestoreSideSearchStatePerWindow(
-      const std::map<std::string, std::string>& extra_data) override {}
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
   bool IsLocationBarVisible() const override;
@@ -407,98 +434,14 @@ class VivaldiBrowserWindow final
   ui::ZOrderLevel GetZOrderLevel() const override;
   void SetZOrderLevel(ui::ZOrderLevel order) override {}
 
-  // web_modal::WebContentsModalDialogManagerDelegate implementation.
-  void SetWebContentsBlocked(content::WebContents* web_contents,
-                             bool blocked) override;
-  bool IsWebContentsVisible(content::WebContents* web_contents) override;
-
-  // Overridden from ui::AcceleratorProvider:
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) const override;
-
-  ui::AcceleratorProvider* GetAcceleratorProvider();
-
-  // Overridden from ExclusiveAccessContext
-  Profile* GetProfile() override;
-  void EnterFullscreen(const GURL& url,
-                       ExclusiveAccessBubbleType bubble_type,
-                       int64_t display_id) override;
-  void ExitFullscreen() override;
-  void UpdateExclusiveAccessExitBubbleContent(
-      const GURL& url,
-      ExclusiveAccessBubbleType bubble_type,
-      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
-      bool force_update) override;
-  bool IsExclusiveAccessBubbleDisplayed() const override;
-  void OnExclusiveAccessUserInput() override;
-  content::WebContents* GetActiveWebContents() override;
-
-  ExclusiveAccessContext* GetExclusiveAccessContext() override;
-  void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
-
-  void MaybeShowProfileSwitchIPH() override {}
-
-  void ResetDockingState(int tab_id);
-
-  bool IsToolbarShowing() const override;
-
-  // If moved is true, the change is caused by a move
-  void OnNativeWindowChanged(bool moved = false);
-  void OnNativeClose();
-  void OnNativeWindowActivationChanged(bool active);
-
-  void NavigationStateChanged(content::WebContents* source,
-                              content::InvalidateTypes changed_flags);
-
-  // Enable or disable fullscreen mode.
-  void SetFullscreen(bool enable);
-
-  std::u16string GetTitle();
-  views::View* GetContentsView() const;
-  gfx::NativeView GetNativeView();
-
-  // View to pass to BubbleDialogDelegateView and its sublasses.
-  views::View* GetBubbleDialogAnchor() const;
-
-  content::WebContents* GetActiveWebContents() const;
-
-  // TODO(pettern): fix
-  bool requested_alpha_enabled() { return false; }
-
-  const extensions::Extension* extension() { return extension_; }
-
-  bool is_hidden() { return is_hidden_; }
-
-  WindowType type() { return window_type_; }
-
-  void SetWindowState(ui::WindowShowState show_state) {
-    window_state_data_.state = show_state;
-  }
-
-  // window for the callback is null on errors or if the user closed the
-  // window before the initial content was loaded.
-  using DidFinishNavigationCallback =
-      base::OnceCallback<void(VivaldiBrowserWindow* window)>;
-  void SetDidFinishNavigationCallback(DidFinishNavigationCallback callback);
-
-  void SetWindowURL(std::string s) { resource_relative_url_ = std::move(s);}
-
  private:
-  class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
-   public:
-    VivaldiManagePasswordsIconView(VivaldiBrowserWindow& window);
-    virtual ~VivaldiManagePasswordsIconView() = default;
-    VivaldiManagePasswordsIconView(const VivaldiManagePasswordsIconView&) =
-        delete;
-    VivaldiManagePasswordsIconView& operator=(
-        const VivaldiManagePasswordsIconView&) = delete;
+  // Implementation of various interface-like Chromium classes is in this inner
+  // class not to pollute with extra details the main class.
+  class InterfaceHelper;
 
-    void SetState(password_manager::ui::State state) override;
-    bool Update();
-
-   private:
-    VivaldiBrowserWindow& window_;
-  };
+  friend InterfaceHelper;
+  friend VivaldiUIWebContentsDelegate;
+  friend VivaldiWindowWidgetDelegate;
 
   struct WindowStateData {
     // State kept to dispatch events on changes.
@@ -506,10 +449,7 @@ class VivaldiBrowserWindow final
     gfx::Rect bounds;
   };
 
-  friend class VivaldiUIWebContentsDelegate;
-  friend class VivaldiNativeAppWindowViews;
-
-  void DestroyBrowser() override;
+  void InitWidget(const VivaldiBrowserWindowParams& create_params);
 
   void DeleteThis();
 
@@ -524,10 +464,30 @@ class VivaldiBrowserWindow final
   void OnPositionChanged();
   void OnActivationChanged(bool activated);
 
+  void OnViewWasResized();
+
   // VivaldiQuitConfirmationDialog::CloseCallback
   void ContinueClose(bool quiting, bool close, bool stop_asking);
 
   void OnDidFinishNavigation(bool success);
+
+  void ReportWebsiteSettingsState(bool visible);
+  void OnWebsiteSettingsStatClosed(views::Widget::ClosedReason closed_reason,
+                                   bool reload_prompt);
+
+  content::WebContents* GetActiveWebContents() const;
+
+  gfx::Insets GetFrameInsets() const;
+
+  // Helper methods implemented only on Windows
+
+  void SetupShellIntegration(const VivaldiBrowserWindowParams& create_params);
+  int GetCommandIDForAppCommandID(int app_command_id) const;
+
+  // This must be the first field for the class to ensure that it outlives any
+  // other field that use the class as a delegate and embeds a raw pointer to
+  // it.
+  const std::unique_ptr<InterfaceHelper> interface_helper_;
 
   // The Browser object for this window. This must be the first field in the
   // class so it is destructed after any field below that may refer to the
@@ -535,7 +495,8 @@ class VivaldiBrowserWindow final
   std::unique_ptr<Browser> browser_;
 
   std::unique_ptr<content::WebContents> web_contents_;
-  std::unique_ptr<VivaldiNativeAppWindowViews> views_;
+  views::Widget* widget_ = nullptr;
+  std::unique_ptr<VivaldiWindowWidgetDelegate> widget_delegate_;
   VivaldiUIWebContentsDelegate web_contents_delegate_{this};
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
@@ -556,6 +517,20 @@ class VivaldiBrowserWindow final
   bool quit_dialog_shown_ = false;
   bool close_dialog_shown_ = false;
 
+  // When true, use the system frame with the maximized button etc.
+  bool with_native_frame_ = false;
+
+  // Allow resize for clicks this many pixels inside the bounds.
+  int resize_inside_bounds_size_ = 5;
+
+  // Size in pixels of the lower-right corner resize handle.
+  int resize_area_corner_size_ = 16;
+
+  gfx::Size minimum_size_;
+
+  // The region in the window to drag it around OS desktop.
+  std::unique_ptr<SkRegion> draggable_region_;
+
   // The window type for this window.
   WindowType window_type_ = NORMAL;
 
@@ -563,7 +538,7 @@ class VivaldiBrowserWindow final
   extensions::Extension* extension_ = nullptr;
 
   // The InfoBarContainerWebProxy that contains InfoBars for the current tab.
-  vivaldi::InfoBarContainerWebProxy* infobar_container_ = nullptr;
+  std::unique_ptr<vivaldi::InfoBarContainerWebProxy> infobar_container_;
 
   std::unique_ptr<VivaldiLocationBar> location_bar_;
 
@@ -581,10 +556,15 @@ class VivaldiBrowserWindow final
   bool last_motion_ = false;
   WindowStateData window_state_data_;
 
-  VivaldiManagePasswordsIconView icon_view_{*this};
-  std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;
+  gfx::Rect maximize_button_bounds_;
+
+  // The icon family for the task bar and elsewhere.
+  gfx::ImageFamily icon_family_;
 
   DidFinishNavigationCallback did_finish_navigation_callback_;
+
+  base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
+      modal_dialog_observers_;
 
   base::WeakPtrFactory<VivaldiBrowserWindow> weak_ptr_factory_{this};
 };

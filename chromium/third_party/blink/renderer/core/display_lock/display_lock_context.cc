@@ -12,8 +12,10 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/display_lock/content_visibility_auto_state_changed_event.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -24,7 +26,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/html_element_type_helpers.h"
-#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -32,6 +33,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -45,9 +47,6 @@ const char* kContainmentNotSatisfied =
 const char* kUnsupportedDisplay =
     "Element has unsupported display type (display: contents).";
 }  // namespace rejection_names
-
-const char kForcedRendering[] =
-    "Rendering was performed in a subtree hidden by content-visibility:hidden.";
 
 ScrollableArea* GetScrollableArea(Node* node) {
   if (!node)
@@ -69,6 +68,7 @@ DisplayLockContext::DisplayLockContext(Element* element)
   DetermineIfSubtreeHasFocus();
   DetermineIfSubtreeHasSelection();
   DetermineIfSubtreeHasTopLayerElement();
+  DetermineIfInSharedElementTransitionChain();
 }
 
 void DisplayLockContext::SetRequestedState(EContentVisibility state) {
@@ -91,13 +91,6 @@ void DisplayLockContext::SetRequestedState(EContentVisibility state) {
           is_hidden_until_found_ || is_details_slot_
               ? static_cast<uint16_t>(DisplayLockActivationReason::kFindInPage)
               : 0u);
-      break;
-    case EContentVisibility::kHiddenMatchable:
-      UseCounter::Count(document_,
-                        WebFeature::kContentVisibilityHiddenMatchable);
-      RequestLock(
-          static_cast<uint16_t>(DisplayLockActivationReason::kAny) &
-          ~static_cast<uint16_t>(DisplayLockActivationReason::kViewport));
       break;
   }
   // In a new state, we might need to either start or stop observing viewport
@@ -294,6 +287,9 @@ void DisplayLockContext::Lock() {
   // layout objects, since otherwise they would be hoisted out of our subtree.
   DetachDescendantTopLayerElements();
 
+  // Schedule ContentVisibilityAutoStateChanged event if needed.
+  ScheduleStateChangeEventIfNeeded();
+
   if (!element_->GetLayoutObject())
     return;
 
@@ -369,6 +365,9 @@ void DisplayLockContext::DidLayoutChildren() {
 
 bool DisplayLockContext::ShouldPrePaintChildren() const {
   return !is_locked_ || forced_info_.is_forced(ForcedPhase::kPrePaint) ||
+         (document_->GetDisplayLockDocumentState()
+              .ActivatableDisplayLocksForced() &&
+          IsActivatable(DisplayLockActivationReason::kAny)) ||
          (element_->GetLayoutObject() &&
           element_->GetLayoutObject()->IsShapingDeferred());
 }
@@ -482,9 +481,15 @@ bool DisplayLockContext::ShouldCommitForActivation(
   return IsActivatable(reason) && IsLocked();
 }
 
-void DisplayLockContext::NotifyForcedUpdateScopeStarted(ForcedPhase phase,
-                                                        bool emit_warnings) {
-  forced_info_.start(phase);
+void DisplayLockContext::UpgradeForcedScope(ForcedPhase old_phase,
+                                            ForcedPhase new_phase,
+                                            bool emit_warnings) {
+  // Since we're upgrading, it means we have a bigger phase.
+  DCHECK_LT(static_cast<int>(old_phase), static_cast<int>(new_phase));
+
+  auto old_forced_info = forced_info_;
+  forced_info_.end(old_phase);
+  forced_info_.start(new_phase);
   if (IsLocked()) {
     // Now that the update is forced, we should ensure that style layout, and
     // prepaint code can reach it via dirty bits. Note that paint isn't a part
@@ -494,27 +499,36 @@ void DisplayLockContext::NotifyForcedUpdateScopeStarted(ForcedPhase phase,
     // from within style recalc. We rely on `TakeBlockedStyleRecalcChange`
     // to be called from self style recalc.
     if (CanDirtyStyle() &&
+        !old_forced_info.is_forced(ForcedPhase::kStyleAndLayoutTree) &&
         forced_info_.is_forced(ForcedPhase::kStyleAndLayoutTree)) {
       MarkForStyleRecalcIfNeeded();
     }
-    if (forced_info_.is_forced(ForcedPhase::kLayout))
+    if (!old_forced_info.is_forced(ForcedPhase::kLayout) &&
+        forced_info_.is_forced(ForcedPhase::kLayout)) {
       MarkForLayoutIfNeeded();
-    if (forced_info_.is_forced(ForcedPhase::kPrePaint))
+    }
+    if (!old_forced_info.is_forced(ForcedPhase::kPrePaint) &&
+        forced_info_.is_forced(ForcedPhase::kPrePaint)) {
       MarkAncestorsForPrePaintIfNeeded();
+    }
 
     if (emit_warnings && v8::Isolate::GetCurrent()->InContext() &&
         !IsActivatable(DisplayLockActivationReason::kAny) && document_ &&
         element_) {
-      // Note that this is a verbose level message, since it can happen
-      // frequently and is not necessarily a problem if the developer is
-      // accessing content-visibility: hidden subtrees intentionally.
-      auto* console_message = MakeGarbageCollected<ConsoleMessage>(
-          mojom::blink::ConsoleMessageSource::kJavaScript,
-          mojom::blink::ConsoleMessageLevel::kVerbose, kForcedRendering);
-      console_message->SetNodes(document_->GetFrame(),
-                                {DOMNodeIds::IdForNode(element_)});
-      document_->AddConsoleMessage(console_message);
+      document_->GetDisplayLockDocumentState().IssueForcedRenderWarning(
+          element_);
     }
+  }
+}
+
+void DisplayLockContext::ScheduleStateChangeEventIfNeeded() {
+  if (state_ == EContentVisibility::kAuto &&
+      RuntimeEnabledFeatures::ContentVisibilityAutoStateChangedEventEnabled() &&
+      !IsShapingDeferred()) {
+    element_->EnqueueEvent(
+        *ContentVisibilityAutoStateChangedEvent::Create(
+            event_type_names::kContentvisibilityautostatechanged, is_locked_),
+        TaskType::kMiscPlatformAPI);
   }
 }
 
@@ -563,6 +577,9 @@ void DisplayLockContext::Unlock() {
   // of |element_| in the AX cache.
   if (AXObjectCache* cache = element_->GetDocument().ExistingAXObjectCache())
     cache->ChildrenChanged(element_);
+
+  // Schedule ContentVisibilityAutoStateChanged event if needed.
+  ScheduleStateChangeEventIfNeeded();
 
   auto* layout_object = element_->GetLayoutObject();
   // We might commit without connecting, so there is no layout object yet.
@@ -707,7 +724,9 @@ bool DisplayLockContext::MarkNeedsRepaintAndPaintArtifactCompositorUpdate() {
   DCHECK(ConnectedToView());
   if (auto* layout_object = element_->GetLayoutObject()) {
     layout_object->PaintingLayer()->SetNeedsRepaint();
-    document_->View()->SetPaintArtifactCompositorNeedsUpdate();
+    document_->View()->SetPaintArtifactCompositorNeedsUpdate(
+        PaintArtifactCompositorUpdateReason::
+            kDisplayLockContextNeedsPaintArtifactCompositorUpdate);
     return true;
   }
   return false;
@@ -814,6 +833,7 @@ void DisplayLockContext::DidMoveToNewDocument(Document& old_document) {
   DetermineIfSubtreeHasFocus();
   DetermineIfSubtreeHasSelection();
   DetermineIfSubtreeHasTopLayerElement();
+  DetermineIfInSharedElementTransitionChain();
 }
 
 void DisplayLockContext::WillStartLifecycleUpdate(const LocalFrameView& view) {
@@ -1035,6 +1055,9 @@ bool DisplayLockContext::ForceUnlockIfNeeded() {
               layout_invalidation_reason::kDisplayLock);
         }
       }
+      // If we forced unlock, then we need to prevent subsequent calls to
+      // Lock() until the next frame.
+      SetRequestedState(EContentVisibility::kVisible);
     }
     return true;
   }
@@ -1101,6 +1124,56 @@ void DisplayLockContext::DetermineIfSubtreeHasTopLayerElement() {
       }
     }
   }
+}
+
+void DisplayLockContext::DetermineIfInSharedElementTransitionChain() {
+  ResetAndDetermineIfAncestorIsSharedElement();
+  if (ConnectedToView())
+    document_->GetDisplayLockDocumentState().UpdateSharedElementAncestorLocks();
+}
+
+void DisplayLockContext::ResetInSharedElementTransitionChain() {
+  SetRenderAffectingState(RenderAffectingState::kSharedElementTransitionChain,
+                          false);
+}
+
+void DisplayLockContext::SetInSharedElementTransitionChain() {
+  SetRenderAffectingState(RenderAffectingState::kSharedElementTransitionChain,
+                          true);
+}
+
+bool DisplayLockContext::IsInSharedElementAncestorChain() const {
+  return render_affecting_state_[static_cast<int>(
+      RenderAffectingState::kSharedElementTransitionChain)];
+}
+
+void DisplayLockContext::ResetAndDetermineIfAncestorIsSharedElement() {
+  ResetInSharedElementTransitionChain();
+  if (!ConnectedToView())
+    return;
+
+  auto* supplement = DocumentTransitionSupplement::FromIfExists(*document_);
+  if (!supplement)
+    return;
+
+  auto* transition = supplement->GetTransition();
+  bool has_shared_element_ancestor = false;
+  for (auto* candidate = element_.Get(); candidate;
+       candidate = FlatTreeTraversal::ParentElement(*candidate)) {
+    // We don't care about document element as the ancestor, since it's common
+    // to have one and it will be clipped by viewport anyway.
+    if (candidate->IsDocumentElement())
+      continue;
+
+    if (auto* layout_object = candidate->GetLayoutObject();
+        layout_object &&
+        transition->IsRepresentedViaPseudoElements(*layout_object)) {
+      has_shared_element_ancestor = true;
+      break;
+    }
+  }
+  SetRenderAffectingState(RenderAffectingState::kSharedElementTransitionChain,
+                          has_shared_element_ancestor);
 }
 
 void DisplayLockContext::ClearHasTopLayerElement() {
@@ -1224,7 +1297,8 @@ void DisplayLockContext::NotifyRenderAffectingStateChanged() {
         !state(RenderAffectingState::kSubtreeHasSelection) &&
         !state(RenderAffectingState::kAutoStateUnlockedUntilLifecycle) &&
         !state(RenderAffectingState::kAutoUnlockedForPrint) &&
-        !state(RenderAffectingState::kSubtreeHasTopLayerElement)));
+        !state(RenderAffectingState::kSubtreeHasTopLayerElement) &&
+        !state(RenderAffectingState::kSharedElementTransitionChain)));
 
   // For shaping-deferred boxes, we'd like to unlock permanently.
   if (IsShapingDeferred() && state_ != EContentVisibility::kVisible &&
@@ -1268,6 +1342,8 @@ const char* DisplayLockContext::RenderAffectingStateName(int state) const {
       return "AutoUnlockedForPrint";
     case RenderAffectingState::kSubtreeHasTopLayerElement:
       return "SubtreeHasTopLayerElement";
+    case RenderAffectingState::kSharedElementTransitionChain:
+      return "SharedElementTransitionChain";
     case RenderAffectingState::kNumRenderAffectingStates:
       break;
   }

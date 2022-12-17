@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
+
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 
 #import <objc/runtime.h>
@@ -149,7 +151,7 @@ display::Display GetDisplayForWindow(NSWindow* window) {
 @implementation ModalShowAnimationWithLayer {
   // This is the "real" delegate, but this class acts as the NSAnimationDelegate
   // to avoid a separate object.
-  remote_cocoa::NativeWidgetNSWindowBridge* _bridgedNativeWidget;
+  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge> _bridgedNativeWidget;
 }
 - (instancetype)initWithBridgedNativeWidget:
     (remote_cocoa::NativeWidgetNSWindowBridge*)widget {
@@ -431,11 +433,11 @@ void NativeWidgetNSWindowBridge::StackAbove(uint64_t sibling_id) {
   DCHECK(sibling_bridge);
 
   NSInteger sibling = sibling_bridge->ns_window().windowNumber;
-  [window_ orderWindow:NSWindowAbove relativeTo:sibling];
+  [window_ reallyOrderWindow:NSWindowAbove relativeTo:sibling];
 }
 
 void NativeWidgetNSWindowBridge::StackAtTop() {
-  [window_ orderWindow:NSWindowAbove relativeTo:0];
+  [window_ reallyOrderWindow:NSWindowAbove relativeTo:0];
 }
 
 void NativeWidgetNSWindowBridge::ShowEmojiPanel() {
@@ -492,6 +494,7 @@ void NativeWidgetNSWindowBridge::InitWindow(
   // Don't allow dragging sheets.
   if (params->modal_type == ui::MODAL_TYPE_WINDOW)
     [window_ setMovable:NO];
+  [window_ setIsTooltip:params->is_tooltip];
 }
 
 void NativeWidgetNSWindowBridge::SetInitialBounds(
@@ -727,8 +730,9 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
     NSData* restore_ns_data =
         [NSData dataWithBytes:pending_restoration_data_.data()
                        length:pending_restoration_data_.size()];
-    base::scoped_nsobject<NSKeyedUnarchiver> decoder(
-        [[NSKeyedUnarchiver alloc] initForReadingWithData:restore_ns_data]);
+    base::scoped_nsobject<NSKeyedUnarchiver> decoder([[NSKeyedUnarchiver alloc]
+        initForReadingFromData:restore_ns_data
+                         error:nil]);
     [window_ restoreStateWithCoder:decoder];
     pending_restoration_data_.clear();
 
@@ -771,7 +775,7 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
 
   // If the parent (or an ancestor) is hidden, return and wait for it to become
   // visible.
-  for (auto* ancestor = parent_; ancestor; ancestor = ancestor->parent_) {
+  for (auto* ancestor = parent_.get(); ancestor; ancestor = ancestor->parent_) {
     if (!ancestor->window_visible_)
       return;
   }

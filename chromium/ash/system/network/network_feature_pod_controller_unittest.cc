@@ -22,10 +22,10 @@
 #include "ash/test/ash_test_base.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
-#include "chromeos/network/network_handler_callbacks.h"
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_state_test_helper.h"
-#include "chromeos/network/network_type_pattern.h"
+#include "chromeos/ash/components/network/network_handler_callbacks.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_state_test_helper.h"
+#include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -37,8 +37,6 @@
 
 namespace ash {
 namespace {
-
-using chromeos::NetworkTypePattern;
 
 const char* kStubCellularDevice = "/device/stub_cellular_device";
 
@@ -108,7 +106,7 @@ class NetworkFeaturePodControllerTest : public AshTestBase {
                                       shill::kTypeEthernet, "stub_eth_device");
 
     network_state_handler()->SetTetherTechnologyState(
-        chromeos::NetworkStateHandler::TechnologyState::TECHNOLOGY_ENABLED);
+        NetworkStateHandler::TechnologyState::TECHNOLOGY_ENABLED);
 
     base::RunLoop().RunUntilIdle();
   }
@@ -246,11 +244,11 @@ class NetworkFeaturePodControllerTest : public AshTestBase {
               feature_pod_label_button()->GetSubLabelText());
   }
 
-  chromeos::NetworkStateTestHelper* network_state_helper() {
+  NetworkStateTestHelper* network_state_helper() {
     return &network_config_helper_.network_state_helper();
   }
 
-  chromeos::NetworkStateHandler* network_state_handler() {
+  NetworkStateHandler* network_state_handler() {
     return network_state_helper()->network_state_handler();
   }
 

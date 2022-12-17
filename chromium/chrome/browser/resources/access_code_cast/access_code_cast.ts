@@ -4,14 +4,14 @@
 
 import './passcode_input/passcode_input.js';
 import './error_message/error_message.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
-import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {isWindows} from 'chrome://resources/js/cr.m.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -66,17 +66,17 @@ export class AccessCodeCastElement extends AccessCodeCastElementBase {
       accessCode: {
         type: String,
         value: '',
-        observer: 'castStateChange'
+        observer: 'castStateChange',
       },
       canCast: {
         type: Boolean,
         value: true,
-        observer: 'castStateChange'
-      }
+        observer: 'castStateChange',
+      },
     };
   }
 
-  private listenerIds: Array<number>;
+  private listenerIds: number[];
   private router: PageCallbackRouter;
 
   private static readonly ACCESS_CODE_LENGTH = 6;

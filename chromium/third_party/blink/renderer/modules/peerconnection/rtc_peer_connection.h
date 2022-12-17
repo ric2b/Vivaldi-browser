@@ -45,7 +45,6 @@
 #include "third_party/blink/renderer/modules/crypto/normalize_algorithm.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
-#include "third_party/blink/renderer/modules/peerconnection/call_setup_state_tracker.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_ice_candidate.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_controller.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
@@ -66,13 +65,13 @@
 
 namespace blink {
 
-class Dictionary;
 class ExceptionState;
+class GoogMediaConstraints;
 class MediaStreamTrack;
 class RTCAnswerOptions;
 class RTCConfiguration;
-class RTCDTMFSender;
 class RTCDataChannel;
+class RTCDTMFSender;
 class RTCDataChannelInit;
 class RTCDtlsTransport;
 class RTCIceCandidateInit;
@@ -106,11 +105,7 @@ class MODULES_EXPORT RTCPeerConnection final
  public:
   static RTCPeerConnection* Create(ExecutionContext*,
                                    const RTCConfiguration*,
-                                   const Dictionary&,
-                                   ExceptionState&);
-  static RTCPeerConnection* Create(ExecutionContext*,
-                                   const RTCConfiguration*,
-                                   const ScriptValue&,
+                                   GoogMediaConstraints*,
                                    ExceptionState&);
   static RTCPeerConnection* Create(ExecutionContext*,
                                    const RTCConfiguration*,
@@ -119,9 +114,8 @@ class MODULES_EXPORT RTCPeerConnection final
   RTCPeerConnection(ExecutionContext*,
                     webrtc::PeerConnectionInterface::RTCConfiguration,
                     bool sdp_semantics_specified,
-                    bool force_encoded_audio_insertable_streams,
-                    bool force_encoded_video_insertable_streams,
-                    MediaConstraints,
+                    bool encoded_insertable_streams,
+                    GoogMediaConstraints*,
                     ExceptionState&);
   ~RTCPeerConnection() override;
 
@@ -350,22 +344,11 @@ class MODULES_EXPORT RTCPeerConnection final
   // application assumes a format that differs from the actual default format.
   absl::optional<ComplexSdpCategory> CheckForComplexSdp(
       const ParsedSessionDescription&) const;
-
-  const CallSetupStateTracker& call_setup_state_tracker() const;
-  void NoteCallSetupStateEventPending(
-      RTCPeerConnection::SetSdpOperationType operation,
-      const RTCSessionDescriptionInit& description);
-  void NoteSessionDescriptionRequestCompleted(
-      RTCCreateSessionDescriptionOperation operation,
-      bool success);
   void NoteVoidRequestCompleted(RTCSetSessionDescriptionOperation operation,
                                 bool success);
   static void GenerateCertificateCompleted(
       ScriptPromiseResolver* resolver,
       rtc::scoped_refptr<rtc::RTCCertificate> certificate);
-  // Checks if the document that the peer connection lives in has ever executed
-  // getUserMedia().
-  bool HasDocumentMedia() const;
 
   // Called by RTCIceTransport::OnStateChange to update the ice connection
   // state.
@@ -373,13 +356,7 @@ class MODULES_EXPORT RTCPeerConnection final
 
   webrtc::SdpSemantics sdp_semantics() { return sdp_semantics_; }
 
-  bool force_encoded_audio_insertable_streams() {
-    return force_encoded_audio_insertable_streams_;
-  }
-
-  bool force_encoded_video_insertable_streams() {
-    return force_encoded_video_insertable_streams_;
-  }
+  bool encoded_insertable_streams() { return encoded_insertable_streams_; }
 
   void Trace(Visitor*) const override;
 
@@ -548,11 +525,6 @@ class MODULES_EXPORT RTCPeerConnection final
   webrtc::PeerConnectionInterface::IceGatheringState ice_gathering_state_;
   webrtc::PeerConnectionInterface::IceConnectionState ice_connection_state_;
   webrtc::PeerConnectionInterface::PeerConnectionState peer_connection_state_;
-  // TODO(https://crbug.com/857004): The trackers' metrics are currently not
-  // uploaded; either use the metrics it produces (i.e. revert
-  // https://chromium-review.googlesource.com/c/chromium/src/+/1991421) or
-  // delete all CallSetupStateTracker code for good.
-  CallSetupStateTracker call_setup_state_tracker_;
 
   // A map containing any track that is in use by the peer connection. This
   // includes tracks of |rtp_senders_| and |rtp_receivers_|.
@@ -641,8 +613,7 @@ class MODULES_EXPORT RTCPeerConnection final
   const base::TimeDelta blink_webrtc_time_diff_;
 
   // Insertable streams.
-  bool force_encoded_audio_insertable_streams_;
-  bool force_encoded_video_insertable_streams_;
+  bool encoded_insertable_streams_;
 };
 
 }  // namespace blink

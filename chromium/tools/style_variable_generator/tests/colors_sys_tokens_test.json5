@@ -1,5 +1,14 @@
 {
   token_namespace: 'cros.sys',
+  options: {
+    ColorMappings: {
+      set_name: 'CrosSys'
+    },
+    proto: {
+      field_name: 'test_colors',
+      field_id: 2,
+    },
+  },
   colors: {
     /* Primary */
     primary: {

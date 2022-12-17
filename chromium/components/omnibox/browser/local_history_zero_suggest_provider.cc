@@ -34,21 +34,13 @@
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "url/gurl.h"
 
-using metrics::OmniboxEventProto;
-
-// Default relevance for the LocalHistoryZeroSuggestProvider query suggestions
-// for authenticated and unauthenticated scenarios respectively. These values
-// are chosen to place local history zero-prefix suggestions below server
-// provided zps when the user is signed in (e.g., pSuggest) and above server
-// provided zps when the user is signed out (e.g., trending).
-// Server provided relevance for zps is expected to range from 550-1400.
-const int kLocalHistoryZPSAuthenticatedRelevance = 500;
-const int kLocalHistoryZPSUnauthenticatedRelevance = 1450;
+using metrics::OmniboxInputType;
 
 namespace {
 
@@ -65,9 +57,35 @@ std::u16string GetSearchTermsFromURL(const GURL& url,
 
 // Whether zero suggest suggestions are allowed in the given context.
 // Invoked early, confirms all the conditions for zero suggestions are met.
-bool AllowLocalHistoryZeroSuggestSuggestions(const AutocompleteInput& input) {
-  // Flag is default-enabled on Android and Desktop.
-  return base::FeatureList::IsEnabled(omnibox::kLocalHistoryZeroSuggest);
+bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
+                                             const AutocompleteInput& input) {
+  // Allow local history zero-suggest only when the user is not in incognito
+  // mode.
+  if (client->IsOffTheRecord())
+    return false;
+
+  // Allow local history zero-suggest only when the user has set up Google as
+  // their default search engine.
+  TemplateURLService* template_url_service = client->GetTemplateURLService();
+  if (!template_url_service ||
+      !template_url_service->GetDefaultSearchProvider() ||
+      template_url_service->GetDefaultSearchProvider()->GetEngineType(
+          template_url_service->search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
+    return false;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          omnibox::kLocalHistoryZeroSuggestBeyondNTP)) {
+    // Allow local history zero-suggest where remote zero-suggest is eligible.
+    return ZeroSuggestProvider::ResultTypeToRun(client, input) !=
+           ZeroSuggestProvider::ResultType::kNone;
+  }
+
+  // Allow local history query suggestions only when the omnibox is empty and is
+  // focused from the NTP.
+  return input.focus_type() == OmniboxFocusType::ON_FOCUS &&
+         input.type() == OmniboxInputType::EMPTY &&
+         BaseSearchProvider::IsNTPPage(input.current_page_classification());
 }
 
 void RecordDBMetrics(const base::TimeTicks db_query_time,
@@ -91,35 +109,11 @@ LocalHistoryZeroSuggestProvider* LocalHistoryZeroSuggestProvider::Create(
 void LocalHistoryZeroSuggestProvider::Start(const AutocompleteInput& input,
                                             bool minimal_changes) {
   TRACE_EVENT0("omnibox", "LocalHistoryZeroSuggestProvider::Start");
+  Stop(true, false);
 
-  done_ = true;
-  matches_.clear();
-
-  // Allow local history query suggestions only when the user is not in an
-  // off-the-record context.
-  if (client_->IsOffTheRecord())
-    return;
-
-  // Allow local history query suggestions only when the omnibox is empty and is
-  // focused from the NTP.
-  if (input.focus_type() == OmniboxFocusType::DEFAULT ||
-      input.type() != metrics::OmniboxInputType::EMPTY ||
-      !BaseSearchProvider::IsNTPPage(input.current_page_classification())) {
+  if (!AllowLocalHistoryZeroSuggestSuggestions(client_, input)) {
     return;
   }
-
-  // Allow local history query suggestions only when the user has set up Google
-  // as their default search engine.
-  TemplateURLService* template_url_service = client_->GetTemplateURLService();
-  if (!template_url_service ||
-      !template_url_service->GetDefaultSearchProvider() ||
-      template_url_service->GetDefaultSearchProvider()->GetEngineType(
-          template_url_service->search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
-    return;
-  }
-
-  if (!AllowLocalHistoryZeroSuggestSuggestions(input))
-    return;
 
   QueryURLDatabase(input);
 }
@@ -235,9 +229,8 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
   }
   RecordDBMetrics(db_query_time, results.size());
 
-  int relevance = client_->IsAuthenticated()
-                      ? kLocalHistoryZPSAuthenticatedRelevance
-                      : kLocalHistoryZPSUnauthenticatedRelevance;
+  int relevance =
+      OmniboxFieldTrial::kLocalHistoryZeroSuggestRelevanceScore.Get();
   for (const auto& result : results) {
     SearchSuggestionParser::SuggestResult suggestion(
         /*suggestion=*/result->normalized_term,
@@ -245,6 +238,13 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
         /*subtypes=*/{}, /*from_keyword=*/false, relevance--,
         /*relevance_from_server=*/false,
         /*input_text=*/base::ASCIIToUTF16(std::string()));
+
+    // Only provide a group ID, as the client does not know the header or the
+    // priority for SuggestionGroupId::kPersonalizedZeroSuggest. The suggestion
+    // group info will either be provided by the server (i.e., on SRP/Web) or
+    // this group ID will be dropped (i.e., on NTP).
+    suggestion.set_suggestion_group_id(
+        SuggestionGroupId::kPersonalizedZeroSuggest);
 
     AutocompleteMatch match = BaseSearchProvider::CreateSearchSuggestion(
         this, input, /*in_keyword_mode=*/false, suggestion,
@@ -258,8 +258,6 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
     if (matches_.size() >= max_matches_)
       break;
   }
-
-  NotifyListeners(true);
 }
 
 void LocalHistoryZeroSuggestProvider::OnHistoryQueryResults(

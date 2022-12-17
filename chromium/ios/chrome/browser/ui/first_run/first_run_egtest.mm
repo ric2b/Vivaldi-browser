@@ -48,9 +48,6 @@ using chrome_test_util::AdvancedSyncSettingsDoneButtonMatcher;
 
 namespace {
 
-NSString* const kScrollViewIdentifier =
-    @"kPromoStyleScrollViewAccessibilityIdentifier";
-
 NSString* const kMetricsConsentCheckboxAccessibilityIdentifier =
     @"kMetricsConsentCheckboxAccessibilityIdentifier";
 
@@ -174,9 +171,10 @@ GREYLayoutConstraint* BelowConstraint() {
 
 // Checks that the forced sign-in screen is displayed.
 - (void)verifyForcedSigninScreenIsDisplayed {
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(
-                     first_run::kFirstRunSignInScreenAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(
+              first_run::kFirstRunLegacySignInScreenAccessibilityIdentifier)]
       assertWithMatcher:grey_notNil()];
 }
 
@@ -211,10 +209,11 @@ GREYLayoutConstraint* BelowConstraint() {
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
-// Scrolls down to |elementMatcher| in the scrollable content of the first run
+// Scrolls down to `elementMatcher` in the scrollable content of the first run
 // screen.
 - (void)scrollToElementAndAssertVisibility:(id<GREYMatcher>)elementMatcher {
-  id<GREYMatcher> scrollView = grey_accessibilityID(kScrollViewIdentifier);
+  id<GREYMatcher> scrollView =
+      grey_accessibilityID(kPromoStyleScrollViewAccessibilityIdentifier);
 
   [[[EarlGrey
       selectElementWithMatcher:grey_allOf(elementMatcher,
@@ -490,7 +489,7 @@ GREYLayoutConstraint* BelowConstraint() {
 
   // Scroll to ensure that the third instruction is visible.
   id<GREYMatcher> scrollViewMatcher =
-      grey_accessibilityID(kScrollViewIdentifier);
+      grey_accessibilityID(kPromoStyleScrollViewAccessibilityIdentifier);
   [[EarlGrey selectElementWithMatcher:thirdInstruction]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 50)
       onElementWithMatcher:scrollViewMatcher];
@@ -607,7 +606,7 @@ GREYLayoutConstraint* BelowConstraint() {
   FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  // Check that the title of the primary button updates for |fakeIdentity|.
+  // Check that the title of the primary button updates for `fakeIdentity`.
   [[EarlGrey selectElementWithMatcher:GetYesImInButton()]
       performAction:grey_tap()];
 
@@ -633,7 +632,7 @@ GREYLayoutConstraint* BelowConstraint() {
   [self scrollToElementAndAssertVisibility:identityButton];
   [[EarlGrey selectElementWithMatcher:identityButton] performAction:grey_tap()];
 
-  // Check that |fakeIdentity2| is displayed.
+  // Check that `fakeIdentity2` is displayed.
   [self scrollToElementAndAssertVisibility:IdentityCellMatcherForEmail(
                                                fakeIdentity2.userEmail)];
   // Check that 'Add Account' is displayed.
@@ -641,12 +640,12 @@ GREYLayoutConstraint* BelowConstraint() {
             grey_accessibilityLabel(l10n_util::GetNSString(
                 IDS_IOS_ACCOUNT_IDENTITY_CHOOSER_ADD_ACCOUNT))];
 
-  // Select |fakeIdentity2|.
+  // Select `fakeIdentity2`.
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity2.userEmail)]
       performAction:grey_tap()];
 
-  // Check that the title of the primary button updates for |fakeIdentity2|.
+  // Check that the title of the primary button updates for `fakeIdentity2`.
   [self scrollToElementAndAssertVisibility:GetYesImInButton()];
 }
 
@@ -749,7 +748,15 @@ GREYLayoutConstraint* BelowConstraint() {
 // If browser is already signed in and the user opens the advanced settings then
 // selects "No thanks", the user should stay signed in, but sync should be
 // turned off.
-- (void)testAdvancedSettingsSignedInSyncOff {
+// TODO(crbug.com/1352970): Flaky on iOS simulator.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_testAdvancedSettingsSignedInSyncOff \
+  DISABLED_testAdvancedSettingsSignedInSyncOff
+#else
+#define MAYBE_testAdvancedSettingsSignedInSyncOff \
+  testAdvancedSettingsSignedInSyncOff
+#endif
+- (void)MAYBE_testAdvancedSettingsSignedInSyncOff {
   // Sign-in browser.
   FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];

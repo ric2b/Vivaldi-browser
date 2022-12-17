@@ -21,6 +21,9 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/assistant/assistant_util.h"
+#include "chrome/browser/ash/crosapi/crosapi_ash.h"
+#include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/browser/ash/crosapi/fullscreen_controller_ash.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_service_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -40,7 +43,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
@@ -50,9 +52,13 @@
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_layout.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/ui_devtools/devtools_server.h"
 #include "components/user_manager/user_manager.h"
+#include "components/version_info/channel.h"
+#include "components/version_info/version_info.h"
+#include "content/public/browser/chromeos/multi_capture_service.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/media_session_service.h"
 #include "content/public/browser/render_widget_host.h"
@@ -138,7 +144,8 @@ ChromeShellDelegate::GetGeolocationUrlLoaderFactory() const {
 void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
   ash::NewWindowDelegate::GetPrimary()->OpenUrl(
       GURL(kKeyboardShortcutHelpPageUrl),
-      ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction);
+      ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+      ash::NewWindowDelegate::Disposition::kNewForegroundTab);
 }
 
 bool ChromeShellDelegate::CanGoBack(gfx::NativeWindow window) const {
@@ -213,6 +220,12 @@ void ChromeShellDelegate::BindMultiDeviceSetup(
     service->BindMultiDeviceSetup(std::move(receiver));
 }
 
+void ChromeShellDelegate::BindMultiCaptureService(
+    mojo::PendingReceiver<video_capture::mojom::MultiCaptureService> receiver) {
+  content::GetMultiCaptureService().BindMultiCaptureService(
+      std::move(receiver));
+}
+
 media_session::MediaSessionService*
 ChromeShellDelegate::GetMediaSessionService() {
   return &content::GetMediaSessionService();
@@ -256,7 +269,7 @@ void ChromeShellDelegate::SetUpEnvironmentForLockedFullscreen(bool locked) {
   }
 
   if (assistant::IsAssistantAllowedForProfile(profile) ==
-      chromeos::assistant::AssistantAllowedState::ALLOWED) {
+      ash::assistant::AssistantAllowedState::ALLOWED) {
     ash::AssistantState::Get()->NotifyLockedFullScreenStateChanged(locked);
   }
 }
@@ -336,4 +349,31 @@ const GURL& ChromeShellDelegate::GetLastCommittedURLForWindowIfAny(
   }
 
   return contents ? contents->GetLastCommittedURL() : GURL::EmptyGURL();
+}
+
+version_info::Channel ChromeShellDelegate::GetChannel() {
+  return chrome::GetChannel();
+}
+
+void ChromeShellDelegate::ForceSkipWarningUserOnClose(
+    const std::vector<aura::Window*>& windows) {
+  for (aura::Window* window : windows) {
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForNativeWindow(window);
+    if (browser_view) {
+      browser_view->browser()->set_force_skip_warning_user_on_close(true);
+    }
+  }
+}
+
+std::string ChromeShellDelegate::GetVersionString() {
+  return version_info::GetVersionNumber();
+}
+
+void ChromeShellDelegate::ShouldExitFullscreenBeforeLock(
+    ChromeShellDelegate::ShouldExitFullscreenCallback callback) {
+  crosapi::CrosapiManager::Get()
+      ->crosapi_ash()
+      ->fullscreen_controller_ash()
+      ->ShouldExitFullscreenBeforeLock(std::move(callback));
 }

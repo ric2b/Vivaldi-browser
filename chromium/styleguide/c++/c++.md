@@ -36,7 +36,7 @@ status of Chromium's C++ support is covered in more detail in
 
   * Functions used only for testing should be restricted to test-only usages
     with the testing suffixes supported by
-    [PRESUMBIT.py](https://chromium.googlesource.com/chromium/src/+/main/PRESUBMIT.py).
+    [PRESUBMIT.py](https://chromium.googlesource.com/chromium/src/+/main/PRESUBMIT.py).
     `ForTesting` is the conventional suffix although similar patterns, such as
     `ForTest`, are also accepted. These suffixes are checked at presubmit time
     to ensure the functions are called only by test files.
@@ -228,18 +228,24 @@ code when you find it, or at least not make such usage any more widespread.
 
 ## Non-owning pointers in class fields
 
-Use `raw_ptr<T>` for class and struct fields in place of a raw C++ pointer `T*`
-whenever possible, except in paths that include `/renderer/` or
-`blink/public/web/`.  `raw_ptr<T>` is a non-owning smart pointer that has
-improved memory-safety over raw pointers, and can prevent exploitation of a
-significant percentage of Use-after-Free bugs.
+Use `const raw_ref<T>` or `raw_ptr<T>` for class and struct fields in place of a
+raw C++ reference `T&` or pointer `T*` whenever possible, except in paths that include
+`/renderer/` or `blink/public/web/`.  These a non-owning smart pointers that
+have improved memory-safety over raw pointers and references, and can prevent
+exploitation of a significant percentage of Use-after-Free bugs.
 
-Using `raw_ptr<T>` may not be possible in rare cases for
-[performance reasons](../../base/memory/raw_ptr.md#Performance).
-Additionally, `raw_ptr<T>` doesn’t support some C++ scenarios (e.g. `constexpr`,
-ObjC pointers).  Tooling will help to encourage use of `raw_ptr<T>`.  See
-[raw_ptr.md](../../base/memory/raw_ptr.md#When-to-use-raw_ptr_T)
-for how to add exclusions.
+Prefer `const raw_ref<T>` whenever the held pointer will never be null, and it's
+ok to drop the `const` if the internal reference can be reassigned to point to a
+different `T`. Use `raw_ptr<T>` in order to express that the pointer _can_ be
+null. Only `raw_ptr<T>` can be default-constructed, since `raw_ref<T>` disallows
+nullness.
+
+Using `raw_ref<T>` or `raw_ptr<T>` may not be possible in rare cases for
+[performance reasons](../../base/memory/raw_ptr.md#Performance). Additionally,
+`raw_ptr<T>` doesn’t support some C++ scenarios (e.g. `constexpr`, ObjC
+pointers).  Tooling will help to encourage use of these types in the future. See
+[raw_ptr.md](../../base/memory/raw_ptr.md#When-to-use-raw_ptr_T) for how to add
+exclusions.
 
 ## Forward declarations vs. #includes
 
@@ -259,7 +265,7 @@ All files in Chromium start with a common license header. That header should
 look like this:
 
 ```c++
-// Copyright $YEAR The Chromium Authors. All rights reserved.
+// Copyright $YEAR The Chromium Authors.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 ```
@@ -268,8 +274,8 @@ Some important notes about this header:
   * There is no `(c)` after `Copyright`.
   * `$YEAR` should be set to the current year at the time a file is created, and
     not changed thereafter.
-  * For files specific to Chromium OS, replace the word Chromium with the phrase
-    Chromium OS.
+  * For files specific to ChromiumOS, replace the word Chromium with the phrase
+    ChromiumOS.
   * If the style changes, don't bother to update existing files to comply with
     the new style. For the same reason, don't just blindly copy an existing
     file's header when creating a new file, since the existing file may use an
@@ -336,6 +342,28 @@ these:
     `DCHECK()` can be used to document that a pointer is never null, and doing
     so as early as possible can help with debugging, though our styleguide now
     recommends using a reference instead of a pointer when it cannot be null.
+
+## Test-only code paths in production code
+
+Try to avoid test-only code paths in production code. Such code paths make
+production code behave differently in tests. This makes both tests and
+production code hard to reason about. Consider dependency injection, fake
+classes, etc to avoid such code paths.
+
+However, if a test-only path in production code cannot be avoided, instrument
+that code path with `CHECK_IS_TEST();` to assert that the code is only run in
+tests.
+
+```c++
+// `profile_manager` may not be available in tests.
+if (!profile_manager) {
+  CHECK_IS_TEST();
+  return std::string();
+}
+```
+
+`CHECK_IS_TEST();` will crash outside of tests. This asserts that the test-only
+code path is not accidentally or maliciously taken in production.
 
 ## Miscellany
 

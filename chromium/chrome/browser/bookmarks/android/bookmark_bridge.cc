@@ -22,16 +22,16 @@
 #include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/i18n/string_compare.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/android/chrome_jni_headers/BookmarkBridge_jni.h"
 #include "chrome/browser/android/bookmarks/partner_bookmarks_reader.h"
 #include "chrome/browser/android/reading_list/reading_list_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
+#include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
-#include "chrome/browser/power_bookmarks/power_bookmark_utils.h"
-#include "chrome/browser/power_bookmarks/proto/power_bookmark_meta.pb.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
@@ -46,8 +46,11 @@
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/proto/price_tracking.pb.h"
+#include "components/commerce/core/shopping_service.h"
 #include "components/dom_distiller/core/url_utils.h"
 #include "components/optimization_guide/proto/hints.pb.h"
+#include "components/power_bookmarks/core/power_bookmark_utils.h"
+#include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/query_parser.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -74,6 +77,7 @@ using bookmarks::android::JavaBookmarkIdCreateBookmarkId;
 using bookmarks::android::JavaBookmarkIdGetId;
 using bookmarks::android::JavaBookmarkIdGetType;
 using content::BrowserThread;
+using power_bookmarks::PowerBookmarkMeta;
 
 namespace {
 
@@ -94,8 +98,8 @@ class BookmarkTitleComparer {
   }
 
  private:
-  BookmarkBridge* bookmark_bridge_;  // weak
-  const icu::Collator* collator_;
+  raw_ptr<BookmarkBridge> bookmark_bridge_;  // weak
+  raw_ptr<const icu::Collator> collator_;
 };
 
 std::unique_ptr<icu::Collator> GetICUCollator() {
@@ -943,38 +947,42 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::AddBookmark(
   int type = JavaBookmarkIdGetType(env, j_parent_id_obj);
   const BookmarkNode* parent = GetNodeByID(bookmark_id, type);
 
-  const BookmarkNode* new_node = bookmark_model_->AddURL(
+  std::unique_ptr<GURL> url = url::GURLAndroid::ToNativeGURL(env, j_url);
+
+  const BookmarkNode* new_node = bookmark_model_->AddNewURL(
       parent, static_cast<size_t>(index),
-      base::android::ConvertJavaStringToUTF16(env, j_title),
-      *url::GURLAndroid::ToNativeGURL(env, j_url));
-  DCHECK(new_node);
-  ScopedJavaLocalRef<jobject> new_java_obj = JavaBookmarkIdCreateBookmarkId(
-      env, new_node->id(), GetBookmarkType(new_node));
-  return new_java_obj;
-}
+      base::android::ConvertJavaStringToUTF16(env, j_title), *url);
 
-ScopedJavaLocalRef<jobject> BookmarkBridge::AddPowerBookmark(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_web_contents,
-    const JavaParamRef<jobject>& j_parent_id_obj,
-    jint index,
-    const JavaParamRef<jstring>& j_title,
-    const JavaParamRef<jobject>& j_url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(IsLoaded());
-  long parent_id = JavaBookmarkIdGetId(env, j_parent_id_obj);
-  int type = JavaBookmarkIdGetType(env, j_parent_id_obj);
-  const BookmarkNode* parent = GetNodeByID(parent_id, type);
+  commerce::ShoppingService* service =
+      commerce::ShoppingServiceFactory::GetForBrowserContext(profile_);
 
-  auto* web_contents =
-      content::WebContents::FromJavaWebContents(j_web_contents);
-  DCHECK(web_contents);
+  // TODO(crbug.com/1247352): Move to platform-independent location.
+  // TODO(1345462): This should be implemented as a data provider for bookmarks
+  //                once it is available.
+  if (service && base::FeatureList::IsEnabled(commerce::kShoppingList)) {
+    absl::optional<commerce::ProductInfo> info =
+        service->GetAvailableProductInfoForUrl(*url.get());
+    if (info.has_value()) {
+      std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
+          std::make_unique<power_bookmarks::PowerBookmarkMeta>();
+      meta->set_type(power_bookmarks::SHOPPING);
+      meta->mutable_lead_image()->set_url(info->image_url.spec());
 
-  const BookmarkNode* new_node = power_bookmarks::AddURL(
-      web_contents, bookmark_model_, parent, static_cast<size_t>(index),
-      base::android::ConvertJavaStringToUTF16(env, j_title),
-      *url::GURLAndroid::ToNativeGURL(env, j_url));
+      power_bookmarks::ShoppingSpecifics* specifics =
+          meta->mutable_shopping_specifics();
+      specifics->set_title(info->title);
+      specifics->mutable_current_price()->set_amount_micros(
+          info->amount_micros);
+      specifics->mutable_current_price()->set_currency_code(
+          info->currency_code);
+      specifics->set_product_cluster_id(info->product_cluster_id);
+      specifics->set_offer_id(info->offer_id);
+      specifics->set_country_code(info->country_code);
+
+      power_bookmarks::SetNodePowerBookmarkMeta(bookmark_model_, new_node,
+                                                std::move(meta));
+    }
+  }
   DCHECK(new_node);
   ScopedJavaLocalRef<jobject> new_java_obj = JavaBookmarkIdCreateBookmarkId(
       env, new_node->id(), GetBookmarkType(new_node));

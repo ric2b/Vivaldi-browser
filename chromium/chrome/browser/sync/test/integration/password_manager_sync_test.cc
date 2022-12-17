@@ -36,7 +36,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/driver/sync_service_impl.h"
-#include "components/sync/test/fake_server/fake_server_nigori_helper.h"
+#include "components/sync/test/fake_server_nigori_helper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/test/browser_test.h"
@@ -47,10 +47,6 @@
 #include "net/http/http_status_code.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "components/signin/public/base/signin_switches.h"
-#endif
 
 namespace {
 
@@ -94,11 +90,8 @@ class PasswordManagerSyncTest : public SyncTest {
     // updating a password become flaky.
     feature_list_.InitWithFeatures(
         {
-          password_manager::features::kEnablePasswordsAccountStorage,
-              password_manager::features::kFillOnAccountSelect,
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-              switches::kLacrosNonSyncingProfiles,
-#endif
+            password_manager::features::kEnablePasswordsAccountStorage,
+            password_manager::features::kFillOnAccountSelect,
         },
         {});
   }

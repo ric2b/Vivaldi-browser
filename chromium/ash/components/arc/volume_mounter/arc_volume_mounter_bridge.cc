@@ -4,11 +4,16 @@
 
 #include "ash/components/arc/volume_mounter/arc_volume_mounter_bridge.h"
 
+#include <string>
+#include <vector>
+
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
+#include "ash/components/arc/session/arc_service_manager.h"
+#include "ash/components/arc/session/arc_vm_client_adapter.h"
 #include "ash/components/disks/disk.h"
 #include "ash/components/disks/disk_mount_manager.h"
 #include "base/bind.h"
@@ -18,6 +23,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/task/bind_post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/upstart/upstart_client.h"
 #include "chromeos/components/disks/disks_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
@@ -49,6 +59,11 @@ constexpr char kDummyUuid[] = "00000000000000000000000000000000DEADBEEF";
 // histogram.
 constexpr int kUmaMaxMountFailureCount = 40;
 
+// The minimum and maximum values of app UID in Android. Defined in Android's
+// system/core/libcutils/include/private/android_filesystem_config.h.
+constexpr uint32_t kAndroidAppUidStart = 10000;
+constexpr uint32_t kAndroidAppUidEnd = 19999;
+
 // Singleton factory for ArcVolumeMounterBridge.
 class ArcVolumeMounterBridgeFactory
     : public internal::ArcBrowserContextKeyedServiceFactoryBase<
@@ -67,6 +82,15 @@ class ArcVolumeMounterBridgeFactory
   ArcVolumeMounterBridgeFactory() = default;
   ~ArcVolumeMounterBridgeFactory() override = default;
 };
+
+std::string GetChromeOsUserId() {
+  auto* arc_service_manager = ArcServiceManager::Get();
+  DCHECK(arc_service_manager);
+  // Return the string representation of AccountId.
+  return cryptohome::CreateAccountIdentifierFromAccountId(
+             arc_service_manager->account_id())
+      .account_id();
+}
 
 }  // namespace
 
@@ -89,8 +113,7 @@ KeyedServiceBaseFactory* ArcVolumeMounterBridge::GetFactory() {
 
 ArcVolumeMounterBridge::ArcVolumeMounterBridge(content::BrowserContext* context,
                                                ArcBridgeService* bridge_service)
-    : delegate_(nullptr),
-      arc_bridge_service_(bridge_service),
+    : arc_bridge_service_(bridge_service),
       pref_service_(user_prefs::UserPrefs::Get(context)) {
   DCHECK(pref_service_);
   arc_bridge_service_->volume_mounter()->AddObserver(this);
@@ -121,11 +144,18 @@ void ArcVolumeMounterBridge::Initialize(Delegate* delegate) {
 
 // Sends MountEvents of all existing MountPoints in cros-disks.
 void ArcVolumeMounterBridge::SendAllMountEvents() {
+  if (!IsReadyToSendMountingEvents()) {
+    DVLOG(1) << "Skipping SendAllMountEvents because it is not ready to send "
+             << "mounting events to Android";
+    return;
+  }
+
   SendMountEventForMyFiles();
 
-  for (const auto& keyValue : DiskMountManager::GetInstance()->mount_points()) {
-    OnMountEvent(DiskMountManager::MountEvent::MOUNTING,
-                 chromeos::MountError::MOUNT_ERROR_NONE, keyValue.second);
+  for (const auto& mount_point :
+       DiskMountManager::GetInstance()->mount_points()) {
+    OnMountEvent(DiskMountManager::MountEvent::MOUNTING, ash::MountError::kNone,
+                 mount_point);
   }
 }
 
@@ -142,7 +172,7 @@ void ArcVolumeMounterBridge::SendMountEventForMyFiles() {
       l10n_util::GetStringUTF8(IDS_FILE_BROWSER_MY_FILES_ROOT_LABEL);
 
   // TODO(niwa): Add a new DeviceType enum value for MyFiles.
-  chromeos::DeviceType device_type = chromeos::DeviceType::DEVICE_TYPE_SD;
+  ash::DeviceType device_type = ash::DeviceType::kSD;
 
   // Conditionally set MyFiles to be visible for P and invisible for R. In R, we
   // use IsVisibleRead so this is not needed.
@@ -153,9 +183,9 @@ void ArcVolumeMounterBridge::SendMountEventForMyFiles() {
 
 bool ArcVolumeMounterBridge::IsVisibleToAndroidApps(
     const std::string& uuid) const {
-  const base::Value* uuid_list =
-      pref_service_->GetList(prefs::kArcVisibleExternalStorages);
-  for (auto& value : uuid_list->GetListDeprecated()) {
+  const base::Value::List& uuid_list =
+      pref_service_->GetValueList(prefs::kArcVisibleExternalStorages);
+  for (auto& value : uuid_list) {
     if (value.is_string() && value.GetString() == uuid)
       return true;
   }
@@ -164,22 +194,22 @@ bool ArcVolumeMounterBridge::IsVisibleToAndroidApps(
 
 void ArcVolumeMounterBridge::OnVisibleStoragesChanged() {
   // Remount all external mount points when the list of visible storage changes.
-  for (const auto& key_value :
+  for (const auto& mount_point :
        DiskMountManager::GetInstance()->mount_points()) {
     OnMountEvent(DiskMountManager::MountEvent::UNMOUNTING,
-                 chromeos::MountError::MOUNT_ERROR_NONE, key_value.second);
+                 ash::MountError::kNone, mount_point);
   }
-  for (const auto& key_value :
+  for (const auto& mount_point :
        DiskMountManager::GetInstance()->mount_points()) {
-    OnMountEvent(DiskMountManager::MountEvent::MOUNTING,
-                 chromeos::MountError::MOUNT_ERROR_NONE, key_value.second);
+    OnMountEvent(DiskMountManager::MountEvent::MOUNTING, ash::MountError::kNone,
+                 mount_point);
   }
 }
 
 void ArcVolumeMounterBridge::OnMountEvent(
     DiskMountManager::MountEvent event,
-    chromeos::MountError error_code,
-    const DiskMountManager::MountPointInfo& mount_info) {
+    ash::MountError error_code,
+    const DiskMountManager::MountPoint& mount_info) {
   DCHECK(delegate_);
 
   // Skip mount events for volumes that are not shared with ARC (e.g., those
@@ -190,7 +220,7 @@ void ArcVolumeMounterBridge::OnMountEvent(
              << mount_info.mount_path;
     return;
   }
-  if (error_code != chromeos::MountError::MOUNT_ERROR_NONE) {
+  if (error_code != ash::MountError::kNone) {
     DVLOG(1) << "Error " << error_code << "occurs during MountEvent " << event;
     return;
   }
@@ -202,12 +232,19 @@ void ArcVolumeMounterBridge::OnMountEvent(
     return;
   }
 
+  if (event == DiskMountManager::MountEvent::MOUNTING &&
+      !IsReadyToSendMountingEvents()) {
+    DVLOG(1) << "Skipping OnMountEvent because it is not ready to send "
+             << "mounting events to Android";
+    return;
+  }
+
   // Get disks information that are needed by Android MountService.
   const ash::disks::Disk* disk =
       DiskMountManager::GetInstance()->FindDiskBySourcePath(
           mount_info.source_path);
   std::string fs_uuid, device_label;
-  chromeos::DeviceType device_type = chromeos::DeviceType::DEVICE_TYPE_UNKNOWN;
+  ash::DeviceType device_type = ash::DeviceType::kUnknown;
   // There are several cases where disk can be null:
   // 1. The disk is removed physically before being ejected/unmounted.
   // 2. The disk is inserted, but then immediately removed physically. The
@@ -255,8 +292,8 @@ void ArcVolumeMounterBridge::OnMountEvent(
   }
 
   if (event == DiskMountManager::MountEvent::MOUNTING &&
-      (device_type == chromeos::DeviceType::DEVICE_TYPE_USB ||
-       device_type == chromeos::DeviceType::DEVICE_TYPE_SD)) {
+      (device_type == ash::DeviceType::kUSB ||
+       device_type == ash::DeviceType::kSD)) {
     // Record visibilities of the mounted devices only when they are removable
     // storages (e.g. USB sticks or SD cards).
     base::UmaHistogramBoolean("Arc.ExternalStorage.MountedMediaVisibility",
@@ -270,7 +307,7 @@ void ArcVolumeMounterBridge::SendMountEventForRemovableMedia(
     const std::string& mount_path,
     const std::string& fs_uuid,
     const std::string& device_label,
-    chromeos::DeviceType device_type,
+    ash::DeviceType device_type,
     bool visible) {
   mojom::VolumeMounterInstance* volume_mounter_instance =
       ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->volume_mounter(),
@@ -281,6 +318,11 @@ void ArcVolumeMounterBridge::SendMountEventForRemovableMedia(
   volume_mounter_instance->OnMountEvent(
       mojom::MountPointInfo::New(event, source_path, mount_path, fs_uuid,
                                  device_label, device_type, visible));
+}
+
+void ArcVolumeMounterBridge::OnConnectionClosed() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  arcvm_external_storage_mount_points_are_ready_ = false;
 }
 
 void ArcVolumeMounterBridge::RequestAllMountPoints() {
@@ -296,6 +338,85 @@ void ArcVolumeMounterBridge::ReportMountFailureCount(uint16_t count) {
   base::UmaHistogramCustomCounts("Arc.VolumeMounter.MountFailureCount",
                                  base::strict_cast<int>(count), /*min=*/1,
                                  kUmaMaxMountFailureCount, /*buckets=*/10);
+}
+
+bool ArcVolumeMounterBridge::IsReadyToSendMountingEvents() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(delegate_);
+  // Check whether external storage mount points are set up and file system
+  // watchers are watching file system changes. In ARC++ container, we can
+  // assume that the mount points are set up in an earlier boot stage, whereas
+  // in ARCVM they need to be set up by SetUpExternalStorageMountPoints().
+  return (!IsArcVmEnabled() ||
+          arcvm_external_storage_mount_points_are_ready_) &&
+         delegate_->IsWatchingFileSystemChanges();
+}
+
+void ArcVolumeMounterBridge::SetUpExternalStorageMountPoints(
+    uint32_t media_provider_uid,
+    SetUpExternalStorageMountPointsCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(IsArcVmEnabled());
+  if (media_provider_uid < kAndroidAppUidStart ||
+      media_provider_uid > kAndroidAppUidEnd) {
+    LOG(ERROR) << "Invalid MediaProvider UID: " << media_provider_uid;
+    std::move(callback).Run(false);
+    return;
+  }
+
+  if (arcvm_external_storage_mount_points_are_ready_) {
+    std::move(callback).Run(true);
+    return;
+  }
+
+  DVLOG(1) << "MediaProvider UID is " << media_provider_uid;
+
+  const std::string chromeos_user = GetChromeOsUserId();
+  DCHECK(!chromeos_user.empty());
+  std::vector<std::string> environment{
+      "CHROMEOS_USER=" + chromeos_user,
+      base::StringPrintf("MEDIA_PROVIDER_UID=%u", media_provider_uid)};
+
+  // Post OnSetUpExternalStorageMountPoints() as a task on the current thread
+  // because it eventually calls ArcFileSystemWatcherService's methods to attach
+  // watchers that need to be called on the UI thread.
+  ash::UpstartClient::Get()->StartJobWithErrorDetails(
+      kArcVmMediaSharingServicesJobName, std::move(environment),
+      base::BindPostTask(
+          base::ThreadTaskRunnerHandle::Get(),
+          base::BindOnce(
+              &ArcVolumeMounterBridge::OnSetUpExternalStorageMountPoints,
+              weak_ptr_factory_.GetWeakPtr(), std::move(callback))));
+}
+
+void ArcVolumeMounterBridge::OnSetUpExternalStorageMountPoints(
+    SetUpExternalStorageMountPointsCallback callback,
+    bool result,
+    absl::optional<std::string> error_name,
+    absl::optional<std::string> error_message) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!arcvm_external_storage_mount_points_are_ready_);
+  if (!result) {
+    // Check if the job has already been running, in which case we treat the
+    // result as a success. It can happen when Android's system services are
+    // restarted without rebooting.
+    if (error_name.has_value() &&
+        error_name.value() == ash::UpstartClient::kAlreadyStartedError) {
+      DVLOG(1) << kArcVmMediaSharingServicesJobName << " is already running";
+    } else {
+      LOG(ERROR) << "Failed to start " << kArcVmMediaSharingServicesJobName
+                 << ": "
+                 << (error_name.has_value() ? error_name.value()
+                                            : "unknown error")
+                 << ": "
+                 << (error_message.has_value() ? error_message.value() : "");
+      std::move(callback).Run(false);
+      return;
+    }
+  }
+
+  arcvm_external_storage_mount_points_are_ready_ = true;
+  std::move(callback).Run(true);
 }
 
 }  // namespace arc

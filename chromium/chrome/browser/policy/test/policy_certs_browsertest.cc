@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/test_future.h"
@@ -27,10 +28,10 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/network/onc/onc_certificate_importer.h"
 #include "chromeos/ash/components/network/onc/onc_certificate_importer_impl.h"
 #include "chromeos/components/onc/onc_test_utils.h"
-#include "chromeos/network/network_cert_loader.h"
 #include "chromeos/test/chromeos_test_utils.h"
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -78,7 +79,7 @@ constexpr char kRootCaCert[] = "root_ca_cert.pem";
 // Allows waiting until the list of policy-pushed web-trusted certificates
 // changes.
 class WebTrustedCertsChangedObserver
-    : public chromeos::PolicyCertificateProvider::Observer {
+    : public ash::PolicyCertificateProvider::Observer {
  public:
   WebTrustedCertsChangedObserver() = default;
 
@@ -87,7 +88,7 @@ class WebTrustedCertsChangedObserver
   WebTrustedCertsChangedObserver& operator=(
       const WebTrustedCertsChangedObserver&) = delete;
 
-  // chromeos::PolicyCertificateProvider::Observer
+  // ash::PolicyCertificateProvider::Observer
   void OnPolicyProvidedCertsChanged() override { run_loop_.Quit(); }
 
   void Wait() { run_loop_.Run(); }
@@ -97,11 +98,10 @@ class WebTrustedCertsChangedObserver
 };
 
 // Allows waiting until |NetworkCertLoader| updates its list of certificates.
-class NetworkCertLoaderTestObserver
-    : public chromeos::NetworkCertLoader::Observer {
+class NetworkCertLoaderTestObserver : public ash::NetworkCertLoader::Observer {
  public:
   explicit NetworkCertLoaderTestObserver(
-      chromeos::NetworkCertLoader* network_cert_loader)
+      ash::NetworkCertLoader* network_cert_loader)
       : network_cert_loader_(network_cert_loader) {
     network_cert_loader_->AddObserver(this);
   }
@@ -114,13 +114,13 @@ class NetworkCertLoaderTestObserver
     network_cert_loader_->RemoveObserver(this);
   }
 
-  // chromeos::NetworkCertLoader::Observer
+  // ash::NetworkCertLoader::Observer
   void OnCertificatesLoaded() override { run_loop_.Quit(); }
 
   void Wait() { run_loop_.Run(); }
 
  private:
-  chromeos::NetworkCertLoader* network_cert_loader_;
+  raw_ptr<ash::NetworkCertLoader> network_cert_loader_;
   base::RunLoop run_loop_;
 };
 
@@ -374,7 +374,7 @@ class MultiProfilePolicyProviderHelper {
       std::move(closure).Run();
     }
   }
-  Profile* profile_1_ = nullptr;
+  raw_ptr<Profile> profile_1_ = nullptr;
   Profile* profile_2_ = nullptr;
 
   testing::NiceMock<MockConfigurationPolicyProvider> policy_for_profile_1_;
@@ -539,7 +539,7 @@ IN_PROC_BROWSER_TEST_F(PolicyProvidedCertsRegularUserTest,
 
 bool IsCertInCertificateList(
     const net::X509Certificate* cert,
-    const chromeos::NetworkCertLoader::NetworkCertList& network_cert_list) {
+    const ash::NetworkCertLoader::NetworkCertList& network_cert_list) {
   for (const auto& network_cert : network_cert_list) {
     if (net::x509_util::IsSameCertificate(network_cert.cert(), cert))
       return true;
@@ -553,14 +553,14 @@ IN_PROC_BROWSER_TEST_F(PolicyProvidedCertsRegularUserTest,
   // properly initialized because |UserSessionManager| only sets the primary
   // user's NSS Database in |NetworkCertLoader| if running on ChromeOS according
   // to |base::SysInfo|.
-  ASSERT_TRUE(chromeos::NetworkCertLoader::IsInitialized());
-  chromeos::NetworkCertLoader::Get()->SetUserNSSDB(test_nss_cert_db_.get());
+  ASSERT_TRUE(ash::NetworkCertLoader::IsInitialized());
+  ash::NetworkCertLoader::Get()->SetUserNSSDB(test_nss_cert_db_.get());
 
   EXPECT_FALSE(IsCertInCertificateList(
       user_policy_certs_helper_.root_cert().get(),
-      chromeos::NetworkCertLoader::Get()->authority_certs()));
+      ash::NetworkCertLoader::Get()->authority_certs()));
   NetworkCertLoaderTestObserver network_cert_loader_observer(
-      chromeos::NetworkCertLoader::Get());
+      ash::NetworkCertLoader::Get());
   user_policy_certs_helper_.SetRootCertONCUserPolicy(
       multi_profile_policy_helper_.profile_1(),
       multi_profile_policy_helper_.policy_for_profile_1());
@@ -571,7 +571,7 @@ IN_PROC_BROWSER_TEST_F(PolicyProvidedCertsRegularUserTest,
   // set a policy with a certificate requesting Web Trust here).
   EXPECT_TRUE(IsCertInCertificateList(
       user_policy_certs_helper_.root_cert().get(),
-      chromeos::NetworkCertLoader::Get()->authority_certs()));
+      ash::NetworkCertLoader::Get()->authority_certs()));
 }
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

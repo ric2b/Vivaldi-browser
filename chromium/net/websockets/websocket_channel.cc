@@ -127,11 +127,11 @@ void GetFrameTypeForOpcode(WebSocketFrameHeader::OpCode opcode,
 base::Value NetLogFailParam(uint16_t code,
                             base::StringPiece reason,
                             base::StringPiece message) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetDoubleKey("code", code);
-  dict.SetStringKey("reason", reason);
-  dict.SetStringKey("internal_reason", message);
-  return dict;
+  base::Value::Dict dict;
+  dict.Set("code", code);
+  dict.Set("reason", reason);
+  dict.Set("internal_reason", message);
+  return base::Value(std::move(dict));
 }
 
 class DependentIOBuffer : public WrappedIOBuffer {
@@ -607,8 +607,8 @@ ChannelState WebSocketChannel::OnReadDone(bool synchronous, int result) {
       // with no data read, not an empty response.
       DCHECK(!read_frames_.empty())
           << "ReadFrames() returned OK, but nothing was read.";
-      for (size_t i = 0; i < read_frames_.size(); ++i) {
-        if (HandleFrame(std::move(read_frames_[i])) == CHANNEL_DELETED)
+      for (auto& read_frame : read_frames_) {
+        if (HandleFrame(std::move(read_frame)) == CHANNEL_DELETED)
           return CHANNEL_DELETED;
       }
       read_frames_.clear();
@@ -1008,7 +1008,11 @@ void WebSocketChannel::CloseTimeout() {
       net::NetLogEventType::WEBSOCKET_CLOSE_TIMEOUT);
   stream_->Close();
   SetState(CLOSED);
-  DoDropChannel(false, kWebSocketErrorAbnormalClosure, "");
+  if (has_received_close_frame_) {
+    DoDropChannel(true, received_close_code_, received_close_reason_);
+  } else {
+    DoDropChannel(false, kWebSocketErrorAbnormalClosure, "");
+  }
   // |this| has been deleted.
 }
 

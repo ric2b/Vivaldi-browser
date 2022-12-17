@@ -10,6 +10,7 @@
 
 #include "base/strings/string_piece_forward.h"
 #include "base/unguessable_token.h"
+#include "net/base/isolation_info.h"
 #include "net/base/schemeful_site.h"
 #include "net/cookies/site_for_cookies.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -78,6 +79,15 @@ class BLINK_COMMON_EXPORT StorageKey {
       const base::UnguessableToken* nonce,
       blink::mojom::AncestorChainBit ancestor_chain_bit);
 
+  // Takes an origin and populates the rest of the data using |isolation_info|.
+  // Note: |frame_origin| from |IsolationInfo| should not be used, as that is
+  // not a reliable source to get the origin.
+  // Note 2: This probably does not correctly account for extension URLs. See
+  // https://crbug.com/1346450 for more context.
+  static StorageKey CreateFromOriginAndIsolationInfo(
+      const url::Origin& origin,
+      const net::IsolationInfo& isolation_info);
+
   // Copyable and Moveable.
   StorageKey(const StorageKey& other) = default;
   StorageKey& operator=(const StorageKey& other) = default;
@@ -144,10 +154,16 @@ class BLINK_COMMON_EXPORT StorageKey {
 
   // Return the "site for cookies" for the StorageKey's frame (or worker).
   //
-  // Right now this "site for cookies" is not entirely accurate. For example
-  // consider if A.com embeds B.com which embeds A.com in a child frame. The
-  // site for cookies according to this method will be A.com, but according to
-  // the spec it should be an opaque origin.
+  // While the SiteForCookie object returned matches the current default
+  // behavior it's important to note that it may not exactly match a
+  // SiteForCookies created for the same frame context and could cause
+  // behavioral difference for users using the
+  // LegacySameSiteCookieBehaviorEnabledForDomainList enterprise policy. The
+  // impact is expected to be minimal however.
+  //
+  // (The difference is due to StorageKey not tracking the same state as
+  // SiteForCookies, see see net::SiteForCookies::schemefully_same_ for more
+  // info.)
   const net::SiteForCookies ToNetSiteForCookies() const;
 
   // Returns true if the registration key string is partitioned by top-level

@@ -44,7 +44,6 @@
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
-#include "third_party/blink/public/web/web_origin_policy.h"
 
 #if INSIDE_BLINK
 #include "base/memory/scoped_refptr.h"
@@ -325,15 +324,6 @@ struct BLINK_EXPORT WebNavigationParams {
   // taking into account the origin computed by the renderer.
   StorageKey storage_key;
 
-  // The sandbox flags to apply to the new document. This is the union of:
-  // - the frame's current sandbox attribute, taken when the navigation started.
-  // - the navigation response's CSP sandbox flags.
-  // - the result of CSP embedded enforcement required CSP sandbox flags.
-  // - Various edge cases: MHTML document, error pages, ...
-  // See content/browser/renderer_host/sandbox_flags.md
-  network::mojom::WebSandboxFlags sandbox_flags =
-      network::mojom::WebSandboxFlags::kAll;
-
   // The devtools token for this navigation. See DocumentLoader
   // for details.
   base::UnguessableToken devtools_navigation_token;
@@ -395,8 +385,6 @@ struct BLINK_EXPORT WebNavigationParams {
   // navigation that should be applied in the document being navigated to.
   WebVector<int> initiator_origin_trial_features;
 
-  absl::optional<WebOriginPolicy> origin_policy;
-
   // The physical URL of Web Bundle from which the document is loaded.
   // Used as an additional identifier for MemoryCache.
   WebURL web_bundle_physical_url;
@@ -438,6 +426,12 @@ struct BLINK_EXPORT WebNavigationParams {
   // enforced on the document created by this navigation.
   std::unique_ptr<WebPolicyContainer> policy_container;
 
+  // Blink's copy of a permissions policy constructed in the browser that should
+  // take precedence over any permissions policy constructed in blink. This is
+  // useful for isolated applications, which use a different base permissions
+  // policy than blink, which uses a fully permissive policy as its base.
+  absl::optional<blink::ParsedPermissionsPolicy> permissions_policy_override;
+
   // These are used to construct a subset of the back/forward list for the
   // window.navigation API. They only have the attributes that are needed for
   // that API.
@@ -462,8 +456,26 @@ struct BLINK_EXPORT WebNavigationParams {
   // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
   absl::optional<WebFencedFrameReporting> fenced_frame_reporting;
 
-  // Whether or not this navigation will commit in an anonymous frame.
-  bool anonymous = false;
+  // Whether the current context would be allowed to create an opaque-ads
+  //  frame (based on the browser-side calculations). See
+  // HTMLFencedFrameElement::canLoadOpaqueURL for usage and
+  // ::blink::mojom::CommitNavigationParams::ancestor_or_self_has_cspee for
+  // where the value is coming from.
+  bool ancestor_or_self_has_cspee = false;
+
+  // Reduced Accept-Language negotiates the language when navigating to a new
+  // document in the main frame, and the browser supplies the same negotiated
+  // language to the main frame and all its subframes when committing a
+  // navigation. This value will be used as the Accept-Language for subresource
+  // requests made by the document committed by this navigation. For example,
+  // when navigating to a URL with embedded image subresource request, the
+  // language negotiation only happens in top-level document. It will store the
+  // top-level document's negotiated language as `reduced_accept_language` here.
+  // Whenever fetching image subresources, the HTTP Accept-Language header will
+  // be set as the reduced accept language which was stored here. As we only do
+  // language negotiation on the top-level document, all subresource requests
+  // will inherit the Accept-Language header value of the top-level document.
+  WebString reduced_accept_language;
 };
 
 }  // namespace blink

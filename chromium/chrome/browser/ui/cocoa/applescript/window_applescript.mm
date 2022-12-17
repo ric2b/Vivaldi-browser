@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "chrome/browser/ui/cocoa/applescript/window_applescript.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 
 #include <memory>
 
@@ -28,7 +29,9 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/web_contents.h"
 
@@ -133,7 +136,8 @@
   int atIndex = [anActiveTabIndex intValue] - 1;
   if (atIndex >= 0 && atIndex < _browser->tab_strip_model()->count()) {
     _browser->tab_strip_model()->ActivateTabAt(
-        atIndex, {TabStripModel::GestureType::kOther});
+        atIndex, TabStripUserGestureDetails(
+                     TabStripUserGestureDetails::GestureType::kOther));
   } else
     AppleScript::SetError(AppleScript::errInvalidTabIndex);
 }
@@ -230,7 +234,7 @@
   if (index < 0 || index >= _browser->tab_strip_model()->count())
     return;
   _browser->tab_strip_model()->CloseWebContentsAt(
-      index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
+      index, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
 }
 
 - (NSNumber*)orderedIndex {

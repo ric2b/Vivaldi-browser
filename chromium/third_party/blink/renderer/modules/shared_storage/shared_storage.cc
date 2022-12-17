@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/numerics/safe_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -29,6 +30,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/modules/shared_storage/shared_storage_worklet.h"
+#include "third_party/blink/renderer/modules/shared_storage/util.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -71,7 +73,7 @@ bool Serialize(ScriptState* script_state,
 
   std::pair<uint8_t*, size_t> buffer = serializer.Release();
 
-  output.ReserveInitialCapacity(SafeCast<wtf_size_t>(buffer.second));
+  output.ReserveInitialCapacity(base::checked_cast<wtf_size_t>(buffer.second));
   output.Append(buffer.first, static_cast<wtf_size_t>(buffer.second));
   DCHECK_EQ(output.size(), buffer.second);
 
@@ -82,6 +84,7 @@ bool Serialize(ScriptState* script_state,
 
 void OnVoidOperationFinished(ScriptPromiseResolver* resolver,
                              SharedStorage* shared_storage,
+                             blink::SharedStorageVoidOperation caller,
                              bool success,
                              const String& error_message) {
   DCHECK(resolver);
@@ -92,6 +95,10 @@ void OnVoidOperationFinished(ScriptPromiseResolver* resolver,
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
         script_state->GetIsolate(), DOMExceptionCode::kOperationError,
         error_message));
+    if (caller == blink::SharedStorageVoidOperation::kRun) {
+      LogSharedStorageWorkletError(
+          SharedStorageWorkletErrorType::kRunWebVisible);
+    }
     return;
   }
 
@@ -149,15 +156,17 @@ ScriptPromise SharedStorage::set(ScriptState* script_state,
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
-                                      "A browsing context is required.");
+  if (!CheckBrowsingContextIsValid(*script_state, exception_state))
     return ScriptPromise();
-  }
 
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
+
+  if (!CheckSharedStoragePermissionsPolicy(*script_state, *execution_context,
+                                           *resolver)) {
+    return promise;
+  }
 
   if (!IsValidSharedStorageKeyStringLength(key.length())) {
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
@@ -179,7 +188,8 @@ ScriptPromise SharedStorage::set(ScriptState* script_state,
       ->SharedStorageSet(
           key, value, ignore_if_present,
           WTF::Bind(&OnVoidOperationFinished, WrapPersistent(resolver),
-                    WrapPersistent(this)));
+                    WrapPersistent(this),
+                    blink::SharedStorageVoidOperation::kSet));
 
   return promise;
 }
@@ -191,15 +201,17 @@ ScriptPromise SharedStorage::append(ScriptState* script_state,
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
-                                      "A browsing context is required.");
+  if (!CheckBrowsingContextIsValid(*script_state, exception_state))
     return ScriptPromise();
-  }
 
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
+
+  if (!CheckSharedStoragePermissionsPolicy(*script_state, *execution_context,
+                                           *resolver)) {
+    return promise;
+  }
 
   if (!IsValidSharedStorageKeyStringLength(key.length())) {
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
@@ -219,7 +231,8 @@ ScriptPromise SharedStorage::append(ScriptState* script_state,
       ->SharedStorageAppend(
           key, value,
           WTF::Bind(&OnVoidOperationFinished, WrapPersistent(resolver),
-                    WrapPersistent(this)));
+                    WrapPersistent(this),
+                    blink::SharedStorageVoidOperation::kAppend));
 
   return promise;
 }
@@ -230,15 +243,17 @@ ScriptPromise SharedStorage::Delete(ScriptState* script_state,
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
-                                      "A browsing context is required.");
+  if (!CheckBrowsingContextIsValid(*script_state, exception_state))
     return ScriptPromise();
-  }
 
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
+
+  if (!CheckSharedStoragePermissionsPolicy(*script_state, *execution_context,
+                                           *resolver)) {
+    return promise;
+  }
 
   if (!IsValidSharedStorageKeyStringLength(key.length())) {
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
@@ -250,7 +265,8 @@ ScriptPromise SharedStorage::Delete(ScriptState* script_state,
   GetSharedStorageDocumentService(execution_context)
       ->SharedStorageDelete(
           key, WTF::Bind(&OnVoidOperationFinished, WrapPersistent(resolver),
-                         WrapPersistent(this)));
+                         WrapPersistent(this),
+                         blink::SharedStorageVoidOperation::kDelete));
 
   return promise;
 }
@@ -260,20 +276,22 @@ ScriptPromise SharedStorage::clear(ScriptState* script_state,
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
-                                      "A browsing context is required.");
+  if (!CheckBrowsingContextIsValid(*script_state, exception_state))
     return ScriptPromise();
-  }
 
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
+  if (!CheckSharedStoragePermissionsPolicy(*script_state, *execution_context,
+                                           *resolver)) {
+    return promise;
+  }
+
   GetSharedStorageDocumentService(execution_context)
-      ->SharedStorageClear(WTF::Bind(&OnVoidOperationFinished,
-                                     WrapPersistent(resolver),
-                                     WrapPersistent(this)));
+      ->SharedStorageClear(WTF::Bind(
+          &OnVoidOperationFinished, WrapPersistent(resolver),
+          WrapPersistent(this), blink::SharedStorageVoidOperation::kClear));
 
   return promise;
 }
@@ -297,9 +315,9 @@ ScriptPromise SharedStorage::selectURL(
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
-                                      "A browsing context is required.");
+  if (!CheckBrowsingContextIsValid(*script_state, exception_state)) {
+    LogSharedStorageWorkletError(
+        SharedStorageWorkletErrorType::kSelectURLWebVisible);
     return ScriptPromise();
   }
 
@@ -315,6 +333,20 @@ ScriptPromise SharedStorage::selectURL(
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
         script_state->GetIsolate(), DOMExceptionCode::kInvalidAccessError,
         "sharedStorage.selectURL() is not allowed in fenced frame."));
+    LogSharedStorageWorkletError(
+        SharedStorageWorkletErrorType::kSelectURLWebVisible);
+    return promise;
+  }
+
+  // For `selectURL()` to succeed, it is currently enforced in the browser side
+  // that `addModule()` must be called beforehand that passed the early
+  // permission checks. Thus the permissions-policy check here isn't strictly
+  // needed. But here we still check the permissions-policy for consistency and
+  // consider this a higher priority error.
+  if (!CheckSharedStoragePermissionsPolicy(*script_state, *execution_context,
+                                           *resolver)) {
+    LogSharedStorageWorkletError(
+        SharedStorageWorkletErrorType::kSelectURLWebVisible);
     return promise;
   }
 
@@ -322,6 +354,8 @@ ScriptPromise SharedStorage::selectURL(
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
         script_state->GetIsolate(), DOMExceptionCode::kDataError,
         "Length of the \"urls\" parameter is not valid."));
+    LogSharedStorageWorkletError(
+        SharedStorageWorkletErrorType::kSelectURLWebVisible);
     return promise;
   }
 
@@ -344,6 +378,8 @@ ScriptPromise SharedStorage::selectURL(
       resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
           script_state->GetIsolate(), DOMExceptionCode::kDataError,
           "The url \"" + url_with_metadata->url() + "\" is invalid."));
+      LogSharedStorageWorkletError(
+          SharedStorageWorkletErrorType::kSelectURLWebVisible);
       return promise;
     }
 
@@ -362,6 +398,8 @@ ScriptPromise SharedStorage::selectURL(
         resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
             script_state->GetIsolate(), DOMExceptionCode::kDataError,
             "selectURL could not get reportingMetadata object attributes"));
+        LogSharedStorageWorkletError(
+            SharedStorageWorkletErrorType::kSelectURLWebVisible);
         return promise;
       }
 
@@ -377,6 +415,8 @@ ScriptPromise SharedStorage::selectURL(
               script_state->GetIsolate(), DOMExceptionCode::kDataError,
               "selectURL reportingMetadata object attributes must be "
               "strings"));
+          LogSharedStorageWorkletError(
+              SharedStorageWorkletErrorType::kSelectURLWebVisible);
           return promise;
         }
 
@@ -389,6 +429,8 @@ ScriptPromise SharedStorage::selectURL(
               script_state->GetIsolate(), DOMExceptionCode::kDataError,
               "selectURL reportingMetadata object attributes must be "
               "strings"));
+          LogSharedStorageWorkletError(
+              SharedStorageWorkletErrorType::kSelectURLWebVisible);
           return promise;
         }
 
@@ -402,6 +444,8 @@ ScriptPromise SharedStorage::selectURL(
                   String::NumberToStringECMAScript(index) +
                   " has an invalid or non-HTTPS report_url parameter \"" +
                   report_url_string + "\"."));
+          LogSharedStorageWorkletError(
+              SharedStorageWorkletErrorType::kSelectURLWebVisible);
           return promise;
         }
 
@@ -416,8 +460,11 @@ ScriptPromise SharedStorage::selectURL(
   }
 
   Vector<uint8_t> serialized_data;
-  if (!Serialize(script_state, options, exception_state, serialized_data))
+  if (!Serialize(script_state, options, exception_state, serialized_data)) {
+    LogSharedStorageWorkletError(
+        SharedStorageWorkletErrorType::kSelectURLWebVisible);
     return promise;
+  }
 
   GetSharedStorageDocumentService(execution_context)
       ->RunURLSelectionOperationOnWorklet(
@@ -434,6 +481,8 @@ ScriptPromise SharedStorage::selectURL(
                   resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
                       script_state->GetIsolate(),
                       DOMExceptionCode::kOperationError, error_message));
+                  LogSharedStorageWorkletError(
+                      SharedStorageWorkletErrorType::kSelectURLWebVisible);
                   return;
                 }
 
@@ -459,25 +508,33 @@ ScriptPromise SharedStorage::run(
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
-  if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
-                                      "A browsing context is required.");
+  if (!CheckBrowsingContextIsValid(*script_state, exception_state)) {
+    LogSharedStorageWorkletError(SharedStorageWorkletErrorType::kRunWebVisible);
     return ScriptPromise();
   }
 
   Vector<uint8_t> serialized_data;
-  if (!Serialize(script_state, options, exception_state, serialized_data))
+  if (!Serialize(script_state, options, exception_state, serialized_data)) {
+    LogSharedStorageWorkletError(SharedStorageWorkletErrorType::kRunWebVisible);
     return ScriptPromise();
+  }
 
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
+  if (!CheckSharedStoragePermissionsPolicy(*script_state, *execution_context,
+                                           *resolver)) {
+    LogSharedStorageWorkletError(SharedStorageWorkletErrorType::kRunWebVisible);
+    return promise;
+  }
+
   GetSharedStorageDocumentService(execution_context)
       ->RunOperationOnWorklet(
           name, std::move(serialized_data),
           WTF::Bind(&OnVoidOperationFinished, WrapPersistent(resolver),
-                    WrapPersistent(this)));
+                    WrapPersistent(this),
+                    blink::SharedStorageVoidOperation::kRun));
 
   return promise;
 }

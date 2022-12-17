@@ -18,7 +18,10 @@ class ChromeBrowserState;
 @protocol ClearBrowsingDataConsumer;
 @protocol CollectionViewFooterLinkDelegate;
 
-// Clear Browswing Data Section Identifiers.
+// Only used in this folder to offer the user to log out
+extern const char kCBDSignOutOfChromeURL[];
+
+// Clear Browsing Data Section Identifiers.
 enum ClearBrowsingDataSectionIdentifier {
   // Section holding types of data that can be cleared.
   SectionIdentifierDataTypes = kSectionIdentifierEnumZero,
@@ -87,6 +90,9 @@ enum ClearBrowsingDataItemType {
 
 // Fills `model` with appropriate sections and items.
 - (void)loadModel:(ListModel*)model;
+
+// Update the footer depending on whether the user signed in or out.
+- (void)updateModel:(ListModel*)model withTableView:(UITableView*)tableView;
 
 // Restarts browsing data counters, which in turn updates UI, with those data
 // types specified by `mask`.

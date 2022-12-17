@@ -268,7 +268,6 @@ source_set("browser_sources") {
     "notification_service.h",
     "notification_source.h",
     "notification_types.h",
-    "origin_policy_commands.h",
     "overlay_window.h",
     "overscroll_configuration.h",
     "page.h",
@@ -284,11 +283,18 @@ source_set("browser_sources") {
     "permission_controller.h",
     "permission_controller_delegate.cc",
     "permission_controller_delegate.h",
+    "permission_result.cc",
+    "permission_result.h",
     "picture_in_picture_window_controller.h",
     "platform_notification_context.h",
     "platform_notification_service.h",
+    "prefetch_service_delegate.cc",
+    "prefetch_service_delegate.h",
+    "preloading.h",
+    "preloading_data.h",
     "prerender_handle.h",
     "prerender_trigger_type.h",
+    "presentation_observer.h",
     "presentation_receiver_flags.h",
     "presentation_request.cc",
     "presentation_request.h",
@@ -301,6 +307,7 @@ source_set("browser_sources") {
     "push_messaging_service.cc",
     "push_messaging_service.h",
     "quota_permission_context.h",
+    "reduce_accept_language_controller_delegate.h",
     "reload_type.h",
     "render_frame_host.h",
     "render_frame_host_receiver_set.h",
@@ -342,6 +349,7 @@ source_set("browser_sources") {
     "service_worker_external_request_timeout_type.h",
     "service_worker_running_info.cc",
     "service_worker_running_info.h",
+    "service_worker_version_base_info.cc",
     "service_worker_version_base_info.h",
     "session_storage_namespace.cc",
     "session_storage_namespace.h",
@@ -393,6 +401,7 @@ source_set("browser_sources") {
     "url_loader_throttles.h",
     "usb_chooser.cc",
     "usb_chooser.h",
+    "usb_delegate.h",
     "video_capture_device_launcher.cc",
     "video_capture_device_launcher.h",
     "video_capture_service.h",
@@ -418,6 +427,8 @@ source_set("browser_sources") {
     "web_ui_controller.cc",
     "web_ui_controller.h",
     "web_ui_controller_factory.h",
+    "web_ui_controller_interface_binder.cc",
+    "web_ui_controller_interface_binder.h",
     "web_ui_data_source.h",
     "web_ui_message_handler.h",
     "web_ui_url_loader_factory.h",
@@ -453,6 +464,7 @@ source_set("browser_sources") {
     "//build:chromecast_buildflags",
     "//components/browsing_topics/common:common",
     "//components/download/public/common:public",
+    "//components/file_access",
     "//components/services/storage/privileged/mojom",
     "//components/services/storage/public/mojom",
     "//content/public/common:common_sources",
@@ -519,11 +531,15 @@ source_set("browser_sources") {
 
   if (enable_plugins) {
     sources += [
-      "browser_ppapi_host.h",
-      "pepper_vpn_provider_resource_host_proxy.h",
-      "plugin_data_remover.h",
       "plugin_service.h",
       "plugin_service_filter.h",
+    ]
+  }
+
+  if (enable_ppapi) {
+    sources += [
+      "browser_ppapi_host.h",
+      "pepper_vpn_provider_resource_host_proxy.h",
     ]
     deps += [ "//ppapi/c" ]
   }
@@ -536,7 +552,6 @@ source_set("browser_sources") {
     deps += [ "//ui/android" ]
     sources += [
       "android/android_overlay_provider.h",
-      "android/app_web_message_port.h",
       "android/browser_context_handle.h",
       "android/child_process_importance.h",
       "android/compositor.h",
@@ -546,6 +561,8 @@ source_set("browser_sources") {
       "android/java_interfaces.h",
       "android/media_url_interceptor_register.cc",
       "android/media_url_interceptor_register.h",
+      "android/message_payload_type.h",
+      "android/message_port_helper.h",
       "android/motion_event_action.h",
       "android/synchronous_compositor.cc",
       "android/synchronous_compositor.h",
@@ -606,6 +623,8 @@ source_set("browser_sources") {
   if (is_chromeos_ash) {
     sources += [
       "chromeos/delegate_to_browser_gpu_service_accelerator_factory.h",
+      "chromeos/multi_capture_service.cc",
+      "chromeos/multi_capture_service.h",
       "tts_controller_delegate.cc",
       "tts_controller_delegate.h",
     ]
@@ -628,6 +647,10 @@ source_set("browser_sources") {
 
   if (use_clang_profiling_inside_sandbox) {
     sources += [ "profiling_utils.h" ]
+  }
+
+  if (is_chromeos_lacros) {
+    deps += [ "//chromeos/startup" ]
   }
 }
 

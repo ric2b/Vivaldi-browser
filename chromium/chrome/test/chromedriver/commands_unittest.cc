@@ -88,8 +88,7 @@ void OnGetSessions(const Status& status,
                    bool w3c_compliant) {
   ASSERT_EQ(kOk, status.code());
   ASSERT_TRUE(value.get());
-  std::vector<base::Value> sessions_list =
-      base::Value::FromUniquePtrValue(std::move(value)).TakeListDeprecated();
+  const base::Value::List& sessions_list = value->GetList();
   ASSERT_EQ(static_cast<size_t>(2), sessions_list.size());
 
   const base::Value& session1 = sessions_list[0];
@@ -400,7 +399,7 @@ class FindElementWebView : public StubWebView {
   // Overridden from WebView:
   Status CallFunction(const std::string& frame,
                       const std::string& function,
-                      const base::ListValue& args,
+                      const base::Value::List& args,
                       std::unique_ptr<base::Value>* result) override {
     ++current_count_;
     if (scenario_ == kElementExistsTimeout ||
@@ -429,7 +428,7 @@ class FindElementWebView : public StubWebView {
       *result = base::Value::ToUniquePtrValue(result_->Clone());
       frame_ = frame;
       function_ = function;
-      args_ = base::Value::ToUniquePtrValue(args.Clone());
+      args_ = std::make_unique<base::Value>(args.Clone());
     }
     return Status(kOk);
   }
@@ -512,7 +511,7 @@ TEST(CommandsTest, FailedFindElements) {
                                      &result, nullptr)
                      .code());
   ASSERT_TRUE(result->is_list());
-  ASSERT_EQ(0U, result->GetListDeprecated().size());
+  ASSERT_EQ(0U, result->GetList().size());
 }
 
 TEST(CommandsTest, SuccessfulFindChildElement) {
@@ -590,7 +589,7 @@ TEST(CommandsTest, FailedFindChildElements) {
                      base::Value::AsDictionaryValue(params), &result)
                      .code());
   ASSERT_TRUE(result->is_list());
-  ASSERT_EQ(0U, result->GetListDeprecated().size());
+  ASSERT_EQ(0U, result->GetList().size());
 }
 
 TEST(CommandsTest, TimeoutInFindElement) {
@@ -620,7 +619,7 @@ class ErrorCallFunctionWebView : public StubWebView {
   // Overridden from WebView:
   Status CallFunction(const std::string& frame,
                       const std::string& function,
-                      const base::ListValue& args,
+                      const base::Value::List& args,
                       std::unique_ptr<base::Value>* result) override {
     return Status(code_);
   }

@@ -10,9 +10,10 @@
 #include <set>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 
+#include "base/containers/flat_map.h"
 #include "base/no_destructor.h"
+#include "base/numerics/checked_math.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -65,7 +66,7 @@ bool FindDescendantRoleWithMaxDepth(const AXPlatformNodeBase* node,
 const char16_t AXPlatformNodeBase::kEmbeddedCharacter = u'\xfffc';
 
 // Map from each AXPlatformNode's unique id to its instance.
-using UniqueIdMap = std::unordered_map<int32_t, AXPlatformNode*>;
+using UniqueIdMap = base::flat_map<int32_t, AXPlatformNode*>;
 base::LazyInstance<UniqueIdMap>::Leaky g_unique_id_map =
     LAZY_INSTANCE_INITIALIZER;
 
@@ -193,6 +194,7 @@ std::string AXPlatformNodeBase::GetName() const {
       name += extra_text;
     }
 
+    DCHECK(base::IsStringUTF8AllowingNoncharacters(name)) << "Invalid UTF8";
     return name;
   }
   return std::string();
@@ -824,10 +826,6 @@ bool AXPlatformNodeBase::IsPlatformDocument() const {
   return delegate_ && delegate_->IsPlatformDocument();
 }
 
-bool AXPlatformNodeBase::IsPlatformDocumentWithContent() const {
-  return delegate_ && delegate_->IsPlatformDocumentWithContent();
-}
-
 bool AXPlatformNodeBase::IsStructuredAnnotation() const {
   // The node represents a structured annotation if it can trace back to a
   // target node that is being annotated.
@@ -1115,27 +1113,8 @@ absl::optional<float> AXPlatformNodeBase::GetFontSizeInPoints() const {
   return absl::nullopt;
 }
 
-bool AXPlatformNodeBase::HasCaret(const AXTree::Selection* selection) {
-  if (IsAtomicTextField() &&
-      HasIntAttribute(ax::mojom::IntAttribute::kTextSelStart) &&
-      HasIntAttribute(ax::mojom::IntAttribute::kTextSelEnd)) {
-    return true;
-  }
-
-  // The caret is always at the focus of the selection.
-  int32_t focus_id;
-  if (selection)
-    focus_id = selection->focus_object_id;
-  else
-    focus_id = delegate_->GetTreeData().sel_focus_object_id;
-
-  AXPlatformNodeBase* focus_object =
-      static_cast<AXPlatformNodeBase*>(delegate_->GetFromNodeID(focus_id));
-
-  if (!focus_object)
-    return false;
-
-  return focus_object->IsDescendantOf(this);
+bool AXPlatformNodeBase::HasVisibleCaretOrSelection() const {
+  return delegate_ && delegate_->HasVisibleCaretOrSelection();
 }
 
 bool AXPlatformNodeBase::IsLeaf() const {
@@ -1153,7 +1132,7 @@ bool AXPlatformNodeBase::IsInvisibleOrIgnored() const {
   if (HasState(ax::mojom::State::kFocusable))
     return !IsFocused();
 
-  return !const_cast<AXPlatformNodeBase*>(this)->HasCaret();
+  return !HasVisibleCaretOrSelection();
 }
 
 bool AXPlatformNodeBase::IsFocused() const {
@@ -1262,11 +1241,13 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
       case ax::mojom::DescriptionFrom::kPopupElement:
         // The following types of markup are mapped to "tooltip":
         // * The title attribute.
-        // * A related popup=hint related via togglepopup/showpopup/hidepopup.
+        // * A related popup=hint related via popuptoggletarget /
+        // popupshowtarget / popuphidetarget.
         // * A tooltip related via aria-describedby (see kRelatedElement above).
         from = "tooltip";
         break;
       case ax::mojom::DescriptionFrom::kNone:
+      case ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty:
         NOTREACHED();
     }
     DCHECK(!from.empty());
@@ -1777,6 +1758,31 @@ int32_t AXPlatformNodeBase::GetHypertextOffsetFromChild(
   return GetHypertextOffsetFromHyperlinkIndex(hyperlink_index);
 }
 
+int AXPlatformNodeBase::HypertextOffsetFromChildIndex(int child_index) const {
+  DCHECK_GE(child_index, 0);
+  DCHECK_LE(child_index, static_cast<int>(GetChildCount()));
+
+  // Use both a child index and an iterator to avoid an O(n^2) complexity which
+  // would be the case if we were to call GetChildAtIndex on each child.
+  int hypertext_offset = 0;
+  int endpoint_child_index = 0;
+  for (AXPlatformNodeChildIterator child_iter = AXPlatformNodeChildrenBegin();
+       child_iter != AXPlatformNodeChildrenEnd(); ++child_iter) {
+    if (endpoint_child_index >= child_index) {
+      break;
+    }
+
+    int child_text_len = 1;
+    if (child_iter->IsText())
+      child_text_len =
+          base::checked_cast<int>(child_iter->GetHypertext().size());
+
+    endpoint_child_index++;
+    hypertext_offset += child_text_len;
+  }
+  return hypertext_offset;
+}
+
 int32_t AXPlatformNodeBase::GetHypertextOffsetFromDescendant(
     AXPlatformNodeBase* descendant) {
   auto* parent_object = static_cast<AXPlatformNodeBase*>(
@@ -1795,44 +1801,50 @@ int32_t AXPlatformNodeBase::GetHypertextOffsetFromDescendant(
 int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
     AXPlatformNodeBase* endpoint_object,
     int endpoint_offset) {
+  DCHECK_GE(endpoint_offset, 0);
+
   // There are three cases:
-  // 1. The selection endpoint is inside this object but not one of its
-  // descendants, or is in an ancestor of this object. endpoint_offset should be
+  // 1. The selection endpoint is this object itself: endpoint_offset should be
   // returned, possibly adjusted from a child offset to a hypertext offset.
-  // 2. The selection endpoint is a descendant of this object. The offset of the
+  // 2. The selection endpoint is an ancestor of this object. If endpoint_offset
+  // points out after this object, then this object text length is returned,
+  // otherwise 0.
+  // 3. The selection endpoint is a descendant of this object. The offset of the
   // character in this object's hypertext corresponding to the subtree in which
   // the endpoint is located should be returned.
-  // 3. The selection endpoint is in a completely different part of the tree.
+  // 4. The selection endpoint is in a completely different part of the tree.
   // Either 0 or hypertext length should be returned depending on the direction
   // that one needs to travel to find the endpoint.
   //
   // TODO(nektar): Replace all this logic with the use of AXNodePosition.
 
-  // Case 1. Is the endpoint object equal to this object or an ancestor of this
-  // object?
-  //
-  // IsDescendantOf includes the case when endpoint_object == this.
-  if (IsDescendantOf(endpoint_object)) {
-    if (endpoint_object->IsLeaf()) {
-      DCHECK_EQ(endpoint_object, this) << "Text objects cannot have children.";
+  // Case 1. Is the endpoint object equal to this object
+  if (endpoint_object == this) {
+    if (endpoint_object->IsLeaf())
       return endpoint_offset;
-    } else {
-      DCHECK_GE(endpoint_offset, 0);
-      DCHECK_LE(static_cast<size_t>(endpoint_offset),
-                endpoint_object->GetDelegate()->GetChildCount());
+    return HypertextOffsetFromChildIndex(endpoint_offset);
+  }
 
-      // Adjust the |endpoint_offset| because the selection endpoint is a tree
-      // position, i.e. it represents a child index and not a text offset.
-      if (static_cast<size_t>(endpoint_offset) >=
-          endpoint_object->GetChildCount()) {
-        return static_cast<int>(endpoint_object->GetHypertext().size());
-      } else {
-        auto* child = static_cast<AXPlatformNodeBase*>(FromNativeViewAccessible(
-            endpoint_object->ChildAtIndex(endpoint_offset)));
-        DCHECK(child);
-        return endpoint_object->GetHypertextOffsetFromChild(child);
-      }
+  // Case 2. Is the endpoint an ancestor of this object.
+  if (IsDescendantOf(endpoint_object)) {
+    DCHECK_LE(endpoint_offset,
+              static_cast<int>(endpoint_object->GetChildCount()));
+
+    AXPlatformNodeBase* closest_ancestor = this;
+    while (closest_ancestor) {
+      AXPlatformNodeBase* parent = static_cast<AXPlatformNodeBase*>(
+          FromNativeViewAccessible(closest_ancestor->GetParent()));
+      if (parent == endpoint_object)
+        break;
+      closest_ancestor = parent;
     }
+
+    // If the endpoint is after this node, then return the node's
+    // hypertext length, otherwise 0 as the endpoint points before the node.
+    if (endpoint_offset >
+        static_cast<int>(*closest_ancestor->GetIndexInParent()))
+      return static_cast<int>(GetHypertext().size());
+    return 0;
   }
 
   AXPlatformNodeBase* common_parent = this;
@@ -1895,14 +1907,15 @@ AXPlatformNodeBase::AXPosition AXPlatformNodeBase::HypertextOffsetToEndpoint(
   DCHECK_GE(hypertext_offset, 0);
   DCHECK_LT(hypertext_offset, static_cast<int>(GetHypertext().size()));
 
-  int32_t current_hypertext_offset = hypertext_offset;
+  int current_hypertext_offset = hypertext_offset;
   for (auto child_iter = AXPlatformNodeChildrenBegin();
        child_iter != AXPlatformNodeChildrenEnd() &&
        current_hypertext_offset >= 0;
        ++child_iter) {
     int child_text_len = 1;
     if (child_iter->IsText())
-      child_text_len = child_iter->GetHypertext().size();
+      child_text_len =
+          base::checked_cast<int>(child_iter->GetHypertext().size());
 
     if (current_hypertext_offset < child_text_len) {
       int endpoint_offset = child_text_len - current_hypertext_offset;
@@ -1989,7 +2002,7 @@ void AXPlatformNodeBase::GetSelectionOffsetsFromTree(
   // outside this object in their entirety.
   // Selections that span more than one character are by definition inside
   // this object, so checking them is not necessary.
-  if (*selection_start == *selection_end && !HasCaret(selection)) {
+  if (*selection_start == *selection_end && !HasVisibleCaretOrSelection()) {
     *selection_start = -1;
     *selection_end = -1;
     return;

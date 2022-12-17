@@ -15,23 +15,23 @@ import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
 /**
  * Information for an account managed by Chrome OS AccountManager.
  */
-export type Account = {
-  id: string,
-  accountType: number,
-  isDeviceAccount: boolean,
-  isSignedIn: boolean,
-  unmigrated: boolean,
-  fullName: string,
-  email: string,
-  pic: string,
-  organization?: string,
-};
+export interface Account {
+  id: string;
+  accountType: number;
+  isDeviceAccount: boolean;
+  isSignedIn: boolean;
+  unmigrated: boolean;
+  fullName: string;
+  email: string;
+  pic: string;
+  organization?: string;
+}
 
 export interface AccountManagerBrowserProxy {
   /**
    * Returns a Promise for the list of GAIA accounts held in AccountManager.
    */
-  getAccounts(): Promise<Array<Account>>;
+  getAccounts(): Promise<Account[]>;
 }
 
 export class AccountManagerBrowserProxyImpl implements

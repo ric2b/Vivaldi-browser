@@ -16,7 +16,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/feed/android/jni_headers/FeedServiceBridge_jni.h"
 #include "chrome/browser/feed/feed_service_factory.h"
-#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
@@ -142,6 +141,10 @@ static void JNI_FeedServiceBridge_SetContentOrderForWebFeed(
   NOTREACHED() << "Invalid content order: " << content_order;
 }
 
+static jboolean JNI_FeedServiceBridge_IsSignedIn(JNIEnv* env) {
+  return FeedServiceBridge::IsSignedIn();
+}
+
 std::string FeedServiceBridge::GetLanguageTag() {
   JNIEnv* env = base::android::AttachCurrentThread();
   return ConvertJavaStringToUTF8(env,
@@ -162,10 +165,13 @@ DisplayMetrics FeedServiceBridge::GetDisplayMetrics() {
 }
 
 bool FeedServiceBridge::IsAutoplayEnabled() {
-  // For now, disable autoplay if metrics are disabled until we can ensure that
-  // the autoplay feature does not report metrics.
-  return base::FeatureList::IsEnabled(kInterestFeedV2Autoplay) &&
-         ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
+  return base::FeatureList::IsEnabled(kInterestFeedV2Autoplay);
+}
+
+TabGroupEnabledState FeedServiceBridge::GetTabGroupEnabledState() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return static_cast<TabGroupEnabledState>(
+      Java_FeedServiceBridge_getTabGroupEnabledState(env));
 }
 
 void FeedServiceBridge::ClearAll() {
@@ -194,6 +200,11 @@ uint64_t FeedServiceBridge::GetReliabilityLoggingId() {
   }
   return FeedService::GetReliabilityLoggingId(
       g_browser_process->metrics_service()->GetClientId(), profile_prefs);
+}
+
+// static
+bool FeedServiceBridge::IsSignedIn() {
+  return GetFeedService()->IsSignedIn();
 }
 
 JavaUnreadContentObserver::JavaUnreadContentObserver(

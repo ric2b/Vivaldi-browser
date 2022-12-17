@@ -29,7 +29,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
-#include "pdf/document_loader_impl.h"
+#include "pdf/loader/document_loader_impl.h"
 #include "pdf/pdf_features.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
@@ -348,6 +348,28 @@ IN_PROC_BROWSER_TEST_F(PdfFindRequestManagerTest, DoesNotSearchPdfViewerUi) {
   FindResults results = delegate()->GetFindResults();
   EXPECT_EQ(last_request_id(), results.request_id);
   EXPECT_EQ(1, results.number_of_matches);
+}
+
+// Regression test for crbug.com/1352097.
+IN_PROC_BROWSER_TEST_F(PdfFindRequestManagerTest, SingleResultFindNext) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  LoadAndWait("/find_in_pdf_page.pdf");
+  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(contents()));
+
+  auto options = blink::mojom::FindOptions::New();
+  Find("pdf", options.Clone());
+  delegate()->MarkNextReply();
+  delegate()->WaitForNextReply();
+
+  options->new_session = false;
+  Find("pdf", options.Clone());
+  delegate()->MarkNextReply();
+  delegate()->WaitForNextReply();
+
+  FindResults results = delegate()->GetFindResults();
+  EXPECT_EQ(last_request_id(), results.request_id);
+  EXPECT_EQ(1, results.number_of_matches);
+  EXPECT_EQ(1, results.active_match_ordinal);
 }
 
 }  // namespace content

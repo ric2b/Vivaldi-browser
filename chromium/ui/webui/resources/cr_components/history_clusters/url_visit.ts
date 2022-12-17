@@ -5,18 +5,18 @@
 import './page_favicon.js';
 import './history_clusters_shared_style.css.js';
 import '../../cr_elements/cr_action_menu/cr_action_menu.js';
-import '../../cr_elements/cr_icon_button/cr_icon_button.m.js';
-import '../../cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import '../../cr_elements/cr_icon_button/cr_icon_button.js';
+import '../../cr_elements/cr_lazy_render/cr_lazy_render.js';
 
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {CrActionMenuElement} from '../../cr_elements/cr_action_menu/cr_action_menu.js';
-import {CrLazyRenderElement} from '../../cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import {CrLazyRenderElement} from '../../cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {loadTimeData} from '../../js/load_time_data.m.js';
 
+import {BrowserProxyImpl} from './browser_proxy.js';
 import {Annotation, URLVisit} from './history_clusters.mojom-webui.js';
-import {OpenWindowProxyImpl} from './open_window_proxy.js';
 import {getTemplate} from './url_visit.html.js';
 import {insertHighlightedTextWithMatchesIntoElement} from './utils.js';
 
@@ -115,7 +115,7 @@ class VisitRowElement extends MenuContainerElementBase {
       unusedUrlForDisplay_: {
         type: String,
         computed: 'computeUrlForDisplay_(visit)',
-      }
+      },
     };
   }
 
@@ -125,7 +125,7 @@ class VisitRowElement extends MenuContainerElementBase {
 
   query: string;
   visit: URLVisit;
-  private annotations_: Array<string>;
+  private annotations_: string[];
   private allowDeletingHistory_: boolean;
   private debugInfo_: string;
   private unusedTitle_: string;
@@ -144,7 +144,7 @@ class VisitRowElement extends MenuContainerElementBase {
     }));
   }
 
-  private onClick_(event: Event) {
+  private onClick_(event: MouseEvent) {
     // Ignore previously handled events.
     if (event.defaultPrevented) {
       return;
@@ -155,7 +155,18 @@ class VisitRowElement extends MenuContainerElementBase {
     // To record metrics.
     this.onAuxClick_();
 
-    OpenWindowProxyImpl.getInstance().open(this.visit.normalizedUrl.url);
+    this.openUrl_(event);
+  }
+
+  private onContextMenu_(event: MouseEvent) {
+    // Because WebUI has a Blink-provided context menu that's suitable, and
+    // Side Panel always UIs always have a custom context menu.
+    if (!loadTimeData.getBoolean('inSidePanel')) {
+      return;
+    }
+
+    BrowserProxyImpl.getInstance().handler.showContextMenuForURL(
+        this.visit.normalizedUrl, {x: event.clientX, y: event.clientY});
   }
 
   private onKeydown_(e: KeyboardEvent) {
@@ -167,7 +178,7 @@ class VisitRowElement extends MenuContainerElementBase {
     // To record metrics.
     this.onAuxClick_();
 
-    OpenWindowProxyImpl.getInstance().open(this.visit.normalizedUrl.url);
+    this.openUrl_(e);
   }
 
   private onActionMenuButtonClick_(event: Event) {
@@ -191,7 +202,7 @@ class VisitRowElement extends MenuContainerElementBase {
   // Helper methods
   //============================================================================
 
-  private computeAnnotations_(): Array<string> {
+  private computeAnnotations_(): string[] {
     return this.visit.annotations
         .map((annotation: number) => annotationToStringId.get(annotation))
         .filter(
@@ -221,6 +232,17 @@ class VisitRowElement extends MenuContainerElementBase {
         this.$.url, this.visit.urlForDisplay,
         this.visit.urlForDisplayMatchPositions);
     return this.visit.urlForDisplay;
+  }
+
+  private openUrl_(event: MouseEvent|KeyboardEvent) {
+    BrowserProxyImpl.getInstance().handler.openHistoryCluster(
+        this.visit.normalizedUrl, {
+          middleButton: false,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+        });
   }
 }
 

@@ -335,18 +335,6 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case PHONE_HOME_CITY_AND_NUMBER:
         case PHONE_HOME_CITY_AND_NUMBER_WITHOUT_TRUNK_PREFIX:
         case PHONE_HOME_WHOLE_NUMBER:
-        case PHONE_FAX_NUMBER:
-        case PHONE_FAX_CITY_CODE:
-        case PHONE_FAX_COUNTRY_CODE:
-        case PHONE_FAX_CITY_AND_NUMBER:
-        case PHONE_FAX_WHOLE_NUMBER:
-        case ADDRESS_BILLING_LINE1:
-        case ADDRESS_BILLING_LINE2:
-        case ADDRESS_BILLING_APT_NUM:
-        case ADDRESS_BILLING_CITY:
-        case ADDRESS_BILLING_STATE:
-        case ADDRESS_BILLING_ZIP:
-        case ADDRESS_BILLING_COUNTRY:
         case CREDIT_CARD_NAME_FULL:
         case CREDIT_CARD_NUMBER:
         case CREDIT_CARD_EXP_MONTH:
@@ -358,25 +346,10 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case CREDIT_CARD_VERIFICATION_CODE:
         case COMPANY_NAME:
         case FIELD_WITH_DEFAULT_VALUE:
-        case PHONE_BILLING_NUMBER:
-        case PHONE_BILLING_CITY_CODE:
-        case PHONE_BILLING_COUNTRY_CODE:
-        case PHONE_BILLING_CITY_AND_NUMBER:
-        case PHONE_BILLING_WHOLE_NUMBER:
-        case NAME_BILLING_FIRST:
-        case NAME_BILLING_MIDDLE:
-        case NAME_BILLING_LAST:
-        case NAME_BILLING_MIDDLE_INITIAL:
-        case NAME_BILLING_FULL:
-        case NAME_BILLING_SUFFIX:
         case MERCHANT_EMAIL_SIGNUP:
         case MERCHANT_PROMO_CODE:
         case PASSWORD:
         case ACCOUNT_CREATION_PASSWORD:
-        case ADDRESS_BILLING_STREET_ADDRESS:
-        case ADDRESS_BILLING_SORTING_CODE:
-        case ADDRESS_BILLING_DEPENDENT_LOCALITY:
-        case ADDRESS_BILLING_LINE3:
         case NOT_ACCOUNT_CREATION_PASSWORD:
         case USERNAME:
         case USERNAME_AND_EMAIL_ADDRESS:
@@ -401,8 +374,10 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case NAME_FULL_WITH_HONORIFIC_PREFIX:
         case BIRTHDATE_DAY:
         case BIRTHDATE_MONTH:
-        case BIRTHDATE_YEAR_4_DIGITS:
+        case BIRTHDATE_4_DIGIT_YEAR:
+        case IBAN_VALUE:
         case MAX_VALID_FIELD_TYPE:
+        case CREDIT_CARD_STANDALONE_VERIFICATION_CODE:
           NOTREACHED() << field_type << " type is not in that group.";
           group = GROUP_AMBIGUOUS;
           break;
@@ -860,14 +835,6 @@ void AutofillMetrics::LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
 }
 
 // static
-void AutofillMetrics::LogLocalCardMigrationNotOfferedDueToMaxStrikesMetric(
-    SaveTypeMetric metric) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Autofill.StrikeDatabase.LocalCardMigrationNotOfferedDueToMaxStrikes",
-      metric);
-}
-
-// static
 void AutofillMetrics::LogUploadOfferedCardOriginMetric(
     UploadOfferedCardOriginMetric metric) {
   DCHECK_LT(metric, NUM_UPLOAD_OFFERED_CARD_ORIGIN_METRICS);
@@ -1120,227 +1087,42 @@ void AutofillMetrics::LogScanCreditCardCompleted(
 }
 
 // static
-void AutofillMetrics::LogLocalCardMigrationDecisionMetric(
-    LocalCardMigrationDecisionMetric metric) {
-  UMA_HISTOGRAM_ENUMERATION("Autofill.LocalCardMigrationDecision", metric);
-}
-
-// static
-void AutofillMetrics::LogLocalCardMigrationBubbleOfferMetric(
-    LocalCardMigrationBubbleOfferMetric metric,
-    bool is_reshow) {
-  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_BUBBLE_OFFER_METRICS);
-  std::string histogram_name = "Autofill.LocalCardMigrationBubbleOffer.";
-  histogram_name += is_reshow ? "Reshows" : "FirstShow";
-  base::UmaHistogramEnumeration(histogram_name, metric,
-                                NUM_LOCAL_CARD_MIGRATION_BUBBLE_OFFER_METRICS);
-}
-
-// static
-void AutofillMetrics::LogLocalCardMigrationBubbleResultMetric(
-    LocalCardMigrationBubbleResultMetric metric,
-    bool is_reshow) {
-  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_BUBBLE_RESULT_METRICS);
-  std::string suffix = is_reshow ? ".Reshows" : ".FirstShow";
-  base::UmaHistogramEnumeration(
-      "Autofill.LocalCardMigrationBubbleResult" + suffix, metric,
-      NUM_LOCAL_CARD_MIGRATION_BUBBLE_RESULT_METRICS);
-}
-
-// static
-void AutofillMetrics::LogLocalCardMigrationDialogOfferMetric(
-    LocalCardMigrationDialogOfferMetric metric) {
-  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_DIALOG_OFFER_METRICS);
-  std::string histogram_name = "Autofill.LocalCardMigrationDialogOffer";
-  base::UmaHistogramEnumeration(histogram_name, metric,
-                                NUM_LOCAL_CARD_MIGRATION_DIALOG_OFFER_METRICS);
-}
-
-// static
-void AutofillMetrics::LogLocalCardMigrationDialogUserInteractionMetric(
-    const base::TimeDelta& duration,
-    LocalCardMigrationDialogUserInteractionMetric metric) {
-  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_DIALOG_USER_INTERACTION_METRICS);
-  base::UmaHistogramEnumeration(
-      "Autofill.LocalCardMigrationDialogUserInteraction", metric,
-      NUM_LOCAL_CARD_MIGRATION_DIALOG_USER_INTERACTION_METRICS);
-
-  // Do not log duration metrics for
-  // LOCAL_CARD_MIGRATION_DIALOG_DELETE_CARD_ICON_CLICKED, as it can happen
-  // multiple times in one dialog.
-  std::string suffix;
-  switch (metric) {
-    case LOCAL_CARD_MIGRATION_DIALOG_CLOSED_SAVE_BUTTON_CLICKED:
-      suffix = "Accepted";
+void AutofillMetrics::LogProgressDialogResultMetric(
+    bool is_canceled_by_user,
+    AutofillProgressDialogType autofill_progress_dialog_type) {
+  std::string dialog_type;
+  switch (autofill_progress_dialog_type) {
+    case AutofillProgressDialogType::kAndroidFIDOProgressDialog:
+      dialog_type = "AndroidFIDO";
       break;
-    case LOCAL_CARD_MIGRATION_DIALOG_CLOSED_CANCEL_BUTTON_CLICKED:
-      suffix = "Denied";
+    case AutofillProgressDialogType::kVirtualCardUnmaskProgressDialog:
+      dialog_type = "CardUnmask";
       break;
-    case LOCAL_CARD_MIGRATION_DIALOG_CLOSED_VIEW_CARDS_BUTTON_CLICKED:
-    case LOCAL_CARD_MIGRATION_DIALOG_CLOSED_DONE_BUTTON_CLICKED:
-      suffix = "Closed";
-      break;
-    default:
-      return;
-  }
-
-  base::UmaHistogramLongTimes(
-      "Autofill.LocalCardMigrationDialogActiveDuration." + suffix, duration);
-}
-
-// static
-void AutofillMetrics::LogLocalCardMigrationDialogUserSelectionPercentageMetric(
-    int selected,
-    int total) {
-  UMA_HISTOGRAM_PERCENTAGE(
-      "Autofill.LocalCardMigrationDialogUserSelectionPercentage",
-      100 * selected / total);
-}
-
-// static
-void AutofillMetrics::LogLocalCardMigrationPromptMetric(
-    LocalCardMigrationOrigin local_card_migration_origin,
-    LocalCardMigrationPromptMetric metric) {
-  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_PROMPT_METRICS);
-  std::string histogram_name = "Autofill.LocalCardMigrationOrigin.";
-  // Switch to different sub-histogram depending on local card migration origin.
-  switch (local_card_migration_origin) {
-    case LocalCardMigrationOrigin::UseOfLocalCard:
-      histogram_name += "UseOfLocalCard";
-      break;
-    case LocalCardMigrationOrigin::UseOfServerCard:
-      histogram_name += "UseOfServerCard";
-      break;
-    case LocalCardMigrationOrigin::SettingsPage:
-      histogram_name += "SettingsPage";
-      break;
-    default:
+    case AutofillProgressDialogType::kUnspecified:
       NOTREACHED();
       return;
   }
-  base::UmaHistogramEnumeration(histogram_name, metric,
-                                NUM_LOCAL_CARD_MIGRATION_PROMPT_METRICS);
-}
-
-// static
-void AutofillMetrics::LogOfferNotificationBubbleOfferMetric(
-    AutofillOfferData::OfferType offer_type,
-    bool is_reshow) {
-  std::string histogram_name = "Autofill.OfferNotificationBubbleOffer.";
-  // Switch to different sub-histogram depending on offer type being displayed.
-  switch (offer_type) {
-    case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
-      histogram_name += "CardLinkedOffer";
-      break;
-    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
-      histogram_name += "GPayPromoCodeOffer";
-      break;
-    case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
-      histogram_name += "FreeListingCouponOffer";
-      break;
-    case AutofillOfferData::OfferType::UNKNOWN:
-      NOTREACHED();
-      return;
-  }
-  base::UmaHistogramBoolean(histogram_name, is_reshow);
-}
-
-// static
-void AutofillMetrics::LogOfferNotificationBubbleResultMetric(
-    AutofillOfferData::OfferType offer_type,
-    OfferNotificationBubbleResultMetric metric,
-    bool is_reshow) {
-  DCHECK_LE(metric, OfferNotificationBubbleResultMetric::kMaxValue);
-  std::string histogram_name = "Autofill.OfferNotificationBubbleResult.";
-  // Switch to different sub-histogram depending on offer type being displayed.
-  switch (offer_type) {
-    case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
-      histogram_name += "CardLinkedOffer.";
-      break;
-    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
-      histogram_name += "GPayPromoCodeOffer.";
-      break;
-    case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
-      histogram_name += "FreeListingCouponOffer.";
-      break;
-    case AutofillOfferData::OfferType::UNKNOWN:
-      NOTREACHED();
-      return;
-  }
-  // Add subhistogram for |is_reshow| decision.
-  histogram_name += is_reshow ? "Reshows" : "FirstShow";
-  base::UmaHistogramEnumeration(histogram_name, metric);
-}
-
-// static
-void AutofillMetrics::LogOfferNotificationBubblePromoCodeButtonClicked(
-    AutofillOfferData::OfferType offer_type) {
-  std::string histogram_name =
-      "Autofill.OfferNotificationBubblePromoCodeButtonClicked.";
-  // Switch to different sub-histogram depending on offer type being displayed.
-  // Card-linked offers do not have a promo code button.
-  switch (offer_type) {
-    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
-      histogram_name += "GPayPromoCodeOffer";
-      break;
-    case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
-      histogram_name += "FreeListingCouponOffer";
-      break;
-    case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
-    case AutofillOfferData::OfferType::UNKNOWN:
-      NOTREACHED();
-      return;
-  }
-  base::UmaHistogramBoolean(histogram_name, true);
-}
-
-// static
-void AutofillMetrics::LogOfferNotificationBubbleSuppressed(
-    AutofillOfferData::OfferType offer_type) {
-  std::string histogram_name = "Autofill.OfferNotificationBubbleSuppressed.";
-  // Switch to different sub-histogram depending on offer type being suppressed.
-  // Card-linked offers will not be suppressed.
-  switch (offer_type) {
-    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
-      histogram_name += "GPayPromoCodeOffer";
-      break;
-    case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
-      histogram_name += "FreeListingCouponOffer";
-      break;
-    case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
-    case AutofillOfferData::OfferType::UNKNOWN:
-      NOTREACHED();
-      return;
-  }
-  base::UmaHistogramBoolean(histogram_name, true);
-}
-
-// static
-void AutofillMetrics::LogOfferNotificationInfoBarDeepLinkClicked() {
-  base::RecordAction(base::UserMetricsAction(
-      "Autofill_OfferNotificationInfoBar_DeepLinkClicked"));
-}
-
-// static
-void AutofillMetrics::LogOfferNotificationInfoBarResultMetric(
-    OfferNotificationInfoBarResultMetric metric) {
-  DCHECK_LE(metric, OfferNotificationInfoBarResultMetric::kMaxValue);
-  base::UmaHistogramEnumeration(
-      "Autofill.OfferNotificationInfoBarResult.CardLinkedOffer", metric);
-}
-
-void AutofillMetrics::LogOfferNotificationInfoBarShown() {
   base::UmaHistogramBoolean(
-      "Autofill.OfferNotificationInfoBarOffer.CardLinkedOffer", true);
+      "Autofill.ProgressDialog." + dialog_type + ".Result",
+      is_canceled_by_user);
 }
 
-void AutofillMetrics::LogProgressDialogResultMetric(bool is_canceled_by_user) {
-  base::UmaHistogramBoolean("Autofill.ProgressDialog.CardUnmask.Result",
-                            is_canceled_by_user);
-}
-
-void AutofillMetrics::LogProgressDialogShown() {
-  base::UmaHistogramBoolean("Autofill.ProgressDialog.CardUnmask.Shown", true);
+void AutofillMetrics::LogProgressDialogShown(
+    AutofillProgressDialogType autofill_progress_dialog_type) {
+  std::string dialog_type;
+  switch (autofill_progress_dialog_type) {
+    case AutofillProgressDialogType::kAndroidFIDOProgressDialog:
+      dialog_type = "AndroidFIDO";
+      break;
+    case AutofillProgressDialogType::kVirtualCardUnmaskProgressDialog:
+      dialog_type = "CardUnmask";
+      break;
+    case AutofillProgressDialogType::kUnspecified:
+      NOTREACHED();
+      return;
+  }
+  base::UmaHistogramBoolean("Autofill.ProgressDialog." + dialog_type + ".Shown",
+                            true);
 }
 
 // static
@@ -2236,11 +2018,6 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
 }
 
 // static
-void AutofillMetrics::LogSyncedOfferDataBeingValid(bool valid) {
-  base::UmaHistogramBoolean("Autofill.Offer.SyncedOfferDataBeingValid", valid);
-}
-
-// static
 void AutofillMetrics::LogNumberOfCreditCardsSuppressedForDisuse(
     size_t num_cards) {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.CreditCardsSuppressedForDisuse",
@@ -3102,6 +2879,33 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFormSubmitted(
   builder.Record(ukm_recorder_);
 }
 
+void AutofillMetrics::FormInteractionsUkmLogger::LogKeyMetrics(
+    const DenseSet<FormType>& form_types,
+    bool data_to_fill_available,
+    bool suggestions_shown,
+    bool edited_autofilled_field,
+    bool suggestion_filled,
+    autofill_assistant::AutofillAssistantIntent intent) {
+  if (!CanLog())
+    return;
+
+  ukm::builders::Autofill_KeyMetrics builder(source_id_);
+  builder.SetFillingReadiness(data_to_fill_available)
+      .SetFillingAssistance(suggestion_filled)
+      .SetFormTypes(FormTypesToBitVector(form_types));
+
+  if (intent != autofill_assistant::AutofillAssistantIntent::UNDEFINED_INTENT)
+    builder.SetAutofillAssistantIntent(static_cast<int64_t>(intent));
+
+  if (suggestions_shown)
+    builder.SetFillingAcceptance(suggestion_filled);
+
+  if (suggestion_filled)
+    builder.SetFillingCorrectness(!edited_autofilled_field);
+
+  builder.Record(ukm_recorder_);
+}
+
 void AutofillMetrics::FormInteractionsUkmLogger::LogFormEvent(
     FormEvent form_event,
     const DenseSet<FormType>& form_types,
@@ -3328,16 +3132,6 @@ void AutofillMetrics::LogProfileUpdateWithRemovedPhoneNumberImportDecision(
 void AutofillMetrics::LogProfileUpdateAffectedType(
     ServerFieldType affected_type,
     AutofillClient::SaveAddressProfileOfferUserDecision decision) {
-  // TODO(crbug.com/1253798): Remove the special-case metric in favor of more
-  // general one once the majority of clients contribute to the more general
-  // one.
-  if (decision ==
-      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted) {
-    base::UmaHistogramEnumeration(
-        "Autofill.ProfileImport.UpdateProfileAffectedType",
-        ConvertSettingsVisibleFieldTypeForMetrics(affected_type));
-  }
-
   // Record the decision-specific metric.
   base::UmaHistogramEnumeration(
       base::StrCat({"Autofill.ProfileImport.UpdateProfileAffectedType",
@@ -3372,25 +3166,16 @@ void AutofillMetrics::LogUpdateProfileNumberOfEditedFields(
 void AutofillMetrics::LogUpdateProfileNumberOfAffectedFields(
     int number_of_edited_fields,
     AutofillClient::SaveAddressProfileOfferUserDecision decision) {
-  // TODO(crbug.com/1253798): Remove the special-case metric in favor of more
-  // general one once the majority of clients contribute to the more general
-  // one.
-  if (decision ==
-      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted) {
-    base::UmaHistogramExactLinear(
-        "Autofill.ProfileImport.UpdateProfileNumberOfAffectedFields",
-        number_of_edited_fields, /*exclusive_max=*/15);
-  }
-
   // Record the decision-specific metric.
   base::UmaHistogramExactLinear(
-      base::StrCat({"Autofill.ProfileImport.UpdateProfileAffectedType",
-                    GetSaveAndUpdatePromptDecisionMetricsSuffix(decision)}),
+      base::StrCat(
+          {"Autofill.ProfileImport.UpdateProfileNumberOfAffectedFields",
+           GetSaveAndUpdatePromptDecisionMetricsSuffix(decision)}),
       number_of_edited_fields, /*exclusive_max=*/15);
 
   // But also collect an histogram for any decision.
   base::UmaHistogramExactLinear(
-      "Autofill.ProfileImport.UpdateProfileAffectedType.Any",
+      "Autofill.ProfileImport.UpdateProfileNumberOfAffectedFields.Any",
       number_of_edited_fields, /*exclusive_max=*/15);
 }
 
@@ -3416,6 +3201,19 @@ void AutofillMetrics::LogPhoneNumberImportParsingResult(
       "Autofill.ProfileImport.PhoneNumberParsingResult",
       static_cast<AutofillMetrics::PhoneNumberImportParsingResult>(
           (with_variation_country_code << 1) | with_app_locale));
+}
+
+// static
+void AutofillMetrics::LogPhoneNumberGrammarMatched(int grammar_id,
+                                                   bool suffix_matched,
+                                                   int num_grammars) {
+  DCHECK(0 <= grammar_id && grammar_id < num_grammars);
+  int metric = 2 * grammar_id + suffix_matched;
+  int max_metric = 2 * (num_grammars - 1) + 1;
+  // Add 1 everywhere, because UmaHistogramExactLinear is 1-based.
+  base::UmaHistogramExactLinear(
+      "Autofill.FieldPrediction.PhoneNumberGrammarUsage", metric + 1,
+      /*exclusive_max=*/max_metric + 2);
 }
 
 void AutofillMetrics::LogVerificationStatusOfNameTokensOnProfileUsage(
@@ -3556,8 +3354,46 @@ void AutofillMetrics::LogOtpInputDialogNewOtpRequested() {
 void AutofillMetrics::
     LogIsValueNotAutofilledOverExistingValueSameAsSubmittedValue(bool is_same) {
   base::UmaHistogramBoolean(
-      "Autofill.IsValueNotAutofilledOverExistingValueSameAsSubmittedValue",
+      "Autofill.IsValueNotAutofilledOverExistingValueSameAsSubmittedValue2",
       is_same);
+}
+
+// static
+void AutofillMetrics::LogAutocompletePredictionCollisionState(
+    PredictionState prediction_state,
+    AutocompleteState autocomplete_state) {
+  if (prediction_state == PredictionState::kNone &&
+      autocomplete_state == AutocompleteState::kNone) {
+    return;
+  }
+  // The buckets are calculated by using the least significant two bits to
+  // encode the `autocomplete_state`, and the next two bits to encode the
+  // `prediction_state`.
+  int bucket = (static_cast<int>(prediction_state) << 2) |
+               static_cast<int>(autocomplete_state);
+  // Without (kNone, kNone), 4*4 - 1 = 15 possible pairs remain. Log the bucket
+  // 0-based, in order to interpret the metric as an enum.
+  DCHECK(1 <= bucket && bucket <= 15);
+  UMA_HISTOGRAM_ENUMERATION("Autofill.Autocomplete.PredictionCollisionState",
+                            bucket - 1, 15);
+}
+
+// static
+void AutofillMetrics::LogAutocompletePredictionCollisionTypes(
+    ServerFieldType server_type,
+    ServerFieldType heuristic_type) {
+  const std::string kHistogramName =
+      "Autofill.Autocomplete.PredictionCollisionType.";
+  if (server_type != NO_SERVER_DATA) {
+    base::UmaHistogramEnumeration(kHistogramName + "Server", server_type,
+                                  ServerFieldType::MAX_VALID_FIELD_TYPE);
+  }
+  base::UmaHistogramEnumeration(kHistogramName + "Heuristics", heuristic_type,
+                                ServerFieldType::MAX_VALID_FIELD_TYPE);
+  base::UmaHistogramEnumeration(
+      kHistogramName + "ServerOrHeuristics",
+      server_type != NO_SERVER_DATA ? server_type : heuristic_type,
+      ServerFieldType::MAX_VALID_FIELD_TYPE);
 }
 
 const std::string PaymentsRpcResultToMetricsSuffix(

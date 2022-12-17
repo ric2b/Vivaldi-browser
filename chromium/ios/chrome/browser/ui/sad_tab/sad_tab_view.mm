@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/sad_tab/sad_tab_view.h"
 
 #import <MaterialComponents/MaterialButtons.h>
-#import <MaterialComponents/MaterialTypography.h>
 
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
@@ -13,12 +12,12 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/ui_metrics/sadtab_metrics_types.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+#import "ios/chrome/common/ui/util/text_view_util.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/navigation/navigation_manager.h"
 #import "net/base/mac/url_conversions.h"
@@ -309,22 +308,22 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
     [_titleLabel setLineBreakMode:NSLineBreakByWordWrapping];
     [_titleLabel setNumberOfLines:0];
     [_titleLabel setTextColor:[UIColor colorNamed:kTextPrimaryColor]];
-    [_titleLabel setFont:[[MDCTypography fontLoader]
-                             regularFontOfSize:kTitleLabelFontSize]];
+    [_titleLabel setFont:[UIFont systemFontOfSize:kTitleLabelFontSize
+                                           weight:UIFontWeightRegular]];
   }
   return _titleLabel;
 }
 
 - (UITextView*)footerLabel {
   if (!_footerLabel) {
-    _footerLabel = [[UITextView alloc] initWithFrame:CGRectZero];
+    _footerLabel = CreateUITextViewWithTextKit1();
     _footerLabel.backgroundColor = self.backgroundColor;
     _footerLabel.delegate = self;
 
     // Set base text styling for footer.
     NSDictionary<NSAttributedStringKey, id>* footerAttributes = @{
-      NSFontAttributeName :
-          [[MDCTypography fontLoader] regularFontOfSize:kFooterLabelFontSize],
+      NSFontAttributeName : [UIFont systemFontOfSize:kFooterLabelFontSize
+                                              weight:UIFontWeightRegular],
       NSForegroundColorAttributeName : [UIColor colorNamed:kTextSecondaryColor],
     };
     NSMutableAttributedString* footerText =
@@ -534,13 +533,13 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
 
 - (UITextView*)messageTextView {
   if (!_messageTextView) {
-    _messageTextView = [[UITextView alloc] initWithFrame:CGRectZero];
+    _messageTextView = CreateUITextViewWithTextKit1();
     [_messageTextView setBackgroundColor:self.backgroundColor];
     [_messageTextView setAttributedText:[self messageTextViewAttributedText]];
     _messageTextView.textContainer.lineFragmentPadding = 0.0f;
     [_messageTextView setTextColor:[UIColor colorNamed:kTextSecondaryColor]];
-    [_messageTextView setFont:[[MDCTypography fontLoader]
-                                  regularFontOfSize:kMessageTextViewFontSize]];
+    [_messageTextView setFont:[UIFont systemFontOfSize:kMessageTextViewFontSize
+                                                weight:UIFontWeightRegular]];
     [_messageTextView setUserInteractionEnabled:NO];
   }
   return _messageTextView;

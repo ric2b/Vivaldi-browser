@@ -147,9 +147,9 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
       const blink::WebVector<blink::WebString>& stopped_matching_selectors) {}
 
   // Called when the RenderFrame creates a FencedFrame and provides the
-  // RemoteFrameToken to identify the RenderFrameProxy to the inner
+  // RemoteFrameToken to identify the `blink::RemoteFrame` to the inner
   // RenderFrame. This is called immediately after the FencedFrame is created
-  // in the browser and the RenderFrameProxy initialized in this renderer.
+  // in the browser and the `blink::RemoteFrame` initialized in this renderer.
   virtual void DidCreateFencedFrame(
       const blink::RemoteFrameToken& placeholder_token) {}
 
@@ -216,6 +216,15 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // page load. This is used for UseCounter metrics.
   virtual void DidObserveNewFeatureUsage(
       const blink::UseCounterFeature& feature) {}
+
+  // A new soft navigation was observed.
+  // A soft navigation is:
+  // - A same-document navigation in the top-level document.
+  // - Triggered with a user gesture.
+  // - Initiated with the window.history or window.navigation APIs.
+  // - Accompanied with a DOM modification of the <main> element during the same
+  // or a descendant task.
+  virtual void DidObserveSoftNavigation(uint32_t count) {}
 
   // Reports that visible elements in the frame shifted (bit.ly/lsm-explainer).
   // This is called once for each animation frame containing any layout shift,

@@ -11,6 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/feed/core/common/pref_names.h"
 #include "components/feed/core/proto/v2/user_actions_store.pb.h"
@@ -18,6 +19,7 @@
 #include "components/feed/core/v2/prefs.h"
 #include "components/feed/core/v2/public/common_enums.h"
 #include "components/feed/core/v2/public/feed_api.h"
+#include "components/feed/feed_feature_list.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/variations/scoped_variations_ids_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -30,6 +32,7 @@ namespace {
 class UserActionsCollectorTest : public testing::Test {
  public:
   UserActionsCollectorTest() {
+    feature_list_.InitAndEnableFeature(kPersonalizeFeedUnsignedUsers);
     feed::RegisterProfilePrefs(profile_prefs_.registry());
     user_actions_collector_ =
         std::make_unique<UserActionsCollector>(&profile_prefs_);
@@ -55,6 +58,7 @@ class UserActionsCollectorTest : public testing::Test {
   }
 
  protected:
+  base::test::ScopedFeatureList feature_list_;
   variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
   TestingPrefServiceSimple profile_prefs_;
@@ -88,11 +92,11 @@ TEST_F(UserActionsCollectorTest, AddAndRetrieveOne64BitEntry) {
       "CountValuesDuringStoreInitialization",
       1, 1);
 
-  const base::Value& list_value =
+  const base::Value::List& list_value =
       user_actions_collector_->visit_metadata_string_list_pref_for_testing();
-  ASSERT_EQ(1u, list_value.GetList().size());
+  ASSERT_EQ(1u, list_value.size());
 
-  const auto& entry = list_value.GetList().front();
+  const auto& entry = list_value.front();
 
   std::string base64_decoded;
   ASSERT_TRUE(base::Base64Decode(entry.GetString(), &base64_decoded));
@@ -242,13 +246,13 @@ TEST_F(UserActionsCollectorTest, SortedList) {
       "CountValuesDuringStoreInitialization",
       GetFeedConfig().max_url_entries_in_cache, 1);
 
-  const base::Value& list_value =
+  const base::Value::List& list_value =
       user_actions_collector_->visit_metadata_string_list_pref_for_testing();
 
   // First |count_entries| entries (with mid from 0 to |count_entries|-1) should
   // be dropped.
   long expected_mid = count_entries;
-  for (const base::Value& entry : list_value.GetList()) {
+  for (const base::Value& entry : list_value) {
     std::string base64_decoded;
     ASSERT_TRUE(base::Base64Decode(entry.GetString(), &base64_decoded));
     feedunsignedpersonalizationstore::VisitMetadata entry_proto;
@@ -282,12 +286,12 @@ TEST_F(UserActionsCollectorTest, LimitCountOfMidsPerUrlEntry) {
       "CountValuesDuringStoreInitialization",
       1, 1);
 
-  const base::Value& list_value =
+  const base::Value::List& list_value =
       user_actions_collector_->visit_metadata_string_list_pref_for_testing();
 
-  ASSERT_EQ(1u, list_value.GetList().size());
+  ASSERT_EQ(1u, list_value.size());
 
-  const auto& entry = list_value.GetList().front();
+  const auto& entry = list_value.front();
 
   std::string base64_decoded;
   ASSERT_TRUE(base::Base64Decode(entry.GetString(), &base64_decoded));

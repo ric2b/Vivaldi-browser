@@ -27,8 +27,8 @@
 #include "media/filters/decoder_stream_traits.h"
 #include "media/filters/decrypting_demuxer_stream.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/pass_through_decoder.h"
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
+#include "platform_media/ipc_demuxer/renderer/pass_through_decoder.h"
 #endif
 
 namespace media {
@@ -296,7 +296,7 @@ void DecoderSelector<StreamType>::OverrideDecoderPriorityCBForTesting(
 
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::CreateDecoders() {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   if (config_.platform_media_pass_through_) {
     decoders_.clear();
     decoders_.push_back(CreatePlatformMediaPassThroughDecoder<StreamType>());

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tabs/tab_strip_scroll_container.h"
 
+#include "base/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "cc/paint/paint_shader.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -91,9 +92,12 @@ class TabStripContainerOverflowIndicator : public views::View {
   // views::View overrides:
   void OnPaint(gfx::Canvas* canvas) override {
     // TODO(tbergquist): Handle themes with titlebar background images.
-    SkColor frame_color = tab_strip_->controller()->GetFrameColor(
-        BrowserFrameActiveState::kUseCurrent);
-    SkColor shadow_color = GetColorProvider()->GetColor(ui::kColorShadowBase);
+    // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
+    SkColor4f frame_color =
+        SkColor4f::FromColor(tab_strip_->controller()->GetFrameColor(
+            BrowserFrameActiveState::kUseCurrent));
+    SkColor4f shadow_color = SkColor4f::FromColor(
+        GetColorProvider()->GetColor(ui::kColorShadowBase));
 
     // Mirror how the indicator is painted for the right vs left sides.
     SkPoint points[2];
@@ -105,7 +109,7 @@ class TabStripContainerOverflowIndicator : public views::View {
       points[1].iset(GetContentsBounds().origin().x(), GetContentsBounds().y());
     }
 
-    SkColor colors[5];
+    SkColor4f colors[5];
     SkScalar color_positions[5];
     // Paint an opaque region on the outside.
     colors[0] = frame_color;
@@ -116,7 +120,8 @@ class TabStripContainerOverflowIndicator : public views::View {
     // Paint a shadow-like gradient on the inside.
     colors[2] = shadow_color;
     colors[3] = shadow_color;
-    colors[4] = SkColorSetA(shadow_color, SK_AlphaTRANSPARENT);
+    colors[4] = shadow_color;
+    colors[4].fA = 0.0f;
     color_positions[2] = static_cast<float>(kOpaqueWidth) / kTotalWidth;
     color_positions[3] =
         static_cast<float>(kOpaqueWidth + kShadowSpread) / kTotalWidth;
@@ -181,6 +186,10 @@ TabStripScrollContainer::TabStripScrollContainer(
       views::FlexSpecification(base::BindRepeating(
           &TabScrollContainerFlexRule, base::Unretained(tab_strip_))));
 
+  on_contents_scrolled_subscription_ = scroll_view->AddContentsScrolledCallback(
+      base::BindRepeating(&TabStripScrollContainer::OnContentsScrolledCallback,
+                          base::Unretained(this)));
+
   std::unique_ptr<views::View> scroll_button_container =
       std::make_unique<views::View>();
   views::FlexLayout* scroll_button_layout =
@@ -221,24 +230,36 @@ void TabStripScrollContainer::OnViewPreferredSizeChanged(views::View* view) {
   PreferredSizeChanged();
 }
 
+void TabStripScrollContainer::OnContentsScrolledCallback() {
+  views::Widget* root_widget = tab_strip_->GetWidget();
+  std::set<views::Widget*> children_widgets;
+  views::Widget::GetAllOwnedWidgets(root_widget->GetNativeView(),
+                                    &children_widgets);
+
+  for (auto* child_widget : children_widgets) {
+    views::BubbleDialogDelegate* bdd =
+        child_widget->widget_delegate()->AsBubbleDialogDelegate();
+    if (bdd) {
+      views::View* anchor_view = bdd->GetAnchorView();
+      if (this->Contains(anchor_view)) {
+        child_widget->Hide();
+      }
+    }
+  }
+}
+
 int TabStripScrollContainer::GetTabStripAvailableWidth() const {
   return overflow_view_->GetAvailableSize(scroll_view_).width().value();
 }
 
 void TabStripScrollContainer::ScrollTowardsLeadingTab() {
   gfx::Rect visible_content = scroll_view_->GetVisibleRect();
-  gfx::Rect scroll(visible_content.x() - visible_content.width(),
-                   visible_content.y(), visible_content.width(),
-                   visible_content.height());
-  scroll_view_->contents()->ScrollRectToVisible(scroll);
+  tab_strip_->ScrollTowardsLeadingTabs(visible_content.width());
 }
 
 void TabStripScrollContainer::ScrollTowardsTrailingTab() {
   gfx::Rect visible_content = scroll_view_->GetVisibleRect();
-  gfx::Rect scroll(visible_content.x() + visible_content.width(),
-                   visible_content.y(), visible_content.width(),
-                   visible_content.height());
-  scroll_view_->contents()->ScrollRectToVisible(scroll);
+  tab_strip_->ScrollTowardsTrailingTabs(visible_content.width());
 }
 
 void TabStripScrollContainer::FrameColorsChanged() {
@@ -246,12 +267,12 @@ void TabStripScrollContainer::FrameColorsChanged() {
       tab_strip_->GetTabForegroundColor(TabActive::kInactive);
   /* Use placeholder color for disabled state because these buttons should
      never be disabled (they are hidden when the tab strip is not full) */
-  views::SetImageFromVectorIconWithColor(
-      leading_scroll_button_, kScrollingTabstripLeadingIcon, foreground_color,
-      gfx::kPlaceholderColor);
-  views::SetImageFromVectorIconWithColor(
-      trailing_scroll_button_, kScrollingTabstripTrailingIcon, foreground_color,
-      gfx::kPlaceholderColor);
+  views::SetImageFromVectorIconWithColor(leading_scroll_button_,
+                                         kLeadingScrollIcon, foreground_color,
+                                         gfx::kPlaceholderColor);
+  views::SetImageFromVectorIconWithColor(trailing_scroll_button_,
+                                         kTrailingScrollIcon, foreground_color,
+                                         gfx::kPlaceholderColor);
   left_overflow_indicator_->SchedulePaint();
   right_overflow_indicator_->SchedulePaint();
 }

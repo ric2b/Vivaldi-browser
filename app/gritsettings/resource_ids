@@ -33,8 +33,20 @@
   "app/resources/android-permissions/vivaldi_android_permissions_strings.grd": {
     "messages": [90000],
   },
+  "app/ios/vivaldi_ios_native_strings.grd": {
+    "messages": [40000],
+  },
+  "app/mobile_common/vivaldi_mobile_common_native_strings.grd": {
+    "messages": [41000],
+  },
   "app/resources/strings/vivaldi_strings.grd": {
     "messages": [90100],
+  },
+  "app/resources/ios_branding_strings/vivaldi_ios_branding_strings.grd": {
+    "messages": [500],
+  },
+  "app/resources/ios_strings/vivaldi_ios_strings.grd": {
+    "messages": [600],
   },
   "app/resources/generated/vivaldi_generated_resources.grd": {
     "messages": [90200],

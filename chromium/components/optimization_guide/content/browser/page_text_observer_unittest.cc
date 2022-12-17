@@ -18,11 +18,14 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/http/http_response_headers.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1088,7 +1091,10 @@ class PageTextObserverWithPrerenderTest : public PageTextObserverTest {
 };
 
 TEST_F(PageTextObserverWithPrerenderTest,
-       PrerenderingShouldNotResetOutstatndingRequest) {
+       PrerenderingShouldNotResetOutstandingRequest) {
+  content::test::ScopedPrerenderWebContentsDelegate web_contents_delegate(
+      *web_contents());
+
   TestConsumer consumer;
   observer()->AddConsumer(&consumer);
   EXPECT_FALSE(consumer.was_called());
@@ -1122,6 +1128,8 @@ TEST_F(PageTextObserverWithPrerenderTest,
 }
 
 TEST_F(PageTextObserverWithPrerenderTest, AMPRequestedOnOOPIFInPrerendering) {
+  content::test::ScopedPrerenderWebContentsDelegate web_contents_delegate(
+      *web_contents());
   TestConsumer consumer;
   observer()->AddConsumer(&consumer);
 

@@ -167,25 +167,39 @@ const char kGoogleSlidesAppId[] = "aapocclcgogkmnckokdopfmhonfmgoek";
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // TODO(michaelpg): Deprecate old app IDs before adding new ones to avoid bloat.
 const char kHighlightsAppId[] = "lpmakjfjcconjeehbidjclhdlpjmfjjj";
-const char kHighlightsAtlasAppId[] = "gjeelkjnolfmhphfhhjokaijbicopfln";
 const char kScreensaverAppId[] = "mnoijifedipmbjaoekhadjcijipaijjc";
-const char kScreensaverAtlasAppId[] = "bnabjkecnachpogjlfilfcnlpcmacglh";
-const char kScreensaverKraneZdksAppId[] = "fafhbhdboeiciklpkminlncemohljlkj";
 const char kSigninProfileTestExtensionId[] = "mecfefiddjlmabpeilblgegnbioikfmp";
 const char kGuestModeTestExtensionId[] = "behllobkkfkfnphdnhnkndlbkcpglgmj";
+
+const char kStagingAttractLoopAppId[] = "aefaeciooibphdopnjjmgjdlckdcfbae";
+const char kStagingHighlightsAppId[] = "glochkamldfopmdlegmcnjmgkopfiplb";
+// 2022 Attract Loop App ID
+const char kNewAttractLoopAppId[] = "igilkdghcdehjdcpndaodgnjgdggiemm";
+// 2022 Highlights App ID
+const char kNewHighlightsAppId[] = "enchmnkoajljphdmahljlebfmpkkbnkj";
 
 bool IsSystemUIApp(base::StringPiece extension_id) {
   static const char* const kApps[] = {
       // clang-format off
       kChromeVoxExtensionId,
       kFilesManagerAppId,
-      kHighlightsAtlasAppId,
       kHighlightsAppId,
-      kScreensaverAtlasAppId,
       kScreensaverAppId,
       // clang-format on
   };
   for (const char* id : kApps) {
+    if (extension_id == id)
+      return true;
+  }
+  return false;
+}
+
+bool IsDemoModeChromeApp(base::StringPiece extension_id) {
+  static const char* const kDemoModeApps[] = {
+      kHighlightsAppId,        kScreensaverAppId,    kStagingAttractLoopAppId,
+      kStagingHighlightsAppId, kNewAttractLoopAppId, kNewHighlightsAppId,
+  };
+  for (const char* id : kDemoModeApps) {
     if (extension_id == id)
       return true;
   }

@@ -34,6 +34,7 @@ IpczResult IPCZ_API NotifyTransport(IpczHandle transport,
   if (flags & IPCZ_TRANSPORT_ACTIVITY_DEACTIVATED) {
     const Ref<DriverTransport> doomed_transport =
         DriverTransport::TakeFromHandle(transport);
+    doomed_transport->NotifyDeactivated();
     return IPCZ_RESULT_OK;
   }
 
@@ -56,6 +57,31 @@ DriverTransport::DriverTransport(DriverObject transport)
     : transport_(std::move(transport)) {}
 
 DriverTransport::~DriverTransport() = default;
+
+// static
+DriverTransport::Pair DriverTransport::CreatePair(
+    const IpczDriver& driver,
+    const DriverTransport* transport0,
+    const DriverTransport* transport1) {
+  IpczDriverHandle new_transport0;
+  IpczDriverHandle new_transport1;
+  IpczDriverHandle target_transport0 = IPCZ_INVALID_DRIVER_HANDLE;
+  IpczDriverHandle target_transport1 = IPCZ_INVALID_DRIVER_HANDLE;
+  if (transport0) {
+    ABSL_ASSERT(transport1);
+    target_transport0 = transport0->driver_object().handle();
+    target_transport1 = transport1->driver_object().handle();
+  }
+  IpczResult result = driver.CreateTransports(
+      target_transport0, target_transport1, IPCZ_NO_FLAGS, nullptr,
+      &new_transport0, &new_transport1);
+  ABSL_ASSERT(result == IPCZ_RESULT_OK);
+  auto first =
+      MakeRefCounted<DriverTransport>(DriverObject(driver, new_transport0));
+  auto second =
+      MakeRefCounted<DriverTransport>(DriverObject(driver, new_transport1));
+  return {std::move(first), std::move(second)};
+}
 
 IpczDriverHandle DriverTransport::Release() {
   return transport_.release();
@@ -88,12 +114,26 @@ IpczResult DriverTransport::Transmit(Message& message) {
 
 bool DriverTransport::Notify(const RawMessage& message) {
   ABSL_ASSERT(listener_);
-  return listener_->OnTransportMessage(message, *this);
+  // Listener methods may set a new Listener on this DriverTransport, and that
+  // may drop their own last reference. Keep a reference here to ensure this
+  // Listener remains alive through the extent of its notification.
+  Ref<Listener> listener = listener_;
+  return listener->OnTransportMessage(message, *this);
 }
 
 void DriverTransport::NotifyError() {
   ABSL_ASSERT(listener_);
-  listener_->OnTransportError();
+  // Listener methods may set a new Listener on this DriverTransport, and that
+  // may drop their own last reference. Keep a reference here to ensure this
+  // Listener remains alive through the extent of its notification.
+  Ref<Listener> listener = listener_;
+  return listener->OnTransportError();
+}
+
+void DriverTransport::NotifyDeactivated() {
+  ABSL_ASSERT(listener_);
+  Ref<Listener> listener = std::move(listener_);
+  listener->OnTransportDeactivated();
 }
 
 IpczResult DriverTransport::Close() {

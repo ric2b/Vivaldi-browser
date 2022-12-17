@@ -38,6 +38,7 @@ The current status of existing standards and Abseil features is:
     features below
     *   absl::StatusOr: Initially supported September 3, 2020
     *   absl::Cleanup: Initially supported February 4, 2021
+    *   absl::AnyInvocable: Initially supported June 20, 2022
 
 [TOC]
 
@@ -421,6 +422,26 @@ for functions, but now including class constructors.
 *** promo
 Usage is governed by the
 [Google Style Guide](https://google.github.io/styleguide/cppguide.html#CTAD).
+***
+
+### Fold expressions <sup>[allowed]</sup>
+
+```c++
+template <typename... Args>
+auto sum(Args... args) {
+  return (... + args);
+}
+```
+
+**Description:** A fold expression performs a fold of a template parameter pack
+over a binary operator.
+
+**Documentation:**
+[Fold expression](https://en.cppreference.com/w/cpp/language/fold)
+
+**Notes:**
+*** promo
+[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/4DTm3idXz0w/m/g_JjOh0wAgAJ)
 ***
 
 ### Selection statements with initializer <sup>[allowed]</sup>
@@ -966,26 +987,6 @@ deduced from the types of its arguments.
 
 **Documentation:**
 [Template parameters](https://en.cppreference.com/w/cpp/language/template_parameters)
-
-**Notes:**
-*** promo
-None
-***
-
-### Fold expressions <sup>[tbd]</sup>
-
-```c++
-template <typename... Args>
-auto sum(Args... args) {
-  return (... + args);
-}
-```
-
-**Description:** A fold expression performs a fold of a template parameter pack
-over a binary operator.
-
-**Documentation:**
-[Fold expression](https://en.cppreference.com/w/cpp/language/fold)
 
 **Notes:**
 *** promo
@@ -1622,6 +1623,24 @@ None
 
 The following Abseil library features are allowed in the Chromium codebase.
 
+### Attribute macros <sup>[allowed]</sup>
+
+```c++
+const char* name() ABSL_ATTRIBUTE_RETURNS_NONNULL { return "hello world"; }
+```
+
+**Description:** Macros that conditionally resolve to attributes. Prefer to use
+standard C++ attributes, such as `[[fallthrough]]`. Use these macros for
+non-standard attributes, which may not be present in all compilers.
+
+**Documentation:**
+[attributes.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/base/attributes.h)
+
+**Notes:**
+*** promo
+[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/vQmaBfbyBGM/m/HHOYUZ5YAwAJ)
+***
+
 ### 128bit integer <sup>[allowed]</sup>
 
 ```c++
@@ -1790,11 +1809,67 @@ Banned due to only working with 8-bit characters. Keep using
 `base::StringPiece` from `base/strings/`.
 ***
 
+### FunctionRef <sup>[banned]</sup>
+
+```c++
+absl::FunctionRef
+```
+
+**Description:** Type for holding a non-owning reference to an object of any
+invocable type.
+
+**Documentation:**
+[function_ref.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/functional/function_ref.h)
+
+**Notes:**
+*** promo
+- `absl::FunctionRef` is banned due to allowing implicit conversions between
+  function signatures in potentially surprising ways. For example, a callable
+  with the signature `int()` will bind to `absl::FunctionRef<void()>`: the
+  return value from the callable will be silently discarded.
+- In Chromium, use `base::FunctionRef` instead.
+- Unlike `base::OnceCallback` and `base::RepeatingCallback`, `base::FunctionRef`
+  supports capturing lambdas.
+- Useful when passing an invocable object to a function that synchronously calls
+  the invocable object, e.g. `ForEachFrame(base::FunctionRef<void(Frame&)>)`.
+  This can often result in clearer code than code that is templated to accept
+  lambdas, e.g. with `template <typename Invocable> void
+  ForEachFrame(Invocable invocable)`, it is much less obvious what arguments
+  will be passed to `invocable`.
+- For now, `base::OnceCallback` and `base::RepeatingCallback` intentionally
+  disallow conversions to `base::FunctionRef`, under the theory that the
+  callback should be a capturing lambda instead. Attempting to use this
+  conversion will trigger a `static_assert` requesting additional feedback for
+  use cases where this conversion would be valuable.
+- *Important:* `base::FunctionRef` must not outlive the function call. Like
+  `base::StringPiece`, `base::FunctionRef` is a *non-owning* reference. Using a
+  `base::FunctionRef` as a return value or class field is dangerous and likely
+  to result in lifetime bugs.
+- [Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/JVN4E4IIYA0/m/V0EVUVLiBwAJ)
+***
+
 ## Abseil TBD Features {#absl-review}
 
 The following Abseil library features are not allowed in the Chromium codebase.
 See the top of this page on how to propose moving a feature from this list into
 the allowed or banned sections.
+
+### AnyInvocable <sup>[tbd]</sup>
+
+```c++
+absl::AnyInvocable
+```
+
+**Description:** An equivalent of the C++23 std::move_only_function.
+
+**Documentation:**
+*   [any_invocable.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/functional/any_invocable.h)
+*   [std::move_only_function](https://en.cppreference.com/w/cpp/utility/functional/move_only_function/move_only_function)
+
+**Notes:**
+*** promo
+Overlaps with `base::RepeatingCallback`, `base::OnceCallback`.
+***
 
 ### bind_front <sup>[tbd]</sup>
 
@@ -1873,23 +1948,6 @@ standard library.
 **Notes:**
 *** promo
 Overlaps with `base/ranges/algorithm.h`.
-***
-
-### FunctionRef <sup>[tbd]</sup>
-
-```c++
-absl::FunctionRef
-```
-
-**Description:** Type for holding a non-owning reference to an object of any
-invocable type.
-
-**Documentation:**
-[function_ref.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/functional/function_ref.h)
-
-**Notes:**
-*** promo
-None
 ***
 
 ### Random <sup>[tbd]</sup>

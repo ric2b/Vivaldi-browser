@@ -1,11 +1,5 @@
 # Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
-from __future__ import print_function
-from future import standard_library
-standard_library.install_aliases()
-from builtins import str
-from builtins import range
-
 import os
 import re
 
@@ -59,6 +53,7 @@ REPLACE_GOOGLE_EXCEPTIONS =[
   "IDS_SETTINGS_SIGNIN_ALLOWED_DESC",
   "IDS_CONTEXTUAL_SEARCH_PROMO_TITLE",
   "IDS_CONTEXTUAL_SEARCH_SEE_BETTER_RESULTS_TITLE",
+  "IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_EXPLANATION1_PHASE2",
 ]
 
 def ReplaceMatches(resources, matcher, replace_with, exceptions=[]):

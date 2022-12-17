@@ -46,9 +46,14 @@ const base::Feature kReportKeepaliveUkm{"ReportKeepaliveUkm",
 const base::Feature kAllowSharedArrayBuffersUnconditionally{
     "AllowSharedArrayBuffersUnconditionally", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables the CryptoToken component extension, which implements the deprecated
-// U2F Security Key API. Once this flag is default disabled sites can continue
-// to use CryptoToken via a Deprecation Trail with the same name.
+// Loads the CryptoToken component extension, which implements the deprecated
+// U2F Security Key API.
+// TODO(1224886): Delete together with CryptoToken code.
+const base::Feature kLoadCryptoTokenExtension{
+    "LoadCryptoTokenExtension", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the CryptoToken component extension to receive messages. This flag
+// has no effect unless `kLoadCryptoTokenExtension` is also enabled.
 // TODO(1224886): Delete together with CryptoToken code.
 const base::Feature kU2FSecurityKeyAPI{"U2FSecurityKeyAPI",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -100,9 +105,22 @@ const base::Feature kExtensionsMenuAccessControl{
 // creating the script context too early which can be bad for performance.
 const base::Feature kAvoidEarlyExtensionScriptContextCreation{
     "AvoidEarlyExtensionScriptContextCreation",
-    // Disabled in Vivaldi because of VB-90136. extension.getViews fails after
-    // webcontents.OnDidFinishNavigation. We need to signal when
-    // Dispatcher::DidCreateScriptContext is called.
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// The feature enabling offscreen documents in Manifest V3 extensions.
+const base::Feature kExtensionsOffscreenDocuments{
+    "ExtensionsOffscreenDocuments", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, allows APIs used by the webstore to be exposed on the URL for the
+// new webstore.
+// TODO(crbug.com/1338235): Before this starts to be rolled out to end users, we
+// need to ensure the new domain has all the special handling we do for the
+// current webstore enabled on it.
+const base::Feature kNewWebstoreDomain{"NewWebstoreDomain",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Side panel API availability.
+const base::Feature kExtensionSidePanelIntegration{
+    "ExtensionSidePanelIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace extensions_features

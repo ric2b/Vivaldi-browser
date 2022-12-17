@@ -20,7 +20,7 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Bildeigenschaften...</translation>
 <translation id="1920297417712412573">Als Notiz kopieren</translation>
-<translation id="1921101374471252440">Bild &amp;neu laden</translation>
+<translation id="1921101374471252440">&amp;Bild neu laden</translation>
 <translation id="1924750141060565109">Landschaft 15</translation>
 <translation id="19598411548897379">Allgemein</translation>
 <translation id="1985669426322966465">Software-Aktualisierung</translation>
@@ -63,7 +63,7 @@
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3680031241659195730">Eine neue Version von Vivaldi ist verfügbar!</translation>
 <translation id="3708982624815781692">Der Download wurde abgebrochen.</translation>
-<translation id="3732157130969736834">Link zu Lesezeichen hinzufügen</translation>
+<translation id="3732157130969736834">Link zu Lesezeichen</translation>
 <translation id="3732388226447288666">Tier 2</translation>
 <translation id="3732439195215136813">Tier 5</translation>
 <translation id="3795800845758778870">Leider stehen die Brave-Einstellungen nicht zur Verfügung, solange der Browser läuft. Um die Einstellungen in Vivaldi zu importieren, speichern Sie Ihre Arbeit und schließen Sie alle Brave-Fenster. Klicken Sie dann auf Weiter.</translation>
@@ -74,7 +74,7 @@
 <translation id="3943857333388298514">Einfügen</translation>
 <translation id="4005270918754737597">Diese Version überspringen</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">Nicht mehr an&amp;zeigen</translation>
+<translation id="4073157431025461511">Nicht mehr anzeigen</translation>
 <translation id="4074744496918018786">Bild in privatem Fenster öffnen</translation>
 <translation id="4324492550286218827">Landschaft 2</translation>
 <translation id="4406101500523955324">In neuem Privaten Fenster öffnen</translation>
@@ -118,7 +118,7 @@
 <translation id="6339818817272922368">Lokales Konto</translation>
 <translation id="6438786710866753178">Landschaft 4</translation>
 <translation id="6477028720702061455">Opera-Profilordner für den Import auswählen</translation>
-<translation id="6510706699590490869">Vivaldi &amp;aktualisieren</translation>
+<translation id="6510706699590490869">&amp;Vivaldi aktualisieren</translation>
 <translation id="6538338088414940408">Link in Hintergrund-Tab öffnen</translation>
 <translation id="6551219277044048123">Suche erstellen...</translation>
 <translation id="6630781781151951863">Landschaft 18</translation>
@@ -133,7 +133,7 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Das Update-Installationsprogramm konnte nicht gestartet werden. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="7658239707568436148">Abbrechen</translation>
-<translation id="7715497554424665066">Update &amp;ignorieren</translation>
+<translation id="7715497554424665066">&amp;Update ignorieren</translation>
 <translation id="7724603315864178912">Ausschneiden</translation>
 <translation id="7727481996062361502">Verifizierte Aktualisierung…</translation>
 <translation id="7793738202466490491">Als Kalender Ereignis hinzufügen</translation>
@@ -142,7 +142,7 @@
 <translation id="7957213167373139414">Mein Kalender</translation>
 <translation id="8027581147000338959">In neuem Fenster öffnen</translation>
 <translation id="8099620695029051217">Seitenadresse kopieren</translation>
-<translation id="8197810018650377191">Seite zu Lesezeichen hinzufügen</translation>
+<translation id="8197810018650377191">Lesezeichen Seite</translation>
 <translation id="8261506727792406068">Löschen</translation>
 <translation id="8263047843452521549">Den Service-Worker im Hintergrund inspizieren</translation>
 <translation id="8331671104904436324">In Hintergrund-Tab öffnen</translation>
@@ -154,7 +154,7 @@
 <translation id="8539196077526389150">Landschaft 13</translation>
 <translation id="8562339533180097902">Vivaldi jetzt schließen und installieren</translation>
 <translation id="8567452685425968223">Entpacke Aktualisierung…</translation>
-<translation id="8624587806981488221">Bild &amp;neu laden</translation>
+<translation id="8624587806981488221">&amp;Bild neu laden</translation>
 <translation id="864444594187862076">Opera Version 15+ (Developer)</translation>
 <translation id="8651348004684669199">Aktiven Tab hinzufügen</translation>
 <translation id="8669345741879513971">Monster 10</translation>

@@ -9,13 +9,15 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/wall_clock_timer.h"
 #include "base/version.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/upgrade_detector/build_state_observer.h"
-#include "chromeos/dbus/update_engine/update_engine_client.h"
-#include "chromeos/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 
 class PrefRegistrySimple;
 
@@ -38,10 +40,9 @@ namespace policy {
 // also calls UpdateRequiredNotification to show in-session notifications if an
 // update is required but it cannot be downloaded due to network limitations or
 // Auto Update Expiration.
-class MinimumVersionPolicyHandler
-    : public BuildStateObserver,
-      public chromeos::NetworkStateHandlerObserver,
-      public chromeos::UpdateEngineClient::Observer {
+class MinimumVersionPolicyHandler : public BuildStateObserver,
+                                    public ash::NetworkStateHandlerObserver,
+                                    public ash::UpdateEngineClient::Observer {
  public:
   static const char kRequirements[];
   static const char kChromeOsVersion[];
@@ -144,7 +145,8 @@ class MinimumVersionPolicyHandler
   void OnUpdate(const BuildState* build_state) override;
 
   // NetworkStateHandlerObserver:
-  void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+  void DefaultNetworkChanged(const ash::NetworkState* network) override;
+  void OnShuttingDown() override;
 
   // UpdateEngineClient::Observer:
   void UpdateStatusChanged(const update_engine::StatusResult& status) override;
@@ -216,7 +218,7 @@ class MinimumVersionPolicyHandler
   void FetchEolInfo();
 
   // Callback after fetching end-of-life info from the update_engine_client.
-  void OnFetchEolInfo(chromeos::UpdateEngineClient::EolInfo info);
+  void OnFetchEolInfo(ash::UpdateEngineClient::EolInfo info);
 
   // Called when the warning time to apply updates has expired. If the user on
   // the login screen, the update required screen is shown else the current user
@@ -247,8 +249,7 @@ class MinimumVersionPolicyHandler
   void UpdateOverMeteredPermssionGranted();
 
   // Tells whether starting an update check succeeded or not.
-  void OnUpdateCheckStarted(
-      chromeos::UpdateEngineClient::UpdateCheckResult result);
+  void OnUpdateCheckStarted(ash::UpdateEngineClient::UpdateCheckResult result);
 
   // Callback from UpdateEngineClient::SetUpdateOverCellularOneTimePermission().
   void OnSetUpdateOverCellularOneTimePermission(bool success);
@@ -311,6 +312,10 @@ class MinimumVersionPolicyHandler
   // Handles showing in-session update required notifications on the basis of
   // current network and time to reach the deadline.
   std::unique_ptr<ash::UpdateRequiredNotification> notification_handler_;
+
+  base::ScopedObservation<ash::NetworkStateHandler,
+                          ash::NetworkStateHandlerObserver>
+      network_state_handler_observer_{this};
 
   // List of registered observers.
   base::ObserverList<Observer>::Unchecked observers_;

@@ -14,7 +14,7 @@ namespace user_notes {
 
 UserNoteManager::UserNoteManager(content::Page& page,
                                  base::SafeRef<UserNoteService> service)
-    : PageUserData<UserNoteManager>(page), service_(service) {
+    : PageUserData<UserNoteManager>(page), service_(std::move(service)) {
   // TODO(crbug.com/1313967): If / when user notes are supported in subframes,
   // caching the agent container of the primary main frame will not work. In
   // that case, the frame's container will probably need to be fetched on each
@@ -62,13 +62,17 @@ void UserNoteManager::RemoveNote(const base::UnguessableToken& id) {
   instance_map_.erase(entry_it);
 }
 
+void UserNoteManager::OnWebHighlightFocused(const base::UnguessableToken& id) {
+  service_->OnWebHighlightFocused(id, &page().GetMainDocument());
+}
+
 void UserNoteManager::AddNoteInstance(std::unique_ptr<UserNoteInstance> note) {
   AddNoteInstance(std::move(note), base::DoNothing());
 }
 
 void UserNoteManager::AddNoteInstance(
     std::unique_ptr<UserNoteInstance> note_instance,
-    base::OnceClosure initialize_callback) {
+    UserNoteInstance::AttachmentFinishedCallback initialize_callback) {
   // TODO(crbug.com/1313967): This DCHECK is only applicable if notes are only
   // supported in the top-level frame. If notes are ever supported in subframes,
   // it is possible for the same note ID to be added to the same page more than
@@ -84,6 +88,11 @@ void UserNoteManager::AddNoteInstance(
   instance_map_.emplace(note_instance->model().id(), std::move(note_instance));
   note_instance_raw->InitializeHighlightIfNeeded(
       std::move(initialize_callback));
+}
+
+void UserNoteManager::OnAddNoteRequested(content::RenderFrameHost* frame,
+                                         bool has_selected_text) {
+  service_->OnAddNoteRequested(frame, has_selected_text);
 }
 
 PAGE_USER_DATA_KEY_IMPL(UserNoteManager);

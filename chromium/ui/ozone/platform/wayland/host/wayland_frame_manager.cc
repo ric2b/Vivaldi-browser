@@ -10,6 +10,7 @@
 #include "base/containers/adapters.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/ozone/platform/wayland/host/wayland_buffer_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_handle.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
@@ -79,25 +80,24 @@ WaylandFrameManager::~WaylandFrameManager() {
 void WaylandFrameManager::RecordFrame(std::unique_ptr<WaylandFrame> frame) {
   DCHECK_LE(pending_frames_.size(), 6u);
 
-  // Request for buffer handle creation at record time.
-  for (auto& subsurface_to_overlay : frame->subsurfaces_to_overlays) {
-    if (subsurface_to_overlay.second.buffer_id) {
-      auto* handle = connection_->buffer_manager_host()->EnsureBufferHandle(
-          subsurface_to_overlay.first->wayland_surface(),
-          subsurface_to_overlay.second.buffer_id);
-      if (!handle)
-        return;
-    }
-  }
-  if (frame->root_config.buffer_id) {
-    auto* handle = connection_->buffer_manager_host()->EnsureBufferHandle(
-        frame->root_surface, frame->root_config.buffer_id);
-    if (!handle)
-      return;
+  bool buffer_pending_creation = false;
+  // The |frame| may have buffers to be sent for submission, which might not
+  // have been created yet. This must be done now if they cannot be created
+  // immediately. Thus, dispatch this request so that buffers are created by the
+  // time this frame is played back if |pending_frames_| is not empty.
+  // Otherwise, there is no point to ensure wl_buffers exist as
+  // MaybeProcessPendingFrame will do that as well.
+  if (!connection_->wayland_buffer_factory()->CanCreateDmabufImmed() &&
+      !pending_frames_.empty()) {
+    buffer_pending_creation =
+        EnsureWlBuffersExist(*frame) && !frame->buffer_lost;
   }
 
   pending_frames_.push_back(std::move(frame));
-  MaybeProcessPendingFrame();
+  // There are wl_buffers missing, need to wait. MaybeProcessPendingFrame will
+  // be called as soon as buffers are created.
+  if (!buffer_pending_creation)
+    MaybeProcessPendingFrame();
 }
 
 void WaylandFrameManager::MaybeProcessPendingFrame() {
@@ -109,53 +109,54 @@ void WaylandFrameManager::MaybeProcessPendingFrame() {
   if (!frame)
     return;
 
-  // Ensure wl_buffer existence.
-  WaylandBufferHandle* handle_pending_creation = nullptr;
-  for (auto& subsurface_to_overlay : frame->subsurfaces_to_overlays) {
-    if (subsurface_to_overlay.second.buffer_id) {
-      auto* handle = connection_->buffer_manager_host()->EnsureBufferHandle(
-          subsurface_to_overlay.first->wayland_surface(),
-          subsurface_to_overlay.second.buffer_id);
-      // Buffer is gone while this frame is pending, remove this config.
-      if (!handle) {
-        frame->buffer_lost = true;
-        subsurface_to_overlay.second = wl::WaylandOverlayConfig();
-      } else if (!handle->wl_buffer() && !handle_pending_creation) {
-        // Found the first not-ready buffer, let handle invoke
-        // MaybeProcessPendingFrame() when wl_buffer is created.
-        handle_pending_creation = handle;
-      }
-    }
-  }
-  if (frame->root_config.buffer_id) {
-    auto* handle = connection_->buffer_manager_host()->EnsureBufferHandle(
-        frame->root_surface, frame->root_config.buffer_id);
-    if (!handle) {
-      frame->buffer_lost = true;
-      frame->root_config = wl::WaylandOverlayConfig();
-    } else if (!handle->wl_buffer() && !handle_pending_creation) {
-      handle_pending_creation = handle;
-    }
-  }
-
-  // There are wl_buffers missing, need to wait.
-  if (handle_pending_creation) {
-    handle_pending_creation->set_buffer_created_callback(
-        base::BindOnce(&WaylandFrameManager::MaybeProcessPendingFrame,
-                       weak_factory_.GetWeakPtr()));
-    return;
-  }
   // Frame callback hasn't been acked, need to wait.
   if (!submitted_frames_.empty() &&
       submitted_frames_.back()->wl_frame_callback) {
     return;
   }
-  // Window is not configured, need to wait.
-  if (!window_->can_submit_frames())
+
+  // Window is still neither configured nor has pending configure bounds, need
+  // to wait. Probably happens only in early stages of window initialization.
+  if (!window_->received_configure_event())
     return;
 
-  std::unique_ptr<WaylandFrame> playback = std::move(pending_frames_.front());
-  PlayBackFrame(std::move(playback));
+  // Ensure wl_buffer existence. This is called for the first time in the
+  // following cases:
+  // 1) if it is possible to create buffers immediately to ensure
+  // WaylandBufferHandles are not lost and to create wl_buffers if they have not
+  // existed yet (a new buffer is submitted).
+  // 2) or |pending_frames| was empty when RecordFrame for this |frame| was
+  // called regardless whether it is possible to create wl_buffers immediately
+  // or not.
+  const bool has_buffer_pending_creation = EnsureWlBuffersExist(*frame);
+  // There are wl_buffers missing, need to wait.
+  if (has_buffer_pending_creation && !frame->buffer_lost) {
+    DLOG_IF(FATAL,
+            has_buffer_pending_creation &&
+                connection_->wayland_buffer_factory()->CanCreateDmabufImmed())
+        << "Buffers should have been created immediately.";
+    return;
+  }
+
+  // If processing a valid frame, update window's visual size, which may result
+  // in surface configuration being done, i.e: xdg_surface set_window_geometry +
+  // ack_configure requests being issued.
+  const wl::WaylandOverlayConfig& config = frame->root_config;
+  if (!frame->buffer_lost && !!config.buffer_id) {
+    window_->UpdateVisualSize(gfx::ToRoundedSize(config.bounds_rect.size()));
+  }
+
+  // Skip this frame if:
+  // 1. It can't be submitted due to lost buffers.
+  // 2. Even after updating visual size above, |window_| is still not fully
+  //    configured, which might mean that the current frame sent by the gpu
+  //    is still out-of-sync with the pending configure sequences received from
+  //    the Wayland compositor. This avoids protocol errors as observed in
+  //    https://crbug.com/1313023.
+  if (frame->buffer_lost || !window_->IsSurfaceConfigured())
+    DiscardFrame(std::move(pending_frames_.front()));
+  else
+    PlayBackFrame(std::move(pending_frames_.front()));
 
   pending_frames_.pop_front();
 
@@ -169,24 +170,12 @@ void WaylandFrameManager::MaybeProcessPendingFrame() {
 }
 
 void WaylandFrameManager::PlayBackFrame(std::unique_ptr<WaylandFrame> frame) {
-  // Skip this frame if we can't playback this frame due to lost buffers.
-  if (frame->buffer_lost) {
-    frame->feedback = gfx::PresentationFeedback::Failure();
-    submitted_frames_.push_back(std::move(frame));
-    VerifyNumberOfSubmittedFrames();
-    MaybeProcessSubmittedFrames();
-    return;
-  }
+  DCHECK(!frame->buffer_lost);
+  DCHECK(window_->IsSurfaceConfigured());
 
-  auto* root_surface = frame->root_surface;
+  auto* root_surface = frame->root_surface.get();
   auto& root_config = frame->root_config;
   bool empty_frame = !root_config.buffer_id;
-
-  if (!empty_frame) {
-    window_->UpdateVisualSize(
-        gfx::ToRoundedSize(root_config.bounds_rect.size()),
-        root_config.surface_scale_factor);
-  }
 
   // Configure subsurfaces. Traverse the deque backwards s.t. we can set
   // frame_callback and presentation_feedback on the top-most possible surface.
@@ -243,6 +232,13 @@ void WaylandFrameManager::PlayBackFrame(std::unique_ptr<WaylandFrame> frame) {
 
   VerifyNumberOfSubmittedFrames();
 
+  MaybeProcessSubmittedFrames();
+}
+
+void WaylandFrameManager::DiscardFrame(std::unique_ptr<WaylandFrame> frame) {
+  frame->feedback = gfx::PresentationFeedback::Failure();
+  submitted_frames_.push_back(std::move(frame));
+  VerifyNumberOfSubmittedFrames();
   MaybeProcessSubmittedFrames();
 }
 
@@ -439,6 +435,49 @@ void WaylandFrameManager::VerifyNumberOfSubmittedFrames() {
       (*it)->pending_feedback.reset();
     }
   }
+}
+
+bool WaylandFrameManager::EnsureWlBuffersExist(WaylandFrame& frame) {
+  WaylandBufferHandle* handle_pending_creation = nullptr;
+  for (auto& subsurface_to_overlay : frame.subsurfaces_to_overlays) {
+    if (subsurface_to_overlay.second.buffer_id) {
+      auto* handle = connection_->buffer_manager_host()->EnsureBufferHandle(
+          subsurface_to_overlay.first->wayland_surface(),
+          subsurface_to_overlay.second.buffer_id);
+      // Buffer is gone while this frame is pending, remove this config.
+      if (!handle) {
+        frame.buffer_lost = true;
+        subsurface_to_overlay.second = wl::WaylandOverlayConfig();
+      } else if (!handle->wl_buffer() && !handle_pending_creation) {
+        // Found the first not-ready buffer, let handle invoke
+        // MaybeProcessPendingFrame() when wl_buffer is created.
+        handle_pending_creation = handle;
+      }
+    }
+  }
+  if (frame.root_config.buffer_id) {
+    auto* handle = connection_->buffer_manager_host()->EnsureBufferHandle(
+        frame.root_surface, frame.root_config.buffer_id);
+    if (!handle) {
+      frame.buffer_lost = true;
+      frame.root_config = wl::WaylandOverlayConfig();
+    } else if (!handle->wl_buffer() && !handle_pending_creation) {
+      handle_pending_creation = handle;
+    }
+  }
+
+  // Some buffers might have been lost. No need to wait.
+  if (frame.buffer_lost)
+    handle_pending_creation = nullptr;
+
+  // There are wl_buffers missing, schedule MaybeProcessPendingFrame so that
+  // it's called when buffers are created.
+  if (handle_pending_creation) {
+    handle_pending_creation->set_buffer_created_callback(
+        base::BindOnce(&WaylandFrameManager::MaybeProcessPendingFrame,
+                       weak_factory_.GetWeakPtr()));
+  }
+  return !!handle_pending_creation;
 }
 
 void WaylandFrameManager::OnExplicitBufferRelease(WaylandSurface* surface,

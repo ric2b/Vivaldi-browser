@@ -22,7 +22,7 @@ namespace blink {
 
 class AudioTrackEncoder;
 class MediaStreamComponent;
-class Thread;
+class NonMainThread;
 
 // AudioTrackRecorder is a MediaStreamAudioSink that encodes the audio buses
 // received from a Stream Audio Track. The class is constructed on a
@@ -54,7 +54,7 @@ class MODULES_EXPORT AudioTrackRecorder
                      MediaStreamComponent* track,
                      OnEncodedAudioCB on_encoded_audio_cb,
                      base::OnceClosure on_track_source_ended_cb,
-                     int32_t bits_per_second,
+                     uint32_t bits_per_second,
                      BitrateMode bitrate_mode);
 
   AudioTrackRecorder(const AudioTrackRecorder&) = delete;
@@ -76,7 +76,7 @@ class MODULES_EXPORT AudioTrackRecorder
   static scoped_refptr<AudioTrackEncoder> CreateAudioEncoder(
       CodecId codec,
       OnEncodedAudioCB on_encoded_audio_cb,
-      int32_t bits_per_second,
+      uint32_t bits_per_second,
       BitrateMode bitrate_mode);
 
   void ConnectToTrack();
@@ -100,7 +100,7 @@ class MODULES_EXPORT AudioTrackRecorder
   const scoped_refptr<AudioTrackEncoder> encoder_;
 
   // The thread on which |encoder_| works.
-  std::unique_ptr<Thread> encoder_thread_;
+  std::unique_ptr<NonMainThread> encoder_thread_;
 
   scoped_refptr<base::SingleThreadTaskRunner> encoder_task_runner_;
 

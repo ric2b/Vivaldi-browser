@@ -24,6 +24,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/download/public/common/quarantine_connection.h"
+#include "components/file_access/scoped_file_access.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/allow_service_worker_result.h"
 #include "content/public/browser/certificate_request_result_type.h"
@@ -44,7 +45,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "ppapi/buildflags/buildflags.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/ip_address_space.mojom-forward.h"
@@ -97,7 +97,6 @@ namespace mojom {
 class DeviceAPIService;
 class ManagedConfigurationService;
 class RendererPreferenceWatcher;
-class WebUsbService;
 class WindowFeatures;
 enum class WebFeature : int32_t;
 }  // namespace mojom
@@ -123,6 +122,7 @@ class ImageSkia;
 namespace media {
 class AudioLogFactory;
 class AudioManager;
+class ScreenEnumerator;
 }  // namespace media
 
 namespace mojo {
@@ -131,7 +131,6 @@ class BinderMapWithContext;
 }  // namespace mojo
 
 namespace network {
-enum class OriginPolicyState;
 class SharedURLLoaderFactory;
 namespace mojom {
 class TrustedHeaderClient;
@@ -215,6 +214,8 @@ class MediaObserver;
 class NavigationHandle;
 class NavigationThrottle;
 class NavigationUIData;
+class PrefetchServiceDelegate;
+class PresentationObserver;
 class QuotaPermissionContext;
 class ReceiverPresentationServiceDelegate;
 class RenderFrameHost;
@@ -227,6 +228,7 @@ class StoragePartition;
 class TracingDelegate;
 class TtsPlatform;
 class URLLoaderRequestInterceptor;
+class UsbDelegate;
 class VideoOverlayWindow;
 class VideoPictureInPictureWindowController;
 class VpnServiceProxy;
@@ -238,7 +240,6 @@ class XrIntegrationClient;
 struct GlobalRenderFrameHostId;
 struct GlobalRequestID;
 struct OpenURLParams;
-struct PepperPluginInfo;
 struct Referrer;
 struct ServiceWorkerVersionBaseInfo;
 struct SocketPermissionRequest;
@@ -279,11 +280,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::unique_ptr<BrowserMainParts> CreateBrowserMainParts(
       bool is_integration_test);
 
-  // Allows the embedder to change the default behavior of
-  // BrowserThread::PostAfterStartupTask to better match whatever
-  // definition of "startup" the embedder has in mind. This may be
-  // called on any thread.
-  // Note: see related BrowserThread::PostAfterStartupTask.
+  // Queues `task` until after the startup phase (for whatever definition of
+  // "startup" the embedder has in mind). This may be called on any thread.
+  // Note: prefer to simply post a task with BEST_EFFORT priority. This will
+  // delay the task until higher priority tasks are finished, which includes
+  // critical startup tasks. The BrowserThread::PostBestEffortTask() helper can
+  // post a BEST_EFFORT task to an arbitrary task runner.
   virtual void PostAfterStartupTask(
       const base::Location& from_here,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
@@ -632,6 +634,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // can be found in ChromeContentBrowserClient). Returns true by default.
   virtual bool IsIsolatedAppsDeveloperModeAllowed(BrowserContext* context);
 
+  // Check if applications whose origin is |origin| are allowed to perform
+  // all-screens-auto-selection, which allows automatic capturing of all
+  // screens with the getDisplayMediaSet API.
+  virtual bool IsGetDisplayMediaSetSelectAllScreensAllowed(
+      content::BrowserContext* context,
+      const url::Origin& origin);
+
   // Allow the embedder to control the maximum renderer process count. Only
   // applies if it is set to a non-zero value.  Once this limit is exceeded,
   // existing processes will be reused whenever possible, see
@@ -709,12 +718,19 @@ class CONTENT_EXPORT ContentBrowserClient {
       const GURL& script_url,
       BrowserContext* context);
 
-  // Called when a service worker will start on a render process. The embedder
-  // can configure process-wide features here. (e.g. enable extra blink runtime
-  // features).
-  virtual void WillStartServiceWorker(BrowserContext* context,
-                                      const GURL& script_url,
-                                      RenderProcessHost* render_process_host);
+  // Allows the embedder to enable process-wide blink features before starting a
+  // service worker. This is similar to
+  // `blink.mojom.CommitNavigationParams.force_enabled_origin_trials` but for
+  // RuntimeFeatures instead of Origin Trials.
+  //
+  // This method is only called when the process that will run the Service
+  // Worker is isolated. These features can be highly privileged, so the
+  // renderer process with such features enabled shouldn't be used for other
+  // sites.
+  virtual void UpdateEnabledBlinkRuntimeFeaturesInIsolatedWorker(
+      BrowserContext* context,
+      const GURL& script_url,
+      std::vector<std::string>& out_forced_enabled_runtime_features);
 
   // Allow the embedder to control if a Shared Worker can be connected from a
   // given tab.
@@ -747,6 +763,15 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void UpdateRendererPreferencesForWorker(
       BrowserContext* browser_context,
       blink::RendererPreferences* out_prefs);
+
+  // Requests access to |files| in order to be sent to |destination_url|.
+  // |continuation_callback| is called with a token that should be held until
+  // `open()` operation on the files is finished.
+  virtual void RequestFilesAccess(
+      const std::vector<base::FilePath>& files,
+      const GURL& destination_url,
+      base::OnceCallback<void(file_access::ScopedFileAccess)>
+          continuation_callback);
 
   // Allow the embedder to control if access to file system by a shared worker
   // is allowed.
@@ -846,6 +871,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool IsSharedStorageAllowed(content::BrowserContext* browser_context,
                                       const url::Origin& top_frame_origin,
                                       const url::Origin& accessing_origin);
+
+  // Allows the embedder to control if Private Aggregation API operations can
+  // happen in a given context.
+  virtual bool IsPrivateAggregationAllowed(
+      content::BrowserContext* browser_context,
+      const url::Origin& top_frame_origin,
+      const url::Origin& reporting_origin);
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Notification that a trust anchor was used by the given user.
@@ -1157,8 +1189,8 @@ class CONTENT_EXPORT ContentBrowserClient {
   // frame that is being prerendered.
   //
   // Prerender2 limits inactivated pages' capabilities by controlling when to
-  // bind Mojo interfaces. See content/browser/prerender/README.md for more
-  // about capability control.
+  // bind Mojo interfaces. See content/browser/preloading/prerender/README.md
+  // for more about capability control.
   //
   // The embedder can add entries to `policy_map` for interfaces that it
   // registers in `RegisterBrowserInterfaceBindersForFrame()` and
@@ -1174,6 +1206,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Allows to register browser interfaces which are exposed to a service worker
   // execution context.
   virtual void RegisterBrowserInterfaceBindersForServiceWorker(
+      BrowserContext* browser_context,
       mojo::BinderMapWithContext<const ServiceWorkerVersionBaseInfo&>* map) {}
 
   // Allows the embedder to register per-WebUI interface brokers that are used
@@ -1223,6 +1256,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual ReceiverPresentationServiceDelegate*
   GetReceiverPresentationServiceDelegate(WebContents* web_contents);
 
+  // Add or remove an observer for presentations associated with `web_contents`.
+  virtual void AddPresentationObserver(PresentationObserver* observer,
+                                       WebContents* web_contents);
+  virtual void RemovePresentationObserver(PresentationObserver* observer,
+                                          WebContents* web_contents);
+
   // Allows programmatic opening of a new tab/window without going through
   // another WebContents. For example, from a Worker. |site_instance|
   // describes the context initiating the navigation. |callback| will be
@@ -1265,6 +1304,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // will be used.
   virtual std::unique_ptr<media::AudioManager> CreateAudioManager(
       media::AudioLogFactory* audio_log_factory);
+
+  // The ScreenEnumerator object can be used to query all attached screens
+  // at once. This function should be called on the IO thread.
+  virtual std::unique_ptr<media::ScreenEnumerator> CreateScreenEnumerator()
+      const;
 
   // Returns true if (and only if) CreateAudioManager() is implemented and
   // returns a non-null value.
@@ -1727,7 +1771,7 @@ class CONTENT_EXPORT ContentBrowserClient {
                                         const std::string& request_method,
                                         bool has_user_gesture,
                                         bool is_redirect,
-                                        bool is_main_frame,
+                                        bool is_outermost_main_frame,
                                         ui::PageTransition transition,
                                         bool* ignore_navigation);
 
@@ -1764,10 +1808,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldForceDownloadResource(const GURL& url,
                                            const std::string& mime_type);
 
-  virtual void CreateWebUsbService(
-      RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<blink::mojom::WebUsbService> receiver);
-
   virtual void CreateDeviceInfoService(
       RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<blink::mojom::DeviceAPIService> receiver);
@@ -1787,6 +1827,9 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allows the embedder to provide an implementation of the Web Bluetooth API.
   virtual BluetoothDelegate* GetBluetoothDelegate();
+
+  // Allows the embedder to provide an implementation of the WebUSB API.
+  virtual UsbDelegate* GetUsbDelegate();
 
   // Allows the embedder to provide an implementation of the Local Font Access
   // API.
@@ -1914,12 +1957,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void RegisterRendererPreferenceWatcher(
       BrowserContext* browser_context,
       mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher);
-
-  // Returns the HTML content of the error page for Origin Policy related
-  // errors.
-  virtual absl::optional<std::string> GetOriginPolicyErrorPage(
-      network::OriginPolicyState error_reason,
-      content::NavigationHandle* navigation_handle);
 
   // Returns true if it is OK to accept untrusted exchanges, such as expired
   // signed exchanges, and unsigned Web Bundles.
@@ -2124,14 +2161,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // fullscreen when mock screen orientation changes.
   virtual bool CanEnterFullscreenWithoutUserActivation();
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // Returns true if |embedder_origin| is allowed to embed a plugin described by
-  // |plugin_info|.  This method allows restricting some internal plugins (like
-  // Chrome's PDF plugin) to specific origins.
-  virtual bool ShouldAllowPluginCreation(const url::Origin& embedder_origin,
-                                         const PepperPluginInfo& plugin_info);
-#endif
-
 #if BUILDFLAG(ENABLE_VR)
   // Allows the embedder to provide mechanisms to integrate with WebXR
   // functionality.
@@ -2210,6 +2239,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::unique_ptr<SpeculationHostDelegate>
   CreateSpeculationHostDelegate(RenderFrameHost& render_frame_host);
 
+  // Allows the embedder to provide a PrefetchServiceDelegate that will be used
+  // to make prefetches.
+  virtual std::unique_ptr<PrefetchServiceDelegate>
+  CreatePrefetchServiceDelegate(BrowserContext* browser_context);
+
   // Allows the embedder to show a dialog that will be used to control whether a
   // connection through the Direct Sockets API is permitted. If the connection
   // is permitted, the remote address and port that the user input will be sent
@@ -2254,12 +2288,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // (e.g. in tests), an empty list will be used instead of waiting for the
   // embedder to call content::FirstPartySetsHandler::SetPublicFirstPartySets.
   virtual bool WillProvidePublicFirstPartySets();
-
-  // Returns a base::Value::Dict containing the value of the First-Party Sets
-  // Overrides enterprise policy.
-  // If the policy was not present or it was invalid, this returns an empty
-  // base::Value::Dict.
-  virtual base::Value::Dict GetFirstPartySetsOverrides();
 
   // Gets information required for an alternative error page from web app's
   // manifest for |url|, including theme color, background color and app short

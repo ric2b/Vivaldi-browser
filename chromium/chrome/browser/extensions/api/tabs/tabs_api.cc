@@ -58,9 +58,11 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -377,8 +379,8 @@ int MoveTabToWindow(ExtensionFunction* function,
       target_index, std::move(web_contents),
           ::vivaldi::IsVivaldiRunning() && pinned
           // We want to retain pinned in Vivaldi.
-            ? TabStripModel::ADD_PINNED :
-              TabStripModel::ADD_NONE);
+            ? AddTabTypes::ADD_PINNED :
+              AddTabTypes::ADD_NONE);
 }
 
 // This function sets the state of the browser window to a "locked"
@@ -679,7 +681,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   // if we do it ourself.
   if (extension() && is_vivaldi && ::vivaldi::IsVivaldiApp(extension_id()) &&
       calling_profile->IsOffTheRecord() &&
-      incognito_result == windows_util::IncognitoResult::kIncognito) {
+      incognito_result == windows_util::IncognitoResult::kRegular) {
     window_profile = calling_profile->GetOriginalProfile();
   }
 
@@ -877,8 +879,8 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
           urls.size(), std::move(detached_tab),
           ::vivaldi::IsVivaldiRunning() && pinned
               // We keep the pinned state when moving tabs.
-              ? TabStripModel::ADD_PINNED
-              : TabStripModel::ADD_NONE
+              ? AddTabTypes::ADD_PINNED
+              : AddTabTypes::ADD_NONE
           );
     }
   }
@@ -887,7 +889,10 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   if (!contents && urls.empty() && window_type == Browser::TYPE_NORMAL) {
     chrome::NewTab(new_window);
   }
-  chrome::SelectNumberedTab(new_window, 0, {TabStripModel::GestureType::kNone});
+  chrome::SelectNumberedTab(
+      new_window, 0,
+      TabStripUserGestureDetails(
+          TabStripUserGestureDetails::GestureType::kNone));
 
   if (focused) {
     new_window->window()->Show();
@@ -1496,7 +1501,7 @@ ExtensionFunction::ResponseAction TabsHighlightFunction::Run() {
   if (!tabstrip)
     return RespondNow(Error(tabs_constants::kTabStripNotEditableError));
   ui::ListSelectionModel selection;
-  int active_index = -1;
+  absl::optional<size_t> active_index;
 
   if (params->highlight_info.tabs.as_integers) {
     std::vector<int>& tab_indices = *params->highlight_info.tabs.as_integers;
@@ -1533,7 +1538,7 @@ ExtensionFunction::ResponseAction TabsHighlightFunction::Run() {
 
 bool TabsHighlightFunction::HighlightTab(TabStripModel* tabstrip,
                                          ui::ListSelectionModel* selection,
-                                         int* active_index,
+                                         absl::optional<size_t>* active_index,
                                          int index,
                                          std::string* error) {
   // Make sure the index is in range.
@@ -1544,8 +1549,8 @@ bool TabsHighlightFunction::HighlightTab(TabStripModel* tabstrip,
   }
 
   // By default, we make the first tab in the list active.
-  if (*active_index == -1)
-    *active_index = index;
+  if (!active_index->has_value())
+    *active_index = static_cast<size_t>(index);
 
   selection->AddIndexToSelection(index);
   return true;

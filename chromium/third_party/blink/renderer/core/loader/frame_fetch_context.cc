@@ -40,6 +40,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/http/structured_headers.h"
 #include "services/network/public/cpp/client_hints.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -120,19 +121,6 @@ namespace blink {
 
 namespace {
 
-// Requested client hints are always sent for first-party subresources, but
-// third party subresources receive hints based on (1) the state of the flag
-// `kAllowClientHintsToThirdParty` and (2) whether they are a legacy client
-// hint (device-memory, resource-width, viewport-width and dpr).
-// TODO(crbug.com/1227043): Remove both of the above mechanisms.
-//
-// If `kAllowClientHintsToThirdParty` is enabled AND the requested client hint
-// is a legacy client hint, then the hint is shared to third parties regardless
-// of permissions policy. This flag is only enabled by default on Android.
-//
-// If `kAllowClientHintsToThirdParty` is disabled OR the requested client hint
-// isn't a legacy client hint, then the hint is shared only to third parties
-// specifically enabled by the permissions policy.
 mojom::FetchCacheMode DetermineFrameCacheMode(Frame* frame) {
   if (!frame)
     return mojom::FetchCacheMode::kDefault;
@@ -188,7 +176,8 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
               const String& user_agent,
               const absl::optional<UserAgentMetadata>& user_agent_metadata,
               bool is_svg_image_chrome_client,
-              bool is_prerendering)
+              bool is_prerendering,
+              const String& reduced_accept_language)
       : url(url),
         content_security_policy(content_security_policy),
         site_for_cookies(std::move(site_for_cookies)),
@@ -198,7 +187,8 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
         user_agent(user_agent),
         user_agent_metadata(user_agent_metadata),
         is_svg_image_chrome_client(is_svg_image_chrome_client),
-        is_prerendering(is_prerendering) {}
+        is_prerendering(is_prerendering),
+        reduced_accept_language(reduced_accept_language) {}
 
   const KURL url;
   const scoped_refptr<const SecurityOrigin> parent_security_origin;
@@ -211,6 +201,7 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
   const absl::optional<UserAgentMetadata> user_agent_metadata;
   const bool is_svg_image_chrome_client;
   const bool is_prerendering;
+  const String reduced_accept_language;
 
   void Trace(Visitor* visitor) const {
     visitor->Trace(content_security_policy);
@@ -368,6 +359,8 @@ void FrameFetchContext::PrepareRequest(
   if (GetResourceFetcherProperties().IsDetached())
     return;
 
+  request.SetUkmSourceId(document_->UkmSourceID());
+
   if (document_loader_->ForceFetchCacheMode())
     request.SetCacheMode(*document_loader_->ForceFetchCacheMode());
 
@@ -421,7 +414,6 @@ void FrameFetchContext::ModifyRequestForCSP(ResourceRequest& resource_request) {
 }
 
 void FrameFetchContext::AddClientHintsIfNecessary(
-    const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
     ResourceRequest& request) {
   // If the feature is enabled, then client hints are allowed only on secure
@@ -461,29 +453,38 @@ void FrameFetchContext::AddClientHintsIfNecessary(
       image_info->viewport_height = GetFrame()->View()->ViewportHeight();
     }
 
-    MediaValues* media_values =
-        MediaValues::CreateDynamicIfFrameExists(GetFrame());
-    bool is_dark_mode = media_values->GetPreferredColorScheme() ==
-                        mojom::blink::PreferredColorScheme::kDark;
-    prefers_color_scheme = is_dark_mode ? "dark" : "light";
+    prefers_color_scheme = document_->InDarkMode() ? "dark" : "light";
   }
 
-  // |hints_preferences| is used only in case of the preload scanner;
   // GetClientHintsPreferences() has things parsed for this document
   // by browser (from accept-ch header on this response or previously persisted)
   // with renderer-parsed http-equiv merged in.
-  ClientHintsPreferences prefs;
-  prefs.CombineWith(hints_preferences);
-  prefs.CombineWith(GetClientHintsPreferences());
-
   BaseFetchContext::AddClientHintsIfNecessary(
-      prefs, resource_origin, is_1p_origin, ua, policy, image_info,
-      prefers_color_scheme, request);
+      GetClientHintsPreferences(), resource_origin, is_1p_origin, ua, policy,
+      image_info, prefers_color_scheme, request);
+}
+
+void FrameFetchContext::AddReducedAcceptLanguageIfNecessary(
+    ResourceRequest& request) {
+  // If the feature is enabled, then reduce accept language are allowed only on
+  // http and https.
+  if (!base::FeatureList::IsEnabled(network::features::kReduceAcceptLanguage)) {
+    return;
+  }
+
+  if (!request.Url().ProtocolIsInHTTPFamily())
+    return;
+
+  const String& reduced_accept_language = GetReducedAcceptLanguage();
+  if (!reduced_accept_language.IsEmpty() &&
+      request.HttpHeaderField(http_names::kAcceptLanguage).IsEmpty()) {
+    request.SetHttpHeaderField(http_names::kAcceptLanguage,
+                               reduced_accept_language.Ascii().c_str());
+  }
 }
 
 void FrameFetchContext::PopulateResourceRequest(
     ResourceType type,
-    const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
     ResourceRequest& request,
     const ResourceLoaderOptions& options) {
@@ -491,7 +492,8 @@ void FrameFetchContext::PopulateResourceRequest(
     probe::SetDevToolsIds(Probe(), request, options.initiator_info);
 
   ModifyRequestForCSP(request);
-  AddClientHintsIfNecessary(hints_preferences, resource_width, request);
+  AddClientHintsIfNecessary(resource_width, request);
+  AddReducedAcceptLanguageIfNecessary(request);
 }
 
 bool FrameFetchContext::IsPrerendering() const {
@@ -614,6 +616,7 @@ FrameFetchContext::CreateWebSocketHandshakeThrottle() {
 
 bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
     mojom::blink::RequestContextType request_context,
+    network::mojom::blink::IPAddressSpace target_address_space,
     const absl::optional<ResourceRequest::RedirectInfo>& redirect_info,
     const KURL& url,
     ReportingDisposition reporting_disposition,
@@ -628,8 +631,8 @@ bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
       redirect_info ? RedirectStatus::kFollowedRedirect
                     : RedirectStatus::kNoRedirect;
   return MixedContentChecker::ShouldBlockFetch(
-      GetFrame(), request_context, url_before_redirects, redirect_status, url,
-      devtools_id, reporting_disposition,
+      GetFrame(), request_context, target_address_space, url_before_redirects,
+      redirect_status, url, devtools_id, reporting_disposition,
       document_loader_->GetContentSecurityNotifier());
 }
 
@@ -735,6 +738,21 @@ const ClientHintsPreferences FrameFetchContext::GetClientHintsPreferences()
   return frame->GetClientHintsPreferences();
 }
 
+String FrameFetchContext::GetReducedAcceptLanguage() const {
+  if (GetResourceFetcherProperties().IsDetached())
+    return frozen_state_->reduced_accept_language;
+  LocalFrame* frame = document_->GetFrame();
+  DCHECK(frame);
+  // If accept language override from inspector emulation, set Accept-Language
+  // header as the overridden value.
+  String override_accept_language;
+  probe::ApplyAcceptLanguageOverride(Probe(), &override_accept_language);
+  return override_accept_language.IsEmpty()
+             ? frame->GetReducedAcceptLanguage().GetString()
+             : network_utils::GenerateAcceptLanguageHeader(
+                   override_accept_language);
+}
+
 float FrameFetchContext::GetDevicePixelRatio() const {
   if (GetResourceFetcherProperties().IsDetached())
     return frozen_state_->device_pixel_ratio;
@@ -764,7 +782,7 @@ FetchContext* FrameFetchContext::Detach() {
       Url(), GetContentSecurityPolicy(), GetSiteForCookies(),
       GetTopFrameOrigin(), client_hints_prefs, GetDevicePixelRatio(),
       user_agent, GetUserAgentMetadata(), IsSVGImageChromeClient(),
-      IsPrerendering());
+      IsPrerendering(), GetReducedAcceptLanguage());
   document_loader_ = nullptr;
   document_ = nullptr;
   return this;
@@ -795,12 +813,6 @@ bool FrameFetchContext::CalculateIfAdSubresource(
   const KURL& url = alias_url ? alias_url.value() : resource_request.Url();
   return GetFrame()->GetAdTracker()->CalculateIfAdSubresource(
       document_->domWindow(), url, type, initiator_info, known_ad);
-}
-
-mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
-FrameFetchContext::TakePendingWorkerTimingReceiver(int request_id) {
-  DCHECK(!GetResourceFetcherProperties().IsDetached());
-  return document_loader_->TakePendingWorkerTimingReceiver(request_id);
 }
 
 void FrameFetchContext::DidObserveLoadingBehavior(

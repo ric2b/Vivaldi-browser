@@ -29,7 +29,7 @@
 #include "net/http/http_util.h"
 #include "net/ssl/ssl_info.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_packets.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/http2_header_block.h"
 #include "net/url_request/url_request_context.h"
 #include "url/gurl.h"
 
@@ -79,7 +79,6 @@ static jlong JNI_CronetBidirectionalStream_CreateBidirectionalStream(
     const base::android::JavaParamRef<jobject>& jbidi_stream,
     jlong jurl_request_context_adapter,
     jboolean jsend_request_headers_automatically,
-    jboolean jenable_metrics,
     jboolean jtraffic_stats_tag_set,
     jint jtraffic_stats_tag,
     jboolean jtraffic_stats_uid_set,
@@ -92,9 +91,9 @@ static jlong JNI_CronetBidirectionalStream_CreateBidirectionalStream(
   CronetBidirectionalStreamAdapter* adapter =
       new CronetBidirectionalStreamAdapter(
           context_adapter, env, jbidi_stream,
-          jsend_request_headers_automatically, jenable_metrics,
-          jtraffic_stats_tag_set, jtraffic_stats_tag, jtraffic_stats_uid_set,
-          jtraffic_stats_uid, jnetwork_handle);
+          jsend_request_headers_automatically, jtraffic_stats_tag_set,
+          jtraffic_stats_tag, jtraffic_stats_uid_set, jtraffic_stats_uid,
+          jnetwork_handle);
 
   return reinterpret_cast<jlong>(adapter);
 }
@@ -104,16 +103,14 @@ CronetBidirectionalStreamAdapter::CronetBidirectionalStreamAdapter(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jbidi_stream,
     bool send_request_headers_automatically,
-    bool enable_metrics,
     bool traffic_stats_tag_set,
     int32_t traffic_stats_tag,
     bool traffic_stats_uid_set,
     int32_t traffic_stats_uid,
-    net::NetworkChangeNotifier::NetworkHandle network)
+    net::handles::NetworkHandle network)
     : context_(context),
       owner_(env, jbidi_stream),
       send_request_headers_automatically_(send_request_headers_automatically),
-      enable_metrics_(enable_metrics),
       traffic_stats_tag_set_(traffic_stats_tag_set),
       traffic_stats_tag_(traffic_stats_tag),
       traffic_stats_uid_set_(traffic_stats_uid_set),
@@ -474,9 +471,6 @@ CronetBidirectionalStreamAdapter::GetHeadersArray(
 }
 
 void CronetBidirectionalStreamAdapter::MaybeReportMetrics() {
-  if (!enable_metrics_)
-    return;
-
   if (!bidi_stream_)
     return;
   net::LoadTimingInfo load_timing_info;

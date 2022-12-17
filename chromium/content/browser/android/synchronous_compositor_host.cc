@@ -304,7 +304,6 @@ void SynchronousCompositorHost::UpdateFrameMetaData(
   frame_metadata_version_ = version;
   if (new_local_surface_id)
     local_surface_id_ = new_local_surface_id.value();
-  UpdatePresentedFrameToken(frame_metadata.frame_token);
 }
 
 namespace {
@@ -506,20 +505,22 @@ void SynchronousCompositorHost::ReturnResources(
                                  std::move(resources));
 }
 
+void SynchronousCompositorHost::OnCompositorFrameTransitionDirectiveProcessed(
+    uint32_t layer_tree_frame_sink_id,
+    uint32_t sequence_id) {
+  if (blink::mojom::SynchronousCompositor* compositor =
+          GetSynchronousCompositor()) {
+    compositor->OnCompositorFrameTransitionDirectiveProcessed(
+        layer_tree_frame_sink_id, sequence_id);
+  }
+}
+
 void SynchronousCompositorHost::DidPresentCompositorFrames(
     viz::FrameTimingDetailsMap timing_details,
     uint32_t frame_token) {
   timing_details_ = timing_details;
   if (!timing_details_.empty())
     AddBeginFrameRequest(BEGIN_FRAME);
-
-  UpdatePresentedFrameToken(frame_token);
-}
-
-void SynchronousCompositorHost::UpdatePresentedFrameToken(
-    uint32_t frame_token) {
-  rwhva_->FrameTokenChangedForSynchronousCompositor(frame_token,
-                                                    root_scroll_offset_);
 }
 
 void SynchronousCompositorHost::SetMemoryPolicy(size_t bytes_limit) {

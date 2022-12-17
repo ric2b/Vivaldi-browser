@@ -180,7 +180,6 @@ interface CountQueuingStrategy
     getter size
     method constructor
 interface CropTarget
-    static method fromElement
     attribute @@toStringTag
     method constructor
 interface Crypto
@@ -491,7 +490,6 @@ interface FetchEvent : ExtendableEvent
     getter preloadResponse
     getter request
     getter resultingClientId
-    method addPerformanceEntry
     method constructor
     method respondWith
 interface File : Blob
@@ -1175,6 +1173,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter nextHopProtocol
     getter redirectEnd
     getter redirectStart
+    getter renderBlockingStatus
     getter requestStart
     getter responseEnd
     getter responseStart
@@ -1182,7 +1181,6 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter serverTiming
     getter transferSize
     getter workerStart
-    getter workerTiming
     method constructor
     method toJSON
 interface PerformanceServerTiming
@@ -1409,6 +1407,8 @@ interface ServiceWorkerRegistration : EventTarget
     setter onupdatefound
 interface StorageBucket
     attribute @@toStringTag
+    getter indexedDB
+    getter locks
     method constructor
     method durability
     method estimate
@@ -1522,6 +1522,13 @@ interface TransformStream
     getter readable
     getter writable
     method constructor
+interface TransformStreamDefaultController
+    attribute @@toStringTag
+    getter desiredSize
+    method constructor
+    method enqueue
+    method error
+    method terminate
 interface TrustedHTML
     attribute @@toStringTag
     method constructor

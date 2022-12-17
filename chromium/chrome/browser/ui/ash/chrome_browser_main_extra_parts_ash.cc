@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/game_mode/game_mode_controller.h"
 #include "chrome/browser/ash/login/signin/signin_error_notifier_factory.h"
 #include "chrome/browser/ash/night_light/night_light_client.h"
 #include "chrome/browser/ash/policy/display/display_resolution_handler.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/ash/accessibility/accessibility_controller_client.h"
 #include "chrome/browser/ui/ash/ambient/ambient_client_impl.h"
+#include "chrome/browser/ui/ash/app_access_notifier.h"
 #include "chrome/browser/ui/ash/arc_open_url_delegate_impl.h"
 #include "chrome/browser/ui/ash/ash_shell_init.h"
 #include "chrome/browser/ui/ash/ash_web_view_factory_impl.h"
@@ -39,9 +41,9 @@
 #include "chrome/browser/ui/ash/desks/desks_client.h"
 #include "chrome/browser/ui/ash/ime_controller_client_impl.h"
 #include "chrome/browser/ui/ash/in_session_auth_dialog_client.h"
+#include "chrome/browser/ui/ash/in_session_auth_token_provider_impl.h"
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
 #include "chrome/browser/ui/ash/media_client_impl.h"
-#include "chrome/browser/ui/ash/microphone_mute_notification_delegate_impl.h"
 #include "chrome/browser/ui/ash/network/mobile_data_notifications.h"
 #include "chrome/browser/ui/ash/network/network_connect_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/network/network_portal_notification_controller.h"
@@ -60,10 +62,10 @@
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 #include "chrome/browser/ui/views/select_file_dialog_extension_factory.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
+#include "chromeos/ash/components/network/network_connect.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "chromeos/components/quick_answers/public/cpp/controller/quick_answers_controller.h"
 #include "chromeos/components/quick_answers/quick_answers_client.h"
-#include "chromeos/network/network_connect.h"
 #include "chromeos/services/bluetooth_config/fast_pair_delegate.h"
 #include "chromeos/services/bluetooth_config/in_process_instance.h"
 #include "components/crash/core/common/crash_key.h"
@@ -140,7 +142,7 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   // NetworkConnect handles the network connection state machine for the UI.
   network_connect_delegate_ =
       std::make_unique<NetworkConnectDelegateChromeOS>();
-  chromeos::NetworkConnect::Initialize(network_connect_delegate_.get());
+  ash::NetworkConnect::Initialize(network_connect_delegate_.get());
 
   cast_config_controller_media_router_ =
       std::make_unique<CastConfigControllerMediaRouter>();
@@ -179,6 +181,9 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   in_session_auth_dialog_client_ =
       std::make_unique<InSessionAuthDialogClient>();
 
+  in_session_auth_token_provider_ =
+      std::make_unique<ash::InSessionAuthTokenProviderImpl>();
+
   // NOTE: The WallpaperControllerClientImpl must be initialized before the
   // session controller, because the session controller triggers the loading
   // of users, which itself calls a code path which eventually reaches the
@@ -190,6 +195,9 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
 
   session_controller_client_ = std::make_unique<SessionControllerClientImpl>();
   session_controller_client_->Init();
+  // By this point ash shell should have initialized its D-Bus signal
+  // listeners, so inform the session manager that Ash is initialized.
+  session_controller_client_->EmitAshInitialized();
 
   system_tray_client_ = std::make_unique<SystemTrayClientImpl>();
   network_connect_delegate_->SetSystemTrayClient(system_tray_client_.get());
@@ -258,8 +266,7 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   media_client_->Init();
 
   if (ash::features::IsMicMuteNotificationsEnabled()) {
-    microphone_mute_notification_delegate_ =
-        std::make_unique<MicrophoneMuteNotificationDelegateImpl>();
+    app_access_notifier_ = std::make_unique<AppAccessNotifier>();
   }
 
   // Check if Lacros is enabled for crash reporting here to give the user
@@ -282,8 +289,8 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   // NetworkPortalDetector instance may be replaced.
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           ::switches::kTestType)) {
-    chromeos::NetworkPortalDetector* detector =
-        chromeos::network_portal_detector::GetInstance();
+    ash::NetworkPortalDetector* detector =
+        ash::network_portal_detector::GetInstance();
     CHECK(detector);
     network_portal_notification_controller_ =
         std::make_unique<chromeos::NetworkPortalNotificationController>(
@@ -297,6 +304,7 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
       std::make_unique<quick_answers::QuickAnswersClient>(
           g_browser_process->shared_url_loader_factory(),
           QuickAnswersController::Get()->GetQuickAnswersDelegate()));
+  game_mode_controller_ = std::make_unique<game_mode::GameModeController>();
 
   // Initialize TabScrubberChromeOS after the Ash Shell has been initialized.
   TabScrubberChromeOS::GetInstance();
@@ -335,6 +343,7 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   tab_cluster_ui_client_.reset();
 
   // Initialized in PostProfileInit (which may not get called in some tests).
+  game_mode_controller_.reset();
   quick_answers_controller_.reset();
   ash_web_view_factory_.reset();
   network_portal_notification_controller_.reset();
@@ -343,7 +352,7 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   login_screen_client_.reset();
 
   if (ash::features::IsMicMuteNotificationsEnabled()) {
-    microphone_mute_notification_delegate_.reset();
+    app_access_notifier_.reset();
   }
 
   // Initialized in PreProfileInit (which may not get called in some tests).
@@ -361,8 +370,8 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   ambient_client_.reset();
 
   cast_config_controller_media_router_.reset();
-  if (chromeos::NetworkConnect::IsInitialized())
-    chromeos::NetworkConnect::Shutdown();
+  if (ash::NetworkConnect::IsInitialized())
+    ash::NetworkConnect::Shutdown();
   network_connect_delegate_.reset();
   user_profile_loaded_observer_.reset();
 }

@@ -111,7 +111,7 @@ suite('<app-management-plugin-vm-detail-view>', function() {
 
   setup(async function() {
     pluginVmBrowserProxy = new TestPluginVmBrowserProxy();
-    PluginVmBrowserProxyImpl.setInstance(pluginVmBrowserProxy);
+    PluginVmBrowserProxyImpl.setInstanceForTesting(pluginVmBrowserProxy);
     fakeHandler = setupFakeHandler();
     replaceStore();
 
@@ -136,7 +136,7 @@ suite('<app-management-plugin-vm-detail-view>', function() {
     // Add an app, and make it the currently selected app.
     const options = {
       type: appManagement.mojom.AppType.kPluginVm,
-      permissions: permissions
+      permissions: permissions,
     };
     const app = await fakeHandler.addApp(null, options);
     appId = app.id;

@@ -9,26 +9,37 @@
  * Clicking the button fires a password-more-actions-clicked event.
  */
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../site_favicon.js';
+// <if expr="is_chromeos">
+import '../controls/password_prompt_dialog.js';
+// </if>
 import './passwords_shared.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
-import {routes} from '../route.js';
-import {Router} from '../router.js';
 
 import {getTemplate} from './password_list_item.html.js';
-import {PasswordViewPageInteractions, PasswordViewPageUrlParams, recordPasswordViewInteraction} from './password_view.js';
+import {PASSWORD_VIEW_PAGE_REQUESTED_EVENT_NAME, PasswordViewPageInteractions, recordPasswordViewInteraction} from './password_view.js';
 import {ShowPasswordMixin, ShowPasswordMixinInterface} from './show_password_mixin.js';
+
+
+declare global {
+  interface HTMLElementEventMap {
+    [PASSWORD_MORE_ACTIONS_CLICKED_EVENT_NAME]: PasswordMoreActionsClickedEvent;
+  }
+}
 
 export type PasswordMoreActionsClickedEvent = CustomEvent<{
   target: HTMLElement,
   listItem: PasswordListItemElement,
 }>;
+
+export const PASSWORD_MORE_ACTIONS_CLICKED_EVENT_NAME =
+    'password-more-actions-clicked';
 
 export interface PasswordListItemElement {
   $: {
@@ -86,6 +97,11 @@ export class PasswordListItemElement extends PasswordListItemElementBase {
   private shouldShowSubpageButton_: boolean;
   shouldHideActionButtons: boolean;
 
+  override focus() {
+    this.shouldShowSubpageButton_ ? this.$.seePasswordDetails.focus() :
+                                    super.focus();
+  }
+
   private computeShouldShowSubpageButton_(): boolean {
     return !this.shouldHideActionButtons && this.isPasswordViewPageEnabled_;
   }
@@ -108,24 +124,14 @@ export class PasswordListItemElement extends PasswordListItemElementBase {
     if (!this.shouldShowSubpageButton_) {
       return;
     }
-    const params = new URLSearchParams();
-    params.set(PasswordViewPageUrlParams.SITE, this.entry.urls.shown);
-    params.set(PasswordViewPageUrlParams.USERNAME, this.entry.username);
-    // For sync'ing and signed-out users, there is strictly only one password
-    // store, and hence no need to specify store information.
-    // For account store users, a credential can exist in one or both of the
-    // device and account stores, in which case, store information is required.
-    // For consistency with the sync'ing and signed-out case, store information
-    // isn't provided when the credentials exist only in the device store.
-    if (this.entry.isPresentInAccount()) {
-      params.set(PasswordViewPageUrlParams.IN_ACCOUNT, 'true');
-      if (this.entry.isPresentOnDevice()) {
-        params.set(PasswordViewPageUrlParams.ON_DEVICE, 'true');
-      }
-    }
     recordPasswordViewInteraction(
         PasswordViewPageInteractions.CREDENTIAL_ROW_CLICKED);
-    Router.getInstance().navigateTo(routes.PASSWORD_VIEW, params);
+    this.dispatchEvent(
+        new CustomEvent(PASSWORD_VIEW_PAGE_REQUESTED_EVENT_NAME, {
+          bubbles: true,
+          composed: true,
+          detail: this,
+        }));
   }
 
   private onPasswordMoreActionsButtonTap_() {

@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -78,7 +79,10 @@ ProfilePickerTurnSyncOnDelegate::~ProfilePickerTurnSyncOnDelegate() = default;
 void ProfilePickerTurnSyncOnDelegate::ShowLoginError(
     const SigninUIError& error) {
   LogOutcome(ProfileMetrics::ProfileSignedInFlowOutcome::kLoginError);
-
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  LOG(WARNING) << "crbug.com/1340791 | Login error: "
+               << static_cast<int>(error.type());
+#endif
   if (IsLacrosPrimaryProfileFirstRun(profile_)) {
     // The primary profile onboarding is silently skipped if there's any error.
     if (controller_)
@@ -108,6 +112,9 @@ void ProfilePickerTurnSyncOnDelegate::ShowMergeSyncDataConfirmation(
     const std::string& previous_email,
     const std::string& new_email,
     signin::SigninChoiceCallback callback) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  LOG(WARNING) << "crbug.com/1340791 | Unexpected data merge prompt";
+#endif
   // A brand new profile cannot have a conflict in sync accounts.
   NOTREACHED();
 }
@@ -134,6 +141,10 @@ void ProfilePickerTurnSyncOnDelegate::ShowSyncConfirmation(
   absl::optional<EnterpriseProfileWelcomeUI::ScreenType> welcome_screen_type;
   if (IsLacrosPrimaryProfileFirstRun(profile_)) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // Show the enterprise version of the screen even if management consent was
+    // already given. See http://crbug.com/1322067.
+    enterprise_account_ = profile_->GetProfilePolicyConnector()->IsManaged();
+
     welcome_screen_type =
         enterprise_account_
             ? EnterpriseProfileWelcomeUI::ScreenType::kLacrosEnterpriseWelcome
@@ -154,22 +165,29 @@ void ProfilePickerTurnSyncOnDelegate::ShowSyncConfirmation(
   ShowSyncConfirmationScreen();
 }
 
+bool ProfilePickerTurnSyncOnDelegate::
+    ShouldAbortBeforeShowSyncDisabledConfirmation() {
+  if (IsLacrosPrimaryProfileFirstRun(profile_)) {
+    // The primary profile first run experience is silently skipped if sync is
+    // disabled (there's no point to promo a feature that cannot get enabled).
+    return true;
+  }
+
+  return false;
+}
+
 void ProfilePickerTurnSyncOnDelegate::ShowSyncDisabledConfirmation(
     bool is_managed_account,
     base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
         callback) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  LOG(WARNING) << "crbug.com/1340791 | Sync disabled prompt.";
+#endif
   DCHECK(callback);
-  if (IsLacrosPrimaryProfileFirstRun(profile_)) {
-    // The primary profile first run experience is silently skipped if sync is
-    // disabled (there's no point to promo a feature that cannot get enabled).
-    // TODO (crbug.com/1141341): SYNC_WITH_DEFAULT_SETTINGS encodes to stay
-    // signed-in. Split the enum for sync disabled / rename the entries to
-    // better match the situation.
-    std::move(callback).Run(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
-    return;
-  }
-  sync_confirmation_callback_ = std::move(callback);
+  DCHECK(!IsLacrosPrimaryProfileFirstRun(profile_));
   sync_disabled_ = true;
+
+  sync_confirmation_callback_ = std::move(callback);
   ShowEnterpriseWelcome(is_managed_account
                             ? EnterpriseProfileWelcomeUI::ScreenType::
                                   kEntepriseAccountSyncDisabled
@@ -187,6 +205,9 @@ void ProfilePickerTurnSyncOnDelegate::ShowSyncSettings() {
 void ProfilePickerTurnSyncOnDelegate::SwitchToProfile(Profile* new_profile) {
   // A brand new profile cannot have preexisting syncable data and thus
   // switching to another profile does never get offered.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  LOG(WARNING) << "crbug.com/1340791 | SwitchToProfile not expected.";
+#endif
   NOTREACHED();
 }
 
@@ -255,6 +276,11 @@ void ProfilePickerTurnSyncOnDelegate::OnEnterpriseWelcomeClosed(
   }
 
   DCHECK_EQ(choice, signin::SIGNIN_CHOICE_NEW_PROFILE);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  LOG(WARNING) << "crbug.com/1340791 | Closed EnterpriseWelcome with choice="
+               << static_cast<int>(choice)
+               << " and type=" << static_cast<int>(type);
+#endif
 
   switch (type) {
     case EnterpriseProfileWelcomeUI::ScreenType::kEntepriseAccountSyncEnabled:

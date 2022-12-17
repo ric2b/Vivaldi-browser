@@ -4,10 +4,8 @@
 
 module media_router.mojom;
 
-// Keep in sync with:
-// - RouteRequestResult::ResultCode in route_request_result.h
-// - MediaRouteProviderResult enum in tools/metrics/histograms.xml.
-// - media_router_mojom_traits.h
+// Keep in sync with MediaRouteProviderResult enum in
+// tools/metrics/histograms.xml.
 enum RouteRequestResultCode {
   UNKNOWN_ERROR,
   OK,
@@ -20,6 +18,7 @@ enum RouteRequestResultCode {
   CANCELLED,
   ROUTE_ALREADY_EXISTS,
   DESKTOP_PICKER_FAILED,
-  ROUTE_ALREADY_TERMINATED
+  ROUTE_ALREADY_TERMINATED,
+  REDUNDANT_REQUEST,
 // New values must be added here.
 };

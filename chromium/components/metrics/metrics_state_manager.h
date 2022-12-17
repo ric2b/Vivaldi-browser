@@ -18,7 +18,6 @@
 #include "components/metrics/client_info.h"
 #include "components/metrics/cloned_install_detector.h"
 #include "components/metrics/entropy_state.h"
-#include "components/version_info/channel.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/metrics/structured/neutrino_logging.h"  // nogncheck
@@ -79,6 +78,18 @@ class MetricsStateManager final {
   // is no other reason to disable reporting. One such reason is client
   // sampling, and this client isn't in the sample.
   bool IsMetricsReportingEnabled();
+
+  // Returns true if Extended Variations Safe Mode is supported on this
+  // platform. Variations Safe Mode is a mechanism that allows Chrome to fall
+  // back to a "safe" seed so that clients can recover from a problematic
+  // experiment, for example, one that causes browser crashes. See the design
+  // doc for more details:
+  // https://docs.google.com/document/d/17UN2pLSa5JZqk8f3LeYZIftXewxqcITotgalTrJvGSY.
+  //
+  // Extended Variations Safe Mode builds on this by allowing clients to recover
+  // from problematic experiments that cause browser crashes earlier on in
+  // startup.
+  bool IsExtendedSafeModeSupported() const;
 
   // Returns the client ID for this client, or the empty string if the user is
   // not opted in to metrics reporting.
@@ -184,17 +195,12 @@ class MetricsStateManager final {
   //
   // |startup_visibility| denotes whether this session is expected to come to
   // the foreground.
-  //
-  // TODO(crbug/1241702): Remove |channel| at the end of the Extended Variations
-  // Safe Mode experiment. |channel| is used to enable the experiment on only
-  // certain channels.
   static std::unique_ptr<MetricsStateManager> Create(
       PrefService* local_state,
       EnabledStateProvider* enabled_state_provider,
       const std::wstring& backup_registry_key,
       const base::FilePath& user_data_dir,
       StartupVisibility startup_visibility = StartupVisibility::kUnknown,
-      version_info::Channel channel = version_info::Channel::UNKNOWN,
       StoreClientInfoCallback store_client_info = StoreClientInfoCallback(),
       LoadClientInfoCallback load_client_info = LoadClientInfoCallback(),
       base::StringPiece external_client_id = base::StringPiece());
@@ -265,7 +271,6 @@ class MetricsStateManager final {
                       const std::wstring& backup_registry_key,
                       const base::FilePath& user_data_dir,
                       StartupVisibility startup_visibility,
-                      version_info::Channel channel,
                       StoreClientInfoCallback store_client_info,
                       LoadClientInfoCallback load_client_info,
                       base::StringPiece external_client_id);

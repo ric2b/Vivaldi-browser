@@ -7,18 +7,19 @@
  * text-to-speech settings.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
 import '../../controls/settings_slider.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {LanguagesBrowserProxy, LanguagesBrowserProxyImpl} from '../os_languages_page/languages_browser_proxy.js';
@@ -37,8 +38,10 @@ import {TtsSubpageBrowserProxy, TtsSubpageBrowserProxyImpl} from './tts_subpage_
  */
 const SettingsTtsSubpageElementBase = mixinBehaviors(
     [
-      DeepLinkingBehavior, I18nBehavior, RouteObserverBehavior,
-      WebUIListenerBehavior
+      DeepLinkingBehavior,
+      I18nBehavior,
+      RouteObserverBehavior,
+      WebUIListenerBehavior,
     ],
     PolymerElement);
 
@@ -119,16 +122,16 @@ class SettingsTtsSubpageElement extends SettingsTtsSubpageElementBase {
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
         value: () => new Set([
-          chromeos.settings.mojom.Setting.kTextToSpeechRate,
-          chromeos.settings.mojom.Setting.kTextToSpeechPitch,
-          chromeos.settings.mojom.Setting.kTextToSpeechVolume,
-          chromeos.settings.mojom.Setting.kTextToSpeechVoice,
-          chromeos.settings.mojom.Setting.kTextToSpeechEngines,
+          Setting.kTextToSpeechRate,
+          Setting.kTextToSpeechPitch,
+          Setting.kTextToSpeechVolume,
+          Setting.kTextToSpeechVoice,
+          Setting.kTextToSpeechEngines,
         ]),
       },
     };
@@ -287,7 +290,7 @@ class SettingsTtsSubpageElement extends SettingsTtsSubpageElementBase {
           language: voice.displayLanguage,
           code: voice.languageCode,
           preferred: false,
-          voices: []
+          voices: [],
         };
       }
       // Each voice gets a unique ID from its name and extension.
@@ -400,13 +403,13 @@ class SettingsTtsSubpageElement extends SettingsTtsSubpageElementBase {
       return;
     }
     const allCodes = new Set(
-        Object.keys(this.prefs.settings['tts']['lang_to_voice_name'].value));
+        Object.keys(this.prefs['settings']['tts']['lang_to_voice_name'].value));
     for (const code in langToVoices) {
       // Remove from allCodes, to track what we've found a default for.
       allCodes.delete(code);
       const voices = langToVoices[code].voices;
       const defaultVoiceForLang =
-          this.prefs.settings['tts']['lang_to_voice_name'].value[code];
+          this.prefs['settings']['tts']['lang_to_voice_name'].value[code];
       if (!defaultVoiceForLang || defaultVoiceForLang === '') {
         // Initialize prefs that have no value
         this.set(
@@ -463,7 +466,7 @@ class SettingsTtsSubpageElement extends SettingsTtsSubpageElementBase {
             const code = languageCodeMap[prospectiveUILanguage];
             // First try the pref value.
             result =
-                this.prefs.settings['tts']['lang_to_voice_name'].value[code];
+                this.prefs['settings']['tts']['lang_to_voice_name'].value[code];
           }
           if (!result) {
             // If it's not a pref value yet, or the prospectiveUILanguage was

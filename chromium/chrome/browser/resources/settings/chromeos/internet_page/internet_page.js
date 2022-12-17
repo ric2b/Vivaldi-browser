@@ -10,8 +10,8 @@
 
 import 'chrome://resources/cr_components/chromeos/cellular_setup/cellular_setup_icons.m.js';
 import 'chrome://resources/cr_components/chromeos/network/sim_lock_dialogs.m.js';
-import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_indicator.m.js';
@@ -20,7 +20,7 @@ import '../os_settings_icons_css.js';
 import '../../prefs/prefs.js';
 import '../../settings_page/settings_animated_pages.js';
 import '../../settings_page/settings_subpage.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import './cellular_setup_dialog.js';
 import './internet_detail_menu.js';
 import './internet_detail_page.js';
@@ -42,6 +42,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {afterNextRender, html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {recordSettingChange} from '../metrics_recorder.js';
@@ -67,8 +68,11 @@ const ESIM_PROFILE_LIMIT = 5;
  */
 const SettingsInternetPageElementBase = mixinBehaviors(
     [
-      NetworkListenerBehavior, DeepLinkingBehavior, I18nBehavior,
-      RouteObserverBehavior, WebUIListenerBehavior
+      NetworkListenerBehavior,
+      DeepLinkingBehavior,
+      I18nBehavior,
+      RouteObserverBehavior,
+      WebUIListenerBehavior,
     ],
     PolymerElement);
 
@@ -170,7 +174,7 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
         type: Array,
         value() {
           return [];
-        }
+        },
       },
 
       /** @private {boolean} */
@@ -260,13 +264,13 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
         value: () => new Set([
-          chromeos.settings.mojom.Setting.kWifiOnOff,
-          chromeos.settings.mojom.Setting.kMobileOnOff,
+          Setting.kWifiOnOff,
+          Setting.kMobileOnOff,
         ]),
       },
 
@@ -377,15 +381,15 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
 
   /**
    * Overridden from DeepLinkingBehavior.
-   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @param {!Setting} settingId
    * @return {boolean}
    */
   beforeDeepLinkAttempt(settingId) {
     // Manually show the deep links for settings nested within elements.
     let networkType = null;
-    if (settingId === chromeos.settings.mojom.Setting.kWifiOnOff) {
+    if (settingId === Setting.kWifiOnOff) {
       networkType = mojom.NetworkType.kWiFi;
-    } else if (settingId === chromeos.settings.mojom.Setting.kMobileOnOff) {
+    } else if (settingId === Setting.kMobileOnOff) {
       networkType = mojom.NetworkType.kCellular;
     }
 

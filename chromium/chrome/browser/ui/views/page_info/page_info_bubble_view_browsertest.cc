@@ -9,7 +9,6 @@
 #include "base/scoped_observation.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
@@ -34,6 +33,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
+#include "components/page_info/core/about_this_site_service.h"
 #include "components/page_info/core/about_this_site_validation.h"
 #include "components/page_info/core/features.h"
 #include "components/page_info/core/proto/about_this_site_metadata.pb.h"
@@ -64,21 +64,18 @@
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/events/types/event_type.h"
+#include "ui/events/test/test_event.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/test/widget_test.h"
 
 using AboutThisSiteStatus =
     page_info::about_this_site_validation::AboutThisSiteStatus;
+using AboutThisSiteInteraction =
+    page_info::AboutThisSiteService::AboutThisSiteInteraction;
 
 namespace {
 
 constexpr char kExpiredCertificateFile[] = "expired_cert.pem";
-
-class ClickEvent : public ui::Event {
- public:
-  ClickEvent() : ui::Event(ui::ET_UNKNOWN, base::TimeTicks(), 0) {}
-};
 
 void PerformMouseClickOnView(views::View* view) {
   ui::AXActionData data;
@@ -92,7 +89,7 @@ void OpenPageInfoBubble(Browser* browser) {
   LocationIconView* location_icon_view =
       browser_view->toolbar()->location_bar()->location_icon_view();
   ASSERT_TRUE(location_icon_view);
-  ClickEvent event;
+  ui::test::TestEvent event;
   location_icon_view->ShowBubble(event);
   views::BubbleDialogDelegateView* page_info =
       PageInfoBubbleView::GetPageInfoBubbleForTesting();
@@ -154,19 +151,6 @@ void AddHintForTesting(Browser* browser,
       url, optimization_guide::proto::ABOUT_THIS_SITE, optimization_metadata);
 }
 
-page_info::proto::SiteInfo CreateValidSiteInfo() {
-  page_info::proto::SiteInfo site_info;
-  auto* description = site_info.mutable_description();
-  description->set_description(
-      "A domain used in illustrative examples in documents");
-  description->set_lang("en_US");
-  description->set_name("Example");
-  description->mutable_source()->set_url("https://example.com");
-  description->mutable_source()->set_label("Example source");
-
-  return site_info;
-}
-
 }  // namespace
 
 class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
@@ -178,7 +162,6 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
       const PageInfoBubbleViewBrowserTest& test) = delete;
 
   void SetUp() override {
-    MockCertificateViewerForTesting();
     ASSERT_TRUE(embedded_test_server()->Start());
     InProcessBrowserTest::SetUp();
   }
@@ -749,9 +732,12 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewPrerenderBrowserTest,
 class PageInfoBubbleViewAboutThisSiteBrowserTest : public InProcessBrowserTest {
  public:
   PageInfoBubbleViewAboutThisSiteBrowserTest() {
-    feature_list.InitWithFeatures({page_info::kPageInfoAboutThisSiteEn,
-                                   page_info::kPageInfoAboutThisSiteNonEn},
-                                  {});
+    feature_list.InitWithFeatures(
+        {page_info::kPageInfoAboutThisSiteEn,
+         page_info::kPageInfoAboutThisSiteNonEn,
+         page_info::kPageInfoAboutThisSiteMoreInfo,
+         page_info::kPageInfoAboutThisSiteDescriptionPlaceholder},
+        {});
   }
 
   void SetUp() override {
@@ -769,6 +755,23 @@ class PageInfoBubbleViewAboutThisSiteBrowserTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch(optimization_guide::switches::
                           kDisableCheckingUserPermissionsForTesting);
+  }
+
+  page_info::proto::SiteInfo CreateValidSiteInfo() {
+    page_info::proto::SiteInfo site_info;
+    auto* description = site_info.mutable_description();
+    description->set_description(
+        "A domain used in illustrative examples in documents");
+    description->set_lang("en_US");
+    description->set_name("Example");
+    description->mutable_source()->set_url("https://example.com");
+    description->mutable_source()->set_label("Example source");
+    site_info.mutable_more_about()->set_url(
+        https_server_.GetURL("a.test", "/title2.html").spec());
+    EXPECT_EQ(
+        page_info::about_this_site_validation::ValidateSiteInfo(site_info),
+        AboutThisSiteStatus::kValid);
+    return site_info;
   }
 
  protected:
@@ -807,6 +810,64 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
   page_info->GetWidget()->CloseWithReason(
       views::Widget::ClosedReason::kEscKeyPressed);
   base::RunLoop().RunUntilIdle();
+}
+
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
+                       AboutThisSiteInteraction) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  base::HistogramTester histograms;
+
+  auto url = https_server_.GetURL("a.test", "/title1.html");
+  AddHintForTesting(browser(), url, CreateValidSiteInfo());
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  OpenPageInfoBubble(browser());
+
+  auto* page_info = PageInfoBubbleView::GetPageInfoBubbleForTesting();
+  views::View* button = page_info->GetViewByID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON);
+  ASSERT_TRUE(button);
+
+  histograms.ExpectUniqueSample("Security.PageInfo.AboutThisSiteInteraction",
+                                AboutThisSiteInteraction::kShownWithDescription,
+                                1);
+
+  PerformMouseClickOnView(button);
+  histograms.ExpectTotalCount("Security.PageInfo.AboutThisSiteInteraction", 2);
+  histograms.ExpectBucketCount(
+      "Security.PageInfo.AboutThisSiteInteraction",
+      AboutThisSiteInteraction::kClickedWithDescription, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
+                       AboutThisSiteInteractionWithoutDescription) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  base::HistogramTester histograms;
+
+  auto url = https_server_.GetURL("a.test", "/title1.html");
+  auto site_info = CreateValidSiteInfo();
+  site_info.clear_description();
+  EXPECT_EQ(page_info::about_this_site_validation::ValidateSiteInfo(site_info),
+            AboutThisSiteStatus::kValid);
+  AddHintForTesting(browser(), url, site_info);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  OpenPageInfoBubble(browser());
+
+  auto* page_info = PageInfoBubbleView::GetPageInfoBubbleForTesting();
+  views::View* button = page_info->GetViewByID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON);
+  ASSERT_TRUE(button);
+
+  histograms.ExpectUniqueSample(
+      "Security.PageInfo.AboutThisSiteInteraction",
+      AboutThisSiteInteraction::kShownWithoutDescription, 1);
+
+  PerformMouseClickOnView(button);
+  histograms.ExpectTotalCount("Security.PageInfo.AboutThisSiteInteraction", 2);
+  histograms.ExpectBucketCount(
+      "Security.PageInfo.AboutThisSiteInteraction",
+      AboutThisSiteInteraction::kClickedWithoutDescription, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
@@ -907,4 +968,29 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDisabledBrowserTest,
   ukm_recorder.ExpectEntryMetric(
       entries[0], ukm::builders::AboutThisSiteStatus::kStatusName,
       static_cast<int>(AboutThisSiteStatus::kUnknown));
+}
+
+class PageInfoBubbleViewSiteSettingsBrowserTest : public InProcessBrowserTest {
+ public:
+  PageInfoBubbleViewSiteSettingsBrowserTest() {
+    feature_list.InitWithFeatures({page_info::kPageInfoHideSiteSettings}, {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list;
+};
+
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewSiteSettingsBrowserTest,
+                       SiteSettingsNotValid) {
+  GURL url = GURL("https://www.google.com/");
+  EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  OpenPageInfoBubble(browser());
+
+  views::Widget* page_info_bubble =
+      PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetWidget();
+  EXPECT_TRUE(page_info_bubble);
+
+  views::View* view = page_info_bubble->GetRootView()->GetViewByID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SITE_SETTINGS);
+  EXPECT_FALSE(view);
 }

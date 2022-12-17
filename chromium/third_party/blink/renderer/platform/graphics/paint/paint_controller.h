@@ -132,6 +132,9 @@ class PLATFORM_EXPORT PaintController {
 
   void RecordSelection(absl::optional<PaintedSelectionBound> start,
                        absl::optional<PaintedSelectionBound> end);
+  void RecordAnySelectionWasPainted() {
+    paint_chunker_.RecordAnySelectionWasPainted();
+  }
 
   wtf_size_t NumNewChunks() const {
     return new_paint_artifact_->PaintChunks().size();
@@ -452,13 +455,13 @@ class PLATFORM_EXPORT PaintControllerCycleScope {
   STACK_ALLOCATED();
 
  public:
-  explicit PaintControllerCycleScope(bool record_debug_info = false)
+  explicit PaintControllerCycleScope(bool record_debug_info)
       : record_debug_info_(record_debug_info) {
     clients_to_validate_ =
         MakeGarbageCollected<HeapVector<Member<const DisplayItemClient>>>();
   }
   explicit PaintControllerCycleScope(PaintController& controller,
-                                     bool record_debug_info = false)
+                                     bool record_debug_info)
       : PaintControllerCycleScope(record_debug_info) {
     AddController(controller);
   }

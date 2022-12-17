@@ -23,9 +23,11 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "browser/vivaldi_webcontents_util.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/helper/vivaldi_app_helper.h"
+#include "ui/content/vivaldi_tab_check.h"
 #endif
 
 namespace vivaldi {
@@ -126,6 +128,18 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       web_prefs->cookie_enabled = true;
       web_prefs->privileged_webgl_extensions_enabled = false;
     }
+
+    // Tabs and web-panels.
+    if (VivaldiTabCheck::IsVivaldiTab(web_contents) ||
+        vivaldi::IsVivaldiWebPanel(web_contents)) {
+      // ["always"] | "cache" | "never"
+      int imageload = prefs->GetInteger(vivaldiprefs::kPageImageLoading);
+      web_prefs->images_enabled = (imageload != 2 /*never*/);
+
+      web_prefs->allow_access_keys =
+          prefs->GetBoolean(vivaldiprefs::kWebpagesAccessKeys);
+    }
+
 #endif //ENABLE_EXTENSIONS
   }
 #endif  // !IS_ANDROID

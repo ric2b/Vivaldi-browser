@@ -95,6 +95,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/session_manager_types.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -197,6 +198,21 @@ void ClickOnView(const views::View* view,
   const gfx::Point view_center = view->GetBoundsInScreen().CenterPoint();
   event_generator->MoveMouseTo(view_center);
   event_generator->ClickLeftButton();
+}
+
+void DoubleClickOnView(const views::View* view,
+                       ui::test::EventGenerator* event_generator) {
+  DCHECK(view);
+
+  const gfx::Point view_center = view->GetBoundsInScreen().CenterPoint();
+  event_generator->MoveMouseTo(view_center);
+  event_generator->DoubleClickLeftButton();
+}
+
+void SendAccessibleActionToView(views::View* view, ax::mojom::Action action) {
+  ui::AXActionData action_data;
+  action_data.action = action;
+  view->HandleAccessibleAction(action_data);
 }
 
 void WaitForMilliseconds(int milliseconds) {
@@ -1110,6 +1126,8 @@ TEST_F(DesksTest, WindowActivation) {
 
 TEST_F(DesksTest, ActivateDeskFromOverview) {
   auto* controller = DesksController::Get();
+  auto* overview_controller = Shell::Get()->overview_controller();
+  auto* event_generator = GetEventGenerator();
 
   // Create three desks other than the default initial desk.
   NewDesk();
@@ -1123,60 +1141,85 @@ TEST_F(DesksTest, ActivateDeskFromOverview) {
   wm::ActivateWindow(win1.get());
   EXPECT_EQ(win1.get(), window_util::GetActiveWindow());
 
-  // Enter overview mode, and expect the desk bar is shown with exactly four
-  // desks mini views, and there are exactly two windows in the overview mode
-  // grid.
-  auto* overview_controller = Shell::Get()->overview_controller();
-  EnterOverview();
-  EXPECT_TRUE(overview_controller->InOverviewSession());
-  const auto* overview_grid =
-      GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
-  const auto* desks_bar_view = overview_grid->desks_bar_view();
-  ASSERT_TRUE(desks_bar_view);
-  ASSERT_EQ(4u, desks_bar_view->mini_views().size());
-  EXPECT_EQ(2u, overview_grid->window_list().size());
+  // Test that left-click on desk mini view activates the specified desk.
+  {
+    // Enter overview mode, and expect the desk bar is shown with exactly four
+    // desks mini views, and there are exactly two windows in the overview mode
+    // grid.
+    EnterOverview();
+    EXPECT_TRUE(overview_controller->InOverviewSession());
+    const auto* overview_grid =
+        GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
+    const auto* desks_bar_view = overview_grid->desks_bar_view();
+    ASSERT_TRUE(desks_bar_view);
+    ASSERT_EQ(4u, desks_bar_view->mini_views().size());
+    EXPECT_EQ(2u, overview_grid->window_list().size());
 
-  // Activate desk_4 (last one on the right) by clicking on its mini view.
-  const Desk* desk_4 = controller->desks()[3].get();
-  EXPECT_FALSE(desk_4->is_active());
-  auto* mini_view = desks_bar_view->mini_views().back();
-  EXPECT_EQ(desk_4, mini_view->desk());
-  EXPECT_FALSE(mini_view->close_desk_button()->GetVisible());
-  const gfx::Point mini_view_center =
-      mini_view->GetBoundsInScreen().CenterPoint();
-  auto* event_generator = GetEventGenerator();
-  event_generator->MoveMouseTo(mini_view_center);
-  DeskSwitchAnimationWaiter waiter;
-  event_generator->ClickLeftButton();
-  waiter.Wait();
+    // Activate desk_4 (last one on the right) by clicking on its mini view.
+    const Desk* desk_4 = controller->desks()[3].get();
+    EXPECT_EQ(0, controller->GetActiveDeskIndex());
+    auto* mini_view = desks_bar_view->mini_views().back();
+    EXPECT_EQ(desk_4, mini_view->desk());
+    EXPECT_FALSE(mini_view->close_desk_button()->GetVisible());
+    DeskSwitchAnimationWaiter waiter;
+    ClickOnView(mini_view, event_generator);
+    waiter.Wait();
 
-  // Expect that desk_4 is now active, and overview mode exited.
-  EXPECT_TRUE(desk_4->is_active());
-  EXPECT_FALSE(overview_controller->InOverviewSession());
-  // Exiting overview mode should not restore focus to a window on a
-  // now-inactive desk. Run a loop since the overview session is destroyed async
-  // and until that happens, focus will be on the dummy
-  // "OverviewModeFocusedWidget".
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(nullptr, window_util::GetActiveWindow());
+    // Expect that desk_4 is now active, and overview mode exited.
+    EXPECT_EQ(3, controller->GetActiveDeskIndex());
+    EXPECT_FALSE(overview_controller->InOverviewSession());
+    // Exiting overview mode should not restore focus to a window on a
+    // now-inactive desk. Run a loop since the overview session is destroyed
+    // async and until that happens, focus will be on the dummy
+    // "OverviewModeFocusedWidget".
+    base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(nullptr, window_util::GetActiveWindow());
 
-  // Create one window in desk_4 and enter overview mode. Expect the grid is
-  // showing exactly one window.
-  auto win2 = CreateAppWindow(gfx::Rect(50, 50, 200, 200));
-  wm::ActivateWindow(win2.get());
-  EnterOverview();
-  EXPECT_TRUE(overview_controller->InOverviewSession());
-  overview_grid = GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
-  EXPECT_EQ(1u, overview_grid->window_list().size());
+    // Create one window in desk_4 and enter overview mode. Expect the grid is
+    // showing exactly one window.
+    auto win2 = CreateAppWindow(gfx::Rect(50, 50, 200, 200));
+    wm::ActivateWindow(win2.get());
+    EnterOverview();
+    EXPECT_TRUE(overview_controller->InOverviewSession());
+    overview_grid = GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
+    EXPECT_EQ(1u, overview_grid->window_list().size());
 
-  // When exiting overview mode without changing desks, the focus should be
-  // restored to the same window.
-  ExitOverview();
-  EXPECT_FALSE(overview_controller->InOverviewSession());
-  // Run a loop since the overview session is destroyed async and until that
-  // happens, focus will be on the dummy "OverviewModeFocusedWidget".
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(win2.get(), window_util::GetActiveWindow());
+    // When exiting overview mode without changing desks, the focus should be
+    // restored to the same window.
+    ExitOverview();
+    EXPECT_FALSE(overview_controller->InOverviewSession());
+    // Run a loop since the overview session is destroyed async and until that
+    // happens, focus will be on the dummy "OverviewModeFocusedWidget".
+    base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(win2.get(), window_util::GetActiveWindow());
+  }
+
+  // Test double click on desk mini view does not crash.
+  {
+    EnterOverview();
+    const auto* overview_grid =
+        GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
+    DeskSwitchAnimationWaiter waiter;
+    DoubleClickOnView(overview_grid->desks_bar_view()->mini_views().front(),
+                      event_generator);
+    waiter.Wait();
+    EXPECT_EQ(0, controller->GetActiveDeskIndex());
+    EXPECT_FALSE(overview_controller->InOverviewSession());
+  }
+
+  // Test that using ChromeVox on a desk mini view does not crash.
+  {
+    EnterOverview();
+    const auto* overview_grid =
+        GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
+    DeskSwitchAnimationWaiter waiter;
+    SendAccessibleActionToView(
+        overview_grid->desks_bar_view()->mini_views()[1]->desk_preview(),
+        ax::mojom::Action::kDoDefault);
+    waiter.Wait();
+    EXPECT_EQ(1, controller->GetActiveDeskIndex());
+    EXPECT_FALSE(overview_controller->InOverviewSession());
+  }
 }
 
 // This test makes sure we have coverage for that desk switch animation when run
@@ -2128,6 +2171,86 @@ TEST_F(DesksWithMultiDisplayOverview, DropOnOtherDeskInOtherDisplay) {
   EXPECT_TRUE(base::Contains(desk_2->windows(), win.get()));
 }
 
+// DesksBarVisibilityObserver waits for the Desks Bar on the observed root
+// window to become visible.
+class DesksBarVisibilityObserver : public aura::WindowObserver {
+ public:
+  explicit DesksBarVisibilityObserver(aura::Window* root_window)
+      : root_window_(root_window) {
+    root_window_->AddObserver(this);
+  }
+  DesksBarVisibilityObserver(const DesksBarVisibilityObserver&) = delete;
+  DesksBarVisibilityObserver& operator=(const DesksBarVisibilityObserver&) =
+      delete;
+  ~DesksBarVisibilityObserver() override {
+    DCHECK(root_window_);
+    root_window_->RemoveObserver(this);
+  }
+
+  void Wait() { run_loop_.Run(); }
+
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
+    if (visible && window->GetId() == kShellWindowId_DesksBarWindow)
+      run_loop_.Quit();
+  }
+
+ private:
+  base::RunLoop run_loop_;
+  raw_ptr<aura::Window> root_window_;
+};
+
+// Tests that closing a desk while in overview before the overview starting
+// animation finishes on a second display does not cause a crash. Regression
+// test for https://crbug.com/1346154.
+TEST_F(DesksWithMultiDisplayOverview, CloseDeskBeforeAnimationFinishes) {
+  // We need a non-zero duration to ensure we can close the desk before the
+  // animation completes.
+  ui::ScopedAnimationDurationScaleMode animation_scale(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Create a maximized window on Desk 1. This means that when entering
+  // overview, we skip the wallpaper animation for Desk 1, so that the
+  // desks_bar_view for RootWindow-0 will initialize before RootWindow-1.
+  auto win0 = CreateAppWindow(gfx::Rect(0, 0, 250, 100));
+  const WMEvent toggle_maximize_event(WM_EVENT_TOGGLE_MAXIMIZE);
+  WindowState::Get(win0.get())->OnWMEvent(&toggle_maximize_event);
+  ASSERT_TRUE(WindowState::Get(win0.get())->IsMaximized());
+
+  EnterOverview();
+  auto* overview_controller = Shell::Get()->overview_controller();
+  ASSERT_TRUE(overview_controller->InOverviewSession());
+
+  // Check that the desk bar on our first root window has finished initializing,
+  // while the second desk bar hasn't been initialized yet since the enter
+  // animation hasn't finished for the second root window.
+  auto root_windows = Shell::GetAllRootWindows();
+  ASSERT_EQ(2u, root_windows.size());
+  const auto* desks_bar_view_1 =
+      GetOverviewGridForRoot(root_windows[0])->desks_bar_view();
+  ASSERT_EQ(2u, desks_bar_view_1->mini_views().size());
+  ASSERT_EQ(nullptr, GetOverviewGridForRoot(root_windows[1])->desks_bar_view());
+
+  // Close the first desk. Previously, this would result in a crash since the
+  // desk is deleted before `desks_bar_view_2` is initialized, resulting in the
+  // `desk_1_mini_view` not being created for `desks_bar_view_2`. When
+  // `OnDeskRemoved` is then called for the second desk bar, we now return early
+  // if that miniview can't be found.
+  // To prevent flakiness in this test, we wait until `desks_bar_view_2` is
+  // initialized and shown before we check the state.
+  DesksBarVisibilityObserver desks_bar_2_observer(root_windows[1]);
+  auto* desk_1_mini_view = desks_bar_view_1->mini_views()[0];
+  CloseDeskFromMiniView(desk_1_mini_view, GetEventGenerator());
+  desks_bar_2_observer.Wait();
+
+  // Verify that we are still in overview mode and that both desks bars are in
+  // the zero state.
+  ASSERT_TRUE(overview_controller->InOverviewSession());
+  ASSERT_TRUE(desks_bar_view_1->IsZeroState());
+  const auto* desks_bar_view_2 =
+      GetOverviewGridForRoot(root_windows[1])->desks_bar_view();
+  ASSERT_TRUE(desks_bar_view_2->IsZeroState());
+}
+
 namespace {
 
 PrefService* GetPrimaryUserPrefService() {
@@ -2138,13 +2261,12 @@ PrefService* GetPrimaryUserPrefService() {
 // given list of |desks_names|.
 void VerifyDesksRestoreData(PrefService* user_prefs,
                             const std::vector<std::string>& desks_names) {
-  const base::Value* desks_restore_names =
-      user_prefs->GetList(prefs::kDesksNamesList);
-  ASSERT_EQ(desks_names.size(),
-            desks_restore_names->GetListDeprecated().size());
+  const base::Value::List& desks_restore_names =
+      user_prefs->GetValueList(prefs::kDesksNamesList);
+  ASSERT_EQ(desks_names.size(), desks_restore_names.size());
 
   size_t index = 0;
-  for (const auto& value : desks_restore_names->GetListDeprecated())
+  for (const auto& value : desks_restore_names)
     EXPECT_EQ(desks_names[index++], value.GetString());
 }
 
@@ -3169,7 +3291,7 @@ TEST_F(DesksTest, SwitchToDeskWithSnappedActiveWindow) {
   auto win0 = CreateAppWindow(gfx::Rect(0, 0, 250, 100));
   auto win1 = CreateAppWindow(gfx::Rect(50, 50, 200, 200));
   WindowState* win0_state = WindowState::Get(win0.get());
-  WMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  WindowSnapWMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
   win0_state->OnWMEvent(&snap_to_left);
   EXPECT_EQ(chromeos::WindowStateType::kPrimarySnapped,
             win0_state->GetStateType());
@@ -3421,10 +3543,10 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
                                      std::vector<std::string> desk_names) {
     DCHECK(prefs);
     ListPrefUpdate update(prefs, prefs::kDesksNamesList);
-    base::Value* pref_data = update.Get();
-    ASSERT_TRUE(pref_data->GetListDeprecated().empty());
+    base::Value::List& pref_data = update->GetList();
+    ASSERT_TRUE(pref_data.empty());
     for (auto desk_name : desk_names)
-      pref_data->Append(desk_name);
+      pref_data.Append(desk_name);
   }
 
   void SimulateUserLogin(const AccountId& account_id) {
@@ -4271,8 +4393,7 @@ class PerDeskShelfTest : public AshTestBase,
   // given |window| is equal to the given |expected_visibility|.
   void VerifyViewVisibility(aura::Window* window,
                             bool expected_visibility) const {
-    const int index = GetShelfItemIndexForWindow(window);
-    EXPECT_GE(index, 0);
+    const size_t index = GetShelfItemIndexForWindow(window);
     auto* shelf_view = GetShelfView();
     auto* view_model = shelf_view->view_model();
 
@@ -4894,7 +5015,7 @@ TEST_F(DesksTest, FocusedMiniViewIsVisible) {
   ASSERT_EQ(mini_views.size(), desks_util::kMaxNumberOfDesks);
   // Traverse all the desks mini views from left to right.
   for (size_t i = 0; i < desks_util::kMaxNumberOfDesks; i++) {
-    // Move the focus to mini view.
+    // Move the focus to the mini view's associated preview view.
     SendKey(ui::VKEY_TAB);
     EXPECT_TRUE(
         DesksTestApi::GetDesksBarScrollView()->GetVisibleRect().Contains(
@@ -4905,7 +5026,7 @@ TEST_F(DesksTest, FocusedMiniViewIsVisible) {
 
   // Traverse from all the desk mini views from right to left.
   for (size_t i = desks_util::kMaxNumberOfDesks - 1; i > 0; i--) {
-    // Move the focus from desk name view to the associated mini view.
+    // Move the focus from desk name view to the associated preview view.
     SendKey(ui::VKEY_LEFT);
     // Move the focus to previous mini view's name view.
     SendKey(ui::VKEY_LEFT);
@@ -5524,7 +5645,7 @@ TEST_F(DesksTest, ReorderDesksByKeyboard) {
   // Highlight the second desk.
   overview_controller->overview_session()
       ->highlight_controller()
-      ->MoveHighlightToView(mini_view_1);
+      ->MoveHighlightToView(mini_view_1->desk_preview());
 
   // Swap the positions of the second desk and the third desk by pressing Ctrl +
   // ->.
@@ -5641,7 +5762,7 @@ TEST_F(DesksTest, ReorderDesksInRTLMode) {
   // Highlight the |desk_0|.
   overview_controller->overview_session()
       ->highlight_controller()
-      ->MoveHighlightToView(mini_view_0);
+      ->MoveHighlightToView(mini_view_0->desk_preview());
 
   // Swap the positions of the |desk_0| and the |desk_2| by pressing Ctrl + <-.
   event_generator->PressKey(ui::VKEY_LEFT, ui::EF_CONTROL_DOWN);
@@ -6364,21 +6485,34 @@ TEST_F(PersistentDesksBarTest, OverviewMode) {
 
 // Tests the desk activation changes after clicking the desk button in the bar.
 TEST_F(PersistentDesksBarTest, DeskActivation) {
-  NewDesk();
   auto* desks_controller = DesksController::Get();
+  auto* event_generator = GetEventGenerator();
+
+  NewDesk();
   EXPECT_EQ(2u, desks_controller->desks().size());
   EXPECT_TRUE(GetBarWidget());
-  EXPECT_EQ(desks_controller->desks()[0].get(),
-            desks_controller->active_desk());
+  EXPECT_EQ(0, desks_controller->GetActiveDeskIndex());
 
   // Should activate `Desk 2` after clicking the corresponding desk button.
-  DeskSwitchAnimationWaiter waiter;
-  ClickOnView(DesksTestApi::GetPersistentDesksBarDeskButtons()[1],
-              GetEventGenerator());
-  waiter.Wait();
-  EXPECT_TRUE(GetBarWidget());
-  EXPECT_EQ(desks_controller->desks()[1].get(),
-            desks_controller->active_desk());
+  {
+    DeskSwitchAnimationWaiter waiter;
+    ClickOnView(DesksTestApi::GetPersistentDesksBarDeskButtons()[1],
+                event_generator);
+    waiter.Wait();
+    EXPECT_TRUE(GetBarWidget());
+    EXPECT_EQ(1, desks_controller->GetActiveDeskIndex());
+  }
+
+  // Should activate `Desk 1` after double-clicking the corresponding desk
+  // button without crash.
+  {
+    DeskSwitchAnimationWaiter waiter;
+    DoubleClickOnView(DesksTestApi::GetPersistentDesksBarDeskButtons()[0],
+                      event_generator);
+    waiter.Wait();
+    EXPECT_TRUE(GetBarWidget());
+    EXPECT_EQ(0, desks_controller->GetActiveDeskIndex());
+  }
 }
 
 TEST_F(PersistentDesksBarTest, LeavingOrEnteringTabletModeWithOverviewModeOn) {
@@ -7502,7 +7636,7 @@ TEST_F(DesksCloseAllTest, ShortcutCloseAll) {
   SendKey(ui::VKEY_TAB);
   SendKey(ui::VKEY_TAB);
   SendKey(ui::VKEY_TAB);
-  ASSERT_EQ(mini_view,
+  ASSERT_EQ(mini_view->desk_preview(),
             overview_session->highlight_controller()->highlighted_view());
 
   // Tests that after hitting Ctrl + Shift + W, the desk is destroyed along with
@@ -7821,7 +7955,7 @@ TEST_F(DesksCloseAllTest, TestMetricsRecordingWhenCloseAllWindows) {
       // Record click undo button in toast after remove all
       histogram_tester.ExpectTotalCount("Ash.Desks.CloseAllUndo", 1);
       // Record undo toast expired
-      histogram_tester.ExpectTotalCount("Ash.Desks.CloseAllUndoAndExpired",
+      histogram_tester.ExpectTotalCount("Ash.Desks.CloseAllTotal",
                                         ++undo_toast_expired_count);
 
     } else {
@@ -7829,7 +7963,7 @@ TEST_F(DesksCloseAllTest, TestMetricsRecordingWhenCloseAllWindows) {
       // destroyed.
       WaitForMilliseconds(ToastData::kDefaultToastDuration.InMilliseconds());
       // Record undo toast expired
-      histogram_tester.ExpectTotalCount("Ash.Desks.CloseAllUndoAndExpired",
+      histogram_tester.ExpectTotalCount("Ash.Desks.CloseAllTotal",
                                         ++undo_toast_expired_count);
       // Record number of windows being closed
       histogram_tester.ExpectUniqueSample("Ash.Desks.NumberOfWindowsClosed", 2,
@@ -7923,7 +8057,7 @@ TEST_F(DesksCloseAllTest, CanUndoDeskClosureThroughKeyboardNavigation) {
 
   // Tab to the first mini view and perform close-all on it.
   SendKey(ui::VKEY_TAB);
-  ASSERT_EQ(GetPrimaryRootDesksBarView()->mini_views()[0],
+  ASSERT_EQ(GetPrimaryRootDesksBarView()->mini_views()[0]->desk_preview(),
             Shell::Get()
                 ->overview_controller()
                 ->overview_session()

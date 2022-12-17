@@ -9,21 +9,20 @@
 #include <string>
 #include <vector>
 
-#include "chrome/browser/ash/crostini/crostini_simple_types.h"
-#include "chrome/browser/profiles/profile.h"
-#include "components/value_store/value_store.h"
+#include "chromeos/ash/components/dbus/cicerone/cicerone_service.pb.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefChangeRegistrar;
 
-namespace crostini {
-struct ContainerId;
-}  // namespace crostini
+namespace guest_os {
+struct GuestId;
+}  // namespace guest_os
 
 namespace extensions {
 
-class CrostiniStartupStatus;
+class StartupStatus;
 
 class TerminalPrivateAPI : public BrowserContextKeyedAPI {
  public:
@@ -66,20 +65,19 @@ class TerminalPrivateOpenTerminalProcessFunction : public ExtensionFunction {
       std::unique_ptr<std::vector<std::string>> args);
 
  private:
-  void OnCrostiniRestarted(
-      const std::string& user_id_hash,
-      base::CommandLine cmdline,
-      crostini::CrostiniResult result);
+  void OnGuestRunning(const std::string& user_id_hash,
+                      base::CommandLine cmdline,
+                      bool success,
+                      std::string failure_reason);
 
   void OpenVmshellProcess(const std::string& user_id_hash,
                           base::CommandLine cmdline);
 
-  void OnGetVshSession(const std::string& user_id_hash,
-                       base::CommandLine cmdline,
-                       const std::string& terminal_id,
-                       bool success,
-                       const std::string& failure_reason,
-                       int32_t container_shell_pid);
+  void OnGetVshSession(
+      const std::string& user_id_hash,
+      base::CommandLine cmdline,
+      const std::string& terminal_id,
+      absl::optional<vm_tools::cicerone::GetVshSessionResponse>);
 
   void OpenProcess(const std::string& user_id_hash,
                    base::CommandLine cmdline);
@@ -95,8 +93,8 @@ class TerminalPrivateOpenTerminalProcessFunction : public ExtensionFunction {
                                 base::CommandLine cmdline,
                                 const std::string& user_id_hash);
   void RespondOnUIThread(bool success, const std::string& terminal_id);
-  std::unique_ptr<CrostiniStartupStatus> startup_status_;
-  std::unique_ptr<crostini::ContainerId> container_id_;
+  std::unique_ptr<StartupStatus> startup_status_;
+  std::unique_ptr<guest_os::GuestId> guest_id_;
 };
 
 // Opens new vmshell process. Returns the new terminal id.
@@ -127,6 +125,7 @@ class TerminalPrivateSendInputFunction : public ExtensionFunction {
  private:
   void SendInputOnRegistryTaskRunner(const std::string& terminal_id,
                                      const std::string& input);
+  void OnSendInput(bool success);
   void RespondOnUIThread(bool success);
 };
 

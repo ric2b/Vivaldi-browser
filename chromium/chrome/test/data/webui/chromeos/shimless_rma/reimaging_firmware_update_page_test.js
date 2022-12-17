@@ -18,13 +18,10 @@ export function reimagingFirmwareUpdatePageTest() {
   /** @type {?FakeShimlessRmaService} */
   let service = null;
 
-  suiteSetup(() => {
-    service = new FakeShimlessRmaService();
-    setShimlessRmaServiceForTesting(service);
-  });
-
   setup(() => {
     document.body.innerHTML = '';
+    service = new FakeShimlessRmaService();
+    setShimlessRmaServiceForTesting(service);
   });
 
   teardown(() => {
@@ -90,12 +87,23 @@ export function reimagingFirmwareUpdatePageTest() {
   test('RoFirmwareUpdateEnablesNext', async () => {
     const resolver = new PromiseResolver();
     await initializeReimagingFirmwareUpdatePage();
+
+    const firmwareTitle = component.shadowRoot.querySelector('#titleText');
+    assertEquals(
+        loadTimeData.getString('firmwareUpdateInstallImageTitleText'),
+        firmwareTitle.textContent.trim());
+
     service.triggerUpdateRoFirmwareObserver(
         UpdateRoFirmwareStatus.kComplete, 0);
     await flushTasks();
     service.roFirmwareUpdateComplete = () => {
       return resolver.promise;
     };
+
+    // Confirm the page title changes after firmware install completes.
+    assertEquals(
+        loadTimeData.getString('firmwareUpdateInstallCompleteTitleText'),
+        firmwareTitle.textContent.trim());
 
     const expectedResult = {foo: 'bar'};
     let savedResult;

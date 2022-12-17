@@ -5,14 +5,18 @@
 /**
  * @fileoverview The logic behind incremental search.
  */
-import {Output} from '/chromevox/background/output/output.js';
-import {ISearchHandler} from '/chromevox/background/panel/i_search_handler.js';
+import {AutomationPredicate} from '../../../common/automation_predicate.js';
+import {AutomationUtil} from '../../../common/automation_util.js';
+import {constants} from '../../../common/constants.js';
+import {Cursor} from '../../../common/cursors/cursor.js';
+
+import {ISearchHandler} from './i_search_handler.js';
 
 const Dir = constants.Dir;
 
 /** Controls an incremental search. */
 export class ISearch {
-  /** @param {!cursors.Cursor} cursor */
+  /** @param {!Cursor} cursor */
   constructor(cursor) {
     if (!cursor.node) {
       throw 'Incremental search started from invalid range.';
@@ -25,8 +29,8 @@ export class ISearch {
                      cursor.node, Dir.FORWARD, AutomationPredicate.leaf) ||
         cursor.node;
 
-    /** @type {!cursors.Cursor} */
-    this.cursor = cursors.Cursor.fromNode(leaf);
+    /** @type {!Cursor} */
+    this.cursor = Cursor.fromNode(leaf);
 
     /** @private {number} */
     this.callbackId_ = 0;
@@ -62,7 +66,7 @@ export class ISearch {
       } while (result && !AutomationPredicate.object(result));
 
       if (result) {
-        this.cursor = cursors.Cursor.fromNode(result);
+        this.cursor = Cursor.fromNode(result);
         const start = result.name.toLocaleLowerCase().indexOf(searchStr);
         const end = start + searchStr.length;
         this.handler_.onSearchResultChanged(result, start, end);

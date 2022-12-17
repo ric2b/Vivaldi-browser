@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/weak_ptr.h"
+#include "base/task/common/lazy_now.h"
 #include "base/task/sequence_manager/task_queue.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -25,12 +26,6 @@
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
-
-namespace base {
-namespace trace_event {
-class BlameContext;
-}  // namespace trace_event
-}  // namespace base
 
 namespace blink {
 namespace scheduler {
@@ -80,13 +75,14 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
 
   std::unique_ptr<FrameScheduler> CreateFrameScheduler(
       FrameScheduler::Delegate* delegate,
-      BlameContext*,
+      bool is_in_embedded_frame_tree,
       FrameScheduler::FrameType) override;
   void AudioStateChanged(bool is_audio_playing) override;
   bool IsAudioPlaying() const override;
   bool IsExemptFromBudgetBasedThrottling() const override;
   bool OptedOutFromAggressiveThrottlingForTest() const override;
   bool RequestBeginMainFrameNotExpected(bool new_state) override;
+  scoped_refptr<scheduler::WidgetScheduler> CreateWidgetScheduler() override;
 
   // Virtual for testing.
   virtual void ReportIntervention(const String& message);
@@ -102,7 +98,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
 
   // An "ordinary" PageScheduler is responsible for a fully-featured page
   // owned by a web view.
-  bool IsOrdinary() const;
+  virtual bool IsOrdinary() const;
 
   MainThreadSchedulerImpl* GetMainThreadScheduler() const;
   AgentGroupSchedulerImpl& GetAgentGroupScheduler() override;
@@ -182,30 +178,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
     kMaxValue = kFrozenToHiddenBackgrounded,
   };
 
-  class PageLifecycleStateTracker {
-    USING_FAST_MALLOC(PageLifecycleStateTracker);
-
-   public:
-    explicit PageLifecycleStateTracker(PageLifecycleState);
-    PageLifecycleStateTracker(const PageLifecycleStateTracker&) = delete;
-    PageLifecycleStateTracker& operator=(const PageLifecycleStateTracker&) =
-        delete;
-    ~PageLifecycleStateTracker() = default;
-
-    void SetPageLifecycleState(PageLifecycleState);
-    PageLifecycleState GetPageLifecycleState() const;
-
-   private:
-    static absl::optional<PageLifecycleStateTransition>
-    ComputePageLifecycleStateTransition(PageLifecycleState old_state,
-                                        PageLifecycleState new_state);
-
-    static void RecordPageLifecycleStateTransition(
-        PageLifecycleStateTransition);
-
-    PageLifecycleState current_state_;
-  };
-
   void RegisterFrameSchedulerImpl(FrameSchedulerImpl* frame_scheduler);
 
   // A page cannot be throttled or frozen 30 seconds after playing audio.
@@ -216,11 +188,11 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   // can be increased to 30 seconds without significantly affecting performance.
   static constexpr base::TimeDelta kRecentAudioDelay = base::Seconds(30);
 
-  static const char kHistogramPageLifecycleStateTransition[];
-
   // Support not issuing a notification to frames when we disable freezing as
   // a part of foregrounding the page.
   void SetPageFrozenImpl(bool frozen, NotificationPolicy notification_policy);
+
+  void SetPageLifecycleState(PageLifecycleState state);
 
   // Adds or removes a |task_queue| from the WakeUpBudgetPool. When the
   // FrameOriginType or visibility of a FrameScheduler changes, it should remove
@@ -229,30 +201,27 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   void AddQueueToWakeUpBudgetPool(MainThreadTaskQueue* task_queue,
                                   FrameOriginType frame_origin_type,
                                   bool frame_visible,
-                                  base::sequence_manager::LazyNow* lazy_now);
-  void RemoveQueueFromWakeUpBudgetPool(
-      MainThreadTaskQueue* task_queue,
-      base::sequence_manager::LazyNow* lazy_now);
+                                  base::LazyNow* lazy_now);
+  void RemoveQueueFromWakeUpBudgetPool(MainThreadTaskQueue* task_queue,
+                                       base::LazyNow* lazy_now);
   // Returns the WakeUpBudgetPool to use for |task_queue| which belongs to a
   // frame with |frame_origin_type| and visibility |frame_visible|.
   WakeUpBudgetPool* GetWakeUpBudgetPool(MainThreadTaskQueue* task_queue,
                                         FrameOriginType frame_origin_type,
                                         bool frame_visible);
   // Initializes WakeUpBudgetPools, if not already initialized.
-  void MaybeInitializeWakeUpBudgetPools(
-      base::sequence_manager::LazyNow* lazy_now);
+  void MaybeInitializeWakeUpBudgetPools(base::LazyNow* lazy_now);
 
   CPUTimeBudgetPool* background_cpu_time_budget_pool();
-  void MaybeInitializeBackgroundCPUTimeBudgetPool(
-      base::sequence_manager::LazyNow* lazy_now);
+  void MaybeInitializeBackgroundCPUTimeBudgetPool(base::LazyNow* lazy_now);
 
   // Depending on page visibility, either turns throttling off, or schedules a
   // call to enable it after a grace period.
   void UpdatePolicyOnVisibilityChange(NotificationPolicy notification_policy);
 
   // Adjusts settings of budget pools depending on current state of the page.
-  void UpdateCPUTimeBudgetPool(base::sequence_manager::LazyNow* lazy_now);
-  void UpdateWakeUpBudgetPools(base::sequence_manager::LazyNow* lazy_now);
+  void UpdateCPUTimeBudgetPool(base::LazyNow* lazy_now);
+  void UpdateWakeUpBudgetPools(base::LazyNow* lazy_now);
   base::TimeDelta GetIntensiveWakeUpThrottlingInterval(
       bool is_same_origin) const;
 
@@ -370,7 +339,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   TaskHandle set_ipc_posted_handler_task_;
   base::TimeTicks stored_in_back_forward_cache_timestamp_;
 
-  std::unique_ptr<PageLifecycleStateTracker> page_lifecycle_state_tracker_;
+  PageLifecycleState current_lifecycle_state_ = kDefaultPageLifecycleState;
   base::WeakPtrFactory<PageSchedulerImpl> weak_factory_{this};
 };
 

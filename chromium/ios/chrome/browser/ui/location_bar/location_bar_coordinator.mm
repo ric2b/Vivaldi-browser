@@ -10,13 +10,13 @@
 #import "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
+#import "components/omnibox/browser/location_bar_model_impl.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "components/search_engines/util.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/variations/net/variations_http_headers.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
@@ -31,7 +31,7 @@
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/browser/ui/badges/badge_mediator.h"
 #import "ios/chrome/browser/ui/badges/badge_view_controller.h"
-#include "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
@@ -41,6 +41,7 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_consumer.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_mediator.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_model_delegate_ios.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_mediator.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_url_loader.h"
@@ -73,6 +74,10 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+const size_t kMaxURLDisplayChars = 32 * 1024;
+}  // namespace
+
 @interface LocationBarCoordinator () <LoadQueryCommands,
                                       LocationBarDelegate,
                                       LocationBarViewControllerDelegate,
@@ -81,10 +86,15 @@
                                       URLDragDataSource> {
   // API endpoint for omnibox.
   std::unique_ptr<WebOmniboxEditControllerImpl> _editController;
-  // Observer that updates |viewController| for fullscreen events.
+  // Observer that updates `viewController` for fullscreen events.
   std::unique_ptr<FullscreenUIUpdater> _omniboxFullscreenUIUpdater;
   // Observer that updates BadgeViewController for fullscreen events.
   std::unique_ptr<FullscreenUIUpdater> _badgeFullscreenUIUpdater;
+
+  // Facade objects used by `_toolbarCoordinator`.
+  // Must outlive `_toolbarCoordinator`.
+  std::unique_ptr<LocationBarModelDelegateIOS> _locationBarModelDelegate;
+  std::unique_ptr<LocationBarModel> _locationBarModel;
 }
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
@@ -150,8 +160,8 @@
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
   self.viewController.dispatcher =
-      static_cast<id<ActivityServiceCommands, BrowserCommands,
-                     ApplicationCommands, LoadQueryCommands, OmniboxCommands>>(
+      static_cast<id<ActivityServiceCommands, ApplicationCommands,
+                     LoadQueryCommands, OmniboxCommands>>(
           self.browser->GetCommandDispatcher());
   self.viewController.voiceSearchEnabled =
       ios::provider::IsVoiceSearchEnabled();
@@ -206,6 +216,11 @@
   self.mediator.consumer = self;
   self.mediator.webStateList = self.webStateList;
 
+  _locationBarModelDelegate.reset(
+      new LocationBarModelDelegateIOS(self.browser->GetWebStateList()));
+  _locationBarModel = std::make_unique<LocationBarModelImpl>(
+      _locationBarModelDelegate.get(), kMaxURLDisplayChars);
+
   self.steadyViewMediator = [[LocationBarSteadyViewMediator alloc]
       initWithLocationBarModel:[self locationBarModel]];
   self.steadyViewMediator.webStateList = self.browser->GetWebStateList();
@@ -238,6 +253,9 @@
   self.mediator = nil;
   [self.steadyViewMediator disconnect];
   self.steadyViewMediator = nil;
+
+  _locationBarModel = nullptr;
+  _locationBarModelDelegate = nullptr;
 
   _badgeFullscreenUIUpdater = nullptr;
   _omniboxFullscreenUIUpdater = nullptr;
@@ -287,21 +305,28 @@
 #pragma mark - LocationBarURLLoader
 
 - (void)loadGURLFromLocationBar:(const GURL&)url
-                    postContent:(TemplateURLRef::PostContent*)postContent
-                     transition:(ui::PageTransition)transition
-                    disposition:(WindowOpenDisposition)disposition {
+                               postContent:
+                                   (TemplateURLRef::PostContent*)postContent
+                                transition:(ui::PageTransition)transition
+                               disposition:(WindowOpenDisposition)disposition
+    destination_url_entered_without_scheme:
+        (bool)destination_url_entered_without_scheme {
   if (url.SchemeIs(url::kJavaScriptScheme)) {
     LoadJavaScriptURL(url, self.browserState,
                       self.webStateList->GetActiveWebState());
   } else {
-    // TODO(crbug.com/785244): Is it ok to call |cancelOmniboxEdit| after
-    // |loadURL|?  It doesn't seem to be causing major problems.  If we call
+    // TODO(crbug.com/785244): Is it ok to call `cancelOmniboxEdit` after
+    // `loadURL|?  It doesn't seem to be causing major problems.  If we call
     // cancel before load, then any prerendered pages get destroyed before the
     // call to load.
     web::NavigationManager::WebLoadParams web_params =
         web_navigation_util::CreateWebLoadParams(url, transition, postContent);
+    if (destination_url_entered_without_scheme) {
+      web_params.https_upgrade_type = web::HttpsUpgradeType::kOmnibox;
+    }
     NSMutableDictionary* combinedExtraHeaders =
-        [[self variationHeadersForURL:url] mutableCopy];
+        [web_navigation_util::VariationHeadersForURL(
+            url, self.browserState->IsOffTheRecord()) mutableCopy];
     [combinedExtraHeaders addEntriesFromDictionary:web_params.extra_headers];
     web_params.extra_headers = [combinedExtraHeaders copy];
     UrlLoadParams params = UrlLoadParams::InCurrentTab(web_params);
@@ -334,7 +359,10 @@
   // before focusing the omnibox.
   if (IsVisibleURLNewTabPage([self webState]) &&
       !self.browserState->IsOffTheRecord()) {
-    [self.viewController.dispatcher focusFakebox];
+    id<BrowserCoordinatorCommands> browserCoordinatorCommandsHandler =
+        HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                           BrowserCoordinatorCommands);
+    [browserCoordinatorCommandsHandler focusFakebox];
   } else {
     [self.omniboxCoordinator focusOmnibox];
   }
@@ -364,7 +392,7 @@
 }
 
 - (LocationBarModel*)locationBarModel {
-  return [self.delegate locationBarModel];
+  return _locationBarModel.get();
 }
 
 - (void)locationBarRequestScribbleTargetFocus {
@@ -469,28 +497,7 @@
 
 #pragma mark - private
 
-// Returns a dictionary with variation headers for qualified URLs. Can be empty.
-- (NSDictionary*)variationHeadersForURL:(const GURL&)URL {
-  network::ResourceRequest resource_request;
-  variations::AppendVariationsHeaderUnknownSignedIn(
-      URL,
-      self.browserState->IsOffTheRecord() ? variations::InIncognito::kYes
-                                          : variations::InIncognito::kNo,
-      &resource_request);
-  NSMutableDictionary* result = [NSMutableDictionary dictionary];
-  // The variations header appears in cors_exempt_headers rather than in
-  // headers.
-  net::HttpRequestHeaders::Iterator header_iterator(
-      resource_request.cors_exempt_headers);
-  while (header_iterator.GetNext()) {
-    NSString* name = base::SysUTF8ToNSString(header_iterator.name());
-    NSString* value = base::SysUTF8ToNSString(header_iterator.value());
-    result[name] = value;
-  }
-  return [result copy];
-}
-
-// Navigate to |query| from omnibox.
+// Navigate to `query` from omnibox.
 - (void)loadURLForQuery:(const std::u16string&)query {
   GURL searchURL;
   metrics::OmniboxInputType type = AutocompleteInput::Parse(

@@ -44,7 +44,7 @@ std::string GetURLQueryString(const base::StringPairs& query_params);
 //  |buffer| - The contents of the file.
 scoped_refptr<DecoderBuffer> ReadTestDataFile(
     const std::string& name
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
     , const base::FilePath& full_filename = {}
 #endif
 );

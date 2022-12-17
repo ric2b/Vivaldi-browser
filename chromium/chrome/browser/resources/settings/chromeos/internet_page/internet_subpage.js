@@ -8,9 +8,9 @@
  */
 
 import 'chrome://resources/cr_components/chromeos/network/network_list.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.m.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_indicator.m.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
@@ -18,7 +18,7 @@ import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../os_settings_icons_css.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import './cellular_networks_list.js';
 import './network_always_on_vpn.js';
@@ -31,6 +31,7 @@ import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {afterNextRender, html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {recordSettingChange} from '../metrics_recorder.js';
@@ -54,8 +55,12 @@ const mojom = chromeos.networkConfig.mojom;
  */
 const SettingsInternetSubpageElementBase = mixinBehaviors(
     [
-      NetworkListenerBehavior, CrPolicyNetworkBehaviorMojo, DeepLinkingBehavior,
-      RouteObserverBehavior, RouteOriginBehavior, I18nBehavior
+      NetworkListenerBehavior,
+      CrPolicyNetworkBehaviorMojo,
+      DeepLinkingBehavior,
+      RouteObserverBehavior,
+      RouteOriginBehavior,
+      I18nBehavior,
     ],
     PolymerElement);
 
@@ -159,18 +164,6 @@ class SettingsInternetSubpageElement extends
       },
 
       /**
-       * Whether the ESim Policy feature flag is enabled or not.
-       * @private
-       */
-      isESimPolicyEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.valueExists('esimPolicyEnabled') &&
-              loadTimeData.getBoolean('esimPolicyEnabled');
-        }
-      },
-
-      /**
        * Always-on VPN operating mode.
        * @private {!chromeos.networkConfig.mojom.AlwaysOnVpnMode|undefined}
        */
@@ -204,7 +197,7 @@ class SettingsInternetSubpageElement extends
         value() {
           return loadTimeData.valueExists('showTechnologyBadge') &&
               loadTimeData.getBoolean('showTechnologyBadge');
-        }
+        },
       },
 
       /** @private */
@@ -225,7 +218,7 @@ class SettingsInternetSubpageElement extends
       /**
        * Contains the settingId of any deep link that wasn't able to be shown,
        * null otherwise.
-       * @private {?chromeos.settings.mojom.Setting}
+       * @private {?Setting}
        */
       pendingSettingId_: {
         type: Number,
@@ -234,16 +227,16 @@ class SettingsInternetSubpageElement extends
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
         value: () => new Set([
-          chromeos.settings.mojom.Setting.kWifiOnOff,
-          chromeos.settings.mojom.Setting.kWifiAddNetwork,
-          chromeos.settings.mojom.Setting.kMobileOnOff,
-          chromeos.settings.mojom.Setting.kInstantTetheringOnOff,
-          chromeos.settings.mojom.Setting.kAddESimNetwork,
+          Setting.kWifiOnOff,
+          Setting.kWifiAddNetwork,
+          Setting.kMobileOnOff,
+          Setting.kInstantTetheringOnOff,
+          Setting.kAddESimNetwork,
         ]),
       },
     };
@@ -297,11 +290,11 @@ class SettingsInternetSubpageElement extends
 
   /**
    * Overridden from DeepLinkingBehavior.
-   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @param {!Setting} settingId
    * @return {boolean}
    */
   beforeDeepLinkAttempt(settingId) {
-    if (settingId === chromeos.settings.mojom.Setting.kAddESimNetwork) {
+    if (settingId === Setting.kAddESimNetwork) {
       afterNextRender(this, () => {
         const deepLinkElement =
             this.shadowRoot.querySelector('cellular-networks-list')
@@ -315,7 +308,7 @@ class SettingsInternetSubpageElement extends
       return false;
     }
 
-    if (settingId === chromeos.settings.mojom.Setting.kInstantTetheringOnOff) {
+    if (settingId === Setting.kInstantTetheringOnOff) {
       // Wait for element to load.
       afterNextRender(this, () => {
         // If both Cellular and Instant Tethering are enabled, we show a special
@@ -600,7 +593,7 @@ class SettingsInternetSubpageElement extends
         providerId: vpn.providerId,
         providerName: vpn.providerName || vpn.providerId,
         appId: '',
-        lastLaunchTime: {internalValue: 0}
+        lastLaunchTime: {internalValue: 0},
       };
       configuredProviders.push(provider);
     }
@@ -815,7 +808,7 @@ class SettingsInternetSubpageElement extends
           composed: true,
           detail: {
             enabled: !this.deviceIsEnabled_(this.deviceState),
-            type: this.deviceState.type
+            type: this.deviceState.type,
           },
         });
     this.dispatchEvent(deviceEnabledToggledEvent);
@@ -886,8 +879,7 @@ class SettingsInternetSubpageElement extends
     }
 
     if (state.type === mojom.NetworkType.kCellular) {
-      return this.isESimPolicyEnabled_ &&
-          !!this.globalPolicy.allowOnlyPolicyCellularNetworks;
+      return !!this.globalPolicy.allowOnlyPolicyCellularNetworks;
     }
 
     return !!this.globalPolicy.allowOnlyPolicyWifiNetworksToConnect ||

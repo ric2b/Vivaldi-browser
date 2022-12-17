@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "net/base/hash_value.h"
+#include "net/base/network_handle.h"
 #include "net/cert/cert_verifier.h"
 #include "net/nqe/effective_connection_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -103,7 +104,9 @@ struct URLRequestContextConfig {
 
   // Configures |context_builder| based on |this|.
   void ConfigureURLRequestContextBuilder(
-      net::URLRequestContextBuilder* context_builder);
+      net::URLRequestContextBuilder* context_builder,
+      net::handles::NetworkHandle bound_network =
+          net::handles::kInvalidNetworkHandle);
 
   // Enable QUIC.
   const bool enable_quic;
@@ -175,6 +178,9 @@ struct URLRequestContextConfig {
   // If |bidi_stream_detect_broken_connection_| is true, this suggests the
   // period of the heartbeat signal.
   base::TimeDelta heartbeat_interval;
+
+  // Whether Cronet's logging should be skipped or not.
+  bool skip_logging;
 
   static bool ExperimentalOptionsParsingIsAllowedToFail() {
     return DCHECK_IS_ON();
@@ -266,7 +272,8 @@ struct URLRequestContextConfig {
   void SetContextBuilderExperimentalOptions(
       net::URLRequestContextBuilder* context_builder,
       net::HttpNetworkSessionParams* session_params,
-      net::QuicParams* quic_params);
+      net::QuicParams* quic_params,
+      net::handles::NetworkHandle bound_network);
 };
 
 // Stores intermediate state for URLRequestContextConfig.  Initializes with

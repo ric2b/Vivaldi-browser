@@ -182,7 +182,7 @@ Browser* FindVivaldiBrowser() {
 }
 
 void BroadcastEvent(const std::string& eventname,
-                    std::vector<base::Value> args,
+                    base::Value::List args,
                     content::BrowserContext* context) {
   if (!context)
     return;
@@ -195,21 +195,18 @@ void BroadcastEvent(const std::string& eventname,
 }
 
 void BroadcastEventToAllProfiles(const std::string& eventname,
-                                 std::vector<base::Value> args_list) {
-  if (args_list.empty()) {
-    args_list = std::vector<base::Value>();
-  }
+                                 base::Value::List args_list) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   std::vector<Profile*> active_profiles = profile_manager->GetLoadedProfiles();
   for (size_t i = 0; i < active_profiles.size(); ++i) {
     Profile* profile = active_profiles[i];
     DCHECK(profile);
-    std::vector<base::Value> args;
+    base::Value::List args;
     if (i + 1 == active_profiles.size()) {
       args = std::move(args_list);
     } else {
       for (const auto& v : args_list)
-        args.emplace_back(v.Clone());
+        args.Append(v.Clone());
     }
     BroadcastEvent(eventname, std::move(args), profile);
   }
@@ -235,7 +232,8 @@ gfx::PointF FromUICoordinates(content::WebContents* web_contents,
                               const gfx::PointF& p) {
   // Account for the zoom factor in the UI.
   zoom::ZoomController* zoom_controller =
-      zoom::ZoomController::FromWebContents(web_contents);
+      web_contents ? zoom::ZoomController::FromWebContents(web_contents)
+                   : nullptr;
   if (!zoom_controller)
     return p;
   double zoom_factor =
@@ -246,7 +244,8 @@ gfx::PointF FromUICoordinates(content::WebContents* web_contents,
 void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect) {
   // Account for the zoom factor in the UI.
   zoom::ZoomController* zoom_controller =
-      zoom::ZoomController::FromWebContents(web_contents);
+      web_contents ? zoom::ZoomController::FromWebContents(web_contents)
+                   : nullptr;
   if (!zoom_controller)
     return;
   double zoom_factor =
@@ -258,7 +257,8 @@ gfx::PointF ToUICoordinates(content::WebContents* web_contents,
                             const gfx::PointF& p) {
   // Account for the zoom factor in the UI.
   zoom::ZoomController* zoom_controller =
-      zoom::ZoomController::FromWebContents(web_contents);
+      web_contents ? zoom::ZoomController::FromWebContents(web_contents)
+                   : nullptr;
   if (!zoom_controller)
     return p;
   double zoom_factor =

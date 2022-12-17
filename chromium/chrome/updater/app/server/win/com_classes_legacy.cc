@@ -18,22 +18,40 @@
 #include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_process_information.h"
+#include "base/win/win_util.h"
 #include "chrome/updater/app/server/win/server.h"
 #include "chrome/updater/constants.h"
+#include "chrome/updater/device_management_task.h"
+#include "chrome/updater/external_constants.h"
+#include "chrome/updater/persisted_data.h"
+#include "chrome/updater/policy/manager.h"
+#include "chrome/updater/policy/service.h"
+#include "chrome/updater/prefs.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
+#include "chrome/updater/updater_version.h"
+#include "chrome/updater/util.h"
+#include "chrome/updater/win/app_command_runner.h"
+#include "chrome/updater/win/scoped_handle.h"
+#include "chrome/updater/win/setup/setup_util.h"
 #include "chrome/updater/win/win_constants.h"
 #include "chrome/updater/win/win_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -46,65 +64,9 @@ HRESULT OpenCallerProcessHandle(DWORD proc_id,
   return proc_handle.IsValid() ? S_OK : updater::HRESULTFromLastError();
 }
 
-std::wstring GetCommandToLaunch(const WCHAR* app_guid, const WCHAR* cmd_id) {
-  if (!app_guid || !cmd_id)
-    return std::wstring();
-
-  base::win::RegKey key(HKEY_LOCAL_MACHINE, CLIENTS_KEY,
-                        updater::Wow6432(KEY_READ));
-  if (key.OpenKey(app_guid, updater::Wow6432(KEY_READ)) != ERROR_SUCCESS)
-    return std::wstring();
-
-  std::wstring cmd_line;
-  key.ReadValue(cmd_id, &cmd_line);
-  return cmd_line;
-}
-
-HRESULT LaunchCmd(const std::wstring& cmd,
-                  const base::win::ScopedHandle& caller_proc_handle,
-                  ULONG_PTR* proc_handle) {
-  if (cmd.empty() || !caller_proc_handle.IsValid() || !proc_handle)
-    return E_INVALIDARG;
-
-  *proc_handle = NULL;
-
-  STARTUPINFOW startup_info = {sizeof(startup_info)};
-  PROCESS_INFORMATION process_information = {0};
-  std::wstring cmd_line(cmd);
-  if (!::CreateProcess(nullptr, &cmd_line[0], nullptr, nullptr, FALSE,
-                       CREATE_NO_WINDOW, nullptr, nullptr, &startup_info,
-                       &process_information)) {
-    return updater::HRESULTFromLastError();
-  }
-
-  base::win::ScopedProcessInformation pi(process_information);
-  DCHECK(pi.IsValid());
-
-  HANDLE duplicate_proc_handle = NULL;
-
-  bool res = ::DuplicateHandle(
-                 ::GetCurrentProcess(),     // Current process.
-                 pi.process_handle(),       // Process handle to duplicate.
-                 caller_proc_handle.Get(),  // Process receiving the handle.
-                 &duplicate_proc_handle,    // Duplicated handle.
-                 PROCESS_QUERY_INFORMATION |
-                     SYNCHRONIZE,  // Access requested for the new handle.
-                 FALSE,            // Don't inherit the new handle.
-                 0) != 0;          // Flags.
-  if (!res) {
-    HRESULT hr = updater::HRESULTFromLastError();
-    VLOG(1) << "Failed to duplicate the handle " << hr;
-    return hr;
-  }
-
-  // The caller must close this handle.
-  *proc_handle = reinterpret_cast<ULONG_PTR>(duplicate_proc_handle);
-  return S_OK;
-}
-
 // Extracts a string from a VARIANT if the VARIANT is VT_BSTR or VT_BSTR |
-// VT_BYREF. Returns an empty string if the VARIANT is not a BSTR.
-std::wstring StringFromVariant(const VARIANT& source) {
+// VT_BYREF. Returns absl::nullopt if the VARIANT is not a BSTR.
+absl::optional<std::wstring> StringFromVariant(const VARIANT& source) {
   if (V_VT(&source) == VT_BSTR) {
     return V_BSTR(&source);
   }
@@ -116,115 +78,30 @@ std::wstring StringFromVariant(const VARIANT& source) {
   return {};
 }
 
-// Formats a single `parameter` and returns the result. Any placeholder `%N` in
-// `parameter` is replaced with substitutions[N - 1]. Any literal `%` needs to
-// be escaped with a `%`.
-//
-// Returns `absl::nullopt` if:
-// * a placeholder %N is encountered where N > substitutions.size().
-// * a literal `%` is not escaped with a `%`.
-//
-// See examples in the LegacyAppCommandWebImplTest.FormatParameters* unit tests.
-absl::optional<std::wstring> FormatParameter(
-    const std::vector<std::wstring>& substitutions,
-    const std::wstring& parameter) {
-  DCHECK_LE(substitutions.size(), 9U);
-
-  std::wstring formatted_parameter;
-  for (auto i = parameter.begin(); i != parameter.end(); ++i) {
-    if (*i != '%') {
-      formatted_parameter.push_back(*i);
-      continue;
-    }
-
-    if (++i == parameter.end())
-      return absl::nullopt;
-
-    if (*i == '%') {
-      formatted_parameter.push_back('%');
-      continue;
-    }
-
-    if (*i < '1' || *i > '9')
-      return absl::nullopt;
-
-    const size_t index = *i - '1';
-    if (index >= substitutions.size())
-      return absl::nullopt;
-
-    formatted_parameter.append(substitutions[index]);
-  }
-
-  return formatted_parameter;
+template <typename T>
+std::string GetStringFromValue(const T& value) {
+  return value;
 }
 
-// Quotes `input` if necessary so that it will be interpreted as a single
-// command-line parameter according to the rules for ::CommandLineToArgvW.
-//
-// ::CommandLineToArgvW has a special interpretation of backslash characters
-// when they are followed by a quotation mark character ("). This interpretation
-// assumes that any preceding argument is a valid file system path, or else it
-// may behave unpredictably.
-//
-// This special interpretation controls the "in quotes" mode tracked by the
-// parser. When this mode is off, whitespace terminates the current argument.
-// When on, whitespace is added to the argument like all other characters.
-
-// * 2n backslashes followed by a quotation mark produce n backslashes followed
-// by begin/end quote. This does not become part of the parsed argument, but
-// toggles the "in quotes" mode.
-// * (2n) + 1 backslashes followed by a quotation mark again produce n
-// backslashes followed by a quotation mark literal ("). This does not toggle
-// the "in quotes" mode.
-// * n backslashes not followed by a quotation mark simply produce n
-// backslashes.
-//
-// See examples in the LegacyAppCommandWebImplTest.ParameterQuoting unit test.
-std::wstring QuoteForCommandLineToArgvW(const std::wstring& input) {
-  if (input.empty())
-    return L"\"\"";
-
-  std::wstring output;
-  const bool contains_whitespace =
-      input.find_first_of(L" \t") != std::wstring::npos;
-  if (contains_whitespace)
-    output.push_back(L'"');
-
-  size_t slash_count = 0;
-  for (auto i = input.begin(); i != input.end(); ++i) {
-    if (*i == L'"') {
-      // Before a quote, output 2n backslashes.
-      while (slash_count > 0) {
-        output.append(L"\\\\");
-        --slash_count;
-      }
-      output.append(L"\\\"");
-    } else if (*i != L'\\' || i + 1 == input.end()) {
-      // At the end of the string, or before a regular character, output queued
-      // slashes.
-      while (slash_count > 0) {
-        output.push_back(L'\\');
-        --slash_count;
-      }
-      // If this is a slash, it's also the last character. Otherwise, it is just
-      // a regular non-quote/non-slash character.
-      output.push_back(*i);
-    } else if (*i == L'\\') {
-      // This is a slash, possibly followed by a quote, not the last character.
-      // Queue it up and output it later.
-      ++slash_count;
-    }
-  }
-
-  if (contains_whitespace)
-    output.push_back(L'"');
-
-  return output;
+template <>
+std::string GetStringFromValue(const int& value) {
+  return base::NumberToString(value);
 }
 
-bool IsParentOf(int key, const base::FilePath& child) {
-  base::FilePath path;
-  return base::PathService::Get(key, &path) && path.IsParent(child);
+template <>
+std::string GetStringFromValue(const bool& value) {
+  return value ? "true" : "false";
+}
+
+template <>
+std::string GetStringFromValue(const updater::UpdatesSuppressedTimes& value) {
+  return base::StringPrintf("%d, %d, %d", value.start_hour_,
+                            value.start_minute_, value.duration_minute_);
+}
+
+template <>
+std::string GetStringFromValue(const std::vector<std::string>& value) {
+  return base::JoinString(value, ";");
 }
 
 }  // namespace
@@ -371,8 +248,8 @@ STDMETHODIMP LegacyOnDemandImpl::get_nextVersionWeb(IDispatch** next) {
 
 STDMETHODIMP LegacyOnDemandImpl::get_command(BSTR command_id,
                                              IDispatch** command) {
-  return LegacyAppCommandWebImpl::CreateAppCommandWeb(
-      GetUpdaterScope(), base::UTF8ToWide(app_id()), command_id, command);
+  return Microsoft::WRL::MakeAndInitialize<LegacyAppCommandWebImpl>(
+      command, GetUpdaterScope(), base::UTF8ToWide(app_id()), command_id);
 }
 
 STDMETHODIMP LegacyOnDemandImpl::get_currentState(IDispatch** current_state) {
@@ -631,34 +508,42 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchBrowser(DWORD browser_type,
 }
 
 STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdElevated(
-    const WCHAR* app_guid,
-    const WCHAR* cmd_id,
+    const WCHAR* app_id,
+    const WCHAR* command_id,
     DWORD caller_proc_id,
     ULONG_PTR* proc_handle) {
-  VLOG(2) << "LegacyProcessLauncherImpl::LaunchCmdElevated: app " << app_guid
-          << ", cmd_id " << cmd_id << ", pid " << caller_proc_id;
-
-  if (!cmd_id || !wcslen(cmd_id) || !proc_handle) {
-    VLOG(1) << "Invalid arguments";
-    return E_INVALIDARG;
+  AppCommandRunner app_command_runner;
+  if (HRESULT hr = AppCommandRunner::LoadAppCommand(
+          UpdaterScope::kSystem, app_id, command_id, app_command_runner);
+      FAILED(hr)) {
+    return hr;
   }
 
   base::win::ScopedHandle caller_proc_handle;
-  HRESULT hr = OpenCallerProcessHandle(caller_proc_id, caller_proc_handle);
-  if (FAILED(hr)) {
+  if (HRESULT hr = OpenCallerProcessHandle(caller_proc_id, caller_proc_handle);
+      FAILED(hr)) {
     VLOG(1) << "failed to open caller's handle " << hr;
     return hr;
   }
 
-  std::wstring cmd = GetCommandToLaunch(app_guid, cmd_id);
-  if (cmd.empty()) {
-    VLOG(1) << "cmd not found";
-    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+  base::Process process;
+  if (HRESULT hr = app_command_runner.Run({}, process); FAILED(hr)) {
+    return hr;
   }
 
-  VLOG(2) << "[LegacyProcessLauncherImpl::LaunchCmdElevated][cmd " << cmd
-          << "]";
-  return LaunchCmd(cmd, caller_proc_handle, proc_handle);
+  ScopedKernelHANDLE duplicate_proc_handle;
+  if (!::DuplicateHandle(
+          ::GetCurrentProcess(), process.Handle(), caller_proc_handle.Get(),
+          ScopedKernelHANDLE::Receiver(duplicate_proc_handle).get(),
+          PROCESS_QUERY_INFORMATION | SYNCHRONIZE, FALSE, 0)) {
+    HRESULT hr = HRESULTFromLastError();
+    VLOG(1) << "Failed to duplicate the handle " << hr;
+    return hr;
+  }
+
+  // The caller must close this handle.
+  *proc_handle = reinterpret_cast<ULONG_PTR>(duplicate_proc_handle.release());
+  return S_OK;
 }
 
 STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdLineEx(
@@ -672,122 +557,17 @@ STDMETHODIMP LegacyProcessLauncherImpl::LaunchCmdLineEx(
 LegacyAppCommandWebImpl::LegacyAppCommandWebImpl() = default;
 LegacyAppCommandWebImpl::~LegacyAppCommandWebImpl() = default;
 
-HRESULT LegacyAppCommandWebImpl::CreateAppCommandWeb(
+HRESULT LegacyAppCommandWebImpl::RuntimeClassInitialize(
     UpdaterScope scope,
     const std::wstring& app_id,
-    const std::wstring& command_id,
-    IDispatch** app_command_web) {
-  DCHECK(app_command_web);
-
-  Microsoft::WRL::ComPtr<LegacyAppCommandWebImpl> web_impl;
-  if (HRESULT hr =
-          CreateLegacyAppCommandWebImpl(scope, app_id, command_id, web_impl);
+    const std::wstring& command_id) {
+  if (HRESULT hr = AppCommandRunner::LoadAppCommand(scope, app_id, command_id,
+                                                    app_command_runner_);
       FAILED(hr)) {
     return hr;
   }
 
-  return web_impl.CopyTo(app_command_web);
-}
-
-HRESULT LegacyAppCommandWebImpl::CreateLegacyAppCommandWebImpl(
-    UpdaterScope scope,
-    const std::wstring& app_id,
-    const std::wstring& command_id,
-    Microsoft::WRL::ComPtr<LegacyAppCommandWebImpl>& web_impl) {
-  const HKEY root = UpdaterScopeToHKeyRoot(scope);
-  const std::wstring app_key_name = base::StrCat({CLIENTS_KEY, app_id});
-  std::wstring command_format;
-
-  if (const base::win::RegKey command_key(
-          root,
-          base::StrCat({app_key_name, L"\\", kRegKeyCommands, command_id})
-              .c_str(),
-          Wow6432(KEY_QUERY_VALUE));
-      !command_key.Valid()) {
-    const base::win::RegKey app_key(root, app_key_name.c_str(),
-                                    Wow6432(KEY_QUERY_VALUE));
-    if (!app_key.HasValue(command_id.c_str()))
-      return HRESULT_FROM_WIN32(ERROR_BAD_COMMAND);
-
-    // Older command layout format:
-    //     Update\Clients\{`app_id`}
-    //         REG_SZ `command_id` == {command format}
-    if (const LONG result =
-            app_key.ReadValue(command_id.c_str(), &command_format);
-        result != ERROR_SUCCESS) {
-      return HRESULT_FROM_WIN32(result);
-    }
-  } else {
-    // New command layout format:
-    //     Update\Clients\{`app_id`}\Commands\`command_id`
-    //         REG_SZ "CommandLine" == {command format}
-    if (const LONG result =
-            command_key.ReadValue(kRegValueCommandLine, &command_format);
-        result != ERROR_SUCCESS) {
-      return HRESULT_FROM_WIN32(result);
-    }
-  }
-
-  if (HRESULT hr =
-          Microsoft::WRL::MakeAndInitialize<LegacyAppCommandWebImpl>(&web_impl);
-      FAILED(hr)) {
-    return hr;
-  }
-
-  return web_impl->Initialize(scope, command_format);
-}
-
-bool LegacyAppCommandWebImpl::InitializeExecutable(
-    UpdaterScope scope,
-    const base::FilePath& exe_path) {
-  if (!exe_path.IsAbsolute() ||
-      (scope == UpdaterScope::kSystem &&
-       !IsParentOf(base::DIR_PROGRAM_FILESX86, exe_path) &&
-       !IsParentOf(base::DIR_PROGRAM_FILES6432, exe_path))) {
-    return false;
-  }
-
-  executable_ = exe_path;
-  return true;
-}
-
-HRESULT LegacyAppCommandWebImpl::Initialize(UpdaterScope scope,
-                                            std::wstring command_format) {
-  int num_args = 0;
-  ScopedLocalAlloc args(::CommandLineToArgvW(&command_format[0], &num_args));
-  if (!args.is_valid() || num_args < 1)
-    return E_INVALIDARG;
-
-  const wchar_t** argv = reinterpret_cast<const wchar_t**>(args.get());
-  if (!InitializeExecutable(scope, base::FilePath(argv[0])))
-    return E_INVALIDARG;
-
-  parameters_.clear();
-  for (int i = 1; i < num_args; ++i)
-    parameters_.push_back(argv[i]);
-
-  return S_OK;
-}
-
-absl::optional<std::wstring> LegacyAppCommandWebImpl::FormatCommandLine(
-    const std::vector<std::wstring>& parameters) const {
-  std::wstring formatted_command_line;
-  for (size_t i = 0; i < parameters_.size(); ++i) {
-    absl::optional<std::wstring> formatted_parameter =
-        FormatParameter(parameters, parameters_[i]);
-    if (!formatted_parameter) {
-      VLOG(1) << __func__ << " FormatParameter failed";
-      return absl::nullopt;
-    }
-
-    formatted_command_line.append(
-        QuoteForCommandLineToArgvW(*formatted_parameter));
-
-    if (i + 1 < parameters_.size())
-      formatted_command_line.push_back(L' ');
-  }
-
-  return formatted_command_line;
+  return InitializeTypeInfo();
 }
 
 STDMETHODIMP LegacyAppCommandWebImpl::get_status(UINT* status) {
@@ -821,71 +601,623 @@ STDMETHODIMP LegacyAppCommandWebImpl::get_output(BSTR* output) {
   return E_NOTIMPL;
 }
 
-STDMETHODIMP LegacyAppCommandWebImpl::execute(VARIANT parameter1,
-                                              VARIANT parameter2,
-                                              VARIANT parameter3,
-                                              VARIANT parameter4,
-                                              VARIANT parameter5,
-                                              VARIANT parameter6,
-                                              VARIANT parameter7,
-                                              VARIANT parameter8,
-                                              VARIANT parameter9) {
-  if (executable_.empty() || process_.IsValid()) {
-    return E_UNEXPECTED;
-  }
-
-  std::vector<std::wstring> parameters;
-  for (const VARIANT& parameter :
-       {parameter1, parameter2, parameter3, parameter4, parameter5, parameter6,
-        parameter7, parameter8, parameter9}) {
-    const std::wstring parameter_string = StringFromVariant(parameter);
-    if (parameter_string.empty())
+STDMETHODIMP LegacyAppCommandWebImpl::execute(VARIANT substitution1,
+                                              VARIANT substitution2,
+                                              VARIANT substitution3,
+                                              VARIANT substitution4,
+                                              VARIANT substitution5,
+                                              VARIANT substitution6,
+                                              VARIANT substitution7,
+                                              VARIANT substitution8,
+                                              VARIANT substitution9) {
+  std::vector<std::wstring> substitutions;
+  for (const VARIANT& substitution :
+       {substitution1, substitution2, substitution3, substitution4,
+        substitution5, substitution6, substitution7, substitution8,
+        substitution9}) {
+    const absl::optional<std::wstring> substitution_string =
+        StringFromVariant(substitution);
+    if (!substitution_string)
       break;
-    parameters.push_back(parameter_string);
+
+    VLOG(2) << __func__
+            << " substitution_string: " << substitution_string.value();
+    substitutions.push_back(substitution_string.value());
   }
 
-  absl::optional<std::wstring> command_line = FormatCommandLine(parameters);
-  if (!command_line)
+  return app_command_runner_.Run(substitutions, process_);
+}
+
+STDMETHODIMP LegacyAppCommandWebImpl::GetTypeInfoCount(UINT* type_info_count) {
+  *type_info_count = 1;
+  return S_OK;
+}
+
+STDMETHODIMP LegacyAppCommandWebImpl::GetTypeInfo(UINT type_info_index,
+                                                  LCID locale_id,
+                                                  ITypeInfo** type_info) {
+  if (type_info_index != 0)
     return E_INVALIDARG;
 
-  STARTUPINFOW si = {sizeof(si)};
-  PROCESS_INFORMATION pi = {0};
-  if (!::CreateProcess(executable_.value().c_str(), &(*command_line)[0],
-                       nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
-                       nullptr, &si, &pi)) {
-    return HRESULTFromLastError();
+  return type_info_.CopyTo(type_info);
+}
+
+STDMETHODIMP LegacyAppCommandWebImpl::GetIDsOfNames(
+    REFIID iid,
+    LPOLESTR* names_to_be_mapped,
+    UINT count_of_names_to_be_mapped,
+    LCID locale_id,
+    DISPID* dispatch_ids) {
+  return type_info_->GetIDsOfNames(names_to_be_mapped,
+                                   count_of_names_to_be_mapped, dispatch_ids);
+}
+
+STDMETHODIMP LegacyAppCommandWebImpl::Invoke(DISPID dispatch_id,
+                                             REFIID iid,
+                                             LCID locale_id,
+                                             WORD flags,
+                                             DISPPARAMS* dispatch_parameters,
+                                             VARIANT* result,
+                                             EXCEPINFO* exception_info,
+                                             UINT* arg_error_index) {
+  HRESULT hr = type_info_->Invoke(
+      Microsoft::WRL::ComPtr<IAppCommandWeb>(this).Get(), dispatch_id, flags,
+      dispatch_parameters, result, exception_info, arg_error_index);
+  if (FAILED(hr)) {
+    LOG(ERROR) << __func__ << " type_info_->Invoke failed: " << dispatch_id
+               << ": " << std::hex << hr;
   }
 
-  ::CloseHandle(pi.hThread);
-
-  process_ = base::Process(pi.hProcess);
-  return process_.IsValid() ? S_OK : E_UNEXPECTED;
+  return hr;
 }
 
-STDMETHODIMP LegacyAppCommandWebImpl::GetTypeInfoCount(UINT*) {
+HRESULT LegacyAppCommandWebImpl::InitializeTypeInfo() {
+  base::FilePath typelib_path;
+  if (!base::PathService::Get(base::DIR_EXE, &typelib_path))
+    return E_UNEXPECTED;
+
+  typelib_path =
+      typelib_path.Append(GetExecutableRelativePath())
+          .Append(GetComTypeLibResourceIndex(__uuidof(IAppCommandWeb)));
+
+  Microsoft::WRL::ComPtr<ITypeLib> type_lib;
+  if (HRESULT hr = ::LoadTypeLib(typelib_path.value().c_str(), &type_lib);
+      FAILED(hr)) {
+    LOG(ERROR) << __func__ << " ::LoadTypeLib failed: " << typelib_path << ": "
+               << std::hex << hr;
+    return hr;
+  }
+
+  if (HRESULT hr =
+          type_lib->GetTypeInfoOfGuid(__uuidof(IAppCommandWeb), &type_info_);
+      FAILED(hr)) {
+    LOG(ERROR) << __func__ << " ::GetTypeInfoOfGuid failed"
+               << ": " << std::hex << hr << ": IID_IAppCommand: "
+               << base::win::WStringFromGUID(__uuidof(IAppCommandWeb));
+    return hr;
+  }
+
+  return S_OK;
+}
+
+PolicyStatusImpl::PolicyStatusImpl()
+    : policy_service_(
+          AppServerSingletonInstance()->config()->GetPolicyService()) {}
+PolicyStatusImpl::~PolicyStatusImpl() = default;
+
+HRESULT PolicyStatusImpl::RuntimeClassInitialize() {
+  return S_OK;
+}
+
+// IPolicyStatus.
+STDMETHODIMP PolicyStatusImpl::get_lastCheckPeriodMinutes(DWORD* minutes) {
+  DCHECK(minutes);
+
+  int period = 0;
+  if (!policy_service_->GetLastCheckPeriodMinutes(nullptr, &period))
+    return E_FAIL;
+
+  *minutes = period;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_updatesSuppressedTimes(
+    DWORD* start_hour,
+    DWORD* start_min,
+    DWORD* duration_min,
+    VARIANT_BOOL* are_updates_suppressed) {
+  DCHECK(start_hour);
+  DCHECK(start_min);
+  DCHECK(duration_min);
+  DCHECK(are_updates_suppressed);
+
+  UpdatesSuppressedTimes updates_suppressed_times;
+  if (!policy_service_->GetUpdatesSuppressedTimes(nullptr,
+                                                  &updates_suppressed_times) ||
+      !updates_suppressed_times.valid()) {
+    return E_FAIL;
+  }
+
+  base::Time::Exploded now;
+  base::Time::Now().LocalExplode(&now);
+  *start_hour = updates_suppressed_times.start_hour_;
+  *start_min = updates_suppressed_times.start_minute_;
+  *duration_min = updates_suppressed_times.duration_minute_;
+  *are_updates_suppressed =
+      updates_suppressed_times.contains(now.hour, now.minute) ? VARIANT_TRUE
+                                                              : VARIANT_FALSE;
+
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_downloadPreferenceGroupPolicy(BSTR* pref) {
+  DCHECK(pref);
+
+  std::string download_preference;
+  if (!policy_service_->GetDownloadPreferenceGroupPolicy(
+          nullptr, &download_preference)) {
+    return E_FAIL;
+  }
+
+  *pref =
+      base::win::ScopedBstr(base::ASCIIToWide(download_preference)).Release();
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_packageCacheSizeLimitMBytes(DWORD* limit) {
+  DCHECK(limit);
+
+  int cache_size_limit = 0;
+  if (!policy_service_->GetPackageCacheSizeLimitMBytes(nullptr,
+                                                       &cache_size_limit)) {
+    return E_FAIL;
+  }
+
+  *limit = cache_size_limit;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_packageCacheExpirationTimeDays(DWORD* days) {
+  DCHECK(days);
+
+  int cache_life_limit = 0;
+  if (!policy_service_->GetPackageCacheExpirationTimeDays(nullptr,
+                                                          &cache_life_limit)) {
+    return E_FAIL;
+  }
+
+  *days = cache_life_limit;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppInstalls(
+    BSTR app_id,
+    DWORD* policy) {
+  DCHECK(policy);
+
+  int install_policy = 0;
+  if (!policy_service_->GetEffectivePolicyForAppInstalls(
+          base::WideToASCII(app_id), nullptr, &install_policy)) {
+    return E_FAIL;
+  }
+
+  *policy = install_policy;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppUpdates(BSTR app_id,
+                                                                DWORD* policy) {
+  DCHECK(policy);
+
+  int update_policy = 0;
+  if (!policy_service_->GetEffectivePolicyForAppUpdates(
+          base::WideToASCII(app_id), nullptr, &update_policy)) {
+    return E_FAIL;
+  }
+
+  *policy = update_policy;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_targetVersionPrefix(BSTR app_id,
+                                                       BSTR* prefix) {
+  DCHECK(prefix);
+
+  std::string target_version_prefix;
+  if (!policy_service_->GetTargetVersionPrefix(
+          base::WideToASCII(app_id), nullptr, &target_version_prefix)) {
+    return E_FAIL;
+  }
+
+  *prefix =
+      base::win::ScopedBstr(base::ASCIIToWide(target_version_prefix)).Release();
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_isRollbackToTargetVersionAllowed(
+    BSTR app_id,
+    VARIANT_BOOL* rollback_allowed) {
+  DCHECK(rollback_allowed);
+
+  bool is_rollback_allowed = false;
+  if (!policy_service_->IsRollbackToTargetVersionAllowed(
+          base::WideToASCII(app_id), nullptr, &is_rollback_allowed)) {
+    return E_FAIL;
+  }
+
+  *rollback_allowed = is_rollback_allowed ? VARIANT_TRUE : VARIANT_FALSE;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_updaterVersion(BSTR* version) {
+  DCHECK(version);
+
+  *version = base::win::ScopedBstr(kUpdaterVersionUtf16).Release();
+  return S_OK;
+}
+
+namespace {
+
+// Holds the result of the IPC to retrieve `last checked time`.
+struct LastCheckedTimeResult
+    : public base::RefCountedThreadSafe<LastCheckedTimeResult> {
+  absl::optional<DATE> last_checked_time;
+  base::WaitableEvent completion_event;
+
+ private:
+  friend class base::RefCountedThreadSafe<LastCheckedTimeResult>;
+  virtual ~LastCheckedTimeResult() = default;
+};
+
+}  // namespace
+
+STDMETHODIMP PolicyStatusImpl::get_lastCheckedTime(DATE* last_checked) {
+  DCHECK(last_checked);
+
+  using PolicyStatusImplPtr = Microsoft::WRL::ComPtr<PolicyStatusImpl>;
+  auto result = base::MakeRefCounted<LastCheckedTimeResult>();
+  AppServerSingletonInstance()->main_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](PolicyStatusImplPtr obj,
+             scoped_refptr<LastCheckedTimeResult> result) {
+            const base::ScopedClosureRunner signal_event(base::BindOnce(
+                [](scoped_refptr<LastCheckedTimeResult> result) {
+                  result->completion_event.Signal();
+                },
+                result));
+
+            const base::Time last_checked_time =
+                base::MakeRefCounted<const PersistedData>(
+                    AppServerSingletonInstance()->prefs()->GetPrefService())
+                    ->GetLastChecked();
+            if (last_checked_time.is_null())
+              return;
+
+            const FILETIME last_checked_filetime =
+                last_checked_time.ToFileTime();
+            FILETIME file_time_local = {};
+            SYSTEMTIME system_time = {};
+            DATE last_checked_variant_time = {};
+            if (::FileTimeToLocalFileTime(&last_checked_filetime,
+                                          &file_time_local) &&
+                ::FileTimeToSystemTime(&file_time_local, &system_time) &&
+                ::SystemTimeToVariantTime(&system_time,
+                                          &last_checked_variant_time)) {
+              result->last_checked_time = last_checked_variant_time;
+            }
+          },
+          PolicyStatusImplPtr(this), result));
+
+  if (!result->completion_event.TimedWait(base::Seconds(60)) ||
+      !result->last_checked_time.has_value()) {
+    return E_FAIL;
+  }
+
+  *last_checked = *result->last_checked_time;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::refreshPolicies() {
+  AppServerSingletonInstance()->main_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&DeviceManagementTask::RunFetchPolicy,
+                     base::MakeRefCounted<DeviceManagementTask>(
+                         AppServerSingletonInstance()->config(),
+                         AppServerSingletonInstance()->main_task_runner()),
+                     base::DoNothing()));
+
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_lastCheckPeriodMinutes(
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<int> policy_status;
+  return policy_service_->GetLastCheckPeriodMinutes(&policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_updatesSuppressedTimes(
+    IPolicyStatusValue** value,
+    VARIANT_BOOL* are_updates_suppressed) {
+  DCHECK(value);
+  DCHECK(are_updates_suppressed);
+
+  UpdatesSuppressedTimes updates_suppressed_times;
+  PolicyStatus<UpdatesSuppressedTimes> policy_status;
+  if (!policy_service_->GetUpdatesSuppressedTimes(&policy_status,
+                                                  &updates_suppressed_times) ||
+      !updates_suppressed_times.valid()) {
+    return E_FAIL;
+  }
+
+  base::Time::Exploded now;
+  base::Time::Now().LocalExplode(&now);
+  *are_updates_suppressed =
+      updates_suppressed_times.contains(now.hour, now.minute) ? VARIANT_TRUE
+                                                              : VARIANT_FALSE;
+
+  return PolicyStatusValueImpl::Create(policy_status, value);
+}
+
+STDMETHODIMP PolicyStatusImpl::get_downloadPreferenceGroupPolicy(
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::string> policy_status;
+  return policy_service_->GetDownloadPreferenceGroupPolicy(&policy_status,
+                                                           nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_packageCacheSizeLimitMBytes(
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<int> policy_status;
+  return policy_service_->GetPackageCacheSizeLimitMBytes(&policy_status,
+                                                         nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_packageCacheExpirationTimeDays(
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<int> policy_status;
+  return policy_service_->GetPackageCacheExpirationTimeDays(&policy_status,
+                                                            nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_proxyMode(IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::string> policy_status;
+  return policy_service_->GetProxyMode(&policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_proxyPacUrl(IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::string> policy_status;
+  return policy_service_->GetProxyPacUrl(&policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_proxyServer(IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::string> policy_status;
+  return policy_service_->GetProxyServer(&policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppInstalls(
+    BSTR app_id,
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<int> policy_status;
+  return policy_service_->GetEffectivePolicyForAppInstalls(
+             base::WideToASCII(app_id), &policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_effectivePolicyForAppUpdates(
+    BSTR app_id,
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<int> policy_status;
+  return policy_service_->GetEffectivePolicyForAppUpdates(
+             base::WideToASCII(app_id), &policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_targetVersionPrefix(
+    BSTR app_id,
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::string> policy_status;
+  return policy_service_->GetTargetVersionPrefix(base::WideToASCII(app_id),
+                                                 &policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_isRollbackToTargetVersionAllowed(
+    BSTR app_id,
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<bool> policy_status;
+  return policy_service_->IsRollbackToTargetVersionAllowed(
+             base::WideToASCII(app_id), &policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_targetChannel(BSTR app_id,
+                                                 IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::string> policy_status;
+  return policy_service_->GetTargetChannel(base::WideToASCII(app_id),
+                                           &policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+STDMETHODIMP PolicyStatusImpl::get_forceInstallApps(
+    VARIANT_BOOL is_machine,
+    IPolicyStatusValue** value) {
+  DCHECK(value);
+
+  PolicyStatus<std::vector<std::string>> policy_status;
+  return policy_service_->GetForceInstallApps(&policy_status, nullptr)
+             ? PolicyStatusValueImpl::Create(policy_status, value)
+             : E_FAIL;
+}
+
+// TODO(crbug.com/1344200): Implement the IDispatch methods.
+STDMETHODIMP PolicyStatusImpl::GetTypeInfoCount(UINT*) {
   return E_NOTIMPL;
 }
 
-STDMETHODIMP LegacyAppCommandWebImpl::GetTypeInfo(UINT, LCID, ITypeInfo**) {
+STDMETHODIMP PolicyStatusImpl::GetTypeInfo(UINT, LCID, ITypeInfo**) {
   return E_NOTIMPL;
 }
 
-STDMETHODIMP LegacyAppCommandWebImpl::GetIDsOfNames(REFIID,
-                                                    LPOLESTR*,
-                                                    UINT,
-                                                    LCID,
-                                                    DISPID*) {
-  return E_NOTIMPL;
-}
-
-STDMETHODIMP LegacyAppCommandWebImpl::Invoke(DISPID,
-                                             REFIID,
+STDMETHODIMP PolicyStatusImpl::GetIDsOfNames(REFIID,
+                                             LPOLESTR*,
+                                             UINT,
                                              LCID,
-                                             WORD,
-                                             DISPPARAMS*,
-                                             VARIANT*,
-                                             EXCEPINFO*,
-                                             UINT*) {
+                                             DISPID*) {
+  return E_NOTIMPL;
+}
+
+STDMETHODIMP PolicyStatusImpl::Invoke(DISPID,
+                                      REFIID,
+                                      LCID,
+                                      WORD,
+                                      DISPPARAMS*,
+                                      VARIANT*,
+                                      EXCEPINFO*,
+                                      UINT*) {
+  return E_NOTIMPL;
+}
+
+PolicyStatusValueImpl::PolicyStatusValueImpl() = default;
+PolicyStatusValueImpl::~PolicyStatusValueImpl() = default;
+
+template <typename T>
+HRESULT PolicyStatusValueImpl::Create(
+    const T& value,
+    IPolicyStatusValue** policy_status_value) {
+  return Microsoft::WRL::MakeAndInitialize<PolicyStatusValueImpl>(
+      policy_status_value,
+      value.effective_policy() ? value.effective_policy()->source : "",
+      value.effective_policy()
+          ? GetStringFromValue(value.effective_policy()->policy)
+          : "",
+      value.conflict_policy() != absl::nullopt,
+      value.conflict_policy() ? value.conflict_policy()->source : "",
+      value.conflict_policy()
+          ? GetStringFromValue(value.conflict_policy()->policy)
+          : "");
+}
+
+HRESULT PolicyStatusValueImpl::RuntimeClassInitialize(
+    const std::string& source,
+    const std::string& value,
+    bool has_conflict,
+    const std::string& conflict_source,
+    const std::string& conflict_value) {
+  source_ = base::ASCIIToWide(source);
+  value_ = base::ASCIIToWide(value);
+  has_conflict_ = has_conflict ? VARIANT_TRUE : VARIANT_FALSE;
+  conflict_source_ = base::ASCIIToWide(conflict_source);
+  conflict_value_ = base::ASCIIToWide(conflict_value);
+
+  return S_OK;
+}
+
+// IPolicyStatusValue.
+STDMETHODIMP PolicyStatusValueImpl::get_source(BSTR* source) {
+  DCHECK(source);
+
+  *source = base::win::ScopedBstr(source_).Release();
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::get_value(BSTR* value) {
+  DCHECK(value);
+
+  *value = base::win::ScopedBstr(value_).Release();
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::get_hasConflict(
+    VARIANT_BOOL* has_conflict) {
+  DCHECK(has_conflict);
+
+  *has_conflict = has_conflict_;
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::get_conflictSource(BSTR* conflict_source) {
+  DCHECK(conflict_source);
+
+  *conflict_source = base::win::ScopedBstr(conflict_source_).Release();
+  return S_OK;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::get_conflictValue(BSTR* conflict_value) {
+  DCHECK(conflict_value);
+
+  *conflict_value = base::win::ScopedBstr(conflict_value_).Release();
+  return S_OK;
+}
+
+// TODO(crbug.com/1344200): Implement the IDispatch methods.
+STDMETHODIMP PolicyStatusValueImpl::GetTypeInfoCount(UINT*) {
+  return E_NOTIMPL;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::GetTypeInfo(UINT, LCID, ITypeInfo**) {
+  return E_NOTIMPL;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::GetIDsOfNames(REFIID,
+                                                  LPOLESTR*,
+                                                  UINT,
+                                                  LCID,
+                                                  DISPID*) {
+  return E_NOTIMPL;
+}
+
+STDMETHODIMP PolicyStatusValueImpl::Invoke(DISPID,
+                                           REFIID,
+                                           LCID,
+                                           WORD,
+                                           DISPPARAMS*,
+                                           VARIANT*,
+                                           EXCEPINFO*,
+                                           UINT*) {
   return E_NOTIMPL;
 }
 

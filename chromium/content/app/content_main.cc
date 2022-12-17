@@ -21,6 +21,7 @@
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/platform_thread.h"
@@ -84,11 +85,7 @@ namespace {
 
 // Maximum message size allowed to be read from a Mojo message pipe in any
 // service manager embedder process.
-#if defined(OFFICIAL_BUILD)
 constexpr size_t kMaximumMojoMessageSize = 128 * 1024 * 1024;
-#else
-constexpr size_t kMaximumMojoMessageSize = 512 * 1024 * 1024;
-#endif
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID)
 
@@ -221,6 +218,30 @@ void InitializeMojo(mojo::core::Configuration* config) {
   CHECK_EQ(MOJO_RESULT_OK, result);
 }
 
+void InitTimeTicksAtUnixEpoch() {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switches::kTimeTicksAtUnixEpoch)) {
+    return;
+  }
+
+  std::string time_ticks_at_unix_epoch_as_string =
+      command_line->GetSwitchValueASCII(switches::kTimeTicksAtUnixEpoch);
+
+  int64_t time_ticks_at_unix_epoch_delta_micro;
+  if (!base::StringToInt64(time_ticks_at_unix_epoch_as_string,
+                           &time_ticks_at_unix_epoch_delta_micro)) {
+    return;
+  }
+
+  base::TimeDelta time_ticks_at_unix_epoch_delta =
+      base::Microseconds(time_ticks_at_unix_epoch_delta_micro);
+
+  base::TimeTicks time_ticks_at_unix_epoch =
+      base::TimeTicks() + time_ticks_at_unix_epoch_delta;
+
+  base::TimeTicks::SetSharedUnixEpoch(time_ticks_at_unix_epoch);
+}
+
 }  // namespace
 
 ContentMainParams::ContentMainParams(ContentMainDelegate* delegate)
@@ -239,7 +260,7 @@ RunContentProcess(ContentMainParams params,
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Lacros is launched with inherited priority. Revert to normal priority
   // before spawning more processes.
-  base::PlatformThread::SetCurrentThreadPriority(base::ThreadPriority::NORMAL);
+  base::PlatformThread::SetCurrentThreadType(base::ThreadType::kDefault);
 #endif
   int exit_code = -1;
   base::debug::GlobalActivityTracker* tracker = nullptr;
@@ -261,7 +282,6 @@ RunContentProcess(ContentMainParams params,
 #if BUILDFLAG(IS_MAC) && BUILDFLAG(USE_ALLOCATOR_SHIM)
     base::allocator::InitializeAllocatorShim();
 #endif
-    base::allocator::InstallDanglingRawPtrChecks();
     base::EnableTerminationOnOutOfMemory();
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -304,6 +324,8 @@ RunContentProcess(ContentMainParams params,
 
     SetProcessTitleFromCommandLine(argv);
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+    InitTimeTicksAtUnixEpoch();
 
 // On Android setlocale() is not supported, and we don't override the signal
 // handlers so we can get a stack trace when crashing.

@@ -100,8 +100,8 @@
 #include "media/base/android/media_codec_util.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/ipc_demuxer.h"
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
+#include "platform_media/ipc_demuxer/renderer/ipc_demuxer.h"
 #endif
 
 namespace blink {
@@ -234,7 +234,7 @@ void DestructionHelper(
   vfc_task_runner->DeleteSoon(FROM_HERE, std::move(compositor));
   main_task_runner->DeleteSoon(FROM_HERE, std::move(renderer_factory_selector));
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   if (demuxer) {
     // If this is IPCDemuxer, ensure that any IPC it has started is closed on
     // the media thread before we hop back to the main thread.
@@ -841,6 +841,7 @@ void WebMediaPlayerImpl::OnDisplayTypeChanged(DisplayType display_type) {
   }
 
   SetPersistentState(display_type == DisplayType::kPictureInPicture);
+  UpdatePlayState();
 }
 
 void WebMediaPlayerImpl::DoLoad(LoadType load_type,
@@ -930,9 +931,9 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
         return;
       }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
       mime_type_ = mime_type;
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
+#endif  // VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
 
       // Replace `loaded_url_` with an empty data:// URL since it may be large.
       loaded_url_ = GURL("data:,");
@@ -2364,7 +2365,7 @@ void WebMediaPlayerImpl::OnBufferingStateChangeInternal(
 void WebMediaPlayerImpl::OnDurationChange() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-  if (frame_->IsAdSubframe()) {
+  if (frame_->IsAdFrame()) {
     UMA_HISTOGRAM_CUSTOM_TIMES("Ads.Media.Duration", GetPipelineMediaDuration(),
                                base::Milliseconds(1), base::Days(1),
                                50 /* bucket_count */);
@@ -2763,7 +2764,7 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
     mb_data_source_->SetPreload(MultiBufferDataSource::METADATA);
   }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   if (media::IPCDemuxer::IsEnabled()) {
     if (mb_data_source_ && media::ProtocolSniffer::ShouldSniffProtocol(
                                mb_data_source_->mime_type())) {
@@ -2777,7 +2778,7 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
     StartIPCPipeline(mime_type_);
     return;
   }
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
+#endif  // VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
 
   StartPipeline();
 }
@@ -2966,10 +2967,10 @@ void WebMediaPlayerImpl::StartPipeline() {
     DCHECK(!chunk_demuxer_);
     DCHECK(data_source_);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
     // Check if demuxer was already initialized in StartIPCPipeline.
     if (!demuxer_) {
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(UVIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
         // clang-format off
 #if BUILDFLAG(ENABLE_FFMPEG)
     Demuxer::MediaTracksUpdatedCB media_tracks_updated_cb =
@@ -2984,9 +2985,9 @@ void WebMediaPlayerImpl::StartPipeline() {
     return;
 #endif
         // clang-format on
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
     }
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 
   } else {
     DCHECK(!chunk_demuxer_);
@@ -3108,7 +3109,8 @@ void WebMediaPlayerImpl::UpdatePlayState() {
   bool is_suspended = pipeline_controller_->IsSuspended();
   bool is_backgrounded = IsBackgroundSuspendEnabled(this) && IsHidden();
   PlayState state = UpdatePlayState_ComputePlayState(
-      is_flinging_, can_auto_suspend, is_suspended, is_backgrounded);
+      is_flinging_, can_auto_suspend, is_suspended, is_backgrounded,
+      IsInPictureInPicture());
   SetDelegateState(state.delegate_state, state.is_idle);
   SetMemoryReportingState(state.is_memory_reporting_enabled);
   SetSuspendState(state.is_suspended || pending_suspend_resume_cycle_);
@@ -3225,10 +3227,12 @@ void WebMediaPlayerImpl::SetSuspendState(bool is_suspended) {
 }
 
 WebMediaPlayerImpl::PlayState
-WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_flinging,
-                                                     bool can_auto_suspend,
-                                                     bool is_suspended,
-                                                     bool is_backgrounded) {
+WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(
+    bool is_flinging,
+    bool can_auto_suspend,
+    bool is_suspended,
+    bool is_backgrounded,
+    bool is_in_picture_in_picture) {
   PlayState result;
 
   bool must_suspend = was_suspended_for_frame_closed_;
@@ -3251,8 +3255,8 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_flinging,
 
   // Background suspend is only enabled for paused players.
   // In the case of players with audio the session should be kept.
-  bool background_suspended =
-      can_auto_suspend && is_backgrounded && paused_ && have_future_data;
+  bool background_suspended = can_auto_suspend && is_backgrounded && paused_ &&
+                              have_future_data && !is_in_picture_in_picture;
 
   // Idle suspension is allowed prior to kReadyStateHaveMetadata since there
   // exist mechanisms to exit the idle state when the player is capable of
@@ -4111,7 +4115,7 @@ void WebMediaPlayerImpl::ReportSessionUMAs() const {
   }
 }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 void WebMediaPlayerImpl::SniffProtocol() {
   media::ProtocolSniffer::SniffProtocol(
       data_source_.get(),
@@ -4169,6 +4173,6 @@ void WebMediaPlayerImpl::OnIPCMediaHostInitialized(bool success) {
   StartPipeline();
 }
 
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
+#endif  // VIVALDI_USE_SYSTEM_MEDIA_DEMUXER
 
 }  // namespace blink

@@ -45,15 +45,6 @@ void CancelRequest(
       message));
 }
 
-base::WeakPtr<media_router::WebContentsPresentationManager>
-GetPresentationManager(content::WebContents* web_contents) {
-  if (!web_contents ||
-      !media_router::MediaRouterEnabled(web_contents->GetBrowserContext())) {
-    return nullptr;
-  }
-  return media_router::WebContentsPresentationManager::Get(web_contents);
-}
-
 // Here we check to see if the WebContents is focused. Note that we can't just
 // use |WebContentsObserver::OnWebContentsFocused()| and
 // |WebContentsObserver::OnWebContentsLostFocus()| because focusing the
@@ -75,47 +66,6 @@ bool IsWebContentsFocused(content::WebContents* web_contents) {
 }
 
 }  // namespace
-
-MediaNotificationService::PresentationManagerObservation::
-    PresentationManagerObservation(base::RepeatingClosure cast_started_callback,
-                                   content::WebContents* web_contents)
-    : cast_started_callback_(cast_started_callback),
-      presentation_manager_(GetPresentationManager(web_contents)) {
-  if (presentation_manager_)
-    presentation_manager_->AddObserver(this);
-
-  bool has_presentation_request =
-      presentation_manager_ &&
-      presentation_manager_->HasDefaultPresentationRequest();
-  base::UmaHistogramBoolean(
-      "Media.GlobalMediaControls.HasDefaultPresentationRequest",
-      has_presentation_request);
-}
-
-MediaNotificationService::PresentationManagerObservation::
-    ~PresentationManagerObservation() {
-  if (presentation_manager_)
-    presentation_manager_->RemoveObserver(this);
-}
-
-void MediaNotificationService::PresentationManagerObservation::
-    OnMediaRoutesChanged(const std::vector<media_router::MediaRoute>& routes) {
-  // If there are no routes, then casting hasn't started.
-  if (routes.empty())
-    return;
-
-  // This will dismiss the backing item and therefore delete |this|. Do not use
-  // |this| after this call.
-  cast_started_callback_.Run();
-}
-
-void MediaNotificationService::PresentationManagerObservation::
-    SetPresentationManagerForTesting(
-        base::WeakPtr<media_router::WebContentsPresentationManager>
-            presentation_manager) {
-  presentation_manager_ = presentation_manager;
-  presentation_manager_->AddObserver(this);
-}
 
 MediaNotificationService::MediaNotificationService(
     Profile* profile,
@@ -154,10 +104,7 @@ MediaNotificationService::MediaNotificationService(
   // base::Unretained() is safe here because cast_notification_producer_ is
   // deleted before item_manager_.
   cast_notification_producer_ = std::make_unique<CastMediaNotificationProducer>(
-      profile, item_manager_.get(),
-      base::BindRepeating(
-          &global_media_controls::MediaItemManager::OnItemsChanged,
-          base::Unretained(item_manager_.get())));
+      profile, item_manager_.get());
   item_manager_->AddItemProducer(cast_notification_producer_.get());
 
   if (media_router::GlobalMediaControlsCastStartStopEnabled(profile)) {
@@ -170,7 +117,6 @@ MediaNotificationService::MediaNotificationService(
 
 MediaNotificationService::~MediaNotificationService() {
   media_session_item_producer_->RemoveObserver(this);
-  presentation_manager_observations_.clear();
   item_manager_->RemoveItemProducer(media_session_item_producer_.get());
 }
 
@@ -212,25 +158,6 @@ MediaNotificationService::RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
   return media_session_item_producer_
       ->RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
           id, std::move(callback));
-}
-
-void MediaNotificationService::OnMediaSessionItemCreated(
-    const std::string& id) {
-  auto* web_contents = content::MediaSession::GetWebContentsFromRequestId(id);
-
-  // base::Unretained is safe here since we own the object that owns this
-  // callback.
-  presentation_manager_observations_.emplace(
-      std::piecewise_construct, std::forward_as_tuple(id),
-      std::forward_as_tuple(
-          base::BindRepeating(&MediaNotificationService::OnCastStarted,
-                              base::Unretained(this), web_contents),
-          web_contents));
-}
-
-void MediaNotificationService::OnMediaSessionItemDestroyed(
-    const std::string& id) {
-  presentation_manager_observations_.erase(id);
 }
 
 void MediaNotificationService::OnMediaSessionActionButtonPressed(
@@ -368,27 +295,6 @@ MediaNotificationService::CreateCastDialogControllerForPresentationRequest() {
 void MediaNotificationService::set_device_provider_for_testing(
     std::unique_ptr<MediaNotificationDeviceProvider> device_provider) {
   device_provider_ = std::move(device_provider);
-}
-
-void MediaNotificationService::OnCastStarted(
-    content::WebContents* web_contents) {
-  // Hide the dialog.
-  item_manager_->HideDialog();
-
-  if (!web_contents)
-    return;
-
-  // If there is a media item associated with this WebContents, dismiss it.
-  auto request_id =
-      content::MediaSession::GetRequestIdFromWebContents(web_contents);
-  if (!request_id)
-    return;
-
-  auto item = media_session_item_producer_->GetMediaItem(request_id.ToString());
-  if (!item)
-    return;
-
-  item->Dismiss();
 }
 
 bool MediaNotificationService::HasCastNotificationsForWebContents(

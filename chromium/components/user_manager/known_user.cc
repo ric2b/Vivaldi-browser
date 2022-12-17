@@ -225,8 +225,9 @@ const base::Value* KnownUser::FindPrefs(const AccountId& account_id) const {
   if (!account_id.is_valid())
     return nullptr;
 
-  const base::Value* known_users = local_state_->GetList(kKnownUsers);
-  for (const base::Value& element_value : known_users->GetListDeprecated()) {
+  const base::Value::List& known_users =
+      local_state_->GetValueList(kKnownUsers);
+  for (const base::Value& element_value : known_users) {
     if (element_value.is_dict()) {
       if (UserMatches(account_id, element_value)) {
         return &element_value;
@@ -250,7 +251,7 @@ void KnownUser::SetPath(const AccountId& account_id,
     return;
 
   ListPrefUpdate update(local_state_, kKnownUsers);
-  for (base::Value& element_value : update->GetListDeprecated()) {
+  for (base::Value& element_value : update->GetList()) {
     if (element_value.is_dict()) {
       if (UserMatches(account_id, element_value)) {
         if (opt_value.has_value())
@@ -430,10 +431,6 @@ AccountId KnownUser::GetAccountId(const std::string& user_email,
       }
       return AccountId::FromUserEmailGaiaId(sanitized_email, id);
     case AccountType::ACTIVE_DIRECTORY:
-      if (const std::string* stored_email =
-              FindStringPath(AccountId::AdFromObjGuid(id), kCanonicalEmail)) {
-        return AccountId::AdFromUserEmailObjGuid(*stored_email, id);
-      }
       return AccountId::AdFromUserEmailObjGuid(sanitized_email, id);
     case AccountType::UNKNOWN:
       return AccountId::FromUserEmail(sanitized_email);
@@ -445,8 +442,9 @@ AccountId KnownUser::GetAccountId(const std::string& user_email,
 std::vector<AccountId> KnownUser::GetKnownAccountIds() {
   std::vector<AccountId> result;
 
-  const base::Value* known_users = local_state_->GetList(kKnownUsers);
-  for (const base::Value& element_value : known_users->GetListDeprecated()) {
+  const base::Value::List& known_users =
+      local_state_->GetValueList(kKnownUsers);
+  for (const base::Value& element_value : known_users) {
     if (element_value.is_dict()) {
       const std::string* email = element_value.FindStringKey(kCanonicalEmail);
       const std::string* gaia_id = element_value.FindStringKey(kGAIAIdKey);
@@ -758,10 +756,10 @@ void KnownUser::RemovePrefs(const AccountId& account_id) {
     return;
 
   ListPrefUpdate update(local_state_, kKnownUsers);
-  base::Value::ListView update_view = update->GetListDeprecated();
-  for (auto it = update_view.begin(); it != update_view.end(); ++it) {
+  base::Value::List& update_list = update->GetList();
+  for (auto it = update_list.begin(); it != update_list.end(); ++it) {
     if (UserMatches(account_id, *it)) {
-      update->EraseListIter(it);
+      update_list.erase(it);
       break;
     }
   }
@@ -769,7 +767,7 @@ void KnownUser::RemovePrefs(const AccountId& account_id) {
 
 void KnownUser::CleanEphemeralUsers() {
   ListPrefUpdate update(local_state_, kKnownUsers);
-  update->EraseListValueIf([](const auto& value) {
+  update->GetList().EraseIf([](const auto& value) {
     if (!value.is_dict())
       return false;
 

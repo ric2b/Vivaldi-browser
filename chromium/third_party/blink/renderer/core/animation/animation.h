@@ -320,7 +320,6 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   DispatchEventResult DispatchEventInternal(Event&) override;
   void AddedEventListener(const AtomicString& event_type,
                           RegisteredEventListener&) override;
-  TimelinePhase CurrentPhaseInternal() const;
   virtual AnimationEffect::EventDelegate* CreateEventDelegate(
       Element* target,
       const AnimationEffect::EventDelegate* old_event_delegate) {
@@ -328,11 +327,6 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   }
 
  private:
-  void SetHoldTimeAndPhase(absl::optional<AnimationTimeDelta> new_hold_time,
-                           TimelinePhase new_hold_phase);
-  void ResetHoldTimeAndPhase();
-  bool ValidateHoldTimeAndPhase() const;
-
   void ClearOutdated();
   void ForceServiceOnNextFrame();
 
@@ -348,7 +342,6 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   absl::optional<AnimationTimeDelta> CalculateStartTime(
       AnimationTimeDelta current_time) const;
   absl::optional<AnimationTimeDelta> CalculateCurrentTime() const;
-  TimelinePhase CalculateCurrentPhase() const;
 
   V8CSSNumberish* ConvertTimeToCSSNumberish(
       absl::optional<AnimationTimeDelta>) const;
@@ -432,7 +425,6 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   absl::optional<double> pending_playback_rate_;
   absl::optional<AnimationTimeDelta> start_time_;
   absl::optional<AnimationTimeDelta> hold_time_;
-  absl::optional<TimelinePhase> hold_phase_;
   absl::optional<AnimationTimeDelta> previous_current_time_;
   bool reset_current_time_on_resume_ = false;
 
@@ -482,7 +474,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
 
   // TODO(crbug.com/960944): Consider reintroducing kPause and cleanup use of
   // mutually exclusive pending_play_ and pending_pause_ flags.
-  enum CompositorAction { kNone, kStart };
+  enum class CompositorAction { kNone, kStart };
 
   class CompositorState {
     USING_FAST_MALLOC(CompositorState);
@@ -501,7 +493,8 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
                         : absl::nullopt),
           playback_rate(animation.EffectivePlaybackRate()),
           effect_changed(false),
-          pending_action(animation.start_time_ ? kNone : kStart) {}
+          pending_action(animation.start_time_ ? CompositorAction::kNone
+                                               : CompositorAction::kStart) {}
     CompositorState(const CompositorState&) = delete;
     CompositorState& operator=(const CompositorState&) = delete;
 

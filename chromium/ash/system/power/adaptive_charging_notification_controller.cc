@@ -12,6 +12,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "base/i18n/time_formatting.h"
 #include "base/notreached.h"
 #include "chromeos/dbus/power/power_manager_client.h"
@@ -26,6 +27,7 @@ namespace {
 
 constexpr char kNotifierId[] = "adaptive-charging-notify";
 constexpr char kInfoNotificationId[] = "adaptive-charging-notify-info";
+constexpr base::TimeDelta kTimeDeltaRoundingInterval = base::Minutes(30);
 
 }  // namespace
 
@@ -46,7 +48,10 @@ void AdaptiveChargingNotificationController::ShowAdaptiveChargingNotification(
     notification_message = l10n_util::GetStringFUTF16(
         IDS_ASH_ADAPTIVE_CHARGING_NOTIFICATION_MESSAGE_TEMPORARY,
         base::TimeFormatTimeOfDayWithHourClockType(
-            base::Time::Now() + base::Hours(hours_to_full.value()),
+            base::Time::FromDeltaSinceWindowsEpoch(
+                base::Time::Now().ToDeltaSinceWindowsEpoch().RoundToMultiple(
+                    kTimeDeltaRoundingInterval)) +
+                base::Hours(hours_to_full.value()),
             base::GetHourClockType(), base::kKeepAmPm));
   } else {
     notification_message = l10n_util::GetStringUTF16(
@@ -73,6 +78,10 @@ void AdaptiveChargingNotificationController::ShowAdaptiveChargingNotification(
 
   if (hours_to_full.has_value())
     notification->set_priority(message_center::SYSTEM_PRIORITY);
+  notification->set_accent_color(
+      DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
+          ? gfx::kGoogleGreen300
+          : gfx::kGoogleGreen600);
 
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));

@@ -7,6 +7,7 @@
 <translation id="1258009455399840361">Otočiť o 90 stupňov v smere hodinových ručičiek</translation>
 <translation id="1276998909102132017">Obrázky galérie</translation>
 <translation id="1300209025925956156">Skenovanie dokumentu</translation>
+<translation id="1309250603447638106">Sťahujú sa aktualizácie na skenovanie dokumentov</translation>
 <translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. Prístup získate stlačením klávesa vyhľadávania + šípky doľava.</translation>
 <translation id="1393338179284529051">Quad HD</translation>
 <translation id="1430915738399379752">Tlačiť</translation>
@@ -47,6 +48,7 @@
 <translation id="2816865716882637212">HD</translation>
 <translation id="28682968802727151">Ukážka zrkadlenia</translation>
 <translation id="2879583609344924966">Kamera <ph name="CAMERA" /> je pripojená.</translation>
+<translation id="2904654629665923749">K dispozícii je skenovanie dokumentov</translation>
 <translation id="2968794441791257519">Fotky a videá nasnímané fotoaparátom budú presunuté do priečinka Stiahnuté súbory. Dostanete sa k nim v Súboroch.
 
         Fotky aj videá budú môcť používať aplikácie s povoleniami pre úložisko.</translation>
@@ -93,7 +95,6 @@
 <translation id="5057360777601936059">Fotoaparát je momentálne nedostupný.
         Skontrolujte, či je správne pripojený.</translation>
 <translation id="5163387177077603948">Presúvate doprava</translation>
-<translation id="520537883758714667">Skenovanie dokumentov je teraz k dispozícii</translation>
 <translation id="5235304959032763950">16 ku 9</translation>
 <translation id="5266635337630551423">Ľavý horný roh dokumentu</translation>
 <translation id="5317780077021120954">Uložiť</translation>

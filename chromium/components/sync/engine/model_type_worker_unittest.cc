@@ -33,10 +33,10 @@
 #include "components/sync/protocol/password_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/protocol/sync_entity.pb.h"
-#include "components/sync/test/engine/fake_cryptographer.h"
-#include "components/sync/test/engine/mock_model_type_processor.h"
-#include "components/sync/test/engine/mock_nudge_handler.h"
-#include "components/sync/test/engine/single_type_mock_server.h"
+#include "components/sync/test/fake_cryptographer.h"
+#include "components/sync/test/mock_model_type_processor.h"
+#include "components/sync/test/mock_nudge_handler.h"
+#include "components/sync/test/single_type_mock_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -1428,8 +1428,8 @@ TEST_F(ModelTypeWorkerTest, IgnoreUpdatesEncryptedWithKeysMissingForTooLong) {
   SetUpdateEncryptionFilter(1);
   TriggerUpdateFromServer(10, kTag1, kValue1);
 
-  // The undecryptable update has been around for only 1 GetUpdatesResponse, so
-  // the worker is still blocked.
+  // The undecryptable update has been around for only 1 GetUpdates, so the
+  // worker is still blocked.
   EXPECT_TRUE(worker()->BlockForEncryption());
 
   // Send empty GetUpdates, reaching the threshold of 2.

@@ -36,7 +36,7 @@ ChromeVoxSettingsPagesTest = class extends ChromeVoxNextE2ETest {
   }
 };
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxSettingsPagesTest', 'TtsRateCommandOnSettingsPage',
     async function() {
       const realTts = ChromeVox.tts;
@@ -86,7 +86,7 @@ TEST_F(
           .call(increaseRate)
           .expectSpeech('Rate 2 percent')
           .call(increaseRate)
-          .expectSpeech('Rate 4 percent')
+          .expectSpeech('Rate 4 percent');
 
-          .replay();
+      await mockFeedback.replay();
     });

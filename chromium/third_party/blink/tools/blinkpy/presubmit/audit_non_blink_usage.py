@@ -1,4 +1,4 @@
-#!/usr/bin/env vpython
+#!/usr/bin/env vpython3
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -37,9 +37,21 @@ _CONFIG = [
             'gfx::ICCProfile',
             'gfx::RadToDeg',
 
-            # absl optional constructs.
-            'absl::optional',
+            # absl
+            'absl::MakeInt128',
+            'absl::MakeUint128',
+            'absl::get',
+            'absl::get_if',
+            'absl::holds_alternative',
             'absl::in_place',
+            'absl::int128',
+            'absl::make_optional',
+            'absl::nullopt',
+            'absl::nullopt_t',
+            'absl::optional',
+            'absl::uint128',
+            'absl::variant',
+            'absl::visit',
 
             # //base constructs that are allowed everywhere
             'base::AdoptRef',
@@ -47,6 +59,7 @@ _CONFIG = [
             'base::SampleMetadataScope',
             'base::AutoReset',
             'base::Contains',
+            'base::ConditionVariable',
             'base::CpuReductionExperimentFilter',
             'base::ValuesEquivalent',
             'base::Days',
@@ -59,6 +72,7 @@ _CONFIG = [
             'base::File',
             'base::FileErrorOr',
             'base::FilePath',
+            'base::FunctionRef',
             'base::GetUniqueIdForProcess',
             'base::GUID',
             'base::HexStringToUInt64',
@@ -75,10 +89,12 @@ _CONFIG = [
             'base::Nanoseconds',
             'base::OptionalFromPtr',
             'base::OptionalOrNullptr',
+            'base::PassKey',
             'base::PlatformThread',
             'base::PlatformThreadId',
             'base::RefCountedData',
             'base::RunLoop',
+            'base::HashingLRUCache',
             'base::ReadOnlySharedMemoryMapping',
             'base::ReadOnlySharedMemoryRegion',
             'base::RemoveChars',
@@ -95,6 +111,7 @@ _CONFIG = [
             'base::SysInfo',
             'base::ThreadChecker',
             'base::ThreadTicks',
+            'base::ThreadType',
             'base::TickClock',
             'base::Time',
             'base::TimeDelta',
@@ -110,23 +127,25 @@ _CONFIG = [
             'base::WritableSharedMemoryMapping',
             'base::as_bytes',
             'base::bit_cast',
-            'absl::in_place',
-            'absl::make_optional',
             'base::make_span',
-            'absl::nullopt',
-            'absl::nullopt_t',
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
             'base::span',
             'logging::GetVlogLevel',
             'logging::SetLogItems',
-            'base::PassKey',
 
             # //base/allocator/partition_allocator/partition_alloc_constants.h
             'partition_alloc::internal::kAlignment',
 
             # //base/task/bind_post_task.h
             'base::BindPostTask',
+
+            # //base/types/expected.h
+            'base::expected',
+            'base::unexpected',
+
+            # //base/bind.h
+            'base::IgnoreResult',
 
             # //base/bits.h
             'base::bits::.+',
@@ -344,6 +363,7 @@ _CONFIG = [
             'gfx::RectToSkIRect',
             'gfx::RectToSkRect',
             'gfx::ScaleToCeiledSize',
+            'gfx::ScaleToEnclosedRect',
             'gfx::ScaleToEnclosingRect',
             'gfx::ScaleToFlooredSize',
             'gfx::ScaleToRoundedRect',
@@ -639,6 +659,7 @@ _CONFIG = [
             'ui::AXEventIntent',
             'ui::AXMode',
             'ui::AXNodeData',
+            'ui::AXRelativeBounds',
             'ui::AXTreeID',
             'ui::kAXModeBasic',
             'ui::kAXModeComplete',
@@ -651,6 +672,7 @@ _CONFIG = [
             # serialization. Please keep alphabetized.
             'ui::CanHaveInlineTextBoxChildren',
             'ui::IsCellOrTableHeader',
+            'ui::IsChildTreeOwner',
             'ui::IsClickable',
             'ui::IsComboBox',
             'ui::IsContainerWithSelectableChildren',
@@ -676,19 +698,6 @@ _CONFIG = [
             'base::mac::(CFToNSCast|NSToCFCast)',
             'base::mac::Is(AtMost|AtLeast)?OS.+',
             'base::(scoped_nsobject|ScopedCFTypeRef)',
-
-            # absl::variant and getters:
-            'absl::get',
-            'absl::get_if',
-            'absl::holds_alternative',
-            'absl::variant',
-            'absl::visit',
-
-            # 128-bit absl types
-            'absl::MakeInt128',
-            'absl::MakeUint128',
-            'absl::int128',
-            'absl::uint128',
         ],
         'disallowed': [
             ('base::Bind(|Once|Repeating)',
@@ -754,6 +763,14 @@ _CONFIG = [
         ],
         'allowed': [
             'viz::BeginFrameArgs',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/renderer/core/annotation'],
+        'allowed': [
+            # AnnotationAgentContainerImpl reuses TextFragmentSelectorGenerator
+            # and the callback must accept this type as the result code.
+            'shared_highlighting::LinkGenerationError',
         ],
     },
     {
@@ -1441,6 +1458,7 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/core/exported/',
+            'third_party/blink/renderer/core/frame/',
             'third_party/blink/renderer/core/input/',
         ],
         'allowed': [
@@ -1627,6 +1645,15 @@ _CONFIG = [
         ],
     },
     {
+        'paths': [
+            'third_party/blink/renderer/modules/filesystem/dom_file_system.cc',
+            'third_party/blink/renderer/modules/webdatabase/database_tracker.cc',
+        ],
+        'allowed': [
+            'storage::GetIdentifierFromOrigin',
+        ],
+    },
+    {
         'paths': ['third_party/blink/renderer/core/frame/local_frame_view.cc'],
         'allowed': [
             'base::LapTimer',
@@ -1639,7 +1666,7 @@ _CONFIG = [
             'third_party/blink/renderer/modules/webaudio/realtime_audio_worklet_thread.cc',
             'third_party/blink/renderer/modules/webaudio/semi_realtime_audio_worklet_thread.cc',
         ],
-        'allowed': ['base::ThreadPriority'],
+        'allowed': ['base::ThreadType'],
     },
     {
         'paths': [

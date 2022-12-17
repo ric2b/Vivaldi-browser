@@ -69,8 +69,6 @@ DOMPlugin* DOMPluginArray::item(unsigned index) {
 
 DOMPlugin* DOMPluginArray::namedItem(const AtomicString& property_name) {
   if (should_return_fixed_plugin_data_) {
-    // I don't know why namedItem() and NamedPropertyEnumerator go directly to
-    // the plugin data, rather than using dom_plugins_.
     for (const auto& plugin : dom_plugins_) {
       if (plugin->name() == property_name)
         return plugin;
@@ -145,9 +143,10 @@ namespace {
 DOMPlugin* MakeFakePlugin(String plugin_name, LocalDOMWindow* window) {
   String description = "Portable Document Format";
   String filename = "internal-pdf-viewer";
-  auto* plugin_info = MakeGarbageCollected<PluginInfo>(
-      plugin_name, filename, description, /*background_color=*/0,
-      /*may_use_external_handler=*/false);
+  auto* plugin_info =
+      MakeGarbageCollected<PluginInfo>(plugin_name, filename, description,
+                                       /*background_color=*/Color::kTransparent,
+                                       /*may_use_external_handler=*/false);
   Vector<String> extensions{"pdf"};
   for (const char* mime_type : {"application/pdf", "text/pdf"}) {
     auto* mime_info = MakeGarbageCollected<MimeClassInfo>(

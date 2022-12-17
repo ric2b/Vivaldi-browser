@@ -15,7 +15,7 @@
 #include "chrome/browser/sync/test/integration/status_change_checker.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/driver/trusted_vault_client.h"
-#include "components/sync/test/fake_server/fake_server.h"
+#include "components/sync/test/fake_server.h"
 
 // Checker used to block until a Nigori with a given passphrase type is
 // available on the server.
@@ -44,16 +44,22 @@ class ServerNigoriKeyNameChecker
   const std::string expected_key_name_;
 };
 
-// Checker used to block until Sync requires or stops requiring a passphrase.
-class PassphraseRequiredStateChecker : public SingleClientStatusChangeChecker {
+// Checker to block until service is waiting for a passphrase.
+class PassphraseRequiredChecker : public SingleClientStatusChangeChecker {
  public:
-  PassphraseRequiredStateChecker(syncer::SyncServiceImpl* service,
-                                 bool desired_state);
+  explicit PassphraseRequiredChecker(syncer::SyncServiceImpl* service);
 
+  // StatusChangeChecker implementation.
   bool IsExitConditionSatisfied(std::ostream* os) override;
+};
 
- private:
-  const bool desired_state_;
+// Checker to block until service has accepted a new passphrase.
+class PassphraseAcceptedChecker : public SingleClientStatusChangeChecker {
+ public:
+  explicit PassphraseAcceptedChecker(syncer::SyncServiceImpl* service);
+
+  // StatusChangeChecker implementation.
+  bool IsExitConditionSatisfied(std::ostream* os) override;
 };
 
 // Checker used to block until Sync requires or stops requiring trusted vault

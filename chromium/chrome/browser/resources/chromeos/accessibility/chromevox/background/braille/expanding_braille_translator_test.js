@@ -15,6 +15,11 @@ ChromeVoxExpandingBrailleTranslatorUnitTest =
     await importModule(
         'ExpandingBrailleTranslator',
         '/chromevox/background/braille/expanding_braille_translator.js');
+    await importModule(
+        ['ExtraCellsSpan', 'ValueSelectionSpan', 'ValueSpan'],
+        '/chromevox/background/braille/spans.js');
+    await importModule('LibLouis', '/chromevox/background/braille/liblouis.js');
+    await importModule('Spannable', '/chromevox/common/spannable.js');
   }
 };
 
@@ -22,9 +27,6 @@ ChromeVoxExpandingBrailleTranslatorUnitTest =
 ChromeVoxExpandingBrailleTranslatorUnitTest.prototype.extraLibraries = [
   '../../../common/testing/assert_additions.js',
   '../../testing/fake_dom.js',
-  '../../common/spannable.js',
-  'liblouis.js',
-  'spans.js',
 ];
 
 /**
@@ -90,7 +92,7 @@ TEST_F(
       const uncontractedTranslator = {
         translate(text, formTypeMap, callback) {
           callback(null, null, null);
-        }
+        },
       };
       const translationResult = null;
 
@@ -274,45 +276,45 @@ TEST_F(
        * location and a 'c' means that the contracted translator was used.
        */
       const TESTDATA = [
-        {name: 'emptyText', input: createText(''), contractedOutput: ''}, {
+        {name: 'emptyText', input: createText(''), contractedOutput: ''},
+        {
           name: 'emptyTextWithCaret',
           input: createText('', 0),
-          contractedOutput: ''
+          contractedOutput: '',
         },
         {
           name: 'textWithNoSelection',
           input: createText(TEXT),
-          contractedOutput: 'ccccccccccccc'
+          contractedOutput: 'ccccccccccccc',
         },
         {
           name: 'textWithCaretAtStart',
           input: createText(TEXT, 0),
-          contractedOutput: 'uuuuuuccccccc'
+          contractedOutput: 'uuuuuuccccccc',
         },
         {
           name: 'textWithCaretAtEnd',
           input: createText(TEXT, TEXT.length),
-          contractedOutput: 'cccccccuuuuuu'
+          contractedOutput: 'cccccccuuuuuu',
         },
         {
           name: 'textWithCaretInWhitespace',
           input: createText(TEXT, 6),
-          contractedOutput: 'uuuuuuucccccc'
+          contractedOutput: 'uuuuuuucccccc',
         },
         {
           name: 'textWithSelectionEndInWhitespace',
           input: createText(TEXT, 0, 7),
-          contractedOutput: 'uuuuuuucccccc'
+          contractedOutput: 'uuuuuuucccccc',
         },
         {
           name: 'textWithSelectionInTwoWords',
           input: createText(TEXT, 2, 9),
-          contractedOutput: 'uuuuuucuuuuuu'
-        }
+          contractedOutput: 'uuuuuucuuuuuu',
+        },
       ];
-      const TESTDATA_WITH_SELECTION = TESTDATA.filter(function(testCase) {
-        return testCase.input.getSpanInstanceOf(ValueSelectionSpan);
-      });
+      const TESTDATA_WITH_SELECTION = TESTDATA.filter(
+          testCase => testCase.input.getSpanInstanceOf(ValueSelectionSpan));
 
       const expType = ExpandingBrailleTranslator.ExpansionType;
       for (let i = 0, testCase; testCase = TESTDATA[i]; ++i) {

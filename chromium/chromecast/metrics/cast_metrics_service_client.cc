@@ -31,7 +31,6 @@
 #include "components/metrics/url_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/version_info/channel.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -316,7 +315,7 @@ void CastMetricsServiceClient::InitializeMetricsService() {
       // Pass an empty file path since Chromecast does not use the Variations
       // framework.
       /*user_data_dir=*/base::FilePath(),
-      ::metrics::StartupVisibility::kUnknown, version_info::Channel::UNKNOWN,
+      ::metrics::StartupVisibility::kUnknown,
       base::BindRepeating(&CastMetricsServiceClient::StoreClientInfo,
                           base::Unretained(this)),
       base::BindRepeating(&CastMetricsServiceClient::LoadClientInfo,
@@ -357,7 +356,7 @@ void CastMetricsServiceClient::StartMetricsService() {
   metrics_service_->InitializeMetricsRecordingState();
 #if !BUILDFLAG(IS_ANDROID)
   // Signal that the session has not yet exited cleanly. We later signal that
-  // the session exited cleanly via MetricsService::RecordCompletedSessionEnd().
+  // the session exited cleanly via MetricsService::LogCleanShutdown().
   // TODO(crbug.com/1208587): See whether this can be called even earlier.
   metrics_state_manager_->LogHasSessionShutdownCleanly(false);
 #endif  // !BUILDFLAG(IS_ANDROID)

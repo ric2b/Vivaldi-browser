@@ -45,7 +45,6 @@ ServiceWorkerHost::ServiceWorkerHost(
   container_host_->set_service_worker_host(this);
   container_host_->UpdateUrls(
       version_->script_url(),
-      net::SiteForCookies::FromUrl(version_->script_url()),
       url::Origin::Create(version_->key().top_level_site().GetURL()),
       version_->key());
 }
@@ -89,10 +88,17 @@ void ServiceWorkerHost::CreateWebTransportConnector(
 void ServiceWorkerHost::BindCacheStorage(
     mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(!base::FeatureList::IsEnabled(
-      blink::features::kEagerCacheStorageSetupForServiceWorkers));
   version_->embedded_worker()->BindCacheStorage(std::move(receiver));
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void ServiceWorkerHost::BindHidService(
+    mojo::PendingReceiver<blink::mojom::HidService> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  version_->embedded_worker()->BindHidService(version_->key().origin(),
+                                              std::move(receiver));
+}
+#endif
 
 net::NetworkIsolationKey ServiceWorkerHost::GetNetworkIsolationKey() const {
   // TODO(https://crbug.com/1147281): This is the NetworkIsolationKey of a

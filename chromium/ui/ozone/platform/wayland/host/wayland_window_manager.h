@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/native_widget_types.h"
@@ -34,6 +35,9 @@ class WaylandWindowManager {
   // Notifies observers that the Window has been ack configured and
   // WaylandBufferManagerHost can start attaching buffers to the |surface_|.
   void NotifyWindowConfigured(WaylandWindow* window);
+
+  // Notifies observers that the window's wayland role has been assigned.
+  void NotifyWindowRoleAssigned(WaylandWindow* window);
 
   // Stores the window that should grab the located events.
   void GrabLocatedEvents(WaylandWindow* event_grabber);
@@ -91,12 +95,11 @@ class WaylandWindowManager {
   // The given |window| must be managed by this manager.
   void SetKeyboardFocusedWindow(WaylandWindow* window);
 
-  // TODO(crbug.com/971525): remove this in favor of targeted subscription of
-  // windows to their outputs.
-  std::vector<WaylandWindow*> GetWindowsOnOutput(uint32_t output_id);
-
   // Returns all stored windows.
   std::vector<WaylandWindow*> GetAllWindows() const;
+
+  // Returns true if the |window| still exists.
+  bool IsWindowValid(const WaylandWindow* window) const;
 
   void AddWindow(gfx::AcceleratedWidget widget, WaylandWindow* window);
   void RemoveWindow(gfx::AcceleratedWidget widget);
@@ -109,13 +112,16 @@ class WaylandWindowManager {
   gfx::AcceleratedWidget AllocateAcceleratedWidget();
 
  private:
-  WaylandConnection* const connection_;
+  WaylandWindow* pointer_focused_window_ = nullptr;
+  WaylandWindow* keyboard_focused_window_ = nullptr;
+
+  const raw_ptr<WaylandConnection> connection_;
 
   base::ObserverList<WaylandWindowObserver> observers_;
 
   base::flat_map<gfx::AcceleratedWidget, WaylandWindow*> window_map_;
 
-  WaylandWindow* located_events_grabber_ = nullptr;
+  raw_ptr<WaylandWindow> located_events_grabber_ = nullptr;
 
   // Stores strictly monotonically increasing counter for allocating unique
   // AccelerateWidgets.

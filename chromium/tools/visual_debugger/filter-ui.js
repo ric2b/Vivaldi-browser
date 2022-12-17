@@ -4,6 +4,7 @@
 
 const MDCMenu = mdc.menu.MDCMenu;
 const MDCMenuFoundation = mdc.menu.MDCMenuFoundation;
+const maxZIndex = 999;
 
 class FilterUI extends HTMLElement {
   constructor() {
@@ -70,8 +71,8 @@ class FilterUI extends HTMLElement {
       <div class='section'>
         <div>
           <form id="actionform">
-            <input type='radio' name='dowhat' value='drawfilter'/>Override
-            <input type='color' name='drawcolor' value='#000000'/>
+            <input type='radio' id='drawfilter' name='dowhat' value='drawfilter'/>Override
+            <input type='color' id='drawcolor' name='drawcolor' value='#000000'/>
             opacity <input type='range' name='fillalpha' min='0' max='100'
              step='10' value='50' list='alphastep'/>
             <datalist id='alphastep'>
@@ -95,6 +96,12 @@ class FilterUI extends HTMLElement {
 <div>
 `;
     this.setUpButtons_();
+
+    // Event listener to check if custom color selected
+    // to automatically select override button
+    document.getElementById('drawcolor').addEventListener("change",function(){
+      document.getElementById('drawfilter').checked = true;
+    });
   }
 
   setUpButtons_() {
@@ -129,6 +136,7 @@ function createFilterChip(filter) {
   chip.setAttribute("role", "row");
   chip.style.margin = '5px';
   chip.style.borderRadius = '0px';
+  chip.style.zIndex = maxZIndex;
   if (filter.shouldDraw) {
     chip.style.border = filter.drawColor ?
       `2px solid ${filter.drawColor}` : `1px solid black`;
@@ -196,7 +204,7 @@ function createFilterChip(filter) {
 
   chip.querySelector('#filtermenu').addEventListener('click', () => {
     const menu = new MDCMenu(chip.querySelector('#filterchipmenu'));
-    menu.setAnchorMargin({ top: 25 })
+    menu.setAnchorMargin({ top: 25 });
     menu.open = true;
   });
 
@@ -225,10 +233,14 @@ function showCreateFilterPopup(anchor) {
   filterUi.style.position = 'absolute';
   filterUi.style.top = (anchor.offsetTop + anchor.offsetHeight) + 'px';
   filterUi.style.left = (anchor.offsetLeft + 20) + 'px';
-
+  filterUi.style.zIndex = maxZIndex;
+  
   showModal(filterUi);
 }
 
+// Traverses through all the filter chips and enables/disables
+// "move next/prev" button clickability depending on if
+// the chip is at the beginning/middle/end of list
 function refreshFilterSet() {
   const list = document.querySelector('#filters');
   for (var chip = list.firstElementChild;
@@ -250,6 +262,7 @@ function refreshFilterSet() {
         .classList.remove("mdc-list-item--disabled");
     }
   }
+  locallyStoreFilters();
 
   Player.instance.refresh();
 
@@ -313,9 +326,7 @@ function showEditFilterPopup(item) {
   filterUi.style.position = 'absolute';
   filterUi.style.top = (chip.offsetTop + chip.offsetHeight) + 'px';
   filterUi.style.left = (chip.offsetLeft + 20) + 'px';
-  // Copyright 2022 The Chromium Authors. All rights reserved.
-  // Use of this source code is governed by a BSD-style license that can be
-  // found in the LICENSE file.
+  filterUi.style.zIndex = maxZIndex;
 
   showModal(filterUi);
 
@@ -344,13 +355,80 @@ function deleteFilter(item) {
   refreshFilterSet();
 }
 
+// Stores filter instances in local storage
+function locallyStoreFilters() {
+  var filterInstances = Filter.instances;
+  // Store string representation of filterInstances list in local storage.
+  localStorage.setItem('filterInstances', JSON.stringify(filterInstances));
+}
+
+// Restores filter instances from local storage.
+function restoreFilters() {
+  const retrievedFilterString = localStorage.getItem('filterInstances');
+  // Add default filters to the instances list.
+  FilterUIDefault.initialize();
+
+  if (!retrievedFilterString) {
+    return;
+  }
+
+  var retrievedFilterInstances = JSON.parse(retrievedFilterString);
+  // Remove any default filter duplicates from restored filters.
+  for (const defaultFilter of defaultFilters) {
+    retrievedFilterInstances = retrievedFilterInstances.filter
+        (instance => !isDuplicate(instance, defaultFilter));
+  }
+  // Re-create non-default filter chips from local storage.
+  // Pre-existing filters are appended behind the default ones.
+  retrievedFilterInstances.forEach((instance) =>
+    createFilterComplete(instance.selector_, instance.action_));
+}
+
+// Checks if one filter is a duplicate of another.
+// NOTE: Custom equality check needed to avoid marking same style
+// of filters with different enabled states and indices as
+// non-duplicates.
+function isDuplicate(filter1, filter2) {
+  if (!filter1 || !filter2) {
+    return false;
+  }
+  if (filter1.selector_.filename !== filter2.selector_.filename) {
+    return false;
+  }
+  if (filter1.selector_.func !== filter2.selector_.func) {
+    return false;
+  }
+  if (filter1.selector_.anno !== filter2.selector_.anno) {
+    return false;
+  }
+  if (filter1.action_.skipDraw !== filter2.action_.skipDraw) {
+    return false;
+  }
+  if (filter1.action_.color !== filter2.action_.color) {
+    return false;
+  }
+  if (filter1.action_.alpha !== filter2.action_.alpha) {
+    return false;
+  }
+  return true;
+}
+
+const defaultFilters = [
+    {
+      selector_: { filename: "", func: "", anno: "frame.root.quad" },
+      action_: { skipDraw: false, color: '#000000', alpha: "10" }
+    },
+    {
+      selector_: { filename: "", func: "", anno: "frame.root.damage" },
+      action_: { skipDraw: false, color: '#FF0000', alpha: "20" }
+    }
+];
+
 // Default filters should probably load off disk.
 const FilterUIDefault = {
   initialize() {
-    createFilterComplete({ filename: "", func: "", anno: "frame.root.quad" },
-      { skipDraw: false, color: '#000000', alpha: "10" });
-    createFilterComplete({ filename: "", func: "", anno: "frame.root.damage" },
-      { skipDraw: false, color: '#FF0000', alpha: "20" });
+    defaultFilters.forEach((instance) =>
+      createFilterComplete(instance.selector_, instance.action_))
   }
 };
 

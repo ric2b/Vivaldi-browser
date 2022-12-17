@@ -10,11 +10,11 @@ include_rules = [
   "+components/discardable_memory/service",
   "+components/download/database",
   "+components/download/public/common",
+  "+components/file_access",
   "+components/filename_generation",
   "+components/permissions/features.h",
   "+components/services/font",
   "+components/services/filesystem",
-  "+components/services/font/ppapi_fontconfig_matching.h",
   "+components/services/quarantine/test_support.h",
   "+components/services/quarantine/quarantine.h",
   "+components/services/screen_ai/buildflags",
@@ -47,7 +47,6 @@ include_rules = [
 
   "+content/public/app",
   "+content/public/browser",
-  "+content/services/shared_storage_worklet/public",
   "+device/base/synchronization",
   "+device/bluetooth",
   "+device/fido/hid",
@@ -62,6 +61,7 @@ include_rules = [
   "+sql",
   "+ui/aura_extra",
   "+components/vector_icons",
+  "+ui/linux",
   "+ui/strings/grit/ax_strings.h",
   "+ui/webui",
 

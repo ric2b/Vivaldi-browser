@@ -26,6 +26,10 @@
 
 // VB-65894
 "mojeek.com",
+"kagi.com",
 
 // VB-64209: Videos on ted.com fail if we use the chrome user agent.
 "ted.com",
+
+// VB-81592: Used in redirects, e.g to Chrome Web Store
+"vvld.in",

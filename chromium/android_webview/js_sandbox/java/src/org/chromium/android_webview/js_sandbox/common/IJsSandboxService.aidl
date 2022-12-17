@@ -7,6 +7,7 @@ import org.chromium.android_webview.js_sandbox.common.IJsSandboxIsolate;
 
 /**
  * Used by the embedding app to execute JavaScript in a sandboxed environment.
+ * @hide
  */
 interface IJsSandboxService {
     IJsSandboxIsolate createIsolate() = 0;
@@ -17,6 +18,12 @@ interface IJsSandboxService {
      * executions to run to completion first.
      */
     const String ISOLATE_TERMINATION = "ISOLATE_TERMINATION";
+
+    /**
+     * Feature flag indicating that isolate creation can take a parameter
+     * to set the maximum heap size limit of the isolate.
+     */
+    const String ISOLATE_MAX_HEAP_SIZE_LIMIT = "ISOLATE_MAX_HEAP_SIZE_LIMIT";
 
     /**
      * This feature flag is a combination of three sub-features:
@@ -33,4 +40,7 @@ interface IJsSandboxService {
      * @return A list of feature names supported by this implementation.
      */
     List<String> getSupportedFeatures() = 1;
+
+    IJsSandboxIsolate createIsolateWithMaxHeapSizeBytes(long maxHeapSize) = 2;
+
 }

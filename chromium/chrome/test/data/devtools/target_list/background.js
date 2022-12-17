@@ -151,7 +151,7 @@ chrome.test.runTests([
     requestUrl('/json/version',
         function(text) {
           var versionInfo = JSON.parse(text);
-          chrome.test.assertTrue(/Chrome\//.test(versionInfo["Browser"]));
+          chrome.test.assertTrue(/^Chrome\//.test(versionInfo["Browser"]));
           chrome.test.assertTrue("Protocol-Version" in versionInfo);
           chrome.test.assertTrue("User-Agent" in versionInfo);
           chrome.test.assertTrue("WebKit-Version" in versionInfo);

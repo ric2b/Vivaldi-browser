@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/external_protocol/auto_launch_protocols_policy_handler.h"
+#include "chrome/browser/external_protocol/constants.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -264,21 +265,18 @@ bool IsSchemeOriginPairAllowedByPolicy(const std::string& scheme,
   if (!initiating_origin)
     return false;
 
-  const base::Value* exempted_protocols =
-      prefs->GetList(prefs::kAutoLaunchProtocolsFromOrigins);
-  if (!exempted_protocols)
-    return false;
+  const base::Value::List& exempted_protocols =
+      prefs->GetValueList(prefs::kAutoLaunchProtocolsFromOrigins);
 
-  const base::Value* origin_patterns = nullptr;
-  for (const base::Value& entry : exempted_protocols->GetListDeprecated()) {
-    const base::DictionaryValue& protocol_origins_map =
-        base::Value::AsDictionaryValue(entry);
-    const std::string* protocol = protocol_origins_map.FindStringKey(
-        policy::AutoLaunchProtocolsPolicyHandler::kProtocolNameKey);
+  const base::Value::List* origin_patterns = nullptr;
+  for (const base::Value& entry : exempted_protocols) {
+    const base::Value::Dict& protocol_origins_map = entry.GetDict();
+    const std::string* protocol = protocol_origins_map.FindString(
+        policy::external_protocol::kProtocolNameKey);
     DCHECK(protocol);
     if (*protocol == scheme) {
-      origin_patterns = protocol_origins_map.FindListKey(
-          policy::AutoLaunchProtocolsPolicyHandler::kOriginListKey);
+      origin_patterns = protocol_origins_map.FindList(
+          policy::external_protocol::kOriginListKey);
       break;
     }
   }
@@ -288,7 +286,7 @@ bool IsSchemeOriginPairAllowedByPolicy(const std::string& scheme,
   url_matcher::URLMatcher matcher;
   base::MatcherStringPattern::ID id(0);
   url_matcher::util::AddFilters(&matcher, true /* allowed */, &id,
-                                &base::Value::AsListValue(*origin_patterns));
+                                *origin_patterns);
 
   auto matching_set = matcher.MatchURL(initiating_origin->GetURL());
   return !matching_set.empty();
@@ -349,15 +347,15 @@ ExternalProtocolHandler::BlockState ExternalProtocolHandler::GetBlockState(
 
     if (MayRememberAllowDecisionsForThisOrigin(initiating_origin)) {
       // Check if there is a matching {Origin+Protocol} pair exemption:
-      const base::Value* allowed_origin_protocol_pairs =
-          profile_prefs->GetDictionary(
+      const base::Value::Dict& allowed_origin_protocol_pairs =
+          profile_prefs->GetValueDict(
               prefs::kProtocolHandlerPerOriginAllowedProtocols);
-      const base::Value* allowed_protocols_for_origin =
-          allowed_origin_protocol_pairs->FindDictKey(
+      const base::Value::Dict* allowed_protocols_for_origin =
+          allowed_origin_protocol_pairs.FindDict(
               initiating_origin->Serialize());
       if (allowed_protocols_for_origin) {
         absl::optional<bool> allow =
-            allowed_protocols_for_origin->FindBoolKey(scheme);
+            allowed_protocols_for_origin->FindBool(scheme);
         if (allow.has_value() && allow.value())
           return DONT_BLOCK;
       }

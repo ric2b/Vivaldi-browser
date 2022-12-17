@@ -26,10 +26,6 @@
 
 namespace webrtc {
 
-// Whether ThreadWrapper should schedule low-precision tasks on the metronome.
-// Default: disabled.
-extern const base::Feature kThreadWrapperUsesMetronome;
-
 // ThreadWrapper implements rtc::Thread interface on top of
 // Chromium's SingleThreadTaskRunner interface. Currently only the bare minimum
 // that is used by P2P part of libjingle is implemented. There are two ways to
@@ -89,6 +85,8 @@ class ThreadWrapper : public base::CurrentThread::DestructionObserver,
   // renderer thread. It should be set explicitly for threads that
   // need to call Send() for other threads.
   void set_send_allowed(bool allowed) { send_allowed_ = allowed; }
+
+  rtc::SocketServer* SocketServer();
 
   // CurrentThread::DestructionObserver implementation.
   void WillDestroyCurrentMessageLoop() override;
@@ -151,15 +149,15 @@ class ThreadWrapper : public base::CurrentThread::DestructionObserver,
   void ProcessPendingSends();
 
   // TaskQueueBase overrides.
-  void PostTask(std::unique_ptr<webrtc::QueuedTask> task) override;
-  void PostDelayedTask(std::unique_ptr<webrtc::QueuedTask> task,
-                       uint32_t milliseconds) override;
-  void PostDelayedHighPrecisionTask(std::unique_ptr<webrtc::QueuedTask> task,
-                                    uint32_t milliseconds) override;
+  void PostTask(absl::AnyInvocable<void() &&> task) override;
+  void PostDelayedTask(absl::AnyInvocable<void() &&> task,
+                       webrtc::TimeDelta delay) override;
+  void PostDelayedHighPrecisionTask(absl::AnyInvocable<void() &&> task,
+                                    webrtc::TimeDelta delay) override;
 
   // Executes WebRTC queued tasks from TaskQueueBase overrides on
   // |task_runner_|.
-  void RunTaskQueueTask(std::unique_ptr<webrtc::QueuedTask> task);
+  void RunTaskQueueTask(absl::AnyInvocable<void() &&> task);
   void RunCoalescedTaskQueueTasks(base::TimeTicks scheduled_time);
 
   // Called before a task runs, returns an opaque optional timestamp which
@@ -174,7 +172,6 @@ class ThreadWrapper : public base::CurrentThread::DestructionObserver,
 
   bool send_allowed_;
 
-  const bool use_metronome_;
   // |lock_| must be locked when accessing |messages_|.
   base::Lock lock_;
   int last_task_id_;
@@ -184,9 +181,8 @@ class ThreadWrapper : public base::CurrentThread::DestructionObserver,
   std::unique_ptr<PostTaskLatencySampler> latency_sampler_;
   SampledDurationCallback task_latency_callback_;
   SampledDurationCallback task_duration_callback_;
-  // If |kThreadWrapperUsesMetronome| is enabled, low precision tasks are
-  // coalesced onto metronome ticks and stored in |coalesced_tasks_| until they
-  // are ready to run.
+  // Low precision tasks are coalesced onto metronome ticks and stored in
+  // `coalesced_tasks_` until they are ready to run.
   blink::CoalescedTasks coalesced_tasks_;
 
   base::WeakPtr<ThreadWrapper> weak_ptr_;

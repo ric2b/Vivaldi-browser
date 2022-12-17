@@ -42,7 +42,7 @@ import types
 BLINK_TOOLS_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', '..'))
 if BLINK_TOOLS_PATH not in sys.path:
-  sys.path.append(BLINK_TOOLS_PATH)
+    sys.path.append(BLINK_TOOLS_PATH)
 
 from blinkpy.common.system.filesystem import FileSystem
 from blinkpy.common.system.log_utils import configure_logging
@@ -301,9 +301,9 @@ class MergeFilesMatchingContents(MergeFiles):
                 nonmatching.append(filename)
 
         if nonmatching:
-            raise MergeFailure(
-                '\n'.join(['File contents don\'t match:'] + nonmatching),
-                out_filename, to_merge)
+            # TODO: revert this once crbug/1353056 is fixed
+            _log.warning('\n'.join(['File contents don\'t match:'] +
+                                   nonmatching))
 
         self.filesystem.write_binary_file(out_filename, data)
 
@@ -729,13 +729,34 @@ def ensure_empty_dir(fs, directory, allow_existing, remove_existing):
         return
 
     layout_test_results = fs.join(directory, 'layout-test-results')
-    merged_output_json = fs.join(directory, 'output.json')
     if (fs.exists(layout_test_results)
             and not fs.remove_contents(layout_test_results)):
         raise IOError(('Unable to remove output directory %s contents!\n'
                        'See log output for errors.') % layout_test_results)
-    if fs.exists(merged_output_json):
-        fs.remove(merged_output_json)
+
+    profraw = fs.join(directory, 'profraw')
+    if (fs.exists(profraw) and not fs.remove_contents(profraw)):
+        raise IOError(('Unable to remove output directory %s contents!\n'
+                       'See log output for errors.') % profraw)
+
+    merged_output_jsons = ['output.json', 'run_histories.json']
+    for output_json in merged_output_jsons:
+        output_json_fullpath = fs.join(directory, output_json)
+        if fs.exists(output_json_fullpath):
+            fs.remove(output_json_fullpath)
+
+    # Fuchsia specific additional logs to be cleaned. Check if 'ffx_log' exists
+    # or not first, otherwise webgpu_blink_web_tests will hang forever.
+    # TODO: work with fuchsia team to remove this special case
+    if fs.exists(fs.join(directory, 'ffx_log')):
+        fuchsia_log_files = [
+            f for f in fs.listdir(directory)
+            if fs.isfile(fs.join(directory, f))
+        ]
+        for file_name in fuchsia_log_files:
+            path = fs.join(directory, file_name)
+            if fs.exists(path):
+                fs.remove(path)
 
 
 def mark_missing_shards(summary_json,

@@ -30,6 +30,7 @@
 #include "content/public/common/url_constants.h"
 #include "media/base/media_switches.h"
 #include "services/network/public/cpp/features.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -153,11 +154,7 @@ ContentMainDelegateImpl::ContentMainDelegateImpl(MainParams params)
 
 ContentMainDelegateImpl::~ContentMainDelegateImpl() = default;
 
-bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
-  int dummy;
-  if (!exit_code)
-    exit_code = &dummy;
-
+absl::optional<int> ContentMainDelegateImpl::BasicStartupComplete() {
   // Disable features which are not currently supported in WebLayer. This allows
   // sites to do feature detection, and prevents crashes in some not fully
   // implemented features.
@@ -232,14 +229,14 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
 
   RegisterPathProvider();
 
-  return false;
+  return absl::nullopt;
 }
 
 bool ContentMainDelegateImpl::ShouldCreateFeatureList(InvokedIn invoked_in) {
 #if BUILDFLAG(IS_ANDROID)
   // On android WebLayer is in charge of creating its own FeatureList in the
   // browser process.
-  return invoked_in == InvokedIn::kChildProcess;
+  return absl::holds_alternative<InvokedInChildProcess>(invoked_in);
 #else
   // TODO(weblayer-dev): Support feature lists on desktop.
   return true;
@@ -298,9 +295,11 @@ void ContentMainDelegateImpl::PreSandboxStartup() {
 #endif
 }
 
-void ContentMainDelegateImpl::PostEarlyInitialization(InvokedIn invoked_in) {
-  if (invoked_in != InvokedIn::kChildProcess)
+absl::optional<int> ContentMainDelegateImpl::PostEarlyInitialization(
+    InvokedIn invoked_in) {
+  if (absl::holds_alternative<InvokedInBrowserProcess>(invoked_in))
     browser_client_->CreateFeatureListAndFieldTrials();
+  return absl::nullopt;
 }
 
 absl::variant<int, content::MainFunctionParams>

@@ -21,11 +21,11 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
+#include "chromeos/ash/services/cros_healthd/public/cpp/fake_cros_healthd.h"
+#include "chromeos/ash/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
+#include "chromeos/ash/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
-#include "chromeos/services/cros_healthd/public/cpp/fake_cros_healthd.h"
-#include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
-#include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -71,12 +71,13 @@ void SetCrosHealthdSystemInfoResponse(const std::string& board_name,
                                       const std::string& build_number,
                                       const std::string& patch_number) {
   // System info
-  auto system_info = healthd_mojom::SystemInfo::New();
-  system_info->product_name = absl::optional<std::string>(board_name);
-  auto os_version_info = healthd_mojom::OsVersion::New(
+  auto os_info = healthd_mojom::OsInfo::New();
+  os_info->code_name = board_name;
+  os_info->marketing_name = marketing_name;
+  os_info->os_version = healthd_mojom::OsVersion::New(
       milestone_version, build_number, patch_number, "unittest-channel");
-  system_info->os_version = std::move(os_version_info);
-  system_info->marketing_name = marketing_name;
+  auto system_info = healthd_mojom::SystemInfo::New();
+  system_info->os_info = std::move(os_info);
 
   // Battery info
   auto battery_info = has_battery ? healthd_mojom::BatteryInfo::New() : nullptr;
@@ -1014,22 +1015,18 @@ TEST_F(SystemDataProviderTest, GetSystemInfoLogs) {
   EXPECT_EQ("Has Battery: true", log_contents[9]);
 }
 
-TEST_F(SystemDataProviderTest, ResetReceiverOnDisconnect) {
-  ASSERT_FALSE(system_data_provider_->ReceiverIsBound());
+TEST_F(SystemDataProviderTest, ResetReceiverOnBindInterface) {
+  // This test simulates a user refreshing the WebUI page. The receiver should
+  // be reset before binding the new receiver. Otherwise we would get a DCHECK
+  // error from mojo::Receiver
   mojo::Remote<mojom::SystemDataProvider> remote;
   system_data_provider_->BindInterface(remote.BindNewPipeAndPassReceiver());
-  ASSERT_TRUE(system_data_provider_->ReceiverIsBound());
-
-  // Unbind remote to trigger disconnect and disconnect handler.
-  remote.reset();
   base::RunLoop().RunUntilIdle();
-  ASSERT_FALSE(system_data_provider_->ReceiverIsBound());
 
-  // Test intent is to ensure interface can be rebound when application is
-  // reloaded using |CTRL + R|.  A disconnect should be signaled in which we
-  // will reset the receiver to its unbound state.
+  remote.reset();
+
   system_data_provider_->BindInterface(remote.BindNewPipeAndPassReceiver());
-  ASSERT_TRUE(system_data_provider_->ReceiverIsBound());
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(SystemDataProviderTest, BatteryInfoPtrDataValidation) {

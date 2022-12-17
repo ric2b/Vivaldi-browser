@@ -41,12 +41,12 @@ class NET_EXPORT_PRIVATE ProxyConfigServiceLinux : public ProxyConfigService {
     // files. Defined here so unit tests can construct worst-case inputs.
     static const size_t BUFFER_SIZE = 512;
 
-    SettingGetter() {}
+    SettingGetter() = default;
 
     SettingGetter(const SettingGetter&) = delete;
     SettingGetter& operator=(const SettingGetter&) = delete;
 
-    virtual ~SettingGetter() {}
+    virtual ~SettingGetter() = default;
 
     // Initializes the class: obtains a gconf/gsettings client, or simulates
     // one, in the concrete implementations. Returns true on success. Must be
@@ -290,7 +290,7 @@ class NET_EXPORT_PRIVATE ProxyConfigServiceLinux : public ProxyConfigService {
       const NetworkTrafficAnnotationTag& traffic_annotation);
   ProxyConfigServiceLinux(
       std::unique_ptr<base::Environment> env_var_getter,
-      SettingGetter* setting_getter,  // TODO(eroman): Use std::unique_ptr.
+      std::unique_ptr<SettingGetter> setting_getter,
       const NetworkTrafficAnnotationTag& traffic_annotation);
 
   ProxyConfigServiceLinux(const ProxyConfigServiceLinux&) = delete;

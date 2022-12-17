@@ -28,7 +28,6 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/common/extensions/api/wallpaper_private.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
@@ -179,12 +178,10 @@ constexpr net::NetworkTrafficAnnotationTag
 std::string MaybeConvertToTestUrl(std::string url) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           ash::switches::kTestWallpaperServer)) {
-    base::ReplaceFirstSubstringAfterOffset(&url, 0, "clients3",
-                                           "chromecast-dev.sandbox");
+    base::ReplaceFirstSubstringAfterOffset(&url, 0, "clients3", "clients1");
   } else if (base::FeatureList::IsEnabled(
                  chromeos::features::kUseWallpaperStagingUrl)) {
-    base::ReplaceFirstSubstringAfterOffset(&url, 0, "clients3",
-                                           "chromecast-staging.sandbox");
+    base::ReplaceFirstSubstringAfterOffset(&url, 0, "clients3", "clients2");
   }
   return url;
 }
@@ -691,14 +688,16 @@ void GooglePhotosFetcher<T>::OnJsonReceived(
       *response_body,
       base::BindOnce(
           [](const GURL& service_url,
-             data_decoder::DataDecoder::ValueOrError result) {
-            if (result.error.has_value()) {
+             data_decoder::DataDecoder::ValueOrError result)
+              -> absl::optional<base::Value> {
+            if (!result.has_value()) {
               LOG(ERROR) << "Failed to parse JSON response from Google Photos "
                             "API request to "
                          << service_url.spec()
-                         << ". Error message: " << result.error.value();
+                         << ". Error message: " << result.error();
+              return absl::nullopt;
             }
-            return std::move(result.value);
+            return std::move(*result);
           },
           service_url)
           .Then(base::BindOnce(&GooglePhotosFetcher::OnResponseReady,

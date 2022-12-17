@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.h"
 
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
+#include "third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
 
 namespace blink {
@@ -13,7 +14,8 @@ PaintPropertyChangeType ClipPaintPropertyNode::State::ComputeChange(
     const State& other) const {
   if (local_transform_space != other.local_transform_space ||
       paint_clip_rect_ != other.paint_clip_rect_ ||
-      !ClipPathEquals(other.clip_path)) {
+      !ClipPathEquals(other.clip_path) ||
+      pixel_moving_filter != other.pixel_moving_filter) {
     return PaintPropertyChangeType::kChangedOnlyValues;
   }
   if (layout_clip_rect_excluding_overlay_scrollbars !=
@@ -81,6 +83,10 @@ std::unique_ptr<JSONObject> ClipPaintPropertyNode::ToJSON() const {
   }
   if (state_.clip_path) {
     json->SetBoolean("hasClipPath", true);
+  }
+  if (state_.pixel_moving_filter) {
+    json->SetString("pixelMovingFilter",
+                    String::Format("%p", state_.pixel_moving_filter.get()));
   }
   return json;
 }

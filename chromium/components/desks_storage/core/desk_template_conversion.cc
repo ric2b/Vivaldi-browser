@@ -52,8 +52,10 @@ constexpr char kDesk[] = "desk";
 constexpr char kDeskType[] = "desk_type";
 constexpr char kDeskTypeTemplate[] = "TEMPLATE";
 constexpr char kDeskTypeSaveAndRecall[] = "SAVE_AND_RECALL";
+constexpr char kDeskTypeUnknown[] = "UNKNOWN";
 constexpr char kDisplayId[] = "display_id";
 constexpr char kEventFlag[] = "event_flag";
+constexpr char kFirstNonPinnedTabIndex[] = "first_non_pinned_tab_index";
 constexpr char kIsAppTypeBrowser[] = "is_app";
 constexpr char kLaunchContainer[] = "launch_container";
 constexpr char kLaunchContainerWindow[] = "LAUNCH_CONTAINER_WINDOW";
@@ -333,29 +335,24 @@ bool IsValidLaunchContainer(const std::string& launch_container) {
   return base::Contains(kValidLaunchContainers, launch_container);
 }
 
-// Returns a casted apps::mojom::LaunchContainer to be set as an app restore
-// data's container field.
+// Returns a casted apps::LaunchContainer to be set as an app restore data's
+// container field.
 int32_t StringToLaunchContainer(const std::string& launch_container) {
   if (launch_container == kLaunchContainerWindow) {
-    return static_cast<int32_t>(
-        apps::mojom::LaunchContainer::kLaunchContainerWindow);
+    return static_cast<int32_t>(apps::LaunchContainer::kLaunchContainerWindow);
   } else if (launch_container == kLaunchContainerPanelDeprecated) {
     return static_cast<int32_t>(
-        apps::mojom::LaunchContainer::kLaunchContainerPanelDeprecated);
+        apps::LaunchContainer::kLaunchContainerPanelDeprecated);
   } else if (launch_container == kLaunchContainerTab) {
-    return static_cast<int32_t>(
-        apps::mojom::LaunchContainer::kLaunchContainerTab);
+    return static_cast<int32_t>(apps::LaunchContainer::kLaunchContainerTab);
   } else if (launch_container == kLaunchContainerNone) {
-    return static_cast<int32_t>(
-        apps::mojom::LaunchContainer::kLaunchContainerNone);
+    return static_cast<int32_t>(apps::LaunchContainer::kLaunchContainerNone);
   } else if (launch_container == kLaunchContainerUnspecified) {
-    return static_cast<int32_t>(
-        apps::mojom::LaunchContainer::kLaunchContainerWindow);
+    return static_cast<int32_t>(apps::LaunchContainer::kLaunchContainerWindow);
     // Dcheck if our container isn't valid.  We should not reach here.
   } else {
     DCHECK(IsValidLaunchContainer(launch_container));
-    return static_cast<int32_t>(
-        apps::mojom::LaunchContainer::kLaunchContainerWindow);
+    return static_cast<int32_t>(apps::LaunchContainer::kLaunchContainerWindow);
   }
 }
 
@@ -397,7 +394,7 @@ int32_t StringToWindowOpenDisposition(const std::string& disposition) {
   }
 }
 
-// Convert App JSON to |app_restore::AppLaunchInfo|.
+// Convert App JSON to `app_restore::AppLaunchInfo`.
 std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
     const base::Value& app) {
   int32_t window_id;
@@ -421,8 +418,8 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
 
   std::string app_type;
   if (!GetString(app, kAppType, &app_type)) {
-    // This should never happen. |APP_NOT_SET| corresponds to empty |app_id|.
-    // This method will early return when |app_id| is empty.
+    // This should never happen. `APP_NOT_SET` corresponds to empty `app_id`.
+    // This method will early return when `app_id` is empty.
     NOTREACHED();
     return nullptr;
   }
@@ -455,6 +452,10 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
     if (GetInt(app, kActiveTabIndex, &active_tab_index))
       app_launch_info->active_tab_index = active_tab_index;
 
+    int first_non_pinned_tab_index;
+    if (GetInt(app, kFirstNonPinnedTabIndex, &first_non_pinned_tab_index))
+      app_launch_info->first_non_pinned_tab_index = first_non_pinned_tab_index;
+
     // Fill in the URL list
     app_launch_info->urls.emplace();
     const base::Value* tabs = app.FindKeyOfType(kTabs, base::Value::Type::LIST);
@@ -482,7 +483,7 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
       }
     }
   }
-  // For Chrome apps and PWAs, the |app_id| is sufficient for identification.
+  // For Chrome apps and PWAs, the `app_id` is sufficient for identification.
 
   return app_launch_info;
 }
@@ -491,7 +492,7 @@ bool IsValidWindowState(const std::string& window_state) {
   return base::Contains(kValidWindowStates, window_state);
 }
 
-// Convert JSON string WindowState |state| to ui::WindowShowState used by
+// Convert JSON string WindowState `state` to ui::WindowShowState used by
 // the app_restore::WindowInfo struct.
 ui::WindowShowState ToUiWindowState(const std::string& window_state) {
   if (window_state == kWindowStateNormal)
@@ -512,7 +513,7 @@ ui::WindowShowState ToUiWindowState(const std::string& window_state) {
   return ui::WindowShowState::SHOW_STATE_NORMAL;
 }
 
-// Convert JSON string WindowState |state| to chromeos::WindowStateType used by
+// Convert JSON string WindowState `state` to chromeos::WindowStateType used by
 // the app_restore::WindowInfo struct.
 chromeos::WindowStateType ToChromeOsWindowState(
     const std::string& window_state) {
@@ -566,14 +567,16 @@ void FillArcExtraWindowInfoFromJson(
   }
 }
 
-// Fill |out_window_info| with information from JSON |app|.
+// Fill `out_window_info` with information from JSON `app`.
 void FillWindowInfoFromJson(const base::Value& app,
                             app_restore::WindowInfo* out_window_info) {
   std::string window_state;
+  chromeos::WindowStateType cros_window_state =
+      chromeos::WindowStateType::kDefault;
   if (GetString(app, kWindowState, &window_state) &&
       IsValidWindowState(window_state)) {
-    out_window_info->window_state_type.emplace(
-        ToChromeOsWindowState(window_state));
+    cros_window_state = ToChromeOsWindowState(window_state);
+    out_window_info->window_state_type.emplace(cros_window_state);
   }
 
   std::string app_type;
@@ -607,7 +610,8 @@ void FillWindowInfoFromJson(const base::Value& app,
 
   std::string pre_minimized_window_state;
   if (GetString(app, kPreMinimizedWindowState, &pre_minimized_window_state) &&
-      IsValidWindowState(pre_minimized_window_state)) {
+      IsValidWindowState(pre_minimized_window_state) &&
+      cros_window_state == chromeos::WindowStateType::kMinimized) {
     out_window_info->pre_minimized_show_state_type.emplace(
         ToUiWindowState(pre_minimized_window_state));
   }
@@ -621,7 +625,7 @@ void FillWindowInfoFromJson(const base::Value& app,
     out_window_info->app_title.emplace(base::UTF8ToUTF16(title));
 }
 
-// Convert a desk template to |app_restore::RestoreData|.
+// Convert a desk template to `app_restore::RestoreData`.
 std::unique_ptr<app_restore::RestoreData> ConvertJsonToRestoreData(
     const base::Value* desk) {
   std::unique_ptr<app_restore::RestoreData> restore_data =
@@ -674,7 +678,7 @@ base::Value ConvertSizeToValue(const gfx::Size& size) {
   return size_value;
 }
 
-// Convert ui::WindowStateType |window_state| to std::string used by the
+// Convert ui::WindowStateType `window_state` to std::string used by the
 // base::Value representation.
 std::string ChromeOsWindowStateToString(
     const chromeos::WindowStateType& window_state) {
@@ -699,7 +703,7 @@ std::string ChromeOsWindowStateToString(
   }
 }
 
-// Convert ui::WindowShowState |state| to JSON used by the base::Value
+// Convert ui::WindowShowState `state` to JSON used by the base::Value
 // representation.
 std::string UiWindowStateToString(const ui::WindowShowState& window_state) {
   switch (window_state) {
@@ -751,16 +755,15 @@ std::string WindowOpenDispositionToString(WindowOpenDisposition disposition) {
   }
 }
 
-std::string LaunchContainerToString(
-    apps::mojom::LaunchContainer launch_container) {
+std::string LaunchContainerToString(apps::LaunchContainer launch_container) {
   switch (launch_container) {
-    case apps::mojom::LaunchContainer::kLaunchContainerWindow:
+    case apps::LaunchContainer::kLaunchContainerWindow:
       return kLaunchContainerWindow;
-    case apps::mojom::LaunchContainer::kLaunchContainerPanelDeprecated:
+    case apps::LaunchContainer::kLaunchContainerPanelDeprecated:
       return kLaunchContainerPanelDeprecated;
-    case apps::mojom::LaunchContainer::kLaunchContainerTab:
+    case apps::LaunchContainer::kLaunchContainerTab:
       return kLaunchContainerTab;
-    case apps::mojom::LaunchContainer::kLaunchContainerNone:
+    case apps::LaunchContainer::kLaunchContainerNone:
       return kLaunchContainerNone;
   }
 }
@@ -857,9 +860,11 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
     app_data.SetKey(kTitle, base::Value(base::UTF16ToUTF8(app->title.value())));
   }
 
+  chromeos::WindowStateType window_state = chromeos::WindowStateType::kDefault;
   if (app->window_state_type.has_value()) {
-    app_data.SetKey(kWindowState, base::Value(ChromeOsWindowStateToString(
-                                      app->window_state_type.value())));
+    window_state = app->window_state_type.value();
+    app_data.SetKey(kWindowState,
+                    base::Value(ChromeOsWindowStateToString(window_state)));
   }
 
   // TODO(crbug.com/1311801): Add support for actual event_flag values.
@@ -888,6 +893,11 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
                     base::Value(app->active_tab_index.value()));
   }
 
+  if (app->first_non_pinned_tab_index.has_value()) {
+    app_data.SetKey(kFirstNonPinnedTabIndex,
+                    base::Value(app->first_non_pinned_tab_index.value()));
+  }
+
   if (app->app_type_browser.has_value()) {
     app_data.SetKey(kIsAppTypeBrowser,
                     base::Value(app->app_type_browser.value()));
@@ -903,7 +913,8 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
                     base::Value(base::NumberToString(app->display_id.value())));
   }
 
-  if (app->pre_minimized_show_state_type.has_value()) {
+  if (app->pre_minimized_show_state_type.has_value() &&
+      window_state == chromeos::WindowStateType::kMinimized) {
     app_data.SetKey(kPreMinimizedWindowState,
                     base::Value(UiWindowStateToString(
                         app->pre_minimized_show_state_type.value())));
@@ -926,8 +937,8 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
   }
 
   if (app->container.has_value()) {
-    apps::mojom::LaunchContainer container =
-        static_cast<apps::mojom::LaunchContainer>(app->container.value());
+    apps::LaunchContainer container =
+        static_cast<apps::LaunchContainer>(app->container.value());
     app_data.SetKey(kLaunchContainer,
                     base::Value(LaunchContainerToString(container)));
   }
@@ -962,6 +973,9 @@ std::string SerializeDeskTypeAsString(ash::DeskTemplateType desk_type) {
       return kDeskTypeTemplate;
     case ash::DeskTemplateType::kSaveAndRecall:
       return kDeskTypeSaveAndRecall;
+    case ash::DeskTemplateType::kUnknown:
+      NOTREACHED();
+      return kDeskTypeUnknown;
   }
 }
 
@@ -1024,7 +1038,7 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
     return nullptr;
 
   int version;
-  std::string uuid;
+  std::string uuid_str;
   std::string name;
   std::string created_time_usec_str;
   std::string updated_time_usec_str;
@@ -1032,15 +1046,18 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
   int64_t updated_time_usec;
   const base::Value* desk = policy_json.FindDictKey(kDesk);
   if (!desk || !GetInt(policy_json, kVersion, &version) ||
-      !GetString(policy_json, kUuid, &uuid) ||
+      !GetString(policy_json, kUuid, &uuid_str) ||
       !GetString(policy_json, kName, &name) ||
       !GetString(policy_json, kCreatedTime, &created_time_usec_str) ||
       !base::StringToInt64(created_time_usec_str, &created_time_usec) ||
       !GetString(policy_json, kUpdatedTime, &updated_time_usec_str) ||
       !base::StringToInt64(updated_time_usec_str, &updated_time_usec) ||
-      uuid.empty() || !base::GUID::ParseCaseInsensitive(uuid).is_valid() ||
       name.empty() || created_time_usec_str.empty() ||
       updated_time_usec_str.empty())
+    return nullptr;
+
+  base::GUID uuid = base::GUID::ParseCaseInsensitive(uuid_str);
+  if (!uuid.is_valid())
     return nullptr;
 
   // Set default value for the desk type to template.
@@ -1056,7 +1073,7 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
 
   std::unique_ptr<ash::DeskTemplate> desk_template =
       std::make_unique<ash::DeskTemplate>(
-          uuid, source, name, created_time,
+          std::move(uuid), source, name, created_time,
           GetDeskTypeFromString(desk_type_string));
 
   desk_template->set_updated_time(updated_time);
@@ -1152,40 +1169,38 @@ SyncWindowOpenDisposition FromBaseWindowOpenDisposition(
   }
 }
 
-SyncLaunchContainer FromMojomLaunchContainer(
-    apps::mojom::LaunchContainer container) {
+SyncLaunchContainer FromLaunchContainer(apps::LaunchContainer container) {
   switch (container) {
-    case apps::mojom::LaunchContainer::kLaunchContainerWindow:
+    case apps::LaunchContainer::kLaunchContainerWindow:
       return sync_pb::
           WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_WINDOW;
-    case apps::mojom::LaunchContainer::kLaunchContainerPanelDeprecated:
+    case apps::LaunchContainer::kLaunchContainerPanelDeprecated:
       return sync_pb::
           WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_PANEL_DEPRECATED;
-    case apps::mojom::LaunchContainer::kLaunchContainerTab:
+    case apps::LaunchContainer::kLaunchContainerTab:
       return sync_pb::
           WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_TAB;
-    case apps::mojom::LaunchContainer::kLaunchContainerNone:
+    case apps::LaunchContainer::kLaunchContainerNone:
       return sync_pb::
           WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_NONE;
   }
 }
 
-apps::mojom::LaunchContainer ToMojomLaunchContainer(
-    SyncLaunchContainer container) {
+apps::LaunchContainer ToLaunchContainer(SyncLaunchContainer container) {
   switch (container) {
     case sync_pb::
         WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_UNSPECIFIED:
-      return apps::mojom::LaunchContainer::kLaunchContainerWindow;
+      return apps::LaunchContainer::kLaunchContainerWindow;
     case sync_pb::
         WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_WINDOW:
-      return apps::mojom::LaunchContainer::kLaunchContainerWindow;
+      return apps::LaunchContainer::kLaunchContainerWindow;
     case sync_pb::
         WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_PANEL_DEPRECATED:
-      return apps::mojom::LaunchContainer::kLaunchContainerPanelDeprecated;
+      return apps::LaunchContainer::kLaunchContainerPanelDeprecated;
     case sync_pb::WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_TAB:
-      return apps::mojom::LaunchContainer::kLaunchContainerTab;
+      return apps::LaunchContainer::kLaunchContainerTab;
     case sync_pb::WorkspaceDeskSpecifics_LaunchContainer_LAUNCH_CONTAINER_NONE:
-      return apps::mojom::LaunchContainer::kLaunchContainerNone;
+      return apps::LaunchContainer::kLaunchContainerNone;
   }
 }
 

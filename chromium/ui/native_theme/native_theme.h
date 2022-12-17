@@ -113,6 +113,19 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kNumStates = kPressed + 1,
   };
 
+  // Enum used for kPageColors pref. Page Colors is a browser setting that can
+  // be used to simulate forced colors mode. This enum should match its React
+  // counterpart.
+  enum PageColors {
+    kOff = 0,
+    kDusk = 1,
+    kDesert = 2,
+    kBlack = 3,
+    kWhite = 4,
+    kHighContrast = 5,
+    kMaxValue = kHighContrast,
+  };
+
   // OS-level preferred color scheme. (Ex. high contrast or dark mode color
   // preference.)
   enum class PreferredColorScheme {
@@ -346,14 +359,15 @@ class NATIVE_THEME_EXPORT NativeTheme {
                                        float height) const;
 
   // Paint the part to the canvas.
-  virtual void Paint(cc::PaintCanvas* canvas,
-                     const ui::ColorProvider* color_provider,
-                     Part part,
-                     State state,
-                     const gfx::Rect& rect,
-                     const ExtraParams& extra,
-                     ColorScheme color_scheme = ColorScheme::kDefault,
-                     const absl::optional<SkColor>& accent_color = 0) const = 0;
+  virtual void Paint(
+      cc::PaintCanvas* canvas,
+      const ui::ColorProvider* color_provider,
+      Part part,
+      State state,
+      const gfx::Rect& rect,
+      const ExtraParams& extra,
+      ColorScheme color_scheme = ColorScheme::kDefault,
+      const absl::optional<SkColor>& accent_color = absl::nullopt) const = 0;
 
   // Returns whether the theme uses a nine-patch resource for the given part.
   // If true, calling code should always paint into a canvas the size of which
@@ -437,6 +451,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // colors, you probably shouldn't. Instead, use GetSystemColor().
   virtual bool ShouldUseDarkColors() const;
 
+  // Returns the user's current page colors.
+  virtual PageColors GetPageColors() const;
+
   // Returns the OS-level user preferred color scheme. See the comment for
   // CalculatePreferredColorScheme() for details on how preferred color scheme
   // is calculated.
@@ -462,6 +479,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     should_use_dark_colors_ = should_use_dark_colors;
   }
   void set_forced_colors(bool forced_colors) { forced_colors_ = forced_colors; }
+  void set_page_colors(PageColors page_colors) { page_colors_ = page_colors; }
   void set_preferred_color_scheme(PreferredColorScheme preferred_color_scheme) {
     preferred_color_scheme_ = preferred_color_scheme;
   }
@@ -470,6 +488,11 @@ class NATIVE_THEME_EXPORT NativeTheme {
   }
   void set_system_colors(const std::map<SystemThemeColor, SkColor>& colors);
   bool is_custom_system_theme() const { return is_custom_system_theme_; }
+
+  // Set the user_color for ColorProviderManager::Key.
+  void set_user_color(absl::optional<SkColor> user_color) {
+    user_color_ = user_color;
+  }
 
   // Updates the state of dark mode, forced colors mode, and the map of system
   // colors. Returns true if NativeTheme was updated as a result, or false if
@@ -552,9 +575,13 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // Observers to notify when the native theme changes.
   base::ObserverList<NativeThemeObserver>::Unchecked native_theme_observers_;
 
+  // User's primary color. Included in the ColorProvider Key.
+  absl::optional<SkColor> user_color_;
+
   bool should_use_dark_colors_ = false;
   const bool is_custom_system_theme_;
   bool forced_colors_ = false;
+  PageColors page_colors_ = PageColors::kOff;
   PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;
   PreferredContrast preferred_contrast_ = PreferredContrast::kNoPreference;
 

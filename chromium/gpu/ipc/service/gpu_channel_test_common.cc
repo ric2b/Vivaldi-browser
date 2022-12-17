@@ -18,7 +18,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/service/scheduler.h"
-#include "gpu/command_buffer/service/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/service/context_url.h"
 #include "gpu/ipc/service/gpu_channel.h"
@@ -43,8 +43,6 @@ class TestGpuChannelManagerDelegate : public GpuChannelManagerDelegate {
   ~TestGpuChannelManagerDelegate() override = default;
 
   // GpuChannelManagerDelegate implementation:
-  void RegisterDisplayContext(gpu::DisplayContext* context) override {}
-  void UnregisterDisplayContext(gpu::DisplayContext* context) override {}
   void LoseAllContexts() override {}
   void DidCreateContextSuccessfully() override {}
   void DidCreateOffscreenContext(const GURL& active_url) override {}
@@ -54,9 +52,9 @@ class TestGpuChannelManagerDelegate : public GpuChannelManagerDelegate {
   void DidLoseContext(bool offscreen,
                       error::ContextLostReason reason,
                       const GURL& active_url) override {}
-  void StoreShaderToDisk(int32_t client_id,
-                         const std::string& key,
-                         const std::string& shader) override {}
+  void StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
+                       const std::string& key,
+                       const std::string& shader) override {}
   void MaybeExitOnContextLost() override { is_exiting_ = true; }
   bool IsExiting() const override { return is_exiting_; }
 #if BUILDFLAG(IS_WIN)
@@ -102,7 +100,7 @@ GpuChannelTestCommon::GpuChannelTestCommon(
       sync_point_manager_.get(), shared_image_manager_.get(),
       nullptr, /* gpu_memory_buffer_factory */
       std::move(feature_info), GpuProcessActivityFlags(),
-      gl::init::CreateOffscreenGLSurface(gfx::Size()),
+      gl::init::CreateOffscreenGLSurface(display_, gfx::Size()),
       nullptr /* image_decode_accelerator_worker */);
 }
 
@@ -118,7 +116,7 @@ GpuChannel* GpuChannelTestCommon::CreateChannel(int32_t client_id,
   uint64_t kClientTracingId = 1;
   GpuChannel* channel = channel_manager()->EstablishChannel(
       base::UnguessableToken::Create(), client_id, kClientTracingId,
-      is_gpu_host, true);
+      is_gpu_host);
   base::ProcessId kProcessId = 1;
   channel->set_client_pid(kProcessId);
   return channel;

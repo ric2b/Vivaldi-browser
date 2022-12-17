@@ -32,9 +32,16 @@ public class LocalizationUtils {
     private LocalizationUtils() { /* cannot be instantiated */ }
 
     @CalledByNative
-    private static Locale getJavaLocale(String language, String country, String variant) {
-        return new Locale(language, country, variant);
-    }
+    // Vivaldi: Modified so that we can support "sr-Latn", ref. VAB-3887.
+    private static Locale getJavaLocale(String language, String country, String variant,
+                                        String script) {
+        return new Locale.Builder()
+                .setLanguage(language)
+                .setRegion(country)
+                .setVariant(variant)
+                .setScript(script)
+                .build();
+   }
 
     @CalledByNative
     private static String getDisplayNameForLocale(Locale locale, Locale displayLocale) {

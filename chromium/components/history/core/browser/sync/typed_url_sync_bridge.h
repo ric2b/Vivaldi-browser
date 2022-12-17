@@ -56,9 +56,8 @@ class TypedURLSyncBridge : public syncer::ModelTypeSyncBridge,
 
   // HistoryBackendObserver:
   void OnURLVisited(HistoryBackend* history_backend,
-                    ui::PageTransition transition,
                     const URLRow& row,
-                    base::Time visit_time) override;
+                    const VisitRow& visit_row) override;
   void OnURLsModified(HistoryBackend* history_backend,
                       const std::vector<URLRow>& changed_urls,
                       bool is_from_expiration) override;
@@ -67,6 +66,8 @@ class TypedURLSyncBridge : public syncer::ModelTypeSyncBridge,
                      bool expired,
                      const std::vector<URLRow>& deleted_rows,
                      const std::set<GURL>& favicon_urls) override;
+  void OnVisitUpdated(const VisitRow& visit) override;
+  void OnVisitDeleted(const VisitRow& visit) override;
 
   // Must be called after creation and before any operations.
   void Init();

@@ -19,12 +19,14 @@
 #include "chrome/browser/ash/app_restore/arc_app_launch_handler.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/desks/chrome_desks_util.h"
 #include "chrome/browser/ui/ash/desks/desks_client.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "components/app_constants/constants.h"
 #include "components/app_restore/app_restore_data.h"
@@ -52,7 +54,6 @@ std::string GetBrowserAppName(
              ? maybe_app_name.value()
              : app_id;
 }
-
 }  // namespace
 
 DesksTemplatesAppLaunchHandler::DesksTemplatesAppLaunchHandler(Profile* profile)
@@ -117,7 +118,7 @@ bool DesksTemplatesAppLaunchHandler::ShouldLaunchSystemWebAppOrChromeApp(
   // A SWA can handle multiple instances if it can open multiple windows.
   if (is_system_web_app) {
     absl::optional<ash::SystemWebAppType> swa_type =
-        web_app::GetSystemWebAppTypeForAppId(profile(), app_id);
+        ash::GetSystemWebAppTypeForAppId(profile(), app_id);
     if (swa_type.has_value()) {
       auto* system_app =
           ash::SystemWebAppManager::Get(profile())->GetSystemApp(*swa_type);
@@ -214,6 +215,18 @@ void DesksTemplatesAppLaunchHandler::LaunchBrowsers() {
                           base::checked_cast<int32_t>(i) == *active_tab_index));
       }
 
+      if (app_restore_data->tab_group_infos.has_value()) {
+        chrome_desks_util::AttachTabGroupsToBrowserInstance(
+            app_restore_data->tab_group_infos.value(), browser);
+      }
+
+      if (app_restore_data->first_non_pinned_tab_index.has_value() &&
+          app_restore_data->first_non_pinned_tab_index.value() <=
+              urls->size()) {
+        chrome_desks_util::SetBrowserPinnedTabs(
+            app_restore_data->first_non_pinned_tab_index.value(), browser);
+      }
+
       // We need to handle minimized windows separately since unlike other
       // window types, it's not shown.
       if (window_state_type &&
@@ -282,10 +295,7 @@ void DesksTemplatesAppLaunchHandler::MaybeLaunchLacrosBrowsers() {
     if (app_id != app_constants::kLacrosAppId)
       continue;
 
-    for (const auto& window_iter : iter.second) {
-      const std::unique_ptr<app_restore::AppRestoreData>& app_restore_data =
-          window_iter.second;
-
+    for (const auto& [restore_window_id, app_restore_data] : iter.second) {
       if (!app_restore_data->active_tab_index.has_value() ||
           !app_restore_data->urls.has_value()) {
         LOG(WARNING) << "Corrupted data for the Lacros window found";
@@ -299,7 +309,7 @@ void DesksTemplatesAppLaunchHandler::MaybeLaunchLacrosBrowsers() {
               app_restore_data->window_state_type.value_or(
                   chromeos::WindowStateType::kDefault)),
           app_restore_data->active_tab_index.value(),
-          GetBrowserAppName(app_restore_data, app_id));
+          GetBrowserAppName(app_restore_data, app_id), restore_window_id);
     }
   }
   restore_data()->RemoveApp(app_constants::kLacrosAppId);

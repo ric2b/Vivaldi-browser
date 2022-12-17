@@ -99,9 +99,11 @@ class ShellView : public views::BoxLayoutView,
   void SetWebContents(WebContents* web_contents, const gfx::Size& size) {
     // If there was a previous WebView in this Shell it should be removed and
     // deleted.
-    if (web_view_)
-      contents_view_->RemoveChildViewT(web_view_.get());
-
+    if (web_view_) {
+      // ExtractAsDangling clears the underlying pointer and returns another
+      // raw_ptr instance that is allowed to dangle.
+      contents_view_->RemoveChildViewT(web_view_.ExtractAsDangling().get());
+    }
     views::Builder<views::View>(contents_view_)
         .AddChild(views::Builder<views::WebView>()
                       .CopyAddressTo(&web_view_)
@@ -398,7 +400,7 @@ void ShellPlatformDelegate::SetContents(Shell* shell) {
 
 void ShellPlatformDelegate::ResizeWebContent(Shell* shell,
                                              const gfx::Size& content_size) {
-  shell->web_contents()->GetRenderWidgetHostView()->SetSize(content_size);
+  shell->web_contents()->Resize(gfx::Rect(content_size));
 }
 
 void ShellPlatformDelegate::EnableUIControl(Shell* shell,

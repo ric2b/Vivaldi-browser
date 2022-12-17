@@ -136,6 +136,8 @@ enum ModelType {
   // WEBAUTHN_CREDENTIAL,
   // Synced history. An entity roughly corresponds to a navigation.
   HISTORY,
+  // Trusted Authorization Servers for printers. ChromeOS only.
+  PRINTERS_AUTHORIZATION_SERVERS,
 
   // Notes items
   NOTES,
@@ -236,6 +238,7 @@ enum class ModelTypeForHistograms {
   kAutofillWalletOffer = 49,
   kWorkspaceDesk = 50,
   kHistory = 51,
+  kPrintersAuthorizationServers = 52,
 
   // Vivaldi
   kNotes = 300,
@@ -263,7 +266,7 @@ constexpr ModelTypeSet ProtocolTypes() {
       ARC_PACKAGE, PRINTERS, READING_LIST, USER_EVENTS, NIGORI, USER_CONSENTS,
       SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS, WIFI_CONFIGURATIONS,
       OS_PREFERENCES, OS_PRIORITY_PREFERENCES, SHARING_MESSAGE, WORKSPACE_DESK,
-      HISTORY);
+      HISTORY, PRINTERS_AUTHORIZATION_SERVERS);
 }
 
 // These are the normal user-controlled types. This is to distinguish from

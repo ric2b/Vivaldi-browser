@@ -774,13 +774,12 @@ void EventRouter::RemoveFilterFromEvent(const std::string& event_name,
       extension_prefs_, extension_id,
       is_for_service_worker ? kFilteredServiceWorkerEvents : kFilteredEvents);
   auto filtered_events = update.Create();
-  ListValue* filter_list = NULL;
+  base::Value::List* filter_list = nullptr;
   if (!filtered_events ||
       !filtered_events->GetListWithoutPathExpansion(event_name, &filter_list)) {
     return;
   }
-  filter_list->EraseListIter(
-      base::ranges::find(filter_list->GetListDeprecated(), *filter));
+  filter_list->erase(base::ranges::find(*filter_list, *filter));
 }
 
 const DictionaryValue* EventRouter::GetFilteredEvents(
@@ -847,6 +846,10 @@ void EventRouter::DispatchEventImpl(const std::string& restrict_to_extension_id,
   DCHECK(!event->restrict_to_browser_context ||
          ExtensionsBrowserClient::Get()->IsSameContext(
              browser_context_, event->restrict_to_browser_context));
+
+  // Don't dispatch events to observers if the browser is shutting down.
+  if (browser_context_->ShutdownStarted())
+    return;
 
   for (TestObserver& observer : test_observers_)
     observer.OnWillDispatchEvent(*event);
@@ -978,9 +981,9 @@ void EventRouter::DispatchEventToProcess(
     return;
   }
 
-  base::Value::List event_args_to_use =
-      modified_event_args ? std::move(*modified_event_args)
-                          : event.event_args->GetList().Clone();
+  base::Value::List event_args_to_use = modified_event_args
+                                            ? std::move(*modified_event_args)
+                                            : event.event_args.Clone();
 
   mojom::EventFilteringInfoPtr filter_info =
       modified_event_filter_info ? std::move(modified_event_filter_info)
@@ -1181,10 +1184,9 @@ void EventRouter::AddFilterToEvent(const std::string& event_name,
       is_for_service_worker ? kFilteredServiceWorkerEvents : kFilteredEvents);
   auto filtered_events = update.Create();
 
-  ListValue* filter_list = nullptr;
+  base::Value::List* filter_list = nullptr;
   if (!filtered_events->GetListWithoutPathExpansion(event_name, &filter_list)) {
-    filtered_events->SetWithoutPathExpansion(
-        event_name, std::make_unique<base::ListValue>());
+    filtered_events->SetKey(event_name, base::Value(base::Value::List()));
     filtered_events->GetListWithoutPathExpansion(event_name, &filter_list);
   }
 
@@ -1254,12 +1256,12 @@ void EventRouter::RemoveLazyEventListenerImpl(
 
 Event::Event(events::HistogramValue histogram_value,
              const std::string& event_name,
-             std::vector<base::Value> event_args)
+             base::Value::List event_args)
     : Event(histogram_value, event_name, std::move(event_args), nullptr) {}
 
 Event::Event(events::HistogramValue histogram_value,
              const std::string& event_name,
-             std::vector<base::Value> event_args,
+             base::Value::List event_args,
              content::BrowserContext* restrict_to_browser_context)
     : Event(histogram_value,
             event_name,
@@ -1271,19 +1273,18 @@ Event::Event(events::HistogramValue histogram_value,
 
 Event::Event(events::HistogramValue histogram_value,
              const std::string& event_name,
-             std::vector<base::Value> event_args_tmp,
+             base::Value::List event_args_tmp,
              content::BrowserContext* restrict_to_browser_context,
              const GURL& event_url,
              EventRouter::UserGestureState user_gesture,
              mojom::EventFilteringInfoPtr info)
     : histogram_value(histogram_value),
       event_name(event_name),
-      event_args(std::make_unique<base::ListValue>(std::move(event_args_tmp))),
+      event_args(std::move(event_args_tmp)),
       restrict_to_browser_context(restrict_to_browser_context),
       event_url(event_url),
       user_gesture(user_gesture),
       filter_info(std::move(info)) {
-  DCHECK(event_args);
   DCHECK_NE(events::UNKNOWN, histogram_value)
       << "events::UNKNOWN cannot be used as a histogram value.\n"
       << "If this is a test, use events::FOR_TEST.\n"
@@ -1295,10 +1296,10 @@ Event::Event(events::HistogramValue histogram_value,
 Event::~Event() = default;
 
 std::unique_ptr<Event> Event::DeepCopy() const {
-  auto copy = std::make_unique<Event>(histogram_value, event_name,
-                                      event_args->Clone().TakeListDeprecated(),
-                                      restrict_to_browser_context, event_url,
-                                      user_gesture, filter_info.Clone());
+  auto copy =
+      std::make_unique<Event>(histogram_value, event_name, event_args.Clone(),
+                              restrict_to_browser_context, event_url,
+                              user_gesture, filter_info.Clone());
   copy->will_dispatch_callback = will_dispatch_callback;
   return copy;
 }

@@ -9,10 +9,12 @@
 #include <string>
 #include <vector>
 
+#include "base/one_shot_event.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "ui/base/models/simple_menu_model.h"
 
 namespace crosapi {
@@ -78,15 +80,33 @@ class TestControllerAsh : public mojom::TestController,
       const std::string& app_id,
       SetSelectedSharesheetAppCallback callback) override;
   void GetAshVersion(GetAshVersionCallback callback) override;
-
   void BindTestShillController(
       mojo::PendingReceiver<crosapi::mojom::TestShillController> receiver,
       BindTestShillControllerCallback callback) override;
+  void CreateAndCancelPrintJob(
+      const std::string& job_title,
+      CreateAndCancelPrintJobCallback callback) override;
+
+  void BindShillClientTestInterface(
+      mojo::PendingReceiver<crosapi::mojom::ShillClientTestInterface> receiver,
+      BindShillClientTestInterfaceCallback callback) override;
+
+  void GetSanitizedActiveUsername(
+      GetSanitizedActiveUsernameCallback callback) override;
+  void BindInputMethodTestInterface(
+      mojo::PendingReceiver<crosapi::mojom::InputMethodTestInterface> receiver,
+      BindInputMethodTestInterfaceCallback callback) override;
 
   mojo::Remote<mojom::StandaloneBrowserTestController>&
   GetStandaloneBrowserTestController() {
     DCHECK(standalone_browser_test_controller_.is_bound());
     return standalone_browser_test_controller_;
+  }
+
+  // Signals when standalone browser test controller becomes bound.
+  const base::OneShotEvent& on_standalone_browser_test_controller_bound()
+      const {
+    return on_standalone_browser_test_controller_bound_;
   }
 
  private:
@@ -108,7 +128,7 @@ class TestControllerAsh : public mojom::TestController,
   static void OnSelectContextMenuForShelfItem(
       SelectContextMenuForShelfItemCallback callback,
       const std::string& item_id,
-      uint32_t index,
+      size_t index,
       std::unique_ptr<ui::SimpleMenuModel> model);
 
   // Each call to EnterOverviewMode or ExitOverviewMode spawns a waiter for the
@@ -123,6 +143,8 @@ class TestControllerAsh : public mojom::TestController,
   // Controller to send commands to the connected lacros crosapi client.
   mojo::Remote<mojom::StandaloneBrowserTestController>
       standalone_browser_test_controller_;
+
+  base::OneShotEvent on_standalone_browser_test_controller_bound_;
 };
 
 class TestShillControllerAsh : public crosapi::mojom::TestShillController {
@@ -137,6 +159,51 @@ class TestShillControllerAsh : public crosapi::mojom::TestShillController {
   void OnPlatformMessage(const std::string& extension_id,
                          const std::string& configuration_name,
                          uint32_t message) override;
+};
+
+class ShillClientTestInterfaceAsh
+    : public crosapi::mojom::ShillClientTestInterface {
+ public:
+  ShillClientTestInterfaceAsh();
+  ~ShillClientTestInterfaceAsh() override;
+
+  void AddDevice(const std::string& device_path,
+                 const std::string& type,
+                 const std::string& name,
+                 AddDeviceCallback callback) override;
+  void ClearDevices(ClearDevicesCallback callback) override;
+  void SetDeviceProperty(const std::string& device_path,
+                         const std::string& name,
+                         ::base::Value value,
+                         bool notify_changed,
+                         SetDevicePropertyCallback callback) override;
+  void SetSimLocked(const std::string& device_path,
+                    bool enabled,
+                    SetSimLockedCallback callback) override;
+
+  void AddService(const std::string& service_path,
+                  const std::string& guid,
+                  const std::string& name,
+                  const std::string& type,
+                  const std::string& state,
+                  bool visible,
+                  AddServiceCallback callback) override;
+  void ClearServices(ClearServicesCallback callback) override;
+  void SetServiceProperty(const std::string& service_path,
+                          const std::string& property,
+                          base::Value value,
+                          SetServicePropertyCallback callback) override;
+
+  void AddProfile(const std::string& profile_path,
+                  const std::string& userhash,
+                  AddProfileCallback callback) override;
+  void AddServiceToProfile(const std::string& profile_path,
+                           const std::string& service_path,
+                           AddServiceToProfileCallback callback) override;
+
+  void AddIPConfig(const std::string& ip_config_path,
+                   ::base::Value properties,
+                   AddIPConfigCallback callback) override;
 };
 
 }  // namespace crosapi

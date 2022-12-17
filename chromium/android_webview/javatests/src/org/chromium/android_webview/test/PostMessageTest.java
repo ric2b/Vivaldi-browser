@@ -24,22 +24,32 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.util.CommonResources;
+import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content_public.browser.MessagePayload;
 import org.chromium.content_public.browser.MessagePort;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
 
+import java.io.UnsupportedEncodingException;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The tests for content postMessage API.
  */
+@Batch(Batch.PER_CLASS)
 @RunWith(AwJUnit4ClassRunner.class)
 public class PostMessageTest {
     @Rule
@@ -90,6 +100,10 @@ public class PostMessageTest {
 
             public String getStringValue() {
                 return mMessagePayload.getAsString();
+            }
+
+            public byte[] getArrayBuffer() {
+                return mMessagePayload.getAsArrayBuffer();
             }
         }
 
@@ -174,6 +188,19 @@ public class PostMessageTest {
             + "        }"
             + "   </script>"
             + "</body></html>";
+    // Concats all the data fields of the received messages and makes it
+    // available as page title.
+    private static final String TITLE_FROM_POSTMESSAGE_TO_FRAME_ARRAYBUFFER =
+            "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        var received = '';"
+            + "        onmessage = function (e) {"
+            + "            const view = new Int8Array(e.data);"
+            + "            received += String.fromCharCode.apply(null, view);"
+            + "            document.title = received;"
+            + "        }"
+            + "   </script>"
+            + "</body></html>";
 
     // Concats all the data fields of the received messages to the transferred channel
     // and makes it available as page title.
@@ -186,6 +213,20 @@ public class PostMessageTest {
             + "            myport.onmessage = function (f) {"
             + "                received += f.data;"
             + "                document.title = received;"
+            + "            }"
+            + "        }"
+            + "   </script>"
+            + "</body></html>";
+    // Concats all the data fields of the received messages to the transferred channel
+    // and makes it available as page title.
+    private static final String TITLE_FROM_POSTMESSAGE_TO_CHANNEL_ARRAYBUFFER =
+            "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        onmessage = function (e) {"
+            + "            var myport = e.ports[0];"
+            + "            myport.onmessage = function (f) {"
+            + "                const view = new Int8Array(f.data);"
+            + "                document.title = String.fromCharCode.apply(null, view);"
             + "            }"
             + "        }"
             + "   </script>"
@@ -236,6 +277,42 @@ public class PostMessageTest {
         MessageObject.Data data = mMessageObject.waitForMessage();
         Assert.assertEquals(WEBVIEW_MESSAGE, data.mMessage);
         Assert.assertEquals(SOURCE_ORIGIN, data.mOrigin);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testPostArrayBuffer() throws Throwable {
+        loadPage(TITLE_FROM_POSTMESSAGE_TO_FRAME_ARRAYBUFFER);
+        final String testString = "TestString";
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            try {
+                mAwContents.postMessageToMainFrame(new MessagePayload(testString.getBytes("UTF-8")),
+                        mWebServer.getBaseUrl(), null);
+            } catch (UnsupportedEncodingException e) {
+                Assert.fail();
+            }
+        });
+        expectTitle(testString);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testPostArrayBufferOnMessagePort() throws Throwable {
+        loadPage(TITLE_FROM_POSTMESSAGE_TO_CHANNEL_ARRAYBUFFER);
+        final String testString = "TestString";
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            MessagePort[] channel = mAwContents.createMessageChannel();
+            mAwContents.postMessageToMainFrame(new MessagePayload("1"), mWebServer.getBaseUrl(),
+                    new MessagePort[] {channel[1]});
+            try {
+                channel[0].postMessage(new MessagePayload(testString.getBytes("UTF-8")), null);
+            } catch (UnsupportedEncodingException e) {
+            }
+            channel[0].close();
+        });
+        expectTitle(testString);
     }
 
     @Test
@@ -540,6 +617,25 @@ public class PostMessageTest {
             + "        }"
             + "   </script>"
             + "</body></html>";
+    private static final String ECHO_ARRAY_BUFFER_PAGE = "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        onmessage = function (e) {"
+            + "            var myPort = e.ports[0];"
+            + "            myPort.onmessage = function(e) {"
+            + "                myPort.postMessage(e.data, [e.data]); }"
+            + "        }"
+            + "   </script>"
+            + "</body></html>";
+    private static final String ECHO_NON_TRANFERABLE_ARRAY_BUFFER_PAGE =
+            "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        onmessage = function (e) {"
+            + "            var myPort = e.ports[0];"
+            + "            myPort.onmessage = function(e) {"
+            + "                myPort.postMessage(e.data, [e.data]); }"
+            + "        }"
+            + "   </script>"
+            + "</body></html>";
 
     private static final String HELLO = "HELLO";
 
@@ -611,6 +707,60 @@ public class PostMessageTest {
         Assert.assertEquals(HELLO, data.getStringValue());
     }
 
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testMessageChannelSendAndReceiveArrayBuffer() throws Throwable {
+        final byte[] bytes = HELLO.getBytes("UTF-8");
+        verifyEchoArrayBuffer(ECHO_ARRAY_BUFFER_PAGE, bytes);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testMessageChannelSendAndReceiveLargeArrayBuffer() throws Throwable {
+        final byte[] bytes = new byte[1000 * 1000]; // 1MB
+        new Random(42).nextBytes(bytes);
+
+        verifyEchoArrayBuffer(ECHO_ARRAY_BUFFER_PAGE, bytes);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testMessageChannelSendAndReceiveNonTransferableArrayBuffer() throws Throwable {
+        final byte[] bytes = HELLO.getBytes("UTF-8");
+        verifyEchoArrayBuffer(ECHO_NON_TRANFERABLE_ARRAY_BUFFER_PAGE, bytes);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testMessageChannelSendAndReceiveLargeNonTransferableArrayBuffer() throws Throwable {
+        final byte[] bytes = new byte[1000 * 1000]; // 1MB
+        new Random(42).nextBytes(bytes);
+
+        verifyEchoArrayBuffer(ECHO_NON_TRANFERABLE_ARRAY_BUFFER_PAGE, bytes);
+    }
+
+    private void verifyEchoArrayBuffer(final String page, final byte[] bytes) throws Throwable {
+        final ChannelContainer channelContainer = new ChannelContainer();
+        loadPage(page);
+        final MessagePort[] channel =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            channel[0].setMessageCallback(
+                    (message, sentPorts) -> channelContainer.notifyCalled(message), null);
+            mAwContents.postMessageToMainFrame(new MessagePayload(WEBVIEW_MESSAGE),
+                    mWebServer.getBaseUrl(), new MessagePort[] {channel[1]});
+            channel[0].postMessage(new MessagePayload(bytes), null);
+        });
+        // wait for the asynchronous response from JS
+        ChannelContainer.Data data = channelContainer.waitForMessageCallback();
+        Assert.assertArrayEquals(bytes, data.getArrayBuffer());
+    }
+
     // Post a message with a pending port to a frame and then post a bunch of messages
     // after that. Make sure that they are not ordered at the receiver side.
     @Test
@@ -628,6 +778,53 @@ public class PostMessageTest {
                     new MessagePayload("3"), mWebServer.getBaseUrl(), null);
         });
         expectTitle("123");
+    }
+
+    // Generate an arraybuffer with a given size, and fill with ordered number, 0-255.
+    // Then pass it back over MessagePort.
+    private static final String GENERATE_ARRAY_BUFFER_FROM_JS_PAGE = "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        onmessage = function (e) {"
+            + "            var myPort = e.ports[0];"
+            + "            myPort.onmessage = function(e) {"
+            + "                let length = parseInt(e.data, 10);"
+            + "                var arrayBuffer = new ArrayBuffer(length);"
+            + "                const view = new Uint8Array(arrayBuffer);"
+            + "                for (var i = 0; i < length; ++i) {"
+            + "                    view[i] = i;"
+            + "                }"
+            + "                myPort.postMessage(arrayBuffer, [arrayBuffer]);"
+            + "            };"
+            + "        };"
+            + "    </script>";
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testReceiveArrayBufferFromJsOverMessagePort() throws Throwable {
+        final int bufferLength = 5000;
+        final byte[] expectedBytes = new byte[bufferLength];
+        for (int i = 0; i < bufferLength; ++i) {
+            // Cast to byte implicitly % 256.
+            expectedBytes[i] = (byte) i;
+        }
+
+        final ChannelContainer channelContainer = new ChannelContainer();
+        loadPage(GENERATE_ARRAY_BUFFER_FROM_JS_PAGE);
+        final MessagePort[] channel =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            channel[0].setMessageCallback(
+                    (message, sentPorts) -> channelContainer.notifyCalled(message), null);
+            mAwContents.postMessageToMainFrame(new MessagePayload(WEBVIEW_MESSAGE),
+                    mWebServer.getBaseUrl(), new MessagePort[] {channel[1]});
+            channel[0].postMessage(new MessagePayload(String.valueOf(bufferLength)), null);
+        });
+        // wait for the asynchronous response from JS
+        ChannelContainer.Data data = channelContainer.waitForMessageCallback();
+        final byte[] bytes = data.getArrayBuffer();
+        Assert.assertEquals(bufferLength, bytes.length);
+        Assert.assertArrayEquals(expectedBytes, bytes);
     }
 
     private static final String RECEIVE_JS_MESSAGE_CHANNEL_PAGE =
@@ -968,5 +1165,210 @@ public class PostMessageTest {
         MessageObject.Data data = mMessageObject.waitForMessage();
         Assert.assertEquals(WEBVIEW_MESSAGE, data.mMessage);
         Assert.assertEquals(SOURCE_ORIGIN, data.mOrigin);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testMessagePortLifecycle() throws Throwable {
+        final String baseUrl = mWebServer.getBaseUrl();
+        loadPage(TEST_PAGE);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            final MessagePort[] ports = mAwContents.createMessageChannel();
+            Assert.assertFalse(ports[0].isTransferred());
+            Assert.assertFalse(ports[0].isClosed());
+            Assert.assertFalse(ports[0].isStarted());
+            Assert.assertFalse(ports[1].isTransferred());
+            Assert.assertFalse(ports[1].isClosed());
+            Assert.assertFalse(ports[1].isStarted());
+
+            // Post port1 to main frame.
+            mAwContents.postMessageToMainFrame(
+                    new MessagePayload("1"), baseUrl, new MessagePort[] {ports[1]});
+            Assert.assertTrue(ports[1].isTransferred());
+            Assert.assertFalse(ports[1].isClosed());
+            Assert.assertFalse(ports[1].isStarted());
+
+            // Close one port.
+            ports[0].close();
+            Assert.assertFalse(ports[0].isTransferred());
+            Assert.assertTrue(ports[0].isClosed());
+            Assert.assertFalse(ports[0].isStarted());
+        });
+    }
+
+    private static final String COUNT_PORT_FROM_MESSAGE = "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        var counter = 0;"
+            + "        var received = '';"
+            + "        onmessage = function (e) {"
+            + "            e.ports[0].onmessage = function(e) {"
+            + "                received += e.data;"
+            + "                counter += e.ports.length;"
+            + "                document.title = received + counter;"
+            + "                e.ports[0].postMessage(received + counter);"
+            + "            };"
+            + "        };"
+            + "   </script>"
+            + "</body></html>";
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    // Previously postMessage can be called on any thread, but no tests or CTS tests checked.
+    public void testTransferPortOnAnotherThread() throws Throwable {
+        loadPage(COUNT_PORT_FROM_MESSAGE);
+        final ChannelContainer container = new ChannelContainer();
+        final MessagePort[] ports =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mAwContents.postMessageToMainFrame(
+                    new MessagePayload(""), "*", new MessagePort[] {ports[1]});
+        });
+        final MessagePort[] ports2 =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+        ports2[0].setMessageCallback((messagePayload, sentPorts) -> {
+            ThreadUtils.checkUiThread();
+            container.notifyCalled(messagePayload);
+        }, null);
+        ports[0].postMessage(new MessagePayload(HELLO), new MessagePort[] {ports2[1]});
+        expectTitle(HELLO + "1");
+        Assert.assertEquals(HELLO + "1", container.waitForMessageCallback().getStringValue());
+        ports[0].close();
+        ports2[0].close();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testTransferPortImmediateAfterPostMessageOnAnotherThread() throws Throwable {
+        loadPage(COUNT_PORT_FROM_MESSAGE);
+        final MessagePort[] ports =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mAwContents.postMessageToMainFrame(
+                    new MessagePayload(""), "*", new MessagePort[] {ports[1]});
+        });
+        final CallbackHelper callbackHelper = new CallbackHelper();
+        final AtomicReference<IllegalStateException> exceptionRef = new AtomicReference<>();
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            try {
+                callbackHelper.waitForCallback(0);
+                mAwContents.postMessageToMainFrame(
+                        new MessagePayload(HELLO), "*", new MessagePort[] {ports[0]});
+            } catch (TimeoutException ignored) {
+            } catch (IllegalStateException e) {
+                exceptionRef.set(e);
+                callbackHelper.notifyCalled();
+            }
+        });
+        ports[0].postMessage(new MessagePayload(HELLO), null);
+        callbackHelper.notifyCalled();
+
+        callbackHelper.waitForCallback(1);
+        Assert.assertEquals("Port is already started", exceptionRef.get().getMessage());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testCloseMessagePortOnAnotherThread() throws Throwable {
+        final MessagePort[] messagePorts = new MessagePort[1];
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            final MessagePort[] ports = mAwContents.createMessageChannel();
+            messagePorts[0] = ports[0];
+            // Move message port into |receiving| state.
+            messagePorts[0].setMessageCallback((messagePayload, sentPorts) -> {}, null);
+        });
+        // Close message channel on another thread, simulate the case where the "finalize" is called
+        // on finalizer thread.
+        messagePorts[0].close();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testTransferPortInAnotherThreadRaceCondition() throws Throwable {
+        loadPage(COUNT_PORT_FROM_MESSAGE);
+        final MessagePort[] ports =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mAwContents.postMessageToMainFrame(
+                    new MessagePayload(""), "*", new MessagePort[] {ports[1]});
+        });
+        final MessagePort[] portsToTransfer =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+        // Transfer the port in another thread.
+        ports[0].postMessage(new MessagePayload("test"), new MessagePort[] {portsToTransfer[0]});
+        // Check port2[0] is transferred right now.
+        Assert.assertTrue(portsToTransfer[0].isTransferred());
+        // Set callback on the just transferred port right now. It should fail.
+        try {
+            portsToTransfer[0].setMessageCallback((messagePayload, sentPorts) -> {}, null);
+            Assert.fail("Port transferred, should not able to listen on");
+        } catch (IllegalStateException e) {
+            // Ignored.
+        }
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    public void testSetReceiverAfterMessageReceived() throws Throwable {
+        loadPage(COUNT_PORT_FROM_MESSAGE);
+        final ChannelContainer container = new ChannelContainer();
+        final HandlerThread thread = new HandlerThread("test-thread");
+        thread.start();
+        final Handler handler = new Handler(thread.getLooper());
+        final MessagePort[] ports =
+                TestThreadUtils.runOnUiThreadBlocking(() -> mAwContents.createMessageChannel());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            // Post message before set callback
+            ports[0].postMessage(new MessagePayload("msg1"), null);
+        });
+        ports[1].setMessageCallback((messagePayload, sentPorts) -> {
+            container.notifyCalled(messagePayload);
+        }, handler);
+        Assert.assertEquals("msg1", container.waitForMessageCallback().getStringValue());
+    }
+
+    private static final String COPY_PORT_MESSAGE_FROM_WINDOW = "<!DOCTYPE html><html><body>"
+            + "    <script>"
+            + "        var port = null;"
+            + "        onmessage = function (e) {"
+            + "            if (e.ports[0]) port = e.ports[0];"
+            + "            else port.postMessage(e.data);"
+            + "        };"
+            + "   </script>"
+            + "</body></html>";
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Android-PostMessage"})
+    // Regression test of https://issuetracker.google.com/245837736
+    public void testMessageListenerAvailableAfterPortGarbageCollected() throws Throwable {
+        loadPage(COPY_PORT_MESSAGE_FROM_WINDOW);
+        final ChannelContainer container = new ChannelContainer();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            MessagePort[] ports = mAwContents.createMessageChannel();
+            ports[0].setMessageCallback((message, p) -> container.notifyCalled(message), null);
+            mAwContents.postMessageToMainFrame(
+                    new MessagePayload("*"), "*", new MessagePort[] {ports[1]});
+            ports = null;
+        });
+        for (int i = 0; i < 100; ++i) {
+            final String message = HELLO + i;
+            Runtime.getRuntime().gc();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                // Trigger GC to make ports[0] being garbage collected. Note that despite that what
+                // JavaDoc says about invoking "gc()", both Dalvik and ART actually run the
+                // collector.
+                mAwContents.postMessageToMainFrame(new MessagePayload(message), "*", null);
+            });
+            Assert.assertEquals(message, container.waitForMessageCallback().getStringValue());
+        }
     }
 }

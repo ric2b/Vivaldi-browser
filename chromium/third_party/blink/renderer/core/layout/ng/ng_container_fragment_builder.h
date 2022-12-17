@@ -14,12 +14,14 @@
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_bfc_offset.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_margin_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/list/ng_unpositioned_list_marker.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_anchor_query.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_appeal.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_early_break.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_floats_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_link.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_logical_link.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_positioned_node.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
@@ -47,20 +49,7 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
     child_break_tokens_.clear();
   }
 
-  struct ChildWithOffset {
-    DISALLOW_NEW();
-    ChildWithOffset(LogicalOffset offset, const NGPhysicalFragment* fragment)
-        : offset(offset), fragment(std::move(fragment)) {}
-
-    void Trace(Visitor*) const;
-
-    // We store logical offsets (instead of the final physical), as we can't
-    // convert into the physical coordinate space until we know our final size.
-    LogicalOffset offset;
-    Member<const NGPhysicalFragment> fragment;
-  };
-
-  using ChildrenVector = HeapVector<ChildWithOffset, 4>;
+  using ChildrenVector = HeapVector<NGLogicalLink, 4>;
   using MulticolCollection =
       HeapHashMap<Member<LayoutBox>,
                   Member<NGMulticolWithPendingOOFs<LogicalOffset>>>;
@@ -139,13 +128,12 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // NGOutOfFlowLayoutPart(container_style, builder).Run();
   //
   // See layout part for builder interaction.
-  void AddOutOfFlowChildCandidate(
-      NGBlockNode,
-      const LogicalOffset& child_offset,
-      NGLogicalStaticPosition::InlineEdge =
-          NGLogicalStaticPosition::kInlineStart,
-      NGLogicalStaticPosition::BlockEdge = NGLogicalStaticPosition::kBlockStart,
-      bool needs_block_offset_adjustment = true);
+  void AddOutOfFlowChildCandidate(NGBlockNode,
+                                  const LogicalOffset& child_offset,
+                                  NGLogicalStaticPosition::InlineEdge =
+                                      NGLogicalStaticPosition::kInlineStart,
+                                  NGLogicalStaticPosition::BlockEdge =
+                                      NGLogicalStaticPosition::kBlockStart);
 
   void AddOutOfFlowChildCandidate(
       const NGLogicalOutOfFlowPositionedNode& candidate);
@@ -262,6 +250,17 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
       const NGInlineContainer<LogicalOffset>* fixedpos_inline_container =
           nullptr,
       LogicalOffset additional_fixedpos_offset = LogicalOffset());
+  // Same as PropagateOOFPositionedInfo(), but only performs the propagation of
+  // OOF fragmentainer descendants. If |out_list| is provided, any OOF
+  // fragmentainer descendants should be propagated there rather than to this
+  // builder.
+  void PropagateOOFFragmentainerDescendants(
+      const NGPhysicalFragment& fragment,
+      LogicalOffset offset,
+      LogicalOffset relative_offset,
+      LayoutUnit containing_block_adjustment,
+      const NGContainingBlock<LogicalOffset>* fixedpos_containing_block,
+      HeapVector<NGLogicalOOFNodeForFragmentation>* out_list = nullptr);
 
   void SetIsSelfCollapsing() { is_self_collapsing_ = true; }
 
@@ -353,6 +352,8 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
 
   const NGConstraintSpace& ConstraintSpace() const { return space_; }
 
+  const NGLogicalAnchorQuery& AnchorQuery() const { return anchor_query_; }
+
   const NGLayoutResult* Abort(NGLayoutResult::EStatus);
 
 #if DCHECK_IS_ON()
@@ -406,6 +407,7 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   HeapVector<NGLogicalOOFNodeForFragmentation>
       oof_positioned_fragmentainer_descendants_;
   HeapVector<NGLogicalOutOfFlowPositionedNode> oof_positioned_descendants_;
+  NGLogicalAnchorQuery anchor_query_;
 
   MulticolCollection multicols_with_pending_oofs_;
 
@@ -450,7 +452,6 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   bool should_force_same_fragmentation_flow_ = false;
   bool should_add_break_tokens_manually_ = false;
 
-  bool has_oof_candidate_that_needs_block_offset_adjustment_ = false;
   bool has_out_of_flow_fragment_child_ = false;
   bool has_out_of_flow_in_fragmentainer_subtree_ = false;
 
@@ -460,8 +461,5 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
 };
 
 }  // namespace blink
-
-WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(
-    blink::NGContainerFragmentBuilder::ChildWithOffset)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_CONTAINER_FRAGMENT_BUILDER_H_

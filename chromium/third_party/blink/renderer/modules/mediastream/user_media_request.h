@@ -47,7 +47,9 @@ class MediaErrorState;
 class MediaStreamConstraints;
 class ScriptWrappable;
 class TransferredMediaStreamTrack;
-class UserMediaController;
+class UserMediaClient;
+
+enum class UserMediaRequestType { kUserMedia, kDisplayMedia, kDisplayMediaSet };
 
 class MODULES_EXPORT UserMediaRequest final
     : public GarbageCollected<UserMediaRequest>,
@@ -70,8 +72,6 @@ class MODULES_EXPORT UserMediaRequest final
     kDeviceInUse
   };
 
-  enum class MediaType { kUserMedia, kDisplayMedia };
-
   class Callbacks : public GarbageCollected<Callbacks> {
    public:
     virtual ~Callbacks() = default;
@@ -89,8 +89,8 @@ class MODULES_EXPORT UserMediaRequest final
   class V8Callbacks;
 
   static UserMediaRequest* Create(ExecutionContext*,
-                                  UserMediaController*,
-                                  MediaType media_type,
+                                  UserMediaClient*,
+                                  UserMediaRequestType media_type,
                                   const MediaStreamConstraints* options,
                                   Callbacks*,
                                   MediaErrorState&,
@@ -99,11 +99,12 @@ class MODULES_EXPORT UserMediaRequest final
                                             const MediaConstraints& video);
 
   UserMediaRequest(ExecutionContext*,
-                   UserMediaController*,
-                   MediaType media_type,
+                   UserMediaClient*,
+                   UserMediaRequestType media_type,
                    MediaConstraints audio,
                    MediaConstraints video,
                    bool should_prefer_current_tab,
+                   bool auto_select_all_screens,
                    Callbacks*,
                    IdentifiableSurface surface);
   ~UserMediaRequest() override;
@@ -118,7 +119,7 @@ class MODULES_EXPORT UserMediaRequest final
   void FailConstraint(const String& constraint_name, const String& message);
   void Fail(Error name, const String& message);
 
-  MediaType MediaRequestType() const;
+  UserMediaRequestType MediaRequestType() const;
   bool Audio() const;
   bool Video() const;
   MediaConstraints AudioConstraints() const;
@@ -147,37 +148,51 @@ class MODULES_EXPORT UserMediaRequest final
 
   bool should_prefer_current_tab() const { return should_prefer_current_tab_; }
 
+  void set_exclude_system_audio(bool value) { exclude_system_audio_ = value; }
+  bool exclude_system_audio() const { return exclude_system_audio_; }
+  bool auto_select_all_screens() const { return auto_select_all_screens_; }
+
   // Mark this request as an GetOpenDevice request for initializing a
   // TransferredMediaStreamTrack from the deviced identified by session_id.
   void SetTransferData(const base::UnguessableToken& session_id,
+                       const base::UnguessableToken& transfer_id,
                        TransferredMediaStreamTrack* track) {
     transferred_track_session_id_ = session_id;
+    transferred_track_transfer_id_ = transfer_id;
     transferred_track_ = track;
   }
   absl::optional<base::UnguessableToken> GetSessionId() const {
     return transferred_track_session_id_;
   }
+  absl::optional<base::UnguessableToken> GetTransferId() const {
+    return transferred_track_transfer_id_;
+  }
   bool IsTransferredTrackRequest() const {
     return !!transferred_track_session_id_;
   }
+  void SetTransferredTrackComponent(MediaStreamComponent* component);
+
   void Trace(Visitor*) const override;
 
  private:
-  MediaType media_type_;
+  UserMediaRequestType media_type_;
   MediaConstraints audio_;
   MediaConstraints video_;
   const bool should_prefer_current_tab_ = false;
+  bool exclude_system_audio_ = false;
+  const bool auto_select_all_screens_ = false;
   bool should_disable_hardware_noise_suppression_;
   bool has_transient_user_activation_ = false;
   int32_t request_id_ = -1;
 
-  Member<UserMediaController> controller_;
+  Member<UserMediaClient> client_;
 
   Member<Callbacks> callbacks_;
   IdentifiableSurface surface_;
   bool is_resolved_ = false;
 
   absl::optional<base::UnguessableToken> transferred_track_session_id_;
+  absl::optional<base::UnguessableToken> transferred_track_transfer_id_;
   Member<TransferredMediaStreamTrack> transferred_track_;
 };
 

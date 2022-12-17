@@ -19,11 +19,11 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
-#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dot_indicator.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -35,27 +35,22 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
-#include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_analysis.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform_util.h"
-#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia_operations.h"
-#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/shadow_value.h"
-#include "ui/gfx/skia_paint_util.h"
-#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/accessibility_paint_checks.h"
-#include "ui/views/background.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
-#include "ui/views/drag_controller.h"
+#include "ui/views/focus/focus_manager.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -156,55 +151,19 @@ class DotView : public views::View {
   }
 };
 
+// Returns whether the `index` is considered on the left edge of a grid with
+// `cols` columns.
+bool IsIndexOnLeftEdge(GridIndex index, int cols) {
+  return (index.slot % cols) == 0;
+}
+
+// Returns whether the `index` is considered on the right edge of a grid with
+// `cols` columns.
+bool IsIndexOnRightEdge(GridIndex index, int cols) {
+  return ((index.slot + 1) % cols) == 0;
+}
+
 }  // namespace
-
-// The badge which is activated when the app corresponding with this
-// AppListItemView receives a notification.
-class AppListItemView::AppNotificationIndicatorView : public views::View {
- public:
-  explicit AppNotificationIndicatorView(SkColor indicator_color)
-      : shadow_values_(gfx::ShadowValue::MakeMdShadowValues(2)),
-        indicator_color_(indicator_color) {}
-  AppNotificationIndicatorView(const AppNotificationIndicatorView& other) =
-      delete;
-  AppNotificationIndicatorView& operator=(
-      const AppNotificationIndicatorView& other) = delete;
-  ~AppNotificationIndicatorView() override = default;
-
-  void OnPaint(gfx::Canvas* canvas) override {
-    gfx::ScopedCanvas scoped(canvas);
-
-    canvas->SaveLayerAlpha(SK_AlphaOPAQUE);
-
-    DCHECK_EQ(width(), height());
-    const float dsf = canvas->UndoDeviceScaleFactor();
-
-    float radius = width() * kNotificationIndicatorWidthRatio / 2.0f;
-    float padding = width() * kNotificationIndicatorPaddingRatio;
-
-    float center_x =
-        base::i18n::IsRTL() ? padding + radius : width() - radius - padding;
-    float center_y = padding + radius;
-    gfx::PointF center = gfx::PointF(center_x, center_y);
-    center.Scale(dsf);
-
-    // Fill the center.
-    cc::PaintFlags flags;
-    flags.setLooper(gfx::CreateShadowDrawLooper(shadow_values_));
-    flags.setColor(indicator_color_);
-    flags.setAntiAlias(true);
-    canvas->DrawCircle(center, dsf * radius, flags);
-  }
-
-  void SetColor(SkColor new_color) {
-    indicator_color_ = new_color;
-    SchedulePaint();
-  }
-
- private:
-  const gfx::ShadowValues shadow_values_;
-  SkColor indicator_color_;
-};
 
 // ImageView for the item icon.
 class AppListItemView::IconImageView : public views::ImageView {
@@ -325,6 +284,7 @@ AppListItemView::AppListItemView(const AppListConfig* app_list_config,
   DCHECK(view_delegate_);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   set_suppress_default_focus_handling();
+  GetViewAccessibility().OverrideIsLeaf(true);
 
   auto title = std::make_unique<views::Label>();
   title->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -346,14 +306,9 @@ AppListItemView::AppListItemView(const AppListConfig* app_list_config,
                             false /*animate*/);
   }
 
-  if (!is_folder_) {
-    notification_indicator_ =
-        AddChildView(std::make_unique<AppNotificationIndicatorView>(
-            item->notification_badge_color()));
-    notification_indicator_->SetPaintToLayer();
-    notification_indicator_->layer()->SetFillsBoundsOpaquely(false);
-    notification_indicator_->SetVisible(item->has_notification_badge());
-  }
+  notification_indicator_ = AddChildView(
+      std::make_unique<DotIndicator>(item->GetNotificationBadgeColor()));
+  notification_indicator_->SetVisible(item->has_notification_badge());
 
   title_ = AddChildView(std::move(title));
 
@@ -460,13 +415,17 @@ void AppListItemView::SetUIState(UIState ui_state) {
   switch (ui_state) {
     case UI_STATE_NORMAL:
       title_->SetVisible(true);
-      if (ui_state_ == UI_STATE_DRAGGING)
+      if (ui_state_ == UI_STATE_DRAGGING) {
+        GetWidget()->SetCursor(ui::mojom::CursorType::kNull);
         ScaleAppIcon(false);
+      }
       break;
     case UI_STATE_DRAGGING:
       title_->SetVisible(false);
-      if (ui_state_ == UI_STATE_NORMAL && !in_cardified_grid_)
+      if (ui_state_ == UI_STATE_NORMAL && !in_cardified_grid_) {
+        GetWidget()->SetCursor(ui::mojom::CursorType::kGrabbing);
         ScaleAppIcon(true);
+      }
       break;
     case UI_STATE_DROPPING_IN_FOLDER:
       break;
@@ -676,6 +635,11 @@ void AppListItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
               IDS_APP_LIST_PAUSED_APP));
       break;
     default:
+      if (item_weak_->is_new_install()) {
+        node_data->SetDescription(
+            ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
+                IDS_APP_LIST_NEW_INSTALL_ACCESSIBILE_DESCRIPTION));
+      }
       break;
   }
 }
@@ -696,6 +660,13 @@ void AppListItemView::OnContextMenuModelReceived(
     return;
 
   menu_show_initiated_from_key_ = source_type == ui::MENU_SOURCE_KEYBOARD;
+
+  // Clear the existing focus in other elements to prevent having a focus
+  // indicator on other non-selected views.
+  if (GetFocusManager()->GetFocusedView()) {
+    GetFocusManager()->ClearFocus();
+    focus_removed_by_context_menu_ = true;
+  }
 
   if (!grid_delegate_->IsSelectedView(this))
     grid_delegate_->ClearSelectedView();
@@ -878,8 +849,18 @@ void AppListItemView::Layout() {
         kNewInstallDotSize, kNewInstallDotSize);
   }
 
-  if (notification_indicator_)
-    notification_indicator_->SetBoundsRect(icon_bounds);
+  const float indicator_size =
+      icon_bounds.width() * kNotificationIndicatorWidthRatio;
+  const float indicator_padding =
+      icon_bounds.width() * kNotificationIndicatorPaddingRatio;
+
+  const float indicator_x =
+      icon_bounds.right() - indicator_size - indicator_padding;
+  const float indicator_y = icon_bounds.y() + indicator_padding;
+
+  const gfx::Rect indicator_bounds = gfx::ToRoundedRect(
+      gfx::RectF(indicator_x, indicator_y, indicator_size, indicator_size));
+  notification_indicator_->SetIndicatorBounds(indicator_bounds);
 }
 
 gfx::Size AppListItemView::CalculatePreferredSize() const {
@@ -1018,8 +999,10 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
 
 void AppListItemView::OnThemeChanged() {
   views::Button::OnThemeChanged();
-  if (item_weak_)
+  if (item_weak_) {
     item_weak_->RequestFolderIconUpdate();
+    notification_indicator_->SetColor(item_weak_->GetNotificationBadgeColor());
+  }
   title_->SetEnabledColor(AppListColorProvider::Get()->GetAppListItemTextColor(
       grid_delegate_->IsInFolder()));
   SchedulePaint();
@@ -1102,7 +1085,7 @@ bool AppListItemView::IsShowingAppMenu() const {
 }
 
 bool AppListItemView::IsNotificationIndicatorShownForTest() const {
-  return notification_indicator_ && notification_indicator_->GetVisible();
+  return notification_indicator_->GetVisible();
 }
 
 void AppListItemView::SetContextMenuShownCallbackForTest(
@@ -1124,14 +1107,12 @@ void AppListItemView::SetMostRecentGridIndex(GridIndex new_grid_index,
   }
 
   if (most_recent_grid_index_.IsValid()) {
-    // Set row change only for items which move to a new row and a new column.
-    // This is done because row change animations should not be shown when
-    // animating items up from the next page into a new row but on the same
-    // column, which could happen when closing a reorder toast.
-    if ((most_recent_grid_index_.slot / columns !=
-         new_grid_index.slot / columns) &&
-        (most_recent_grid_index_.slot % columns !=
-         new_grid_index.slot % columns)) {
+    // Pending row changes are only flagged when the item index changes from one
+    // edge of the grid to the other.
+    if ((IsIndexOnLeftEdge(new_grid_index, columns) &&
+         IsIndexOnRightEdge(most_recent_grid_index_, columns)) ||
+        (IsIndexOnLeftEdge(most_recent_grid_index_, columns) &&
+         IsIndexOnRightEdge(new_grid_index, columns))) {
       has_pending_row_change_ = true;
     } else {
       has_pending_row_change_ = false;
@@ -1167,6 +1148,12 @@ void AppListItemView::OnMenuClosed() {
   // Keep the item focused if the menu was shown via keyboard.
   if (!menu_show_initiated_from_key_)
     OnBlur();
+
+  if (focus_removed_by_context_menu_) {
+    // Restore the last focused view when exiting the menu.
+    GetFocusManager()->RestoreFocusedView();
+    focus_removed_by_context_menu_ = false;
+  }
 }
 
 void AppListItemView::OnSyncDragEnd() {
@@ -1266,13 +1253,12 @@ void AppListItemView::ItemNameChanged() {
 }
 
 void AppListItemView::ItemBadgeVisibilityChanged() {
-  if (notification_indicator_ && icon_)
+  if (icon_)
     notification_indicator_->SetVisible(item_weak_->has_notification_badge());
 }
 
 void AppListItemView::ItemBadgeColorChanged() {
-  if (notification_indicator_)
-    notification_indicator_->SetColor(item_weak_->notification_badge_color());
+  notification_indicator_->SetColor(item_weak_->GetNotificationBadgeColor());
 }
 
 void AppListItemView::ItemIsNewInstallChanged() {

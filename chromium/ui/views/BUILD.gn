@@ -26,6 +26,8 @@ aggregate_vector_icons("views_vector_icons") {
     "checkbox_active.icon",
     "checkbox_normal.icon",
     "close.icon",
+    "drag_general_selection.icon",
+    "drag_image_selection.icon",
     "ic_close.icon",
     "info.icon",
     "launch.icon",
@@ -123,6 +125,7 @@ component("views") {
     "controls/button/radio_button.h",
     "controls/button/toggle_button.h",
     "controls/combobox/combobox.h",
+    "controls/combobox/combobox_menu_model.h",
     "controls/combobox/combobox_util.h",
     "controls/dot_indicator.h",
     "controls/editable_combobox/editable_combobox.h",
@@ -133,6 +136,7 @@ component("views") {
     "controls/image_view_base.h",
     "controls/label.h",
     "controls/link.h",
+    "controls/link_fragment.h",
     "controls/menu/menu_config.h",
     "controls/menu/menu_controller.h",
     "controls/menu/menu_controller_delegate.h",
@@ -348,6 +352,7 @@ component("views") {
     "controls/button/radio_button.cc",
     "controls/button/toggle_button.cc",
     "controls/combobox/combobox.cc",
+    "controls/combobox/combobox_menu_model.cc",
     "controls/combobox/combobox_util.cc",
     "controls/combobox/empty_combobox_model.cc",
     "controls/combobox/empty_combobox_model.h",
@@ -360,6 +365,7 @@ component("views") {
     "controls/image_view_base.cc",
     "controls/label.cc",
     "controls/link.cc",
+    "controls/link_fragment.cc",
     "controls/menu/menu_config.cc",
     "controls/menu/menu_controller.cc",
     "controls/menu/menu_delegate.cc",
@@ -496,7 +502,12 @@ component("views") {
   ]
 
   sources += get_target_outputs(":views_vector_icons")
-  configs += [ "//build/config:precompiled_headers" ]
+
+  configs += [
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:prevent_unsafe_narrowing",
+  ]
+
   defines = [ "VIEWS_IMPLEMENTATION" ]
 
   deps = [
@@ -552,12 +563,20 @@ component("views") {
   ]
 
   if (is_chromeos_ash) {
-    public += [ "highlight_border.h" ]
-    sources += [ "highlight_border.cc" ]
     deps += [
       "//ash/constants",
       "//ui/base/ime/ash",
     ]
+  }
+
+  if (is_chromeos) {
+    public += [ "highlight_border.h" ]
+    sources += [ "highlight_border.cc" ]
+    deps += [ "//chromeos/constants" ]
+  }
+
+  if (is_linux) {
+    public_deps += [ "//ui/linux:linux_ui" ]
   }
 
   if (is_linux || is_chromeos || is_fuchsia) {
@@ -566,25 +585,7 @@ component("views") {
   }
 
   if (is_linux || is_chromeos_lacros) {
-    public_deps += [ "//ui/base/cursor:theme_manager" ]
-    deps += [
-      "//build:chromecast_buildflags",
-      "//ui/base/ime/linux",
-      "//ui/shell_dialogs",
-    ]
-    public += [
-      "linux_ui/device_scale_factor_observer.h",
-      "linux_ui/linux_ui.h",
-      "linux_ui/nav_button_provider.h",
-      "linux_ui/status_icon_linux.h",
-      "linux_ui/window_button_order_observer.h",
-      "linux_ui/window_frame_provider.h",
-    ]
-    sources += [
-      "linux_ui/linux_ui.cc",
-      "linux_ui/status_icon_linux.cc",
-    ]
-
+    deps += [ "//ui/base/ime/linux" ]
     if (!is_chromeos_lacros) {
       sources += [ "controls/menu/menu_config_linux.cc" ]
     }
@@ -600,6 +601,7 @@ component("views") {
 
   if (is_mac) {
     public += [
+      "cocoa/immersive_mode_delegate_mac.h",
       "cocoa/native_widget_mac_ns_window_host.h",
       "controls/menu/menu_closure_animation_mac.h",
       "controls/menu/menu_cocoa_watcher_mac.h",
@@ -797,7 +799,6 @@ component("views") {
         "widget/desktop_aura/desktop_screen_position_client.cc",
         "widget/desktop_aura/desktop_window_tree_host.cc",
       ]
-      public_deps += [ "//ui/aura/cursor" ]
       if (is_win) {
         public += [ "widget/desktop_aura/desktop_window_tree_host_win.h" ]
         sources += [
@@ -822,7 +823,7 @@ component("views") {
       if (is_linux) {
         public += [ "widget/desktop_aura/desktop_window_tree_host_linux.h" ]
         sources += [
-          "widget/desktop_aura/desktop_screen_linux.cc",
+          "widget/desktop_aura/desktop_screen_ozone_linux.cc",
           "widget/desktop_aura/desktop_window_tree_host_linux.cc",
           "widget/desktop_aura/window_event_filter_linux.cc",
           "widget/desktop_aura/window_event_filter_linux.h",
@@ -1104,6 +1105,7 @@ test("views_unittests") {
   use_xvfb = use_xvfb_in_this_config
 
   sources = [
+    "accessibility/accessibility_paint_checks_unittest.cc",
     "accessible_pane_view_unittest.cc",
     "animation/animation_builder_unittest.cc",
     "animation/bounds_animator_unittest.cc",
@@ -1141,6 +1143,7 @@ test("views_unittests") {
     "controls/editable_combobox/editable_combobox_unittest.cc",
     "controls/image_view_unittest.cc",
     "controls/label_unittest.cc",
+    "controls/link_fragment_unittest.cc",
     "controls/link_unittest.cc",
     "controls/menu/menu_controller_unittest.cc",
     "controls/menu/menu_item_view_unittest.cc",
@@ -1289,6 +1292,10 @@ test("views_unittests") {
     ]
   }
 
+  if (is_linux) {
+    deps += [ "//ui/linux:test_support" ]
+  }
+
   if (is_linux || is_chromeos_lacros) {
     deps += [ "//ui/base/ime/linux" ]
   }
@@ -1312,6 +1319,7 @@ test("views_unittests") {
 
   if (is_mac) {
     sources += [
+      "accessibility/view_ax_platform_node_delegate_mac_unittest.cc",
       "cocoa/bridged_native_widget_unittest.mm",
       "cocoa/cocoa_mouse_capture_unittest.mm",
       "cocoa/drag_drop_client_mac_unittest.mm",
@@ -1335,15 +1343,15 @@ test("views_unittests") {
   }
 
   if (is_fuchsia) {
-    use_cfv2 = false
+    use_cfv1 = false
+
+    # These tests use SwiftShader (crbug.com/1022542), which uses JIT.
+    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
+
     additional_manifest_fragments = [
-      "//build/config/fuchsia/test/font_capabilities.test-cmx",
-
-      # These tests use SwiftShader (crbug.com/1022542), which uses JIT.
-      "//build/config/fuchsia/test/jit_capabilities.test-cmx",
-
-      "//build/config/fuchsia/test/present_view_capabilities.test-cmx",
-      "//build/config/fuchsia/test/vulkan_capabilities.test-cmx",
+      "//build/config/fuchsia/test/fonts.shard.test-cml",
+      "//build/config/fuchsia/test/present_view.shard.test-cml",
+      "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
     ]
   }
 

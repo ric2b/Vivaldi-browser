@@ -134,6 +134,7 @@ constexpr int kUnifiedTrayTimeLeftPadding = 1;
 constexpr int kUnifiedTraySpacingBetweenIcons = 6;
 constexpr int kUnifiedTrayBatteryWidth = 12;
 constexpr int kUnifiedTrayBatteryBottomPadding = 1;
+constexpr int kUnifiedTrayChannelIndicatorDimension = 16;
 constexpr int kUnifiedTrayContentPadding = 12;
 constexpr int kUnifiedTopShortcutSpacing = 16;
 constexpr int kUnifiedNotificationHiddenLineHeight = 20;
@@ -248,6 +249,13 @@ constexpr int kMediaTrayPadding = 8;
 // There is no active user session during oobe, which means it doesn't support
 // dark mode. Sets the icon color to be constant.
 constexpr SkColor kIconColorInOobe = gfx::kGoogleGrey700;
+
+// Constants used for the autozoom toast.
+constexpr int kAutozoomToastMinWidth = 160;
+constexpr int kAutozoomToastMaxWidth = 320;
+constexpr int kAutozoomToastMainLabelFontSize = 14;
+constexpr auto kAutozoomToastInsets = gfx::Insets::VH(10, 16);
+constexpr int kAutozoomToastSpacing = 16;
 
 }  // namespace ash
 

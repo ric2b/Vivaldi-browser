@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
 
 namespace ui {
@@ -54,6 +55,9 @@ class ZXDGToplevelV6WrapperImpl : public ShellToplevelWrapper {
   void SetSystemModal(bool modal) override;
   bool SupportsScreenCoordinates() const override;
   void EnableScreenCoordinates() override;
+  void SetFloat() override;
+  void UnSetFloat() override;
+  void SetZOrder(ZOrderLevel z_order) override;
 
   ZXDGSurfaceV6WrapperImpl* zxdg_surface_v6_wrapper() const;
 
@@ -71,8 +75,8 @@ class ZXDGToplevelV6WrapperImpl : public ShellToplevelWrapper {
   std::unique_ptr<ZXDGSurfaceV6WrapperImpl> zxdg_surface_v6_wrapper_;
 
   // Non-owing WaylandWindow that uses this toplevel wrapper.
-  WaylandWindow* const wayland_window_;
-  WaylandConnection* const connection_;
+  const raw_ptr<WaylandWindow> wayland_window_;
+  const raw_ptr<WaylandConnection> connection_;
 
   // XDG Shell V6 object.
   wl::Object<zxdg_toplevel_v6> zxdg_toplevel_v6_;

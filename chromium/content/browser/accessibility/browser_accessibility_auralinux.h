@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_AURALINUX_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_AURALINUX_H_
 
+#include "base/memory/raw_ptr.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/common/content_export.h"
 #include "ui/accessibility/ax_node.h"
@@ -42,8 +43,8 @@ class BrowserAccessibilityAuraLinux : public BrowserAccessibility {
   ui::TextAttributeList ComputeTextAttributes() const override;
 
  private:
-  // TODO(nektar): Rename to platform_node_ to avoid confusion with ui::AXNode.
-  ui::AXPlatformNodeAuraLinux* node_;
+  // TODO: use a unique_ptr since the node is owned by this class.
+  raw_ptr<ui::AXPlatformNodeAuraLinux> platform_node_;
 };
 
 CONTENT_EXPORT BrowserAccessibilityAuraLinux* ToBrowserAccessibilityAuraLinux(

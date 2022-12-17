@@ -59,10 +59,8 @@ void ModelExecutionSchedulerImpl::OnNewModelInfoReady(
 
 void ModelExecutionSchedulerImpl::RequestModelExecutionForEligibleSegments(
     bool expired_only) {
-  std::vector<SegmentId> segment_ids(all_segment_ids_.begin(),
-                                     all_segment_ids_.end());
   segment_database_->GetSegmentInfoForSegments(
-      segment_ids,
+      all_segment_ids_,
       base::BindOnce(&ModelExecutionSchedulerImpl::FilterEligibleSegments,
                      weak_ptr_factory_.GetWeakPtr(), expired_only));
 }
@@ -133,7 +131,9 @@ bool ModelExecutionSchedulerImpl::ShouldExecuteSegment(
 
   // Filter out the segments computed recently.
   if (metadata_utils::HasFreshResults(segment_info, clock_->Now())) {
-    VLOG(1) << "Segmentation model not executed since it has fresh results.";
+    VLOG(1) << "Segmentation model not executed since it has fresh results, "
+               "segment:"
+            << proto::SegmentId_Name(segment_info.segment_id());
     stats::RecordModelExecutionStatus(
         segment_info.segment_id(),
         /*default_provider=*/false,
@@ -144,7 +144,9 @@ bool ModelExecutionSchedulerImpl::ShouldExecuteSegment(
   // Filter out the segments that aren't expired yet.
   if (expired_only && !metadata_utils::HasExpiredOrUnavailableResult(
                           segment_info, clock_->Now())) {
-    VLOG(1) << "Segmentation model not executed since results are not expired.";
+    VLOG(1) << "Segmentation model not executed since results are not expired, "
+               "segment:"
+            << proto::SegmentId_Name(segment_info.segment_id());
     stats::RecordModelExecutionStatus(
         segment_info.segment_id(),
         /*default_provider=*/false,
@@ -160,7 +162,8 @@ bool ModelExecutionSchedulerImpl::ShouldExecuteSegment(
         /*default_provider=*/false,
         ModelExecutionStatus::kSkippedNotEnoughSignals);
     VLOG(1) << "Segmentation model not executed since metadata requirements "
-               "not met.";
+               "not met, segment:"
+            << proto::SegmentId_Name(segment_info.segment_id());
     return false;
   }
 

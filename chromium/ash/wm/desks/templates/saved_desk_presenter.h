@@ -54,8 +54,10 @@ class ASH_EXPORT SavedDeskPresenter : desks_storage::DeskModelObserver {
   void UpdateDesksTemplatesUI();
 
   // Calls the DeskModel to get all the template entries, with a callback to
-  // `OnGetAllEntries`.
+  // `OnGetAllEntries`. `saved_desk_name` is used for the name overwrite nudge
+  // for duplicate desk names.
   void GetAllEntries(const base::GUID& item_to_focus,
+                     const std::u16string& saved_desk_name,
                      aura::Window* const root_window);
 
   // Calls the DeskModel to delete the saved desk with the provided `uuid`. Will
@@ -63,11 +65,11 @@ class ASH_EXPORT SavedDeskPresenter : desks_storage::DeskModelObserver {
   void DeleteEntry(const std::string& uuid,
                    absl::optional<DeskTemplateType> record_for_type);
 
-  // Launches the desk template with 'template_uuid' as a new desk. `delay` is
-  // the time between each app launch, used for debugging.
-  void LaunchDeskTemplate(const std::string& template_uuid,
-                          base::TimeDelta delay,
-                          aura::Window* root_window);
+  // Launches `saved_desk` into a new desk. `delay` is the time between each app
+  // launch, used for debugging.
+  void LaunchSavedDesk(std::unique_ptr<DeskTemplate> saved_desk,
+                       base::TimeDelta delay,
+                       aura::Window* root_window);
 
   // Calls the DeskModel to capture the active desk as a `template_type`, with a
   // callback to `OnAddOrUpdateEntry`. If there are unsupported apps on the
@@ -94,12 +96,11 @@ class ASH_EXPORT SavedDeskPresenter : desks_storage::DeskModelObserver {
  private:
   friend class SavedDeskPresenterTestApi;
 
-  // Callback ran after querying the model for a list of entries. This function
-  // also contains logic for updating the UI.
-  void OnGetAllEntries(const base::GUID& item_to_focus,
-                       aura::Window* const root_window,
-                       desks_storage::DeskModel::GetAllEntriesStatus status,
-                       const std::vector<const DeskTemplate*>& entries);
+  // Launch `saved_desk` into `new_desk`.
+  void LaunchSavedDeskIntoNewDesk(std::unique_ptr<DeskTemplate> saved_desk,
+                                  base::TimeDelta delay,
+                                  aura::Window* root_window,
+                                  const Desk* new_desk);
 
   // Callback after deleting an entry. Will then call `RemoveUIEntries` to
   // update the UI by removing the deleted saved desk.
@@ -107,27 +108,13 @@ class ASH_EXPORT SavedDeskPresenter : desks_storage::DeskModelObserver {
                      absl::optional<DeskTemplateType> record_for_type,
                      desks_storage::DeskModel::DeleteEntryStatus status);
 
-  // Launches DeskTemplate after retrieval from storage.
-  void OnGetTemplateForDeskLaunch(
-      base::Time time_launch_started,
-      base::TimeDelta delay,
-      aura::Window* const root_window,
-      desks_storage::DeskModel::GetEntryByUuidStatus status,
-      std::unique_ptr<DeskTemplate> entry);
-
-  // Callback after creating a new desk for launching a template.
-  void OnNewDeskCreatedForTemplate(std::unique_ptr<DeskTemplate> desk_template,
-                                   base::Time time_launch_started,
-                                   base::TimeDelta delay,
-                                   aura::Window* root_window,
-                                   const Desk* new_desk);
-
   // Callback after adding or updating an entry. Will then call
   // `AddOrUpdateUIEntries` to update the UI by adding or updating the template.
   void OnAddOrUpdateEntry(
       bool was_update,
       aura::Window* const root_window,
       std::unique_ptr<DeskTemplate> desk_template,
+      const std::u16string& saved_desk_name,
       desks_storage::DeskModel::AddOrUpdateEntryStatus status);
 
   // Helper functions for updating the UI.
@@ -141,6 +128,11 @@ class ASH_EXPORT SavedDeskPresenter : desks_storage::DeskModelObserver {
   // incremented.
   std::u16string AppendDuplicateNumberToDuplicateName(
       const std::u16string& duplicate_name_u16);
+
+  // Sets `closure` to be invoked when Save & Recall triggers a modal dialog.
+  static void SetModalDialogCallbackForTesting(base::OnceClosure closure);
+  // Immediately fires the window watcher auto transition timer.
+  static void FireWindowWatcherTimerForTesting();
 
   // Pointer to the session which owns `this`.
   OverviewSession* const overview_session_;

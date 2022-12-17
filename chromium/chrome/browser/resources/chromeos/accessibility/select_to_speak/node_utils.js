@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ParagraphUtils} from '/select_to_speak/paragraph_utils.js';
+import {AutomationPredicate} from '../common/automation_predicate.js';
+import {AutomationUtil} from '../common/automation_util.js';
+import {constants} from '../common/constants.js';
+import {RectUtil} from '../common/rect_util.js';
+
+import {ParagraphUtils} from './paragraph_utils.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 const RoleType = chrome.automation.RoleType;
@@ -32,7 +37,7 @@ export class NodeUtils {
       return NodeUtils.NodeState.NODE_STATE_INVISIBLE;
     }
     // Walk up the tree to make sure the window it is in is not invisible.
-    var window = NodeUtils.getNearestContainingWindow(node);
+    const window = NodeUtils.getNearestContainingWindow(node);
     if (window != null && window.state[chrome.automation.StateType.INVISIBLE]) {
       return NodeUtils.NodeState.NODE_STATE_INVISIBLE;
     }
@@ -237,7 +242,7 @@ export class NodeUtils {
 
     return {
       node: automationPosition.node,
-      offset: automationPosition.textOffset
+      offset: automationPosition.textOffset,
     };
   }
 
@@ -270,7 +275,7 @@ export class NodeUtils {
           node: /** @type {!AutomationNode} */ (child),
           offset: isStart ?
               0 :
-              NodeUtils.nameLength(/** @type {!AutomationNode} */ (child))
+              NodeUtils.nameLength(/** @type {!AutomationNode} */ (child)),
         };
       } else if (isStart && !NodeUtils.isTextField(parent)) {
         // We are off the edge of this parent. Go to the next leaf node that is
@@ -291,7 +296,7 @@ export class NodeUtils {
         if (previousNode) {
           return {
             node: previousNode,
-            offset: NodeUtils.nameLength(previousNode)
+            offset: NodeUtils.nameLength(previousNode),
           };
         }
       }
@@ -351,7 +356,7 @@ export class NodeUtils {
           if (leafNode) {
             return {
               node: leafNode,
-              offset: isStart ? 0 : NodeUtils.nameLength(leafNode)
+              offset: isStart ? 0 : NodeUtils.nameLength(leafNode),
             };
           }
         }
@@ -368,7 +373,7 @@ export class NodeUtils {
       if (leafNode) {
         return {
           node: leafNode,
-          offset: isStart ? 0 : NodeUtils.nameLength(leafNode)
+          offset: isStart ? 0 : NodeUtils.nameLength(leafNode),
         };
       }
     }
@@ -478,8 +483,7 @@ export class NodeUtils {
     return AutomationUtil.findAllNodes(
         blockParent, constants.Dir.FORWARD,
         /* pred= */ NodeUtils.isValidLeafNode, /* opt_restrictions= */ {
-          root: (node) =>
-              node === blockParent,  // Only traverse within the block
+          root: node => node === blockParent,  // Only traverse within the block
         });
   }
 
@@ -494,7 +498,8 @@ export class NodeUtils {
    * @return {!NodeUtils.Position}
    */
   static getPositionFromNodeGroup(nodeGroup, charIndex, fallbackToEnd) {
-    let node, offset;
+    let node;
+    let offset;
     if (charIndex !== undefined) {
       ({node, offset} = ParagraphUtils.findNodeFromNodeGroupByCharIndex(
            nodeGroup, charIndex));

@@ -23,10 +23,11 @@ class MockAutofillAssistant : public AutofillAssistant {
                const std::string& intent,
                GetCapabilitiesResponseCallback callback),
               (override));
-  MOCK_METHOD(std::unique_ptr<ExternalScriptController>,
-              CreateExternalScriptController,
+  MOCK_METHOD(std::unique_ptr<HeadlessScriptController>,
+              CreateHeadlessScriptController,
               (content::WebContents * web_contents,
-               ExternalActionDelegate* action_extension_delegate),
+               ExternalActionDelegate* action_extension_delegate,
+               WebsiteLoginManager* website_login_manager),
               (override));
 };
 

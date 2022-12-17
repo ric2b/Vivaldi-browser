@@ -27,7 +27,7 @@ OSSettingsAccessibilityV3Test.axeOptions = {
     'color-contrast': {enabled: false},
     // The HTML language attribute isn't set by the test_loader.html dummy file.
     'html-has-lang': {enabled: false},
-  }
+  },
 };
 
 // Default accessibility audit options. Specify in test definition to use.
@@ -65,7 +65,7 @@ OSSettingsAccessibilityV3Test.prototype = {
 
   /** @override */
   browsePreload:
-      'chrome://os-settings/test_loader.html?module=settings/a11y/basic_a11y_v3_test.js',
+      'chrome://os-settings/test_loader.html?module=settings/a11y/basic_a11y_v3_test.js&host=test',
 
   // Include files that define the mocha tests.
   extraLibraries: [

@@ -27,6 +27,7 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
@@ -54,6 +55,15 @@ TestRenderFrame::CreateStubBrowserInterfaceBrokerRemote() {
   mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker> pending_receiver =
       pending_remote.InitWithNewPipeAndPassReceiver();
   return pending_remote;
+}
+
+// static
+mojo::PendingAssociatedRemote<blink::mojom::AssociatedInterfaceProvider>
+TestRenderFrame::CreateStubAssociatedInterfaceProviderRemote() {
+  mojo::AssociatedRemote<blink::mojom::AssociatedInterfaceProvider> remote;
+  mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
+      pending_receiver = remote.BindNewEndpointAndPassDedicatedReceiver();
+  return remote.Unbind();
 }
 
 class MockFrameHost : public mojom::FrameHost {
@@ -132,6 +142,8 @@ class MockFrameHost : public mojom::FrameHost {
       mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker_receiver,
       blink::mojom::PolicyContainerBindParamsPtr policy_container_bind_params,
+      mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
+          associated_interface_provider_receiver,
       blink::mojom::TreeScopeType scope,
       const std::string& frame_name,
       const std::string& frame_unique_name,
@@ -139,6 +151,12 @@ class MockFrameHost : public mojom::FrameHost {
       const blink::FramePolicy& frame_policy,
       blink::mojom::FrameOwnerPropertiesPtr frame_owner_properties,
       blink::FrameOwnerElementType owner_type) override {
+    // If we get here, then the remote end of
+    // `associated_interface_provider_receiver` is expected to be usable even
+    // though we don't pass this receiver over an existing mojo pipe. Simulate
+    // doing so by allowing unassociated usage, so that the remote can be used
+    // without blowing up.
+    associated_interface_provider_receiver.EnableUnassociatedUsage();
     MockPolicyContainerHost mock_policy_container_host;
     mock_policy_container_host.BindWithNewEndpoint(
         std::move(policy_container_bind_params->receiver));
@@ -147,30 +165,6 @@ class MockFrameHost : public mojom::FrameHost {
     mock_render_thread->OnCreateChildFrame(
         new_routing_id, std::move(frame_remote),
         std::move(browser_interface_broker_receiver));
-  }
-
-  void CreatePortal(mojo::PendingAssociatedReceiver<blink::mojom::Portal>,
-                    mojo::PendingAssociatedRemote<blink::mojom::PortalClient>,
-                    CreatePortalCallback callback) override {
-    std::move(callback).Run(MSG_ROUTING_NONE,
-                            blink::mojom::FrameReplicationState::New(),
-                            blink::PortalToken(), blink::RemoteFrameToken(),
-                            base::UnguessableToken());
-  }
-
-  void AdoptPortal(const blink::PortalToken&,
-                   AdoptPortalCallback callback) override {
-    std::move(callback).Run(
-        MSG_ROUTING_NONE, blink::mojom::FrameReplicationState::New(),
-        blink::RemoteFrameToken(), base::UnguessableToken());
-  }
-
-  void CreateFencedFrame(
-      mojo::PendingAssociatedReceiver<blink::mojom::FencedFrameOwnerHost>,
-      blink::mojom::FencedFrameMode,
-      CreateFencedFrameCallback) override {
-    NOTREACHED() << "At the moment, content::FencedFrame is not used in any "
-                    "unit tests, so this path should not be hit";
   }
 
   void DidCommitSameDocumentNavigation(
@@ -187,7 +181,8 @@ class MockFrameHost : public mojom::FrameHost {
       blink::mojom::BeginNavigationParamsPtr begin_params,
       mojo::PendingRemote<blink::mojom::BlobURLToken> blob_url_token,
       mojo::PendingAssociatedRemote<mojom::NavigationClient>,
-      mojo::PendingRemote<blink::mojom::PolicyContainerHostKeepAliveHandle>)
+      mojo::PendingRemote<blink::mojom::PolicyContainerHostKeepAliveHandle>,
+      mojo::PendingReceiver<mojom::NavigationRendererCancellationListener>)
       override {}
 
   void SubresourceResponseStarted(const url::SchemeHostPort& final_response_url,
@@ -273,7 +268,7 @@ void TestRenderFrame::Navigate(
       blink::mojom::ControllerServiceWorkerInfoPtr(),
       blink::mojom::ServiceWorkerContainerInfoForClientPtr(),
       mojo::NullRemote() /* prefetch_loader_factory */,
-      base::UnguessableToken::Create(),
+      base::UnguessableToken::Create(), blink::ParsedPermissionsPolicy(),
       blink::mojom::PolicyContainer::New(
           blink::mojom::PolicyContainerPolicies::New(),
           mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote()),
@@ -358,6 +353,10 @@ void TestRenderFrame::BeginNavigation(
           navigation_params.get(), blink::WebString::FromUTF8(mime_type),
           blink::WebString::FromUTF8(charset), data);
     }
+
+    navigation_params->policy_container->policies.sandbox_flags =
+        navigation_params->frame_policy->sandbox_flags;
+
     frame_->CommitNavigation(std::move(navigation_params),
                              nullptr /* extra_data */);
     return;

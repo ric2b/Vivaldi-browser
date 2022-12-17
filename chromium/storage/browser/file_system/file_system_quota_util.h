@@ -20,6 +20,7 @@ class StorageKey;
 
 namespace storage {
 
+struct BucketLocator;
 class FileSystemContext;
 class QuotaManagerProxy;
 class QuotaReservation;
@@ -32,12 +33,20 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemQuotaUtil {
  public:
   virtual ~FileSystemQuotaUtil() = default;
 
-  // Deletes the data on the origin and reports the amount of deleted data
+  // Deletes the data on the StorageKey and reports the amount of deleted data
   // to the quota manager via |proxy|.
   virtual base::File::Error DeleteStorageKeyDataOnFileTaskRunner(
       FileSystemContext* context,
       QuotaManagerProxy* proxy,
       const blink::StorageKey& storage_key,
+      FileSystemType type) = 0;
+
+  // Deletes the data on the bucket and reports the amount of deleted data
+  // to the quota manager via |proxy|.
+  virtual base::File::Error DeleteBucketDataOnFileTaskRunner(
+      FileSystemContext* context,
+      QuotaManagerProxy* proxy,
+      const BucketLocator& bucket_locator,
       FileSystemType type) = 0;
 
   virtual void PerformStorageCleanupOnFileTaskRunner(FileSystemContext* context,
@@ -51,6 +60,13 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemQuotaUtil {
   virtual int64_t GetStorageKeyUsageOnFileTaskRunner(
       FileSystemContext* file_system_context,
       const blink::StorageKey& storage_key,
+      FileSystemType type) = 0;
+
+  // Returns the amount of data used for the `bucket_locator` for usage
+  // tracking.
+  virtual int64_t GetBucketUsageOnFileTaskRunner(
+      FileSystemContext* file_system_context,
+      const BucketLocator& bucket_locator,
       FileSystemType type) = 0;
 
   // Creates new reservation object for the `storage_key` and the `type`.

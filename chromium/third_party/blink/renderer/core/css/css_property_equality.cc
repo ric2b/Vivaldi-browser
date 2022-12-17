@@ -173,8 +173,16 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
                                     b.GetFontDescription().VariationSettings());
     case CSSPropertyID::kFontWeight:
       return a.GetFontWeight() == b.GetFontWeight();
+    case CSSPropertyID::kGridTemplateColumns:
+      return a.GridTemplateColumns() == b.GridTemplateColumns();
+    case CSSPropertyID::kGridTemplateRows:
+      return a.GridTemplateRows() == b.GridTemplateRows();
     case CSSPropertyID::kHeight:
       return a.Height() == b.Height();
+    case CSSPropertyID::kPopUpShowDelay:
+      return a.PopUpShowDelay() == b.PopUpShowDelay();
+    case CSSPropertyID::kPopUpHideDelay:
+      return a.PopUpHideDelay() == b.PopUpHideDelay();
     case CSSPropertyID::kLeft:
       return a.Left() == b.Left();
     case CSSPropertyID::kLetterSpacing:

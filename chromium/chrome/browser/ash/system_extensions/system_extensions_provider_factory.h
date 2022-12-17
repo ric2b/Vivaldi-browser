@@ -29,14 +29,15 @@ class SystemExtensionsProviderFactory
 
   static SystemExtensionsProviderFactory& GetInstance();
 
- private:
-  friend base::NoDestructor<SystemExtensionsProviderFactory>;
-
-  SystemExtensionsProviderFactory();
   SystemExtensionsProviderFactory(const SystemExtensionsProviderFactory&) =
       delete;
   SystemExtensionsProviderFactory& operator=(
       const SystemExtensionsProviderFactory&) = delete;
+
+ private:
+  friend base::NoDestructor<SystemExtensionsProviderFactory>;
+
+  SystemExtensionsProviderFactory();
   ~SystemExtensionsProviderFactory() override;
 
   // BrowserContextKeyedServiceFactory:
@@ -45,6 +46,8 @@ class SystemExtensionsProviderFactory
   bool ServiceIsCreatedWithBrowserContext() const override;
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
+  void RegisterProfilePrefs(
+      user_prefs::PrefRegistrySyncable* registry) override;
 };
 
 }  // namespace ash

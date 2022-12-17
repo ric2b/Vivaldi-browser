@@ -23,6 +23,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/cookie_controls/cookie_controls_service.h"
 #include "chrome/browser/ui/cookie_controls/cookie_controls_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -51,6 +52,7 @@
 #include "ui/base/theme_provider.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/native_theme/native_theme.h"
 
@@ -96,9 +98,9 @@ std::string ReplaceTemplateExpressions(
 }  // namespace
 
 SkColor GetThemeColor(const ui::NativeTheme* native_theme,
-                      const ui::ThemeProvider& tp,
+                      const ui::ColorProvider& cp,
                       int id) {
-  SkColor color = tp.GetColor(id);
+  SkColor color = cp.GetColor(id);
   // If web contents are being inverted because the system is in high-contrast
   // mode, any system theme colors we use must be inverted too to cancel out.
   return native_theme->GetPlatformHighContrastColorScheme() ==
@@ -322,14 +324,11 @@ void NTPResourceCache::CreateNewTabIncognitoHTML(
   replacements["cookieControlsTooltipText"] = l10n_util::GetStringUTF8(
       IDS_NEW_TAB_OTR_COOKIE_CONTROLS_CONTROLLED_TOOLTIP_TEXT);
 
-  // Requesting the incognito HTML is only done from within incognito browser
-  // windows. The ThemeProvider associated with the requesting WebContents will
-  // wrap the relevant incognito bits.
-  const ui::ThemeProvider* tp = webui::GetThemeProvider(wc_getter.Run());
-  DCHECK(tp);
+  const ui::ThemeProvider& tp =
+      ThemeService::GetThemeProviderForProfile(incognito_profile);
 
   replacements["hasCustomBackground"] =
-      tp->HasCustomImage(IDR_THEME_NTP_BACKGROUND) ? "true" : "false";
+      tp.HasCustomImage(IDR_THEME_NTP_BACKGROUND) ? "true" : "false";
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   webui::SetLoadTimeDataDefaults(app_locale, &replacements);
@@ -422,11 +421,8 @@ void NTPResourceCache::CreateNewTabIncognitoCSS(
   const ui::NativeTheme* native_theme = webui::GetNativeTheme(web_contents);
   DCHECK(native_theme);
 
-  // Requesting the incognito CSS is only done from within incognito browser
-  // windows. The ThemeProvider associated with the requesting WebContents will
-  // wrap the relevant incognito bits.
-  const ui::ThemeProvider* tp = webui::GetThemeProvider(web_contents);
-  DCHECK(tp);
+  const ui::ThemeProvider& tp = ThemeService::GetThemeProviderForProfile(
+      profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
   // Generate the replacements.
   ui::TemplateReplacements substitutions;
@@ -436,10 +432,11 @@ void NTPResourceCache::CreateNewTabIncognitoCSS(
       profile_->GetPrefs()->GetString(prefs::kCurrentThemeID);
 
   // Colors.
+  const ui::ColorProvider& cp = web_contents->GetColorProvider();
   substitutions["colorBackground"] = color_utils::SkColorToRgbaString(
-      GetThemeColor(native_theme, *tp, ThemeProperties::COLOR_NTP_BACKGROUND));
-  substitutions["backgroundPosition"] = GetNewTabBackgroundPositionCSS(*tp);
-  substitutions["backgroundTiling"] = GetNewTabBackgroundTilingCSS(*tp);
+      GetThemeColor(native_theme, cp, kColorNewTabPageBackground));
+  substitutions["backgroundPosition"] = GetNewTabBackgroundPositionCSS(tp);
+  substitutions["backgroundTiling"] = GetNewTabBackgroundTilingCSS(tp);
 
   // Get our template.
   static const base::NoDestructor<scoped_refptr<base::RefCountedMemory>>
@@ -461,19 +458,19 @@ void NTPResourceCache::CreateNewTabCSS(
   const ui::NativeTheme* native_theme = webui::GetNativeTheme(web_contents);
   DCHECK(native_theme);
 
-  const ui::ThemeProvider* tp = webui::GetThemeProvider(web_contents);
-  DCHECK(tp);
+  const ui::ThemeProvider& tp =
+      ThemeService::GetThemeProviderForProfile(profile_);
+  const ui::ColorProvider& cp = web_contents->GetColorProvider();
 
   // Get our theme colors.
   SkColor color_background =
-      GetThemeColor(native_theme, *tp, ThemeProperties::COLOR_NTP_BACKGROUND);
-  SkColor color_text =
-      GetThemeColor(native_theme, *tp, ThemeProperties::COLOR_NTP_TEXT);
+      GetThemeColor(native_theme, cp, kColorNewTabPageBackground);
+  SkColor color_text = GetThemeColor(native_theme, cp, kColorNewTabPageText);
   SkColor color_text_light =
-      GetThemeColor(native_theme, *tp, ThemeProperties::COLOR_NTP_TEXT_LIGHT);
+      GetThemeColor(native_theme, cp, kColorNewTabPageTextLight);
 
-  SkColor color_section_border = GetThemeColor(
-      native_theme, *tp, ThemeProperties::COLOR_NTP_SECTION_BORDER);
+  SkColor color_section_border =
+      GetThemeColor(native_theme, cp, kColorNewTabPageSectionBorder);
 
   // Generate the replacements.
   ui::TemplateReplacements substitutions;
@@ -486,9 +483,9 @@ void NTPResourceCache::CreateNewTabCSS(
   substitutions["colorBackground"] =
       color_utils::SkColorToRgbaString(color_background);
   substitutions["colorLink"] = color_utils::SkColorToRgbString(
-      GetThemeColor(native_theme, *tp, ThemeProperties::COLOR_NTP_LINK));
-  substitutions["backgroundPosition"] = GetNewTabBackgroundPositionCSS(*tp);
-  substitutions["backgroundTiling"] = GetNewTabBackgroundTilingCSS(*tp);
+      GetThemeColor(native_theme, cp, kColorNewTabPageLink));
+  substitutions["backgroundPosition"] = GetNewTabBackgroundPositionCSS(tp);
+  substitutions["backgroundTiling"] = GetNewTabBackgroundTilingCSS(tp);
   substitutions["colorTextRgba"] = color_utils::SkColorToRgbaString(color_text);
   substitutions["colorTextLight"] =
       color_utils::SkColorToRgbaString(color_text_light);
@@ -499,7 +496,7 @@ void NTPResourceCache::CreateNewTabCSS(
   // For themes that right-align the background, we flip the attribution to the
   // left to avoid conflicts.
   int alignment =
-      tp->GetDisplayProperty(ThemeProperties::NTP_BACKGROUND_ALIGNMENT);
+      tp.GetDisplayProperty(ThemeProperties::NTP_BACKGROUND_ALIGNMENT);
   if (alignment & ThemeProperties::ALIGN_RIGHT) {
     substitutions["leftAlignAttribution"] = "0";
     substitutions["rightAlignAttribution"] = "auto";
@@ -511,7 +508,7 @@ void NTPResourceCache::CreateNewTabCSS(
   }
 
   substitutions["displayAttribution"] =
-      tp->HasCustomImage(IDR_THEME_NTP_ATTRIBUTION) ? "inline" : "none";
+      tp.HasCustomImage(IDR_THEME_NTP_ATTRIBUTION) ? "inline" : "none";
 
   // Get our template.
   static const base::NoDestructor<scoped_refptr<base::RefCountedMemory>>

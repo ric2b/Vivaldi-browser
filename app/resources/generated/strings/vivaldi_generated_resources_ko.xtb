@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">유휴 상태 해제</translation>
 <translation id="119944043368869598">모두 삭제</translation>
 <translation id="1221825588892235038">선택 영역만</translation>
+<translation id="1234736487471201993">이 이미지의 QR코드 생성</translation>
 <translation id="1244303850296295656">확장 프로그램 오류</translation>
 <translation id="125220115284141797">기본값</translation>
 <translation id="1297175357211070620">대상</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">탭 전송</translation>
 <translation id="2150139952286079145">대상 검색</translation>
 <translation id="215753907730220065">전체화면 종료</translation>
+<translation id="2158475082070321257">강조 표시된 링크 복사</translation>
 <translation id="2177950615300672361">시크릿 탭: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">네이티브 클라이언트 모듈: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">일반 텍스트로 붙여넣기</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">사이트에서 식별자를 사용하여 기기를 인식해야 할 수도 있습니다</translation>
 <translation id="2445081178310039857">확장 프로그램 루트 디렉토리가 필요합니다.</translation>
 <translation id="2470702053775288986">지원되지 않는 확장 프로그램이 사용 중지됨</translation>
-<translation id="2476578072172137802">사이트 설정</translation>
+<translation id="2485422356828889247">제거</translation>
 <translation id="2498539833203011245">최소화</translation>
 <translation id="2509495747794740764">배율 값은 10에서 200 사이의 숫자여야 합니다.</translation>
 <translation id="253557089021624350">프로그램 사용 수</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">악용사례 신고</translation>
 <translation id="2941112035454246133">낮음</translation>
 <translation id="2972581237482394796">다시 실행(&amp;R)</translation>
+<translation id="2993517869960930405">앱 정보</translation>
 <translation id="3003623123441819449">CSS 캐시</translation>
 <translation id="3008272652534848354">권한 재설정</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">다음으로 링크 열기</translation>
 <translation id="3222066309010235055">사전 렌더링: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">압축할 확장 프로그램의 루트 디렉토리를 선택합니다. 확장 프로그램을 업데이트하려면 다시 사용할 비공개 키 파일도 선택합니다.</translation>
+<translation id="3275778913554317645">창으로 열기</translation>
 <translation id="3280237271814976245">다른 이름으로 저장(&amp;A)...</translation>
 <translation id="3285322247471302225">새 탭(&amp;T)</translation>
 <translation id="3288047731229977326">개발자 모드로 실행 중인 확장 프로그램은 컴퓨터에 해를 줄 수 있습니다. 개발자가 아닌 경우 컴퓨터를 안전하게 사용하려면 개발자 모드로 실행 중인 확장 프로그램을 사용 중지해야 합니다.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">기본 응용 프로그램에서 PDF 보기</translation>
 <translation id="3308134619352333507">버튼 숨기기</translation>
 <translation id="3317459757438853210">양면</translation>
+<translation id="3331974543021145906">앱 정보</translation>
 <translation id="3341703758641437857">파일 URL에 접근 허용</translation>
 <translation id="3347086966102161372">이미지 주소 복사(&amp;O)</translation>
 <translation id="3360297538363969800">인쇄에 실패했습니다. 프린터를 확인한 후 다시 시도해 주세요.</translation>
 <translation id="3378572629723696641">확장 프로그램이 손상되었을 수도 있습니다.</translation>
 <translation id="3387614642886316601">향상된 맞춤법 검사 기능 사용</translation>
+<translation id="3390013585654699824">앱 세부정보</translation>
 <translation id="3393582007140394275">화면을 전송할 수 없습니다.</translation>
 <translation id="3432227430032737297">표시된 항목 모두 제거</translation>
 <translation id="345693547134384690">새 탭에서 이미지 열기(&amp;I)</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504"><ph name="SEARCH_ENGINE" />에서 이미지 검색(&amp;S)</translation>
 <translation id="3955193568934677022">사이트에서 보호된 콘텐츠를 재생하도록 허용(권장)</translation>
 <translation id="3979395879372752341">새 확장 프로그램이 추가됨(<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">강조 표시된 링크 복사</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">사전에 추가 (&amp;A)</translation>
 <translation id="407520071244661467">배율</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">가져오기 전에 Firefox 창 닫기</translation>
 <translation id="4130207949184424187">검색주소창에서 검색하면 표시되는 페이지가 이 확장 프로그램으로 인해 변경되었습니다.</translation>
 <translation id="4131410914670010031">흑백</translation>
+<translation id="4165986682804962316">사이트 설정</translation>
 <translation id="4176463684765177261">사용 중지</translation>
 <translation id="4200983522494130825">새 탭(&amp;T)</translation>
 <translation id="4225397296022057997">모든 사이트에서</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">설정 복원</translation>
 <translation id="4726710629007580002">이 확장 프로그램을 설치하려고 할 때 경고가 발생했습니다:</translation>
 <translation id="479536056609751218">웹페이지, HTML만</translation>
+<translation id="4827904420700932487">이 이미지의 QR코드 생성</translation>
 <translation id="4839303808932127586">다른 이름으로 동영상 저장(&amp;V)...</translation>
 <translation id="4840096453115567876">그래도 사생활 보호 모드를 종료하시겠습니까?</translation>
 <translation id="488785315393301722">세부정보 표시</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">액세스하기 전에 확인(권장)</translation>
 <translation id="5677928146339483299">차단됨</translation>
 <translation id="5707185214361380026">확장 프로그램을 불러오는 데 실패했습니다:</translation>
+<translation id="5713171467967533494">Vivaldi 브라우저에서 열기</translation>
 <translation id="5715711091495208045">플러그인 중개인: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF로 저장</translation>
 <translation id="5747809636523347288"><ph name="URL" /> 붙여넣기 및 이동(&amp;S)</translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">설정</translation>
 <translation id="6579369886355986318">모든 제어 기능 표시 &amp;controls</translation>
 <translation id="6639554308659482635">SQLite 메모리</translation>
+<translation id="666731172850799929"><ph name="APP_NAME" />에서 열기</translation>
 <translation id="6686817083349815241">비밀번호 저장</translation>
 <translation id="6691936601825168937">앞으로(F)</translation>
 <translation id="6798954102094737107">플러그인: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@
 <translation id="9003647077635673607">모든 웹사이트에서 허용</translation>
 <translation id="9027459031423301635">새 탭에서 링크 열기(&amp;T)</translation>
 <translation id="9056810968620647706">일치하는 항목이 없습니다.</translation>
+<translation id="9084064520949870008">창으로 열기</translation>
 <translation id="9137916601698928395"><ph name="USER" />(으)로 링크 열기</translation>
 <translation id="91568222606626347">바로가기 만들기...</translation>
 <translation id="916607977885256133">PIP 모드</translation>

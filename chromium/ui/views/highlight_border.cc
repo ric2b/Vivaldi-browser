@@ -4,7 +4,7 @@
 
 #include "ui/views/highlight_border.h"
 
-#include "ash/constants/ash_features.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/gfx/canvas.h"
@@ -19,17 +19,15 @@ namespace views {
 // static
 void HighlightBorder::PaintBorderToCanvas(
     gfx::Canvas* canvas,
-    const views::View& view,
+    SkColor highlight_color,
+    SkColor border_color,
     const gfx::Rect& bounds,
     const gfx::RoundedCornersF& corner_radii,
     Type type,
     bool use_light_colors) {
-  SkColor inner_color = GetHighlightColor(view, type, use_light_colors);
-  SkColor outer_color = GetBorderColor(view, type, use_light_colors);
-
   cc::PaintFlags flags;
   flags.setStrokeWidth(kHighlightBorderThickness);
-  flags.setColor(outer_color);
+  flags.setColor(border_color);
   flags.setStyle(cc::PaintFlags::kStroke_Style);
   flags.setAntiAlias(true);
 
@@ -56,10 +54,23 @@ void HighlightBorder::PaintBorderToCanvas(
   gfx::RectF inner_border_bounds(pixel_bounds);
   inner_border_bounds.Inset(kHighlightBorderThickness);
   inner_border_bounds.Inset(half_thickness);
-  flags.setColor(inner_color);
+  flags.setColor(highlight_color);
   SkPath inner_path;
   inner_path.addRoundRect(gfx::RectFToSkRect(inner_border_bounds), radii);
   canvas->DrawPath(inner_path, flags);
+}
+
+// static
+void HighlightBorder::PaintBorderToCanvas(
+    gfx::Canvas* canvas,
+    const views::View& view,
+    const gfx::Rect& bounds,
+    const gfx::RoundedCornersF& corner_radii,
+    Type type,
+    bool use_light_colors) {
+  PaintBorderToCanvas(canvas, GetHighlightColor(view, type, use_light_colors),
+                      GetBorderColor(view, type, use_light_colors), bounds,
+                      corner_radii, type, use_light_colors);
 }
 
 // static
@@ -71,14 +82,24 @@ SkColor HighlightBorder::GetHighlightColor(const views::View& view,
     // TODO(crbug/1319917): These light color values are used here since we want
     // to use light colors when dark/light mode feature is not enabled. This
     // should be removed after dark light mode is launched.
-    DCHECK(!ash::features::IsDarkLightModeEnabled());
+    DCHECK(!chromeos::features::IsDarkLightModeEnabled());
+    // `kHighlightBorder3` can only be used when the dark light mode is enabled.
+    DCHECK(type != HighlightBorder::Type::kHighlightBorder3);
     highlight_color_id = type == HighlightBorder::Type::kHighlightBorder1
                              ? ui::kColorAshSystemUILightHighlightColor1
                              : ui::kColorAshSystemUILightHighlightColor2;
   } else {
-    highlight_color_id = type == HighlightBorder::Type::kHighlightBorder1
-                             ? ui::kColorAshSystemUIHighlightColor1
-                             : ui::kColorAshSystemUIHighlightColor2;
+    switch (type) {
+      case HighlightBorder::Type::kHighlightBorder1:
+        highlight_color_id = ui::kColorHighlightBorderHighlight1;
+        break;
+      case HighlightBorder::Type::kHighlightBorder2:
+        highlight_color_id = ui::kColorHighlightBorderHighlight2;
+        break;
+      case HighlightBorder::Type::kHighlightBorder3:
+        highlight_color_id = ui::kColorHighlightBorderHighlight3;
+        break;
+    }
   }
 
   // `view` should be embedded in a Widget to use color provider.
@@ -95,14 +116,24 @@ SkColor HighlightBorder::GetBorderColor(const views::View& view,
     // TODO(crbug/1319917): These light color values are used here since we want
     // to use light colors when dark/light mode feature is not enabled. This
     // should be removed after dark light mode is launched.
-    DCHECK(!ash::features::IsDarkLightModeEnabled());
+    DCHECK(!chromeos::features::IsDarkLightModeEnabled());
+    // `kHighlightBorder3` can only be used when the dark light mode is enabled.
+    DCHECK(type != HighlightBorder::Type::kHighlightBorder3);
     border_color_id = type == HighlightBorder::Type::kHighlightBorder1
                           ? ui::kColorAshSystemUILightBorderColor1
                           : ui::kColorAshSystemUILightBorderColor2;
   } else {
-    border_color_id = type == HighlightBorder::Type::kHighlightBorder1
-                          ? ui::kColorAshSystemUIBorderColor1
-                          : ui::kColorAshSystemUIBorderColor2;
+    switch (type) {
+      case HighlightBorder::Type::kHighlightBorder1:
+        border_color_id = ui::kColorHighlightBorderBorder1;
+        break;
+      case HighlightBorder::Type::kHighlightBorder2:
+        border_color_id = ui::kColorHighlightBorderBorder2;
+        break;
+      case HighlightBorder::Type::kHighlightBorder3:
+        border_color_id = ui::kColorHighlightBorderBorder3;
+        break;
+    }
   }
 
   // `view` should be embedded in a Widget to use color provider.

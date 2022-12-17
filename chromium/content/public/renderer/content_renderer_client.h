@@ -96,7 +96,8 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual void RenderFrameCreated(RenderFrame* render_frame) {}
 
   // Notifies that a new WebView has been created.
-  virtual void WebViewCreated(blink::WebView* web_view) {}
+  virtual void WebViewCreated(blink::WebView* web_view,
+                              bool was_created_by_renderer) {}
 
   // Returns the bitmap to show when a plugin crashed, or NULL for none.
   virtual SkBitmap* GetSadPluginBitmap();
@@ -182,6 +183,11 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
   CreateWebSocketHandshakeThrottleProvider();
 
+  // Called immediately after the sandbox is initialized on the main thread.
+  // (If the renderer is run with --no-sandbox, it is still called in
+  // RendererMain at about the same time.)
+  virtual void PostSandboxInitialized() {}
+
   // Called on the main-thread immediately after the io thread is
   // created.
   virtual void PostIOThreadCreated(
@@ -210,7 +216,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // Returns true if the navigation was handled by the embedder and should be
   // ignored by WebKit. This method is used by CEF and android_webview.
   virtual bool HandleNavigation(RenderFrame* render_frame,
-                                bool render_view_was_created_by_renderer,
                                 blink::WebFrame* frame,
                                 const blink::WebURLRequest& request,
                                 blink::WebNavigationType type,

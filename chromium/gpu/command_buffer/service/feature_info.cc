@@ -20,7 +20,6 @@
 #include "build/chromecast_buildflags.h"
 #include "build/chromeos_buildflags.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
-#include "gpu/command_buffer/service/native_image_buffer.h"
 #include "gpu/config/gpu_switches.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_fence.h"
@@ -312,10 +311,9 @@ bool IsGL_REDSupportedOnFBOs() {
 #endif  // BUILDFLAG(IS_MAC)
 }
 
-void FeatureInfo::EnableCHROMIUMTextureStorageImage() {
-  if (!feature_flags_.chromium_texture_storage_image) {
-    feature_flags_.chromium_texture_storage_image = true;
-    AddExtensionString("GL_CHROMIUM_texture_storage_image");
+void FeatureInfo::EnableTextureStorageImage() {
+  if (!feature_flags_.texture_storage_image) {
+    feature_flags_.texture_storage_image = true;
   }
 }
 
@@ -500,7 +498,6 @@ void FeatureInfo::InitializeFeatures() {
 
   AddExtensionString("GL_CHROMIUM_async_pixel_transfers");
   AddExtensionString("GL_CHROMIUM_bind_uniform_location");
-  AddExtensionString("GL_CHROMIUM_color_space_metadata");
   AddExtensionString("GL_CHROMIUM_command_buffer_query");
   AddExtensionString("GL_CHROMIUM_command_buffer_latency_query");
   AddExtensionString("GL_CHROMIUM_copy_texture");
@@ -988,20 +985,23 @@ void FeatureInfo::InitializeFeatures() {
     validators_.texture_sized_texture_filterable_internal_format.AddValue(
         GL_BGRA8_EXT);
     feature_flags_.gpu_memory_buffer_formats.Add(gfx::BufferFormat::BGRA_8888);
-#if BUILDFLAG(IS_MAC)
-    // TODO(sugoi): Remove this once crbug.com/1276529 is fixed.
-    // On Mac OS, DrawingBuffer is using an IOSurface as its backing storage,
-    // this allows WebGL-rendered canvases to be composited by the OS rather
-    // than Chrome. Currently, this causes an issue on MacOS with SwANGLE when
-    // alpha is false, so disable that case for now so that we go through
-    // emulation.
-    if (!gl_version_info_->is_angle_swiftshader)
-#endif
-    {
-      feature_flags_.gpu_memory_buffer_formats.Add(
-          gfx::BufferFormat::BGRX_8888);
-    }
+    feature_flags_.gpu_memory_buffer_formats.Add(gfx::BufferFormat::BGRX_8888);
   }
+
+#if BUILDFLAG(IS_MAC)
+  // TODO(sugoi): Remove this once crbug.com/1276529 is fixed.
+  // On Mac OS, DrawingBuffer is using an IOSurface as its backing storage,
+  // this allows WebGL-rendered canvases to be composited by the OS rather
+  // than Chrome. Currently, this causes an issue on MacOS with SwANGLE when
+  // alpha is false, so disable that case for now so that we go through
+  // emulation.
+  if (gl_version_info_->is_angle_swiftshader) {
+    feature_flags_.gpu_memory_buffer_formats.Remove(
+        gfx::BufferFormat::RGBX_8888);
+    feature_flags_.gpu_memory_buffer_formats.Remove(
+        gfx::BufferFormat::BGRX_8888);
+  }
+#endif
 
   // On desktop, all devices support BGRA render buffers (note that on desktop
   // BGRA internal formats are converted to RGBA in the API implementation).

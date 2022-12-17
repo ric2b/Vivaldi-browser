@@ -7,3 +7,39 @@ update_target("//components/bookmarks/browser:browser") {
     "//vivaldi/app:vivaldi_unscaled_native_resources",
   ]
 }
+
+if (is_ios) {
+  update_target("//ios/chrome/app/resources:packed_resources") {
+    public_deps += [
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/app:vivaldi_ios_native_strings",
+      "//vivaldi/app:vivaldi_mobile_common_native_strings_grd",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+      "//vivaldi/app:vivaldi_ios_merge_repacks",
+    ]
+  }
+
+  update_template_instance("//ios/chrome/app/resources:repack_locales") {
+    ios_locales_pack_extra_source_patterns = [
+      "${root_gen_dir}/vivaldi/app/vivaldi_native_strings_",
+      "${root_gen_dir}/vivaldi/ios/vivaldi_ios_native_strings_",
+      "${root_gen_dir}/vivaldi/mobile_common/vivaldi_mobile_common_native_strings_",
+    ]
+    ios_locales_pack_extra_deps = [
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/app:vivaldi_ios_native_strings",
+      "//vivaldi/app:vivaldi_mobile_common_native_strings_grd",
+    ]
+  }
+
+  foreach(_percent, [100, 200]){
+    update_template_instance("//ios/chrome/app/resources:repack_scalable_resources_${_percent}") {
+      sources += [
+        "$root_gen_dir/vivaldi/vivaldi_native_resources_${_percent}_percent.pak",
+      ]
+      deps += [
+        "//vivaldi/app:vivaldi_native_resources",
+      ]
+    }
+  }
+}

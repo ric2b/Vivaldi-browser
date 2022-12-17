@@ -7,7 +7,7 @@
  * profile avatar icons and allows an avatar to be selected.
  */
 
-import '../cr_button/cr_button.m.js';
+import '../cr_button/cr_button.js';
 import '../shared_vars_css.m.js';
 import '../shared_style_css.m.js';
 import '//resources/polymer/v3_0/paper-styles/color.js';
@@ -20,13 +20,13 @@ import {getImage} from '../../js/icon.js';
 
 import {getTemplate} from './cr_profile_avatar_selector.html.js';
 
-export type AvatarIcon = {
-  url: string,
-  label: string,
-  index: number,
-  isGaiaAvatar: boolean,
-  selected: boolean,
-};
+export interface AvatarIcon {
+  url: string;
+  label: string;
+  index: number;
+  isGaiaAvatar: boolean;
+  selected: boolean;
+}
 
 export class CrProfileAvatarSelectorElement extends PolymerElement {
   static get is() {
@@ -46,7 +46,7 @@ export class CrProfileAvatarSelectorElement extends PolymerElement {
         type: Array,
         value() {
           return [];
-        }
+        },
       },
 
       /**

@@ -195,15 +195,13 @@ DevToolsFileHelper::FileSystem CreateFileSystemStruct(
 
 using PathToType = std::map<std::string, std::string>;
 PathToType GetAddedFileSystemPaths(Profile* profile) {
-  const base::DictionaryValue* file_systems_paths_value =
-      &base::Value::AsDictionaryValue(
-          *profile->GetPrefs()->GetDictionary(prefs::kDevToolsFileSystemPaths));
+  const base::Value::Dict& file_systems_paths_value =
+      profile->GetPrefs()->GetValueDict(prefs::kDevToolsFileSystemPaths);
   PathToType result;
-  for (base::DictionaryValue::Iterator it(*file_systems_paths_value);
-       !it.IsAtEnd(); it.Advance()) {
+  for (auto pair : file_systems_paths_value) {
     std::string type =
-        it.value().is_string() ? it.value().GetString() : std::string();
-    result[it.key()] = type;
+        pair.second.is_string() ? pair.second.GetString() : std::string();
+    result[pair.first] = type;
   }
   return result;
 }
@@ -249,12 +247,11 @@ void DevToolsFileHelper::Save(const std::string& url,
     return;
   }
 
-  const base::DictionaryValue* file_map = &base::Value::AsDictionaryValue(
-      *profile_->GetPrefs()->GetDictionary(prefs::kDevToolsEditedFiles));
+  const base::Value::Dict& file_map =
+      profile_->GetPrefs()->GetValueDict(prefs::kDevToolsEditedFiles);
   base::FilePath initial_path;
 
-  const base::Value* path_value;
-  if (file_map->Get(base::MD5String(url), &path_value)) {
+  if (const base::Value* path_value = file_map.Find(base::MD5String(url))) {
     absl::optional<base::FilePath> path = base::ValueToFilePath(*path_value);
     if (path)
       initial_path = std::move(*path);
@@ -449,9 +446,9 @@ bool DevToolsFileHelper::IsFileSystemAdded(
     const std::string& file_system_path) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  const base::Value* file_systems_paths_value =
-      profile_->GetPrefs()->GetDictionary(prefs::kDevToolsFileSystemPaths);
-  return file_systems_paths_value->FindKey(file_system_path);
+  const base::Value::Dict& file_systems_paths_value =
+      profile_->GetPrefs()->GetValueDict(prefs::kDevToolsFileSystemPaths);
+  return file_systems_paths_value.Find(file_system_path);
 }
 
 void DevToolsFileHelper::OnOpenItemComplete(

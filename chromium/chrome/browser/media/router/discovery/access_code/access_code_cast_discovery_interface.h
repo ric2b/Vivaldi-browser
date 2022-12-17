@@ -15,7 +15,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/access_code_cast/access_code_cast.mojom.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
-#include "components/leveldb_proto/public/proto_database.h"
 #include "components/media_router/browser/logger_impl.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -39,14 +38,8 @@ class AccessCodeCastDiscoveryInterface {
 
   AccessCodeCastDiscoveryInterface(Profile* profile,
                                    const std::string& access_code,
-                                   LoggerImpl* logger);
-
-  // Used for tests. Can be used if caller constructs their own EndpointFetcher.
-  AccessCodeCastDiscoveryInterface(
-      Profile* profile,
-      const std::string& access_code,
-      LoggerImpl* logger,
-      std::unique_ptr<EndpointFetcher> endpoint_fetcher);
+                                   LoggerImpl* logger,
+                                   signin::IdentityManager* identity_manager);
 
   virtual ~AccessCodeCastDiscoveryInterface();
 
@@ -70,6 +63,14 @@ class AccessCodeCastDiscoveryInterface {
 
   std::unique_ptr<EndpointFetcher> CreateEndpointFetcher(
       const std::string& access_code);
+
+  // Used for tests. Can be used if caller constructs their own EndpointFetcher.
+  AccessCodeCastDiscoveryInterface(
+      Profile* profile,
+      const std::string& access_code,
+      LoggerImpl* logger,
+      signin::IdentityManager* identity_manager,
+      std::unique_ptr<EndpointFetcher> endpoint_fetcher);
 
   void SetDeviceCapabilitiesField(
       chrome_browser_media::proto::DeviceCapabilities* device_proto,
@@ -95,6 +96,8 @@ class AccessCodeCastDiscoveryInterface {
   const std::string access_code_;
 
   const raw_ptr<LoggerImpl> logger_;
+
+  const raw_ptr<signin::IdentityManager> identity_manager_;
 
   std::unique_ptr<EndpointFetcher> endpoint_fetcher_;
 

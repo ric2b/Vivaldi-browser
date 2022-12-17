@@ -16,24 +16,35 @@
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+class GURL;
+
 namespace base {
 class CommandLine;
 class Value;
 class Version;
 }  // namespace base
 
-class GURL;
-
 namespace updater {
-
 enum class UpdaterScope;
+}  // namespace updater
 
-namespace test {
+namespace updater::test {
 
 class ScopedServer;
 
-// Returns the path to the updater executable (in the build output directory).
+// Returns the path to the updater installer program (in the build output
+// directory). This is typically the updater setup, or the updater itself for
+// the platforms where a setup program is not provided.
 base::FilePath GetSetupExecutablePath();
+
+// Returns the names for processes which may be running during unit tests.
+std::vector<base::FilePath::StringType> GetTestProcessNames();
+
+// Ensures test processes are not running after the function is called.
+void CleanProcesses();
+
+// Verifies that test processes are not running.
+void ExpectCleanProcesses();
 
 // Prints the updater.log file to stdout.
 void PrintLog(UpdaterScope scope);
@@ -98,6 +109,11 @@ void Update(UpdaterScope scope,
 
 // Invokes the active instance's UpdateService::UpdateAll (via RPC).
 void UpdateAll(UpdaterScope scope);
+
+// Deletes the updater executable directory. Does not do any kind of cleanup
+// related to service registration. The intent of this command is to replicate
+// a common mode of breaking the updater, so we can test how it recovers.
+void DeleteUpdaterDirectory(UpdaterScope scope);
 
 // Runs the command and waits for it to exit or time out.
 bool Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code);
@@ -170,14 +186,14 @@ void ExpectLegacyAppCommandWebSucceeds(UpdaterScope scope,
                                        const std::string& command_id,
                                        const base::Value::List& parameters,
                                        int expected_exit_code);
+void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope);
 void RunTestServiceCommand(const std::string& sub_command);
 
 // Calls a function defined in test/service/win/rpc_client.py.
 // Entries of the `arguments` dictionary should be the function's parameter
 // name/value pairs.
-void InvokeTestServiceFunction(
-    const std::string& function_name,
-    const base::flat_map<std::string, base::Value>& arguments);
+void InvokeTestServiceFunction(const std::string& function_name,
+                               const base::Value::Dict& arguments);
 
 void RunUninstallCmdLine(UpdaterScope scope);
 #endif  // BUILDFLAG(IS_WIN)
@@ -223,7 +239,6 @@ void UninstallApp(UpdaterScope scope, const std::string& app_id);
 
 void RunOfflineInstall(UpdaterScope scope);
 
-}  // namespace test
-}  // namespace updater
+}  // namespace updater::test
 
 #endif  // CHROME_UPDATER_TEST_INTEGRATION_TESTS_IMPL_H_

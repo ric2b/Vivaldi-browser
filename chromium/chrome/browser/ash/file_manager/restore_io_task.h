@@ -7,8 +7,11 @@
 
 #include <vector>
 
+#include "base/files/file_error_or.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/file_manager/trash_common_util.h"
+#include "chrome/browser/ash/file_manager/trash_info_validator.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/file_system/file_system_url.h"
@@ -16,8 +19,7 @@
 
 class Profile;
 
-namespace file_manager {
-namespace io_task {
+namespace file_manager::io_task {
 
 // This class represents a task restoring from trash. A restore task attempts to
 // restore files from a supported Trash folder back to it's original path. If
@@ -43,19 +45,46 @@ class RestoreIOTask : public IOTask {
   // Finalises the RestoreIOTask with the `state`.
   void Complete(State state);
 
-  // Ensure the metadata file conforms to the following:
-  //   - Has a .trashinfo suffix
-  // TODO(b/231830250): Implement the remaining validations:
-  //   - Resides in an enabled trash directory
-  //   - The file resides in the info directory
-  //   - Has an identical item in the files directory with no .trashinfo suffix
+  // Calls the underlying TrashInfoValidator to perform validation on the
+  // supplied .trashinfo file.
   void ValidateTrashInfo(size_t idx);
 
-  // Parse the .trashinfo file and ensure it conforms to the XDG specification
-  // before restoring the file.
-  // TODO(b/231830250): Finish implementation of this method.
-  void ParseTrashInfoFile(size_t idx,
-                          const base::FilePath& trash_info_file_path);
+  // Make sure the enclosing folder where the trashed file to be restored to
+  // actually exists. In the event the file path has been removed, recreate it.
+  void EnsureParentRestorePathExists(
+      size_t idx,
+      base::FileErrorOr<trash::ParsedTrashInfoData> parsed_data);
+
+  void OnParentRestorePathExists(size_t idx,
+                                 const base::FilePath& trashed_file_location,
+                                 const base::FilePath& absolute_restore_path,
+                                 base::File::Error status);
+
+  // Make sure the destination file name is unique before moving, creates unique
+  // file names by appending (N) to the end of a file name.
+  void GenerateDestinationURL(size_t idx,
+                              const base::FilePath& trashed_file_location,
+                              const base::FilePath& absolute_restore_path);
+
+  // Move the item from `trashed_file_location` to `destination_result`.
+  void RestoreItem(
+      size_t idx,
+      base::FilePath trashed_file_location,
+      base::FileErrorOr<storage::FileSystemURL> destination_result);
+
+  void OnRestoreItem(size_t idx, base::File::Error error);
+
+  // Once a restore has completed, kick off the next restore `idx` or finish.
+  void RestoreComplete(size_t idx, base::File::Error error);
+
+  void SetCurrentOperationID(
+      storage::FileSystemOperationRunner::OperationID id);
+
+  base::FilePath MakeRelativeFromBasePath(const base::FilePath& absolute_path);
+
+  const storage::FileSystemURL CreateFileSystemURL(
+      const storage::FileSystemURL& original_url,
+      const base::FilePath& path);
 
   scoped_refptr<storage::FileSystemContext> file_system_context_;
   raw_ptr<Profile> profile_;
@@ -69,13 +98,15 @@ class RestoreIOTask : public IOTask {
   // restore can be cancelled.
   absl::optional<storage::FileSystemOperationRunner::OperationID> operation_id_;
 
+  // Validates and parses .trashinfo files.
+  std::unique_ptr<trash::TrashInfoValidator> validator_ = nullptr;
+
   ProgressCallback progress_callback_;
   CompleteCallback complete_callback_;
 
   base::WeakPtrFactory<RestoreIOTask> weak_ptr_factory_{this};
 };
 
-}  // namespace io_task
-}  // namespace file_manager
+}  // namespace file_manager::io_task
 
 #endif  // CHROME_BROWSER_ASH_FILE_MANAGER_RESTORE_IO_TASK_H_

@@ -28,6 +28,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_download_manager.h"
@@ -211,8 +212,7 @@ class CreditCardAccessManagerTest : public testing::Test {
     auto otp_authenticator =
         std::make_unique<TestCreditCardOtpAuthenticator>(&autofill_client_);
     otp_authenticator_ = otp_authenticator.get();
-    credit_card_access_manager_->set_otp_authenticator_for_testing(
-        std::move(otp_authenticator));
+    autofill_client_.set_otp_authenticator(std::move(otp_authenticator));
   }
 
   void TearDown() override {
@@ -264,7 +264,7 @@ class CreditCardAccessManagerTest : public testing::Test {
   }
 
   CreditCardCVCAuthenticator* GetCVCAuthenticator() {
-    return credit_card_access_manager_->GetOrCreateCVCAuthenticator();
+    return autofill_client_.GetCVCAuthenticator();
   }
 
   void MockUserResponseForCvcAuth(std::u16string cvc, bool enable_fido) {

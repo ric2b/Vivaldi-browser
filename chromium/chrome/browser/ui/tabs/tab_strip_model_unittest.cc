@@ -25,8 +25,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -89,30 +91,28 @@ class MockTabStripModelObserver : public TabStripModelObserver {
   };
 
   struct State {
-    State(WebContents* a_dst_contents,
-          int a_dst_index,
-          TabStripModelObserverAction a_action)
-        : src_contents(nullptr),
-          dst_contents(a_dst_contents),
-          src_index(-1),
-          dst_index(a_dst_index),
-          change_reason(CHANGE_REASON_NONE),
-          foreground(false),
-          action(a_action) {}
+    State(WebContents* dst_contents,
+          absl::optional<size_t> dst_index,
+          TabStripModelObserverAction action)
+        : dst_contents(dst_contents), dst_index(dst_index), action(action) {}
 
-    WebContents* src_contents;
+    WebContents* src_contents = nullptr;
     WebContents* dst_contents;
-    int src_index;
-    int dst_index;
-    int change_reason;
-    bool foreground;
+    absl::optional<size_t> src_index;
+    absl::optional<size_t> dst_index;
+    int change_reason = CHANGE_REASON_NONE;
+    bool foreground = false;
     TabStripModelObserverAction action;
 
     std::string ToString() const {
       std::ostringstream oss;
+      const auto optional_to_string = [](const auto& opt) {
+        return opt.has_value() ? base::NumberToString(opt.value())
+                               : std::string("<none>");
+      };
       oss << "State change: " << kActionNames[int{action}]
-          << "\n  Source index: " << src_index
-          << "\n  Destination index: " << dst_index
+          << "\n  Source index: " << optional_to_string(src_index)
+          << "\n  Destination index: " << optional_to_string(dst_index)
           << "\n  Source contents: " << src_contents
           << "\n  Destination contents: " << dst_contents
           << "\n  Change reason: " << change_reason
@@ -177,7 +177,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
 
   void PushActivateState(WebContents* old_contents,
                          WebContents* new_contents,
-                         int index,
+                         absl::optional<size_t> index,
                          int reason) {
     State s(new_contents, index, ACTIVATE);
     s.src_contents = old_contents;
@@ -199,8 +199,15 @@ class MockTabStripModelObserver : public TabStripModelObserver {
   }
 
   void PushMoveState(WebContents* contents, int from_index, int to_index) {
-    State s(contents, to_index, MOVE);
-    s.src_index = from_index;
+    const auto tab_index_to_selection_model_index =
+        [](int tab_index) -> absl::optional<size_t> {
+      if (tab_index == TabStripModel::kNoTab)
+        return absl::nullopt;
+      DCHECK_GE(tab_index, 0);
+      return static_cast<size_t>(tab_index);
+    };
+    State s(contents, tab_index_to_selection_model_index(to_index), MOVE);
+    s.src_index = tab_index_to_selection_model_index(from_index);
     states_.push_back(s);
   }
 
@@ -321,25 +328,25 @@ class MockTabStripModelObserver : public TabStripModelObserver {
   void TabChangedAt(WebContents* contents,
                     int index,
                     TabChangeType change_type) override {
-    states_.push_back(State(contents, index, CHANGE));
+    states_.emplace_back(contents, index, CHANGE);
   }
 
   void TabPinnedStateChanged(TabStripModel* tab_strip_model,
                              WebContents* contents,
                              int index) override {
-    states_.push_back(State(contents, index, PINNED));
+    states_.emplace_back(contents, index, PINNED);
   }
 
   void WillCloseAllTabs(TabStripModel* tab_strip_model) override {
-    states_.push_back(State(nullptr, -1, CLOSE_ALL));
+    states_.emplace_back(nullptr, absl::nullopt, CLOSE_ALL);
   }
 
   void CloseAllTabsStopped(TabStripModel* tab_strip_model,
                            CloseAllStoppedReason reason) override {
     if (reason == kCloseAllCanceled) {
-      states_.push_back(State(nullptr, -1, CLOSE_ALL_CANCELED));
+      states_.emplace_back(nullptr, absl::nullopt, CLOSE_ALL_CANCELED);
     } else if (reason == kCloseAllCompleted) {
-      states_.push_back(State(nullptr, -1, CLOSE_ALL_COMPLETED));
+      states_.emplace_back(nullptr, absl::nullopt, CLOSE_ALL_COMPLETED);
     }
   }
 
@@ -491,7 +498,7 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
     State s2(raw_contents1, 0, MockTabStripModelObserver::ACTIVATE);
     observer.ExpectStateEquals(1, s2);
     State s3(raw_contents1, 0, MockTabStripModelObserver::SELECT);
-    s3.src_index = ui::ListSelectionModel::kUnselectedIndex;
+    s3.src_index = absl::nullopt;
     observer.ExpectStateEquals(2, s3);
     observer.ClearStates();
   }
@@ -502,7 +509,7 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
   content::WebContents* raw_contents2 = contents2.get();
   {
     tabstrip.InsertWebContentsAt(1, std::move(contents2),
-                                 TabStripModel::ADD_ACTIVE);
+                                 AddTabTypes::ADD_ACTIVE);
 
     EXPECT_EQ(2, tabstrip.count());
     EXPECT_EQ(4, observer.GetStateCount());
@@ -526,7 +533,7 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
   WebContents* raw_contents3 = contents3.get();
   {
     tabstrip.InsertWebContentsAt(2, std::move(contents3),
-                                 TabStripModel::ADD_NONE);
+                                 AddTabTypes::ADD_NONE);
 
     EXPECT_EQ(3, tabstrip.count());
     EXPECT_EQ(1, observer.GetStateCount());
@@ -539,7 +546,9 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
 
   // Test ActivateTabAt
   {
-    tabstrip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+    tabstrip.ActivateTabAt(
+        2, TabStripUserGestureDetails(
+               TabStripUserGestureDetails::GestureType::kOther));
     EXPECT_EQ(3, observer.GetStateCount());
     State s1(raw_contents2, 1, MockTabStripModelObserver::DEACTIVATE);
     observer.ExpectStateEquals(0, s1);
@@ -596,7 +605,7 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
     std::unique_ptr<WebContents> contents4 = CreateWebContentsWithID(4);
     WebContents* raw_contents4 = contents4.get();
     tabstrip.InsertWebContentsAt(3, std::move(contents4),
-                                 TabStripModel::ADD_NONE);
+                                 AddTabTypes::ADD_NONE);
     // detach and delete the tab
     tabstrip.DetachAndDeleteWebContentsAt(3);
 
@@ -613,7 +622,7 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
 
   // Test CloseWebContentsAt
   {
-    EXPECT_TRUE(tabstrip.CloseWebContentsAt(2, TabStripModel::CLOSE_NONE));
+    EXPECT_TRUE(tabstrip.CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE));
     EXPECT_EQ(2, tabstrip.count());
 
     EXPECT_EQ(5, observer.GetStateCount());
@@ -682,7 +691,9 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
   // Test SelectNextTab, SelectPreviousTab, SelectLastTab
   {
     // Make sure the second of the two tabs is selected first...
-    tabstrip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+    tabstrip.ActivateTabAt(
+        1, TabStripUserGestureDetails(
+               TabStripUserGestureDetails::GestureType::kOther));
     tabstrip.SelectPreviousTab();
     EXPECT_EQ(0, tabstrip.active_index());
     tabstrip.SelectLastTab();
@@ -743,15 +754,15 @@ TEST_F(TabStripModelTest, TestBasicOpenerAPI) {
   // We use |InsertWebContentsAt| here instead of |AppendWebContents| so that
   // openership relationships are preserved.
   tabstrip.InsertWebContentsAt(tabstrip.count(), std::move(contents1),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   tabstrip.InsertWebContentsAt(tabstrip.count(), std::move(contents2),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   tabstrip.InsertWebContentsAt(tabstrip.count(), std::move(contents3),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   tabstrip.InsertWebContentsAt(tabstrip.count(), std::move(contents4),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   tabstrip.InsertWebContentsAt(tabstrip.count(), std::move(contents5),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
 
   // All the tabs should have the same opener.
   for (int i = 1; i < tabstrip.count(); ++i)
@@ -798,8 +809,7 @@ TEST_F(TabStripModelTest, TestBasicOpenerAPI) {
 }
 
 static int GetInsertionIndex(TabStripModel* tabstrip) {
-  return tabstrip->order_controller()->DetermineInsertionIndex(
-      ui::PAGE_TRANSITION_LINK, false);
+  return tabstrip->DetermineInsertionIndex(ui::PAGE_TRANSITION_LINK, false);
 }
 
 static void InsertWebContentses(TabStripModel* tabstrip,
@@ -808,13 +818,13 @@ static void InsertWebContentses(TabStripModel* tabstrip,
                                 std::unique_ptr<WebContents> contents3) {
   tabstrip->InsertWebContentsAt(GetInsertionIndex(tabstrip),
                                 std::move(contents1),
-                                TabStripModel::ADD_INHERIT_OPENER);
+                                AddTabTypes::ADD_INHERIT_OPENER);
   tabstrip->InsertWebContentsAt(GetInsertionIndex(tabstrip),
                                 std::move(contents2),
-                                TabStripModel::ADD_INHERIT_OPENER);
+                                AddTabTypes::ADD_INHERIT_OPENER);
   tabstrip->InsertWebContentsAt(GetInsertionIndex(tabstrip),
                                 std::move(contents3),
-                                TabStripModel::ADD_INHERIT_OPENER);
+                                AddTabTypes::ADD_INHERIT_OPENER);
 }
 
 static bool IsSiteInContentSettingExceptionList(
@@ -901,12 +911,12 @@ TEST_F(TabStripModelTest, TestInsertionIndexDetermination) {
   // opener tab.
   std::unique_ptr<WebContents> fg_link_contents = CreateWebContents();
   WebContents* raw_fg_link_contents = fg_link_contents.get();
-  int insert_index = tabstrip.order_controller()->DetermineInsertionIndex(
-      ui::PAGE_TRANSITION_LINK, true);
+  int insert_index =
+      tabstrip.DetermineInsertionIndex(ui::PAGE_TRANSITION_LINK, true);
   EXPECT_EQ(1, insert_index);
   tabstrip.InsertWebContentsAt(
       insert_index, std::move(fg_link_contents),
-      TabStripModel::ADD_ACTIVE | TabStripModel::ADD_INHERIT_OPENER);
+      AddTabTypes::ADD_ACTIVE | AddTabTypes::ADD_INHERIT_OPENER);
   EXPECT_EQ(1, tabstrip.active_index());
   EXPECT_EQ(raw_fg_link_contents, tabstrip.GetActiveWebContents());
 
@@ -917,16 +927,17 @@ TEST_F(TabStripModelTest, TestInsertionIndexDetermination) {
   // Now open a new empty tab. It should open at the end of the strip.
   std::unique_ptr<WebContents> fg_nonlink_contents = CreateWebContents();
   WebContents* raw_fg_nonlink_contents = fg_nonlink_contents.get();
-  insert_index = tabstrip.order_controller()->DetermineInsertionIndex(
-      ui::PAGE_TRANSITION_AUTO_BOOKMARK, true);
+  insert_index =
+      tabstrip.DetermineInsertionIndex(ui::PAGE_TRANSITION_AUTO_BOOKMARK, true);
   EXPECT_EQ(tabstrip.count(), insert_index);
   // We break the opener relationship...
   tabstrip.InsertWebContentsAt(insert_index, std::move(fg_nonlink_contents),
-                               TabStripModel::ADD_NONE);
+                               AddTabTypes::ADD_NONE);
   // Now select it, so that GestureType != kNone causes the opener
   // relationship to be forgotten...
   tabstrip.ActivateTabAt(tabstrip.count() - 1,
-                         {TabStripModel::GestureType::kOther});
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(tabstrip.count() - 1, tabstrip.active_index());
   EXPECT_EQ(raw_fg_nonlink_contents, tabstrip.GetActiveWebContents());
 
@@ -960,7 +971,7 @@ TEST_F(TabStripModelTest, TestInsertionIndexDeterminationAfterDragged) {
   // Open a link in a new background tab.
   tabstrip.InsertWebContentsAt(GetInsertionIndex(&tabstrip),
                                CreateWebContentsWithID(11),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   EXPECT_EQ("1 11 2 3", GetTabStripStateString(tabstrip));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
   EXPECT_EQ(1, tabstrip.GetIndexOfLastWebContentsOpenedBy(raw_opener1, 0));
@@ -976,13 +987,15 @@ TEST_F(TabStripModelTest, TestInsertionIndexDeterminationAfterDragged) {
   EXPECT_EQ(raw_opener1, tabstrip.GetOpenerOfWebContentsAt(2));
 
   // Activate the parent tab again.
-  tabstrip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(0,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
 
   // Open another link in a new background tab.
   tabstrip.InsertWebContentsAt(GetInsertionIndex(&tabstrip),
                                CreateWebContentsWithID(12),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   // Tab 12 should be next to 1, and considered opened by it.
   EXPECT_EQ("1 12 2 11 3", GetTabStripStateString(tabstrip));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
@@ -1012,19 +1025,21 @@ TEST_F(TabStripModelTest, TestInsertionIndexDeterminationNestedOpener) {
   std::unique_ptr<WebContents> child11 = CreateWebContentsWithID(11);
   WebContents* raw_child11 = child11.get();
   tabstrip.InsertWebContentsAt(GetInsertionIndex(&tabstrip), std::move(child11),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   EXPECT_EQ("1 11 2", GetTabStripStateString(tabstrip));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
   EXPECT_EQ(1, tabstrip.GetIndexOfLastWebContentsOpenedBy(raw_opener1, 0));
 
   // Activate the child tab:
-  tabstrip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(1,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(11, GetID(tabstrip.GetActiveWebContents()));
 
   // Open a link in a new background grandchild tab.
   tabstrip.InsertWebContentsAt(GetInsertionIndex(&tabstrip),
                                CreateWebContentsWithID(111),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   EXPECT_EQ("1 11 111 2", GetTabStripStateString(tabstrip));
   EXPECT_EQ(11, GetID(tabstrip.GetActiveWebContents()));
   // The grandchild tab should be counted by GetIndexOfLastWebContentsOpenedBy
@@ -1033,13 +1048,15 @@ TEST_F(TabStripModelTest, TestInsertionIndexDeterminationNestedOpener) {
   EXPECT_EQ(2, tabstrip.GetIndexOfLastWebContentsOpenedBy(raw_child11, 1));
 
   // Activate the parent tab again:
-  tabstrip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(0,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
 
   // Open another link in a new background child tab (a sibling of child11).
   tabstrip.InsertWebContentsAt(GetInsertionIndex(&tabstrip),
                                CreateWebContentsWithID(12),
-                               TabStripModel::ADD_INHERIT_OPENER);
+                               AddTabTypes::ADD_INHERIT_OPENER);
   EXPECT_EQ("1 11 111 12 2", GetTabStripStateString(tabstrip));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
   // opener1 has three adjacent descendants (11, 111, 12)
@@ -1049,8 +1066,8 @@ TEST_F(TabStripModelTest, TestInsertionIndexDeterminationNestedOpener) {
 
   // Closing a tab should cause its children to inherit the tab's opener.
   EXPECT_EQ(true, tabstrip.CloseWebContentsAt(
-                      1, TabStripModel::CLOSE_USER_GESTURE |
-                             TabStripModel::CLOSE_CREATE_HISTORICAL_TAB));
+                      1, TabCloseTypes::CLOSE_USER_GESTURE |
+                             TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB));
   EXPECT_EQ("1 111 12 2", GetTabStripStateString(tabstrip));
   EXPECT_EQ(1, GetID(tabstrip.GetActiveWebContents()));
   // opener1 is now the opener of 111, so has two adjacent descendants (111, 12)
@@ -1075,11 +1092,11 @@ TEST_F(TabStripModelTest, CloseInactiveTabKeepsSelection) {
                       CreateWebContents());
   ASSERT_EQ(0, tabstrip.active_index());
 
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
 
   tabstrip.CloseAllTabs();
@@ -1100,14 +1117,16 @@ TEST_F(TabStripModelTest, CloseActiveTabShiftsSelectionRight) {
   ASSERT_EQ(0, tabstrip.active_index());
 
   tabstrip.ForgetAllOpeners();
-  tabstrip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(1,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(1, tabstrip.active_index());
 
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(1, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(1, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
 
   tabstrip.CloseAllTabs();
@@ -1131,14 +1150,16 @@ TEST_F(TabStripModelTest, CloseGroupedTabShiftsSelectionWithinGroup) {
 
   tabstrip.ForgetAllOpeners();
   tabstrip.AddToNewGroup({0, 1, 2});
-  tabstrip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(1,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(1, tabstrip.active_index());
 
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(1, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
 
   tabstrip.CloseAllTabs();
@@ -1161,7 +1182,9 @@ TEST_F(TabStripModelTest, CollapseGroupShiftsSelection_SuccessNextTab) {
 
   tabstrip.ForgetAllOpeners();
   tab_groups::TabGroupId group = tabstrip.AddToNewGroup({0, 1});
-  tabstrip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(1,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(1, tabstrip.active_index());
 
   absl::optional<int> next_active =
@@ -1189,7 +1212,9 @@ TEST_F(TabStripModelTest, CollapseGroupShiftsSelection_SuccessPreviousTab) {
 
   tabstrip.ForgetAllOpeners();
   tab_groups::TabGroupId group = tabstrip.AddToNewGroup({2, 3});
-  tabstrip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(2,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(2, tabstrip.active_index());
 
   absl::optional<int> next_active =
@@ -1217,7 +1242,9 @@ TEST_F(TabStripModelTest, CollapseGroupShiftsSelection_NoAvailableTabs) {
 
   tabstrip.ForgetAllOpeners();
   tab_groups::TabGroupId group = tabstrip.AddToNewGroup({0, 1, 2, 3});
-  tabstrip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(1,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(1, tabstrip.active_index());
 
   absl::optional<int> next_active =
@@ -1243,14 +1270,16 @@ TEST_F(TabStripModelTest, CloseTabWithOpenerShiftsSelectionWithinOpened) {
                       CreateWebContents());
   ASSERT_EQ(0, tabstrip.active_index());
 
-  tabstrip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(2,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(2, tabstrip.active_index());
 
-  tabstrip.CloseWebContentsAt(2, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(2, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(2, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(1, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
 
   tabstrip.CloseAllTabs();
@@ -1269,15 +1298,15 @@ TEST_F(TabStripModelTest, CloseTabWithOpenerShiftsSelectionToOpener) {
   tabstrip.AppendWebContents(std::move(opener), true);
   std::unique_ptr<WebContents> other_contents = CreateWebContents();
   tabstrip.InsertWebContentsAt(1, std::move(other_contents),
-                               TabStripModel::ADD_NONE);
+                               AddTabTypes::ADD_NONE);
   ASSERT_EQ(2, tabstrip.count());
   std::unique_ptr<WebContents> opened_contents = CreateWebContents();
   tabstrip.InsertWebContentsAt(
       2, std::move(opened_contents),
-      TabStripModel::ADD_ACTIVE | TabStripModel::ADD_INHERIT_OPENER);
+      AddTabTypes::ADD_ACTIVE | AddTabTypes::ADD_INHERIT_OPENER);
   ASSERT_EQ(2, tabstrip.active_index());
 
-  tabstrip.CloseWebContentsAt(2, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
 
   tabstrip.CloseAllTabs();
@@ -1539,7 +1568,9 @@ TEST_F(TabStripModelTest, TestContextMenuCloseCommands) {
   EXPECT_EQ(5, tabstrip.count());
 
   int dummy_index = tabstrip.count() - 1;
-  tabstrip.ActivateTabAt(dummy_index, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(dummy_index,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(raw_dummy, tabstrip.GetActiveWebContents());
 
   tabstrip.ExecuteContextMenuCommand(dummy_index,
@@ -1614,33 +1645,35 @@ TEST_F(TabStripModelTest, AddWebContents_MiddleClickLinksAndClose) {
   WebContents* raw_homepage_contents = homepage_contents.get();
   tabstrip.AddWebContents(std::move(homepage_contents), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
 
   // Open some other tab, by user typing.
   std::unique_ptr<WebContents> typed_page_contents = CreateWebContents();
   WebContents* raw_typed_page_contents = typed_page_contents.get();
   tabstrip.AddWebContents(std::move(typed_page_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(2, tabstrip.count());
 
   // Re-select the home page.
-  tabstrip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(0,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open a bunch of tabs by simulating middle clicking on links on the home
   // page.
   std::unique_ptr<WebContents> middle_click_contents1 = CreateWebContents();
   WebContents* raw_middle_click_contents1 = middle_click_contents1.get();
   tabstrip.AddWebContents(std::move(middle_click_contents1), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   std::unique_ptr<WebContents> middle_click_contents2 = CreateWebContents();
   WebContents* raw_middle_click_contents2 = middle_click_contents2.get();
   tabstrip.AddWebContents(std::move(middle_click_contents2), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   std::unique_ptr<WebContents> middle_click_contents3 = CreateWebContents();
   WebContents* raw_middle_click_contents3 = middle_click_contents3.get();
   tabstrip.AddWebContents(std::move(middle_click_contents3), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
 
   EXPECT_EQ(5, tabstrip.count());
 
@@ -1655,7 +1688,9 @@ TEST_F(TabStripModelTest, AddWebContents_MiddleClickLinksAndClose) {
   // is constructed to start at the middle WebContents in the tree to make sure
   // the cursor wraps around to the first WebContents in the tree before
   // closing the opener or any other WebContents.
-  tabstrip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(2,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   tabstrip.CloseSelectedTabs();
   EXPECT_EQ(raw_middle_click_contents3, tabstrip.GetActiveWebContents());
   tabstrip.CloseSelectedTabs();
@@ -1684,24 +1719,26 @@ TEST_F(TabStripModelTest, AddWebContents_LeftClickPopup) {
   WebContents* raw_homepage_contents = homepage_contents.get();
   tabstrip.AddWebContents(std::move(homepage_contents), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
 
   // Open some other tab, by user typing.
   std::unique_ptr<WebContents> typed_page_contents = CreateWebContents();
   WebContents* raw_typed_page_contents = typed_page_contents.get();
   tabstrip.AddWebContents(std::move(typed_page_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(2, tabstrip.count());
 
   // Re-select the home page.
-  tabstrip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(0,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open a tab by simulating a left click on a link that opens in a new tab.
   std::unique_ptr<WebContents> left_click_contents = CreateWebContents();
   WebContents* raw_left_click_contents = left_click_contents.get();
   tabstrip.AddWebContents(std::move(left_click_contents), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_ACTIVE);
 
   // Verify the state meets our expectations.
   EXPECT_EQ(3, tabstrip.count());
@@ -1736,24 +1773,26 @@ TEST_F(TabStripModelTest, AddWebContents_CreateNewBlankTab) {
   WebContents* raw_homepage_contents = homepage_contents.get();
   tabstrip.AddWebContents(std::move(homepage_contents), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
 
   // Open some other tab, by user typing.
   std::unique_ptr<WebContents> typed_page_contents = CreateWebContents();
   WebContents* raw_typed_page_contents = typed_page_contents.get();
   tabstrip.AddWebContents(std::move(typed_page_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(2, tabstrip.count());
 
   // Re-select the home page.
-  tabstrip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(0,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open a new blank tab in the foreground.
   std::unique_ptr<WebContents> new_blank_contents = CreateWebContents();
   WebContents* raw_new_blank_contents = new_blank_contents.get();
   tabstrip.AddWebContents(std::move(new_blank_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   // Verify the state of the tabstrip.
   EXPECT_EQ(3, tabstrip.count());
@@ -1766,13 +1805,12 @@ TEST_F(TabStripModelTest, AddWebContents_CreateNewBlankTab) {
   WebContents* raw_background_blank_contents1 =
       background_blank_contents1.get();
   tabstrip.AddWebContents(std::move(background_blank_contents1), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_NONE);
   std::unique_ptr<WebContents> background_blank_contents2 = CreateWebContents();
   WebContents* raw_background_blank_contents2 =
       background_blank_contents2.get();
   tabstrip.AddWebContents(std::move(background_blank_contents2), -1,
-                          ui::PAGE_TRANSITION_GENERATED,
-                          TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_GENERATED, AddTabTypes::ADD_NONE);
   EXPECT_EQ(5, tabstrip.count());
   EXPECT_EQ(raw_homepage_contents, tabstrip.GetWebContentsAt(0));
   EXPECT_EQ(raw_typed_page_contents, tabstrip.GetWebContentsAt(1));
@@ -1796,33 +1834,35 @@ TEST_F(TabStripModelTest, AddWebContents_ForgetOpeners) {
   WebContents* raw_homepage_contents = homepage_contents.get();
   tabstrip.AddWebContents(std::move(homepage_contents), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
 
   // Open a blank new tab.
   std::unique_ptr<WebContents> typed_page_contents = CreateWebContents();
   WebContents* raw_typed_page_contents = typed_page_contents.get();
   tabstrip.AddWebContents(std::move(typed_page_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(2, tabstrip.count());
 
   // Re-select the first tab (home page).
-  tabstrip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(0,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open a bunch of tabs by simulating middle clicking on links on the home
   // page.
   std::unique_ptr<WebContents> middle_click_contents1 = CreateWebContents();
   WebContents* raw_middle_click_contents1 = middle_click_contents1.get();
   tabstrip.AddWebContents(std::move(middle_click_contents1), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   std::unique_ptr<WebContents> middle_click_contents2 = CreateWebContents();
   WebContents* raw_middle_click_contents2 = middle_click_contents2.get();
   tabstrip.AddWebContents(std::move(middle_click_contents2), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   std::unique_ptr<WebContents> middle_click_contents3 = CreateWebContents();
   WebContents* raw_middle_click_contents3 = middle_click_contents3.get();
   tabstrip.AddWebContents(std::move(middle_click_contents3), -1,
-                          ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                          ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
 
   // Break out of the context by selecting a tab in a different context.
   EXPECT_EQ(raw_typed_page_contents, tabstrip.GetWebContentsAt(4));
@@ -1830,7 +1870,9 @@ TEST_F(TabStripModelTest, AddWebContents_ForgetOpeners) {
   EXPECT_EQ(raw_typed_page_contents, tabstrip.GetActiveWebContents());
 
   // Step back into the context by selecting a tab inside it.
-  tabstrip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  tabstrip.ActivateTabAt(2,
+                         TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(raw_middle_click_contents2, tabstrip.GetActiveWebContents());
 
   // Now test that closing tabs selects to the right until there are no more,
@@ -1864,7 +1906,7 @@ TEST_F(TabStripModelTest, AddWebContents_LinkOpensInSameGroupAsOpener) {
   std::unique_ptr<WebContents> homepage_contents = CreateWebContents();
   tabstrip.AddWebContents(std::move(homepage_contents), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
   ASSERT_EQ(1, tabstrip.count());
   tab_groups::TabGroupId group_id = tabstrip.AddToNewGroup({0});
   ASSERT_EQ(tabstrip.GetTabGroupForTab(0), group_id);
@@ -1873,7 +1915,7 @@ TEST_F(TabStripModelTest, AddWebContents_LinkOpensInSameGroupAsOpener) {
   // Open a tab by simulating a link that opens in a new tab.
   std::unique_ptr<WebContents> contents = CreateWebContents();
   tabstrip.AddWebContents(std::move(contents), -1, ui::PAGE_TRANSITION_LINK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
   EXPECT_EQ(2, tabstrip.count());
   EXPECT_EQ(tabstrip.GetTabGroupForTab(1), group_id);
 
@@ -1895,11 +1937,11 @@ TEST_F(TabStripModelTest, AddWebContents_UngroupedTabDoesNotBreakContinuity) {
   std::unique_ptr<WebContents> contents1 = CreateWebContents();
   tabstrip.AddWebContents(std::move(contents1), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
   std::unique_ptr<WebContents> contents2 = CreateWebContents();
   tabstrip.AddWebContents(std::move(contents2), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
   ASSERT_EQ(2, tabstrip.count());
   tab_groups::TabGroupId group_id = tabstrip.AddToNewGroup({0, 1});
   ASSERT_EQ(tabstrip.GetTabGroupForTab(0), group_id);
@@ -1911,7 +1953,7 @@ TEST_F(TabStripModelTest, AddWebContents_UngroupedTabDoesNotBreakContinuity) {
   WebContents* raw_contents = contents.get();
   tabstrip.AddWebContents(
       std::move(contents), 1, ui::PAGE_TRANSITION_FIRST,
-      TabStripModel::ADD_ACTIVE | TabStripModel::ADD_FORCE_INDEX);
+      AddTabTypes::ADD_ACTIVE | AddTabTypes::ADD_FORCE_INDEX);
   EXPECT_EQ(3, tabstrip.count());
   ASSERT_EQ(1, tabstrip.GetIndexOfWebContents(raw_contents));
   EXPECT_EQ(tabstrip.GetTabGroupForTab(1), group_id);
@@ -1928,11 +1970,11 @@ TEST_F(TabStripModelTest, AppendContentsReselectionTest) {
   // Open the Home Page.
   tabstrip.AddWebContents(CreateWebContents(), -1,
                           ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                          TabStripModel::ADD_ACTIVE);
+                          AddTabTypes::ADD_ACTIVE);
 
   // Open some other tab, by user typing.
   tabstrip.AddWebContents(CreateWebContents(), -1, ui::PAGE_TRANSITION_TYPED,
-                          TabStripModel::ADD_NONE);
+                          AddTabTypes::ADD_NONE);
 
   // The selected tab should still be the first.
   EXPECT_EQ(0, tabstrip.active_index());
@@ -1941,7 +1983,7 @@ TEST_F(TabStripModelTest, AppendContentsReselectionTest) {
   // and make sure the correct tab gets selected when the new tab is closed.
   tabstrip.AppendWebContents(CreateWebContents(), true);
   EXPECT_EQ(2, tabstrip.active_index());
-  tabstrip.CloseWebContentsAt(2, TabStripModel::CLOSE_NONE);
+  tabstrip.CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(0, tabstrip.active_index());
 
   // Clean up after ourselves.
@@ -1958,44 +2000,45 @@ TEST_F(TabStripModelTest, ReselectionConsidersChildrenTest) {
   WebContents* raw_page_a_contents = page_a_contents.get();
   strip.AddWebContents(std::move(page_a_contents), -1,
                        ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   // Simulate middle click to open page A.A and A.B
   std::unique_ptr<WebContents> page_a_a_contents = CreateWebContents();
   WebContents* raw_page_a_a_contents = page_a_a_contents.get();
   strip.AddWebContents(std::move(page_a_a_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   std::unique_ptr<WebContents> page_a_b_contents = CreateWebContents();
   WebContents* raw_page_a_b_contents = page_a_b_contents.get();
   strip.AddWebContents(std::move(page_a_b_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
 
   // Select page A.A
-  strip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(1, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(raw_page_a_a_contents, strip.GetActiveWebContents());
 
   // Simulate a middle click to open page A.A.A
   std::unique_ptr<WebContents> page_a_a_a_contents = CreateWebContents();
   WebContents* raw_page_a_a_a_contents = page_a_a_a_contents.get();
   strip.AddWebContents(std::move(page_a_a_a_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
 
   EXPECT_EQ(raw_page_a_a_a_contents, strip.GetWebContentsAt(2));
 
   // Close page A.A
-  strip.CloseWebContentsAt(strip.active_index(), TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(strip.active_index(), TabCloseTypes::CLOSE_NONE);
 
   // Page A.A.A should be selected, NOT A.B
   EXPECT_EQ(raw_page_a_a_a_contents, strip.GetActiveWebContents());
 
   // Close page A.A.A
-  strip.CloseWebContentsAt(strip.active_index(), TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(strip.active_index(), TabCloseTypes::CLOSE_NONE);
 
   // Page A.B should be selected
   EXPECT_EQ(raw_page_a_b_contents, strip.GetActiveWebContents());
 
   // Close page A.B
-  strip.CloseWebContentsAt(strip.active_index(), TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(strip.active_index(), TabCloseTypes::CLOSE_NONE);
 
   // Page A should be selected
   EXPECT_EQ(raw_page_a_contents, strip.GetActiveWebContents());
@@ -2011,29 +2054,30 @@ TEST_F(TabStripModelTest, NewTabAtEndOfStripInheritsOpener) {
   // Open page A
   strip.AddWebContents(CreateWebContents(), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   // Open pages B, C and D in the background from links on page A...
   for (int i = 0; i < 3; ++i) {
     strip.AddWebContents(CreateWebContents(), -1, ui::PAGE_TRANSITION_LINK,
-                         TabStripModel::ADD_NONE);
+                         AddTabTypes::ADD_NONE);
   }
 
   // Switch to page B's tab.
-  strip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(1, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open a New Tab at the end of the strip (simulate Ctrl+T)
   std::unique_ptr<WebContents> new_contents = CreateWebContents();
   WebContents* raw_new_contents = new_contents.get();
   strip.AddWebContents(std::move(new_contents), -1, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(4, strip.GetIndexOfWebContents(raw_new_contents));
   EXPECT_EQ(4, strip.active_index());
 
   // Close the New Tab that was just opened. We should be returned to page B's
   // Tab...
-  strip.CloseWebContentsAt(4, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(4, TabCloseTypes::CLOSE_NONE);
 
   EXPECT_EQ(1, strip.active_index());
 
@@ -2043,13 +2087,13 @@ TEST_F(TabStripModelTest, NewTabAtEndOfStripInheritsOpener) {
   std::unique_ptr<WebContents> page_e_contents = CreateWebContents();
   WebContents* raw_page_e_contents = page_e_contents.get();
   strip.AddWebContents(std::move(page_e_contents), -1,
-                       ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                       ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(4, strip.GetIndexOfWebContents(raw_page_e_contents));
   EXPECT_EQ(4, strip.active_index());
 
   // Close the Tab. Selection should shift back to page B's Tab.
-  strip.CloseWebContentsAt(4, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(4, TabCloseTypes::CLOSE_NONE);
 
   EXPECT_EQ(1, strip.active_index());
 
@@ -2061,13 +2105,13 @@ TEST_F(TabStripModelTest, NewTabAtEndOfStripInheritsOpener) {
   WebContents* raw_page_f_contents = page_f_contents.get();
   strip.AddWebContents(std::move(page_f_contents), -1,
                        ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   EXPECT_EQ(4, strip.GetIndexOfWebContents(raw_page_f_contents));
   EXPECT_EQ(4, strip.active_index());
 
   // Close the Tab. The next-adjacent should be selected.
-  strip.CloseWebContentsAt(4, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(4, TabCloseTypes::CLOSE_NONE);
 
   EXPECT_EQ(3, strip.active_index());
 
@@ -2085,7 +2129,7 @@ TEST_F(TabStripModelTest, NavigationForgetsOpeners) {
   // Open page A
   strip.AddWebContents(CreateWebContents(), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   // Open pages B, C and D in the background from links on page A...
   std::unique_ptr<WebContents> page_c_contents = CreateWebContents();
@@ -2093,25 +2137,26 @@ TEST_F(TabStripModelTest, NavigationForgetsOpeners) {
   std::unique_ptr<WebContents> page_d_contents = CreateWebContents();
   WebContents* raw_page_d_contents = page_d_contents.get();
   strip.AddWebContents(CreateWebContents(), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
   strip.AddWebContents(std::move(page_c_contents), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
   strip.AddWebContents(std::move(page_d_contents), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
 
   // Open page E in a different opener tree from page A.
   std::unique_ptr<WebContents> page_e_contents = CreateWebContents();
   WebContents* raw_page_e_contents = page_e_contents.get();
   strip.AddWebContents(std::move(page_e_contents), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
 
   // Tell the TabStripModel that we are navigating page D via a link click.
-  strip.ActivateTabAt(3, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(3, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   strip.TabNavigating(raw_page_d_contents, ui::PAGE_TRANSITION_LINK);
 
   // Close page D, page C should be selected. (part of same opener tree).
-  strip.CloseWebContentsAt(3, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(3, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(2, strip.active_index());
 
   // Tell the TabStripModel that we are navigating in page C via a bookmark.
@@ -2119,7 +2164,7 @@ TEST_F(TabStripModelTest, NavigationForgetsOpeners) {
 
   // Close page C, page E should be selected. (C is no longer part of the
   // A-B-C-D tree, selection moves to the right).
-  strip.CloseWebContentsAt(2, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(raw_page_e_contents, strip.GetWebContentsAt(strip.active_index()));
 
   strip.CloseAllTabs();
@@ -2136,20 +2181,21 @@ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
   // opened.
   strip.AddWebContents(CreateWebContents(), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   std::unique_ptr<WebContents> page_c_contents = CreateWebContents();
   WebContents* raw_page_c_contents = page_c_contents.get();
   std::unique_ptr<WebContents> page_d_contents = CreateWebContents();
   WebContents* raw_page_d_contents = page_d_contents.get();
   strip.AddWebContents(CreateWebContents(), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
   strip.AddWebContents(std::move(page_c_contents), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
   strip.AddWebContents(std::move(page_d_contents), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
 
-  strip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(2, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // TEST 1: A tab in the middle of a bunch of tabs is active and the user opens
   // a new tab at the end of the strip. Closing that new tab will select the tab
@@ -2161,7 +2207,7 @@ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
   content::WebContentsTester::For(raw_new_tab_contents)
       ->NavigateAndCommit(GURL("chrome://newtab"));
   strip.AddWebContents(std::move(new_tab_contents), -1,
-                       ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                       ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   // The opener should still be remembered after one navigation.
   content::NavigationSimulator::CreateBrowserInitiated(
@@ -2171,7 +2217,7 @@ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
 
   // At this point, if we close this tab the last selected one should be
   // re-selected.
-  strip.CloseWebContentsAt(strip.count() - 1, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(strip.count() - 1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(raw_page_c_contents, strip.GetWebContentsAt(strip.active_index()));
 
   // TEST 2: As above, but the user selects another tab in the strip and thus
@@ -2179,27 +2225,31 @@ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
 
   // Open a new tab again.
   strip.AddWebContents(CreateWebContents(), -1, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   // Now select the first tab.
-  strip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(0, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Now select the last tab.
-  strip.ActivateTabAt(strip.count() - 1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(strip.count() - 1,
+                      TabStripUserGestureDetails(
+                          TabStripUserGestureDetails::GestureType::kOther));
 
   // Now close the last tab. The next adjacent should be selected.
-  strip.CloseWebContentsAt(strip.count() - 1, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(strip.count() - 1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(raw_page_d_contents, strip.GetWebContentsAt(strip.active_index()));
 
   // TEST 3: As above, but the user does multiple navigations and thus the tab's
   // opener relationship is forgotten.
-  strip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(2, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open a new tab but navigate away from the new tab page.
   new_tab_contents = CreateWebContents();
   raw_new_tab_contents = new_tab_contents.get();
   strip.AddWebContents(std::move(new_tab_contents), -1,
-                       ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                       ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
   content::WebContentsTester::For(raw_new_tab_contents)
       ->NavigateAndCommit(GURL("http://example.org"));
 
@@ -2210,7 +2260,7 @@ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
   strip.TabNavigating(raw_new_tab_contents, ui::PAGE_TRANSITION_TYPED);
 
   // Close the tab. The next adjacent should be selected.
-  strip.CloseWebContentsAt(strip.count() - 1, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(strip.count() - 1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(raw_page_d_contents, strip.GetWebContentsAt(strip.active_index()));
 
   strip.CloseAllTabs();
@@ -2294,7 +2344,7 @@ TEST_F(TabStripModelTest, FastShutdown) {
     tabstrip.AppendWebContents(std::move(contents1), true);
     tabstrip.AppendWebContents(std::move(contents2), true);
 
-    tabstrip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+    tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
     EXPECT_FALSE(raw_contents1->GetPrimaryMainFrame()
                      ->GetProcess()
                      ->FastShutdownStarted());
@@ -2455,7 +2505,7 @@ TEST_F(TabStripModelTest, Pinning) {
   // up after them.
   {
     tabstrip.InsertWebContentsAt(1, std::move(contents4),
-                                 TabStripModel::ADD_NONE);
+                                 AddTabTypes::ADD_NONE);
 
     ASSERT_EQ(1, observer.GetStateCount());
     State state(raw_contents4, 2, MockTabStripModelObserver::INSERT);
@@ -2478,7 +2528,7 @@ TEST_F(TabStripModelTest, ReplaceSendsSelected) {
   std::unique_ptr<WebContents> first_contents = CreateWebContents();
   WebContents* raw_first_contents = first_contents.get();
   strip.AddWebContents(std::move(first_contents), -1, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
 
   MockTabStripModelObserver observer;
   strip.AddObserver(&observer);
@@ -2505,7 +2555,7 @@ TEST_F(TabStripModelTest, ReplaceSendsSelected) {
   std::unique_ptr<WebContents> third_contents = CreateWebContents();
   WebContents* raw_third_contents = third_contents.get();
   strip.AddWebContents(std::move(third_contents), 1, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
 
   observer.ClearStates();
 
@@ -2807,22 +2857,22 @@ TEST_F(TabStripModelTest, MoveSelectedTabsTo_ForgetOpeners) {
   WebContents* raw_page_a_contents = page_a_contents.get();
   strip.AddWebContents(std::move(page_a_contents), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
   std::unique_ptr<WebContents> page_a1_contents = CreateWebContents();
   WebContents* raw_page_a1_contents = page_a1_contents.get();
   strip.AddWebContents(std::move(page_a1_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
 
   // Likewise, open pages B and B1.
   std::unique_ptr<WebContents> page_b_contents = CreateWebContents();
   WebContents* raw_page_b_contents = page_b_contents.get();
   strip.AddWebContents(std::move(page_b_contents), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE);
+                       AddTabTypes::ADD_ACTIVE);
   std::unique_ptr<WebContents> page_b1_contents = CreateWebContents();
   WebContents* raw_page_b1_contents = page_b1_contents.get();
   strip.AddWebContents(std::move(page_b1_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
 
   EXPECT_EQ(raw_page_a_contents, strip.GetWebContentsAt(0));
   EXPECT_EQ(raw_page_a1_contents, strip.GetWebContentsAt(1));
@@ -2836,7 +2886,7 @@ TEST_F(TabStripModelTest, MoveSelectedTabsTo_ForgetOpeners) {
   std::unique_ptr<WebContents> page_b2_contents = CreateWebContents();
   WebContents* raw_page_b2_contents = page_b2_contents.get();
   strip.AddWebContents(std::move(page_b2_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   EXPECT_EQ(raw_page_b_contents, strip.GetWebContentsAt(0));
   EXPECT_EQ(raw_page_b2_contents, strip.GetWebContentsAt(1));
   EXPECT_EQ(raw_page_a_contents, strip.GetWebContentsAt(2));
@@ -2844,14 +2894,15 @@ TEST_F(TabStripModelTest, MoveSelectedTabsTo_ForgetOpeners) {
   EXPECT_EQ(raw_page_b1_contents, strip.GetWebContentsAt(4));
 
   // Switch to A.
-  strip.ActivateTabAt(2, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(2, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(raw_page_a_contents, strip.GetActiveWebContents());
 
   // Open page A2 in the background from A. It should end up after A1.
   std::unique_ptr<WebContents> page_a2_contents = CreateWebContents();
   WebContents* raw_page_a2_contents = page_a2_contents.get();
   strip.AddWebContents(std::move(page_a2_contents), -1,
-                       ui::PAGE_TRANSITION_LINK, TabStripModel::ADD_NONE);
+                       ui::PAGE_TRANSITION_LINK, AddTabTypes::ADD_NONE);
   EXPECT_EQ(raw_page_b_contents, strip.GetWebContentsAt(0));
   EXPECT_EQ(raw_page_b2_contents, strip.GetWebContentsAt(1));
   EXPECT_EQ(raw_page_a_contents, strip.GetWebContentsAt(2));
@@ -2891,7 +2942,8 @@ TEST_F(TabStripModelTest, MultipleSelection) {
   strip.AddObserver(&observer);
 
   // Selection and active tab change.
-  strip.ActivateTabAt(3, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(3, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(2, observer.GetStateCount());
   ASSERT_EQ(observer.GetStateAt(0).action, MockTabStripModelObserver::ACTIVATE);
   State s1(raw_contents3, 3, MockTabStripModelObserver::SELECT);
@@ -2934,7 +2986,7 @@ TEST_F(TabStripModelTest, MultipleSelection) {
   observer.ClearStates();
 
   // Closing one of the selected tabs, not the active one.
-  strip.CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(3, strip.count());
   ASSERT_EQ(3, observer.GetStateCount());
   ASSERT_EQ(observer.GetStateAt(0).action, MockTabStripModelObserver::CLOSE);
@@ -2943,7 +2995,7 @@ TEST_F(TabStripModelTest, MultipleSelection) {
   observer.ClearStates();
 
   // Closing the active tab, while there are others tabs selected.
-  strip.CloseWebContentsAt(0, TabStripModel::CLOSE_NONE);
+  strip.CloseWebContentsAt(0, TabCloseTypes::CLOSE_NONE);
   EXPECT_EQ(2, strip.count());
   ASSERT_EQ(5, observer.GetStateCount());
   ASSERT_EQ(observer.GetStateAt(0).action, MockTabStripModelObserver::CLOSE);
@@ -2989,7 +3041,8 @@ TEST_F(TabStripModelTest, MultipleToSingle) {
   strip.AddObserver(&observer);
   // This changes the selection (0 is no longer selected) but the selected_index
   // still remains at 1.
-  strip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(1, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(1, observer.GetStateCount());
   State s(raw_contents2, 1, MockTabStripModelObserver::SELECT);
   s.src_index = 1;
@@ -3143,13 +3196,14 @@ TEST_F(TabStripModelTest, LinkClicksWithPinnedTabOrdering) {
   // Open two pages, pinned.
   strip.AddWebContents(CreateWebContents(), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE | TabStripModel::ADD_PINNED);
+                       AddTabTypes::ADD_ACTIVE | AddTabTypes::ADD_PINNED);
   strip.AddWebContents(CreateWebContents(), -1,
                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                       TabStripModel::ADD_ACTIVE | TabStripModel::ADD_PINNED);
+                       AddTabTypes::ADD_ACTIVE | AddTabTypes::ADD_PINNED);
 
   // Activate the first tab (a).
-  strip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(0, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
 
   // Open two more tabs as link clicks. The first tab, c, should appear after
   // the pinned tabs followed by the second tab (d).
@@ -3158,9 +3212,9 @@ TEST_F(TabStripModelTest, LinkClicksWithPinnedTabOrdering) {
   std::unique_ptr<WebContents> page_d_contents = CreateWebContents();
   WebContents* raw_page_d_contents = page_d_contents.get();
   strip.AddWebContents(std::move(page_c_contents), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
   strip.AddWebContents(std::move(page_d_contents), -1, ui::PAGE_TRANSITION_LINK,
-                       TabStripModel::ADD_NONE);
+                       AddTabTypes::ADD_NONE);
 
   EXPECT_EQ(2, strip.GetIndexOfWebContents(raw_page_c_contents));
   EXPECT_EQ(3, strip.GetIndexOfWebContents(raw_page_d_contents));
@@ -3181,7 +3235,8 @@ TEST_F(TabStripModelTest, MoveWebContentsAt) {
   strip.AppendWebContents(CreateWebContents(), false);
   strip.AddObserver(&observer);
 
-  strip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(1, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_EQ(1, strip.active_index());
 
   strip.MoveWebContentsAt(2, 3, true);
@@ -3197,7 +3252,8 @@ TEST_F(TabStripModelTest, NewTabsUngrouped) {
 
   EXPECT_FALSE(strip.GetTabGroupForTab(0).has_value());
 
-  strip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(0, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   strip.CloseAllTabs();
 }
 
@@ -3212,7 +3268,8 @@ TEST_F(TabStripModelTest, AddTabToNewGroup) {
 
   EXPECT_TRUE(strip.GetTabGroupForTab(0).has_value());
 
-  strip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(0, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   strip.CloseAllTabs();
 }
 
@@ -3646,7 +3703,7 @@ TEST_F(TabStripModelTest, CloseTabDeletesGroup) {
   strip.AddToNewGroup({0});
   EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
 
-  strip.CloseWebContentsAt(0, TabStripModel::CLOSE_USER_GESTURE);
+  strip.CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
 
   EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 0U);
 }
@@ -3663,7 +3720,7 @@ TEST_F(TabStripModelTest, CloseTabNotifiesObserversOfGroupChange) {
   EXPECT_EQ(1u, observer.group_updates().size());
   EXPECT_EQ(1, observer.group_update(group).contents_update_count);
 
-  strip.CloseWebContentsAt(0, TabStripModel::CLOSE_USER_GESTURE);
+  strip.CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
   EXPECT_EQ(0u, observer.group_updates().size());
 }
 
@@ -3681,7 +3738,7 @@ TEST_F(TabStripModelTest, InsertWebContentsAtWithGroupNotifiesObservers) {
   EXPECT_EQ(1u, observer.group_updates().size());
   EXPECT_EQ(2, observer.group_update(group).contents_update_count);
 
-  strip.InsertWebContentsAt(1, CreateWebContents(), TabStripModel::ADD_NONE,
+  strip.InsertWebContentsAt(1, CreateWebContents(), AddTabTypes::ADD_NONE,
                             group);
 
   EXPECT_EQ(1u, observer.group_updates().size());
@@ -3699,7 +3756,7 @@ TEST_F(TabStripModelTest, InsertWebContentsAtDoesNotGroupByDefault) {
   strip.AppendWebContents(CreateWebContents(), false);
   strip.AddToNewGroup({0, 1});
 
-  strip.InsertWebContentsAt(2, CreateWebContents(), TabStripModel::ADD_NONE);
+  strip.InsertWebContentsAt(2, CreateWebContents(), AddTabTypes::ADD_NONE);
 
   // The newly added tab should not be in the group.
   EXPECT_TRUE(strip.GetTabGroupForTab(0).has_value());
@@ -3720,7 +3777,7 @@ TEST_F(TabStripModelTest, InsertWebContentsAtWithGroupGroups) {
   absl::optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(0);
 
   strip.InsertWebContentsAt(1, CreateWebContentsWithID(2),
-                            TabStripModel::ADD_NONE, group);
+                            AddTabTypes::ADD_NONE, group);
 
   EXPECT_EQ(strip.GetTabGroupForTab(0), group);
   EXPECT_EQ(strip.GetTabGroupForTab(1), group);
@@ -3737,7 +3794,7 @@ TEST_F(TabStripModelTest, NewTabWithGroup) {
   auto group = strip.AddToNewGroup({1});
 
   strip.AddWebContents(CreateWebContentsWithID(3), 2, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_NONE, group);
+                       AddTabTypes::ADD_NONE, group);
   EXPECT_EQ("0 1 3 2", GetTabStripStateString(strip));
   EXPECT_EQ(group, strip.GetTabGroupForTab(2));
 
@@ -3749,7 +3806,7 @@ TEST_F(TabStripModelTest, NewTabWithGroupDeletedCorrectly) {
   TabStripModel strip(&delegate, profile());
   strip.AppendWebContents(CreateWebContents(), true);
   strip.AddToNewGroup({0});
-  strip.InsertWebContentsAt(1, CreateWebContents(), TabStripModel::ADD_NONE,
+  strip.InsertWebContentsAt(1, CreateWebContents(), AddTabTypes::ADD_NONE,
                             strip.GetTabGroupForTab(0));
 
   strip.RemoveFromGroup({1});
@@ -3767,8 +3824,7 @@ TEST_F(TabStripModelTest, NewTabWithoutIndexInsertsAtEndOfGroup) {
   auto group = strip.AddToNewGroup({0, 1});
 
   strip.AddWebContents(CreateWebContentsWithID(3), -1,
-                       ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_NONE,
-                       group);
+                       ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_NONE, group);
   EXPECT_EQ("0 1 3 2", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
@@ -3781,7 +3837,7 @@ TEST_F(TabStripModelTest, DiscontinuousNewTabIndexTooHigh) {
   auto group = strip.AddToNewGroup({0, 1});
 
   strip.AddWebContents(CreateWebContentsWithID(3), 3, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_NONE, group);
+                       AddTabTypes::ADD_NONE, group);
   EXPECT_EQ("0 1 3 2", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
@@ -3794,7 +3850,7 @@ TEST_F(TabStripModelTest, DiscontinuousNewTabIndexTooLow) {
   auto group = strip.AddToNewGroup({1, 2});
 
   strip.AddWebContents(CreateWebContentsWithID(3), 0, ui::PAGE_TRANSITION_TYPED,
-                       TabStripModel::ADD_NONE, group);
+                       AddTabTypes::ADD_NONE, group);
   EXPECT_EQ("0 3 1 2", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
@@ -4272,13 +4328,16 @@ TEST_F(TabStripModelTest, ActivateRecordsStartTime) {
   ASSERT_FALSE(has_tab_switch_start_time(1));
 
   // ActivateTabAt should only update the start time if the active tab changes.
-  strip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(1, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_FALSE(has_tab_switch_start_time(0));
   EXPECT_FALSE(has_tab_switch_start_time(1));
-  strip.ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(0, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_TRUE(has_tab_switch_start_time(0));
   EXPECT_FALSE(has_tab_switch_start_time(1));
-  strip.ActivateTabAt(1, {TabStripModel::GestureType::kOther});
+  strip.ActivateTabAt(1, TabStripUserGestureDetails(
+                             TabStripUserGestureDetails::GestureType::kOther));
   EXPECT_TRUE(has_tab_switch_start_time(0));
   EXPECT_TRUE(has_tab_switch_start_time(1));
 }
@@ -4297,7 +4356,7 @@ TEST_F(TabStripModelTest, ToggleSiteMuted) {
       ->SetLastCommittedURL(url);
 
   tabstrip.AddWebContents(std::move(new_tab_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   // Validate if the mute site menu item shows up and the site is unmuted
   EXPECT_TRUE(tabstrip.IsContextMenuCommandEnabled(
@@ -4333,7 +4392,7 @@ TEST_F(TabStripModelTest, ToggleSiteMutedWithLessSpecificRule) {
       ->SetLastCommittedURL(url);
 
   tabstrip.AddWebContents(std::move(new_tab_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   // Validate if the mute site menu item shows up and the site is unmuted
   EXPECT_TRUE(tabstrip.IsContextMenuCommandEnabled(
@@ -4383,7 +4442,7 @@ TEST_F(TabStripModelTest, ToggleSiteMutedWithOtherDisjointRule) {
       ->SetLastCommittedURL(url);
 
   tabstrip.AddWebContents(std::move(new_tab_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   // Validate if the mute site menu item shows up and the site is unmuted
   EXPECT_TRUE(tabstrip.IsContextMenuCommandEnabled(
@@ -4429,7 +4488,7 @@ TEST_F(TabStripModelTest, ToggleSiteMutedWithDifferentDefault) {
       ->SetLastCommittedURL(url);
 
   tabstrip.AddWebContents(std::move(new_tab_contents), -1,
-                          ui::PAGE_TRANSITION_TYPED, TabStripModel::ADD_ACTIVE);
+                          ui::PAGE_TRANSITION_TYPED, AddTabTypes::ADD_ACTIVE);
 
   settings->SetDefaultContentSetting(ContentSettingsType::SOUND,
                                      ContentSetting::CONTENT_SETTING_BLOCK);

@@ -231,7 +231,8 @@ IN_PROC_BROWSER_TEST_F(
   NavigateIframeToURL(web_contents(), "test_iframe", subframe_url);
 
   // Create an impression tag that is opened via middle click in the subframe.
-  RenderFrameHost* subframe = ChildFrameAt(web_contents()->GetMainFrame(), 0);
+  RenderFrameHost* subframe =
+      ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0);
 
   GURL register_source_url = https_server()->GetURL(
       "b.test", "/attribution_reporting/register_source_headers.html");
@@ -356,7 +357,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSourceDeclarationBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(
     AttributionSourceDeclarationBrowserTest,
-    ImpressionInSubframeWithoutPermissionsPolicy_NotRegistered) {
+    ImpressionInSubframeWithoutPermissionsPolicy_Registered) {
   GURL page_url = https_server()->GetURL("b.test", "/page_with_iframe.html");
   EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
 
@@ -364,7 +365,8 @@ IN_PROC_BROWSER_TEST_F(
       https_server()->GetURL("c.test", "/page_with_impression_creator.html");
   NavigateIframeToURL(web_contents(), "test_iframe", subframe_url);
 
-  RenderFrameHost* subframe = ChildFrameAt(web_contents()->GetMainFrame(), 0);
+  RenderFrameHost* subframe =
+      ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0);
 
   GURL register_source_url = https_server()->GetURL(
       "b.test", "/attribution_reporting/register_source_headers.html");
@@ -374,10 +376,38 @@ IN_PROC_BROWSER_TEST_F(
                         attributionsrc: $1});)",
                                          register_source_url)));
 
+  // For now, we expect an impression because the attribution-reporting
+  // permission policy has a default of *.
   SourceObserver source_observer(web_contents());
   EXPECT_TRUE(ExecJs(subframe, "simulateClick('link');"));
+  source_observer.Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(
+    AttributionSourceDeclarationBrowserTest,
+    ImpressionInSubframeWithPermissionsPolicyDisabled_NotRegistered) {
+  GURL page_url = https_server()->GetURL(
+      "b.test", "/attribution_reporting/page_with_disallowed_iframe.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
+
+  GURL subframe_url =
+      https_server()->GetURL("c.test", "/page_with_impression_creator.html");
+  NavigateIframeToURL(web_contents(), "test_iframe", subframe_url);
+
+  RenderFrameHost* subframe =
+      ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0);
+
+  GURL register_source_url = https_server()->GetURL(
+      "b.test", "/attribution_reporting/register_source_headers.html");
+  EXPECT_TRUE(ExecJs(subframe, JsReplace(R"(
+    createAttributionSrcAnchor({id: 'link',
+                        url: 'page_with_conversion_redirect.html',
+                        attributionsrc: $1});)",
+                                         register_source_url)));
 
   // We should see a null impression on the navigation
+  SourceObserver source_observer(web_contents());
+  EXPECT_TRUE(ExecJs(subframe, "simulateClick('link');"));
   EXPECT_TRUE(source_observer.WaitForNavigationWithNoImpression());
 }
 
@@ -393,7 +423,8 @@ IN_PROC_BROWSER_TEST_F(AttributionSourceDeclarationBrowserTest,
       https_server()->GetURL("c.test", "/page_with_impression_creator.html");
   NavigateIframeToURL(web_contents(), "test_iframe", subframe_url);
 
-  RenderFrameHost* subframe = ChildFrameAt(web_contents()->GetMainFrame(), 0);
+  RenderFrameHost* subframe =
+      ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0);
 
   GURL register_source_url = https_server()->GetURL(
       "b.test", "/attribution_reporting/register_source_headers.html");
@@ -436,7 +467,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSourceDeclarationBrowserTest,
 
   auto context_menu_interceptor =
       std::make_unique<content::ContextMenuInterceptor>(
-          web_contents()->GetMainFrame(),
+          web_contents()->GetPrimaryMainFrame(),
           ContextMenuInterceptor::ShowBehavior::kPreventShow);
 
   content::SimulateMouseClickAt(
@@ -608,7 +639,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSourceDeclarationBrowserTest,
   NavigateIframeToURL(web_contents(), "test_iframe", middle_iframe_url);
 
   RenderFrameHost* middle_iframe =
-      ChildFrameAt(web_contents()->GetMainFrame(), 0);
+      ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0);
 
   GURL innermost_iframe_url(
       embedded_test_server()->GetURL("/page_with_impression_creator.html"));

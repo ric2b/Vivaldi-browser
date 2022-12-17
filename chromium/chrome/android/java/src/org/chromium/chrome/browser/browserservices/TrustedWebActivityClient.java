@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.browserservices;
 
-import static org.chromium.chrome.browser.browserservices.metrics.TrustedWebActivityUmaRecorder.DelegatedNotificationSmallIconFallback.FALLBACK_ICON_NOT_PROVIDED;
-import static org.chromium.chrome.browser.browserservices.metrics.TrustedWebActivityUmaRecorder.DelegatedNotificationSmallIconFallback.NO_FALLBACK;
 import static org.chromium.chrome.browser.browserservices.permissiondelegation.InstalledWebappGeolocationBridge.EXTRA_NEW_LOCATION_ERROR_CALLBACK;
 
 import android.app.Notification;
@@ -34,6 +32,7 @@ import androidx.browser.trusted.TrustedWebActivityServiceConnectionPool;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClientWrappers.Connection;
@@ -50,6 +49,7 @@ import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.List;
 import java.util.Set;
@@ -58,7 +58,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
- * Uses a Trusted Web Activity client to display notifications.
+ * A client for calling methods on a {@link TrustedWebActivityService}.
  */
 @Singleton
 public class TrustedWebActivityClient {
@@ -88,30 +88,11 @@ public class TrustedWebActivityClient {
     private final TrustedWebActivityUmaRecorder mRecorder;
 
     /**
-     * Interface for callbacks to {@link #checkNotificationPermission} and {@link
-     * #checkLocationPermission}.
-     * TODO(crbug.com/1320272): Delete this interface once the new flow has shipped.
-     */
-    public interface PermissionCheckCallback {
-        /**
-         * May be called as a result of {@link #checkNotificationPermission} or {@link
-         * #checkLocationPermission}.
-         */
-        void onPermissionCheck(ComponentName answeringApp, boolean enabled);
-
-        /**
-         * Called when {@link #checkNotificationPermission} or {@link #checkLocationPermission}
-         * can't find a TWA to connect to.
-         */
-        default void onNoTwaFound() {}
-    }
-
-    /**
      * Interface for callbacks to get a permission setting from a TWA app.
      */
     public interface PermissionCallback {
         /**
-         * Called on a background thread when the app answered with a permission setting.
+         * Called when the app answered with a permission setting.
          */
         void onPermission(ComponentName app, @ContentSettingValues int settingValue);
 
@@ -130,7 +111,7 @@ public class TrustedWebActivityClient {
     }
 
     /**
-     * Creates a TrustedWebActivityService.
+     * Creates a TrustedWebActivityClient.
      */
     @Inject
     public TrustedWebActivityClient(TrustedWebActivityServiceConnectionPool connectionPool,
@@ -140,7 +121,7 @@ public class TrustedWebActivityClient {
     }
 
     /**
-     * Creates a TrustedWebActivityService for tests.
+     * Creates a TrustedWebActivityClient for tests.
      */
     public TrustedWebActivityClient(ConnectionPool connectionPool,
             InstalledWebappPermissionManager permissionManager,
@@ -165,43 +146,15 @@ public class TrustedWebActivityClient {
     }
 
     /**
-     * Checks whether the TWA of the given origin has the notification permission granted.
-     * @param callback Will be called on a background thread with whether the permission is granted.
-     * @return {@code false} if no such TWA exists (in which case the callback will not be called).
-     *         Ensure that the app has been added to the {@link InstalledWebappPermissionManager}
-     *         before calling this.
-     * TODO(crbug.com/1320272): Delete this method once the new flow has shipped.
-     */
-    public void checkNotificationPermission(Origin origin, PermissionCheckCallback callback) {
-        Resources res = ContextUtils.getApplicationContext().getResources();
-        String channelDisplayName = res.getString(R.string.notification_category_group_general);
-
-        connectAndExecute(
-                origin.uri(), new ExecutionCallback() {
-                    @Override
-                    public void onConnected(Origin originCopy, Connection service)
-                            throws RemoteException {
-                        callback.onPermissionCheck(service.getComponentName(),
-                                service.areNotificationsEnabled(channelDisplayName));
-                    }
-
-                    @Override
-                    public void onNoTwaFound() {
-                        callback.onNoTwaFound();
-                    }
-                });
-    }
-
-    /**
      * Gets the notification permission setting of the TWA for the given origin.
-     * @param permissionCallback To be called on a background thread with the permission setting.
+     * @param url The url of the web page that requesting the permission.
+     * @param permissionCallback To be called with the permission setting.
      */
-    public void checkNotificationPermissionSetting(
-            Origin origin, PermissionCallback permissionCallback) {
+    public void checkNotificationPermission(String url, PermissionCallback permissionCallback) {
         String channelName = ContextUtils.getApplicationContext().getResources().getString(
                 R.string.notification_category_group_general);
 
-        connectAndExecute(origin.uri(), new ExecutionCallback() {
+        connectAndExecute(Uri.parse(url), new ExecutionCallback() {
             @Override
             public void onConnected(Origin origin, Connection service) throws RemoteException {
                 Bundle commandArgs = new Bundle();
@@ -245,14 +198,14 @@ public class TrustedWebActivityClient {
     }
 
     /**
-     * Requests notification permission for the TWA for the given origin using a dialog.
-     * @param permissionCallback To be called on a background thread with the permission setting.
+     * Requests notification permission for the TWA for the given url using a dialog.
+     * @param url The url of the web page that requesting the permission.
+     * @param permissionCallback To be called with the permission setting.
      */
-    public void requestNotificationPermission(
-            Origin origin, PermissionCallback permissionCallback) {
+    public void requestNotificationPermission(String url, PermissionCallback permissionCallback) {
         String channelName = ContextUtils.getApplicationContext().getResources().getString(
                 R.string.notification_category_group_general);
-        connectAndExecute(origin.uri(), new ExecutionCallback() {
+        connectAndExecute(Uri.parse(url), new ExecutionCallback() {
             @Override
             public void onConnected(Origin origin, Connection service) throws RemoteException {
                 Bundle commandArgs = new Bundle();
@@ -308,24 +261,30 @@ public class TrustedWebActivityClient {
 
     /**
      * Check location permission for the TWA of the given origin.
-     * @param callback Will be called on a background thread with whether the permission is granted.
-     * @return {@code false} if no such TWA exists (in which case the callback will not be called).
-     *         Ensure that the app has been added to the {@link InstalledWebappPermissionManager}
-     *         before calling this.
+     * @param url The url of the web page that requesting the permission.
+     * @param permissionCallback Will be called with whether the permission is granted.
      */
-    public void checkLocationPermission(Origin origin, PermissionCheckCallback callback) {
-        connectAndExecute(origin.uri(), new ExecutionCallback() {
+    public void checkLocationPermission(String url, PermissionCallback permissionCallback) {
+        connectAndExecute(Uri.parse(url), new ExecutionCallback() {
             @Override
             public void onConnected(Origin origin, Connection service) throws RemoteException {
                 TrustedWebActivityCallback resultCallback = new TrustedWebActivityCallback() {
                     @Override
                     public void onExtraCallback(String callbackName, @Nullable Bundle bundle) {
-                        boolean granted = false;
-                        if (TextUtils.equals(callbackName, CHECK_LOCATION_PERMISSION_COMMAND_NAME)
-                                && bundle != null) {
-                            granted = bundle.getBoolean(LOCATION_PERMISSION_RESULT);
-                        }
-                        callback.onPermissionCheck(service.getComponentName(), granted);
+                        // Hop back to the UI thread because we are on a binder thread.
+                        PostTask.postTask(UiThreadTaskTraits.USER_VISIBLE, () -> {
+                            boolean granted = false;
+                            if (TextUtils.equals(
+                                        callbackName, CHECK_LOCATION_PERMISSION_COMMAND_NAME)
+                                    && bundle != null) {
+                                granted = bundle.getBoolean(LOCATION_PERMISSION_RESULT);
+                            }
+                            @ContentSettingValues
+                            int settingValue = granted ? ContentSettingValues.ALLOW
+                                                       : ContentSettingValues.BLOCK;
+                            permissionCallback.onPermission(
+                                    service.getComponentName(), settingValue);
+                        });
                     }
                 };
 
@@ -334,20 +293,26 @@ public class TrustedWebActivityClient {
                 // Set permission to false if the service does not know how to handle the
                 // extraCommand or did not handle the command.
                 if (executionResult == null || !executionResult.getBoolean(EXTRA_COMMAND_SUCCESS)) {
-                    callback.onPermissionCheck(service.getComponentName(), false);
+                    permissionCallback.onPermission(
+                            service.getComponentName(), ContentSettingValues.BLOCK);
                 }
             }
 
             @Override
             public void onNoTwaFound() {
-                callback.onNoTwaFound();
+                permissionCallback.onNoTwaFound();
             }
         });
     }
 
+    /**
+     * Start listening for location updates. Location updates are passed to the callback on a
+     * background thread. Errors may be passed on the main thread or on a background thread,
+     * depending on where and when they happen.
+     */
     public void startListeningLocationUpdates(
-            Origin origin, boolean highAccuracy, TrustedWebActivityCallback locationCallback) {
-        connectAndExecute(origin.uri(), new ExecutionCallback() {
+            String url, boolean highAccuracy, TrustedWebActivityCallback locationCallback) {
+        connectAndExecute(Uri.parse(url), new ExecutionCallback() {
             @Override
             public void onConnected(Origin origin, Connection service) throws RemoteException {
                 Bundle args = new Bundle();
@@ -369,8 +334,8 @@ public class TrustedWebActivityClient {
         });
     }
 
-    public void stopLocationUpdates(Origin origin) {
-        connectAndExecute(origin.uri(), new ExecutionCallback() {
+    public void stopLocationUpdates(String url) {
+        connectAndExecute(Uri.parse(url), new ExecutionCallback() {
             @Override
             public void onConnected(Origin origin, Connection service) throws RemoteException {
                 service.sendExtraCommand(STOP_LOCATION_COMMAND_NAME, Bundle.EMPTY, null);
@@ -396,7 +361,7 @@ public class TrustedWebActivityClient {
             if (!service.areNotificationsEnabled(channelDisplayName)) {
                 mPermissionManager.updatePermission(origin,
                         service.getComponentName().getPackageName(),
-                        ContentSettingsType.NOTIFICATIONS, false);
+                        ContentSettingsType.NOTIFICATIONS, ContentSettingValues.BLOCK);
 
                 // Attempting to notify when notifications are disabled won't have any effect, but
                 // returning here just saves us from doing unnecessary work.
@@ -421,13 +386,13 @@ public class TrustedWebActivityClient {
     private void fallbackToIconFromServiceIfNecessary(
             NotificationBuilderBase builder, Connection service) throws RemoteException {
         if (builder.hasSmallIconForContent() && builder.hasStatusBarIconBitmap()) {
-            recordFallback(NO_FALLBACK);
+            recordFallback(DelegatedNotificationSmallIconFallback.NO_FALLBACK);
             return;
         }
 
         int id = service.getSmallIconId();
         if (id == TrustedWebActivityService.SMALL_ICON_NOT_SET) {
-            recordFallback(FALLBACK_ICON_NOT_PROVIDED);
+            recordFallback(DelegatedNotificationSmallIconFallback.FALLBACK_ICON_NOT_PROVIDED);
             return;
         }
 

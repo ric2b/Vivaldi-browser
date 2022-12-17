@@ -14,6 +14,7 @@
 #include "ui/gl/gl_display.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gpu_preference.h"
+#include "ui/ozone/public/native_pixmap_gl_binding.h"
 
 namespace gl {
 class GLContext;
@@ -56,6 +57,24 @@ class COMPONENT_EXPORT(OZONE_BASE) GLOzone {
   // Clears static GL bindings.
   virtual void ShutdownGL(gl::GLDisplay* display) = 0;
 
+  // Returns true if the NativePixmap of the specified type can be imported
+  // into GL using ImportNativePixmap().
+  virtual bool CanImportNativePixmap() = 0;
+
+  // Imports NativePixmap into GL and binds it to the provided texture_id. The
+  // NativePixmapGLBinding does not take ownership of the provided texture_id
+  // and the client is expected to keep the binding alive while the texture is
+  // being used. This is because the NativePixmapGLBinding is not guaranteed to
+  // live until glDeleteTextures fn is called on all platforms.
+  virtual std::unique_ptr<NativePixmapGLBinding> ImportNativePixmap(
+      scoped_refptr<gfx::NativePixmap> pixmap,
+      gfx::BufferFormat plane_format,
+      gfx::BufferPlane plane,
+      gfx::Size plane_size,
+      const gfx::ColorSpace& color_space,
+      GLenum target,
+      GLuint texture_id) = 0;
+
   // Returns information about the GL window system binding implementation (eg.
   // EGL, GLX, WGL). Returns true if the information was retrieved successfully.
   virtual bool GetGLWindowSystemBindingInfo(
@@ -72,6 +91,7 @@ class COMPONENT_EXPORT(OZONE_BASE) GLOzone {
 
   // Creates a GL surface that renders directly to a view.
   virtual scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLDisplay* display,
       gfx::AcceleratedWidget window) = 0;
 
   // Creates a GL surface that renders directly into a window with surfaceless
@@ -80,10 +100,12 @@ class COMPONENT_EXPORT(OZONE_BASE) GLOzone {
   // unsupported.
   // TODO(spang): Consider deprecating this and using OverlaySurface for GL.
   virtual scoped_refptr<gl::GLSurface> CreateSurfacelessViewGLSurface(
+      gl::GLDisplay* display,
       gfx::AcceleratedWidget window) = 0;
 
   // Creates a GL surface used for offscreen rendering.
   virtual scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLDisplay* display,
       const gfx::Size& size) = 0;
 };
 

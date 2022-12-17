@@ -241,7 +241,7 @@ PA_ALWAYS_INLINE constexpr uint16_t BucketIndexLookup::GetIndex(size_t size) {
   //
   // So, an allocation of size 1.4*2^10 would go into the 1.5*2^10 bucket under
   // Distribution A, but to the 2^11 bucket under Distribution B.
-  if (1 << 8 < size && size < 1 << 19)
+  if (1 << 8 < size && size < kHighThresholdForAlternateDistribution)
     return BucketIndexLookup::GetIndexForDenserBuckets(RoundUpSize(size));
   return BucketIndexLookup::GetIndexForDenserBuckets(size);
 }
@@ -269,13 +269,5 @@ PA_ALWAYS_INLINE constexpr uint16_t BucketIndexLookup::GetIndexForDenserBuckets(
 }
 
 }  // namespace partition_alloc::internal
-
-namespace base::internal {
-
-// TODO(https://crbug.com/1288247): Remove these 'using' declarations once
-// the migration to the new namespaces gets done.
-using ::partition_alloc::internal::BucketIndexLookup;
-
-}  // namespace base::internal
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_BUCKET_LOOKUP_H_

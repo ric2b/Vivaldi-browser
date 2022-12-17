@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -51,10 +52,6 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
  public:
   ClientTagBasedModelTypeProcessor(ModelType type,
                                    const base::RepeatingClosure& dump_stack);
-  // Used only for unit-tests.
-  ClientTagBasedModelTypeProcessor(ModelType type,
-                                   const base::RepeatingClosure& dump_stack,
-                                   bool commit_only);
 
   ClientTagBasedModelTypeProcessor(const ClientTagBasedModelTypeProcessor&) =
       delete;
@@ -78,6 +75,7 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void UntrackEntityForStorageKey(const std::string& storage_key) override;
   void UntrackEntityForClientTagHash(
       const ClientTagHash& client_tag_hash) override;
+  std::vector<std::string> GetAllTrackedStorageKeys() const override;
   bool IsEntityUnsynced(const std::string& storage_key) override;
   base::Time GetEntityCreationTime(
       const std::string& storage_key) const override;
@@ -86,8 +84,8 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void OnModelStarting(ModelTypeSyncBridge* bridge) override;
   void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) override;
   bool IsTrackingMetadata() const override;
-  std::string TrackedAccountId() override;
-  std::string TrackedCacheGuid() override;
+  std::string TrackedAccountId() const override;
+  std::string TrackedCacheGuid() const override;
   void ReportError(const ModelError& error) override;
   absl::optional<ModelError> GetError() const override;
   base::WeakPtr<ModelTypeControllerDelegate> GetControllerDelegate() override;
@@ -284,12 +282,6 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   //////////////////
 
   std::unique_ptr<ProcessorEntityTracker> entity_tracker_;
-
-  // If the processor should behave as if |type_| is one of the commit only
-  // model types. For this processor, being commit only means that on commit
-  // confirmation, we should delete local data, because the model side never
-  // intends to read it. This includes both data and metadata.
-  const bool commit_only_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

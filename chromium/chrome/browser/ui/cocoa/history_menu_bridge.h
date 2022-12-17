@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_COCOA_HISTORY_MENU_BRIDGE_H_
 #define CHROME_BROWSER_UI_COCOA_HISTORY_MENU_BRIDGE_H_
 
+#include "base/memory/raw_ptr.h"
+
 #import <Cocoa/Cocoa.h>
 #include <map>
 #include <memory>
@@ -234,9 +236,8 @@ class HistoryMenuBridge : public sessions::TabRestoreServiceObserver,
 
   // history::HistoryServiceObserver:
   void OnURLVisited(history::HistoryService* history_service,
-                    ui::PageTransition transition,
-                    const history::URLRow& row,
-                    base::Time visit_time) override;
+                    const history::URLRow& url_row,
+                    const history::VisitRow& new_visit) override;
   void OnURLsModified(history::HistoryService* history_service,
                       const history::URLRows& changed_urls) override;
   void OnURLsDeleted(history::HistoryService* history_service,
@@ -253,9 +254,9 @@ class HistoryMenuBridge : public sessions::TabRestoreServiceObserver,
 
   base::scoped_nsobject<HistoryMenuCocoaController> controller_;  // strong
 
-  Profile* const profile_;                                      // weak
-  history::HistoryService* history_service_ = nullptr;          // weak
-  sessions::TabRestoreService* tab_restore_service_ = nullptr;  // weak
+  const raw_ptr<Profile> profile_;                                      // weak
+  raw_ptr<history::HistoryService> history_service_ = nullptr;          // weak
+  raw_ptr<sessions::TabRestoreService> tab_restore_service_ = nullptr;  // weak
 
   base::CancelableTaskTracker cancelable_task_tracker_;
 

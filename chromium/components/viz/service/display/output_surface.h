@@ -19,8 +19,8 @@
 #include "components/viz/service/display/software_output_device.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/service/gpu_task_scheduler_helper.h"
 #include "gpu/ipc/common/surface_handle.h"
-#include "gpu/ipc/gpu_task_scheduler_helper.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkM44.h"
@@ -136,6 +136,9 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // SkColorType for all supported buffer formats.
     SkColorType sk_color_types[static_cast<int>(gfx::BufferFormat::LAST) + 1] =
         {};
+
+    // Max size for textures.
+    int max_texture_size = 0;
   };
 
   // Constructor for skia-based compositing.
@@ -200,13 +203,16 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     float device_scale_factor = 1.f;
     gfx::ColorSpace color_space;
     float sdr_white_level = gfx::ColorSpace::kDefaultSDRWhiteLevel;
-    gfx::BufferFormat format = gfx::BufferFormat::RGBX_8888;
+    // TODO(sunnyps): Change to SkColorType.
+    gfx::BufferFormat format = gfx::BufferFormat::RGBA_8888;
+    SkAlphaType alpha_type = kPremul_SkAlphaType;
 
     bool operator==(const ReshapeParams& other) const {
       return size == other.size &&
              device_scale_factor == other.device_scale_factor &&
              color_space == other.color_space &&
-             sdr_white_level == other.sdr_white_level;
+             sdr_white_level == other.sdr_white_level &&
+             format == other.format && alpha_type == other.alpha_type;
     }
     bool operator!=(const ReshapeParams& other) const {
       return !(*this == other);

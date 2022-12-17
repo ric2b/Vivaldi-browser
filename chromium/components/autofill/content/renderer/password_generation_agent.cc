@@ -23,7 +23,6 @@
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/signatures.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/public/renderer/render_view.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
@@ -206,7 +205,7 @@ struct PasswordGenerationAgent::GenerationItemInfo {
   // True when PasswordGenerationAgent updates other password fields on the page
   // due to the generated password being edited. It's used to suppress the fake
   // blur events coming from there.
-  bool updating_other_password_fileds_ = false;
+  bool updating_other_password_fields_ = false;
 };
 
 PasswordGenerationAgent::PasswordGenerationAgent(
@@ -218,7 +217,7 @@ PasswordGenerationAgent::PasswordGenerationAgent(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kShowAutofillSignatures)),
       password_agent_(password_agent) {
-  registry->AddInterface(base::BindRepeating(
+  registry->AddInterface<mojom::PasswordGenerationAgent>(base::BindRepeating(
       &PasswordGenerationAgent::BindPendingReceiver, base::Unretained(this)));
   password_agent_->SetPasswordGenerationAgent(this);
 }
@@ -233,8 +232,8 @@ void PasswordGenerationAgent::BindPendingReceiver(
 
 void PasswordGenerationAgent::DidCommitProvisionalLoad(
     ui::PageTransition transition) {
-  // Update stats for main frame navigation.
-  if (!render_frame()->GetWebFrame()->Parent()) {
+  // Update stats for primary main frame navigation.
+  if (render_frame()->GetWebFrame()->IsOutermostMainFrame()) {
     if (current_generation_item_) {
       if (current_generation_item_->password_edited_) {
         password_generation::LogPasswordGenerationEvent(
@@ -281,7 +280,7 @@ void PasswordGenerationAgent::OnFieldAutofilled(
 
 bool PasswordGenerationAgent::ShouldIgnoreBlur() const {
   return current_generation_item_ &&
-         current_generation_item_->updating_other_password_fileds_;
+         current_generation_item_->updating_other_password_fields_;
 }
 
 bool PasswordGenerationAgent::IsPrerendering() const {
@@ -302,7 +301,7 @@ void PasswordGenerationAgent::GeneratedPasswordAccepted(
   LogMessage(Logger::STRING_GENERATION_RENDERER_GENERATED_PASSWORD_ACCEPTED);
   for (auto& password_element : current_generation_item_->password_elements_) {
     base::AutoReset<bool> auto_reset_update_confirmation_password(
-        &current_generation_item_->updating_other_password_fileds_, true);
+        &current_generation_item_->updating_other_password_fields_, true);
     password_element.SetAutofillValue(blink::WebString::FromUTF16(password));
     // setAutofillValue() above may have resulted in JavaScript closing the
     // frame.
@@ -555,7 +554,7 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
     } else if (current_generation_item_->password_is_generated_) {
       current_generation_item_->password_edited_ = true;
       base::AutoReset<bool> auto_reset_update_confirmation_password(
-          &current_generation_item_->updating_other_password_fileds_, true);
+          &current_generation_item_->updating_other_password_fields_, true);
       // Mirror edits to any confirmation password fields.
       CopyElementValueToOtherInputElements(
           &element, &current_generation_item_->password_elements_);
@@ -650,7 +649,7 @@ void PasswordGenerationAgent::PasswordNoLongerGenerated() {
   for (WebInputElement& element :
        current_generation_item_->password_elements_) {
     base::AutoReset<bool> auto_reset_update_confirmation_password(
-        &current_generation_item_->updating_other_password_fileds_, true);
+        &current_generation_item_->updating_other_password_fields_, true);
     if (current_generation_item_->generation_element_ != element)
       element.SetAutofillValue(blink::WebString());
   }

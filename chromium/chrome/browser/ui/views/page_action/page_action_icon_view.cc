@@ -32,7 +32,7 @@
 #include "ui/views/style/platform_style.h"
 
 float PageActionIconView::Delegate::GetPageActionInkDropVisibleOpacity() const {
-  return GetOmniboxStateOpacity(OmniboxPartState::SELECTED);
+  return kOmniboxOpacitySelected;
 }
 
 int PageActionIconView::Delegate::GetPageActionIconSize() const {
@@ -68,7 +68,7 @@ PageActionIconView::PageActionIconView(
 
   image()->SetFlipCanvasOnPaintForRTLUI(true);
   views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  SetFocusBehavior(views::PlatformStyle::kDefaultFocusBehavior);
   // Only shows bubble after mouse is released.
   button_controller()->set_notify_action(
       views::ButtonController::NotifyAction::kOnRelease);
@@ -96,6 +96,10 @@ SkColor PageActionIconView::GetLabelColorForTesting() const {
 void PageActionIconView::ExecuteForTesting() {
   DCHECK(GetVisible());
   OnExecuting(EXECUTE_SOURCE_MOUSE);
+}
+
+void PageActionIconView::InstallLoadingIndicatorForTesting() {
+  InstallLoadingIndicator();
 }
 
 void PageActionIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -252,15 +256,6 @@ void PageActionIconView::UpdateIconImage() {
     SetImageModel(ui::ImageModel::FromImageSkia(image));
 }
 
-void PageActionIconView::InstallLoadingIndicator() {
-  if (loading_indicator_)
-    return;
-
-  loading_indicator_ =
-      AddChildView(std::make_unique<PageActionIconLoadingIndicatorView>(this));
-  loading_indicator_->SetVisible(false);
-}
-
 void PageActionIconView::SetIsLoading(bool is_loading) {
   if (loading_indicator_)
     loading_indicator_->SetAnimating(is_loading);
@@ -274,6 +269,15 @@ void PageActionIconView::UpdateBorder() {
   const gfx::Insets new_insets = delegate_->GetPageActionIconInsets(this);
   if (new_insets != GetInsets())
     SetBorder(views::CreateEmptyBorder(new_insets));
+}
+
+void PageActionIconView::InstallLoadingIndicator() {
+  if (loading_indicator_)
+    return;
+
+  loading_indicator_ =
+      AddChildView(std::make_unique<PageActionIconLoadingIndicatorView>(this));
+  loading_indicator_->SetVisible(false);
 }
 
 BEGIN_METADATA(PageActionIconView, IconLabelBubbleView)

@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -58,7 +59,8 @@ class LocalPrinterHandlerChromeos : public PrinterHandler {
 
   // Returns a PrinterStatus object (defined in
   // chrome/browser/resources/print_preview/data/printer_status_cros.js).
-  static base::Value StatusToValue(const crosapi::mojom::PrinterStatus& status);
+  static base::Value::Dict StatusToValue(
+      const crosapi::mojom::PrinterStatus& status);
 
   // PrinterHandler implementation.
   void Reset() override;
@@ -83,8 +85,8 @@ class LocalPrinterHandlerChromeos : public PrinterHandler {
                               PrinterHandler::PrintCallback callback,
                               const absl::optional<std::string>& username);
 
-  content::WebContents* const preview_web_contents_;
-  crosapi::mojom::LocalPrinter* local_printer_ = nullptr;
+  const raw_ptr<content::WebContents> preview_web_contents_;
+  raw_ptr<crosapi::mojom::LocalPrinter> local_printer_ = nullptr;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   int local_printer_version_ = 0;
 #endif

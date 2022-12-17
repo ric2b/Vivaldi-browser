@@ -15,8 +15,6 @@
 #include "components/sessions/core/sessions_export.h"
 #include "ui/base/ui_base_types.h"
 
-#include <map>
-
 class GURL;
 
 namespace gfx {

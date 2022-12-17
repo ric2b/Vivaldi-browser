@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_LACROS_ACCOUNT_MANAGER_PROFILE_ACCOUNT_MANAGER_H_
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
@@ -75,15 +76,16 @@ class ProfileAccountManager : public KeyedService,
   void ShowManageAccountsSettings() override;
   std::unique_ptr<OAuth2AccessTokenFetcher> CreateAccessTokenFetcher(
       const account_manager::AccountKey& account,
-      const std::string& oauth_consumer_name,
       OAuth2AccessTokenConsumer* consumer) override;
+  void ReportAuthError(const account_manager::AccountKey& account,
+                       const GoogleServiceAuthError& error) override;
   void UpsertAccountForTesting(const account_manager::Account& account,
                                const std::string& token_value) override;
   void RemoveAccountForTesting(
       const account_manager::AccountKey& account) override;
 
  private:
-  AccountProfileMapper* const mapper_;
+  const raw_ptr<AccountProfileMapper> mapper_;
   const base::FilePath profile_path_;
   base::ObserverList<account_manager::AccountManagerFacade::Observer>
       observers_;

@@ -9,8 +9,8 @@
  * UI.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import '../os_icons.js';
 
@@ -90,7 +90,7 @@ export function getLabelForDeviceType(deviceType) {
  */
 export function getLabelForAssignment(assignment) {
   return I18nBehavior.i18nAdvanced('switchAndDeviceType', {
-    substitutions: [assignment.key, getLabelForDeviceType(assignment.device)]
+    substitutions: [assignment.key, getLabelForDeviceType(assignment.device)],
   });
 }
 

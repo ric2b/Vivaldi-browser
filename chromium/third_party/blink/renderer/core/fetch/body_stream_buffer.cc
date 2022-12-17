@@ -5,7 +5,9 @@
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
 
 #include <memory>
+
 #include "base/auto_reset.h"
+#include "base/numerics/safe_conversions.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/body.h"
 #include "third_party/blink/renderer/core/fetch/bytes_consumer_tee.h"
@@ -24,7 +26,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/script_cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
-#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
 
@@ -213,14 +214,15 @@ scoped_refptr<EncodedFormData> BodyStreamBuffer::DrainAsFormData() {
 void BodyStreamBuffer::DrainAsChunkedDataPipeGetter(
     ScriptState* script_state,
     mojo::PendingReceiver<network::mojom::blink::ChunkedDataPipeGetter>
-        pending_receiver) {
+        pending_receiver,
+    BytesUploader::Client* client) {
   DCHECK(!IsStreamLocked());
   auto* consumer =
       MakeGarbageCollected<ReadableStreamBytesConsumer>(script_state, stream_);
+  ExecutionContext* execution_context = ExecutionContext::From(script_state);
   stream_uploader_ = MakeGarbageCollected<BytesUploader>(
-      consumer, std::move(pending_receiver),
-      ExecutionContext::From(script_state)
-          ->GetTaskRunner(TaskType::kNetworking));
+      execution_context, consumer, std::move(pending_receiver),
+      execution_context->GetTaskRunner(TaskType::kNetworking), client);
 }
 
 void BodyStreamBuffer::StartLoading(FetchDataLoader* loader,
@@ -459,7 +461,7 @@ void BodyStreamBuffer::ProcessData() {
     if (result == BytesConsumer::Result::kOk) {
       array = DOMUint8Array::CreateOrNull(
           reinterpret_cast<const unsigned char*>(buffer),
-          SafeCast<uint32_t>(available));
+          base::checked_cast<uint32_t>(available));
       result = consumer_->EndRead(available);
       if (!array) {
         RaiseOOMError();

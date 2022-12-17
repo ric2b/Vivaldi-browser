@@ -42,8 +42,8 @@ class VivaldiDataSource : public content::URLDataSource {
       const GURL& path,
       const content::WebContents::Getter& wc_getter,
       content::URLDataSource::GotDataCallback callback) override;
-  std::string GetMimeType(const std::string& path) override;
-  bool AllowCaching(const std::string& path) override;
+  std::string GetMimeType(const GURL& url) override;
+  bool AllowCaching(const GURL& url) override;
 
  private:
   using PathType = vivaldi_data_url_utils::PathType;

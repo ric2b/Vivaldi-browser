@@ -255,31 +255,8 @@ void AnimationEffect::updateTiming(OptionalEffectTiming* optional_timing,
   InvalidateAndNotifyOwner();
 }
 
-absl::optional<Timing::Phase> TimelinePhaseToTimingPhase(
-    absl::optional<TimelinePhase> phase) {
-  absl::optional<Timing::Phase> result;
-  if (phase) {
-    switch (phase.value()) {
-      case TimelinePhase::kBefore:
-        result = Timing::Phase::kPhaseBefore;
-        break;
-      case TimelinePhase::kActive:
-        result = Timing::Phase::kPhaseActive;
-        break;
-      case TimelinePhase::kAfter:
-        result = Timing::Phase::kPhaseAfter;
-        break;
-      case TimelinePhase::kInactive:
-        // Timing::Phase does not have an inactive phase.
-        break;
-    }
-  }
-  return result;
-}
-
 void AnimationEffect::UpdateInheritedTime(
     absl::optional<AnimationTimeDelta> inherited_time,
-    absl::optional<TimelinePhase> inherited_timeline_phase,
     bool at_progress_timeline_boundary,
     double inherited_playback_rate,
     TimingUpdateReason reason) const {
@@ -287,21 +264,22 @@ void AnimationEffect::UpdateInheritedTime(
       (inherited_playback_rate < 0) ? Timing::AnimationDirection::kBackwards
                                     : Timing::AnimationDirection::kForwards;
 
-  absl::optional<Timing::Phase> timeline_phase =
-      TimelinePhaseToTimingPhase(inherited_timeline_phase);
-
-  bool needs_update = needs_update_ || last_update_time_ != inherited_time ||
-                      (owner_ && owner_->EffectSuppressed()) ||
-                      last_update_phase_ != timeline_phase;
+  bool needs_update =
+      needs_update_ || last_update_time_ != inherited_time ||
+      last_at_progress_timeline_boundary_ != at_progress_timeline_boundary ||
+      (owner_ && owner_->EffectSuppressed());
   needs_update_ = false;
   last_update_time_ = inherited_time;
-  last_update_phase_ = timeline_phase;
+  // A finished animation saturates inherited time at 0 or effect end.
+  // If we hit a progress timeline boundary and then enter the after phase
+  // timeline time doesn't change. Thus, we need to track boundary transitions
+  // as well since this can affect the phase (active vs after).
+  last_at_progress_timeline_boundary_ = at_progress_timeline_boundary;
 
   if (needs_update) {
     Timing::CalculatedTiming calculated = SpecifiedTiming().CalculateTimings(
-        inherited_time, timeline_phase, at_progress_timeline_boundary,
-        NormalizedTiming(), direction, IsA<KeyframeEffect>(this),
-        inherited_playback_rate);
+        inherited_time, at_progress_timeline_boundary, NormalizedTiming(),
+        direction, IsA<KeyframeEffect>(this), inherited_playback_rate);
 
     const bool was_canceled = calculated.phase != calculated_.phase &&
                               calculated.phase == Timing::kPhaseNone;

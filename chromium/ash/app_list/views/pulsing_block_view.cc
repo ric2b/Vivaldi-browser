@@ -11,6 +11,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "base/check_op.h"
 #include "base/rand_util.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -77,7 +78,7 @@ namespace ash {
 PulsingBlockView::PulsingBlockView(const gfx::Size& size,
                                    base::TimeDelta animation_delay)
     : block_size_(size) {
-  if (ash::features::IsLauncherPulsingBlocksRefreshEnabled()) {
+  if (ash::features::IsProductivityLauncherEnabled()) {
     views::BoxLayout* layout_manager =
         SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal));
@@ -93,14 +94,15 @@ PulsingBlockView::PulsingBlockView(const gfx::Size& size,
         views::Builder<views::View>()
             .SetVisible(true)
             .SetLayoutManager(std::make_unique<views::FillLayout>())
-            .AddChild(views::Builder<views::View>()
-                          .CopyAddressTo(&background_color_view_)
-                          .SetEnabled(false)
-                          .SetBackground(views::CreateSolidBackground(
-                              AshColorProvider::Get()->IsDarkModeEnabled()
-                                  ? SkColorSetA(SK_ColorWHITE, 0x4D)
-                                  : SkColorSetA(SK_ColorBLACK, 0x33)))
-                          .SetPreferredSize(block_size_))
+            .AddChild(
+                views::Builder<views::View>()
+                    .CopyAddressTo(&background_color_view_)
+                    .SetEnabled(false)
+                    .SetBackground(views::CreateSolidBackground(
+                        DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
+                            ? SkColorSetA(SK_ColorWHITE, 0x4D)
+                            : SkColorSetA(SK_ColorBLACK, 0x33)))
+                    .SetPreferredSize(block_size_))
             .SetPreferredSize(block_size_)
             .SetPaintToLayer()
             .Build());
@@ -133,7 +135,7 @@ const char* PulsingBlockView::GetClassName() const {
 }
 
 void PulsingBlockView::OnStartDelayTimer() {
-  if (!ash::features::IsLauncherPulsingBlocksRefreshEnabled()) {
+  if (!ash::features::IsProductivityLauncherEnabled()) {
     SchedulePulsingAnimation(layer());
     return;
   }
@@ -146,25 +148,42 @@ void PulsingBlockView::OnStartDelayTimer() {
 void PulsingBlockView::OnThemeChanged() {
   views::View::OnThemeChanged();
 
-  if (!ash::features::IsLauncherPulsingBlocksRefreshEnabled())
+  if (!ash::features::IsProductivityLauncherEnabled())
     return;
 
   if (background_color_view_) {
     background_color_view_->SetBackground(views::CreateSolidBackground(
-        AshColorProvider::Get()->IsDarkModeEnabled()
+        DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
             ? SkColorSetA(SK_ColorWHITE, 0x4D)
             : SkColorSetA(SK_ColorBLACK, 0x33)));
   }
 }
 
 void PulsingBlockView::OnPaint(gfx::Canvas* canvas) {
-  if (ash::features::IsLauncherPulsingBlocksRefreshEnabled()) {
+  if (ash::features::IsProductivityLauncherEnabled()) {
     views::View::OnPaint(canvas);
     return;
   }
   gfx::Rect rect(GetContentsBounds());
   rect.ClampToCenteredSize(gfx::Size(kBlockSize, kBlockSize));
   canvas->FillRect(rect, kBlockColor);
+}
+
+bool PulsingBlockView::IsAnimating() {
+  views::View* animating_view = ash::features::IsProductivityLauncherEnabled()
+                                    ? background_color_view_
+                                    : this;
+  return animating_view->layer()
+             ? animating_view->layer()->GetAnimator()->is_animating()
+             : false;
+}
+
+bool PulsingBlockView::FireAnimationTimerForTest() {
+  if (!start_delay_timer_.IsRunning())
+    return false;
+
+  start_delay_timer_.FireNow();
+  return true;
 }
 
 }  // namespace ash

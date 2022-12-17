@@ -21,6 +21,7 @@
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/login/lock/screen_locker.h"
 #include "chrome/browser/ash/login/ui/user_adding_screen.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/multi_profile_user_controller.h"
@@ -39,7 +40,7 @@
 #include "chrome/browser/ui/managed_ui.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -205,7 +206,8 @@ void SessionControllerClientImpl::NotifyChromeLockAnimationsComplete() {
 }
 
 void SessionControllerClientImpl::RunUnlockAnimation(
-    base::OnceClosure animation_finished_callback) {
+    ash::SessionController::RunUnlockAnimationCallback
+        animation_finished_callback) {
   session_controller_->RunUnlockAnimation(
       std::move(animation_finished_callback));
 }
@@ -217,6 +219,10 @@ void SessionControllerClientImpl::ShowTeleportWarningDialog(
 
 void SessionControllerClientImpl::RequestLockScreen() {
   DoLockScreen();
+}
+
+void SessionControllerClientImpl::RequestHideLockScreen() {
+  ash::ScreenLocker::Hide();
 }
 
 void SessionControllerClientImpl::RequestSignOut() {
@@ -284,7 +290,7 @@ void SessionControllerClientImpl::EmitAshInitialized() {
   // purely by emitting D-Bus signals, and thus has to be run whenever Ash is
   // started so Ash (DetachableBaseHandler in particular) gets the proper view
   // of the current detachable base state.
-  chromeos::SessionManagerClient::Get()->EmitAshInitialized();
+  ash::SessionManagerClient::Get()->EmitAshInitialized();
 }
 
 PrefService* SessionControllerClientImpl::GetSigninScreenPrefService() {

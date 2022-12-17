@@ -62,7 +62,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 // Font to use in Compact x Any and Any x Compact size class.
 @property(nonatomic, strong, readonly) UIFont* normalFont;
 
-// Returns the layers affected by animations added by |-animateFadeWithStyle:|.
+// Returns the layers affected by animations added by `-animateFadeWithStyle:`.
 - (NSArray*)fadeAnimationLayers;
 // Font that should be used in current size class.
 - (UIFont*)currentFont;
@@ -155,7 +155,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     // In crbug.com/1237851, sometimes self.autocompleteTextLength is greater
     // than self.text.length, causing the subtraction below to overflow,
     // breaking
-    // |-substringToIndex:|. This shouldn't happen, so use the DCHECK to catch
+    // `-substringToIndex:`. This shouldn't happen, so use the DCHECK to catch
     // it to help debug and default to the end of the string if an overflow
     // would occur.
     DCHECK(self.text.length >= self.autocompleteTextLength);
@@ -171,7 +171,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 - (NSString*)userText {
   // In crbug.com/1237851, sometimes self.autocompleteTextLength is greater than
   // self.text.length, causing the subtraction below to overflow, breaking
-  // |-substringToIndex:|. This shouldn't happen, so use the DCHECK to catch it
+  // `-substringToIndex:`. This shouldn't happen, so use the DCHECK to catch it
   // to help debug and default to the end of the string if an overflow would
   // occur.
   DCHECK(self.text.length >= self.autocompleteTextLength);
@@ -299,8 +299,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 #pragma mark - UI Refresh animation public helpers
 
 - (CGFloat)offsetForString:(NSString*)string {
-  // Sometimes |string| is not contained in self.text, for example for
-  // https://en.m.wikipedia.org/foo the |string| might be "en.wikipedia.org" if
+  // Sometimes `string` is not contained in self.text, for example for
+  // https://en.m.wikipedia.org/foo the `string` might be "en.wikipedia.org" if
   // the scheme and the "m." trivial subdomain are stripped. In this case,
   // default to a reasonable prefix string to give a plausible offset.
   NSString* prefixString = @"https://";
@@ -593,6 +593,24 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   [super paste:sender];
 }
 
+#pragma mark UIPasteConfigurationSupporting
+
+// Used by UIPasteControl to check if can paste.
+- (BOOL)canPasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
+  if ([self.delegate respondsToSelector:@selector(canPasteItemProviders:)]) {
+    return [self.delegate canPasteItemProviders:itemProviders];
+  } else {
+    return NO;
+  }
+}
+
+// Used by UIPasteControl to paste.
+- (void)pasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
+  if ([self.delegate respondsToSelector:@selector(pasteItemProviders:)]) {
+    [self.delegate pasteItemProviders:itemProviders];
+  }
+}
+
 #pragma mark UIKeyInput
 
 // Override deleteBackward so that backspace clear autocomplete text.
@@ -643,12 +661,12 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (void)keyCommandUp {
   [self exitPreEditState];
-  [self.suggestionCommandsEndpoint highlightNextSuggestion];
+  [self.suggestionCommandsEndpoint highlightPreviousSuggestion];
 }
 
 - (void)keyCommandDown {
   [self exitPreEditState];
-  [self.suggestionCommandsEndpoint highlightPreviousSuggestion];
+  [self.suggestionCommandsEndpoint highlightNextSuggestion];
 }
 
 #pragma mark preedit and inline autocomplete key commands
@@ -768,7 +786,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
       [[text attributedSubstringFromRange:userTextRange] mutableCopy];
 
   if (autocompleteLength > 0) {
-    // Creating |autocompleteText| from |[text string]| has the added bonus of
+    // Creating `autocompleteText` from `[text string]` has the added bonus of
     // removing all the previously set attributes. This way the autocomplete
     // text doesn't have a highlighted protocol, etc.
     NSMutableAttributedString* autocompleteText =
@@ -790,11 +808,11 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   // update the attributed text here is to change the colors of the omnibox
   // (such as host, protocol) when !self.editing, but also to hide real
   // UITextField text under the _selection text when self.editing. Since we will
-  // correct the omnibox editing text color anytime |self.text| is different
-  // than |fieldText|, it seems it's OK to skip calling self.attributedText
+  // correct the omnibox editing text color anytime `self.text` is different
+  // than `fieldText`, it seems it's OK to skip calling self.attributedText
   // during the condition added below. If we change mobile omnibox to match
   // desktop and also color the omnibox while self.editing, this workaround will
-  // no longer work. The check for |autocompleteLength| reduces the scope of
+  // no longer work. The check for `autocompleteLength` reduces the scope of
   // this workaround, without it having introduced crbug.com/740075.
   BOOL updateText = YES;
   if (experimental_flags::IsThirdPartyKeyboardWorkaroundEnabled()) {

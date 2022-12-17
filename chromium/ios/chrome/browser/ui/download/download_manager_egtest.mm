@@ -307,9 +307,6 @@ std::unique_ptr<net::test_server::HttpResponse> GetContentDispositionResponse(
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  if (@available(iOS 15.0, *)) {
-    config.features_enabled.push_back(web::features::kEnableNewDownloadAPI);
-  }
   return config;
 }
 
@@ -414,7 +411,8 @@ std::unique_ptr<net::test_server::HttpResponse> GetContentDispositionResponse(
 }
 
 // Tests accessibility on Download Manager UI when download is complete.
-- (void)testAccessibilityOnCompletedDownloadToolbar {
+// TODO(crbug.com/1352113): Re-enable
+- (void)DISABLED_testAccessibilityOnCompletedDownloadToolbar {
   [super testAccessibilityOnCompletedDownloadToolbar];
 }
 

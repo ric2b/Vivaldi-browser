@@ -6,7 +6,7 @@ import {dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/pol
 
 import {assert, assertNotReached} from '../js/assert.m.js';
 import {isMac} from '../js/cr.m.js';
-import {KeyboardShortcutList} from '../js/cr/ui/keyboard_shortcut_list.m.js';
+import {KeyboardShortcutList} from '../js/cr/ui/keyboard_shortcut_list.js';
 import {isTextInputElement} from '../js/util.m.js';
 
 /**
@@ -19,7 +19,7 @@ export const FindShortcutManager = (() => {
   /**
    * Stack of listeners. Only the top listener will handle the shortcut.
    */
-  const listeners: Array<FindShortcutMixinInterface> = [];
+  const listeners: FindShortcutMixinInterface[] = [];
 
   /**
    * Tracks if any modal context is open in settings. This assumes only one

@@ -72,12 +72,12 @@ enum { kMinimumContainerSize = 12 };
 MEDIA_EXPORT MediaContainerName DetermineContainer(const uint8_t* buffer,
                                                    int buffer_size);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 // This is a simplified version used by Opera's ProtocolSniffer, in particular
 // we don't want to CheckMov as it triggers also for MPEG4.
 MEDIA_EXPORT MediaContainerName
     OperaDetermineContainer(const uint8_t* buffer, int buffer_size);
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 
 }  // namespace container_names
 

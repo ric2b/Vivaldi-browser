@@ -29,9 +29,8 @@
 #include "ui/views/vector_icons.h"
 
 // static
-void ShowAuthenticatorRequestDialog(
-    content::WebContents* web_contents,
-    std::unique_ptr<AuthenticatorRequestDialogModel> model) {
+void ShowAuthenticatorRequestDialog(content::WebContents* web_contents,
+                                    AuthenticatorRequestDialogModel* model) {
   // The authenticator request dialog will only be shown for common user-facing
   // WebContents, which have a |manager|. Most other sources without managers,
   // like service workers and extension background pages, do not allow WebAuthn
@@ -47,11 +46,13 @@ void ShowAuthenticatorRequestDialog(
   if (!manager)
     return;
 
-  new AuthenticatorRequestDialogView(web_contents, std::move(model));
+  new AuthenticatorRequestDialogView(web_contents, model);
 }
 
 AuthenticatorRequestDialogView::~AuthenticatorRequestDialogView() {
-  model_->RemoveObserver(this);
+  if (model_) {
+    model_->RemoveObserver(this);
+  }
 
   // AuthenticatorRequestDialogView is a WidgetDelegate, owned by views::Widget.
   // It's only destroyed by Widget::OnNativeWidgetDestroyed() invoking
@@ -213,10 +214,11 @@ std::u16string AuthenticatorRequestDialogView::GetWindowTitle() const {
 
 void AuthenticatorRequestDialogView::OnModelDestroyed(
     AuthenticatorRequestDialogModel* model) {
-  NOTREACHED();
+  model_ = nullptr;
 }
 
 void AuthenticatorRequestDialogView::OnStepTransition() {
+  DCHECK(model_) << "Model must be valid since this is a model observer method";
   if (model_->should_dialog_be_closed()) {
     if (!first_shown_) {
       // No widget has ever been created for this dialog, thus there will be no
@@ -230,14 +232,7 @@ void AuthenticatorRequestDialogView::OnStepTransition() {
     }
     return;
   }
-  if (model_->should_dialog_be_hidden()) {
-    if (GetWidget()) {
-      GetWidget()->Hide();
-    }
-    return;
-  }
-
-  ReplaceCurrentSheetWith(CreateSheetViewForCurrentStepOf(model_.get()));
+  ReplaceCurrentSheetWith(CreateSheetViewForCurrentStepOf(model_));
   Show();
 }
 
@@ -253,16 +248,16 @@ void AuthenticatorRequestDialogView::OnVisibilityChanged(
   // Show() does not actually show the dialog while the parent WebContents are
   // hidden. Instead, show it when the WebContents become visible again.
   if (web_contents_was_hidden && !web_contents_hidden_ &&
-      !model_->should_dialog_be_hidden() && !GetWidget()->IsVisible()) {
+      !GetWidget()->IsVisible()) {
     GetWidget()->Show();
   }
 }
 
 AuthenticatorRequestDialogView::AuthenticatorRequestDialogView(
     content::WebContents* web_contents,
-    std::unique_ptr<AuthenticatorRequestDialogModel> model)
+    AuthenticatorRequestDialogModel* model)
     : content::WebContentsObserver(web_contents),
-      model_(std::move(model)),
+      model_(model),
       web_contents_hidden_(web_contents->GetVisibility() ==
                            content::Visibility::HIDDEN) {
   SetShowTitle(false);
@@ -331,7 +326,7 @@ void AuthenticatorRequestDialogView::OtherMechanismsButtonPressed() {
   auto* other_mechanisms_menu_model =
       sheet_->model()->GetOtherMechanismsMenuModel();
   DCHECK(other_mechanisms_menu_model);
-  DCHECK_GE(other_mechanisms_menu_model->GetItemCount(), 1);
+  DCHECK_GE(other_mechanisms_menu_model->GetItemCount(), 1u);
 
   other_mechanisms_menu_runner_ = std::make_unique<views::MenuRunner>(
       other_mechanisms_menu_model, views::MenuRunner::COMBOBOX);
@@ -373,7 +368,7 @@ void AuthenticatorRequestDialogView::OnDialogClosing() {
   // This should not be a problem as the native widget will never synchronously
   // close and hence not synchronously destroy the model while it's iterating
   // over observers in SetCurrentStep().
-  if (!model_->should_dialog_be_closed())
+  if (model_ && !model_->should_dialog_be_closed())
     Cancel();
 }
 

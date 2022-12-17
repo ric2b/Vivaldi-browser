@@ -84,6 +84,7 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNodeOrAlias> {
       PropertyTreePrinter<TransformPaintPropertyNodeOrAlias>& printer) {
     printer.AddNode(properties.PaintOffsetTranslation());
     printer.AddNode(properties.StickyTranslation());
+    printer.AddNode(properties.AnchorScrollTranslation());
     printer.AddNode(properties.Translate());
     printer.AddNode(properties.Rotate());
     printer.AddNode(properties.Scale());
@@ -116,6 +117,7 @@ class PropertyTreePrinterTraits<ClipPaintPropertyNodeOrAlias> {
     printer.AddNode(properties.MaskClip());
     printer.AddNode(properties.CssClip());
     printer.AddNode(properties.CssClipFixedPosition());
+    printer.AddNode(properties.PixelMovingFilterClipExpander());
     printer.AddNode(properties.OverflowControlsClip());
     printer.AddNode(properties.InnerBorderRadiusClip());
     printer.AddNode(properties.OverflowClip());
@@ -155,8 +157,10 @@ class PropertyTreePrinterTraits<EffectPaintPropertyNodeOrAlias> {
       PropertyTreePrinter<EffectPaintPropertyNodeOrAlias>& printer) {
     auto* supplement =
         DocumentTransitionSupplement::FromIfExists(object.GetDocument());
+    // `NeedsSharedElementEffectNode` is an indirect way to see if the object is
+    // participating in the transition.
     if (!supplement ||
-        !supplement->GetTransition()->IsTransitionParticipant(object)) {
+        !supplement->GetTransition()->NeedsSharedElementEffectNode(object)) {
       return;
     }
 
@@ -231,6 +235,8 @@ void UpdateDebugNames(const LayoutObject& object,
   SetDebugName(properties.PaintOffsetTranslation(), "PaintOffsetTranslation",
                object);
   SetDebugName(properties.StickyTranslation(), "StickyTranslation", object);
+  SetDebugName(properties.AnchorScrollTranslation(), "AnchorScrollTranslation",
+               object);
   SetDebugName(properties.Translate(), "Translate", object);
   SetDebugName(properties.Rotate(), "Rotate", object);
   SetDebugName(properties.Scale(), "Scale", object);
@@ -249,6 +255,8 @@ void UpdateDebugNames(const LayoutObject& object,
   SetDebugName(properties.CssClip(), "CssClip", object);
   SetDebugName(properties.CssClipFixedPosition(), "CssClipFixedPosition",
                object);
+  SetDebugName(properties.PixelMovingFilterClipExpander(),
+               "PixelMovingFilterClip", object);
   SetDebugName(properties.OverflowControlsClip(), "OverflowControlsClip",
                object);
   SetDebugName(properties.InnerBorderRadiusClip(), "InnerBorderRadiusClip",

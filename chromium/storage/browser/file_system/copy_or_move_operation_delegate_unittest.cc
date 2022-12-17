@@ -629,8 +629,9 @@ class CopyOrMoveOperationTestHelper {
  private:
   void GetUsageAndQuota(FileSystemType type, int64_t* usage, int64_t* quota) {
     blink::mojom::QuotaStatusCode status =
-        AsyncFileTestHelper::GetUsageAndQuota(quota_manager_->proxy(), origin_,
-                                              type, usage, quota);
+        AsyncFileTestHelper::GetUsageAndQuota(quota_manager_->proxy(),
+                                              blink::StorageKey(origin_), type,
+                                              usage, quota);
     ASSERT_EQ(blink::mojom::QuotaStatusCode::kOk, status);
   }
 
@@ -684,7 +685,6 @@ TEST_P(LocalFileSystemCopyOrMoveOperationTest, SingleFile) {
   FileSystemURL src = helper.SourceURL("a");
   FileSystemURL dest = helper.DestURL("b");
   int64_t src_initial_usage = helper.GetSourceUsage();
-  int64_t dest_initial_usage = helper.GetDestUsage();
 
   // Set up a source file.
   ASSERT_EQ(base::File::FILE_OK, helper.CreateFile(src, 10));
@@ -716,20 +716,11 @@ TEST_P(LocalFileSystemCopyOrMoveOperationTest, SingleFile) {
   ASSERT_EQ(src_should_exist, helper.FileExists(src, 10));
   ASSERT_EQ(dest_should_exist, helper.FileExists(dest, 10));
 
-  if (IsLocal()) {
-    int64_t src_new_usage = helper.GetSourceUsage();
-    if (IsMove() || BlockingEnabled()) {
-      EXPECT_EQ(src_new_usage, src_initial_usage + src_increase);
-    } else {
-      EXPECT_EQ(src_new_usage, src_initial_usage + 2 * src_increase);
-    }
+  int64_t src_new_usage = helper.GetSourceUsage();
+  if (IsMove() || BlockingEnabled()) {
+    EXPECT_EQ(src_new_usage, src_initial_usage + src_increase);
   } else {
-    int64_t src_new_usage = helper.GetSourceUsage();
-    ASSERT_EQ(src_new_usage,
-              src_initial_usage + (src_should_exist ? src_increase : 0));
-    int64_t dest_new_usage = helper.GetDestUsage();
-    ASSERT_EQ(dest_new_usage,
-              dest_initial_usage + (dest_should_exist ? src_increase : 0));
+    EXPECT_EQ(src_new_usage, src_initial_usage + 2 * src_increase);
   }
 }
 
@@ -742,7 +733,6 @@ TEST_P(LocalFileSystemCopyOrMoveOperationTest, EmptyDirectory) {
   FileSystemURL src = helper.SourceURL("a");
   FileSystemURL dest = helper.DestURL("b");
   int64_t src_initial_usage = helper.GetSourceUsage();
-  int64_t dest_initial_usage = helper.GetDestUsage();
 
   // Set up a source directory.
   ASSERT_EQ(base::File::FILE_OK, helper.CreateDirectory(src));
@@ -774,20 +764,11 @@ TEST_P(LocalFileSystemCopyOrMoveOperationTest, EmptyDirectory) {
   ASSERT_EQ(src_should_exist, helper.DirectoryExists(src));
   ASSERT_EQ(dest_should_exist, helper.DirectoryExists(dest));
 
-  if (IsLocal()) {
-    int64_t src_new_usage = helper.GetSourceUsage();
-    if (IsMove() || BlockingEnabled()) {
-      EXPECT_EQ(src_new_usage, src_initial_usage + src_increase);
-    } else {
-      EXPECT_EQ(src_new_usage, src_initial_usage + 2 * src_increase);
-    }
+  int64_t src_new_usage = helper.GetSourceUsage();
+  if (IsMove() || BlockingEnabled()) {
+    EXPECT_EQ(src_new_usage, src_initial_usage + src_increase);
   } else {
-    int64_t src_new_usage = helper.GetSourceUsage();
-    int64_t dest_new_usage = helper.GetDestUsage();
-    ASSERT_EQ(src_new_usage,
-              src_initial_usage + (src_should_exist ? src_increase : 0));
-    ASSERT_EQ(dest_new_usage,
-              dest_initial_usage + (dest_should_exist ? src_increase : 0));
+    EXPECT_EQ(src_new_usage, src_initial_usage + 2 * src_increase);
   }
 }
 
@@ -800,7 +781,6 @@ TEST_P(LocalFileSystemCopyOrMoveOperationTest, FilesAndDirectories) {
   FileSystemURL src = helper.SourceURL("a");
   FileSystemURL dest = helper.DestURL("b");
   int64_t src_initial_usage = helper.GetSourceUsage();
-  int64_t dest_initial_usage = helper.GetDestUsage();
 
   // Set up a source directory.
   ASSERT_EQ(base::File::FILE_OK, helper.CreateDirectory(src));
@@ -873,37 +853,15 @@ TEST_P(LocalFileSystemCopyOrMoveOperationTest, FilesAndDirectories) {
         CopyOrMoveOperationTestHelper::VerifyDirectoryState::ALL_FILES_EXIST);
   }
 
-  if (IsLocal()) {
-    // For local operations we can only check the size if there is no blocking
-    // involved.
-    if (!BlockingEnabled()) {
-      int64_t src_new_usage = helper.GetSourceUsage();
-      if (IsMove()) {
-        ASSERT_EQ(src_initial_usage + src_increase, src_new_usage);
-      } else {
-        // Copies duplicate used size on common file system.
-        ASSERT_EQ(src_initial_usage + 2 * src_increase, src_new_usage);
-      }
-    }
-  } else {
+  // For local operations we can only check the size if there is no blocking
+  // involved.
+  if (!BlockingEnabled()) {
     int64_t src_new_usage = helper.GetSourceUsage();
-    if (!IsMove()) {
-      // For copies, all source files should remain.
+    if (IsMove()) {
       ASSERT_EQ(src_initial_usage + src_increase, src_new_usage);
-    } else if (!BlockingEnabled()) {
-      // For moves without blocking, additional source size should be zero.
-      ASSERT_EQ(src_initial_usage, src_new_usage);
     } else {
-      // For moves with blocking, some files should be blocked and remain on the
-      // source file system.
-      ASSERT_LT(src_initial_usage, src_new_usage);
-    }
-
-    int64_t dest_increase = helper.GetDestUsage() - dest_initial_usage;
-    if (!BlockingEnabled()) {
-      ASSERT_EQ(src_increase, dest_increase);
-    } else {
-      ASSERT_GT(src_increase, dest_increase);
+      // Copies duplicate used size on common file system.
+      ASSERT_EQ(src_initial_usage + 2 * src_increase, src_new_usage);
     }
   }
 }
@@ -1348,8 +1306,14 @@ class CopyOrMoveOperationDelegateTestHelper {
   void SetUp() {
     ASSERT_TRUE(base_.CreateUniqueTempDir());
     base::FilePath base_dir = base_.GetPath();
-    file_system_context_ =
-        storage::CreateFileSystemContextForTesting(nullptr, base_dir);
+    quota_manager_ = base::MakeRefCounted<storage::MockQuotaManager>(
+        /*is_incognito=*/false, base_dir, base::ThreadTaskRunnerHandle::Get(),
+        base::MakeRefCounted<storage::MockSpecialStoragePolicy>());
+    quota_manager_proxy_ = base::MakeRefCounted<storage::MockQuotaManagerProxy>(
+        quota_manager_.get(), base::ThreadTaskRunnerHandle::Get());
+    // Prepare file system.
+    file_system_context_ = storage::CreateFileSystemContextForTesting(
+        quota_manager_proxy_.get(), base_dir);
 
     // Prepare the origin's root directory.
     FileSystemBackend* backend =
@@ -1452,6 +1416,8 @@ class CopyOrMoveOperationDelegateTestHelper {
   FileSystemURL error_url_;
 
   base::test::TaskEnvironment task_environment_;
+  scoped_refptr<storage::MockQuotaManager> quota_manager_;
+  scoped_refptr<storage::MockQuotaManagerProxy> quota_manager_proxy_;
   scoped_refptr<FileSystemContext> file_system_context_;
 };
 

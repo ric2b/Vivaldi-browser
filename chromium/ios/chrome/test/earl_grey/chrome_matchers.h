@@ -212,9 +212,6 @@ id<GREYMatcher> ClearBrowsingDataView();
 // Returns a matcher for the clear browsing data action sheet item.
 id<GREYMatcher> ConfirmClearBrowsingDataButton();
 
-// Returns a matcher for the settings button in the tools menu.
-id<GREYMatcher> SettingsMenuButton();
-
 // Returns a matcher for the "Done" button in the settings' navigation bar.
 id<GREYMatcher> SettingsDoneButton();
 
@@ -236,10 +233,6 @@ id<GREYMatcher> LanguagesButton();
 
 // Returns a matcher for the "Add Credit Card" view in the Settings menu.
 id<GREYMatcher> AddCreditCardView();
-
-// Returns a matcher for the "Add Payment Method" button in the Settings Payment
-// Methods view.
-id<GREYMatcher> AddPaymentMethodButton();
 
 // Returns a matcher for the "Add" credit card button in the Payment
 // Methods add credit card view.
@@ -287,6 +280,9 @@ id<GREYMatcher> SettingsSafetyCheckTableView();
 
 // Returns a matcher for the privacy settings table view.
 id<GREYMatcher> SettingsPrivacyTableView();
+
+// Returns a matcher for the privacy safe browsing settings table view.
+id<GREYMatcher> SettingsPrivacySafeBrowsingTableView();
 
 // Returns a matcher for the Content Settings button on the main Settings
 // screen.
@@ -379,15 +375,6 @@ id<GREYMatcher> PaymentRequestPickerSearchBar();
 
 // Returns a matcher for the New Window button on the Tools menu.
 id<GREYMatcher> OpenNewWindowMenuButton();
-
-// Returns a matcher for the reading list on the Tools menu.
-id<GREYMatcher> ReadingListMenuButton();
-
-// Returns a matcher for the bookmarks button on the Tools menu.
-id<GREYMatcher> BookmarksMenuButton();
-
-// Returns a matcher for the recent tabs button on the Tools menu.
-id<GREYMatcher> RecentTabsMenuButton();
 
 // Returns a matcher for the system selection callout.
 id<GREYMatcher> SystemSelectionCallout();
@@ -549,6 +536,34 @@ id<GREYMatcher> HistoryEntry(const std::string& url, const std::string& title);
 // Returns a matcher to the add button in the toolbar in the settings view.
 id<GREYMatcher> SettingsToolbarAddButton();
 
+#pragma mark - Promo style view controller
+
+// Returns matcher for the primary action button.
+id<GREYMatcher> PromoStylePrimaryActionButtonMatcher();
+
+// Returns matcher for the secondary action button.
+id<GREYMatcher> PromoStyleSecondaryActionButtonMatcher();
+
+#pragma mark - Incognito Interstitial
+
+// Returns a matcher for the Incognito Interstitial view controller.
+id<GREYMatcher> IncognitoInterstitialMatcher();
+
+// Returns a matcher for the subtitle of the Incognito Interstitial,
+// as it should appear when `URL` was given to the Interstitial.
+id<GREYMatcher> IncognitoInterstitialLabelForURL(const std::string& url);
+
+// Returns a matcher for the primary action button in the Incognito
+// Interstitial.
+id<GREYMatcher> IncognitoInterstitialOpenInChromeIncognitoButton();
+
+// Returns a matcher for the secondary action button in the Incognito
+// Interstitial.
+id<GREYMatcher> IncognitoInterstitialOpenInChromeButton();
+
+// Returns a matcher for the Cancel button in the Incognito Interstitial.
+id<GREYMatcher> IncognitoInterstitialCancelButton();
+
 #pragma mark - Manual Fallback
 
 // Returns a matcher for the scroll view in keyboard accessory bar.
@@ -623,6 +638,39 @@ id<GREYMatcher> ManualFallbackSuggestPasswordMatcher();
 
 // Returns a matcher for the button to accept the generated password.
 id<GREYMatcher> UseSuggestedPasswordMatcher();
+
+#pragma mark - Overflow Menu Destinations
+
+// Returns a matcher for the bookmarks destination button in the overflow menu.
+id<GREYMatcher> BookmarksDestinationButton();
+
+// Returns a matcher for the history destination button in the overflow menu.
+id<GREYMatcher> HistoryDestinationButton();
+
+// Returns a matcher for the reading list destination button in the overflow
+// menu.
+id<GREYMatcher> ReadingListDestinationButton();
+
+// Returns a matcher for the passwords destination button in the overflow menu.
+id<GREYMatcher> PasswordsDestinationButton();
+
+// Returns a matcher for the downloads destination button in the overflow menu.
+id<GREYMatcher> DownloadsDestinationButton();
+
+// Returns a matcher for the recent tabs destination button in the overflow
+// menu.
+id<GREYMatcher> RecentTabsDestinationButton();
+
+// Returns a matcher for the site info destination button in the overflow menu.
+id<GREYMatcher> SiteInfoDestinationButton();
+
+// Returns a matcher for the settings destination button in the overflow menu.
+id<GREYMatcher> SettingsDestinationButton();
+
+#pragma mark - Overflow Menu Actions
+
+// Returns a matcher for the settings action button in the overflow menu.
+id<GREYMatcher> SettingsActionButton();
 
 #pragma mark - Tab Grid Edit Mode
 

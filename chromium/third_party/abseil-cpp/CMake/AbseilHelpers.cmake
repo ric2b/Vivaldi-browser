@@ -26,6 +26,12 @@ if(NOT DEFINED ABSL_IDE_FOLDER)
   set(ABSL_IDE_FOLDER Abseil)
 endif()
 
+if(ABSL_USE_SYSTEM_INCLUDES)
+  set(ABSL_INTERNAL_INCLUDE_WARNING_GUARD SYSTEM)
+else()
+  set(ABSL_INTERNAL_INCLUDE_WARNING_GUARD "")
+endif()
+
 # absl_cc_library()
 #
 # CMake function to imitate Bazel's cc_library rule.
@@ -166,6 +172,9 @@ function(absl_cc_library)
           set(PC_CFLAGS "${PC_CFLAGS} ${cflag}")
         elseif(${cflag} MATCHES "^(-W|/w[1234eo])")
           # Don't impose our warnings on others.
+        elseif(${cflag} MATCHES "^-m")
+          # Don't impose CPU instruction requirements on others, as
+          # the code performs feature detection on runtime.
         else()
           set(PC_CFLAGS "${PC_CFLAGS} ${cflag}")
         endif()
@@ -239,7 +248,7 @@ Cflags: -I\${includedir}${PC_CFLAGS}\n")
     # unconditionally.
     set_property(TARGET ${_NAME} PROPERTY LINKER_LANGUAGE "CXX")
 
-    target_include_directories(${_NAME}
+    target_include_directories(${_NAME} ${ABSL_INTERNAL_INCLUDE_WARNING_GUARD}
       PUBLIC
         "$<BUILD_INTERFACE:${ABSL_COMMON_INCLUDE_DIRS}>"
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -258,10 +267,10 @@ Cflags: -I\${includedir}${PC_CFLAGS}\n")
     endif()
 
     if(ABSL_PROPAGATE_CXX_STD)
-      # Abseil libraries require C++11 as the current minimum standard.
+      # Abseil libraries require C++14 as the current minimum standard.
       # Top-level application CMake projects should ensure a consistent C++
       # standard for all compiled sources by setting CMAKE_CXX_STANDARD.
-      target_compile_features(${_NAME} PUBLIC cxx_std_11)
+      target_compile_features(${_NAME} PUBLIC cxx_std_14)
     else()
       # Note: This is legacy (before CMake 3.8) behavior. Setting the
       # target-level CXX_STANDARD property to ABSL_CXX_STANDARD (which is
@@ -287,7 +296,7 @@ Cflags: -I\${includedir}${PC_CFLAGS}\n")
   else()
     # Generating header-only library
     add_library(${_NAME} INTERFACE)
-    target_include_directories(${_NAME}
+    target_include_directories(${_NAME} ${ABSL_INTERNAL_INCLUDE_WARNING_GUARD}
       INTERFACE
         "$<BUILD_INTERFACE:${ABSL_COMMON_INCLUDE_DIRS}>"
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -306,10 +315,10 @@ Cflags: -I\${includedir}${PC_CFLAGS}\n")
     target_compile_definitions(${_NAME} INTERFACE ${ABSL_CC_LIB_DEFINES})
 
     if(ABSL_PROPAGATE_CXX_STD)
-      # Abseil libraries require C++11 as the current minimum standard.
+      # Abseil libraries require C++14 as the current minimum standard.
       # Top-level application CMake projects should ensure a consistent C++
       # standard for all compiled sources by setting CMAKE_CXX_STANDARD.
-      target_compile_features(${_NAME} INTERFACE cxx_std_11)
+      target_compile_features(${_NAME} INTERFACE cxx_std_14)
 
       # (INTERFACE libraries can't have the CXX_STANDARD property set, so there
       # is no legacy behavior else case).
@@ -418,10 +427,10 @@ function(absl_cc_test)
   set_property(TARGET ${_NAME} PROPERTY FOLDER ${ABSL_IDE_FOLDER}/test)
 
   if(ABSL_PROPAGATE_CXX_STD)
-    # Abseil libraries require C++11 as the current minimum standard.
+    # Abseil libraries require C++14 as the current minimum standard.
     # Top-level application CMake projects should ensure a consistent C++
     # standard for all compiled sources by setting CMAKE_CXX_STANDARD.
-    target_compile_features(${_NAME} PUBLIC cxx_std_11)
+    target_compile_features(${_NAME} PUBLIC cxx_std_14)
   else()
     # Note: This is legacy (before CMake 3.8) behavior. Setting the
     # target-level CXX_STANDARD property to ABSL_CXX_STANDARD (which is

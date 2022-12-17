@@ -35,6 +35,8 @@
 #include "third_party/blink/renderer/core/dom/first_letter_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/generated_children.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_quote.h"
@@ -131,12 +133,29 @@ const QualifiedName& PseudoElementTagName(PseudoId pseudo_id) {
   return name;
 }
 
-const AtomicString& PseudoElement::PseudoElementNameForEvents(
-    PseudoId pseudo_id) {
-  if (pseudo_id == kPseudoIdNone)
-    return g_null_atom;
-  else
-    return PseudoElementTagName(pseudo_id).LocalName();
+AtomicString PseudoElement::PseudoElementNameForEvents(Element* element) {
+  DCHECK(element);
+  auto pseudo_id = element->GetPseudoId();
+  switch (pseudo_id) {
+    case kPseudoIdNone:
+      return g_null_atom;
+    case kPseudoIdPageTransitionContainer:
+    case kPseudoIdPageTransitionImageWrapper:
+    case kPseudoIdPageTransitionIncomingImage:
+    case kPseudoIdPageTransitionOutgoingImage: {
+      auto* pseudo = To<PseudoElement>(element);
+      DCHECK(pseudo);
+      StringBuilder builder;
+      builder.Append(PseudoElementTagName(pseudo_id).LocalName());
+      builder.Append("(");
+      builder.Append(pseudo->document_transition_tag());
+      builder.Append(")");
+      return AtomicString(builder.ReleaseString());
+    }
+    default:
+      break;
+  }
+  return PseudoElementTagName(pseudo_id).LocalName();
 }
 
 bool PseudoElement::IsWebExposed(PseudoId pseudo_id, const Node* parent) {
@@ -144,14 +163,6 @@ bool PseudoElement::IsWebExposed(PseudoId pseudo_id, const Node* parent) {
     case kPseudoIdMarker:
       if (parent && parent->IsPseudoElement())
         return RuntimeEnabledFeatures::CSSMarkerNestedPseudoElementEnabled();
-      return true;
-    case kPseudoIdPageTransition:
-    case kPseudoIdPageTransitionContainer:
-    case kPseudoIdPageTransitionImageWrapper:
-    case kPseudoIdPageTransitionIncomingImage:
-    case kPseudoIdPageTransitionOutgoingImage:
-      // These elements are generated only when DocumentTransition feature is
-      // enabled.
       return true;
     default:
       return true;
@@ -174,6 +185,17 @@ PseudoElement::PseudoElement(Element* parent,
       parent->HasTagName(html_names::kInputTag)) {
     UseCounter::Count(parent->GetDocument(),
                       WebFeature::kPseudoBeforeAfterForInputElement);
+    if (HTMLInputElement* input = DynamicTo<HTMLInputElement>(parent)) {
+      if (input->type() == input_type_names::kDate ||
+          input->type() == input_type_names::kDatetimeLocal ||
+          input->type() == input_type_names::kMonth ||
+          input->type() == input_type_names::kWeek ||
+          input->type() == input_type_names::kTime) {
+        UseCounter::Count(
+            parent->GetDocument(),
+            WebFeature::kPseudoBeforeAfterForDateTimeInputElement);
+      }
+    }
   }
 }
 

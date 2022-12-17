@@ -9,15 +9,16 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
 #include "media/gpu/buildflags.h"
 #include "media/gpu/test/video.h"
+#include "media/gpu/test/video_player/decoder_listener.h"
+#include "media/gpu/test/video_player/decoder_wrapper.h"
 #include "media/gpu/test/video_player/frame_renderer_dummy.h"
-#include "media/gpu/test/video_player/video_decoder_client.h"
-#include "media/gpu/test/video_player/video_player.h"
 #include "media/gpu/test/video_player/video_player_test_environment.h"
 #include "sandbox/linux/services/resource_limits.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -173,7 +174,7 @@ class PerformanceEvaluator : public VideoFrameProcessor {
 
   // Frame renderer used to get the dropped frame rate, owned by the creator of
   // the performance evaluator.
-  const FrameRendererDummy* const frame_renderer_;
+  const raw_ptr<const FrameRendererDummy> frame_renderer_;
 };
 
 void PerformanceEvaluator::ProcessVideoFrame(
@@ -330,9 +331,10 @@ class VideoDecoderTest : public ::testing::Test {
   // which the video player will simulate rendering frames, if 0 no rendering is
   // simulated. The |vsync_rate| is used during simulated rendering, if 0 Vsync
   // is disabled.
-  std::unique_ptr<VideoPlayer> CreateVideoPlayer(const Video* video,
-                                                 uint32_t render_frame_rate = 0,
-                                                 uint32_t vsync_rate = 0) {
+  std::unique_ptr<DecoderListener> CreateDecoderListener(
+      const Video* video,
+      uint32_t render_frame_rate = 0,
+      uint32_t vsync_rate = 0) {
     LOG_ASSERT(video);
 
     // Create dummy frame renderer, simulates rendering at specified frame rate.
@@ -352,12 +354,12 @@ class VideoDecoderTest : public ::testing::Test {
     frame_processors.push_back(std::move(performance_evaluator));
 
     // Use the new VD-based video decoders if requested.
-    VideoDecoderClientConfig config;
+    DecoderWrapperConfig config;
     config.implementation = g_env->GetDecoderImplementation();
     config.linear_output = g_env->ShouldOutputLinearBuffers();
 
-    auto video_player = VideoPlayer::Create(config, std::move(frame_renderer),
-                                            std::move(frame_processors));
+    auto video_player = DecoderListener::Create(
+        config, std::move(frame_renderer), std::move(frame_processors));
     LOG_ASSERT(video_player);
     LOG_ASSERT(video_player->Initialize(video));
 
@@ -367,7 +369,7 @@ class VideoDecoderTest : public ::testing::Test {
     return video_player;
   }
 
-  PerformanceEvaluator* performance_evaluator_;
+  raw_ptr<PerformanceEvaluator> performance_evaluator_;
 };
 
 }  // namespace
@@ -376,7 +378,7 @@ class VideoDecoderTest : public ::testing::Test {
 // will decode a video as fast as possible, and gives an idea about the maximum
 // output of the decoder.
 TEST_F(VideoDecoderTest, MeasureUncappedPerformance) {
-  auto tvp = CreateVideoPlayer(g_env->Video());
+  auto tvp = CreateDecoderListener(g_env->Video());
 
   performance_evaluator_->StartMeasuring();
   tvp->Play();
@@ -392,7 +394,8 @@ TEST_F(VideoDecoderTest, MeasureUncappedPerformance) {
 // will simulate rendering the video at its actual frame rate, and will
 // calculate the number of frames that were dropped. Vsync is enabled at 60 FPS.
 TEST_F(VideoDecoderTest, MeasureCappedPerformance) {
-  auto tvp = CreateVideoPlayer(g_env->Video(), g_env->Video()->FrameRate(), 60);
+  auto tvp =
+      CreateDecoderListener(g_env->Video(), g_env->Video()->FrameRate(), 60);
 
   performance_evaluator_->StartMeasuring();
   tvp->Play();
@@ -418,9 +421,9 @@ TEST_F(VideoDecoderTest, MeasureUncappedPerformance_TenConcurrentDecoders) {
 
   constexpr size_t kNumConcurrentDecoders = 10;
 
-  std::vector<std::unique_ptr<VideoPlayer>> players(kNumConcurrentDecoders);
+  std::vector<std::unique_ptr<DecoderListener>> players(kNumConcurrentDecoders);
   for (auto&& player : players) {
-    player = CreateVideoPlayer(g_env->Video());
+    player = CreateDecoderListener(g_env->Video());
     // Increase the timeout for older machines that cannot decode as
     // efficiently.
     player->SetEventWaitTimeout(kMultipleDecodersTimeout);

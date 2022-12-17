@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1397811292916898096">Szukaj w <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Dotknij, aby wyszukać to funkcja, która jest dostępna tylko wtedy, gdy jako domyślna wyszukiwarka w Vivaldi ustawione jest Google. Wysyła słowo i wraz z jego kontekstem do wyszukiwarki Google. Możesz ją wyłączyć przechodząc do <ph name="BEGIN_LINK" />ustawień<ph name="END_LINK" /> przeglądarki.</translation>
 <translation id="1598449788754183301">Przełącz normalne/prywatne karty</translation>
 <translation id="1644574205037202324">Historia</translation>
 <translation id="17513872634828108">Otwarte karty</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nowa prywatna karta</translation>
 <translation id="4243710787042215766">Otwórz w karcie prywatnej</translation>
 <translation id="4526803704855831732">Karty prywatne</translation>
+<translation id="4719086422742491124">Dowiedz się o tematach na stronach internetowych bez jej opuszczania. Zaznacz jedno lub więcej słów na stronie, aby je wyszukać.
+
+Dotknij, aby wyszukać to funkcja, która jest dostępna tylko wtedy, gdy jako domyślna wyszukiwarka w Vivaldi ustawione jest Google.</translation>
 <translation id="4759238208242260848">Pobieranie</translation>
 <translation id="4883379392681899581">Opuść tryb prywatny</translation>
 <translation id="4943872375798546930">Brak wyników</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542">Dane aplikacji <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Tryb prywatny</translation>
 <translation id="5233638681132016545">Nowa karta</translation>
-<translation id="572328651809341494">Ostatnie karty</translation>
-<translation id="5840488417521835756">Dowiedz się więcej o przeglądanych tematach bez opuszczania aktualnej strony. Funkcja "Dotknij, aby wyszukać" jest dostępna wyłącznie, gdy domyślną wyszukiwarką w przeglądarce Vivaldi jest Google. Funkcja ta przekazuje słowo wraz z jego kontekstem do wyszukiwarki Google. W efekcie otrzymasz definicje, grafiki, wyniki wyszukiwania i inne informacje.
+<translation id="5375131951310889874">Dowiedz się o tematach na stronach internetowych bez jej opuszczania. Dotknij, aby wyszukać to funkcja, która jest dostępna tylko wtedy, gdy jako domyślna wyszukiwarka w Vivaldi ustawione jest Google. Wysyła słowo i wraz z jego kontekstem do wyszukiwarki Google, zwracając definicje, zdjęcia, powiązane strony i inne szczegóły.
 
-Jeśli chcesz dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je zaznaczyć. Aby doprecyzować wyszukiwanie, przesuń panel do samej góry i kliknij pole wyszukiwania.</translation>
+Aby dostosować wyszukiwane hasło, przyciśnij przez chwilę i zaznacz interesujący Cię tekst. Aby zawęzić wyszukiwanie, przesuń panel do góry i dotknij pola wyszukiwania.</translation>
+<translation id="572328651809341494">Ostatnie karty</translation>
 <translation id="6150320133806434356">Zakładka została</translation>
 <translation id="6336451774241870485">Nowa karta prywatna</translation>
 <translation id="6585139692466700358">Oferuj tłumaczenie stron w innych językach za pomocą usługi tłumaczeniowej Vivaldi</translation>
@@ -53,7 +57,6 @@ Jeśli chcesz dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je
 <translation id="732145680195464316">Zakładka została zapisana w <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Vivaldi – informacje</translation>
 <translation id="7465104139234185284">Zamknij wszystkie karty prywatne</translation>
-<translation id="7519434535192513364">Funkcja "Dotknij, aby wyszukać" jest dostępna wyłącznie, gdy domyślną wyszukiwarką w przeglądarce Vivaldi jest Google. Funkcja ta przekazuje słowo wraz z jego kontekstem do wyszukiwarki Google. Możesz ją wyłączyć w <ph name="BEGIN_LINK" />ustawieniach<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Warunki korzystania z Vivaldi</translation>
 <translation id="85991616550051997">Przejdź do strony głównej</translation>
 <translation id="8820817407110198400">Zakładki</translation>

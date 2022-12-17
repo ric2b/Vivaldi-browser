@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "base/memory/raw_ptr.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/types/event_type.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
@@ -15,6 +16,10 @@ namespace gfx {
 class PointF;
 class Vector2dF;
 }  // namespace gfx
+
+namespace wl {
+enum class EventDispatchPolicy;
+}  // namespace wl
 
 namespace ui {
 
@@ -94,8 +99,8 @@ class WaylandPointer {
 
   wl::Object<wl_pointer> obj_;
   wl::Object<zcr_pointer_stylus_v2> zcr_pointer_stylus_v2_;
-  WaylandConnection* const connection_;
-  Delegate* const delegate_;
+  const raw_ptr<WaylandConnection> connection_;
+  const raw_ptr<Delegate> delegate_;
 
   // Whether the axis source event has been received for the current frame.
   //
@@ -108,8 +113,10 @@ class WaylandPointer {
 
 class WaylandPointer::Delegate {
  public:
-  virtual void OnPointerFocusChanged(WaylandWindow* window,
-                                     const gfx::PointF& location) = 0;
+  virtual void OnPointerFocusChanged(
+      WaylandWindow* window,
+      const gfx::PointF& location,
+      wl::EventDispatchPolicy dispatch_policy) = 0;
   virtual void OnPointerButtonEvent(EventType evtype,
                                     int changed_button,
                                     WaylandWindow* window = nullptr) = 0;

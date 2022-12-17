@@ -17,8 +17,10 @@
 #include "ash/shelf/shelf_tooltip_manager.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/test/scrollable_shelf_test_base.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/i18n/rtl.h"
@@ -31,6 +33,18 @@
 #include "ui/views/animation/ink_drop.h"
 
 namespace ash {
+namespace {
+
+// A helper class to override the current time.
+struct TimeOverrideHelper {
+  static base::Time TimeNow() { return current_time; }
+
+  // Used as the current time in ash pixel diff tests.
+  static base::Time current_time;
+};
+
+base::Time TimeOverrideHelper::current_time;
+}  // namespace
 
 class PageFlipWaiter : public ScrollableShelfView::TestObserver {
  public:
@@ -106,52 +120,14 @@ class TestShelfItemDelegate : public ShelfItemDelegate {
   void Close() override {}
 };
 
-class ScrollableShelfViewTest : public AshTestBase {
+class ScrollableShelfViewTest : public ScrollableShelfTestBase {
  public:
   ScrollableShelfViewTest() = default;
   ~ScrollableShelfViewTest() override = default;
 
-  void SetUp() override {
-    AshTestBase::SetUp();
-    scrollable_shelf_view_ = GetPrimaryShelf()
-                                 ->shelf_widget()
-                                 ->hotseat_widget()
-                                 ->scrollable_shelf_view();
-    shelf_view_ = scrollable_shelf_view_->shelf_view();
-    test_api_ = std::make_unique<ShelfViewTestAPI>(
-        scrollable_shelf_view_->shelf_view());
-    test_api_->SetAnimationDuration(base::Milliseconds(1));
-  }
-
-  void TearDown() override {
-    // When the test is completed, the page flip timer should be idle.
-    EXPECT_FALSE(scrollable_shelf_view_->IsPageFlipTimerBusyForTest());
-
-    AshTestBase::TearDown();
-  }
-
  protected:
-  void PopulateAppShortcut(int number) {
-    for (int i = 0; i < number; i++)
-      AddAppShortcut();
-  }
-
   ShelfID AddAppShortcut(ShelfItemType item_type = TYPE_PINNED_APP) {
-    ShelfItem item =
-        ShelfTestUtil::AddAppShortcut(base::NumberToString(id_++), item_type);
-
-    // Wait for shelf view's bounds animation to end. Otherwise the scrollable
-    // shelf's bounds are not updated yet.
-    test_api_->RunMessageLoopUntilAnimationsDone();
-
-    return item.id;
-  }
-
-  void AddAppShortcutsUntilOverflow() {
-    while (scrollable_shelf_view_->layout_strategy_for_test() ==
-           ScrollableShelfView::kNotShowArrowButtons) {
-      AddAppShortcut();
-    }
+    return AddAppShortcutWithIconColor(item_type, SK_ColorRED);
   }
 
   // Verifies that a tappable app icon should have the correct button state when
@@ -161,8 +137,8 @@ class ScrollableShelfViewTest : public AshTestBase {
     GetEventGenerator()->MoveMouseTo(
         GetPrimaryDisplay().bounds().CenterPoint());
 
-    for (int i = scrollable_shelf_view_->first_tappable_app_index();
-         i <= scrollable_shelf_view_->last_tappable_app_index(); ++i) {
+    for (size_t i = scrollable_shelf_view_->first_tappable_app_index().value();
+         i <= scrollable_shelf_view_->last_tappable_app_index().value(); ++i) {
       const auto* shelf_app_icon = test_api_->GetButton(i);
       const gfx::Rect app_icon_screen_bounds =
           shelf_app_icon->GetBoundsInScreen();
@@ -193,16 +169,16 @@ class ScrollableShelfViewTest : public AshTestBase {
     views::View::ConvertRectToScreen(scrollable_shelf_view_,
                                      &visible_space_in_screen);
 
-    views::View* last_tappable_icon =
-        view_model->view_at(scrollable_shelf_view_->last_tappable_app_index());
+    views::View* last_tappable_icon = view_model->view_at(
+        scrollable_shelf_view_->last_tappable_app_index().value());
     const gfx::Rect last_tappable_icon_bounds =
         last_tappable_icon->GetBoundsInScreen();
 
     // Expects that the last tappable icon is fully shown.
     EXPECT_TRUE(visible_space_in_screen.Contains(last_tappable_icon_bounds));
 
-    views::View* first_tappable_icon =
-        view_model->view_at(scrollable_shelf_view_->first_tappable_app_index());
+    views::View* first_tappable_icon = view_model->view_at(
+        scrollable_shelf_view_->first_tappable_app_index().value());
     const gfx::Rect first_tappable_icon_bounds =
         first_tappable_icon->GetBoundsInScreen();
 
@@ -251,11 +227,6 @@ class ScrollableShelfViewTest : public AshTestBase {
 
     return has_rounded_corners;
   }
-
-  ScrollableShelfView* scrollable_shelf_view_ = nullptr;
-  ShelfView* shelf_view_ = nullptr;
-  std::unique_ptr<ShelfViewTestAPI> test_api_;
-  int id_ = 0;
 };
 
 // Tests scrollable shelf's features under both LTR and RTL.
@@ -316,8 +287,8 @@ TEST_F(ScrollableShelfViewTest, CorrectUIAfterDisplayRotationShortToLong) {
   EXPECT_EQ(ScrollableShelfView::kShowLeftArrowButton,
             scrollable_shelf_view_->layout_strategy_for_test());
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
-  const views::View* last_visible_icon =
-      view_model->view_at(scrollable_shelf_view_->last_tappable_app_index());
+  const views::View* last_visible_icon = view_model->view_at(
+      scrollable_shelf_view_->last_tappable_app_index().value());
   const gfx::Rect icon_bounds = last_visible_icon->GetBoundsInScreen();
   gfx::Rect visible_space = scrollable_shelf_view_->visible_space();
   views::View::ConvertRectToScreen(scrollable_shelf_view_, &visible_space);
@@ -384,7 +355,6 @@ TEST_P(ScrollableShelfViewRTLTest, NotShowTooltipForHiddenIcons) {
 
   ASSERT_EQ(ScrollableShelfView::kShowRightArrowButton,
             scrollable_shelf_view_->layout_strategy_for_test());
-  scrollable_shelf_view_->first_tappable_app_index();
 
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
 
@@ -393,8 +363,8 @@ TEST_P(ScrollableShelfViewRTLTest, NotShowTooltipForHiddenIcons) {
   EXPECT_FALSE(tooltip_manager->IsVisible());
 
   // Verifies that tooltip should show for a visible shelf item.
-  views::View* visible_icon =
-      view_model->view_at(scrollable_shelf_view_->first_tappable_app_index());
+  views::View* visible_icon = view_model->view_at(
+      scrollable_shelf_view_->first_tappable_app_index().value());
   GetEventGenerator()->MoveMouseTo(
       visible_icon->GetBoundsInScreen().CenterPoint());
   tooltip_manager->ShowTooltip(visible_icon);
@@ -407,7 +377,7 @@ TEST_P(ScrollableShelfViewRTLTest, NotShowTooltipForHiddenIcons) {
 
   // Verifies that tooltip should not show for a hidden shelf item.
   views::View* hidden_icon = view_model->view_at(
-      scrollable_shelf_view_->last_tappable_app_index() + 1);
+      scrollable_shelf_view_->last_tappable_app_index().value() + 1);
   GetEventGenerator()->MoveMouseTo(
       hidden_icon->GetBoundsInScreen().CenterPoint());
   tooltip_manager->ShowTooltip(hidden_icon);
@@ -546,8 +516,8 @@ TEST_P(ScrollableShelfViewRTLTest, DragIconToNewPage) {
             scrollable_shelf_view_->layout_strategy_for_test());
 
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
-  views::View* dragged_view =
-      view_model->view_at(scrollable_shelf_view_->last_tappable_app_index());
+  views::View* dragged_view = view_model->view_at(
+      scrollable_shelf_view_->last_tappable_app_index().value());
   const gfx::Point drag_start_point =
       dragged_view->GetBoundsInScreen().CenterPoint();
 
@@ -558,7 +528,7 @@ TEST_P(ScrollableShelfViewRTLTest, DragIconToNewPage) {
       scrollable_shelf_view_->left_arrow()->GetBoundsInScreen().origin() -
       gfx::Vector2d(10, 0);
 
-  ASSERT_NE(0, view_model->GetIndexOfView(dragged_view));
+  ASSERT_NE(0u, view_model->GetIndexOfView(dragged_view));
 
   // Drag |dragged_view| from |drag_start_point| to |drag_end_point|. Wait
   // for enough time before releasing the mouse button.
@@ -587,17 +557,19 @@ TEST_P(ScrollableShelfViewRTLTest, DragIconToNewPage) {
   // (2) The dragged view has the correct view index.
   EXPECT_EQ(ScrollableShelfView::kShowRightArrowButton,
             scrollable_shelf_view_->layout_strategy_for_test());
-  const int view_index = view_model->GetIndexOfView(dragged_view);
-  EXPECT_GE(view_index, scrollable_shelf_view_->first_tappable_app_index());
-  EXPECT_LE(view_index, scrollable_shelf_view_->last_tappable_app_index());
+  const auto view_index = view_model->GetIndexOfView(dragged_view);
+  EXPECT_GE(view_index,
+            scrollable_shelf_view_->first_tappable_app_index().value());
+  EXPECT_LE(view_index,
+            scrollable_shelf_view_->last_tappable_app_index().value());
 }
 
 // Verifies that after adding the second display, shelf icons showing on
 // the primary display are also visible on the second display
 // (https://crbug.com/1035596).
 TEST_P(ScrollableShelfViewRTLTest, CheckTappableIndicesOnSecondDisplay) {
-  constexpr int icon_number = 5;
-  for (int i = 0; i < icon_number; i++)
+  constexpr size_t icon_number = 5;
+  for (size_t i = 0; i < icon_number; i++)
     AddAppShortcut();
 
   // Adds the second display.
@@ -613,8 +585,9 @@ TEST_P(ScrollableShelfViewRTLTest, CheckTappableIndicesOnSecondDisplay) {
 
   // Verifies that the all icons are visible on the secondary display.
   EXPECT_EQ(icon_number - 1,
-            secondary_scrollable_shelf_view->last_tappable_app_index());
-  EXPECT_EQ(0, secondary_scrollable_shelf_view->first_tappable_app_index());
+            secondary_scrollable_shelf_view->last_tappable_app_index().value());
+  EXPECT_EQ(
+      0u, secondary_scrollable_shelf_view->first_tappable_app_index().value());
 }
 
 // Verifies that the scrollable shelf in oveflow mode has the correct layout
@@ -651,8 +624,8 @@ TEST_P(ScrollableShelfViewRTLTest, CorrectUIAfterSwitchingToTablet) {
   base::RunLoop().RunUntilIdle();
 
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
-  views::View* first_tappable_view =
-      view_model->view_at(scrollable_shelf_view_->first_tappable_app_index());
+  views::View* first_tappable_view = view_model->view_at(
+      scrollable_shelf_view_->first_tappable_app_index().value());
 
   // Verifies that the gap between the left arrow button and the first tappable
   // icon is expected.
@@ -693,10 +666,12 @@ TEST_P(ScrollableShelfViewRTLTest, CorrectUIInTabletWithoutOverflow) {
 
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
   const gfx::Rect first_tappable_icon_bounds =
-      view_model->view_at(scrollable_shelf_view_->first_tappable_app_index())
+      view_model
+          ->view_at(scrollable_shelf_view_->first_tappable_app_index().value())
           ->GetBoundsInScreen();
   const gfx::Rect last_tappable_icon_bounds =
-      view_model->view_at(scrollable_shelf_view_->last_tappable_app_index())
+      view_model
+          ->view_at(scrollable_shelf_view_->last_tappable_app_index().value())
           ->GetBoundsInScreen();
 
   if (base::i18n::IsRTL()) {
@@ -745,9 +720,9 @@ TEST_P(ScrollableShelfViewRTLTest, CheckRoundedCornersSetForInkDrop) {
   ShelfViewTestAPI shelf_view_test_api(shelf_view_);
 
   ShelfAppButton* first_icon = shelf_view_test_api.GetButton(
-      scrollable_shelf_view_->first_tappable_app_index());
+      scrollable_shelf_view_->first_tappable_app_index().value());
   ShelfAppButton* last_icon = shelf_view_test_api.GetButton(
-      scrollable_shelf_view_->last_tappable_app_index());
+      scrollable_shelf_view_->last_tappable_app_index().value());
 
   // When the right arrow is showing, check rounded corners are set if the ink
   // drop is visible for the first visible app.
@@ -766,9 +741,9 @@ TEST_P(ScrollableShelfViewRTLTest, CheckRoundedCornersSetForInkDrop) {
 
   // Recalculate first and last icons.
   first_icon = shelf_view_test_api.GetButton(
-      scrollable_shelf_view_->first_tappable_app_index());
+      scrollable_shelf_view_->first_tappable_app_index().value());
   last_icon = shelf_view_test_api.GetButton(
-      scrollable_shelf_view_->last_tappable_app_index());
+      scrollable_shelf_view_->last_tappable_app_index().value());
 
   // When the left arrow is showing, check rounded corners are set if the ink
   // drop is visible for the last visible app.
@@ -837,7 +812,7 @@ TEST_F(ScrollableShelfViewTest,
 
   AddAppShortcut();
   const ShelfID app_id = AddAppShortcut();
-  ASSERT_EQ(2, test_api_->GetButtonCount());
+  ASSERT_EQ(2u, test_api_->GetButtonCount());
 
   ShelfModel* shelf_model = ShelfModel::Get();
   const int index = shelf_model->ItemIndexByID(app_id);
@@ -857,7 +832,7 @@ TEST_F(ScrollableShelfViewTest,
   // Emulate to remove a shelf icon from context menu.
   shelf_model->RemoveItemAt(index);
   test_api_->RunMessageLoopUntilAnimationsDone();
-  ASSERT_EQ(1, test_api_->GetButtonCount());
+  ASSERT_EQ(1u, test_api_->GetButtonCount());
 
   // Verify the count of activated corner buttons.
   EXPECT_FALSE(
@@ -965,7 +940,8 @@ TEST_P(ScrollableShelfViewRTLTest, RipOffShelfItem) {
 
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
   const gfx::Rect first_tappable_view_bounds =
-      view_model->view_at(scrollable_shelf_view_->first_tappable_app_index())
+      view_model
+          ->view_at(scrollable_shelf_view_->first_tappable_app_index().value())
           ->GetBoundsInScreen();
 
   const gfx::Point drag_start_location =
@@ -1001,10 +977,13 @@ TEST_P(ScrollableShelfViewRTLTest, MouseWheelOnEmptyShelfShouldExpandAppList) {
   AddAppShortcut();
   AddAppShortcut();
 
+  GetEventGenerator()->MoveMouseTo(scrollable_shelf_view_->shelf_view()
+                                       ->view_model_for_test()
+                                       ->view_at(1)
+                                       ->GetBoundsInScreen()
+                                       .CenterPoint());
   int shelf_scroll_threshold =
       ShelfConfig::Get()->mousewheel_scroll_offset_threshold();
-  GetEventGenerator()->MoveMouseTo(
-      scrollable_shelf_view_->GetBoundsInScreen().CenterPoint());
   GetEventGenerator()->MoveMouseWheel(0, shelf_scroll_threshold + 1);
 
   // The app list's view is lazily loaded. Since this is the first time, and we
@@ -1180,7 +1159,7 @@ TEST_P(ScrollableShelfViewRTLTest, CheckInkDropRippleOfEdgeIcons) {
 
   ShelfViewTestAPI shelf_view_test_api(shelf_view_);
   ShelfAppButton* first_app_button = shelf_view_test_api.GetButton(
-      scrollable_shelf_view_->first_tappable_app_index());
+      scrollable_shelf_view_->first_tappable_app_index().value());
   VeirifyRippleRingWithinShelfContainer(*first_app_button);
 
   // Tap at the right arrow. Hotseat layout should show the left arrow.
@@ -1191,7 +1170,7 @@ TEST_P(ScrollableShelfViewRTLTest, CheckInkDropRippleOfEdgeIcons) {
             scrollable_shelf_view_->layout_strategy_for_test());
 
   ShelfAppButton* last_app_button = shelf_view_test_api.GetButton(
-      scrollable_shelf_view_->last_tappable_app_index());
+      scrollable_shelf_view_->last_tappable_app_index().value());
   VeirifyRippleRingWithinShelfContainer(*last_app_button);
 }
 
@@ -1211,7 +1190,7 @@ TEST_P(ScrollableShelfViewRTLTest, ClickAtLastIcon) {
 
   // Right-click on the edge of the last icon.
   const views::View* last_icon = shelf_view_->view_model_for_test()->view_at(
-      scrollable_shelf_view_->last_tappable_app_index());
+      scrollable_shelf_view_->last_tappable_app_index().value());
   gfx::Point click_point = last_icon->GetBoundsInScreen().right_center();
   click_point.Offset(-1, 0);
   GetEventGenerator()->MoveMouseTo(click_point);
@@ -1264,7 +1243,7 @@ TEST_F(ScrollableShelfViewTest, PresentationTimeMetricsForGestureScroll) {
             scrollable_shelf_view_->layout_strategy_for_test());
 
   views::ViewModel* view_model = shelf_view_->view_model_for_test();
-  ASSERT_GT(view_model->view_size(), 2);
+  ASSERT_GT(view_model->view_size(), 2u);
 
   // |gesture_start_point| is between the first and the second shelf icon. It
   // ensures that gesture scroll does not start from a point within any shelf
@@ -1344,14 +1323,14 @@ TEST_P(ScrollableShelfViewRTLTest, FeedbackForAppPinning) {
             scrollable_shelf_view_->layout_strategy_for_test());
 
   // |num| is the minimum of app icons to enter overflow mode.
-  const int num = shelf_view_->view_model_for_test()->view_size();
+  const size_t num = shelf_view_->view_model_for_test()->view_size();
 
   ShelfModel::ScopedUserTriggeredMutation user_triggered(
       scrollable_shelf_view_->shelf_view()->model());
 
   {
     ShelfID shelf_id = AddAppShortcut();
-    const int view_index =
+    const size_t view_index =
         shelf_view_->model()->ItemIndexByAppID(shelf_id.app_id);
     ASSERT_EQ(view_index, num);
 
@@ -1367,20 +1346,22 @@ TEST_P(ScrollableShelfViewRTLTest, FeedbackForAppPinning) {
             scrollable_shelf_view_->layout_strategy_for_test());
 
   // Pins the icons of running apps to the shelf.
-  for (int i = 0; i < 2 * num; i++)
+  for (size_t i = 0; i < 2 * num; i++)
     AddAppShortcut(ShelfItemType::TYPE_APP);
 
   {
     ShelfID shelf_id = AddAppShortcut();
-    const int view_index =
+    const size_t view_index =
         shelf_view_->model()->ItemIndexByAppID(shelf_id.app_id);
     ASSERT_EQ(view_index, num + 1);
 
     // Scrolls the shelf to show the pinned app. Expects that the shelf is
     // scrolled to the correct page. Notes that the pinned app should be placed
     // ahead of running apps.
-    EXPECT_LT(view_index, scrollable_shelf_view_->last_tappable_app_index());
-    EXPECT_GT(view_index, scrollable_shelf_view_->first_tappable_app_index());
+    EXPECT_LT(view_index,
+              scrollable_shelf_view_->last_tappable_app_index().value());
+    EXPECT_GT(view_index,
+              scrollable_shelf_view_->first_tappable_app_index().value());
     EXPECT_EQ(ScrollableShelfView::kShowButtons,
               scrollable_shelf_view_->layout_strategy_for_test());
   }
@@ -1392,6 +1373,23 @@ class ScrollableShelfViewWithAppScalingTest : public ScrollableShelfViewTest {
   ~ScrollableShelfViewWithAppScalingTest() override = default;
 
   void SetUp() override {
+    // When the calendar view is enabled, the status widget's bounds could vary
+    // under different dates. For example, "June 10" is longer than "June 9".
+    // Therefore, the code below sets the constant date to avoid flakiness.
+    if (features::IsCalendarViewEnabled()) {
+      scoped_locale_ =
+          std::make_unique<base::test::ScopedRestoreICUDefaultLocale>("en_US"),
+      time_zone_ = std::make_unique<base::test::ScopedRestoreDefaultTimezone>(
+          "America/Chicago");
+
+      constexpr char kFakeNowTimeString[] = "Sunday, 5 June 2022 14:30:00 CDT";
+      ASSERT_TRUE(base::Time::FromString(kFakeNowTimeString,
+                                         &TimeOverrideHelper::current_time));
+      time_override_ = std::make_unique<base::subtle::ScopedTimeClockOverrides>(
+          &TimeOverrideHelper::TimeNow, /*time_ticks_override=*/nullptr,
+          /*thread_ticks_override=*/nullptr);
+    }
+
     ScrollableShelfViewTest::SetUp();
 
     // Display should be big enough (width and height are bigger than 600).
@@ -1428,6 +1426,11 @@ class ScrollableShelfViewWithAppScalingTest : public ScrollableShelfViewTest {
   // If calendar view is enabled, the space is a little smaller and can only
   // show 9 apps at one time.
   static constexpr int kAppCountWithShowingDateTray = 9;
+
+  // Ensures that the current time is constant if the calendar view is enabled.
+  std::unique_ptr<base::test::ScopedRestoreICUDefaultLocale> scoped_locale_;
+  std::unique_ptr<base::test::ScopedRestoreDefaultTimezone> time_zone_;
+  std::unique_ptr<base::subtle::ScopedTimeClockOverrides> time_override_;
 };
 
 // Verifies the basic function of app scaling which scales down the hotseat and
@@ -1545,6 +1548,74 @@ TEST_F(ScrollableShelfViewTest, RightClickArrows) {
   GetEventGenerator()->ClickLeftButton();
   EXPECT_FALSE(
       shelf_view_->IsShowingMenuForView(scrollable_shelf_view_->left_arrow()));
+}
+
+// Verifies that activating an app will automatically scroll the shelf to show
+// the activated app icon.
+TEST_P(ScrollableShelfViewRTLTest, ActivateAppScrollShelfToMakeAppVisible) {
+  AddAppShortcutsUntilOverflow();
+  const ShelfButton* first_button = test_api_->GetButton(0);
+  const int last_button_index = test_api_->GetButtonCount() - 1;
+  const ShelfButton* last_button = test_api_->GetButton(last_button_index);
+  gfx::Rect visible_space_in_screen = scrollable_shelf_view_->visible_space();
+  views::View::ConvertRectToScreen(scrollable_shelf_view_,
+                                   &visible_space_in_screen);
+
+  // Initially, the first button will show while the last one will not because
+  // of the overflow.
+  EXPECT_TRUE(
+      visible_space_in_screen.Contains(first_button->GetBoundsInScreen()));
+  EXPECT_FALSE(
+      visible_space_in_screen.Contains(last_button->GetBoundsInScreen()));
+
+  gfx::Rect first_window_bounds(0, 0, 200, 200);
+  gfx::Rect last_window_bounds(200, 0, 200, 200);
+
+  // Create new windows for the first and last apps on the shelf. Set the
+  // `kShelfIDKey` property to associate windows with shelf apps.
+  std::unique_ptr<aura::Window> first_app_window =
+      CreateTestWindow(first_window_bounds);
+  first_app_window->SetProperty(kShelfIDKey,
+                                ShelfModel::Get()->items()[0].id.Serialize());
+  std::unique_ptr<aura::Window> last_app_window =
+      CreateTestWindow(last_window_bounds);
+  last_app_window->SetProperty(
+      kShelfIDKey,
+      ShelfModel::Get()->items()[last_button_index].id.Serialize());
+
+  // Activate `last_app_window` by mouse click. It emulates the process that an
+  // app window is activated after clicking at a shelf app icon.
+  GetEventGenerator()->MoveMouseTo(last_window_bounds.CenterPoint());
+  GetEventGenerator()->ClickLeftButton();
+
+  // Get the new visible space of `scrollable_shelf_view_`
+  visible_space_in_screen = scrollable_shelf_view_->visible_space();
+  views::View::ConvertRectToScreen(scrollable_shelf_view_,
+                                   &visible_space_in_screen);
+
+  // The last app button should be showing while the first app button is not
+  // because the shelf is scrolled.
+  EXPECT_FALSE(
+      visible_space_in_screen.Contains(first_button->GetBoundsInScreen()));
+  EXPECT_TRUE(
+      visible_space_in_screen.Contains(last_button->GetBoundsInScreen()));
+
+  // Activate `last_app_window` by mouse click. It emulates the process that an
+  // app window is activated after clicking at a shelf app icon.
+  GetEventGenerator()->MoveMouseTo(first_window_bounds.CenterPoint());
+  GetEventGenerator()->ClickLeftButton();
+
+  // Get the new visible space of `scrollable_shelf_view_`
+  visible_space_in_screen = scrollable_shelf_view_->visible_space();
+  views::View::ConvertRectToScreen(scrollable_shelf_view_,
+                                   &visible_space_in_screen);
+
+  // The first app button should be showing while the last app button is not
+  // because the shelf is scrolled.
+  EXPECT_TRUE(
+      visible_space_in_screen.Contains(first_button->GetBoundsInScreen()));
+  EXPECT_FALSE(
+      visible_space_in_screen.Contains(last_button->GetBoundsInScreen()));
 }
 
 }  // namespace ash

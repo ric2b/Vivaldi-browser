@@ -11,11 +11,11 @@
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chromeos/network/cellular_esim_profile_handler.h"
-#include "chromeos/network/managed_cellular_pref_handler.h"
-#include "chromeos/network/network_event_log.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/cellular_esim_profile_handler.h"
+#include "chromeos/ash/components/network/managed_cellular_pref_handler.h"
+#include "chromeos/ash/components/network/network_event_log.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -84,16 +84,16 @@ EuiccStatusUploader::EuiccStatusUploader(
       local_state_(local_state),
       is_device_managed_callback_(std::move(is_device_active_callback)),
       retry_entry_(&kBackOffPolicy) {
-  if (!chromeos::NetworkHandler::IsInitialized()) {
+  if (!ash::NetworkHandler::IsInitialized()) {
     LOG(WARNING) << "NetworkHandler is not initialized.";
     return;
   }
 
-  hermes_manager_observation_.Observe(chromeos::HermesManagerClient::Get());
-  hermes_euicc_observation_.Observe(chromeos::HermesEuiccClient::Get());
+  hermes_manager_observation_.Observe(ash::HermesManagerClient::Get());
+  hermes_euicc_observation_.Observe(ash::HermesEuiccClient::Get());
   cloud_policy_client_observation_.Observe(client_);
 
-  auto* network_handler = chromeos::NetworkHandler::Get();
+  auto* network_handler = ash::NetworkHandler::Get();
   network_handler->managed_cellular_pref_handler()->AddObserver(this);
   managed_network_configuration_handler_ =
       network_handler->managed_network_configuration_handler();
@@ -101,10 +101,9 @@ EuiccStatusUploader::EuiccStatusUploader(
 }
 
 EuiccStatusUploader::~EuiccStatusUploader() {
-  if (chromeos::NetworkHandler::IsInitialized())
-    chromeos::NetworkHandler::Get()
-        ->managed_cellular_pref_handler()
-        ->RemoveObserver(this);
+  if (ash::NetworkHandler::IsInitialized())
+    ash::NetworkHandler::Get()->managed_cellular_pref_handler()->RemoveObserver(
+        this);
   OnManagedNetworkConfigurationHandlerShuttingDown();
 }
 
@@ -187,11 +186,11 @@ base::Value EuiccStatusUploader::GetCurrentEuiccStatus() const {
 
   status.SetIntKey(
       kLastUploadedEuiccStatusEuiccCountKey,
-      chromeos::HermesManagerClient::Get()->GetAvailableEuiccs().size());
+      ash::HermesManagerClient::Get()->GetAvailableEuiccs().size());
 
   base::Value esim_profiles(base::Value::Type::LIST);
 
-  for (const auto& esim_profile : chromeos::NetworkHandler::Get()
+  for (const auto& esim_profile : ash::NetworkHandler::Get()
                                       ->cellular_esim_profile_handler()
                                       ->GetESimProfiles()) {
     // Do not report non-provisioned cellular networks.
@@ -199,7 +198,7 @@ base::Value EuiccStatusUploader::GetCurrentEuiccStatus() const {
       continue;
 
     const std::string* smdp_address =
-        chromeos::NetworkHandler::Get()
+        ash::NetworkHandler::Get()
             ->managed_cellular_pref_handler()
             ->GetSmdpAddressFromIccid(esim_profile.iccid());
     // Report only managed profiles with a SMDP address.
@@ -240,13 +239,13 @@ void EuiccStatusUploader::MaybeUploadStatus() {
     return;
   }
 
-  if (chromeos::HermesManagerClient::Get()->GetAvailableEuiccs().empty()) {
+  if (ash::HermesManagerClient::Get()->GetAvailableEuiccs().empty()) {
     VLOG(1) << "No EUICC available on the device.";
     return;
   }
 
-  const base::Value* last_uploaded_pref =
-      local_state_->Get(kLastUploadedEuiccStatusPref);
+  const base::Value& last_uploaded_pref =
+      local_state_->GetValue(kLastUploadedEuiccStatusPref);
   auto current_state = GetCurrentEuiccStatus();
 
   // Force send the status if reset request was received.
@@ -269,7 +268,7 @@ void EuiccStatusUploader::MaybeUploadStatus() {
 
   retry_timer_.reset();
 
-  if (!last_uploaded_pref || *last_uploaded_pref != current_state) {
+  if (last_uploaded_pref != current_state) {
     UploadStatus(std::move(current_state));
   }
 }

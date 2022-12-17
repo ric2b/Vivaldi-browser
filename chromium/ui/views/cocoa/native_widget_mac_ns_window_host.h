@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/memory/raw_ptr.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
 #include "components/remote_cocoa/app_shim/ns_view_ids.h"
 #include "components/remote_cocoa/browser/application_host.h"
@@ -67,6 +68,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   static NativeWidgetMacNSWindowHost* GetFromNativeWindow(
       gfx::NativeWindow window);
   static NativeWidgetMacNSWindowHost* GetFromNativeView(gfx::NativeView view);
+
+  // Key used to bind the content NSView to the overlay widget in immersive
+  // mode.
+  static const char kImmersiveContentNSView[];
 
   // Unique integer id handles are used to bridge between the
   // NativeWidgetMacNSWindowHost in one process and the NativeWidgetNSWindowHost
@@ -188,9 +193,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   // Geometry of the content area of the window, in DIPs. Note that this is not
   // necessarily the same as the views::View's size.
-  const gfx::Rect& GetContentBoundsInScreen() const {
-    return content_bounds_in_screen_;
-  }
+  gfx::Rect GetContentBoundsInScreen() const;
 
   // The display that the window is currently on (or best guess thereof).
   const display::Display& GetCurrentDisplay() const { return display_; }
@@ -415,7 +418,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   // The id that this bridge may be looked up from.
   const uint64_t widget_id_;
-  views::NativeWidgetMac* const native_widget_mac_;  // Weak. Owns |this_|.
+  const raw_ptr<views::NativeWidgetMac>
+      native_widget_mac_;  // Weak. Owns |this_|.
 
   // Structure used to look up this structure's interfaces from its
   // gfx::NativeWindow.
@@ -423,12 +427,12 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
       native_window_mapping_;
 
   // Parent and child widgets.
-  NativeWidgetMacNSWindowHost* parent_ = nullptr;
+  raw_ptr<NativeWidgetMacNSWindowHost> parent_ = nullptr;
   std::vector<NativeWidgetMacNSWindowHost*> children_;
 
   // The factory that was used to create |remote_ns_window_remote_|. This must
   // be the same as |parent_->application_host_|.
-  remote_cocoa::ApplicationHost* application_host_ = nullptr;
+  raw_ptr<remote_cocoa::ApplicationHost> application_host_ = nullptr;
 
   Widget::InitParams::Type widget_type_ = Widget::InitParams::TYPE_WINDOW;
 
@@ -436,7 +440,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   const uint64_t root_view_id_;
 
   // Weak. Owned by |native_widget_mac_|.
-  views::View* root_view_ = nullptr;
+  raw_ptr<views::View> root_view_ = nullptr;
 
   std::unique_ptr<DragDropClientMac> drag_drop_client_;
 

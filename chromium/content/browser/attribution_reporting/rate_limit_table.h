@@ -12,17 +12,13 @@
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
-#include "content/browser/attribution_reporting/attribution_storage.h"
 #include "content/browser/attribution_reporting/stored_source.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/storage_partition.h"
 
 namespace sql {
 class Database;
 }  // namespace sql
-
-namespace url {
-class Origin;
-}  // namespace url
 
 namespace content {
 
@@ -51,10 +47,10 @@ class CONTENT_EXPORT RateLimitTable {
   };
 
   explicit RateLimitTable(const AttributionStorageDelegate* delegate);
-  RateLimitTable(const RateLimitTable& other) = delete;
-  RateLimitTable& operator=(const RateLimitTable& other) = delete;
-  RateLimitTable(RateLimitTable&& other) = delete;
-  RateLimitTable& operator=(RateLimitTable&& other) = delete;
+  RateLimitTable(const RateLimitTable&) = delete;
+  RateLimitTable& operator=(const RateLimitTable&) = delete;
+  RateLimitTable(RateLimitTable&&) = delete;
+  RateLimitTable& operator=(RateLimitTable&&) = delete;
   ~RateLimitTable();
 
   // Creates the table in |db| if it doesn't exist.
@@ -74,6 +70,10 @@ class CONTENT_EXPORT RateLimitTable {
       sql::Database* db,
       const StorableSource& source);
 
+  [[nodiscard]] RateLimitResult SourceAllowedForDestinationLimit(
+      sql::Database* db,
+      const StorableSource& source);
+
   [[nodiscard]] RateLimitResult AttributionAllowedForReportingOriginLimit(
       sql::Database* db,
       const AttributionInfo& attribution_info);
@@ -90,7 +90,7 @@ class CONTENT_EXPORT RateLimitTable {
       sql::Database* db,
       base::Time delete_begin,
       base::Time delete_end,
-      base::RepeatingCallback<bool(const url::Origin&)> filter);
+      StoragePartition::StorageKeyMatcherFunction filter);
   // Returns false on failure.
   [[nodiscard]] bool ClearDataForSourceIds(
       sql::Database* db,

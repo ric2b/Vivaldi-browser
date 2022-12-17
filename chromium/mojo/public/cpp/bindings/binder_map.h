@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <type_traits>
 
 #include "base/callback.h"
 #include "base/component_export.h"
@@ -61,11 +62,17 @@ class BinderMapWithContext {
   // If |Add()| is called multiple times for the same interface, the most
   // recent one replaces any existing binder.
   template <typename Interface>
-  void Add(BinderType<Interface> binder,
+  void Add(std::common_type_t<BinderType<Interface>> binder,
            scoped_refptr<base::SequencedTaskRunner> task_runner = nullptr) {
     binders_[Interface::Name_] = std::make_unique<
         internal::GenericCallbackBinderWithContext<ContextType>>(
         Traits::MakeGenericBinder(std::move(binder)), std::move(task_runner));
+  }
+
+  // Returns true if this map contains a binder for `Interface` receivers.
+  template <typename Interface>
+  bool Contains() {
+    return binders_.find(Interface::Name_) != binders_.end();
   }
 
   // Attempts to bind the |receiver| using one of the registered binders in

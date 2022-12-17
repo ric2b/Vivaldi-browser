@@ -38,6 +38,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/webplugininfo.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -66,7 +67,7 @@ void CheckPdfPluginForRenderFrame(content::RenderFrameHost* frame) {
       kPdfInternalPluginPath, &pdf_internal_plugin_info));
 
   ChromePluginServiceFilter* filter = ChromePluginServiceFilter::GetInstance();
-  EXPECT_TRUE(filter->IsPluginAvailable(frame->GetProcess()->GetID(),
+  EXPECT_TRUE(filter->IsPluginAvailable(frame->GetBrowserContext(),
                                         pdf_internal_plugin_info));
 }
 
@@ -239,9 +240,8 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
 
   // Make sure it is actually disabled for webpages.
   ChromePluginServiceFilter* filter = ChromePluginServiceFilter::GetInstance();
-  EXPECT_FALSE(filter->IsPluginAvailable(
-      initiator()->GetPrimaryMainFrame()->GetProcess()->GetID(),
-      pdf_external_plugin_info));
+  EXPECT_FALSE(filter->IsPluginAvailable(initiator()->GetBrowserContext(),
+                                         pdf_external_plugin_info));
 
   PrintPreview();
 

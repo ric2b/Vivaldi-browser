@@ -91,7 +91,7 @@ blink::LocalFrameToken FrameTokenFromCurrentContext() {
   // RendererWebAudioDevice can be created without a valid frame/document. In
   // that case, FrameForCurrentContext() below will be invalid.
 
-  // We can perform look-ups to determine which RenderView is starting the
+  // We can perform look-ups to determine which `blink::WebView` is starting the
   // audio device.  The reason for all this is because the creator of the
   // WebAudio objects might not be the actual source of the audio (e.g.,
   // an extension creates a object that is passed and used within a page).
@@ -102,8 +102,8 @@ media::AudioParameters GetOutputDeviceParameters(
     const blink::LocalFrameToken& frame_token,
     const base::UnguessableToken& session_id,
     const std::string& device_id) {
-  return AudioDeviceFactory::GetOutputDeviceInfo(frame_token,
-                                                 {session_id, device_id})
+  return AudioDeviceFactory::GetInstance()
+      ->GetOutputDeviceInfo(frame_token, {session_id, device_id})
       .output_params();
 }
 
@@ -187,7 +187,7 @@ void RendererWebAudioDeviceImpl::Start() {
   if (sink_)
     return;  // Already started.
 
-  sink_ = AudioDeviceFactory::NewAudioRendererSink(
+  sink_ = AudioDeviceFactory::GetInstance()->NewAudioRendererSink(
       GetLatencyHintSourceType(latency_hint_.Category()), frame_token_,
       media::AudioSinkParameters(session_id_, std::string()));
 

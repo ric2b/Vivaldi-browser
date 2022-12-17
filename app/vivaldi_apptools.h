@@ -33,9 +33,7 @@ bool BASE_EXPORT IsVivaldiApp(base::StringPiece extension_id);
 bool BASE_EXPORT IsVivaldiExtraLocale(base::StringPiece locale);
 
 bool BASE_EXPORT IsVivaldiRunning();
-bool BASE_EXPORT IsDebuggingVivaldi();
 bool BASE_EXPORT IsVivaldiRunning(const base::CommandLine& cmd_line);
-bool BASE_EXPORT IsDebuggingVivaldi(const base::CommandLine& cmd_line);
 void BASE_EXPORT ForceVivaldiRunning(bool status);
 bool BASE_EXPORT ForcedVivaldiRunning();
 

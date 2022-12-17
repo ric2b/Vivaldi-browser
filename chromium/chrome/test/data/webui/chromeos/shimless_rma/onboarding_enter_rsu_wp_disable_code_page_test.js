@@ -27,13 +27,10 @@ export function onboardingEnterRsuWpDisableCodePageTest() {
   /** @type {?FakeShimlessRmaService} */
   let service = null;
 
-  suiteSetup(() => {
-    service = new FakeShimlessRmaService();
-    setShimlessRmaServiceForTesting(service);
-  });
-
   setup(() => {
     document.body.innerHTML = '';
+    service = new FakeShimlessRmaService();
+    setShimlessRmaServiceForTesting(service);
   });
 
   teardown(() => {
@@ -84,7 +81,7 @@ export function onboardingEnterRsuWpDisableCodePageTest() {
   test('EnterRsuWpDisableCodePageRendersQrCode', async () => {
     await initializeEnterRsuWpDisableCodePage('', '');
 
-    const expectedCanvasSize = 60;
+    const expectedCanvasSize = 20;
 
 
     assertEquals(suppressedComponentCanvasSize_(component), expectedCanvasSize);

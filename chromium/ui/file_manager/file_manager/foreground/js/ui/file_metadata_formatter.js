@@ -35,19 +35,19 @@ export class FileMetadataFormatter extends EventTarget {
       day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
-      hour12: use12hourClock
+      hour12: use12hourClock,
     });
     dispatchSimpleEvent(this, 'date-time-format-changed');
   }
 
   /**
    * Generates a formatted modification time text.
-   * @param {Date} modTime
+   * @param {Date=} modTime
    * @return {string} A string that represents modification time.
    */
   formatModDate(modTime) {
     if (!modTime) {
-      return '...';
+      return '--';
     }
 
     if (!(this.timeFormatter_ && this.dateFormatter_)) {

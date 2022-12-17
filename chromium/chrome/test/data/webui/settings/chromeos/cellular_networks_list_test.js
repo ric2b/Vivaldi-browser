@@ -28,9 +28,6 @@ suite('CellularNetworksList', function() {
   let browserProxy;
 
   setup(function() {
-    loadTimeData.overrideValues({
-      esimPolicyEnabled: true,
-    });
     mojom = chromeos.networkConfig.mojom;
     mojoApi_ = new FakeNetworkConfig();
     MojoInterfaceProviderImpl.getInstance().remote_ = mojoApi_;
@@ -39,7 +36,7 @@ suite('CellularNetworksList', function() {
     setESimManagerRemoteForTesting(eSimManagerRemote);
 
     browserProxy = new TestMultideviceBrowserProxy();
-    MultiDeviceBrowserProxyImpl.instance_ = browserProxy;
+    MultiDeviceBrowserProxyImpl.setInstanceForTesting(browserProxy);
   });
 
   teardown(function() {
@@ -414,7 +411,7 @@ suite('CellularNetworksList', function() {
         cellularNetworkList.deviceState = {
           type: mojom.NetworkType.kCellular,
           deviceState: mojom.DeviceStateType.kEnabled,
-          inhibitReason: mojom.InhibitReason.kNotInhibited
+          inhibitReason: mojom.InhibitReason.kNotInhibited,
         };
         cellularNetworkList.globalPolicy = {
           allowOnlyPolicyCellularNetworks: true,
@@ -442,7 +439,7 @@ suite('CellularNetworksList', function() {
         cellularNetworkList.cellularDeviceState = {
           type: mojom.NetworkType.kCellular,
           deviceState: mojom.DeviceStateType.kEnabled,
-          inhibitReason: mojom.InhibitReason.kInstallingProfile
+          inhibitReason: mojom.InhibitReason.kInstallingProfile,
         };
         addESimSlot();
         await flushAsync();
@@ -465,7 +462,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.cellularDeviceState = {
       type: mojom.NetworkType.kCellular,
       deviceState: mojom.DeviceStateType.kEnabled,
-      inhibitReason: mojom.InhibitReason.kNotInhibited
+      inhibitReason: mojom.InhibitReason.kNotInhibited,
     };
     addESimSlot();
     cellularNetworkList.globalPolicy = {
@@ -502,7 +499,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.cellularDeviceState = {
       type: mojom.NetworkType.kCellular,
       deviceState: mojom.DeviceStateType.kEnabled,
-      inhibitReason: mojom.InhibitReason.kInstallingProfile
+      inhibitReason: mojom.InhibitReason.kInstallingProfile,
     };
     addESimSlot();
     await flushAsync();
@@ -514,7 +511,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.cellularDeviceState = {
       type: mojom.NetworkType.kCellular,
       deviceState: mojom.DeviceStateType.kEnabled,
-      inhibitReason: mojom.InhibitReason.kNotInhibited
+      inhibitReason: mojom.InhibitReason.kNotInhibited,
     };
     addESimSlot();
     await flushAsync();
@@ -533,7 +530,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.deviceState = {
       type: mojom.NetworkType.kCellular,
       deviceState: mojom.DeviceStateType.kEnabled,
-      inhibitReason: mojom.InhibitReason.kNotInhibited
+      inhibitReason: mojom.InhibitReason.kNotInhibited,
     };
     addESimSlot();
 
@@ -560,7 +557,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.deviceState = {
       type: mojom.NetworkType.kCellular,
       deviceState: mojom.DeviceStateType.kEnabled,
-      inhibitReason: mojom.InhibitReason.kNotInhibited
+      inhibitReason: mojom.InhibitReason.kNotInhibited,
     };
     addESimSlot();
     cellularNetworkList.canShowSpinner = true;
@@ -578,7 +575,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.cellularDeviceState = {
       type: mojom.NetworkType.kCellular,
       deviceState: mojom.DeviceStateType.kEnabled,
-      inhibitReason: mojom.InhibitReason.kInstallingProfile
+      inhibitReason: mojom.InhibitReason.kInstallingProfile,
     };
     addESimSlot();
     await flushAsync();
@@ -602,7 +599,7 @@ suite('CellularNetworksList', function() {
         cellularNetworkList.cellularDeviceState = {
           type: mojom.NetworkType.kCellular,
           deviceState: mojom.DeviceStateType.kEnabled,
-          inhibitReason: mojom.InhibitReason.kRefreshingProfileList
+          inhibitReason: mojom.InhibitReason.kRefreshingProfileList,
         };
         addESimSlot();
         cellularNetworkList.canShowSpinner = true;
@@ -624,7 +621,7 @@ suite('CellularNetworksList', function() {
         // kInstallingProfile, the inhibited subtext should also get updated to
         // reflect that.
         cellularNetworkList.cellularDeviceState = {
-          inhibitReason: mojom.InhibitReason.kInstallingProfile
+          inhibitReason: mojom.InhibitReason.kInstallingProfile,
         };
         addESimSlot();
         await flushAsync();

@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Aktivering efter dvale</translation>
 <translation id="119944043368869598">Ryd alle</translation>
 <translation id="1221825588892235038">Kun det markerede</translation>
+<translation id="1234736487471201993">Opret en QR-kode for dette billede</translation>
 <translation id="1244303850296295656">Udvidelsesfejl</translation>
 <translation id="125220115284141797">Standard</translation>
 <translation id="1297175357211070620">Destination</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Cast fanen</translation>
 <translation id="2150139952286079145">Søg efter destinationer</translation>
 <translation id="215753907730220065">Afslut fuld skærm</translation>
+<translation id="2158475082070321257">Kopiér link til fremhævning</translation>
 <translation id="2177950615300672361">Inkognitofane: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Indsæt som almindelig tekst</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Det kan også være nødvendigt for websites at identificere din enhed ved hjælp af et id</translation>
 <translation id="2445081178310039857">Udvidelsens rodmappe er påkrævet.</translation>
 <translation id="2470702053775288986">Understøttede udvidelser er blevet deaktiveret</translation>
-<translation id="2476578072172137802">Indstillinger for website</translation>
+<translation id="2485422356828889247">Afinstaller</translation>
 <translation id="2498539833203011245">Minimer</translation>
 <translation id="2509495747794740764">Skaleringsværdien skal være et tal mellem 10 og 200.</translation>
 <translation id="253557089021624350">Optælling af Keepalive</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Rapportér misbrug</translation>
 <translation id="2941112035454246133">Lav</translation>
 <translation id="2972581237482394796">&amp;Annuller fortryd</translation>
+<translation id="2993517869960930405">Oplysninger om appen</translation>
 <translation id="3003623123441819449">CSS-cache</translation>
 <translation id="3008272652534848354">Nulstil tilladelser</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Åbn linket som</translation>
 <translation id="3222066309010235055">Forhåndsgengivelse: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Vælg rodmappen for udvidelsen, der skal pakkes. Opdater en udvidelse ved også at vælge den private nøglefil til genbrug.</translation>
+<translation id="3275778913554317645">Åbn som vindue</translation>
 <translation id="3280237271814976245">Gem &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Udvidelser, der kører i udviklertilstand, kan skade din computer. Hvis du ikke er udvikler, skal du deaktivere udvidelserne, der kører i udviklertilstand, af hensyn til sikkerheden.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Åbn PDF i Billedfremviser</translation>
 <translation id="3308134619352333507">Skjul knap</translation>
 <translation id="3317459757438853210">To-sidet</translation>
+<translation id="3331974543021145906">Oplysninger om appen</translation>
 <translation id="3341703758641437857">Tillad adgang til fil-URL'er</translation>
 <translation id="3347086966102161372">K&amp;opiér webadressen til billedet</translation>
 <translation id="3360297538363969800">Udskrift mislykkedes. Kontrollér din printer, og prøv igen.</translation>
 <translation id="3378572629723696641">Denne udvidelse kan være blevet beskadiget.</translation>
 <translation id="3387614642886316601">Brug forbedret stavekontrol</translation>
+<translation id="3390013585654699824">Info om appen</translation>
 <translation id="3393582007140394275">Skærmen kan ikke castes.</translation>
 <translation id="3432227430032737297">Fjern alle viste</translation>
 <translation id="345693547134384690">Åbn &amp;billede på ny fane</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Søg efter billedet på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Tillad, at websites afspiller beskyttet indhold (anbefales)</translation>
 <translation id="3979395879372752341">Ny udvidelse er tilføjet (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kopiér link til fremhævning</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Føj til ordbog</translation>
 <translation id="407520071244661467">Skaler</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Luk browser inden import</translation>
 <translation id="4130207949184424187">Denne udvidelse har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
 <translation id="4131410914670010031">Sort/hvid</translation>
+<translation id="4165986682804962316">Websiteindstillinger</translation>
 <translation id="4176463684765177261">Deaktiveret</translation>
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="4225397296022057997">På alle websites</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Gendan indstillinger</translation>
 <translation id="4726710629007580002">Der opstod advarsler under forsøget på at installere udvidelsen:</translation>
 <translation id="479536056609751218">Webside, kun HTML</translation>
+<translation id="4827904420700932487">Opret en QR-kode for dette billede</translation>
 <translation id="4839303808932127586">&amp;Gem video som ...</translation>
 <translation id="4840096453115567876">Vil du afslutte inkognitotilstand alligevel?</translation>
 <translation id="488785315393301722">Vis detaljer</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Spørg inden brug (anbefales)</translation>
 <translation id="5677928146339483299">Blokeret</translation>
 <translation id="5707185214361380026">En fejl opstod ved indlæsning af udvidelsen fra:</translation>
+<translation id="5713171467967533494">Åbn i Vivaldi-browseren</translation>
 <translation id="5715711091495208045">Pluginmægler: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Gem som PDF</translation>
 <translation id="5747809636523347288">Ind&amp;sæt, og gå til <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Valgmuligheder</translation>
 <translation id="6579369886355986318">Vis alle &amp;knapper</translation>
 <translation id="6639554308659482635">SQLite-hukommelse</translation>
+<translation id="666731172850799929">Åbn i <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Gem din adgangskode</translation>
 <translation id="6691936601825168937">&amp;Frem</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="9003647077635673607">Tillad på alle websider</translation>
 <translation id="9027459031423301635">Åbn link på ny &amp;fane</translation>
 <translation id="9056810968620647706">Der blev ikke fundet resultater.</translation>
+<translation id="9084064520949870008">Åbn som vindue</translation>
 <translation id="9137916601698928395">Åbn linket som <ph name="USER" /></translation>
 <translation id="91568222606626347">Opret genvej...</translation>
 <translation id="916607977885256133">Integreret billede</translation>

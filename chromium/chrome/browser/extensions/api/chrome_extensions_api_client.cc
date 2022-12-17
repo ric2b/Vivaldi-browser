@@ -66,8 +66,14 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/extensions/api/file_handlers/non_native_file_system_delegate_chromeos.h"
+#include "chrome/browser/extensions/api/file_system/chrome_file_system_delegate_ash.h"
 #include "chrome/browser/extensions/api/media_perception_private/media_perception_api_delegate_chromeos.h"
 #include "chrome/browser/extensions/api/virtual_keyboard_private/chrome_virtual_keyboard_delegate.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/extensions/api/file_system/chrome_file_system_delegate_lacros.h"
+#include "chrome/browser/extensions/api/virtual_keyboard_private/lacros_virtual_keyboard_delegate.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -163,7 +169,9 @@ bool ChromeExtensionsAPIClient::ShouldHideBrowserNetworkRequest(
 
   // Hide requests made by the NTP Instant renderer.
   auto* instant_service =
-      InstantServiceFactory::GetForProfile(static_cast<Profile*>(context));
+      context
+          ? InstantServiceFactory::GetForProfile(static_cast<Profile*>(context))
+          : nullptr;
   if (instant_service) {
     is_sensitive_request |=
         instant_service->IsInstantProcess(request.render_process_id);
@@ -184,10 +192,10 @@ void ChromeExtensionsAPIClient::NotifyWebRequestWithheld(
       content::RenderFrameHost::FromID(render_process_id, render_frame_id);
   if (!rfh)
     return;
-  // We don't count subframe blocked actions as yet, since there's no way to
-  // surface this to the user. Ignore these (which is also what we do for
-  // content scripts).
-  if (rfh->GetParent())
+  // We don't count subframes and prerendering blocked actions as yet, since
+  // there's no way to surface this to the user. Ignore these (which is also
+  // what we do for content scripts).
+  if (!rfh->IsInPrimaryMainFrame())
     return;
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(rfh);
@@ -350,6 +358,8 @@ ChromeExtensionsAPIClient::CreateVirtualKeyboardDelegate(
     content::BrowserContext* browser_context) const {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return std::make_unique<ChromeVirtualKeyboardDelegate>(browser_context);
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  return std::make_unique<LacrosVirtualKeyboardDelegate>();
 #else
   return nullptr;
 #endif
@@ -382,8 +392,15 @@ MetricsPrivateDelegate* ChromeExtensionsAPIClient::GetMetricsPrivateDelegate() {
 }
 
 FileSystemDelegate* ChromeExtensionsAPIClient::GetFileSystemDelegate() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  using ChromeFileSystemDelegate_Use = ChromeFileSystemDelegateAsh;
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  using ChromeFileSystemDelegate_Use = ChromeFileSystemDelegateLacros;
+#else
+  using ChromeFileSystemDelegate_Use = ChromeFileSystemDelegate;
+#endif
   if (!file_system_delegate_)
-    file_system_delegate_ = std::make_unique<ChromeFileSystemDelegate>();
+    file_system_delegate_ = std::make_unique<ChromeFileSystemDelegate_Use>();
   return file_system_delegate_.get();
 }
 

@@ -45,7 +45,7 @@
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
-#include "net/cert/internal/parse_certificate.h"
+#include "net/cert/pki/parse_certificate.h"
 #include "net/cert/sct_auditing_delegate.h"
 #include "net/cert/sct_status_flags.h"
 #include "net/cert/x509_certificate_net_log_param.h"
@@ -632,9 +632,9 @@ void SSLClientSocketImpl::GetSSLCertRequestInfo(
   const STACK_OF(CRYPTO_BUFFER)* authorities =
       SSL_get0_server_requested_CAs(ssl_.get());
   for (const CRYPTO_BUFFER* ca_name : authorities) {
-    cert_request_info->cert_authorities.push_back(
-        std::string(reinterpret_cast<const char*>(CRYPTO_BUFFER_data(ca_name)),
-                    CRYPTO_BUFFER_len(ca_name)));
+    cert_request_info->cert_authorities.emplace_back(
+        reinterpret_cast<const char*>(CRYPTO_BUFFER_data(ca_name)),
+        CRYPTO_BUFFER_len(ca_name));
   }
 
   cert_request_info->cert_key_types.clear();
@@ -907,11 +907,11 @@ int SSLClientSocketImpl::Init() {
         host_and_port_, &client_cert_, &client_private_key_);
   }
 
-  if (base::FeatureList::IsEnabled(features::kEncryptedClientHello)) {
+  if (context_->EncryptedClientHelloEnabled()) {
     SSL_set_enable_ech_grease(ssl_.get(), 1);
   }
   if (!ssl_config_.ech_config_list.empty()) {
-    DCHECK(base::FeatureList::IsEnabled(features::kEncryptedClientHello));
+    DCHECK(context_->EncryptedClientHelloEnabled());
     net_log_.AddEvent(NetLogEventType::SSL_ECH_CONFIG_LIST, [&] {
       base::Value::Dict dict;
       dict.Set("bytes", NetLogBinaryValue(ssl_config_.ech_config_list));

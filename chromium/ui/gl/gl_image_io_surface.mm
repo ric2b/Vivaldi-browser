@@ -71,6 +71,7 @@ GLenum TextureFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::BGRX_8888:  // See https://crbug.com/595948.
     case gfx::BufferFormat::RGBA_8888:
+    case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_F16:
     case gfx::BufferFormat::BGRA_1010102:
       return GL_RGBA;
@@ -80,7 +81,6 @@ GLenum TextureFormat(gfx::BufferFormat format) {
       return GL_RGB_YCBCR_P010_CHROMIUM;
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
-    case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::YVU_420:
       NOTREACHED() << gfx::BufferFormatToString(format);
@@ -431,6 +431,8 @@ void GLImageIOSurface::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
         base::trace_event::MemoryAllocatorDump::kNameSize,
         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
         static_cast<uint64_t>(size_bytes));
+    anonymous_dump->AddScalar("width", "pixels", size_.width());
+    anonymous_dump->AddScalar("height", "pixels", size_.height());
   }
 }
 
@@ -520,6 +522,7 @@ bool GLImageIOSurface::ValidFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::RGBA_8888:
+    case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_F16:
     case gfx::BufferFormat::BGRA_1010102:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
@@ -527,7 +530,6 @@ bool GLImageIOSurface::ValidFormat(gfx::BufferFormat format) {
       return true;
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
-    case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::YVU_420:
       return false;

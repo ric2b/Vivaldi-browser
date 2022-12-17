@@ -6,7 +6,7 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 import 'chrome://new-tab-page/lazy_load.js';
 
 import {CartHandlerRemote} from 'chrome://new-tab-page/chrome_cart.mojom-webui.js';
-import {ChromeCartProxy, CustomizeModulesElement, ModuleDescriptor, ModuleRegistry,} from 'chrome://new-tab-page/lazy_load.js';
+import {ChromeCartProxy, CustomizeModulesElement, ModuleDescriptor, ModuleRegistry} from 'chrome://new-tab-page/lazy_load.js';
 import {$$, NewTabPageProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {PageCallbackRouter, PageHandlerRemote, PageInterface} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -35,6 +35,7 @@ suite('NewTabPageCustomizeModulesTest', () => {
                 new ModuleDescriptor(id, name, () => Promise.resolve(null))));
     const customizeModules = document.createElement('ntp-customize-modules');
     document.body.appendChild(customizeModules);
+    assertStyle(customizeModules.$.container, 'display', 'none');
     callbackRouterRemote.setDisabledModules(
         allDisabled,
         modules.filter(({disabled}) => disabled).map(({id}) => id));
@@ -364,5 +365,12 @@ suite('NewTabPageCustomizeModulesTest', () => {
 
     // Assert.
     assertEquals(0, subToggleRows.length);
+  });
+
+  test('should show modules after loaded', async () => {
+    const customizeModules = await createCustomizeModules(true, [
+      {id: 'foo', name: 'foo name', disabled: false},
+    ]);
+    assertNotStyle(customizeModules.$.container, 'display', 'none');
   });
 });

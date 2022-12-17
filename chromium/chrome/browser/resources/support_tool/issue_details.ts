@@ -4,7 +4,7 @@
 
 import './strings.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
 import './support_tool_shared.css.js';
 
@@ -13,10 +13,13 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {BrowserProxy, BrowserProxyImpl, IssueDetails} from './browser_proxy.js';
 import {getTemplate} from './issue_details.html.js';
+import {SupportToolPageMixin} from './support_tool_page_mixin.js';
 
 const DONT_INCLUDE_EMAIL: string = 'Do not include email address';
 
-export class IssueDetailsElement extends PolymerElement {
+const IssueDetailsElementBase = SupportToolPageMixin(PolymerElement);
+
+export class IssueDetailsElement extends IssueDetailsElementBase {
   static get is() {
     return 'issue-details';
   }
@@ -71,7 +74,7 @@ export class IssueDetailsElement extends PolymerElement {
       emailAddress: (this.selectedEmail_ === DONT_INCLUDE_EMAIL) ?
           '' :
           this.selectedEmail_,
-      issueDescription: this.issueDescription_
+      issueDescription: this.issueDescription_,
     };
   }
 }

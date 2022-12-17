@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.tab.state;
 
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -14,11 +13,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Batch;
@@ -41,9 +40,16 @@ public class PersistedTabDataTest {
     private static final int INITIAL_VALUE = 42;
     private static final int CHANGED_VALUE = 51;
 
+    @Mock
+    ShoppingPersistedTabData mShoppingPersistedTabDataMock;
+
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
+        // TODO(crbug.com/1337102): Remove runOnUiThreadBlocking call after code refactoring/cleanup
+        // ShoppingPersistedTabData must be mocked on the ui thread, otherwise a thread assert will
+        // fail. An ObserverList is created when creating the mock. The same ObserverList is used
+        // later in the test.
+        ThreadUtils.runOnUiThreadBlocking(() -> { MockitoAnnotations.initMocks(this); });
     }
 
     @SmallTest
@@ -116,12 +122,12 @@ public class PersistedTabDataTest {
     @Test
     public void testOnTabClose() throws TimeoutException {
         TabImpl tab = (TabImpl) MockTab.createAndInitialize(1, false);
-        ShoppingPersistedTabData shoppingPersistedTabData = mock(ShoppingPersistedTabData.class);
         tab.setIsTabSaveEnabled(true);
-        tab.getUserDataHost().setUserData(ShoppingPersistedTabData.class, shoppingPersistedTabData);
+        tab.getUserDataHost().setUserData(
+                ShoppingPersistedTabData.class, mShoppingPersistedTabDataMock);
         PersistedTabData.onTabClose(tab);
         Assert.assertFalse(tab.getIsTabSaveEnabledSupplierForTesting().get());
-        verify(shoppingPersistedTabData, times(1)).disableSaving();
+        verify(mShoppingPersistedTabDataMock, times(1)).disableSaving();
     }
 
     static class ThreadVerifierMockPersistedTabData extends MockPersistedTabData {
@@ -130,7 +136,7 @@ public class PersistedTabDataTest {
         }
 
         @Override
-        public Supplier<ByteBuffer> getSerializeSupplier() {
+        public Serializer<ByteBuffer> getSerializer() {
             // Verify anything before the supplier is called on the UI thread
             ThreadUtils.assertOnUiThread();
             return () -> {
@@ -139,7 +145,7 @@ public class PersistedTabDataTest {
                 // {@link CriticalPersistedTabData} may unnecessarily consume
                 // the UI thread and cause jank.
                 ThreadUtils.assertOnBackgroundThread();
-                return super.getSerializeSupplier().get();
+                return super.getSerializer().get();
             };
         }
     }
@@ -149,9 +155,9 @@ public class PersistedTabDataTest {
             super(tab, 0 /** unused in OutOfMemoryMockPersistedTabData */);
         }
         @Override
-        public Supplier<ByteBuffer> getSerializeSupplier() {
+        public Serializer<ByteBuffer> getSerializer() {
             return () -> {
-                // OutOfMemoryError thrown on getSerializeSupplier.get();
+                // OutOfMemoryError thrown on getSerializer.get();
                 throw new OutOfMemoryError("Out of memory error");
             };
         }
@@ -162,8 +168,8 @@ public class PersistedTabDataTest {
             super(tab, 0 /** unused in OutOfMemoryMockPersistedTabData */);
         }
         @Override
-        public Supplier<ByteBuffer> getSerializeSupplier() {
-            // OutOfMemoryError thrown on getSerializeSupplier
+        public Serializer<ByteBuffer> getSerializer() {
+            // OutOfMemoryError thrown on getSerializer
             throw new OutOfMemoryError("Out of memory error");
         }
     }

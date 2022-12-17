@@ -4,13 +4,11 @@
 
 #include "content/browser/renderer_host/pending_beacon_service.h"
 #include "base/bind.h"
-#include "base/time/time.h"
 #include "content/browser/renderer_host/pending_beacon_host.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-#include "third_party/blink/public/mojom/frame/pending_beacon.mojom.h"
 
 constexpr net::NetworkTrafficAnnotationTag kPendingBeaconNetworkTag =
     net::DefineNetworkTrafficAnnotation("pending_beacon_api",
@@ -56,11 +54,50 @@ void PendingBeaconService::SendBeacons(
     const std::vector<std::unique_ptr<Beacon>>& beacons,
     network::SharedURLLoaderFactory* shared_url_loader_factory) {
   for (const auto& beacon : beacons) {
-    auto resource_request = std::make_unique<network::ResourceRequest>();
-    resource_request->url = beacon->url();
+    auto resource_request = beacon->GenerateResourceRequest();
+    // SimpleURLLoader doesn't support bytes and file request body. We need to
+    // call AttachStringForUpload and AttachFileForUpload instead in such cases.
+    absl::optional<network::DataElement> element;
+    if (resource_request->request_body) {
+      auto& elements = *resource_request->request_body->elements_mutable();
+      DCHECK_EQ(elements.size(), 1u);
+
+      if (elements[0].type() == network::DataElement::Tag::kBytes ||
+          elements[0].type() == network::DataElement::Tag::kFile) {
+        element = std::move(elements[0]);
+        resource_request->request_body = nullptr;
+      }
+    }
+
     std::unique_ptr<network::SimpleURLLoader> simple_url_loader =
         network::SimpleURLLoader::Create(std::move(resource_request),
                                          kPendingBeaconNetworkTag);
+
+    if (element.has_value()) {
+      const auto& content_type = beacon->content_type();
+      if (element->type() == network::DataElement::Tag::kBytes) {
+        const auto& bytes = element->As<network::DataElementBytes>();
+        if (content_type.empty()) {
+          simple_url_loader->AttachStringForUpload(
+              std::string(bytes.AsStringPiece()));
+        } else {
+          simple_url_loader->AttachStringForUpload(
+              std::string(bytes.AsStringPiece()), content_type);
+        }
+      } else if (element->type() == network::DataElement::Tag::kFile) {
+        const auto& file = element->As<network::DataElementFile>();
+        if (content_type.empty()) {
+          simple_url_loader->AttachFileForUpload(file.path(), file.offset(),
+                                                 file.length());
+        } else {
+          simple_url_loader->AttachFileForUpload(file.path(), content_type,
+                                                 file.offset(), file.length());
+        }
+      } else {
+        NOTREACHED();
+      }
+    }
+
     network::SimpleURLLoader* simple_url_loader_ptr = simple_url_loader.get();
 
     // Send out the |beacon|.

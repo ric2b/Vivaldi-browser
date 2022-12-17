@@ -29,6 +29,7 @@
 #include "components/autofill_assistant/android/jni_headers/AssistantModel_jni.h"
 #include "components/autofill_assistant/android/jni_headers/AssistantOverlayModel_jni.h"
 #include "components/autofill_assistant/android/jni_headers/AssistantPlaceholdersConfiguration_jni.h"
+#include "components/autofill_assistant/android/jni_headers/AssistantQrCodeUtil_jni.h"
 #include "components/autofill_assistant/android/jni_headers/AutofillAssistantUiController_jni.h"
 #include "components/autofill_assistant/browser/android/client_android.h"
 #include "components/autofill_assistant/browser/android/dependencies_android.h"
@@ -41,7 +42,7 @@
 #include "components/autofill_assistant/browser/event_handler.h"
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/metrics.h"
-#include "components/autofill_assistant/browser/rectf.h"
+#include "components/autofill_assistant/browser/public/rectf.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_data_util.h"
 #include "components/autofill_assistant/browser/user_model.h"
@@ -69,6 +70,7 @@ using ::base::android::ToJavaByteArray;
 namespace autofill_assistant {
 
 namespace {
+
 std::vector<float> ToFloatVector(const std::vector<RectF>& areas) {
   std::vector<float> flattened;
   for (const auto& rect : areas) {
@@ -199,6 +201,80 @@ absl::optional<bool> GetPreviousFormSelectionResult(
     return absl::nullopt;
   }
   return input_result.selection().selected(selection_index);
+}
+
+/*
+ * Sets the QR Code delegate object and the UI strings for java side
+ * AssistantQrCodeImagePickerModelWrapper. It then triggers java util function
+ * to prompt QR Code Scanning via Image Picker.
+ */
+void PromptQrCodeImagePicker(
+    JNIEnv* env,
+    base::android::ScopedJavaGlobalRef<jobject>
+        java_ui_controller_android_object,
+    const PromptQrCodeScanProto_ImagePickerUiStrings* image_picker_ui_strings,
+    const AssistantQrCodeImagePickerModelWrapper&
+        qr_code_image_picker_model_wrapper,
+    base::android::ScopedJavaGlobalRef<jobject> java_qr_code_native_delegate) {
+  // Register delegate for the QR Code Image Picker UI
+  qr_code_image_picker_model_wrapper.SetDelegate(java_qr_code_native_delegate);
+
+  // Set UI strings in model
+  qr_code_image_picker_model_wrapper.SetToolbarTitle(
+      image_picker_ui_strings->title_text());
+  qr_code_image_picker_model_wrapper.SetPermissionText(
+      image_picker_ui_strings->permission_text());
+  qr_code_image_picker_model_wrapper.SetPermissionButtonText(
+      image_picker_ui_strings->permission_button_text());
+  qr_code_image_picker_model_wrapper.SetOpenSettingsText(
+      image_picker_ui_strings->open_settings_text());
+  qr_code_image_picker_model_wrapper.SetOpenSettingsButtonText(
+      image_picker_ui_strings->open_settings_button_text());
+
+  Java_AssistantQrCodeUtil_promptQrCodeImagePicker(
+      env,
+      Java_AutofillAssistantUiController_getDependencies(
+          env, java_ui_controller_android_object),
+      qr_code_image_picker_model_wrapper.GetModel());
+}
+
+/*
+ * Sets the QR Code delegate object and the UI strings for java side
+ * AssistantQrCodeCameraScanModelWrapper. It then triggers java util function
+ * to prompt QR Code Scanning via Camera Preview.
+ */
+void PromptQrCodeCameraScan(
+    JNIEnv* env,
+    base::android::ScopedJavaGlobalRef<jobject>
+        java_ui_controller_android_object,
+    const PromptQrCodeScanProto_CameraScanUiStrings* camera_scan_ui_strings,
+    const AssistantQrCodeCameraScanModelWrapper&
+        qr_code_camera_scan_model_wrapper,
+    base::android::ScopedJavaGlobalRef<jobject> java_qr_code_native_delegate) {
+  // Register delegate for the QR Code Camera Scan UI
+  qr_code_camera_scan_model_wrapper.SetDelegate(java_qr_code_native_delegate);
+
+  // Set UI strings in model
+  qr_code_camera_scan_model_wrapper.SetToolbarTitle(
+      camera_scan_ui_strings->title_text());
+  qr_code_camera_scan_model_wrapper.SetPermissionText(
+      camera_scan_ui_strings->permission_text());
+  qr_code_camera_scan_model_wrapper.SetPermissionButtonText(
+      camera_scan_ui_strings->permission_button_text());
+  qr_code_camera_scan_model_wrapper.SetOpenSettingsText(
+      camera_scan_ui_strings->open_settings_text());
+  qr_code_camera_scan_model_wrapper.SetOpenSettingsButtonText(
+      camera_scan_ui_strings->open_settings_button_text());
+  qr_code_camera_scan_model_wrapper.SetCameraPreviewInstructionText(
+      camera_scan_ui_strings->camera_preview_instruction_text());
+  qr_code_camera_scan_model_wrapper.SetCameraPreviewSecurityText(
+      camera_scan_ui_strings->camera_preview_security_text());
+
+  Java_AssistantQrCodeUtil_promptQrCodeCameraScan(
+      env,
+      Java_AutofillAssistantUiController_getDependencies(
+          env, java_ui_controller_android_object),
+      qr_code_camera_scan_model_wrapper.GetModel());
 }
 
 // Analog to
@@ -382,6 +458,10 @@ void UiControllerAndroid::SetupForState() {
 
   UpdateActions(ui_delegate_->GetUserActions());
   AutofillAssistantState state = execution_delegate_->GetState();
+  Java_AssistantModel_setHandleBackPress(
+      AttachCurrentThread(), GetModel(),
+      state != AutofillAssistantState::BROWSE);
+
   bool should_prompt_action_expand_sheet =
       ui_delegate_->ShouldPromptActionExpandSheet();
   switch (state) {
@@ -534,6 +614,12 @@ void UiControllerAndroid::OnHeaderFeedbackButtonClicked() {
       /* screenshotMode */ 0);
 }
 
+void UiControllerAndroid::OnQrCodeScanFinished(
+    const ClientStatus& status,
+    const absl::optional<ValueProto>& value) {
+  ui_delegate_->OnQrCodeScanFinished(status, value);
+}
+
 void UiControllerAndroid::OnViewEvent(const EventHandler::EventKey& key) {
   ui_delegate_->DispatchEvent(key);
 }
@@ -651,6 +737,7 @@ void UiControllerAndroid::RestoreUi() {
   OnPersistentGenericUserInterfaceChanged(
       ui_delegate_->GetPersistentGenericUiProto());
   OnGenericUserInterfaceChanged(ui_delegate_->GetGenericUiProto());
+  OnQrCodeScanUiChanged(ui_delegate_->GetPromptQrCodeScanProto());
 
   std::vector<RectF> area;
   execution_delegate_->GetTouchableArea(&area);
@@ -1841,6 +1928,43 @@ void UiControllerAndroid::OnClientSettingsChanged(
   OnClientSettingsDisplayStringsChanged(settings);
 }
 
+void UiControllerAndroid::OnQrCodeScanUiChanged(
+    const PromptQrCodeScanProto* qr_code_scan) {
+  if (!qr_code_scan) {
+    // Action is completed and we will clear all the models and delegate
+    // objects. For any new action, we will create it again.
+    qr_code_native_delegate_ = nullptr;
+    qr_code_camera_scan_model_wrapper_ = nullptr;
+    qr_code_image_picker_model_wrapper_ = nullptr;
+    return;
+  }
+
+  JNIEnv* env = AttachCurrentThread();
+  qr_code_native_delegate_ =
+      std::make_unique<AssistantQrCodeNativeDelegate>(this);
+
+  base::android::ScopedJavaGlobalRef<jobject> java_qr_code_native_delegate =
+      qr_code_native_delegate_->GetJavaObject();
+
+  if (qr_code_scan->use_gallery()) {
+    // Create a model to manage state of QR Code Scanning via Image Picker.
+    qr_code_image_picker_model_wrapper_ =
+        std::make_unique<AssistantQrCodeImagePickerModelWrapper>();
+
+    PromptQrCodeImagePicker(
+        env, java_object_, &qr_code_scan->image_picker_ui_strings(),
+        *qr_code_image_picker_model_wrapper_, java_qr_code_native_delegate);
+  } else {
+    // Create a model to manage state of QR Code Scanning via Camera Preview.
+    qr_code_camera_scan_model_wrapper_ =
+        std::make_unique<AssistantQrCodeCameraScanModelWrapper>();
+
+    PromptQrCodeCameraScan(
+        env, java_object_, &qr_code_scan->camera_scan_ui_strings(),
+        *qr_code_camera_scan_model_wrapper_, java_qr_code_native_delegate);
+  }
+}
+
 void UiControllerAndroid::OnGenericUserInterfaceChanged(
     const GenericUserInterfaceProto* generic_ui) {
   // Try to inflate user interface from proto.
@@ -1972,9 +2096,38 @@ void UiControllerAndroid::OnInfoBoxChanged(const InfoBox* info_box) {
   }
 
   const InfoBoxProto& proto = info_box->proto().info_box();
+  auto jcontext =
+      Java_AutofillAssistantUiController_getContext(env, java_object_);
+  absl::optional<DrawableProto> drawable_proto;
+  bool use_instrinsic_dimensions = false;
+  switch (proto.image_case()) {
+    case InfoBoxProto::ImageCase::kImagePath: {
+      if (!proto.image_path().empty()) {
+        drawable_proto.emplace();
+        auto* bitmap_proto = drawable_proto->mutable_bitmap();
+        bitmap_proto->set_url(proto.image_path());
+        bitmap_proto->set_use_instrinsic_dimensions(true);
+        use_instrinsic_dimensions = true;
+      }
+      break;
+    }
+    case InfoBoxProto::ImageCase::kDrawable: {
+      drawable_proto = proto.drawable();
+      break;
+    }
+    case InfoBoxProto::ImageCase::IMAGE_NOT_SET: {
+      break;
+    }
+  }
+  base::android::ScopedJavaLocalRef<jobject> jdrawable = nullptr;
+  if (drawable_proto.has_value()) {
+    jdrawable = ui_controller_android_utils::CreateJavaDrawable(
+        env, jcontext, *dependencies_, *drawable_proto,
+        execution_delegate_->GetUserModel());
+  }
   auto jinfo_box = Java_AssistantInfoBox_create(
-      env, ConvertUTF8ToJavaString(env, proto.image_path()),
-      ConvertUTF8ToJavaString(env, proto.explanation()));
+      env, jdrawable, ConvertUTF8ToJavaString(env, proto.explanation()),
+      use_instrinsic_dimensions);
   Java_AssistantInfoBoxModel_setInfoBox(env, jmodel, jinfo_box);
 }
 
@@ -2022,14 +2175,6 @@ UiControllerAndroid::CreateGenericUiControllerForProto(
       ui_delegate_->GetEventHandler(), execution_delegate_->GetUserModel(),
       ui_delegate_->GetBasicInteractions());
 }
-
-void UiControllerAndroid::OnError(const std::string& error_message,
-                                  Metrics::DropOutReason reason) {}
-void UiControllerAndroid::OnExecuteScript(const std::string& start_message) {}
-void UiControllerAndroid::OnStart(const TriggerContext& trigger_context) {}
-void UiControllerAndroid::OnStop() {}
-void UiControllerAndroid::OnResetState() {}
-void UiControllerAndroid::OnUiShownChanged(bool shown) {}
 
 base::android::ScopedJavaLocalRef<jobject>
 UiControllerAndroid::GetGenericUiModel() {

@@ -8,8 +8,8 @@
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
 #include "net/cert/cert_net_fetcher.h"
-#include "net/cert/internal/cert_errors.h"
 #include "net/cert/pem.h"
+#include "net/cert/pki/cert_errors.h"
 #include "net/cert/x509_util.h"
 #include "url/gurl.h"
 
@@ -195,7 +195,7 @@ void CertIssuerSourceAia::AsyncGetIssuersOf(const ParsedCertificate* cert,
   if (urls.empty())
     return;
 
-  std::unique_ptr<AiaRequest> aia_request(new AiaRequest());
+  auto aia_request = std::make_unique<AiaRequest>();
 
   for (const auto& url : urls) {
     // TODO(mattm): add synchronous failure mode to FetchCaIssuers interface so

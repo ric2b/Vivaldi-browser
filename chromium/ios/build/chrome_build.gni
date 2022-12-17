@@ -19,6 +19,9 @@ declare_args() {
   # Enable iOS 14, WidgetKit extension.
   ios_enable_widget_kit_extension = true
 
+  # Enable iOS 16 lockscreen extensions.
+  ios_enable_lockscreen_extension = true
+
   # Enable share extension.
   ios_enable_share_extension = true
 
@@ -37,6 +40,9 @@ declare_args() {
 
   # Controls whether ScreenTime API is used.
   ios_enable_screen_time = true
+
+  # Enable background fetch mode for feed refresh.
+  ios_enable_background_mode = true
 
   # Value of the encryption export compliance code. See "Cryptography and
   # U.S. Export Compliance" in "Submitting the App to App Review" in the
@@ -90,9 +96,9 @@ if (breakpad_enabled) {
   is_official_release = false
 }
 
-chromium_bundle_id = "$ios_app_bundle_id_prefix.chrome.ios.dev"
-chromium_handoff_id = "$ios_app_bundle_id_prefix.chrome.handoff"
-ios_move_tab_activity_type = "$ios_app_bundle_id_prefix.chrome.move-tab"
+chromium_bundle_id = "$ios_app_bundle_id_prefix.browser"
+chromium_handoff_id = "$ios_app_bundle_id_prefix.browser.handoff"
+ios_move_tab_activity_type = "$ios_app_bundle_id_prefix.browser.move-tab"
 
 if (is_chrome_branded) {
   chromium_short_name = "Chrome"
@@ -102,10 +108,10 @@ if (is_chrome_branded) {
   url_unsecure_scheme = "googlechrome"
   url_x_callback_scheme = "googlechrome-x-callback"
 } else {
-  chromium_short_name = "Chromium"
-  url_channel_scheme = "chromium-dev"
-  url_secure_scheme = "chromiums"
-  url_ssoauth_scheme = "$ios_app_bundle_id_prefix.sso.chromium"
-  url_unsecure_scheme = "chromium"
-  url_x_callback_scheme = "chromium-x-callback"
+  chromium_short_name = "Vivaldi"
+  url_channel_scheme = "vivaldi-internal"
+  url_secure_scheme = "vivaldis"
+  url_ssoauth_scheme = "$ios_app_bundle_id_prefix.sso.vivaldi"
+  url_unsecure_scheme = "vivaldi"
+  url_x_callback_scheme = "vivaldi-x-callback"
 }

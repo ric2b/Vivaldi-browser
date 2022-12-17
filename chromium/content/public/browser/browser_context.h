@@ -91,6 +91,7 @@ class PermissionController;
 class PermissionControllerDelegate;
 class PlatformNotificationService;
 class PushMessagingService;
+class ReduceAcceptLanguageControllerDelegate;
 class ResourceContext;
 class SSLHostStateDelegate;
 class SharedCorsOriginAccessList;
@@ -157,6 +158,12 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   using StoragePartitionCallback =
       base::RepeatingCallback<void(StoragePartition*)>;
   void ForEachStoragePartition(StoragePartitionCallback callback);
+
+  // Disposes the given StoragePartition. Only in-memory storage partition
+  // disposal is supported. Caller needs to be careful that no outstanding
+  // references are left to access the disposed storage partition.
+  void DisposeStoragePartition(StoragePartition* storage_partition);
+
   // Returns the number of StoragePartitions that exist for `this`
   // BrowserContext.
   size_t GetStoragePartitionCount();
@@ -367,6 +374,11 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Note: if you want to check a permission status, you probably need
   // BrowserContext::GetPermissionController() instead.
   virtual PermissionControllerDelegate* GetPermissionControllerDelegate() = 0;
+
+  // Returns the ReduceAcceptLanguageControllerDelegate associated with that
+  // context if any, nullptr otherwise.
+  virtual ReduceAcceptLanguageControllerDelegate*
+  GetReduceAcceptLanguageControllerDelegate() = 0;
 
   // Returns the ClientHintsControllerDelegate associated with that context if
   // any, nullptr otherwise.

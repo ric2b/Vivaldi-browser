@@ -44,6 +44,7 @@ declare global {
         FROM_STORE = 'FROM_STORE',
         UNPACKED = 'UNPACKED',
         THIRD_PARTY = 'THIRD_PARTY',
+        INSTALLED_BY_DEFAULT = 'INSTALLED_BY_DEFAULT',
         UNKNOWN = 'UNKNOWN',
       }
 
@@ -390,6 +391,16 @@ declare global {
         hosts: string[],
       };
 
+      export type SiteInfo = {
+        siteList?: UserSiteSet, numExtensions: number, site: string,
+      };
+
+      export type SiteGroup = {
+        etldPlusOne: string,
+        numExtensions: number,
+        sites: SiteInfo[],
+      };
+
       type VoidCallback = () => void;
       type StringCallback = (s: string) => void;
 
@@ -447,6 +458,8 @@ declare global {
           options: UserSiteSettingsOptions, callback?: VoidCallback): void;
       export function removeUserSpecifiedSites(
           options: UserSiteSettingsOptions, callback?: VoidCallback): void;
+      export function getUserAndExtensionSitesByEtld(
+          callback: (result: SiteGroup[]) => void): void;
 
       export const onItemStateChanged: ChromeEvent<(data: EventData) => void>;
       export const onProfileStateChanged:

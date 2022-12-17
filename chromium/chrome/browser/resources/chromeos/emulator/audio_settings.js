@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
-import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
-import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
+import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import './icons.js';
@@ -86,7 +86,7 @@ Polymer({
       type: Number,
       value() {
         return -1;
-      }
+      },
     },
 
     /**
@@ -98,7 +98,7 @@ Polymer({
       type: Number,
       value() {
         return 0;
-      }
+      },
     },
 
     /**
@@ -109,7 +109,7 @@ Polymer({
       type: Array,
       value() {
         return [];
-      }
+      },
     },
 
     /**
@@ -132,9 +132,9 @@ Polymer({
           {name: 'Aokr', type: AudioNodeType.AOKR},
           {name: 'Post Mix Loopback', type: AudioNodeType.POST_MIX_LOOPBACK},
           {name: 'Post Dsp Loopback', type: AudioNodeType.POST_DSP_LOOPBACK},
-          {name: 'Other', type: AudioNodeType.OTHER}
+          {name: 'Other', type: AudioNodeType.OTHER},
         ];
-      }
+      },
     },
   },
 
@@ -230,5 +230,5 @@ Polymer({
       newNodeList.push(node);
     }
     this.nodes = newNodeList;
-  }
+  },
 });

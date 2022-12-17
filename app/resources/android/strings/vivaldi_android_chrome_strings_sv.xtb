@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
 <translation id="1397811292916898096">Sök med <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tryck för Sök är en funktion som är tillgänglig när Google är vald som standardsökmotor i Vivaldi. Den skickar det markerade ordet och den aktuella sidan som kontext till Google Search. Du kan stänga av detta i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Växla vanliga/privata flikar</translation>
 <translation id="1644574205037202324">Historik</translation>
 <translation id="17513872634828108">Öppna flikar</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Ny privat flik</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
+<translation id="4719086422742491124">Lär dig om ämnen på webbsidor utan att lämna sidan. Markera ett eller fler ord på en sida för att söka efter dem.
+
+Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald som standardsökmotorn i Vivaldi.</translation>
 <translation id="4759238208242260848">Nedladdningar</translation>
 <translation id="4883379392681899581">Lämna privat läge</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> lagerplats</translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Ny flik</translation>
-<translation id="572328651809341494">Senaste flikar</translation>
-<translation id="5840488417521835756">Lär dig om olika ämnen på webbplatser utan att lämna sidan. Tryck för att söka är en funktion som endast är tillgänglig när Google är inställd som standardsökmotor i Vivaldi. Den skickar ett ord och dess kontext till Google Sök, och får tillbaka definitioner, bilder, sökresultat och andra detaljer.
+<translation id="5375131951310889874">Lär dig om ämnen på webbsidor utan att lämna sidan. Tryck för Sök är en funktion som bara är tillgänglig när Google är vald som standardsökmotor i Vivaldi. Den skickar ett ord och dess omkringliggande kontext till Google Sök, och presenterar definitioner, bilder, sökresultat och andra detaljer.
 
-För att justera söktermen, tryck länge för att välja. Om du vill finjustera sökningen drar du panelen ända upp och trycker på sökrutan.</translation>
+Gör ett långt tryck för att justera din sökterm. För att förfina sökningen kan du dra panelen hela vägen till toppen och trycka på sökrutan.</translation>
+<translation id="572328651809341494">Senaste flikar</translation>
 <translation id="6150320133806434356">Bokmärke sparat</translation>
 <translation id="6336451774241870485">Ny privat flik</translation>
 <translation id="6585139692466700358">Erbjud översättning av sidor på andra språk med Vivaldis översättningstjänst</translation>
@@ -53,7 +57,6 @@ För att justera söktermen, tryck länge för att välja. Om du vill finjustera
 <translation id="732145680195464316">Bokmärke sparat i <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
 <translation id="7465104139234185284">Stäng alla privata flikar</translation>
-<translation id="7519434535192513364">Tryck för att söka är en funktion som endast är tillgänglig när Google är inställd som standardsökmotor i Vivaldi. Den skickar det markerade ordet och den nuvarande sidan som kontext till Google Search. Du kan stänga av funktionen i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
 <translation id="85991616550051997">Gå till hemsida</translation>
 <translation id="8820817407110198400">Bokmärken</translation>

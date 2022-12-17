@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/cr_elements/shared_style_css.m.js';
-
-import {html, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-
-import {CloseReason} from './types.js';
-
 /**
  * @fileoverview The 'nearby-page-template is used as a template for pages. It
  * provide a consistent setup for all pages with title, sub-title, body slot
  * and button options.
  */
+
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {getTemplate} from './nearby_page_template.html.js';
+import {CloseReason} from './types.js';
 
 /** @polymer */
 export class NearbyPageTemplateElement extends PolymerElement {
@@ -21,7 +22,7 @@ export class NearbyPageTemplateElement extends PolymerElement {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {

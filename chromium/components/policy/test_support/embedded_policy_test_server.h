@@ -36,8 +36,7 @@ class EmbeddedPolicyTestServer {
  public:
   class RequestHandler {
    public:
-    RequestHandler(ClientStorage* client_storage,
-                   PolicyStorage* policy_storage);
+    explicit RequestHandler(EmbeddedPolicyTestServer* parent);
     virtual ~RequestHandler();
 
     // Returns the value associated with the "request_type" query param handled
@@ -49,15 +48,18 @@ class EmbeddedPolicyTestServer {
     virtual std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
         const net::test_server::HttpRequest& request) = 0;
 
-    const ClientStorage* client_storage() const { return client_storage_; }
-    ClientStorage* client_storage() { return client_storage_; }
+    const ClientStorage* client_storage() const {
+      return parent_->client_storage();
+    }
+    ClientStorage* client_storage() { return parent_->client_storage(); }
 
-    const PolicyStorage* policy_storage() const { return policy_storage_; }
-    PolicyStorage* policy_storage() { return policy_storage_; }
+    const PolicyStorage* policy_storage() const {
+      return parent_->policy_storage();
+    }
+    PolicyStorage* policy_storage() { return parent_->policy_storage(); }
 
    private:
-    raw_ptr<ClientStorage> client_storage_;
-    raw_ptr<PolicyStorage> policy_storage_;
+    const raw_ptr<EmbeddedPolicyTestServer> parent_;
   };
 
   EmbeddedPolicyTestServer();
@@ -66,7 +68,7 @@ class EmbeddedPolicyTestServer {
   virtual ~EmbeddedPolicyTestServer();
 
   // Initializes and waits until the server is ready to accept requests.
-  bool Start();
+  virtual bool Start();
 
   ClientStorage* client_storage() const { return client_storage_.get(); }
 
@@ -84,7 +86,11 @@ class EmbeddedPolicyTestServer {
   void ConfigureRequestError(const std::string& request_type,
                              net::HttpStatusCode error_code);
 
-#if !BUILDFLAG(IS_ANDROID)
+  // Resets the policy/client storage to its original state.
+  void ResetPolicyStorage();
+  void ResetClientStorage();
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // Updates policy selected by |type| and optional |entity_id|. The
   // |raw_policy| is served via an external endpoint. This does not trigger
   // policy invalidation, hence test authors must manually trigger a policy
@@ -92,13 +98,14 @@ class EmbeddedPolicyTestServer {
   void UpdateExternalPolicy(const std::string& type,
                             const std::string& entity_id,
                             const std::string& raw_policy);
-#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
- private:
+ protected:
   // Default request handler.
-  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
+  virtual std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request);
 
+ private:
   // Request handler for external policy data.
   std::unique_ptr<net::test_server::HttpResponse>
   HandleExternalPolicyDataRequest(const GURL& request);

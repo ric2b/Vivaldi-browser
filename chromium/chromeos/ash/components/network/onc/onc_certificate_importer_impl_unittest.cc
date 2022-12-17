@@ -15,9 +15,9 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "chromeos/ash/components/network/certificate_helper.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
 #include "chromeos/components/onc/onc_test_utils.h"
-#include "chromeos/network/certificate_helper.h"
 #include "components/onc/onc_constants.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/base/hash_value.h"
@@ -26,8 +26,7 @@
 #include "net/cert/x509_util_nss.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
-namespace onc {
+namespace ash::onc {
 
 class ONCCertificateImporterImplTest : public testing::Test {
  public:
@@ -352,5 +351,4 @@ INSTANTIATE_TEST_SUITE_P(
                                 "certificate-web-authority.onc",
                                 "certificate-web-authority-update.onc")));
 
-}  // namespace onc
-}  // namespace chromeos
+}  // namespace ash::onc

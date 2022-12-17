@@ -1,8 +1,10 @@
+import("//build/config/locales.gni")
+if (!is_ios) {
+  import("//chrome/common/features.gni")
+}
+import("//tools/grit/grit_args.gni")
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/locales.gni")
-import("//build/config/locales.gni")
-import("//chrome/common/features.gni")
-import("//tools/grit/grit_args.gni")
 
 import("//vivaldi/app/resources/generate_untranslated.gni")
 

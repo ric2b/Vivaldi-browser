@@ -74,6 +74,7 @@ class TemplateURLRef {
   enum RequestSource {
     SEARCHBOX,          // Omnibox or the NTP realbox. The default.
     CROS_APP_LIST,      // Chrome OS app list search box.
+    NON_SEARCHBOX_NTP,  // Suggestions for the NTP surface.
   };
 
   // This struct encapsulates arguments passed to
@@ -800,6 +801,10 @@ class TemplateURL {
   // engines match.
   SearchEngineType GetEngineType(
       const SearchTermsData& search_terms_data) const;
+
+  // Returns the type of this search engine, i.e. whether the engine is a
+  // prepopulated engine, starter pack engine, or not built-in.
+  BuiltinEngineType GetBuiltinEngineType() const;
 
   // Use the alternate URLs and the search URL to match the provided |url|
   // and extract |search_terms| from it. Returns false and an empty

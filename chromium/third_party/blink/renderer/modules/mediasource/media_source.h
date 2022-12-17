@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/synchronization/lock.h"
 #include "third_party/blink/public/platform/web_media_source.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
@@ -23,7 +24,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
-#include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 
 namespace media {
 class AudioDecoderConfig;
@@ -98,7 +98,7 @@ class MediaSource final : public EventTargetWithInlineData,
   void clearLiveSeekableRange(ExceptionState&)
       LOCKS_EXCLUDED(attachment_link_lock_);
 
-  MediaSourceHandleImpl* getHandle(ExceptionState&)
+  MediaSourceHandleImpl* handle(ExceptionState&)
       LOCKS_EXCLUDED(attachment_link_lock_);
 
   static bool isTypeSupported(ExecutionContext* context, const String& type);
@@ -282,13 +282,11 @@ class MediaSource final : public EventTargetWithInlineData,
       GUARDED_BY(attachment_link_lock_);
   bool context_already_destroyed_ GUARDED_BY(attachment_link_lock_);
 
-  // This is to ensure that at most one successful call to a MediaSource
-  // instance's getHandle() is allowed.
-  bool handle_already_retrieved_ GUARDED_BY(attachment_link_lock_) = false;
+  Member<MediaSourceHandleImpl> worker_media_source_handle_;
 
   // |attachment_link_lock_| protects read/write of |media_source_attachment_|,
-  // |attachment_tracer_|, |context_already_destroyed_|, and
-  // |handle_already_retrieved_|.
+  // |attachment_tracer_|, |context_already_destroyed_|, and execution of
+  // handle().
   // It is only truly necessary for CrossThreadAttachment usage of worker MSE,
   // to prevent read/write collision on main thread versus worker thread. Note
   // that |attachment_link_lock_| must be released before attempting
@@ -308,7 +306,7 @@ class MediaSource final : public EventTargetWithInlineData,
   // |attachment_link_lock_| and
   // callbacks for RunExclusively, when using SameThreadMediaSourceAttachment,
   // on main thread).
-  mutable Mutex attachment_link_lock_;
+  mutable base::Lock attachment_link_lock_;
 
   Member<SourceBufferList> source_buffers_;
   Member<SourceBufferList> active_source_buffers_;

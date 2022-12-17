@@ -40,9 +40,6 @@
 <translation id="5186185447130319458">비공개</translation>
 <translation id="5233638681132016545">새 탭</translation>
 <translation id="572328651809341494">최근 탭</translation>
-<translation id="5840488417521835756">페이지에서 나가지 않고 웹사이트의 주제를 자세히 알아보세요. 탭하여 검색 기능은 Vivaldi의 기본 검색 엔진이 Google로 설정된 경우에만 사용할 수 있습니다. 단어 및 관련 주제를 Google 검색으로 전송하여 정의, 사진, 검색결과, 기타 세부정보를 알아보세요.
-
-검색어를 변경하려면 길게 눌러 선택하세요. 상세히 검색하려면 패널을 위로 끝까지 슬라이드한 후 검색창을 탭하세요.</translation>
 <translation id="6150320133806434356">북마크 저장됨</translation>
 <translation id="6336451774241870485">새 사생활 보호 탭</translation>
 <translation id="6585139692466700358">페이지를 Vivaldi의 번역 서비스를 사용해서 다른 언어로 번역하도록 제안</translation>
@@ -53,7 +50,6 @@
 <translation id="732145680195464316"><ph name="PRODUCT_NAME" />에 북마크가 저장됨</translation>
 <translation id="7427132068601343474">Vivaldi 정보</translation>
 <translation id="7465104139234185284">모든 사생활 보호 탭 닫기</translation>
-<translation id="7519434535192513364">탭하여 검색 기능은 Vivaldi의 기본 검색 엔진을 Google로 설정한 경우에만 사용할 수 있습니다. 선택한 단어와 문맥 이해에 필요한 현재 페이지가 Google 검색에 전송됩니다. <ph name="BEGIN_LINK" />설정<ph name="END_LINK" />에서 이 기능을 사용 중지할 수 있습니다.</translation>
 <translation id="804786196054284061">최종 사용자 라이선스 계약</translation>
 <translation id="85991616550051997">홈페이지로 이동</translation>
 <translation id="8820817407110198400">북마크</translation>

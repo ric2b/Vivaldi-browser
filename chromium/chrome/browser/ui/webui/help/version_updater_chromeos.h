@@ -15,7 +15,7 @@ class WebContents;
 }
 
 class VersionUpdaterCros : public VersionUpdater,
-                           public chromeos::UpdateEngineClient::Observer {
+                           public ash::UpdateEngineClient::Observer {
  public:
   VersionUpdaterCros(const VersionUpdaterCros&) = delete;
   VersionUpdaterCros& operator=(const VersionUpdaterCros&) = delete;
@@ -33,6 +33,7 @@ class VersionUpdaterCros : public VersionUpdater,
   void SetUpdateOverCellularOneTimePermission(StatusCallback callback,
                                               const std::string& update_version,
                                               int64_t update_size) override;
+  void ApplyDeferredUpdate() override;
 
   // Gets the last update status, without triggering a new check or download.
   void GetUpdateStatus(StatusCallback callback);
@@ -49,7 +50,7 @@ class VersionUpdaterCros : public VersionUpdater,
   void UpdateStatusChanged(const update_engine::StatusResult& status) override;
 
   // Callback from UpdateEngineClient::RequestUpdateCheck().
-  void OnUpdateCheck(chromeos::UpdateEngineClient::UpdateCheckResult result);
+  void OnUpdateCheck(ash::UpdateEngineClient::UpdateCheckResult result);
 
   // Callback from UpdateEngineClient::SetUpdateOverCellularOneTimePermission().
   void OnSetUpdateOverCellularOneTimePermission(bool success);
@@ -59,7 +60,7 @@ class VersionUpdaterCros : public VersionUpdater,
 
   // Callback from UpdateEngineClient::GetEolInfo().
   void OnGetEolInfo(EolInfoCallback cb,
-                    chromeos::UpdateEngineClient::EolInfo eol_info);
+                    ash::UpdateEngineClient::EolInfo eol_info);
 
   // Callback from UpdateEngineClient::IsFeatureEnabled().
   void OnIsFeatureEnabled(IsFeatureEnabledCallback callback,

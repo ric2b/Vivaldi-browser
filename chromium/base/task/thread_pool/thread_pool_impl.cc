@@ -47,10 +47,10 @@ namespace internal {
 namespace {
 
 constexpr EnvironmentParams kForegroundPoolEnvironmentParams{
-    "Foreground", base::ThreadPriority::NORMAL};
+    "Foreground", base::ThreadType::kDefault};
 
 constexpr EnvironmentParams kBackgroundPoolEnvironmentParams{
-    "Background", base::ThreadPriority::BACKGROUND};
+    "Background", base::ThreadType::kBackground};
 
 constexpr size_t kMaxBestEffortTasks = 2;
 
@@ -94,10 +94,10 @@ ThreadPoolImpl::ThreadPoolImpl(StringPiece histogram_label,
                 {histogram_label, kForegroundPoolEnvironmentParams.name_suffix},
                 "."),
       kForegroundPoolEnvironmentParams.name_suffix,
-      kForegroundPoolEnvironmentParams.priority_hint,
+      kForegroundPoolEnvironmentParams.thread_type_hint,
       task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef());
 
-  if (CanUseBackgroundPriorityForWorkerThread()) {
+  if (CanUseBackgroundThreadTypeForWorkerThread()) {
     background_thread_group_ = std::make_unique<ThreadGroupImpl>(
         histogram_label.empty()
             ? std::string()
@@ -105,7 +105,7 @@ ThreadPoolImpl::ThreadPoolImpl(StringPiece histogram_label,
                           kBackgroundPoolEnvironmentParams.name_suffix},
                          "."),
         kBackgroundPoolEnvironmentParams.name_suffix,
-        kBackgroundPoolEnvironmentParams.priority_hint,
+        kBackgroundPoolEnvironmentParams.thread_type_hint,
         task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef());
   }
 }
@@ -124,9 +124,6 @@ void ThreadPoolImpl::Start(const ThreadPoolInstance::InitParams& init_params,
                            WorkerThreadObserver* worker_thread_observer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!started_);
-
-  PooledSequencedTaskRunner::InitializeFeatures();
-  task_leeway_.store(kTaskLeewayParam.Get(), std::memory_order_relaxed);
 
   disable_job_yield_ = FeatureList::IsEnabled(kDisableJobYield);
   disable_fair_scheduling_ = FeatureList::IsEnabled(kDisableFairJobScheduling);
@@ -159,7 +156,7 @@ void ThreadPoolImpl::Start(const ThreadPoolInstance::InitParams& init_params,
         std::move(foreground_thread_group_);
     foreground_thread_group_ = std::make_unique<ThreadGroupNativeImpl>(
 #if BUILDFLAG(IS_APPLE)
-        ThreadPriority::NORMAL, service_thread_.task_runner(),
+        ThreadType::kDefault, service_thread_.task_runner(),
 #endif
         task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef(),
         old_group.get());
@@ -172,7 +169,7 @@ void ThreadPoolImpl::Start(const ThreadPoolInstance::InitParams& init_params,
         std::move(background_thread_group_);
     background_thread_group_ = std::make_unique<ThreadGroupNativeImpl>(
 #if BUILDFLAG(IS_APPLE)
-        ThreadPriority::BACKGROUND, service_thread_.task_runner(),
+        ThreadType::kBackground, service_thread_.task_runner(),
 #endif
         task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef(),
         old_group.get());
@@ -263,7 +260,7 @@ bool ThreadPoolImpl::PostDelayedTask(const Location& from_here,
   // Post |task| as part of a one-off single-task Sequence.
   return PostTaskWithSequence(
       Task(from_here, std::move(task), TimeTicks::Now(), delay,
-           task_leeway_.load(std::memory_order_relaxed)),
+           base::GetTaskLeeway()),
       MakeRefCounted<Sequence>(traits, nullptr,
                                TaskSourceExecutionMode::kParallel));
 }
@@ -413,7 +410,7 @@ void ThreadPoolImpl::EndBestEffortFence() {
 bool ThreadPoolImpl::PostTaskWithSequenceNow(Task task,
                                              scoped_refptr<Sequence> sequence) {
   auto transaction = sequence->BeginTransaction();
-  const bool sequence_should_be_queued = transaction.WillPushTask();
+  const bool sequence_should_be_queued = transaction.ShouldBeQueued();
   RegisteredTaskSource task_source;
   if (sequence_should_be_queued) {
     task_source = task_tracker_->RegisterTaskSource(sequence);
@@ -423,7 +420,7 @@ bool ThreadPoolImpl::PostTaskWithSequenceNow(Task task,
   }
   if (!task_tracker_->WillPostTaskNow(task, transaction.traits().priority()))
     return false;
-  transaction.PushTask(std::move(task));
+  transaction.PushImmediateTask(std::move(task));
   if (task_source) {
     const TaskTraits traits = transaction.traits();
     GetThreadGroupForTraits(traits)->PushTaskSourceAndWakeUpWorkers(

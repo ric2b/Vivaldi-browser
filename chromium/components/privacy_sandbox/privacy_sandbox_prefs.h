@@ -22,11 +22,6 @@ extern const char kPrivacySandboxApisEnabled[];
 // enabled.
 extern const char kPrivacySandboxApisEnabledV2[];
 
-// Un-synced boolean pref. This is set to true when the one-time initialization
-// of the users kPrivacySandboxApisEnabledV2 has run. Some users may have the V2
-// pref enabled by default by the PrivacySandboxService.
-extern const char kPrivacySandboxApisEnabledV2Init[];
-
 // Synced boolean that indicates if a user has manually toggled the settings
 // associated with the PrivacySandboxSettings feature.
 // TODO(crbug.com/1292898): Deprecate this preference once all users have been
@@ -38,28 +33,13 @@ extern const char kPrivacySandboxManuallyControlled[];
 // updated settings page.
 extern const char kPrivacySandboxManuallyControlledV2[];
 
-// Boolean to indicate whether or not the preferences have been reconciled for
-// this device. This occurs for each device once when privacy sandbox is first
-// enabled.
-extern const char kPrivacySandboxPreferencesReconciled[];
-
 // Boolean that indicates whether the privacy sandbox desktop page at
 // chrome://settings/privacySandbox has been viewed.
 extern const char kPrivacySandboxPageViewed[];
 
 // The point in time from which history is eligible to be used when calculating
-// a user's FLoC ID.
-// TODO(crbug.com/1292898): Deprecate this preference once Privacy Sandbox
-// Settings 3 has been launched.
-extern const char kPrivacySandboxFlocDataAccessibleSince[];
-
-// The point in time from which history is eligible to be used when calculating
 // a user's Topics API topics.
 extern const char kPrivacySandboxTopicsDataAccessibleSince[];
-
-// Synced boolean that controls whether FLoC is enabled. Requires that the
-// kPrivacySandboxApisEnabled preference be enabled to take effect.
-extern const char kPrivacySandboxFlocEnabled[];
 
 // List of entries representing Topics API topics which are blocked for
 // the profile. Blocked topics cannot be provided to site, or considered as
@@ -103,6 +83,13 @@ extern const char kPrivacySandboxNoConfirmationManuallyControlled[];
 // Boolean that indicates the user's Privacy Sandbox setting was disabled
 // automatically because they do not have the correct level of confirmation.
 extern const char kPrivacySandboxDisabledInsufficientConfirmation[];
+
+// Synced boolean pref. Controls whether First Party Set enabled data access is
+// enabled, e.g. Storage Access API auto grants, or partitioning access by FPS.
+extern const char kPrivacySandboxFirstPartySetsDataAccessAllowed[];
+
+// Boolean that indicates the user's FPS data access preference has been init.
+extern const char kPrivacySandboxFirstPartySetsDataAccessAllowedInitialized[];
 
 }  // namespace prefs
 

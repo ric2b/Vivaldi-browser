@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -22,6 +23,7 @@
 #include "services/device/public/cpp/geolocation/geoposition.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/geoposition.mojom.h"
+#include "services/network/public/cpp/client_hints.h"
 #include "ui/display/mojom/screen_orientation.mojom.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 
@@ -31,6 +33,9 @@ namespace content {
 namespace protocol {
 
 namespace {
+
+constexpr char kCommandIsOnlyAvailableAtTopTarget[] =
+    "Command can only be executed on top-level targets";
 
 display::mojom::ScreenOrientation WebScreenOrientationTypeFromString(
     const std::string& type) {
@@ -124,6 +129,7 @@ Response EmulationHandler::Disable() {
   }
   if (focus_emulation_enabled_)
     SetFocusEmulationEnabled(false);
+  prefers_color_scheme_ = "";
   return Response::Success();
 }
 
@@ -179,6 +185,12 @@ Response EmulationHandler::ClearGeolocationOverride() {
 Response EmulationHandler::SetEmitTouchEventsForMouse(
     bool enabled,
     Maybe<std::string> configuration) {
+  if (!host_)
+    return Response::InternalError();
+
+  if (host_->GetParentOrOuterDocument())
+    return Response::ServerError(kCommandIsOnlyAvailableAtTopTarget);
+
   touch_emulation_enabled_ = enabled;
   touch_emulation_configuration_ = configuration.fromMaybe("");
   UpdateTouchEventEmulationState();
@@ -219,6 +231,9 @@ Response EmulationHandler::SetDeviceMetricsOverride(
 
   if (!host_)
     return Response::ServerError("Target does not support metrics override");
+
+  if (host_->GetParentOrOuterDocument())
+    return Response::ServerError(kCommandIsOnlyAvailableAtTopTarget);
 
   if (screen_width.fromMaybe(0) < 0 || screen_height.fromMaybe(0) < 0 ||
       screen_width.fromMaybe(0) > max_size ||
@@ -369,10 +384,13 @@ Response EmulationHandler::SetDeviceMetricsOverride(
 }
 
 Response EmulationHandler::ClearDeviceMetricsOverride() {
-  if (!device_emulation_enabled_)
-    return Response::Success();
   if (!host_)
     return Response::ServerError("Can't find the associated web contents");
+  if (host_->GetParentOrOuterDocument())
+    return Response::ServerError(kCommandIsOnlyAvailableAtTopTarget);
+  if (!device_emulation_enabled_)
+    return Response::Success();
+
   GetWebContents()->ClearDeviceEmulationSize();
   device_emulation_enabled_ = false;
   device_emulation_params_ = blink::DeviceEmulationParams();
@@ -523,12 +541,37 @@ Response EmulationHandler::SetFocusEmulationEnabled(bool enabled) {
   return Response::FallThrough();
 }
 
+Response EmulationHandler::SetEmulatedMedia(
+    Maybe<std::string> media,
+    Maybe<protocol::Array<protocol::Emulation::MediaFeature>> features) {
+  if (!host_)
+    return Response::InternalError();
+
+  prefers_color_scheme_ = "";
+  if (features.isJust()) {
+    for (auto const& mediaFeature : *features.fromJust()) {
+      if (mediaFeature->GetName() == "prefers-color-scheme") {
+        auto const& value = mediaFeature->GetValue();
+        prefers_color_scheme_ =
+            (value == "light" || value == "dark") ? value : "";
+        return Response::FallThrough();
+      }
+    }
+  }
+
+  return Response::FallThrough();
+}
+
 blink::DeviceEmulationParams EmulationHandler::GetDeviceEmulationParams() {
   return device_emulation_params_;
 }
 
 void EmulationHandler::SetDeviceEmulationParams(
     const blink::DeviceEmulationParams& params) {
+  DCHECK(host_);
+  // Device emulation only happens on the outermost main frame.
+  DCHECK(!host_->GetParentOrOuterDocument());
+
   bool enabled = params != blink::DeviceEmulationParams();
   bool enable_changed = enabled != device_emulation_enabled_;
   bool params_changed = params != device_emulation_params_;
@@ -547,12 +590,10 @@ WebContentsImpl* EmulationHandler::GetWebContents() {
 }
 
 void EmulationHandler::UpdateTouchEventEmulationState() {
-  if (!host_)
-    return;
+  DCHECK(host_);
   // We only have a single TouchEmulator for all frames, so let the main frame's
   // EmulationHandler enable/disable it.
-  if (!host_->is_main_frame())
-    return;
+  DCHECK(!host_->GetParentOrOuterDocument());
 
   if (touch_emulation_enabled_) {
     if (auto* touch_emulator =
@@ -572,11 +613,9 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
 }
 
 void EmulationHandler::UpdateDeviceEmulationState() {
-  if (!host_)
-    return;
-  // Device emulation only happens on the main frame.
-  if (!host_->is_main_frame())
-    return;
+  DCHECK(host_);
+  // Device emulation only happens on the outermost main frame.
+  DCHECK(!host_->GetParentOrOuterDocument());
 
   // TODO(eseckler): Once we change this to mojo, we should wait for an ack to
   // these messages from the renderer. The renderer should send the ack once the
@@ -585,15 +624,15 @@ void EmulationHandler::UpdateDeviceEmulationState() {
   // this is tricky since we'd have to track the DevTools message id with the
   // WidgetMsg and acknowledgment, as well as plump the acknowledgment back to
   // the EmulationHandler somehow. Mojo callbacks should make this much simpler.
-  UpdateDeviceEmulationStateForHost(host_->GetRenderWidgetHost());
-
-  // Update portals inside this page.
-  for (auto* web_contents : GetWebContents()->GetWebContentsAndAllInner()) {
-    if (web_contents->IsPortal()) {
-      UpdateDeviceEmulationStateForHost(
-          web_contents->GetMainFrame()->GetRenderWidgetHost());
-    }
-  }
+  host_->ForEachRenderFrameHostIncludingSpeculative(base::BindRepeating(
+      [](EmulationHandler* handler, RenderFrameHostImpl* host) {
+        // The main frame of nested subpages (ex. fenced frames, portals) inside
+        // this page are updated as well.
+        if (host->is_main_frame())
+          handler->UpdateDeviceEmulationStateForHost(
+              host->GetRenderWidgetHost());
+      },
+      this));
 }
 
 void EmulationHandler::UpdateDeviceEmulationStateForHost(
@@ -624,7 +663,8 @@ void EmulationHandler::UpdateDeviceEmulationStateForHost(
 }
 
 void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
-                                      bool* user_agent_overridden) {
+                                      bool* user_agent_overridden,
+                                      bool* accept_language_overridden) {
   if (!user_agent_.empty()) {
     headers->SetHeader(net::HttpRequestHeaders::kUserAgent, user_agent_);
   }
@@ -633,6 +673,16 @@ void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
     headers->SetHeader(
         net::HttpRequestHeaders::kAcceptLanguage,
         net::HttpUtil::GenerateAcceptLanguageHeader(accept_language_));
+  }
+  *accept_language_overridden = !accept_language_.empty();
+  if (!prefers_color_scheme_.empty()) {
+    const auto& prefersColorSchemeClientHintHeader =
+        network::GetClientHintToNameMap().at(
+            network::mojom::WebClientHintsType::kPrefersColorScheme);
+    if (headers->HasHeader(prefersColorSchemeClientHintHeader)) {
+      headers->SetHeader(prefersColorSchemeClientHintHeader,
+                         prefers_color_scheme_);
+    }
   }
 }
 

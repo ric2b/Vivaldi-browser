@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
@@ -99,14 +100,9 @@ class SegmentationPlatformServiceImpl : public SegmentationPlatformService {
                           SegmentSelectionCallback callback) override;
   SegmentSelectionResult GetCachedSegmentResult(
       const std::string& segmentation_key) override;
-  CallbackId RegisterOnDemandSegmentSelectionCallback(
-      const std::string& segmentation_key,
-      const OnDemandSegmentSelectionCallback& callback) override;
-  void UnregisterOnDemandSegmentSelectionCallback(
-      CallbackId callback_id,
-      const std::string& segmentation_key) override;
-  void OnTrigger(TriggerType trigger,
-                 const TriggerContext& trigger_context) override;
+  void GetSelectedSegmentOnDemand(const std::string& segmentation_key,
+                                  scoped_refptr<InputContext> input_context,
+                                  SegmentSelectionCallback callback) override;
   void EnableMetrics(bool signal_collection_allowed) override;
   ServiceProxy* GetServiceProxy() override;
   bool IsPlatformInitialized() override;
@@ -129,12 +125,6 @@ class SegmentationPlatformServiceImpl : public SegmentationPlatformService {
 
   // Task that runs every day or at startup to keep the platform data updated.
   void RunDailyTasks(bool is_startup);
-
-  // Callback to run after on-demand segment selection.
-  void OnSegmentSelectionForTrigger(
-      const std::string& segmentation_key,
-      const TriggerContext& trigger_context,
-      const SegmentSelectionResult& selected_segment);
 
   std::unique_ptr<ModelProviderFactory> model_provider_factory_;
 
@@ -162,14 +152,6 @@ class SegmentationPlatformServiceImpl : public SegmentationPlatformService {
   base::flat_map<std::string, std::unique_ptr<SegmentSelectorImpl>>
       segment_selectors_;
 
-  // On-demand segment selection.
-  base::flat_map<std::string, base::flat_set<CallbackId>>
-      segment_selection_callback_ids_;
-  base::flat_map<CallbackId, OnDemandSegmentSelectionCallback> callback_map_;
-
-  // Clients registered for trigger events.
-  base::flat_map<TriggerType, base::flat_set<std::string>> clients_for_trigger_;
-
   // Segment results.
   std::unique_ptr<SegmentScoreProvider> segment_score_provider_;
 
@@ -183,6 +165,9 @@ class SegmentationPlatformServiceImpl : public SegmentationPlatformService {
   // For metrics only:
   const base::Time creation_time_;
   base::Time init_time_;
+
+  // For caching any method calls that were received before initialization.
+  base::circular_deque<base::OnceClosure> pending_actions_;
 
   base::WeakPtrFactory<SegmentationPlatformServiceImpl> weak_ptr_factory_{this};
 };

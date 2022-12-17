@@ -8,7 +8,7 @@
  */
 
 import 'chrome://resources/cr_components/chromeos/cellular_setup/cellular_eid_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_indicator.m.js';
@@ -222,15 +222,6 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
         computed: 'computeIsDeviceInhibited_(cellularDeviceState,' +
             'cellularDeviceState.inhibitReason)',
       },
-
-      /** @private {boolean} */
-      isESimPolicyEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.valueExists('esimPolicyEnabled') &&
-              loadTimeData.getBoolean('esimPolicyEnabled');
-        }
-      },
     };
   }
 
@@ -304,7 +295,7 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
 
       // Restricting managed cellular network should not show pending eSIM
       // profiles.
-      if (this.isESimPolicyEnabled_ && this.globalPolicy &&
+      if (this.globalPolicy &&
           this.globalPolicy.allowOnlyPolicyCellularNetworks) {
         this.eSimPendingProfileItems_ = [];
         return;
@@ -563,7 +554,7 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
     if (!this.deviceIsEnabled_(cellularDeviceState)) {
       return true;
     }
-    if (!this.isESimPolicyEnabled_ || !globalPolicy) {
+    if (!globalPolicy) {
       return false;
     }
     return globalPolicy.allowOnlyPolicyCellularNetworks;
@@ -578,8 +569,7 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
    * @private
    */
   shouldShowAddESimPolicyIcon_(globalPolicy) {
-    return this.isESimPolicyEnabled_ && globalPolicy &&
-        globalPolicy.allowOnlyPolicyCellularNetworks;
+    return globalPolicy && globalPolicy.allowOnlyPolicyCellularNetworks;
   }
 
   /**
@@ -617,10 +607,10 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
   /*
    * Returns the add esim button. If the device does not have an EUICC, no eSIM
    * slot, or policies prohibit users from adding a network, null is returned.
-   * @return {?CrIconButtonElement}
+   * @return {?HTMLElement}
    */
   getAddEsimButton() {
-    return /** @type {?CrIconButtonElement} */ (
+    return /** @type {?HTMLElement} */ (
         this.shadowRoot.querySelector('#addESimButton'));
   }
 
@@ -679,9 +669,6 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
    * @private
    */
   shouldShowNoESimSubtextMessage_() {
-    if (!this.isESimPolicyEnabled_) {
-      return false;
-    }
     if (this.globalPolicy &&
         this.globalPolicy.allowOnlyPolicyCellularNetworks) {
       return true;

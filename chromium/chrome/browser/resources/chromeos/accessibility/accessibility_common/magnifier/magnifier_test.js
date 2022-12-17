@@ -16,7 +16,7 @@ MagnifierE2ETest = class extends E2ETestBase {
 
   async getNextMagnifierBounds() {
     return new Promise(resolve => {
-      const listener = (magnifierBounds) => {
+      const listener = magnifierBounds => {
         chrome.accessibilityPrivate.onMagnifierBoundsChanged.removeListener(
             listener);
         resolve(magnifierBounds);
@@ -26,9 +26,16 @@ MagnifierE2ETest = class extends E2ETestBase {
     });
   }
 
+  /** @override */
+  async setUpDeferred() {
+    await super.setUpDeferred();
+    await importModule('RectUtil', '/common/rect_util.js');
+    await importModule('KeyCode', '/common/key_code.js');
+  }
+
   async getPref(name) {
     return new Promise(resolve => {
-      chrome.settingsPrivate.getPref(name, (ret) => {
+      chrome.settingsPrivate.getPref(name, ret => {
         resolve(ret);
       });
     });
@@ -64,7 +71,7 @@ MagnifierE2ETest = class extends E2ETestBase {
 };
 
 // Flaky: http://crbug.com/1171635
-TEST_F(
+AX_TEST_F(
     'MagnifierE2ETest', 'DISABLED_MovesScreenMagnifierToFocusedElement',
     async function() {
       const site = `
@@ -96,7 +103,7 @@ TEST_F(
     });
 
 // Disabled - flaky: https://crbug.com/1145612
-TEST_F(
+AX_TEST_F(
     'MagnifierE2ETest', 'DISABLED_MovesDockedMagnifierToActiveDescendant',
     async function() {
       const site = `
@@ -137,7 +144,7 @@ TEST_F(
 
 
 // Flaky: http://crbug.com/1171750
-TEST_F(
+AX_TEST_F(
     'MagnifierE2ETest', 'DISABLED_MovesScreenMagnifierToActiveDescendant',
     async function() {
       const site = `
@@ -183,12 +190,12 @@ TEST_F(
         const magnifier = accessibilityCommon.getMagnifierForTest();
         magnifier.setIsInitializingForTest(false);
 
-        const moveMenuSelectionAssertBounds = async (targetBounds) => {
+        const moveMenuSelectionAssertBounds = async targetBounds => {
           // Send arrow up key.
           chrome.accessibilityPrivate.sendSyntheticKeyEvent({
             type:
                 chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
-            keyCode: KeyCode.UP
+            keyCode: KeyCode.UP,
           });
 
           // Verify new magnifier bounds include |targetBounds|.
@@ -209,7 +216,7 @@ TEST_F(
         chrome.accessibilityPrivate.sendSyntheticKeyEvent({
           type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
           keyCode: KeyCode.E,
-          modifiers: {alt: true}
+          modifiers: {alt: true},
         });
 
         // Wait for Chrome menu to open.
@@ -223,7 +230,7 @@ TEST_F(
       });
     });
 
-TEST_F('MagnifierE2ETest', 'IgnoresRootNodeFocus', async function() {
+AX_TEST_F('MagnifierE2ETest', 'IgnoresRootNodeFocus', async function() {
   const magnifier = accessibilityCommon.getMagnifierForTest();
   magnifier.setIsInitializingForTest(false);
 
@@ -241,42 +248,43 @@ TEST_F('MagnifierE2ETest', 'IgnoresRootNodeFocus', async function() {
 });
 
 // TODO(crbug.com/1295685): Test is flaky.
-TEST_F('MagnifierE2ETest', 'DISABLED_MagnifierCenterOnPoint', async function() {
-  await this.runWithLoadedTree('');
-  const magnifier = accessibilityCommon.getMagnifierForTest();
-  magnifier.setIsInitializingForTest(false);
+AX_TEST_F(
+    'MagnifierE2ETest', 'DISABLED_MagnifierCenterOnPoint', async function() {
+      await this.runWithLoadedTree('');
+      const magnifier = accessibilityCommon.getMagnifierForTest();
+      magnifier.setIsInitializingForTest(false);
 
-  const movePointAssertBounds = async (targetPoint, targetBounds) => {
-    // Repeatedly center magnifier on |targetPoint|.
-    const id = setInterval(() => {
-      chrome.accessibilityPrivate.magnifierCenterOnPoint(targetPoint);
-    }, 500);
+      const movePointAssertBounds = async (targetPoint, targetBounds) => {
+        // Repeatedly center magnifier on |targetPoint|.
+        const id = setInterval(() => {
+          chrome.accessibilityPrivate.magnifierCenterOnPoint(targetPoint);
+        }, 500);
 
-    // Verify new magnifier bounds include |targetBounds|.
-    await new Promise(resolve => {
-      const boundsChangedListener = newBounds => {
-        if (RectUtil.contains(newBounds, targetBounds)) {
-          chrome.accessibilityPrivate.onMagnifierBoundsChanged.removeListener(
+        // Verify new magnifier bounds include |targetBounds|.
+        await new Promise(resolve => {
+          const boundsChangedListener = newBounds => {
+            if (RectUtil.contains(newBounds, targetBounds)) {
+              chrome.accessibilityPrivate.onMagnifierBoundsChanged
+                  .removeListener(boundsChangedListener);
+              clearInterval(id);
+              resolve();
+            }
+          };
+          chrome.accessibilityPrivate.onMagnifierBoundsChanged.addListener(
               boundsChangedListener);
-          clearInterval(id);
-          resolve();
-        }
+        });
       };
-      chrome.accessibilityPrivate.onMagnifierBoundsChanged.addListener(
-          boundsChangedListener);
+
+      // Move magnifier to upper left of screen.
+      await movePointAssertBounds(
+          {x: 100, y: 100}, {left: 100, top: 100, width: 0, height: 0});
+
+      // Move magnifier to lower right of screen.
+      await movePointAssertBounds(
+          {x: 650, y: 450}, {left: 650, top: 450, width: 0, height: 0});
     });
-  };
 
-  // Move magnifier to upper left of screen.
-  await movePointAssertBounds(
-      {x: 100, y: 100}, {left: 100, top: 100, width: 0, height: 0});
-
-  // Move magnifier to lower right of screen.
-  await movePointAssertBounds(
-      {x: 650, y: 450}, {left: 650, top: 450, width: 0, height: 0});
-});
-
-TEST_F('MagnifierE2ETest', 'OnCaretBoundsChanged', async function() {
+AX_TEST_F('MagnifierE2ETest', 'OnCaretBoundsChanged', async function() {
   const site = `
     <input type="text" id="input" style="width: 1000px">
     <button id="button">Type words</button>

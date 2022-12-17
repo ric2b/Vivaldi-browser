@@ -39,10 +39,16 @@ void RecordOpenedDangerousConfirmDialog(
       download::DOWNLOAD_DANGER_TYPE_MAX);
 }
 
-void RecordDownloadOpenMethod(ChromeDownloadOpenMethod open_method) {
+void RecordDownloadOpen(ChromeDownloadOpenMethod open_method,
+                        const std::string& mime_type_string) {
   base::RecordAction(base::UserMetricsAction("Download.Open"));
   base::UmaHistogramEnumeration("Download.OpenMethod", open_method,
                                 DOWNLOAD_OPEN_METHOD_LAST_ENTRY);
+  download::DownloadContent download_content =
+      download::DownloadContentFromMimeType(
+          mime_type_string, /*record_content_subcategory=*/false);
+  base::UmaHistogramEnumeration("Download.Open.ContentType", download_content,
+                                download::DownloadContent::MAX);
 }
 
 void RecordDatabaseAvailability(bool is_available) {
@@ -77,9 +83,14 @@ void RecordDownloadCancelReason(DownloadCancelReason reason) {
   base::UmaHistogramEnumeration("Download.CancelReason", reason);
 }
 
-void RecordDownloadShelfDragInfo(DownloadShelfDragInfo drag_info) {
+void RecordDownloadShelfDragInfo(DownloadDragInfo drag_info) {
   base::UmaHistogramEnumeration("Download.Shelf.DragInfo", drag_info,
-                                DownloadShelfDragInfo::COUNT);
+                                DownloadDragInfo::COUNT);
+}
+
+void RecordDownloadBubbleDragInfo(DownloadDragInfo drag_info) {
+  base::UmaHistogramEnumeration("Download.Bubble.DragInfo", drag_info,
+                                DownloadDragInfo::COUNT);
 }
 
 void RecordDownloadStartPerProfileType(Profile* profile) {
@@ -94,12 +105,6 @@ void RecordDownloadPromptStatus(DownloadPromptStatus status) {
   base::UmaHistogramEnumeration("MobileDownload.DownloadPromptStatus", status,
                                 DownloadPromptStatus::MAX_VALUE);
 }
-
-void RecordDownloadLaterPromptStatus(DownloadLaterPromptStatus status) {
-  base::UmaHistogramEnumeration("MobileDownload.DownloadLaterPromptStatus",
-                                status);
-}
-
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -165,5 +170,12 @@ DownloadShelfContextMenuAction DownloadCommandToShelfAction(
       return clicked
                  ? DownloadShelfContextMenuAction::kBypassDeepScanningClicked
                  : DownloadShelfContextMenuAction::kBypassDeepScanningEnabled;
+
+    // The following are not actually visible in the context menu so should
+    // never be logged.
+    case DownloadCommands::Command::REVIEW:
+    case DownloadCommands::Command::RETRY:
+      NOTREACHED();
+      return DownloadShelfContextMenuAction::kNotReached;
   }
 }

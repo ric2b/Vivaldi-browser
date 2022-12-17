@@ -2,7 +2,8 @@
 
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/ad_blocker/adblock_rule_manager.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/utils.h"
@@ -22,7 +23,7 @@ bool IsOriginWanted(RuleService* service, RuleGroup group, url::Origin origin) {
   if (origin.scheme() == "chrome-extension")
     return false;
 
-  return !service->IsExemptOfFiltering(group, origin);
+  return !service->GetRuleManager()->IsExemptOfFiltering(group, origin);
 }
 }  // namespace
 

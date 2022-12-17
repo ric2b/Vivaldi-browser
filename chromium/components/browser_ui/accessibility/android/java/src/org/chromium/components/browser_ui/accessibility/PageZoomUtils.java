@@ -4,10 +4,16 @@
 
 package org.chromium.components.browser_ui.accessibility;
 
+import static org.chromium.content_public.browser.HostZoomMap.AVAILABLE_ZOOM_FACTORS;
+import static org.chromium.content_public.browser.HostZoomMap.TEXT_SIZE_MULTIPLIER_RATIO;
+
 import org.chromium.base.ContextUtils;
+import org.chromium.base.MathUtils;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.HostZoomMap;
+
+import java.util.Arrays;
 
 /**
  * General purpose utils class for page zoom feature. This is for methods that are shared by both
@@ -36,12 +42,6 @@ import org.chromium.content_public.browser.HostZoomMap;
  *
  */
 public class PageZoomUtils {
-    // Preset zoom factors that the +/- buttons can "snap" the zoom level to if user chooses to
-    // not use the slider. These zoom factors correspond to the zoom levels that are used on
-    // desktop, i.e. {0.25, 0.33, 0.50, 0.67, ... 3.00, 4.00, 5.00}.
-    public static final double[] AVAILABLE_ZOOM_FACTORS = new double[] {-7.60, -6.08, -3.80, -2.20,
-            -1.58, -1.22, -0.58, 0.00, 0.52, 1.22, 1.56, 2.22, 3.07, 3.80, 5.03, 6.03, 7.60, 8.83};
-
     // The default value for zoom that user can change in the accessibility settings page.
     public static final int PAGE_ZOOM_DEFAULT_SEEK_VALUE = convertZoomFactorToSeekBarValue(0.0);
 
@@ -51,9 +51,6 @@ public class PageZoomUtils {
     // The minimum and maximum zoom values as a percentage (e.g. 25% = 0.25, 500% = 5.0)
     private static final float PAGE_ZOOM_MINIMUM_ZOOM_LEVEL = 0.25f;
     private static final float PAGE_ZOOM_MAXIMUM_ZOOM_LEVEL = 5.00f;
-
-    // The value of the base for zoom factor, should match |kTextSizeMultiplierRatio|.
-    private static final float TEXT_SIZE_MULTIPLIER_RATIO = 1.2f;
 
     /**
      * Returns whether the Accessibility Settings page should include the 'Zoom' UI. The page
@@ -83,7 +80,9 @@ public class PageZoomUtils {
         // 1.2^3.8 = 2.0. See: third_party/blink/common/page/page_zoom.cc
         // This means zoomFactor = log_base1.2(chosenZoomLevel). Java has natural log and base
         // 10, we can rewrite the above as: log10(chosenZoomLevel) / log10(1.2);
-        return Math.log10(chosenZoomLevel) / Math.log10(TEXT_SIZE_MULTIPLIER_RATIO);
+        double result = Math.log10(chosenZoomLevel) / Math.log10(TEXT_SIZE_MULTIPLIER_RATIO);
+
+        return MathUtils.roundTwoDecimalPlaces(result);
     }
 
     /**
@@ -102,7 +101,7 @@ public class PageZoomUtils {
         double zoomLevelPercent = (double) (zoomLevel - PAGE_ZOOM_MINIMUM_ZOOM_LEVEL)
                 / (PAGE_ZOOM_MAXIMUM_ZOOM_LEVEL - PAGE_ZOOM_MINIMUM_ZOOM_LEVEL);
 
-        return (int) (PAGE_ZOOM_MAXIMUM_SEEKBAR_VALUE * zoomLevelPercent);
+        return (int) Math.round(PAGE_ZOOM_MAXIMUM_SEEKBAR_VALUE * zoomLevelPercent);
     }
 
     /**
@@ -158,6 +157,54 @@ public class PageZoomUtils {
                 .edit()
                 .putBoolean(AccessibilityConstants.PAGE_ZOOM_ALWAYS_SHOW_MENU_ITEM, newValue)
                 .apply();
+    }
+
+    /**
+     * Get the index of the next closest zoom factor in the cached available values in the given
+     * direction from the current zoom factor.
+     * Current zoom factor must be within range of possible zoom factors.
+     * @param decrease boolean      True if the next index should be decreasing from the current,
+     *         false otherwise
+     * @param currentZoomFactor double      The current zoom factor for which to search
+     * @throws IllegalArgumentException if current zoom factor is <= the smallest cached zoom factor
+     *         or >= the largest cached zoom factor
+     * @return int      The index of the next closest zoom factor
+     */
+    public static int getNextIndex(boolean decrease, double currentZoomFactor) {
+        // Assert valid current zoom factor
+        if (decrease && currentZoomFactor <= AVAILABLE_ZOOM_FACTORS[0]) {
+            throw new IllegalArgumentException(
+                    "currentZoomFactor should be greater than " + AVAILABLE_ZOOM_FACTORS[0]);
+        } else if (!decrease
+                && currentZoomFactor >= AVAILABLE_ZOOM_FACTORS[AVAILABLE_ZOOM_FACTORS.length - 1]) {
+            throw new IllegalArgumentException("currentZoomFactor should be less than "
+                    + AVAILABLE_ZOOM_FACTORS[AVAILABLE_ZOOM_FACTORS.length - 1]);
+        }
+
+        // BinarySearch will return the index of the first value equal to the given value.
+        // Otherwise it will return (-(insertion point) - 1).
+        // If a negative value is returned, then add one and negate to get the insertion point.
+        int index = Arrays.binarySearch(AVAILABLE_ZOOM_FACTORS, currentZoomFactor);
+
+        // If the value is found, index will be >=0 and we will decrement/increment accordingly:
+        if (index >= 0) {
+            if (decrease) {
+                --index;
+            } else {
+                ++index;
+            }
+        }
+
+        // If the value is not found, index will be (-(index) - 1), so negate and add one:
+        if (index < 0) {
+            index = ++index * -1;
+
+            // Index will now be the first index above the current value, so in the case of
+            // decreasing zoom, we will decrement once.
+            if (decrease) --index;
+        }
+
+        return index;
     }
 
     // Methods that interact with Prefs.

@@ -254,11 +254,14 @@ void NavigationControllerAndroid::LoadUrl(
     const JavaParamRef<jobject>& j_initiator_origin,
     jboolean has_user_gesture,
     jboolean should_clear_history_list,
-    jlong input_start) {
+    jlong input_start,
+    jlong navigation_ui_data_ptr) {
   DCHECK(url);
   NavigationController::LoadURLParams params(
       GURL(ConvertJavaStringToUTF8(env, url)));
-
+  // Wrap the raw pointer in case on an early return.
+  std::unique_ptr<NavigationUIData> navigation_ui_data = base::WrapUnique(
+      reinterpret_cast<NavigationUIData*>(navigation_ui_data_ptr));
   params.load_type =
       static_cast<NavigationController::LoadURLType>(load_url_type);
   params.transition_type = ui::PageTransitionFromInt(transition_type);
@@ -316,6 +319,8 @@ void NavigationControllerAndroid::LoadUrl(
 
   if (input_start != 0)
     params.input_start = base::TimeTicks::FromUptimeMillis(input_start);
+
+  params.navigation_ui_data = std::move(navigation_ui_data);
 
   navigation_controller_->LoadURLWithParams(params);
 }
@@ -383,7 +388,8 @@ void NavigationControllerAndroid::SetUseDesktopUserAgent(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean enabled,
-    jboolean reload_on_state_change) {
+    jboolean reload_on_state_change,
+    jint source) {
   SCOPED_CRASH_KEY_BOOL("nav_reentrancy_caller2", "SetUA_enabled",
                         (bool)enabled);
   if (GetUseDesktopUserAgent(env, obj) == enabled)
@@ -391,7 +397,7 @@ void NavigationControllerAndroid::SetUseDesktopUserAgent(
 
   if (navigation_controller_->in_navigate_to_pending_entry() &&
       reload_on_state_change) {
-    // Sometimes it's possible to call this function  in response to a
+    // Sometimes it's possible to call this function in response to a
     // navigation to a pending entry. In this case, we should avoid triggering
     // another navigation synchronously, as it will crash due to navigation
     // re-entrancy checks. To do that, post a task to update the UA and
@@ -404,6 +410,10 @@ void NavigationControllerAndroid::SetUseDesktopUserAgent(
         base::BindOnce(
             &NavigationControllerAndroid::SetUseDesktopUserAgentInternal,
             weak_factory_.GetWeakPtr(), enabled, reload_on_state_change));
+    LOG(WARNING) << "NavigationControllerAndroid::SetUseDesktopUserAgent "
+                 << "triggers re-entrant navigation, override: "
+                 << (bool)enabled << ", source: " << (int)source;
+    SCOPED_CRASH_KEY_NUMBER("SetUseDesktopUserAgent", "caller", (int)source);
     base::debug::DumpWithoutCrashing();
   } else {
     SetUseDesktopUserAgentInternal(enabled, reload_on_state_change);

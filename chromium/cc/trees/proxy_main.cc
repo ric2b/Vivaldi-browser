@@ -606,7 +606,7 @@ bool ProxyMain::StartDeferringCommits(base::TimeDelta timeout,
   commits_restart_time_ = base::TimeTicks::Now() + timeout;
 
   // Notify dependent systems that the deferral status has changed.
-  layer_tree_host_->OnDeferCommitsChanged(true, reason);
+  layer_tree_host_->OnDeferCommitsChanged(true, reason, absl::nullopt);
   return true;
 }
 
@@ -621,7 +621,7 @@ void ProxyMain::StopDeferringCommits(PaintHoldingCommitTrigger trigger) {
                                   TRACE_ID_LOCAL(this));
 
   // Notify depended systems that the deferral status has changed.
-  layer_tree_host_->OnDeferCommitsChanged(false, reason);
+  layer_tree_host_->OnDeferCommitsChanged(false, reason, trigger);
 }
 
 bool ProxyMain::IsDeferringCommits() const {
@@ -803,9 +803,9 @@ void ProxyMain::SetRenderFrameObserver(
                      base::Unretained(proxy_impl_.get()), std::move(observer)));
 }
 
-uint32_t ProxyMain::GetAverageThroughput() const {
+double ProxyMain::GetPercentDroppedFrames() const {
   NOTIMPLEMENTED();
-  return 0u;
+  return 0.0;
 }
 
 }  // namespace cc

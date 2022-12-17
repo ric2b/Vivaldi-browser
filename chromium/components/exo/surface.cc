@@ -544,7 +544,7 @@ void Surface::SetOverlayPriorityHint(OverlayPriority hint) {
   pending_state_.overlay_priority_hint = hint;
 }
 
-void Surface::SetBackgroundColor(absl::optional<SkColor> background_color) {
+void Surface::SetBackgroundColor(absl::optional<SkColor4f> background_color) {
   TRACE_EVENT0("exo", "Surface::SetBackgroundColor");
   pending_state_.basic_state.background_color = background_color;
 }
@@ -1233,8 +1233,8 @@ void Surface::UpdateResource(FrameSinkResourceManager* resource_manager) {
       // Use the buffer's size, so the AppendContentsToFrame() will append
       // a SolidColorDrawQuad with the buffer's size.
       current_resource_.size = state_.buffer->size();
-      SkColor color = state_.buffer->buffer()->GetColor().toSkColor();
-      current_resource_has_alpha_ = SkColorGetA(color) != SK_AlphaOPAQUE;
+      SkColor4f color = state_.buffer->buffer()->GetColor();
+      current_resource_has_alpha_ = !color.isOpaque();
     }
   } else {
     current_resource_.id = viz::kInvalidResourceId;
@@ -1421,11 +1421,11 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       buffer_transform_.TransformRectReverse(&uv_crop);
     }
 
-    SkColor background_color = SK_ColorTRANSPARENT;
+    SkColor4f background_color = SkColors::kTransparent;
     if (state_.basic_state.background_color.has_value())
       background_color = state_.basic_state.background_color.value();
     else if (current_resource_has_alpha_ && are_contents_opaque)
-      background_color = SK_ColorBLACK;  // Avoid writing alpha < 1
+      background_color = SkColors::kBlack;  // Avoid writing alpha < 1
 
     // If this surface is being replaced by a SurfaceId emit a SurfaceDrawQuad.
     if (get_current_surface_id_) {
@@ -1523,9 +1523,9 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       frame->resource_list.push_back(current_resource_);
     }
   } else {
-    SkColor color = state_.buffer.has_value() && state_.buffer->buffer()
-                        ? state_.buffer->buffer()->GetColor().toSkColor()
-                        : SK_ColorBLACK;
+    SkColor4f color = state_.buffer.has_value() && state_.buffer->buffer()
+                          ? state_.buffer->buffer()->GetColor()
+                          : SkColors::kBlack;
     viz::SolidColorDrawQuad* solid_quad =
         render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
     solid_quad->SetNew(quad_state, quad_rect, quad_rect, color,
@@ -1641,9 +1641,9 @@ void Surface::SetKeyboardShortcutsInhibited(bool inhibited) {
 #endif
 }
 
-Capabilities* Surface::GetCapabilities() {
+SecurityDelegate* Surface::GetSecurityDelegate() {
   if (delegate_)
-    return delegate_->GetCapabilities();
+    return delegate_->GetSecurityDelegate();
   return nullptr;
 }
 

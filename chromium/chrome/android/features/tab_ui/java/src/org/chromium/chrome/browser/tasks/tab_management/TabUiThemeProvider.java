@@ -156,17 +156,42 @@ public class TabUiThemeProvider {
     }
 
     /**
-     * Returns the {@link ColorStateList} to use for the plus sign in new tab tile based on the
-     * incognito mode.
+     * Returns the {@link ColorInt} to use for the {@link TabSelectionEditorSelectionAction}
+     * icon background.
      *
      * @param context {@link Context} used to retrieve color.
      * @param isIncognito Whether the color is used for incognito mode.
-     * @return The {@link ColorStateList} for new tab tile plus sign color.
+     * @param allTabsSelected Whether all tabs are selected.
+     * @return The {@link ColorInt} for select all icon background.
      */
-    public static ColorStateList getNewTabTilePlusTintList(Context context, boolean isIncognito) {
-        return AppCompatResources.getColorStateList(context,
-                isIncognito ? R.color.new_tab_tile_plus_color_incognito
-                            : R.color.new_tab_tile_plus_color);
+    public static @ColorInt int getSelectionActionIconBackgroundColor(
+            Context context, boolean isIncognito, boolean allTabsSelected) {
+        if (isIncognito) {
+            return context.getColor(
+                    R.color.incognito_tab_selection_editor_selection_action_bg_color);
+        } else {
+            @ColorInt
+            int colorInt = allTabsSelected
+                    ? MaterialColors.getColor(context, org.chromium.chrome.R.attr.colorPrimary, TAG)
+                    : MaterialColors.getColor(context, R.attr.colorOnSurfaceVariant, TAG);
+            return colorInt;
+        }
+    }
+
+    /**
+     * Returns the {@link ColorInt} to use for the "check" drawable on the
+     * {@link TabSelectionEditorSelectionAction}.
+     *
+     * @param context {@link Context} used to retrieve color.
+     * @param isIncognito Whether the color is used for incognito mode.
+     * @return The {@link ColorInt} for "check" drawable.
+     */
+    public static @ColorInt int getSelectionActionIconCheckedDrawableColor(
+            Context context, boolean isIncognito) {
+        if (isIncognito) {
+            return context.getColor(R.color.incognito_tab_selection_editor_selection_action_check);
+        }
+        return MaterialColors.getColor(context, org.chromium.chrome.R.attr.colorOnPrimary, TAG);
     }
 
     /**
@@ -456,7 +481,18 @@ public class TabUiThemeProvider {
     }
 
     /**
-     * Returns the text appearance for the message card description based on the incognito mode.
+     * Returns the text appearance for the message card title based on the incognito mode.
+     *
+     * @param isIncognito Whether the text appearance is used for incognito mode.
+     * @return The text appearance for the message card title.
+     */
+    public static int getMessageCardTitleTextAppearance(boolean isIncognito) {
+        return isIncognito ? R.style.TextAppearance_TextLarge_Primary_Baseline_Light
+                           : R.style.TextAppearance_TextLarge_Primary;
+    }
+
+    /**
+     * Returns the text appearance for message card description based on the incognito mode.
      *
      * @param isIncognito Whether the text appearance is used for incognito mode.
      * @return The text appearance for the message card description.
@@ -475,6 +511,70 @@ public class TabUiThemeProvider {
     public static int getMessageCardActionButtonTextAppearance(boolean isIncognito) {
         return isIncognito ? R.style.TextAppearance_Button_Text_Blue_Dark
                            : R.style.TextAppearance_Button_Text_Blue;
+    }
+
+    /**
+     * Returns the text appearance for the message card title based on the incognito mode.
+     *
+     * @param isIncognito Whether the text appearance is used for incognito mode.
+     * @return The text appearance for the message card title.
+     */
+    public static int getLargeMessageCardTitleTextAppearance(boolean isIncognito) {
+        return isIncognito ? R.style.TextAppearance_TextLarge_Primary_Baseline_Light
+                           : R.style.TextAppearance_TextLarge_Primary;
+    }
+
+    /**
+     * Returns the text appearance for large message card description based on the incognito mode.
+     *
+     * @param isIncognito Whether the text appearance is used for incognito mode.
+     * @return The text appearance for the message card description.
+     */
+    public static int getLargeMessageCardDescriptionTextAppearance(boolean isIncognito) {
+        return isIncognito ? R.style.TextAppearance_TextMedium_Secondary_Baseline_Light
+                           : R.style.TextAppearance_TextMedium_Secondary;
+    }
+
+    /**
+     * Returns the text appearance for the large message card action button based on the incognito
+     * mode.
+     *
+     * @param isIncognito Whether the text appearance is used for incognito mode.
+     * @return The appearance for the message card action button text.
+     */
+    public static int getLargeMessageCardActionButtonTextAppearance(boolean isIncognito) {
+        return isIncognito ? R.style.TextAppearance_Button_Text_Filled_Baseline_Dark
+                           : R.style.TextAppearance_Button_Text_Filled;
+    }
+
+    /**
+     * Returns the color for the large message card action button based on the
+     * incognito mode.
+     *
+     * @param context The {@link Context} to use to fetch the resources.
+     * @param isIncognito Whether the color is used for incognito mode.
+     *
+     * @return The {@link ColorInt} to set for the large message card action button.
+     */
+    public static @ColorInt int getLargeMessageCardActionButtonColor(
+            Context context, boolean isIncognito) {
+        return isIncognito ? context.getColor(R.color.filled_button_bg_color_light)
+                           : context.getColor(R.color.filled_button_bg_color);
+    }
+
+    /**
+     * Returns the text color for the message card secondary action button based on the
+     * incognito mode.
+     *
+     * @param context The {@link Context} to use to fetch the resources.
+     * @param isIncognito Whether the text appearance is used for incognito mode.
+     *
+     * @return The {@link ColorInt} to set for the message card secondary action button.
+     */
+    public static @ColorInt int getMessageCardSecondaryActionButtonColor(
+            Context context, boolean isIncognito) {
+        return isIncognito ? context.getColor(R.color.default_text_color_link_light)
+                           : SemanticColorUtils.getDefaultTextColorLink(context);
     }
 
     /**

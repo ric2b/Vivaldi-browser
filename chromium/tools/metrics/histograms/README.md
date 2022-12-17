@@ -84,7 +84,7 @@ callsite. At a given callsite (preferably you have only one), the string
 should be the same every time the macro is called. If you need to use dynamic
 names, use the functions in histogram_functions.h instead of the macros.
 
-### Don't Use Same String in Multiple Places
+### Don't Use Same Inline String in Multiple Places
 
 If you must use the histogram name in multiple places, use a compile-time
 constant of appropriate scope that can be referenced everywhere. Using inline
@@ -721,6 +721,11 @@ This is useful for token substitutions that are shared among multiple families
 of histograms. See
 [histograms.xml](https://source.chromium.org/search?q=file:histograms.xml%20%3Cvariants)
 for examples.
+
+*** promo
+Warning: The `name` attribute of the `<variants>` tag is globally scoped, so
+use detailed names to avoid collisions.
+***
 
 By default, a `<variant>` inherits the owners declared for the patterned
 histogram. Each variant can optionally override the inherited list with custom

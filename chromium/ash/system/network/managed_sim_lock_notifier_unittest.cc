@@ -9,10 +9,12 @@
 #include "ash/test/ash_test_base.h"
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_handler_test_helper.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/cellular_metrics_logger.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_handler_test_helper.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
@@ -75,27 +77,31 @@ class ManagedSimLockNotifierTest : public NoSessionAshTestBase {
     base::RunLoop().RunUntilIdle();
   }
 
-  void SetCellularSimLockEnabled(bool enable) {
+  void SetCellularSimLockEnabled(
+      bool enable,
+      const absl::optional<std::string>& lock_type = absl::nullopt) {
     // Simulate a locked SIM.
-    base::Value sim_lock_status(base::Value::Type::DICTIONARY);
-    sim_lock_status.SetKey(shill::kSIMLockEnabledProperty, base::Value(enable));
+    base::Value::Dict sim_lock_status;
+    sim_lock_status.Set(shill::kSIMLockEnabledProperty, enable);
+    if (lock_type.has_value())
+      sim_lock_status.Set(shill::kSIMLockTypeProperty, *lock_type);
     network_config_helper_->network_state_helper()
         .device_test()
         ->SetDeviceProperty(
             kTestCellularDevicePath, shill::kSIMLockStatusProperty,
-            std::move(sim_lock_status), /*notify_changed=*/true);
+            base::Value(std::move(sim_lock_status)), /*notify_changed=*/true);
 
     // Set the cellular service to be the active profile.
-    base::Value::ListStorage sim_slot_infos;
-    base::Value slot_info_item(base::Value::Type::DICTIONARY);
-    slot_info_item.SetKey(shill::kSIMSlotInfoICCID, base::Value(kTestIccid));
-    slot_info_item.SetBoolKey(shill::kSIMSlotInfoPrimary, true);
-    sim_slot_infos.push_back(std::move(slot_info_item));
+    base::Value::List sim_slot_infos;
+    base::Value::Dict slot_info_item;
+    slot_info_item.Set(shill::kSIMSlotInfoICCID, kTestIccid);
+    slot_info_item.Set(shill::kSIMSlotInfoPrimary, true);
+    sim_slot_infos.Append(std::move(slot_info_item));
     network_config_helper_->network_state_helper()
         .device_test()
         ->SetDeviceProperty(
             kTestCellularDevicePath, shill::kSIMSlotInfoProperty,
-            base::Value(sim_slot_infos), /*notify_changed=*/true);
+            base::Value(std::move(sim_slot_infos)), /*notify_changed=*/true);
 
     base::RunLoop().RunUntilIdle();
   }
@@ -137,9 +143,14 @@ class ManagedSimLockNotifierTest : public NoSessionAshTestBase {
     base::RunLoop().RunUntilIdle();
   }
 
-  void RemoveNotification() {
+  void ClickOnNotification() {
+    message_center::MessageCenter::Get()->ClickOnNotification(
+        ManagedSimLockNotifier::kManagedSimLockNotificationId);
+  }
+
+  void RemoveNotification(bool by_user) {
     message_center::MessageCenter::Get()->RemoveNotification(
-        ManagedSimLockNotifier::kManagedSimLockNotificationId, false);
+        ManagedSimLockNotifier::kManagedSimLockNotificationId, by_user);
   }
 
   // Returns the managed SIM lock notification if it is shown, and null if it is
@@ -153,6 +164,7 @@ class ManagedSimLockNotifierTest : public NoSessionAshTestBase {
   std::unique_ptr<chromeos::network_config::CrosNetworkConfigTestHelper>
       network_config_helper_;
   std::unique_ptr<NetworkHandlerTestHelper> network_handler_test_helper_;
+  base::HistogramTester histogram_tester_;
 };
 
 TEST_F(ManagedSimLockNotifierTest, PolicyChanged) {
@@ -178,7 +190,7 @@ TEST_F(ManagedSimLockNotifierTest, NewActiveSession) {
 
   // Notification should be shown; proceed to remove it.
   EXPECT_TRUE(GetManagedSimLockNotification());
-  RemoveNotification();
+  RemoveNotification(/*by_user=*/false);
   EXPECT_FALSE(GetManagedSimLockNotification());
 
   LogOut();
@@ -189,7 +201,7 @@ TEST_F(ManagedSimLockNotifierTest, NewActiveSession) {
   // locked and policy is true.
   EXPECT_TRUE(GetManagedSimLockNotification());
 
-  RemoveNotification();
+  RemoveNotification(/*by_user=*/false);
   SetAllowCellularSimLock(true);
 
   LogOut();
@@ -242,25 +254,26 @@ TEST_F(ManagedSimLockNotifierTest, PrimarySimIccidChanged) {
   SetAllowCellularSimLock(false);
 
   EXPECT_TRUE(GetManagedSimLockNotification());
-  RemoveNotification();
+  RemoveNotification(/*by_user=*/false);
 
   EXPECT_FALSE(GetManagedSimLockNotification());
   // Simulate primary ICCID changed. Notification should be shown after.
-  base::Value::ListStorage sim_slot_infos;
-  base::Value slot_info_item(base::Value::Type::DICTIONARY);
-  slot_info_item.SetKey(shill::kSIMSlotInfoICCID, base::Value(kTestIccid));
-  slot_info_item.SetBoolKey(shill::kSIMSlotInfoPrimary, false);
-  sim_slot_infos.push_back(std::move(slot_info_item));
+  base::Value::List sim_slot_infos;
+  base::Value::Dict slot_info_item;
+  slot_info_item.Set(shill::kSIMSlotInfoICCID, kTestIccid);
+  slot_info_item.Set(shill::kSIMSlotInfoPrimary, false);
+  sim_slot_infos.Append(std::move(slot_info_item));
 
-  base::Value slot_info_item_2(base::Value::Type::DICTIONARY);
-  slot_info_item_2.SetKey(shill::kSIMSlotInfoICCID, base::Value("kTestIccid2"));
-  slot_info_item_2.SetBoolKey(shill::kSIMSlotInfoPrimary, true);
-  sim_slot_infos.push_back(std::move(slot_info_item_2));
+  base::Value::Dict slot_info_item_2;
+  slot_info_item_2.Set(shill::kSIMSlotInfoICCID, "kTestIccid2");
+  slot_info_item_2.Set(shill::kSIMSlotInfoPrimary, true);
+  sim_slot_infos.Append(std::move(slot_info_item_2));
 
   network_config_helper_->network_state_helper()
       .device_test()
       ->SetDeviceProperty(kTestCellularDevicePath, shill::kSIMSlotInfoProperty,
-                          base::Value(sim_slot_infos), /*notify_changed=*/true);
+                          base::Value(std::move(sim_slot_infos)),
+                          /*notify_changed=*/true);
 
   base::RunLoop().RunUntilIdle();
 
@@ -268,12 +281,17 @@ TEST_F(ManagedSimLockNotifierTest, PrimarySimIccidChanged) {
 }
 
 TEST_F(ManagedSimLockNotifierTest, NotificationOnCellularOnOrOff) {
+  base::HistogramTester histograms;
+
   AddCellularDevice();
   AddCellularService();
   SetCellularSimLockEnabled(true);
   SetAllowCellularSimLock(false);
 
   EXPECT_TRUE(GetManagedSimLockNotification());
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kShown, 1);
 
   // Notification will disappear if user turns off Cellular.
   SetCellularEnabled(false);
@@ -282,6 +300,86 @@ TEST_F(ManagedSimLockNotifierTest, NotificationOnCellularOnOrOff) {
   // Notification will appear if user turns on Cellular.
   SetCellularEnabled(true);
   EXPECT_TRUE(GetManagedSimLockNotification());
+}
+
+TEST_F(ManagedSimLockNotifierTest, NotificationClicked) {
+  base::HistogramTester histograms;
+
+  AddCellularDevice();
+  AddCellularService();
+  SetCellularSimLockEnabled(true);
+  SetAllowCellularSimLock(false);
+
+  ClickOnNotification();
+
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kShown, 1);
+
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kClicked, 1);
+
+  // Notification will be dismissed by the system, in which case we shouldn't
+  // be emitting the dismissed by user metric.
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kDismissed, 0);
+}
+
+TEST_F(ManagedSimLockNotifierTest, NotificationDismissedByUser) {
+  base::HistogramTester histograms;
+
+  AddCellularDevice();
+  AddCellularService();
+  SetCellularSimLockEnabled(true);
+  SetAllowCellularSimLock(false);
+
+  RemoveNotification(/*by_user=*/true);
+
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kShown, 1);
+
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kClicked, 0);
+
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationEventHistogram,
+      CellularMetricsLogger::SimLockNotificationEvent::kDismissed, 1);
+}
+
+TEST_F(ManagedSimLockNotifierTest, SIMLockTypeMetrics) {
+  base::HistogramTester histograms;
+
+  AddCellularDevice();
+  AddCellularService();
+  SetCellularSimLockEnabled(true, shill::kSIMLockPin);
+  SetAllowCellularSimLock(false);
+
+  EXPECT_TRUE(GetManagedSimLockNotification());
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationLockType,
+      CellularMetricsLogger::SimPinLockType::kPinLocked, 1);
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationLockType,
+      CellularMetricsLogger::SimPinLockType::kPukLocked, 0);
+
+  SetCellularSimLockEnabled(false);
+  SetAllowCellularSimLock(true);
+  EXPECT_FALSE(GetManagedSimLockNotification());
+
+  SetCellularSimLockEnabled(true, shill::kSIMLockPuk);
+  SetAllowCellularSimLock(false);
+
+  EXPECT_TRUE(GetManagedSimLockNotification());
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationLockType,
+      CellularMetricsLogger::SimPinLockType::kPinLocked, 1);
+  histograms.ExpectBucketCount(
+      CellularMetricsLogger::kSimLockNotificationLockType,
+      CellularMetricsLogger::SimPinLockType::kPukLocked, 1);
 }
 
 }  // namespace ash

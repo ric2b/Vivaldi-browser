@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import './signin_shared.css.js';
 import './strings.m.js';
 
@@ -40,7 +40,7 @@ class SyncDisabledConfirmationAppElement extends PolymerElement {
   private onConfirm_(e: Event) {
     this.syncConfirmationBrowserProxy_.confirm(
         this.getConsentDescription_(),
-        this.getConsentConfirmation_(e.composedPath() as Array<HTMLElement>));
+        this.getConsentConfirmation_(e.composedPath() as HTMLElement[]));
   }
 
   /**
@@ -48,7 +48,7 @@ class SyncDisabledConfirmationAppElement extends PolymerElement {
    *     element.
    * @return The text of the consent confirmation element.
    */
-  private getConsentConfirmation_(path: Array<HTMLElement>): string {
+  private getConsentConfirmation_(path: HTMLElement[]): string {
     for (const element of path) {
       if (element.nodeType !== Node.DOCUMENT_FRAGMENT_NODE &&
           element.hasAttribute('consent-confirmation')) {

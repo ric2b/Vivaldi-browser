@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/webauthn/authenticator_request_sheet_model.h"
 #include "chrome/browser/ui/webauthn/transport_hover_list_model.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
@@ -231,6 +232,28 @@ class AuthenticatorBlePowerOnAutomaticSheetModel
 
   bool busy_powering_on_ble_ = false;
 };
+
+#if BUILDFLAG(IS_MAC)
+
+class AuthenticatorBlePermissionMacSheetModel
+    : public AuthenticatorSheetModelBase {
+ public:
+  using AuthenticatorSheetModelBase::AuthenticatorSheetModelBase;
+
+ private:
+  // AuthenticatorSheetModelBase:
+  const gfx::VectorIcon& GetStepIllustration(
+      ImageColorScheme color_scheme) const override;
+  std::u16string GetStepTitle() const override;
+  std::u16string GetStepDescription() const override;
+  bool IsAcceptButtonVisible() const override;
+  bool IsAcceptButtonEnabled() const override;
+  bool IsCancelButtonVisible() const override;
+  std::u16string GetAcceptButtonLabel() const override;
+  void OnAccept() override;
+};
+
+#endif  // IS_MAC
 
 class AuthenticatorOffTheRecordInterstitialSheetModel
     : public AuthenticatorSheetModelBase {
@@ -458,8 +481,18 @@ class AuthenticatorResidentCredentialConfirmationSheetView
 class AuthenticatorSelectAccountSheetModel
     : public AuthenticatorSheetModelBase {
  public:
-  explicit AuthenticatorSelectAccountSheetModel(
-      AuthenticatorRequestDialogModel* dialog_model);
+  // Indicates whether the corresponding view is presented before or after
+  // gathering user verification and generating an assertion signature.
+  // `kPreUserVerification` is only possible with platform authenticators
+  // for which we can silently enumerate credentials.
+  enum Mode {
+    kPostUserVerification,
+    kPreUserVerification,
+  };
+
+  AuthenticatorSelectAccountSheetModel(
+      AuthenticatorRequestDialogModel* dialog_model,
+      Mode mode);
   ~AuthenticatorSelectAccountSheetModel() override;
 
   // Set the index of the currently selected row.
@@ -478,6 +511,7 @@ class AuthenticatorSelectAccountSheetModel
   bool IsAcceptButtonEnabled() const override;
   std::u16string GetAcceptButtonLabel() const override;
 
+  const Mode mode_;
   size_t selected_ = 0;
 };
 

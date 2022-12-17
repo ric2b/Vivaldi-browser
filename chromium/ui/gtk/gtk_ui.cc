@@ -16,25 +16,20 @@
 #include "base/containers/flat_map.h"
 #include "base/debug/leak_annotations.h"
 #include "base/environment.h"
-#include "base/files/dir_reader_linux.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/nix/mime_util_xdg.h"
 #include "base/nix/xdg_util.h"
 #include "base/observer_list.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/themes/theme_properties.h"  // nogncheck
-#include "printing/buildflags/buildflags.h"          // nogncheck
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkShader.h"
-#include "ui/base/cursor/cursor_theme_manager_observer.h"
 #include "ui/base/glib/glib_cast.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/linux/fake_input_method_context.h"
 #include "ui/base/ime/linux/linux_input_method_context.h"
-#include "ui/base/ime/linux/linux_input_method_context_factory.h"
-#include "ui/base/linux/linux_ui_delegate.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_manager.h"
@@ -63,14 +58,18 @@
 #include "ui/gtk/select_file_dialog_linux_gtk.h"
 #include "ui/gtk/settings_provider_gtk.h"
 #include "ui/gtk/window_frame_provider_gtk.h"
+#include "ui/linux/cursor_theme_manager_observer.h"
+#include "ui/linux/device_scale_factor_observer.h"
+#include "ui/linux/linux_ui.h"
+#include "ui/linux/linux_ui_delegate.h"
+#include "ui/linux/nav_button_provider.h"
+#include "ui/linux/window_button_order_observer.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/ozone/buildflags.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/shell_dialogs/select_file_dialog_linux.h"
 #include "ui/shell_dialogs/select_file_policy.h"
-#include "ui/views/linux_ui/device_scale_factor_observer.h"
-#include "ui/views/linux_ui/nav_button_provider.h"
-#include "ui/views/linux_ui/window_button_order_observer.h"
+#include "ui/shell_dialogs/shell_dialog_linux.h"
 #include "ui/views/window/window_button_order_provider.h"
 
 #if defined(USE_GIO)
@@ -82,10 +81,6 @@
 #endif
 #if BUILDFLAG(OZONE_PLATFORM_X11)
 #define USE_X11
-#endif
-
-#if BUILDFLAG(ENABLE_PRINTING)
-#include "printing/printing_context_linux.h"
 #endif
 
 #if defined(USE_WAYLAND)
@@ -170,9 +165,9 @@ gfx::FontRenderParams GetGtkFontRenderParams() {
   return params;
 }
 
-views::LinuxUI::WindowFrameAction GetDefaultMiddleClickAction() {
+ui::LinuxUi::WindowFrameAction GetDefaultMiddleClickAction() {
   if (GtkCheckVersion(3, 14))
-    return views::LinuxUI::WindowFrameAction::kNone;
+    return ui::LinuxUi::WindowFrameAction::kNone;
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   switch (base::nix::GetDesktopEnvironment(env.get())) {
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
@@ -181,9 +176,9 @@ views::LinuxUI::WindowFrameAction GetDefaultMiddleClickAction() {
       // middle mouse button to create tab groups. We don't support that in
       // Chrome, but at least avoid lowering windows in response to middle
       // clicks to avoid surprising users who expect the KDE behavior.
-      return views::LinuxUI::WindowFrameAction::kNone;
+      return ui::LinuxUi::WindowFrameAction::kNone;
     default:
-      return views::LinuxUI::WindowFrameAction::kLower;
+      return ui::LinuxUi::WindowFrameAction::kLower;
   }
 }
 
@@ -205,23 +200,6 @@ std::unique_ptr<GtkUiPlatform> CreateGtkUiPlatform(ui::LinuxUiBackend backend) {
   }
 }
 
-void ListGtkThemes(const base::FilePath path,
-                   std::vector<std::string>& themes) {
-  std::string gtk_version =
-      "gtk-" + base::NumberToString(GtkVersion().components()[0]) + ".0";
-  base::DirReaderLinux dir_reader(path.value().c_str());
-
-  if (!dir_reader.IsValid())
-    return;
-
-  while (dir_reader.Next()) {
-    std::string theme_name = dir_reader.name();
-    base::FilePath theme_path = path.Append(theme_name).Append(gtk_version);
-    if (base::PathExists(theme_path))
-      themes.emplace_back(theme_name);
-  }
-}
-
 }  // namespace
 
 GtkUi::GtkUi() : window_frame_actions_() {
@@ -232,6 +210,8 @@ GtkUi::GtkUi() : window_frame_actions_() {
 GtkUi::~GtkUi() {
   DCHECK_EQ(g_gtk_ui, this);
   g_gtk_ui = nullptr;
+
+  shell_dialog_linux::Finalize();
 }
 
 // static
@@ -260,24 +240,14 @@ bool GtkUi::Initialize() {
 
   // This creates an extra thread that may race against GtkInitFromCommandLine,
   // so this must be done after to avoid the race condition.
-  ShellDialogLinux::Initialize();
+  shell_dialog_linux::Initialize();
 
-  using Action = views::LinuxUI::WindowFrameAction;
-  using ActionSource = views::LinuxUI::WindowFrameActionSource;
+  using Action = ui::LinuxUi::WindowFrameAction;
+  using ActionSource = ui::LinuxUi::WindowFrameActionSource;
   window_frame_actions_ = {
       {ActionSource::kDoubleClick, Action::kToggleMaximize},
       {ActionSource::kMiddleClick, GetDefaultMiddleClickAction()},
       {ActionSource::kRightClick, Action::kMenu}};
-  // Linux ozone platforms may want to set LinuxInputMethodContextFactory
-  // instance instead of using GtkUi context factory. This step is made upon
-  // CreateInputMethod call. If the factory is not set, use the GtkUi context
-  // factory.
-  if (GetPlatform()->PreferGtkIme() ||
-      !ui::OzonePlatform::GetInstance()->CreateInputMethod(
-          nullptr, gfx::kNullAcceleratedWidget)) {
-    if (!ui::LinuxInputMethodContextFactory::instance())
-      ui::LinuxInputMethodContextFactory::SetInstance(this);
-  }
 
   GtkSettings* settings = gtk_settings_get_default();
   g_signal_connect_after(settings, "notify::gtk-theme-name",
@@ -308,13 +278,6 @@ bool GtkUi::Initialize() {
 
   LoadGtkValues();
 
-#if BUILDFLAG(ENABLE_PRINTING)
-  printing::PrintingContextLinux::SetCreatePrintDialogFunction(
-      &PrintDialogGtk::CreatePrintDialog);
-  printing::PrintingContextLinux::SetPdfPaperSizeFunction(
-      &GetPdfPaperSizeDeviceUnitsGtk);
-#endif
-
   // We must build this after GTK gets initialized.
   settings_provider_ = CreateSettingsProvider(this);
 
@@ -323,24 +286,6 @@ bool GtkUi::Initialize() {
   platform_->OnInitialized(GetDummyWindow());
 
   return true;
-}
-
-bool GtkUi::GetTint(int id, color_utils::HSL* tint) const {
-  switch (id) {
-    // Tints for which the cross-platform default is fine. Before adding new
-    // values here, specifically verify they work well on Linux.
-    case ThemeProperties::TINT_BACKGROUND_TAB:
-    // TODO(estade): Return something useful for TINT_BUTTONS so that chrome://
-    // page icons are colored appropriately.
-    case ThemeProperties::TINT_BUTTONS:
-      break;
-    default:
-      // Assume any tints not specifically verified on Linux aren't usable.
-      // TODO(pkasting): Try to remove values from |colors_| that could just be
-      // added to the group above instead.
-      NOTREACHED();
-  }
-  return false;
 }
 
 bool GtkUi::GetColor(int id, SkColor* color, bool use_custom_frame) const {
@@ -491,10 +436,8 @@ void GtkUi::SetWindowButtonOrdering(
   views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
       leading_buttons, trailing_buttons);
 
-  for (views::WindowButtonOrderObserver& observer :
-       window_button_order_observer_list()) {
+  for (auto& observer : window_button_order_observer_list())
     observer.OnWindowButtonOrderingChange();
-  }
 }
 
 void GtkUi::SetWindowFrameAction(WindowFrameActionSource source,
@@ -503,9 +446,8 @@ void GtkUi::SetWindowFrameAction(WindowFrameActionSource source,
 }
 
 std::unique_ptr<ui::LinuxInputMethodContext> GtkUi::CreateInputMethodContext(
-    ui::LinuxInputMethodContextDelegate* delegate,
-    bool is_simple) const {
-  return std::make_unique<InputMethodContextImplGtk>(delegate, is_simple);
+    ui::LinuxInputMethodContextDelegate* delegate) const {
+  return GetPlatform()->CreateInputMethodContext(delegate);
 }
 
 gfx::FontRenderParams GtkUi::GetDefaultFontRenderParams() const {
@@ -516,22 +458,24 @@ gfx::FontRenderParams GtkUi::GetDefaultFontRenderParams() const {
 void GtkUi::GetDefaultFontDescription(std::string* family_out,
                                       int* size_pixels_out,
                                       int* style_out,
-                                      gfx::Font::Weight* weight_out,
+                                      int* weight_out,
                                       gfx::FontRenderParams* params_out) const {
   *family_out = default_font_family_;
   *size_pixels_out = default_font_size_pixels_;
   *style_out = default_font_style_;
-  *weight_out = default_font_weight_;
+  *weight_out = static_cast<int>(default_font_weight_);
   *params_out = default_font_render_params_;
 }
 
 ui::SelectFileDialog* GtkUi::CreateSelectFileDialog(
-    ui::SelectFileDialog::Listener* listener,
+    void* listener,
     std::unique_ptr<ui::SelectFilePolicy> policy) const {
-  return new SelectFileDialogLinuxGtk(listener, std::move(policy));
+  return new SelectFileDialogLinuxGtk(
+      static_cast<ui::SelectFileDialog::Listener*>(listener),
+      std::move(policy));
 }
 
-views::LinuxUI::WindowFrameAction GtkUi::GetWindowFrameAction(
+ui::LinuxUi::WindowFrameAction GtkUi::GetWindowFrameAction(
     WindowFrameActionSource source) {
   return window_frame_actions_[source];
 }
@@ -550,13 +494,13 @@ bool GtkUi::AnimationsEnabled() const {
   return animations_enabled;
 }
 
-std::unique_ptr<views::NavButtonProvider> GtkUi::CreateNavButtonProvider() {
+std::unique_ptr<ui::NavButtonProvider> GtkUi::CreateNavButtonProvider() {
   if (GtkCheckVersion(3, 14))
     return std::make_unique<gtk::NavButtonProviderGtk>();
   return nullptr;
 }
 
-views::WindowFrameProvider* GtkUi::GetWindowFrameProvider(bool solid_frame) {
+ui::WindowFrameProvider* GtkUi::GetWindowFrameProvider(bool solid_frame) {
   if (!GtkCheckVersion(3, 14))
     return nullptr;
   auto& provider =
@@ -646,29 +590,13 @@ int GtkUi::GetCursorThemeSize() {
   return size;
 }
 
-std::vector<std::string> GtkUi::GetAvailableSystemThemeNamesForTest() const {
-  std::vector<std::string> themes;
-  const gchar* const* dirs = g_get_system_data_dirs();
-  for (std::size_t i = 0; dirs[i]; i++)
-    ListGtkThemes(base::FilePath(dirs[i]).Append("themes"), themes);
-
-  return themes;
-}
-
-void GtkUi::SetSystemThemeByNameForTest(const std::string& theme_name) {
-  GValue theme = G_VALUE_INIT;
-  g_value_init(&theme, G_TYPE_STRING);
-  g_value_set_string(&theme, theme_name.c_str());
-  g_object_set_property(G_OBJECT(gtk_settings_get_default()), "gtk-theme-name",
-                        &theme);
-}
-
-ui::NativeTheme* GtkUi::GetNativeTheme() const {
+ui::NativeTheme* GtkUi::GetNativeThemeImpl() const {
   return native_theme_;
 }
 
-bool GtkUi::MatchEvent(const ui::Event& event,
-                       std::vector<ui::TextEditCommandAuraLinux>* commands) {
+bool GtkUi::GetTextEditCommandsForEvent(
+    const ui::Event& event,
+    std::vector<ui::TextEditCommandAuraLinux>* commands) {
   // GTK4 dropped custom key bindings.
   if (GtkCheckVersion(4))
     return false;
@@ -686,6 +614,17 @@ bool GtkUi::MatchEvent(const ui::Event& event,
 
   return key_bindings_handler_->MatchEvent(event, commands);
 }
+
+#if BUILDFLAG(ENABLE_PRINTING)
+printing::PrintDialogLinuxInterface* GtkUi::CreatePrintDialog(
+    printing::PrintingContextLinux* context) {
+  return PrintDialogGtk::CreatePrintDialog(context);
+}
+
+gfx::Size GtkUi::GetPdfPaperSize(printing::PrintingContextLinux* context) {
+  return GetPdfPaperSizeDeviceUnitsGtk(context);
+}
+#endif
 
 void GtkUi::OnThemeChanged(GtkSettings* settings, GtkParamSpec* param) {
   colors_.clear();
@@ -749,7 +688,7 @@ void GtkUi::UpdateColors() {
            // Some theme colors, e.g. COLOR_NTP_LINK, are derived from color
            // provider colors. We assume that those sources' colors won't change
            // with frame type.
-           ui::ColorProviderManager::FrameType::kChromium, nullptr});
+           ui::ColorProviderManager::FrameType::kChromium});
 
   SkColor location_bar_border = GetBorderColor("GtkEntry#entry");
   if (SkColorGetA(location_bar_border))
@@ -766,11 +705,6 @@ void GtkUi::UpdateColors() {
 
   SkColor tab_border = GetBorderColor("GtkButton#button");
   // Separates the toolbar from the bookmark bar or butter bars.
-  colors_[ThemeProperties::COLOR_DOWNLOAD_SHELF_CONTENT_AREA_SEPARATOR] =
-      tab_border;
-  colors_[ThemeProperties::COLOR_INFOBAR_CONTENT_AREA_SEPARATOR] = tab_border;
-  colors_[ThemeProperties::COLOR_SIDE_PANEL_CONTENT_AREA_SEPARATOR] =
-      tab_border;
   colors_[ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR] = tab_border;
   // Separates entries in the downloads bar.
   colors_[ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR] = tab_border;
@@ -827,8 +761,6 @@ void GtkUi::UpdateColors() {
         color_utils::GetResultingPaintColor(GetBgColor(""), frame_color);
 
     color_map[ThemeProperties::COLOR_TOOLBAR] = tab_color;
-    color_map[ThemeProperties::COLOR_DOWNLOAD_SHELF] = tab_color;
-    color_map[ThemeProperties::COLOR_INFOBAR] = tab_color;
     color_map[ThemeProperties::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_ACTIVE] =
         tab_color;
     color_map[ThemeProperties::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_INACTIVE] =
@@ -849,11 +781,6 @@ void GtkUi::UpdateColors() {
     color_map[ThemeProperties::
                   COLOR_TAB_FOREGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO] =
         background_tab_text_color_inactive;
-
-    color_map[ThemeProperties::COLOR_OMNIBOX_TEXT] =
-        color_provider->GetColor(ui::kColorTextfieldForeground);
-    color_map[ThemeProperties::COLOR_OMNIBOX_BACKGROUND] =
-        color_provider->GetColor(ui::kColorTextfieldBackground);
 
     // These colors represent the border drawn around tabs and between
     // the tabstrip and toolbar.
@@ -972,7 +899,7 @@ void GtkUi::UpdateDeviceScaleFactor() {
   float old_device_scale_factor = device_scale_factor_;
   device_scale_factor_ = GetRawDeviceScaleFactor();
   if (device_scale_factor_ != old_device_scale_factor) {
-    for (views::DeviceScaleFactorObserver& observer :
+    for (ui::DeviceScaleFactorObserver& observer :
          device_scale_factor_observer_list()) {
       observer.OnDeviceScaleFactorChanged();
     }

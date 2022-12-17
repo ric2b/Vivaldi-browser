@@ -151,6 +151,7 @@
 <translation id="6321917430147971392">Controlla le impostazioni DNS</translation>
 <translation id="6328639280570009161">Prova a disattivare la previsione della rete</translation>
 <translation id="6328786501058569169">Questo sito è ingannevole</translation>
+<translation id="6348220984832452017">Variazioni attive</translation>
 <translation id="6358450015545214790">Che cosa significano?</translation>
 <translation id="6433595998831338502">Connessione negata da <ph name="HOST_NAME" />.</translation>
 <translation id="6447842834002726250">Cookie</translation>
@@ -169,6 +170,7 @@
 <translation id="7113310725918019676">Permetti <ph name="BLOCKED_TYPE" /> da <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> non è conforme agli standard di sicurezza.</translation>
 <translation id="7219179957768738017">La connessione utilizza <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Mostrare notifiche</translation>
 <translation id="7260504762447901703">Revoca accesso</translation>
 <translation id="7353601530677266744">Riga di comando</translation>
 <translation id="7364115444476960850">La pagina a cui stavi provando ad accedere è stata bloccata da Vivaldi <ph name="BLOCKER_NAME" /></translation>

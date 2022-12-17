@@ -2955,24 +2955,6 @@ TEST_F(GLES2ImplementationTest, CoverageModulationCHROMIUM) {
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
-TEST_F(GLES2ImplementationTest, TexStorage2DImageCHROMIUM) {
-  struct Cmds {
-    cmds::TexStorage2DImageCHROMIUM cmd;
-  };
-  Cmds expected;
-  expected.cmd.Init(GL_TEXTURE_2D, GL_RGB565, 4, 5);
-
-  gl_->TexStorage2DImageCHROMIUM(GL_TEXTURE_2D, GL_RGB565, GL_SCANOUT_CHROMIUM,
-                                 4, 5);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
-}
-
-TEST_F(GLES2ImplementationTest, TexStorage2DImageCHROMIUMInvalidConstantArg2) {
-  gl_->TexStorage2DImageCHROMIUM(GL_TEXTURE_2D, GL_RGB565, GL_NONE, 4, 5);
-  EXPECT_TRUE(NoCommandsWritten());
-  EXPECT_EQ(GL_INVALID_ENUM, CheckError());
-}
-
 TEST_F(GLES2ImplementationTest, WindowRectanglesEXT) {
   GLint data[2][4] = {{0}};
   struct Cmds {
@@ -3032,28 +3014,6 @@ TEST_F(GLES2ImplementationTest, EndSharedImageAccessDirectCHROMIUM) {
   expected.cmd.Init(1);
 
   gl_->EndSharedImageAccessDirectCHROMIUM(1);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
-}
-
-TEST_F(GLES2ImplementationTest, BeginBatchReadAccessSharedImageCHROMIUM) {
-  struct Cmds {
-    cmds::BeginBatchReadAccessSharedImageCHROMIUM cmd;
-  };
-  Cmds expected;
-  expected.cmd.Init();
-
-  gl_->BeginBatchReadAccessSharedImageCHROMIUM();
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
-}
-
-TEST_F(GLES2ImplementationTest, EndBatchReadAccessSharedImageCHROMIUM) {
-  struct Cmds {
-    cmds::EndBatchReadAccessSharedImageCHROMIUM cmd;
-  };
-  Cmds expected;
-  expected.cmd.Init();
-
-  gl_->EndBatchReadAccessSharedImageCHROMIUM();
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 

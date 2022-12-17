@@ -119,7 +119,8 @@ class ClipboardProviderTest : public testing::Test,
 
  protected:
   // AutocompleteProviderListener:
-  void OnProviderUpdate(bool updated_matches) override;
+  void OnProviderUpdate(bool updated_matches,
+                        const AutocompleteProvider* provider) override;
 
   TestSchemeClassifier classifier_;
   FakeClipboardRecentContent clipboard_content_;
@@ -130,7 +131,9 @@ class ClipboardProviderTest : public testing::Test,
   base::test::TaskEnvironment task_environment_;
 };
 
-void ClipboardProviderTest::OnProviderUpdate(bool updated_matches) {
+void ClipboardProviderTest::OnProviderUpdate(
+    bool updated_matches,
+    const AutocompleteProvider* provider) {
   // No action required.
 }
 
@@ -280,6 +283,28 @@ TEST_F(ClipboardProviderTest, CreateBlankImageMatchOnStart) {
   EXPECT_EQ(AutocompleteMatchType::CLIPBOARD_IMAGE,
             provider_->matches().back().type);
   EXPECT_FALSE(provider_->matches().back().post_content.get());
+}
+
+TEST_F(ClipboardProviderTest, SkipImageMatchGivenWantAsynchronousMatchesFalse) {
+  base::test::ScopedFeatureList feature_list;
+  base::Feature feature = omnibox::kClipboardSuggestionContentHidden;
+  feature_list.InitAndEnableFeature(feature);
+
+  auto template_url_service =
+      std::make_unique<TemplateURLService>(/*initializers=*/nullptr,
+                                           /*count=*/0);
+  client_->set_template_url_service(std::move(template_url_service));
+
+  gfx::Image test_image = gfx::test::CreateImage(/*width=*/10, /*height=*/10);
+  SetClipboardImage(test_image);
+  // When `input.omit_asynchronous_matches` is set to true, the clipboard
+  // provider should skip any asynchronous logic associated with creating an
+  // image match.
+  AutocompleteInput input = CreateAutocompleteInput(OmniboxFocusType::ON_FOCUS);
+  input.set_omit_asynchronous_matches(true);
+  provider_->Start(input, false);
+  ASSERT_TRUE(provider_->done());
+  ASSERT_TRUE(provider_->matches().empty());
 }
 
 TEST_F(ClipboardProviderTest, CreateURLMatchWithContent) {

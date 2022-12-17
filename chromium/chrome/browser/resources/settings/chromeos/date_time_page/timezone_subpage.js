@@ -9,13 +9,14 @@
 import '../../controls/controlled_radio_button.js';
 import '../../controls/settings_radio_group.js';
 import '../../prefs/prefs.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import './timezone_selector.js';
 
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
-import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from '//resources/js/web_ui_listener_behavior.m.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {routes} from '../os_route.js';
@@ -35,8 +36,10 @@ import {TimeZoneBrowserProxy, TimeZoneBrowserProxyImpl} from './timezone_browser
  */
 const TimezoneSubpageElementBase = mixinBehaviors(
     [
-      DeepLinkingBehavior, PrefsBehavior, RouteObserverBehavior,
-      WebUIListenerBehavior
+      DeepLinkingBehavior,
+      PrefsBehavior,
+      RouteObserverBehavior,
+      WebUIListenerBehavior,
     ],
     PolymerElement);
 
@@ -62,11 +65,11 @@ class TimezoneSubpageElement extends TimezoneSubpageElementBase {
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
-        value: () => new Set([chromeos.settings.mojom.Setting.kChangeTimeZone]),
+        value: () => new Set([Setting.kChangeTimeZone]),
       },
     };
   }
@@ -129,20 +132,20 @@ class TimezoneSubpageElement extends TimezoneSubpageElementBase {
     }
     result.push({
       value: TimeZoneAutoDetectMethod.IP_ONLY,
-      name: loadTimeData.getString('setTimeZoneAutomaticallyIpOnlyDefault')
+      name: loadTimeData.getString('setTimeZoneAutomaticallyIpOnlyDefault'),
     });
 
     if (pref.value === TimeZoneAutoDetectMethod.SEND_WIFI_ACCESS_POINTS) {
       result.push({
         value: TimeZoneAutoDetectMethod.SEND_WIFI_ACCESS_POINTS,
         name: loadTimeData.getString(
-            'setTimeZoneAutomaticallyWithWiFiAccessPointsData')
+            'setTimeZoneAutomaticallyWithWiFiAccessPointsData'),
       });
     }
     result.push({
       value: TimeZoneAutoDetectMethod.SEND_ALL_LOCATION_INFO,
       name:
-          loadTimeData.getString('setTimeZoneAutomaticallyWithAllLocationInfo')
+          loadTimeData.getString('setTimeZoneAutomaticallyWithAllLocationInfo'),
     });
     return result;
   }

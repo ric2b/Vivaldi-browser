@@ -68,6 +68,7 @@ ThreadSafePartitionRoot* CreatePartitionRoot() {
         PartitionOptions::Quarantine::kAllowed,
         PartitionOptions::Cookie::kDisallowed,
         PartitionOptions::BackupRefPtr::kDisabled,
+        PartitionOptions::BackupRefPtrZapping::kDisabled,
         PartitionOptions::UseConfigurablePool::kNo,
   });
 
@@ -205,7 +206,8 @@ TEST_P(PartitionAllocThreadCacheTest, Simple) {
   EXPECT_EQ(kFillCountForSmallBucket, tcache->bucket_count_for_testing(index));
 
   void* ptr2 = root_->Alloc(kSmallSize, "");
-  EXPECT_EQ(internal::UnmaskPtr(ptr), internal::UnmaskPtr(ptr2));
+  // MTE-untag, because Free() changes tag.
+  EXPECT_EQ(UntagPtr(ptr), UntagPtr(ptr2));
   // Allocated from the thread cache.
   EXPECT_EQ(kFillCountForSmallBucket - 1,
             tcache->bucket_count_for_testing(index));
@@ -232,7 +234,8 @@ TEST_P(PartitionAllocThreadCacheTest, InexactSizeMatch) {
   EXPECT_EQ(kFillCountForSmallBucket, tcache->bucket_count_for_testing(index));
 
   void* ptr2 = root_->Alloc(kSmallSize + 1, "");
-  EXPECT_EQ(internal::UnmaskPtr(ptr), internal::UnmaskPtr(ptr2));
+  // MTE-untag, because Free() changes tag.
+  EXPECT_EQ(UntagPtr(ptr), UntagPtr(ptr2));
   // Allocated from the thread cache.
   EXPECT_EQ(kFillCountForSmallBucket - 1,
             tcache->bucket_count_for_testing(index));
@@ -275,6 +278,7 @@ TEST_P(PartitionAllocThreadCacheTest, NoCrossPartitionCache) {
       PartitionOptions::Quarantine::kAllowed,
       PartitionOptions::Cookie::kDisallowed,
       PartitionOptions::BackupRefPtr::kDisabled,
+      PartitionOptions::BackupRefPtrZapping::kDisabled,
       PartitionOptions::UseConfigurablePool::kNo,
   });
 
@@ -461,8 +465,7 @@ TEST_P(PartitionAllocThreadCacheTest, ThreadCacheReclaimedWhenThreadExits) {
   void* this_thread_ptr = root_->Alloc(kMediumSize, "");
   // |other_thread_ptr| was returned to the central allocator, and is returned
   // here, as it comes from the freelist.
-  EXPECT_EQ(internal::UnmaskPtr(this_thread_ptr),
-            internal::UnmaskPtr(other_thread_ptr));
+  EXPECT_EQ(UntagPtr(this_thread_ptr), UntagPtr(other_thread_ptr));
   root_->Free(other_thread_ptr);
 
   for (void* ptr : tmp)
@@ -1236,7 +1239,8 @@ TEST(AlternateBucketDistributionTest, SizeToIndex) {
   // The first two buckets (each power of two and the next bucket up) remain
   // the same between the two bucket distributions.
   size_t expected_index = BucketIndexLookup::GetIndex(1 << 8);
-  for (size_t i = 1 << 8; i < 1 << 19; i <<= 1) {
+  for (size_t i = 1 << 8; i < internal::kHighThresholdForAlternateDistribution;
+       i <<= 1) {
     // The first two buckets in the order should match up to the normal bucket
     // distribution.
     for (size_t offset = 0; offset < 2; offset++) {
@@ -1263,7 +1267,8 @@ TEST(AlternateBucketDistributionTest, SizeToIndex) {
 
   // The rest of the buckets all match up exactly with the existing
   // bucket distribution.
-  for (size_t i = 1 << 19; i < internal::kMaxBucketed; i <<= 1) {
+  for (size_t i = internal::kHighThresholdForAlternateDistribution;
+       i < internal::kMaxBucketed; i <<= 1) {
     for (size_t offset = 0; offset < 4; offset++) {
       size_t n = i * (4 + offset) / 4;
       EXPECT_EQ(BucketIndexLookup::GetIndex(n),

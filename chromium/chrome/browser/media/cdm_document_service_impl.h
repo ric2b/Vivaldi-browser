@@ -40,10 +40,6 @@ class CdmDocumentServiceImpl final
       content::RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<media::mojom::CdmDocumentService> receiver);
 
-  CdmDocumentServiceImpl(
-      content::RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<media::mojom::CdmDocumentService> receiver);
-
   // media::mojom::CdmDocumentService implementation.
   void ChallengePlatform(const std::string& service_id,
                          const std::string& challenge,
@@ -56,7 +52,7 @@ class CdmDocumentServiceImpl final
   void GetMediaFoundationCdmData(
       GetMediaFoundationCdmDataCallback callback) final;
   void SetCdmClientToken(const std::vector<uint8_t>& client_token) final;
-  void OnCdmEvent(media::CdmEvent event) final;
+  void OnCdmEvent(media::CdmEvent event, uint32_t hresult) final;
 
   static void ClearCdmData(
       Profile* profile,
@@ -67,6 +63,10 @@ class CdmDocumentServiceImpl final
 #endif  // BUILDFLAG(IS_WIN)
 
  private:
+  CdmDocumentServiceImpl(
+      content::RenderFrameHost& render_frame_host,
+      mojo::PendingReceiver<media::mojom::CdmDocumentService> receiver);
+
   // |this| can only be destructed as a DocumentService.
   ~CdmDocumentServiceImpl() final;
 
@@ -100,7 +100,6 @@ class CdmDocumentServiceImpl final
   bool has_reported_significant_playback_ = false;
 #endif
 
-  const raw_ptr<content::RenderFrameHost> render_frame_host_;
   base::WeakPtrFactory<CdmDocumentServiceImpl> weak_factory_{this};
 };
 

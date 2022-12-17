@@ -7,10 +7,10 @@
  * the settings page.
  */
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import '../i18n_setup.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import './passwords_shared.css.js';
 
 import {I18nMixin} from '//resources/js/i18n_mixin.js';
@@ -47,11 +47,23 @@ class SettingsCreditCardListEntryElement extends
         },
         readOnly: true,
       },
+
+      /**
+       * Whether virtual card metadata on settings page is enabled.
+       */
+      virtualCardMetadataEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('virtualCardMetadataEnabled');
+        },
+        readOnly: true,
+      },
     };
   }
 
   creditCard: chrome.autofillPrivate.CreditCardEntry;
   private virtualCardEnrollmentEnabled_: boolean;
+  private virtualCardMetadataEnabled_: boolean;
 
   /**
    * Opens the credit card action menu.
@@ -63,7 +75,7 @@ class SettingsCreditCardListEntryElement extends
       detail: {
         creditCard: this.creditCard,
         anchorElement: this.shadowRoot!.querySelector('#creditCardMenu'),
-      }
+      },
     }));
   }
 
@@ -120,6 +132,32 @@ class SettingsCreditCardListEntryElement extends
   private isVirtualCardEnrolled_(): boolean {
     return this.virtualCardEnrollmentEnabled_ &&
         this.creditCard.metadata!.isVirtualCardEnrolled!;
+  }
+
+  private isVirtualCardMetadataEnabled_(): boolean {
+    return this.virtualCardMetadataEnabled_;
+  }
+
+  private shouldShowVirtualCardLabel_(): boolean {
+    return this.isVirtualCardEnrolled_() &&
+        !this.isVirtualCardMetadataEnabled_();
+  }
+
+  private shouldShowSecondarySublabel_(): boolean {
+    return !!(this.creditCard.metadata!.summarySublabel!.trim() !== '' ||
+              this.isVirtualCardEnrolled_() ||
+              this.isVirtualCardEnrollmentEligible_()) &&
+        this.isVirtualCardMetadataEnabled_();
+  }
+
+  private getSecondarySublabel_(): string {
+    if (this.isVirtualCardEnrolled_()) {
+      return this.i18nAdvanced('virtualCardTurnedOn');
+    }
+    if (this.isVirtualCardEnrollmentEligible_()) {
+      return this.i18nAdvanced('virtualCardAvailable');
+    }
+    return this.creditCard.metadata!.summarySublabel!;
   }
 }
 

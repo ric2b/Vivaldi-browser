@@ -26,7 +26,7 @@
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
 // Needed by remoting sender.
-#include "media/mojo/mojom/remoting.mojom.h"
+#include "media/mojo/mojom/remoting.mojom.h"  // nogncheck
 #endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
 namespace blink {
@@ -104,7 +104,8 @@ class MediaFactory {
       viz::FrameSinkId parent_frame_sink_id,
       const cc::LayerTreeSettings& settings,
       scoped_refptr<base::SingleThreadTaskRunner>
-          main_thread_compositor_task_runner);
+          main_thread_compositor_task_runner,
+      scoped_refptr<base::TaskRunner> compositor_worker_task_runner);
 
   // Provides an EncryptedMediaClient to connect blink's EME layer to media's
   // implementation of requestMediaKeySystemAccess. Will always return the same
@@ -112,9 +113,13 @@ class MediaFactory {
   blink::WebEncryptedMediaClient* EncryptedMediaClient();
 
   // Returns `DecoderFactory`, which can be used to created decoders in WebRTC.
+  // Can be dereferenced only on the media thread.
   base::WeakPtr<media::DecoderFactory> GetDecoderFactory();
 
  private:
+  // Initializes `decoder_factory_` if it hasn't been initialized yet.
+  void EnsureDecoderFactory();
+
   std::unique_ptr<media::RendererFactorySelector> CreateRendererFactorySelector(
       media::MediaLog* media_log,
       blink::WebURL url,
@@ -131,7 +136,8 @@ class MediaFactory {
       viz::FrameSinkId parent_frame_sink_id,
       const cc::LayerTreeSettings& settings,
       scoped_refptr<base::SingleThreadTaskRunner>
-          main_thread_compositor_task_runner);
+          main_thread_compositor_task_runner,
+      scoped_refptr<base::TaskRunner> compositor_worker_task_runner);
 
   // Returns the media delegate for WebMediaPlayer usage.  If
   // |media_player_delegate_| is NULL, one is created.

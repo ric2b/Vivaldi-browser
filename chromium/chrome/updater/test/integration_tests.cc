@@ -32,6 +32,7 @@
 #include "chrome/updater/test/integration_test_commands.h"
 #include "chrome/updater/test/integration_tests_impl.h"
 #include "chrome/updater/test/server.h"
+#include "chrome/updater/test_scope.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
@@ -173,6 +174,10 @@ class IntegrationTest : public ::testing::Test {
         app_id, command_id, parameters, expected_exit_code);
   }
 
+  void ExpectLegacyPolicyStatusSucceeds() {
+    test_commands_->ExpectLegacyPolicyStatusSucceeds();
+  }
+
   void RunUninstallCmdLine() { test_commands_->RunUninstallCmdLine(); }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -240,6 +245,8 @@ class IntegrationTest : public ::testing::Test {
   }
 
   void UpdateAll() { test_commands_->UpdateAll(); }
+
+  void DeleteUpdaterDirectory() { test_commands_->DeleteUpdaterDirectory(); }
 
   base::FilePath GetDifferentUserPath() {
     return test_commands_->GetDifferentUserPath();
@@ -335,6 +342,34 @@ TEST_F(IntegrationTest, InstallUninstall) {
   // library separation for the public, private, and legacy interfaces.
   ExpectInterfacesRegistered();
 #endif  // BUILDFLAG(IS_WIN)
+  Uninstall();
+}
+
+TEST_F(IntegrationTest, OverinstallWorking) {
+  SetupRealUpdaterLowerVersion();
+  WaitForUpdaterExit();
+  ExpectVersionNotActive(kUpdaterVersion);
+
+  // A new version hands off installation to the old version, and doesn't
+  // change the active version of the updater.
+  Install();
+  WaitForUpdaterExit();
+  ExpectVersionNotActive(kUpdaterVersion);
+
+  Uninstall();
+}
+
+TEST_F(IntegrationTest, OverinstallBroken) {
+  SetupRealUpdaterLowerVersion();
+  WaitForUpdaterExit();
+  DeleteUpdaterDirectory();
+
+  // Since the old version is not working, the new version should install and
+  // become active.
+  Install();
+  WaitForUpdaterExit();
+  ExpectVersionActive(kUpdaterVersion);
+
   Uninstall();
 }
 
@@ -462,6 +497,33 @@ TEST_F(IntegrationTest, UpdateApp) {
   Clean();
 }
 
+#if BUILDFLAG(IS_WIN)
+TEST_F(IntegrationTest, ForceInstallApp) {
+  ScopedServer test_server(test_commands_);
+  Install();
+
+  base::Value::Dict group_policies;
+  group_policies.Set("Installtest1", GetTestScope() == UpdaterScope::kSystem
+                                         ? kPolicyForceInstallMachine
+                                         : kPolicyForceInstallUser);
+  SetGroupPolicies(group_policies);
+
+  const std::string kAppId("test1");
+  base::Version v0point1("0.1");
+  base::Version v1("1");
+  ExpectUpdateSequence(&test_server, kAppId, "", base::Version("0.0.0.0"),
+                       v0point1);
+  ExpectUpdateSequence(&test_server, kAppId, "", v0point1, v1);
+  RunWake(0);
+
+  WaitForUpdaterExit();
+  ExpectAppVersion(kAppId, v1);
+
+  Uninstall();
+  Clean();
+}
+#endif  // BUILDFLAG(IS_WIN)
+
 TEST_F(IntegrationTest, MultipleWakesOneNetRequest) {
   ScopedServer test_server(test_commands_);
   Install();
@@ -488,7 +550,7 @@ TEST_F(IntegrationTest, MultipleUpdateAllsMultipleNetRequests) {
   Clean();
 }
 
-#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_WIN)
 TEST_F(IntegrationTest, LegacyUpdate3Web) {
   ScopedServer test_server(test_commands_);
   Install();
@@ -538,6 +600,22 @@ TEST_F(IntegrationTest, LegacyAppCommandWeb) {
   Uninstall();
 }
 
+TEST_F(IntegrationTest, LegacyPolicyStatus) {
+  ScopedServer test_server(test_commands_);
+  Install();
+
+  const std::string kAppId("test");
+  InstallApp(kAppId);
+  base::Version v1("1");
+  ExpectUpdateSequence(&test_server, kAppId, "", base::Version("0.1"), v1);
+  RunWake(0);
+  ExpectAppVersion(kAppId, v1);
+
+  ExpectLegacyPolicyStatusSucceeds();
+
+  Uninstall();
+}
+
 TEST_F(IntegrationTest, UninstallCmdLine) {
   Install();
   ExpectInstalled();
@@ -557,7 +635,7 @@ TEST_F(IntegrationTest, UninstallCmdLine) {
   WaitForUpdaterExit();
   ExpectClean();
 }
-#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(IS_WIN)
 
 TEST_F(IntegrationTest, UnregisterUninstalledApp) {
   Install();
@@ -634,17 +712,15 @@ TEST_F(IntegrationTest, UnregisterUnownedApp) {
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(CHROMIUM_BRANDING) || BUILDFLAG(GOOGLE_CHROME_BRANDING)
-// TODO(crbug.com/1268555): Even on Windows, component builds do not work.
 #if !defined(COMPONENT_BUILD)
-// TODO(crbug.com/1340482) - disable the test on branches because it is flaky.
-TEST_F(IntegrationTest, DISABLED_SelfUpdateFromOldReal) {
+// Disabled on Windows due to high flake rate; see https://crbug.com/1341471.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_SelfUpdateFromOldReal DISABLED_SelfUpdateFromOldReal
+#else
+#define MAYBE_SelfUpdateFromOldReal SelfUpdateFromOldReal
+#endif
+TEST_F(IntegrationTest, MAYBE_SelfUpdateFromOldReal) {
   ScopedServer test_server(test_commands_);
-
-  // TODO(crbug.com/1308856): Current versions of the updater do not send an
-  // eventtype=2 event for their own registration, but the old version of the
-  // updater does. When the old version is rolled to a more current version,
-  // this test may start to fail and this expectation can be safely removed.
-  ExpectInstallEvent(&test_server, kUpdaterAppId);
 
   SetupRealUpdaterLowerVersion();
   ExpectVersionNotActive(kUpdaterVersion);
@@ -669,7 +745,14 @@ TEST_F(IntegrationTest, DISABLED_SelfUpdateFromOldReal) {
 #endif
 #endif
 
-TEST_F(IntegrationTest, UpdateServiceStress) {
+// TODO(crbug.com/1336591) - enable test after investigating crbug.com/1336591
+// or open a new crbug for debugging this test if it is the culprit.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_UpdateServiceStress DISABLED_UpdateServiceStress
+#else
+#define MAYBE_UpdateServiceStress UpdateServiceStress
+#endif
+TEST_F(IntegrationTest, MAYBE_UpdateServiceStress) {
   Install();
   ExpectInstalled();
   StressUpdateService();

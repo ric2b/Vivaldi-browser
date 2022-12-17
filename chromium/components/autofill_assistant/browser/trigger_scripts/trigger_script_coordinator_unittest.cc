@@ -13,9 +13,11 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
+#include "components/autofill_assistant/browser/fake_common_dependencies.h"
 #include "components/autofill_assistant/browser/fake_starter_platform_delegate.h"
 #include "components/autofill_assistant/browser/features.h"
-#include "components/autofill_assistant/browser/mock_website_login_manager.h"
+#include "components/autofill_assistant/browser/mock_assistant_field_trial_util.h"
+#include "components/autofill_assistant/browser/public/password_change/mock_website_login_manager.h"
 #include "components/autofill_assistant/browser/service/mock_service_request_sender.h"
 #include "components/autofill_assistant/browser/test_util.h"
 #include "components/autofill_assistant/browser/trigger_scripts/mock_dynamic_trigger_conditions.h"
@@ -27,6 +29,7 @@
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/version_info/version_info.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
@@ -196,9 +199,13 @@ TEST_F(TriggerScriptCoordinatorTest, StartSendsOnlyApprovedFields) {
         expected_client_context.mutable_chrome()->set_chrome_version(
             version_info::GetProductNameAndVersionForUserAgent());
         expected_client_context.set_is_in_chrome_triggered(true);
+        expected_client_context.set_locale("fr-CH");
+        expected_client_context.set_country("CH");
         EXPECT_THAT(request.client_context(), Eq(expected_client_context));
       });
 
+  fake_platform_delegate_.fake_common_dependencies_.locale_.assign("fr-CH");
+  fake_platform_delegate_.fake_common_dependencies_.country_code_.assign("CH");
   coordinator_->Start(GURL(kFakeDeepLink),
                       std::make_unique<TriggerContext>(
                           /* params = */ std::make_unique<ScriptParameters>(
@@ -208,7 +215,9 @@ TEST_F(TriggerScriptCoordinatorTest, StartSendsOnlyApprovedFields) {
                           /* onboarding_shown = */ true,
                           /* is_direct_action = */ true,
                           /* initial_url = */ "https://www.example.com",
-                          /* is_in_chrome_triggered = */ true),
+                          /* is_in_chrome_triggered = */ true,
+                          /* is_externally_triggered = */ false,
+                          /* skip_autofill_assistant_onboarding = */ false),
                       mock_callback_.Get());
 }
 
@@ -1329,6 +1338,59 @@ TEST_F(TriggerScriptCoordinatorTest, BackendCanOverrideScriptParameters) {
                                    std::make_pair("name_3", "value_3")));
 }
 
+TEST_F(TriggerScriptCoordinatorTest, RegisterSyntheticFieldTrial) {
+  auto mock_field_trial_util =
+      std::make_unique<NiceMock<MockAssistantFieldTrialUtil>>();
+  const auto* mock_field_trial_util_ptr = mock_field_trial_util.get();
+  fake_platform_delegate_.field_trial_util_ = std::move(mock_field_trial_util);
+
+  GetTriggerScriptsResponseProto response;
+  response.add_trigger_scripts();
+  auto* param_1 = response.add_script_parameters();
+  param_1->set_name("EXPERIMENT_IDS");
+  param_1->set_value("1337,1002,1001");
+  auto* trial_1 = response.add_script_parameters();
+  trial_1->set_name("FIELD_TRIAL_1");
+  trial_1->set_value("1001");
+  auto* trial_2 = response.add_script_parameters();
+  trial_2->set_name("FIELD_TRIAL_2");
+  trial_2->set_value("1002");
+
+  std::string serialized_response;
+  response.SerializeToString(&serialized_response);
+
+  EXPECT_CALL(
+      *mock_request_sender_,
+      OnSendRequest(GURL(kFakeServerUrl), _, _, RpcType::GET_TRIGGER_SCRIPTS))
+      .WillOnce(RunOnceCallback<2>(net::HTTP_OK, serialized_response,
+                                   ServiceRequestSender::ResponseInfo{}));
+  EXPECT_CALL(*mock_field_trial_util_ptr,
+              RegisterSyntheticFieldTrial(
+                  base::StringPiece("AutofillAssistantTriggered"),
+                  base::StringPiece("Enabled")));
+  EXPECT_CALL(*mock_field_trial_util_ptr,
+              RegisterSyntheticFieldTrial(
+                  base::StringPiece("AutofillAssistantExperimentsTrial-1"),
+                  base::StringPiece("1001")));
+  EXPECT_CALL(*mock_field_trial_util_ptr,
+              RegisterSyntheticFieldTrial(
+                  base::StringPiece("AutofillAssistantExperimentsTrial-2"),
+                  base::StringPiece("1002")));
+
+  // Backwards compatibility.
+  // TODO(b/242171397): Remove
+  EXPECT_CALL(*mock_field_trial_util_ptr,
+              RegisterSyntheticFieldTrial(
+                  base::StringPiece("AutofillAssistantExperimentsTrial"),
+                  base::StringPiece("1001")));
+
+  coordinator_->Start(
+      GURL(kFakeDeepLink),
+      std::make_unique<TriggerContext>(std::make_unique<ScriptParameters>(),
+                                       TriggerContext::Options()),
+      mock_callback_.Get());
+}
+
 TEST_F(TriggerScriptCoordinatorTest, UiTimeoutWhileShown) {
   GetTriggerScriptsResponseProto response;
   TriggerScriptProto* script = response.add_trigger_scripts();
@@ -1643,6 +1705,9 @@ class TriggerScriptCoordinatorPrerenderTest
 };
 
 TEST_F(TriggerScriptCoordinatorPrerenderTest, DoNotRecordIfPrerenderingFailed) {
+  content::test::ScopedPrerenderWebContentsDelegate web_contents_delegate(
+      *web_contents());
+
   GetTriggerScriptsResponseProto response;
   response.add_trigger_scripts();
   std::string serialized_response;

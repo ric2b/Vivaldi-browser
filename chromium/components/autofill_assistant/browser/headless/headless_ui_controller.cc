@@ -122,6 +122,16 @@ bool HeadlessUiController::SetForm(
   VLOG(2) << "Unexpected UI method called: " << __func__;
   return false;
 }
+void HeadlessUiController::ShowQrCodeScanUi(
+    std::unique_ptr<PromptQrCodeScanProto> qr_code_scan,
+    base::OnceCallback<void(const ClientStatus&,
+                            const absl::optional<ValueProto>&)> callback) {
+  VLOG(2) << "Unexpected UI method called: " << __func__;
+}
+
+void HeadlessUiController::ClearQrCodeScanUi() {
+  VLOG(2) << "Unexpected UI method called: " << __func__;
+}
 void HeadlessUiController::SetGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
     base::OnceCallback<void(const ClientStatus&)> end_action_callback,
@@ -165,6 +175,16 @@ const CollectUserDataOptions*
 HeadlessUiController::GetLastSuccessfulUserDataOptions() const {
   VLOG(2) << "Unexpected UI method called: " << __func__;
   return nullptr;
+}
+
+void HeadlessUiController::OnTouchableAreaChanged(
+    const RectF& visual_viewport,
+    const std::vector<RectF>& touchable_areas,
+    const std::vector<RectF>& restricted_areas) {
+  if (action_extension_delegate_) {
+    action_extension_delegate_->OnTouchableAreaChanged(
+        visual_viewport, touchable_areas, restricted_areas);
+  }
 }
 
 }  // namespace autofill_assistant

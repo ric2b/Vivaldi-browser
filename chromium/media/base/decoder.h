@@ -27,8 +27,6 @@ enum class AudioDecoderType : int {
   kMediaFoundation = 8,  // MediaFoundationAudioDecoder
 
 
-  kVivWMFDecoder,
-  kVivATAudio,
   kVivPassThrough,
 
   // Keep this at the end and equal to the last entry.

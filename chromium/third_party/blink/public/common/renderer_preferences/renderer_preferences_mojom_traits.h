@@ -251,21 +251,6 @@ struct BLINK_COMMON_EXPORT
     return data.allow_tab_cycle_from_webpage_into_ui;
   }
 
-  static const bool& should_show_images(
-      const ::blink::RendererPreferences& data) {
-    return data.should_show_images;
-  }
-
-  static const bool& should_ask_plugin_content(
-      const ::blink::RendererPreferences& data) {
-    return data.should_ask_plugin_content;
-  }
-
-  static const bool& should_enable_plugin_content(
-      const ::blink::RendererPreferences& data) {
-    return data.should_enable_plugin_content;
-  }
-
   static const bool& serve_resources_only_from_cache(
       const ::blink::RendererPreferences& data) {
     return data.serve_resources_only_from_cache;

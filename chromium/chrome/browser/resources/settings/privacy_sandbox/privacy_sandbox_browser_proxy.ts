@@ -7,53 +7,35 @@ import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
 // clang-format on
 
 /**
- * Information about the user's current FLoC cohort identifier.
- */
-export type FlocIdentifier = {
-  trialStatus: string,
-  cohort: string,
-  nextUpdate: string,
-  canReset: boolean,
-};
-
-/**
  * A user interest to display. There must only be one of |topic| or |site| set.
  */
-export type PrivacySandboxInterest = {
-  removed: boolean,
-  topic?: CanonicalTopic,
-  site?: string,
-};
+export interface PrivacySandboxInterest {
+  removed: boolean;
+  topic?: CanonicalTopic;
+  site?: string;
+}
 
-export type FledgeState = {
-  joiningSites: Array<string>,
-  blockedSites: Array<string>,
-};
+export interface FledgeState {
+  joiningSites: string[];
+  blockedSites: string[];
+}
 
 /**
  * The canonical form of a Topics API topic. Must be kept in sync with the
  * version at components/privacy_sandbox/canonical_topic.h.
  */
-export type CanonicalTopic = {
-  topicId: number,
-  taxonomyVersion: number,
-  displayString: string,
-};
+export interface CanonicalTopic {
+  topicId: number;
+  taxonomyVersion: number;
+  displayString: string;
+}
 
-export type TopicsState = {
-  topTopics: Array<CanonicalTopic>,
-  blockedTopics: Array<CanonicalTopic>,
-};
+export interface TopicsState {
+  topTopics: CanonicalTopic[];
+  blockedTopics: CanonicalTopic[];
+}
 
 export interface PrivacySandboxBrowserProxy {
-  /**
-   * Gets the user's current FLoC cohort identifier information.
-   */
-  getFlocId(): Promise<FlocIdentifier>;
-
-  /** Resets the user's FLoC cohort identifier. */
-  resetFlocId(): void;
-
   /** Retrieves the user's current FLEDGE state. */
   getFledgeState(): Promise<FledgeState>;
 
@@ -69,14 +51,6 @@ export interface PrivacySandboxBrowserProxy {
 
 export class PrivacySandboxBrowserProxyImpl implements
     PrivacySandboxBrowserProxy {
-  getFlocId() {
-    return sendWithPromise('getFlocId');
-  }
-
-  resetFlocId() {
-    chrome.send('resetFlocId');
-  }
-
   getFledgeState() {
     return sendWithPromise('getFledgeState');
   }

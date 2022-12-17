@@ -22,14 +22,13 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/service_utils.h"
-#include "gpu/command_buffer/service/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,6 +37,7 @@
 #include "ui/gl/gl_context_stub.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface_stub.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 namespace gpu {
@@ -172,7 +172,8 @@ class RecordReplayContext : public GpuControl {
       gl::GLContextAttribs attribs;
       if (gpu_preferences_.use_passthrough_cmd_decoder)
         attribs.bind_generates_resource = bind_generates_resource;
-      surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+      surface_ = gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(),
+                                                    gfx::Size());
       context_ = gl::init::CreateGLContext(share_group_.get(), surface_.get(),
                                            attribs);
     }
@@ -182,7 +183,7 @@ class RecordReplayContext : public GpuControl {
     scoped_refptr<gles2::ContextGroup> context_group = new gles2::ContextGroup(
         gpu_preferences_, true, &mailbox_manager_, nullptr /* memory_tracker */,
         &translator_cache_, &completeness_cache_, feature_info,
-        bind_generates_resource, &image_manager_, nullptr /* image_factory */,
+        bind_generates_resource, nullptr /* image_factory */,
         nullptr /* progress_reporter */, GpuFeatureInfo(),
         &discardable_manager_, &passthrough_discardable_manager_,
         &shared_image_manager_);
@@ -321,7 +322,6 @@ class RecordReplayContext : public GpuControl {
 
   gles2::MailboxManagerImpl mailbox_manager_;
   scoped_refptr<gl::GLShareGroup> share_group_;
-  gles2::ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
   PassthroughDiscardableManager passthrough_discardable_manager_;
   SharedImageManager shared_image_manager_;

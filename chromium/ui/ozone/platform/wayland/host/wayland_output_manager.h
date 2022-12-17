@@ -5,6 +5,7 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_OUTPUT_MANAGER_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_OUTPUT_MANAGER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 
 #include <memory>
@@ -23,6 +24,8 @@ class WaylandOutput;
 
 class WaylandOutputManager : public WaylandOutput::Delegate {
  public:
+  using OutputList = base::flat_map<uint32_t, std::unique_ptr<WaylandOutput>>;
+
   explicit WaylandOutputManager(WaylandConnection* connection);
 
   WaylandOutputManager(const WaylandOutputManager&) = delete;
@@ -39,6 +42,7 @@ class WaylandOutputManager : public WaylandOutput::Delegate {
 
   void InitializeAllXdgOutputs();
   void InitializeAllZAuraOutputs();
+  void InitializeAllColorManagementOutputs();
 
   // Creates a platform screen.
   std::unique_ptr<WaylandScreen> CreateWaylandScreen();
@@ -48,6 +52,7 @@ class WaylandOutputManager : public WaylandOutput::Delegate {
 
   WaylandOutput* GetOutput(uint32_t id) const;
   WaylandOutput* GetPrimaryOutput() const;
+  const OutputList& GetAllOutputs() const;
 
   WaylandScreen* wayland_screen() const { return wayland_screen_.get(); }
 
@@ -60,13 +65,12 @@ class WaylandOutputManager : public WaylandOutput::Delegate {
                              const gfx::Insets& insets,
                              float scale_factor,
                              int32_t panel_transform,
-                             int32_t logical_transform) override;
-
-  using OutputList = base::flat_map<uint32_t, std::unique_ptr<WaylandOutput>>;
+                             int32_t logical_transform,
+                             const std::string& label) override;
 
   OutputList output_list_;
 
-  WaylandConnection* const connection_;
+  const raw_ptr<WaylandConnection> connection_;
 
   // Non-owned wayland screen instance.
   base::WeakPtr<WaylandScreen> wayland_screen_;

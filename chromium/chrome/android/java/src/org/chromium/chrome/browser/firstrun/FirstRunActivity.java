@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.firstrun;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -21,9 +22,9 @@ import androidx.viewpager2.widget.ViewPager2;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
+import org.chromium.base.Promise;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.BooleanSupplier;
-import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BackPressHelper;
@@ -43,11 +44,13 @@ import java.util.BitSet;
 import java.util.List;
 
 // Vivaldi
+import android.content.Intent;
+
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.widget.Toast;
 import org.vivaldi.browser.common.VivaldiUtils;
-import org.vivaldi.browser.firstrun.VivaldiWelcomeFragment;
+import org.vivaldi.browser.firstrun.VivaldiFirstRunFragment;
 
 /**
  * Handles the First Run Experience sequences shown to the user launching Chrome for the first time.
@@ -104,9 +107,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     private static FirstRunActivityObserver sObserver;
 
     private boolean mPostNativeAndPolicyPagesCreated;
-    // Use hasValue() to simplify access. Will be null before initialized.
-    private final OneshotSupplierImpl<Boolean> mNativeSideIsInitializedSupplier =
-            new OneshotSupplierImpl<>();
+    /** Use {@link Promise#isFulfilled()} to verify whether the native has been initialized. */
+    private final Promise<Void> mNativeInitializationPromise = new Promise<>();
 
     private FirstRunFlowSequencer mFirstRunFlowSequencer;
 
@@ -156,7 +158,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         } else {
 		        // Vivaldi - Welcome Page changes
 		        FirstRunPage firstRunPage = ChromeApplicationImpl.isVivaldi()
-		                ? new FirstRunPage<>(VivaldiWelcomeFragment.class, showWelcomePage)
+		                ? new FirstRunPage<>(VivaldiFirstRunFragment.class, showWelcomePage)
 		                : new FirstRunPage<>(ToSAndUMAFirstRunFragment.class, showWelcomePage);
 
             // TODO(crbug.com/1111490): Revisit during post-MVP.
@@ -338,7 +340,10 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     }
 
     private void onNativeDependenciesFullyInitialized() {
-        mNativeSideIsInitializedSupplier.set(true);
+        // Vivaldi
+        mIsNativeInitialized = true;
+
+        mNativeInitializationPromise.fulfill(null);
 
         onInternalStateChanged();
     }
@@ -371,7 +376,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     }
 
     private boolean areNativeAndPoliciesInitialized() {
-        return mNativeSideIsInitializedSupplier.hasValue() && isFlowKnown()
+        return mNativeInitializationPromise.isFulfilled() && isFlowKnown()
                 && this.getPolicyLoadListener().get() != null;
     }
 
@@ -383,13 +388,13 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         FirstRunFragment page = (FirstRunFragment) fragment;
         // Delay notifying the child page until native and the TemplateUrlService are initialized.
-        // Tracked by mNativeSideIsInitializedSupplier is ready. Otherwise if the next page handles
+        // Tracked by mNativeSideIsInitialized is ready. Otherwise if the next page handles
         // the default search engine, it will be missing dependencies. See https://crbug.com/1275950
         // for when this didn't work.
-        if (mNativeSideIsInitializedSupplier.hasValue()) {
+        if (mNativeInitializationPromise.isFulfilled()) {
             page.onNativeInitialized();
         } else {
-            mNativeSideIsInitializedSupplier.onAvailable((ignored) -> page.onNativeInitialized());
+            mNativeInitializationPromise.then((ignored) -> { page.onNativeInitialized(); });
         }
     }
 
@@ -549,7 +554,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
     @Override
     public void acceptTermsOfService(boolean allowCrashUpload) {
-        assert mNativeSideIsInitializedSupplier.hasValue();
+        assert mNativeInitializationPromise.isFulfilled();
 
         // If default is true then it corresponds to opt-out and false corresponds to opt-in.
         UmaUtils.recordMetricsReportingDefaultOptIn(!DEFAULT_METRICS_AND_CRASH_REPORTING);
@@ -638,14 +643,20 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                 this, LocalizationUtils.substituteLocalePlaceholder(getString(url)));
     }
 
-    @VisibleForTesting
-    boolean hasPages() {
-        return mPagerAdapter != null && mPagerAdapter.getItemCount() > 0;
+    @Override
+    public Promise<Void> getNativeInitializationPromise() {
+        return mNativeInitializationPromise;
+    }
+
+    @Override
+    public boolean canUseLandscapeLayout() {
+        return !getResources().getConfiguration().isLayoutSizeAtLeast(
+                Configuration.SCREENLAYOUT_SIZE_LARGE);
     }
 
     @VisibleForTesting
-    public boolean isNativeSideIsInitializedForTest() {
-        return mNativeSideIsInitializedSupplier.hasValue();
+    boolean hasPages() {
+        return mPagerAdapter != null && mPagerAdapter.getItemCount() > 0;
     }
 
     @VisibleForTesting
@@ -657,5 +668,19 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     public static void setObserverForTest(FirstRunActivityObserver observer) {
         assert sObserver == null;
         sObserver = observer;
+    }
+
+    // Vivaldi
+    public boolean mIsNativeInitialized;
+
+    /** Vivaldi - Default browser support **/
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == VivaldiUtils.DEFAULT_BROWSER_ROLE_REQUEST_CODE) {
+            // We don't allow sending usage statistics or crash report to Google
+            acceptTermsOfService(false);
+            advanceToNextPage();
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 }

@@ -74,6 +74,7 @@ class Action {
   virtual bool RewriteEvent(const ui::Event& origin,
                             const gfx::RectF& content_bounds,
                             const bool is_mouse_locked,
+                            const gfx::Transform* rotation_transform,
                             std::list<ui::TouchEvent>& touch_events,
                             bool& keep_original_event) = 0;
   // Get the UI location in the content view.
@@ -93,6 +94,7 @@ class Action {
   void BindPending();
   // Cancel |pending_binding_|.
   void CancelPendingBind(const gfx::RectF& content_bounds);
+  void ResetPendingBind();
 
   // Restore the input binding back to the original binding.
   void RestoreToDefault(const gfx::RectF& content_bounds);
@@ -103,6 +105,10 @@ class Action {
   bool IsOverlapped(const InputElement& input_element);
   // Return the proto object if the action is customized.
   std::unique_ptr<ActionProto> ConvertToProtoIfCustomized();
+  // Update |touch_down_positions_| for different |content_bounds| or/and
+  // |rotation_transform|.
+  void UpdateTouchDownPositions(const gfx::RectF& content_bounds,
+                                const gfx::Transform* rotation_transform);
 
   InputElement* current_binding() const { return current_binding_.get(); }
   InputElement* original_binding() const { return original_binding_.get(); }
@@ -114,12 +120,15 @@ class Action {
   }
   int id() { return id_; }
   const std::string& name() { return name_; }
-  const std::vector<std::unique_ptr<Position>>& locations() const {
-    return locations_;
+  const std::vector<Position>& original_positions() const {
+    return original_positions_;
+  }
+  const std::vector<gfx::PointF>& touch_down_positions() const {
+    return touch_down_positions_;
   }
   bool require_mouse_locked() const { return require_mouse_locked_; }
   aura::Window* target_window() const { return target_window_; }
-  int current_position_index() const { return current_position_index_; }
+  int current_position_idx() const { return current_position_idx_; }
   const absl::optional<int> touch_id() const { return touch_id_; }
   bool on_left_or_middle_side() const { return on_left_or_middle_side_; }
   bool support_modifier_key() const { return support_modifier_key_; }
@@ -134,9 +143,10 @@ class Action {
  protected:
   explicit Action(aura::Window* window);
 
-  absl::optional<gfx::PointF> CalculateTouchPosition(
-      const gfx::RectF& content_bounds);
   bool IsRepeatedKeyEvent(const ui::KeyEvent& key_event);
+  // Verify the key release event. If it is verified, it continues to simulate
+  // the touch event. Otherwise, consider it as discard.
+  bool VerifyOnKeyRelease(ui::DomCode code);
   void OnTouchReleased();
   void OnTouchCancelled();
   // Process after unbinding the input mapping.
@@ -153,16 +163,18 @@ class Action {
   int id_ = 0;
   // name_ is basically for debugging and not visible to users.
   std::string name_;
-  // Location take turns for each key press if there are more than
-  // one location.
-  std::vector<std::unique_ptr<Position>> locations_;
+  // Position take turns for each key press if there are more than
+  // one positions. This is for original default positions.
+  std::vector<Position> original_positions_;
+  // Touch down root location corresponding to |original_positions_|.
+  std::vector<gfx::PointF> touch_down_positions_;
   // If |require_mouse_locked_| == true, the action takes effect when the mouse
   // is locked. Once the mouse is unlocked, the active actions which need mouse
   // lock will be released.
   bool require_mouse_locked_ = false;
   int parsed_input_sources_ = 0;
   absl::optional<int> touch_id_;
-  size_t current_position_index_ = 0;
+  size_t current_position_idx_ = 0;
   raw_ptr<aura::Window> target_window_;
 
   gfx::PointF last_touch_root_location_;

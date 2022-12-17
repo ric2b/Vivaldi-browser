@@ -30,6 +30,8 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
@@ -40,8 +42,8 @@ import org.chromium.ui.test.util.UiRestriction;
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 // NOTE: Disable online detection so we we'll default to online on test bots with no network.
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ContextualSearchFieldTrial.ONLINE_DETECTION_DISABLED})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@EnableFeatures({ChromeFeatureList.CONTEXTUAL_SEARCH_DISABLE_ONLINE_DETECTION})
 @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
 @Batch(Batch.PER_CLASS)
 public class ContextualSearchTriggerTest extends ContextualSearchInstrumentationBase {
@@ -114,7 +116,6 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
     @Feature({"ContextualSearch"})
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
     public void testNonResolveTrigger(@EnabledFeature int enabledFeature) throws Exception {
-        if (isConfigurationForResolvingGesturesOnly()) return;
         triggerNonResolve("states");
 
         Assert.assertNull(mFakeServer.getSearchTermRequested());
@@ -181,13 +182,10 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
         Assert.assertNull(mSelectionController.getSelectedText());
     }
 
-    /**
-     * Tests that a Tap gesture followed by tapping a non-text character doesn't select.
-     * @SmallTest
-     * @Feature({"ContextualSearch"})
-     * crbug.com/665633
-     */
+    /** Tests that a Tap gesture followed by tapping a non-text element doesn't select. */
     @Test
+    @SmallTest
+    @Feature({"ContextualSearch"})
     @DisabledTest(message = "crbug.com/662104")
     public void testTapGestureFollowedByNonTextTap() throws Exception {
         FeatureList.setTestFeatures(ENABLE_NONE);
@@ -230,7 +228,7 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @DisabledTest(message = "https://crbug.com/1075895")
+    // Previously disabled at https://crbug.com/1075895
     public void testTapGesturesNearbyKeepSelecting() throws Exception {
         FeatureList.setTestFeatures(ENABLE_NONE);
 
@@ -275,9 +273,7 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
         assertLoadedNoUrl();
     }
 
-    /**
-     * Tests that a long-press gesture followed by a tap does not select.
-     */
+    /** Tests that a long-press gesture followed by a tap does not select. */
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
@@ -293,6 +289,20 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
         assertLoadedNoUrl();
     }
 
+    /** Tests suppression of any triggering on small view heights. */
+    @Test
+    @SmallTest
+    @Feature({"ContextualSearch"})
+    @Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @Features.EnableFeatures(ChromeFeatureList.CONTEXTUAL_SEARCH_SUPPRESS_SHORT_VIEW)
+    public void testIsSuppressedOnViewHeight() {
+        // Should not be suppressed with a large value (in pixels).
+        final int ridiculouslyShort = 100;
+        Assert.assertFalse(mContextualSearchManager.isSuppressed(ridiculouslyShort));
+        final int ridiculouslyTall = 50000;
+        Assert.assertTrue(mContextualSearchManager.isSuppressed(ridiculouslyTall));
+    }
+
     //============================================================================================
     // Tap-non-triggering when ARIA annotated as interactive.
     //============================================================================================
@@ -303,7 +313,6 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @DisabledTest(message = "http://crbug.com/1296677")
     public void testTapOnRoleIgnored() throws Exception {
         FeatureList.setTestFeatures(ENABLE_NONE);
 
@@ -320,8 +329,6 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    // Previously flaky and disabled 4/2021.  https://crbug.com/1192285
-    @DisabledTest(message = "https://crbug.com/1291558")
     public void testTapOnARIAIgnored() throws Exception {
         FeatureList.setTestFeatures(ENABLE_NONE);
 
@@ -383,12 +390,11 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    // Previously flaky, disabled 4/2021.  https://crbug.com/1192285
-    @DisabledTest(message = "https://crbug.com/1291558")
+    // Previously flaky, disabled 4/2021.  https://crbug.com/1192285, https://crbug.com/1291558
     public void testPreventHandlingCurrentSelectionModification() throws Exception {
         FeatureList.setTestFeatures(ENABLE_NONE);
 
-        simulateNonResolveSearch("search");
+        longPressNode("search");
 
         // Dismiss the Contextual Search panel.
         closePanel();
@@ -407,7 +413,7 @@ public class ContextualSearchTriggerTest extends ContextualSearchInstrumentation
         assertPanelClosedOrUndefined();
 
         // Select a different word and assert that the panel has appeared.
-        simulateNonResolveSearch("resolution");
+        longPressNode("resolution");
         // The simulateNonResolveSearch call will verify that the panel peeks.
     }
 

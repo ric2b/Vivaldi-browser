@@ -31,11 +31,14 @@ enum class CalculationOperator {
 class PLATFORM_EXPORT CalculationExpressionNode
     : public RefCounted<CalculationExpressionNode> {
  public:
-  virtual float Evaluate(float max_value) const = 0;
+  virtual float Evaluate(float max_value,
+                         const Length::AnchorEvaluator*) const = 0;
   virtual bool operator==(const CalculationExpressionNode& other) const = 0;
   bool operator!=(const CalculationExpressionNode& other) const {
     return !operator==(other);
   }
+
+  bool HasAnchorQueries() const { return has_anchor_queries_; }
 
   virtual bool IsNumber() const { return false; }
   virtual bool IsPixelsAndPercent() const { return false; }
@@ -55,6 +58,9 @@ class PLATFORM_EXPORT CalculationExpressionNode
  protected:
   ResultType result_type_;
 #endif
+
+ protected:
+  bool has_anchor_queries_ = false;
 };
 
 class PLATFORM_EXPORT CalculationExpressionNumberNode final
@@ -69,7 +75,7 @@ class PLATFORM_EXPORT CalculationExpressionNumberNode final
   float Value() const { return value_; }
 
   // Implement |CalculationExpressionNode|:
-  float Evaluate(float max_value) const final;
+  float Evaluate(float max_value, const Length::AnchorEvaluator*) const final;
   bool operator==(const CalculationExpressionNode& other) const final;
   scoped_refptr<const CalculationExpressionNode> Zoom(
       double factor) const final;
@@ -106,7 +112,7 @@ class PLATFORM_EXPORT CalculationExpressionPixelsAndPercentNode final
   PixelsAndPercent GetPixelsAndPercent() const { return value_; }
 
   // Implement |CalculationExpressionNode|:
-  float Evaluate(float max_value) const final;
+  float Evaluate(float max_value, const Length::AnchorEvaluator*) const final;
   bool operator==(const CalculationExpressionNode& other) const final;
   scoped_refptr<const CalculationExpressionNode> Zoom(
       double factor) const final;
@@ -137,19 +143,14 @@ class PLATFORM_EXPORT CalculationExpressionOperationNode final
       Children&& children,
       CalculationOperator op);
 
-  CalculationExpressionOperationNode(Children&& children, CalculationOperator op)
-      : children_(std::move(children)), operator_(op) {
-#if DCHECK_IS_ON()
-    result_type_ = ResolvedResultType();
-    DCHECK_NE(result_type_, ResultType::kInvalid);
-#endif
-  }
+  CalculationExpressionOperationNode(Children&& children,
+                                     CalculationOperator op);
 
   const Children& GetChildren() const { return children_; }
   CalculationOperator GetOperator() const { return operator_; }
 
   // Implement |CalculationExpressionNode|:
-  float Evaluate(float max_value) const final;
+  float Evaluate(float max_value, const Length::AnchorEvaluator*) const final;
   bool operator==(const CalculationExpressionNode& other) const final;
   scoped_refptr<const CalculationExpressionNode> Zoom(
       double factor) const final;
@@ -161,6 +162,8 @@ class PLATFORM_EXPORT CalculationExpressionOperationNode final
 #endif
 
  private:
+  bool ComputeHasAnchorQueries() const;
+
   Children children_;
   CalculationOperator operator_;
 };
@@ -206,7 +209,7 @@ class PLATFORM_EXPORT CalculationExpressionAnchorQueryNode final
   const Length& GetFallback() const { return fallback_; }
 
   // Implement |CalculationExpressionNode|:
-  float Evaluate(float max_value) const final;
+  float Evaluate(float max_value, const Length::AnchorEvaluator*) const final;
   bool operator==(const CalculationExpressionNode& other) const final;
   scoped_refptr<const CalculationExpressionNode> Zoom(
       double factor) const final;
@@ -233,7 +236,9 @@ class PLATFORM_EXPORT CalculationExpressionAnchorQueryNode final
         anchor_name_(anchor_name),
         value_(value),
         side_percentage_(side_percentage),
-        fallback_(fallback) {}
+        fallback_(fallback) {
+    has_anchor_queries_ = true;
+  }
 
  private:
   AnchorQueryType type_;

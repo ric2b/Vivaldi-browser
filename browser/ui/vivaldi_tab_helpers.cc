@@ -39,5 +39,6 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
     extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);
   }
 #endif
+
 }
 }  // namespace vivaldi

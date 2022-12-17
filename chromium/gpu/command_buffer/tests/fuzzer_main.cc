@@ -27,15 +27,14 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/raster_decoder.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
-#include "gpu/command_buffer/service/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_context.h"
@@ -47,6 +46,7 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_surface_stub.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
@@ -342,11 +342,12 @@ class CommandBufferSetup {
 
     CHECK(gl::init::InitializeStaticGLBindingsImplementation(
         gl::GLImplementationParts(gl::kGLImplementationEGLANGLE), false));
-    CHECK(gl::init::InitializeGLOneOffPlatformImplementation(
+    display_ = gl::init::InitializeGLOneOffPlatformImplementation(
         /*fallback_to_software_gl=*/false,
         /*disable_gl_drawing=*/false,
         /*init_extensions=*/true,
-        /*system_device_id=*/0));
+        /*system_device_id=*/0);
+    CHECK(display_);
 #elif defined(GPU_FUZZER_USE_STUB)
     gl::GLSurfaceTestSupport::InitializeOneOffWithStubBindings();
     // Because the context depends on configuration bits, we want to recreate
@@ -363,9 +364,16 @@ class CommandBufferSetup {
     if (gpu_preferences_.use_passthrough_cmd_decoder)
       recreate_context_ = true;
 
-    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+    surface_ = gl::init::CreateOffscreenGLSurface(display_, gfx::Size());
     if (!recreate_context_) {
       InitContext();
+    }
+  }
+
+  ~CommandBufferSetup() {
+    if (display_) {
+      gl::init::ShutdownGL(display_, false);
+      display_ = nullptr;
     }
   }
 
@@ -408,9 +416,8 @@ class CommandBufferSetup {
     shared_image_factory_ = std::make_unique<SharedImageFactory>(
         gpu_preferences_, config_.workarounds, gpu_feature_info,
         context_state_.get(), &mailbox_manager_, shared_image_manager_.get(),
-        nullptr /* image_factory */, nullptr /* memory_tracker */,
-        false /* enable_wrapped_sk_image */,
-        false /* is_for_display_compositor */);
+        /*image_factory=*/nullptr, /*memory_tracker=*/nullptr,
+        /*is_for_display_compositor=*/false);
     for (uint32_t usage = SHARED_IMAGE_USAGE_GLES2;
          usage <= SHARED_IMAGE_USAGE_RGB_EMULATION; usage <<= 1) {
       Mailbox::Name name;
@@ -447,7 +454,7 @@ class CommandBufferSetup {
     scoped_refptr<gles2::ContextGroup> context_group = new gles2::ContextGroup(
         gpu_preferences_, true, &mailbox_manager_, nullptr /* memory_tracker */,
         &translator_cache_, &completeness_cache_, decoder_feature_info,
-        config_.attrib_helper.bind_generates_resource, &image_manager_,
+        config_.attrib_helper.bind_generates_resource,
         nullptr /* image_factory */, nullptr /* progress_reporter */,
         gpu_feature_info, discardable_manager_.get(),
         passthrough_discardable_manager_.get(), shared_image_manager_.get());
@@ -631,7 +638,6 @@ class CommandBufferSetup {
   gles2::MailboxManagerImpl mailbox_manager_;
   gles2::TraceOutputter outputter_;
   scoped_refptr<gl::GLShareGroup> share_group_;
-  gles2::ImageManager image_manager_;
   std::unique_ptr<ServiceDiscardableManager> discardable_manager_;
   std::unique_ptr<PassthroughDiscardableManager>
       passthrough_discardable_manager_;
@@ -639,6 +645,7 @@ class CommandBufferSetup {
   std::unique_ptr<SharedImageFactory> shared_image_factory_;
 
   bool recreate_context_ = false;
+  gl::GLDisplay* display_ = nullptr;
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<SharedContextState> context_state_;

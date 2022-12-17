@@ -118,7 +118,7 @@ const CGFloat kPadding = 10;
 // official builds.
 // TODO(lliabraa): Figure out how to support memory warnings (or something
 // like them) in official builds.
-#if BUILDFLAG(CHROMIUM_BRANDING)
+#if BUILDFLAG(CHROMIUM_BRANDING) && !defined(VIVALDI_BUILD)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
   [self addButtonWithTitle:@"Trigger Memory Warning"
@@ -146,7 +146,7 @@ const CGFloat kPadding = 10;
 // official builds.
 // TODO(lliabraa): Figure out how to support memory warnings (or something
 // like them) in official builds.
-#if BUILDFLAG(CHROMIUM_BRANDING)
+#if BUILDFLAG(CHROMIUM_BRANDING)  && !defined(VIVALDI_BUILD)
   // Display a text input to control the rate of continuous memory warnings.
   _continuousMemoryWarningField =
       [[UITextField alloc] initWithFrame:CGRectZero];
@@ -479,7 +479,7 @@ const CGFloat kPadding = 10;
 // official builds.
 // TODO(lliabraa): Figure out how to support memory warnings (or something
 // like them) in official builds.
-#if BUILDFLAG(CHROMIUM_BRANDING)
+#if BUILDFLAG(CHROMIUM_BRANDING) && !defined(VIVALDI_BUILD)
 - (void)updateMemoryWarningInterval {
   [_memoryWarningTimer invalidate];
   double timerValue;

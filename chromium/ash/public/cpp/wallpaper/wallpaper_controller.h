@@ -18,6 +18,8 @@
 #include "base/containers/lru_cache.h"
 #include "base/files/file_path.h"
 #include "base/time/time.h"
+#include "components/user_manager/user_type.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class AccountId;
 
@@ -85,7 +87,8 @@ class ASH_PUBLIC_EXPORT WallpaperController {
                                   const std::string& file_name,
                                   WallpaperLayout layout,
                                   const gfx::ImageSkia& image,
-                                  bool preview_mode) = 0;
+                                  bool preview_mode,
+                                  const std::string& file_path) = 0;
 
   // Sets the wallpaper at |params.asset_id|, |params.url| and
   // |params.collection_id| as the active wallpaper for the user at
@@ -152,10 +155,10 @@ class ASH_PUBLIC_EXPORT WallpaperController {
                                    bool show_wallpaper,
                                    SetWallpaperCallback callback) = 0;
 
-  // Get the path to the default wallpaper file for this account. Will be empty
-  // if this user/device has no recommended default wallpaper.
+  // Get the path to the default wallpaper file for the |user_type|. Will be
+  // empty if this user/device has no recommended default wallpaper.
   virtual base::FilePath GetDefaultWallpaperPath(
-      const AccountId& account_id) = 0;
+      user_manager::UserType user_type) = 0;
 
   // Sets the paths of the customized default wallpaper to be used wherever a
   // default wallpaper is needed. If a default wallpaper is being shown, updates
@@ -172,10 +175,15 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   // Sets wallpaper from policy. If the user has logged in, show the policy
   // wallpaper immediately, otherwise, the policy wallpaper will be shown the
   // next time |ShowUserWallpaper| is called. Note: it is different from device
-  // policy.
+  // policy. This function may be called on the login screen, thus it's
+  // responsibility of the caller to provide the correct |user_type| for such
+  // case i.e. |user_type| should be derived by using
+  // |user_manager::UserManager|.
   // |account_id|: The user's account id.
+  // |user_type|: The type of user.
   // |data|: The data used to decode the image.
   virtual void SetPolicyWallpaper(const AccountId& account_id,
+                                  user_manager::UserType user_type,
                                   const std::string& data) = 0;
 
   // Sets the path of device policy wallpaper.
@@ -223,6 +231,12 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   //    |SetCustomWallpaper|), if any.
   // 4) Use the default wallpaper of this user.
   virtual void ShowUserWallpaper(const AccountId& account_id) = 0;
+
+  // Shows the user's wallpaper but uses |user_type| to determine default
+  // wallpaper if necessary. This is intendend for use where users are not
+  // yet logged in (i.e. login screen).
+  virtual void ShowUserWallpaper(const AccountId& account_id,
+                                 user_manager::UserType user_type) = 0;
 
   // Used by the gaia-signin UI. Signin wallpaper is considered either as the
   // device policy wallpaper or the default wallpaper.
@@ -306,9 +320,9 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   virtual bool IsWallpaperControlledByPolicy(
       const AccountId& account_id) const = 0;
 
-  // Returns a struct with info about the active user's wallpaper; the location
-  // is an empty string and the layout is invalid if there's no active user.
-  virtual WallpaperInfo GetActiveUserWallpaperInfo() const = 0;
+  // Returns a struct with info about the active user's wallpaper if there is an
+  // active user.
+  virtual absl::optional<WallpaperInfo> GetActiveUserWallpaperInfo() const = 0;
 
   // Returns true if the wallpaper setting (used to open the wallpaper picker)
   // should be visible.

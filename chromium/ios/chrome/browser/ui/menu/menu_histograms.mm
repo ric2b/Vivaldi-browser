@@ -44,6 +44,11 @@ const char KContextMenuLinkActionsHistogram[] =
     "Mobile.ContextMenu.WebLink.Actions";
 const char kToolbarMenuActionsHistogram[] =
     "Mobile.ContextMenu.Toolbar.Actions";
+const char kNoteEntryActionsHistogram[] =
+    "Mobile.ContextMenu.NoteEntry.Actions";
+const char kNoteFolderActionsHistogram[] =
+    "Mobile.ContextMenu.NoteFolder.Actions";
+
 }  // namespace
 
 void RecordMenuShown(MenuScenario scenario) {
@@ -83,5 +88,11 @@ const char* GetActionsHistogramName(MenuScenario scenario) {
       return kTabGridSearchResultHistogram;
     case MenuScenario::kToolbarMenu:
       return kToolbarMenuActionsHistogram;
+    case MenuScenario::kNoteEntry:
+      return kNoteEntryActionsHistogram;
+    // Vivaldi
+    case MenuScenario::kNoteFolder:
+      return kNoteFolderActionsHistogram;
+
   }
 }

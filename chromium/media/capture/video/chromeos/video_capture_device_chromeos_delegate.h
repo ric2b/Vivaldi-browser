@@ -9,7 +9,6 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
-#include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "media/capture/video/chromeos/camera_device_context.h"
@@ -38,7 +37,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceChromeOSDelegate final
   VideoCaptureDeviceChromeOSDelegate(
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
       const VideoCaptureDeviceDescriptor& device_descriptor,
-      scoped_refptr<CameraHalDelegate> camera_hal_delegate,
+      CameraHalDelegate* camera_hal_delegate,
       base::OnceClosure cleanup_callback);
 
   VideoCaptureDeviceChromeOSDelegate(
@@ -76,7 +75,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceChromeOSDelegate final
 
   // A reference to the CameraHalDelegate instance in the VCD factory.  This is
   // used by AllocateAndStart to query camera info and create the camera device.
-  const scoped_refptr<CameraHalDelegate> camera_hal_delegate_;
+  CameraHalDelegate* camera_hal_delegate_;
 
   // A reference to the thread that all the VideoCaptureDevice interface methods
   // are expected to be called on.

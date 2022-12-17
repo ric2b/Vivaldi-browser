@@ -79,7 +79,8 @@ def main(args):
   mbw = MetaBuildWrapper()
   return mbw.Main(args)
 
-class MetaBuildWrapper(object):
+
+class MetaBuildWrapper:
   def __init__(self):
     self.chromium_src_dir = CHROMIUM_SRC_DIR
     self.default_config = os.path.join(self.chromium_src_dir, 'tools', 'mb',
@@ -180,12 +181,15 @@ class MetaBuildWrapper(object):
                         help='Sets GN arg android_default_version_code')
       subp.add_argument('--android-version-name',
                         help='Sets GN arg android_default_version_name')
+      subp.add_argument('--rts',
+                        default=None,
+                        help='which regression test selection model to use'
+                        ' For more info about RTS, please see'
+                        ' //docs/testing/regression-test-selection.md')
       subp.add_argument('--use-rts',
                         action='store_true',
                         default=False,
-                        help='whether or not to use regression test selection'
-                        ' For more info about RTS, please see'
-                        ' //docs/testing/regression-test-selection.md')
+                        help='Deprecated argument for enabling RTS')
 
       # TODO(crbug.com/1060857): Remove this once swarming task templates
       # support command prefixes.
@@ -468,18 +472,25 @@ class MetaBuildWrapper(object):
     return 0
 
   def RtsSelect(self):
-    model_dir = self.PathJoin(
-        self.chromium_src_dir, 'testing', 'rts', self._CipdPlatform())
+    if self.args.rts == 'rts-ml-chromium':
+      model_dir = self.PathJoin(self.chromium_src_dir, 'testing', 'rts',
+                                self.args.rts, self._CipdPlatform())
+      exe = self.PathJoin(model_dir, self.args.rts)
+    else:
+      model_dir = self.PathJoin(self.chromium_src_dir, 'testing', 'rts',
+                                self._CipdPlatform())
+      exe = self.PathJoin(model_dir, self.args.rts)
 
-    exe = self.PathJoin(model_dir, 'rts-chromium')
     if self.platform == 'win32':
       exe += '.exe'
 
     args = [
-       exe, 'select',
-      '-model-dir', model_dir, \
-      '-out', self.PathJoin(self.ToAbsPath(self.args.path), self.rts_out_dir),
-      '-checkout', self.chromium_src_dir,
+        exe,
+        'select',
+        '-gen-inverse',
+        '-model-dir', model_dir, \
+        '-out', self.PathJoin(self.ToAbsPath(self.args.path), self.rts_out_dir),
+        '-checkout', self.chromium_src_dir,
     ]
     if self.args.rts_target_change_recall:
       if (self.args.rts_target_change_recall < 0
@@ -488,12 +499,12 @@ class MetaBuildWrapper(object):
             'rts-target-change-recall must be between (0 and 1]', None)
       args += ['-target-change-recall', str(self.args.rts_target_change_recall)]
 
-    ret, _, _ = self.Run(args, force_verbose=True)
+    ret, _, err = self.Run(args, force_verbose=True)
     if ret != 0:
       self.WriteFailureAndRaise(err, None)
 
   def CmdGen(self):
-    if self.args.use_rts:
+    if self.args.rts:
       self.RtsSelect()
     vals = self.Lookup()
     return self.RunGNGen(vals)
@@ -580,7 +591,7 @@ class MetaBuildWrapper(object):
       if self.args.verbose:
         self.Print(('| ' if previous_res else '') + ' '.join(cmd))
 
-      res, out, err = self.Call(cmd, stdin=previous_res)
+      res, out, err = self.Call(cmd, input=previous_res)
       if res != 0:
         self.Print("Err while running '%s'. Output:\n%s\nstderr:\n%s" % (
           ' '.join(cmd), out, err))
@@ -730,7 +741,7 @@ class MetaBuildWrapper(object):
       if self.args.extra_args:
         cmd += self.args.extra_args
       self.Print('')
-      ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
+      ret, _, _ = self.Run(cmd, force_verbose=True, capture_output=False)
       if ret:
         return ret
       task_json = self.ReadFile(json_file)
@@ -746,7 +757,7 @@ class MetaBuildWrapper(object):
           collect_output,
           task_id,
       ]
-      ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
+      ret, _, _ = self.Run(cmd, force_verbose=True, capture_output=False)
       if ret != 0:
         return ret
       collect_json = json.loads(self.ReadFile(collect_output))
@@ -768,7 +779,7 @@ class MetaBuildWrapper(object):
     ]
     if self.args.extra_args:
       cmd += ['--'] + self.args.extra_args
-    ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
+    ret, _, _ = self.Run(cmd, force_verbose=True, capture_output=False)
     return ret
 
   def _DefaultDimensions(self):
@@ -1039,7 +1050,8 @@ class MetaBuildWrapper(object):
     try:
       contents = ast.literal_eval(self.ReadFile(config_file))
     except SyntaxError as e:
-      raise MBErr('Failed to parse config file "%s": %s' % (config_file, e))
+      raise MBErr('Failed to parse config file "%s": %s' %
+                  (config_file, e)) from e
 
     self.configs = contents['configs']
     self.mixins = contents['mixins']
@@ -1064,8 +1076,8 @@ class MetaBuildWrapper(object):
               ', '.join(duplicates))
         isolate_maps.update(isolate_map)
       except SyntaxError as e:
-        raise MBErr(
-            'Failed to parse isolate map file "%s": %s' % (isolate_map, e))
+        raise MBErr('Failed to parse isolate map file "%s": %s' %
+                    (isolate_map, e)) from e
     return isolate_maps
 
   def ConfigFromArgs(self):
@@ -1324,11 +1336,6 @@ class MetaBuildWrapper(object):
       if 'is_skylab=true' in vals['gn_args']:
         runtime_deps = self._FilterOutUnneededSkylabDeps(runtime_deps)
 
-      # For more info about RTS, please see
-      # //docs/testing/regression-test-selection.md
-      if self.args.use_rts:
-        self.AddFilterFileArg(target, build_dir, command)
-
       canonical_target = target.replace(':','_').replace('/','_')
       ret = self.WriteIsolateFiles(build_dir, command, canonical_target,
                                    runtime_deps, vals, extra_files)
@@ -1336,17 +1343,17 @@ class MetaBuildWrapper(object):
         return ret
     return 0
 
-  def AddFilterFileArg(self, target, build_dir, command):
-    if target in self.banned_from_rts:
-      self.Print('%s is banned for RTS on this builder' % target)
-    else:
-      filter_file = target + '.filter'
-      filter_file_path = self.PathJoin(self.rts_out_dir, filter_file)
-      abs_filter_file_path = self.ToAbsPath(build_dir, filter_file_path)
+  def AddFilterFileArg(self, target, build_dir, command, inverted=False):
+    filter_file = ('%s_inverted' % target if inverted else target) + '.filter'
+    filter_file_path = self.PathJoin(self.rts_out_dir, filter_file)
+    abs_filter_file_path = self.ToAbsPath(build_dir, filter_file_path)
 
-      if self.Exists(abs_filter_file_path):
-        command.append('--test-launcher-filter-file=%s' % filter_file_path)
-        self.Print('added RTS filter file to command: %s' % filter_file)
+    filter_exists = self.Exists(abs_filter_file_path)
+    if filter_exists:
+      command.append('--test-launcher-filter-file=%s' % filter_file_path)
+      self.Print('added RTS filter file to command: %s' % filter_file)
+
+    return filter_exists
 
   def PossibleRuntimeDepsPaths(self, vals, ninja_targets, isolate_map):
     """Returns a map of targets to possible .runtime_deps paths.
@@ -1450,7 +1457,7 @@ class MetaBuildWrapper(object):
         '-i',
         self.ToSrcRelPath('%s/%s.isolate' % (build_dir, target)),
     ],
-                         buffer_output=False)
+                         capture_output=False)
 
     return ret
 
@@ -1546,13 +1553,31 @@ class MetaBuildWrapper(object):
                  'list files in directory instead for:' + err)
       return 1
 
-    self.WriteFile(isolate_path,
-      json.dumps({
+    isolate = {
         'variables': {
-          'command': command,
-          'files': files,
+            'command': command,
+            'files': files,
         }
-      }, sort_keys=True) + '\n')
+    }
+    # For more info about RTS, please see
+    # //docs/testing/regression-test-selection.md
+    if self.args.rts:
+      if target in self.banned_from_rts:
+        self.Print('%s is banned for RTS on this builder' % target)
+        isolate['variables']['command'] = command
+      else:
+        inverted_command = command.copy()
+        self.AddFilterFileArg(target, build_dir, command, inverted=False)
+        isolate['variables']['command'] = command
+
+        inverted_filter_exists = self.AddFilterFileArg(target,
+                                                       build_dir,
+                                                       inverted_command,
+                                                       inverted=True)
+        if inverted_filter_exists:
+          isolate['variables']['inverted_command'] = inverted_command
+
+    self.WriteFile(isolate_path, json.dumps(isolate, sort_keys=True) + '\n')
 
     self.WriteJSON(
       {
@@ -1625,7 +1650,7 @@ class MetaBuildWrapper(object):
     if android_version_name:
       gn_args += ' android_default_version_name="%s"' % android_version_name
 
-    if self.args.use_rts:
+    if self.args.rts:
       gn_args += ' use_rts=true'
 
     args_gn_lines = []
@@ -1694,8 +1719,6 @@ class MetaBuildWrapper(object):
     # that one Ozone build can be used to run different backends. Currently,
     # tests are executed for the headless and X11 backends and both can run
     # under Xvfb on Linux.
-    # TODO(tonikitoo,msisov,fwang): Find a way to run tests for the Wayland
-    # backend.
     use_xvfb = (self.platform.startswith('linux') and not is_android
                 and not is_fuchsia and not is_cros_device)
 
@@ -1999,8 +2022,7 @@ class MetaBuildWrapper(object):
       self.WriteFile(path, json.dumps(obj, indent=2, sort_keys=True) + '\n',
                      force_verbose=force_verbose)
     except Exception as e:
-      raise MBErr('Error %s writing to the output path "%s"' %
-                 (e, path))
+      raise MBErr('Error %s writing to the output path "%s"' % (e, path)) from e
 
   def PrintCmd(self, cmd):
     if self.platform == 'win32':
@@ -2025,17 +2047,17 @@ class MetaBuildWrapper(object):
     if self.args.jobs:
       ninja_cmd.extend(['-j', '%d' % self.args.jobs])
     ninja_cmd.append(target)
-    ret, _, _ = self.Run(ninja_cmd, buffer_output=False)
+    ret, _, _ = self.Run(ninja_cmd, capture_output=False)
     return ret
 
-  def Run(self, cmd, env=None, force_verbose=True, buffer_output=True):
+  def Run(self, cmd, env=None, force_verbose=True, capture_output=True):
     # This function largely exists so it can be overridden for testing.
     if self.args.dryrun or self.args.verbose or force_verbose:
       self.PrintCmd(cmd)
     if self.args.dryrun:
       return 0, '', ''
 
-    ret, out, err = self.Call(cmd, env=env, buffer_output=buffer_output)
+    ret, out, err = self.Call(cmd, env=env, capture_output=capture_output)
     if self.args.verbose or force_verbose:
       if ret != 0:
         self.Print('  -> returned %d' % ret)
@@ -2046,20 +2068,25 @@ class MetaBuildWrapper(object):
         self.Print(err, end='', file=sys.stderr)
     return ret, out, err
 
-  def Call(self, cmd, env=None, buffer_output=True, stdin=None):
-    if buffer_output:
-      p = subprocess.Popen(cmd, shell=False, cwd=self.chromium_src_dir,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           env=env, stdin=subprocess.PIPE)
-      out, err = p.communicate(input=stdin)
-      out = out.decode('utf-8')
-      err = err.decode('utf-8')
-    else:
-      p = subprocess.Popen(cmd, shell=False, cwd=self.chromium_src_dir,
-                           env=env)
-      p.wait()
-      out = err = ''
-    return p.returncode, out, err
+  # Call has argument input to match subprocess.run
+  def Call(
+      self,
+      cmd,
+      env=None,
+      capture_output=True,
+      input='',
+  ):  # pylint: disable=redefined-builtin
+    # We are returning the exit code, we don't want an exception thrown
+    # for non-zero exit code
+    # pylint: disable=subprocess-run-check
+    p = subprocess.run(cmd,
+                       shell=False,
+                       capture_output=capture_output,
+                       cwd=self.chromium_src_dir,
+                       env=env,
+                       text=True,
+                       input=input)
+    return p.returncode, p.stdout, p.stderr
 
   def _CipdPlatform(self):
     """Returns current CIPD platform, e.g. linux-amd64.
@@ -2148,7 +2175,7 @@ class MetaBuildWrapper(object):
       return fp.write(contents)
 
 
-class LedResult(object):
+class LedResult:
   """Holds the result of a led operation. Can be chained using |then|."""
 
   def __init__(self, result, run_cmd):

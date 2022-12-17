@@ -34,7 +34,7 @@
 #include "ui/ozone/platform/headless/headless_window_manager.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
-#if BUILDFLAG(ENABLE_VULKAN) && BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(ENABLE_VULKAN) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA))
 #include "ui/ozone/platform/headless/vulkan_implementation_headless.h"
 #endif
 
@@ -107,8 +107,8 @@ class FileSurface : public SurfaceOzoneCanvas {
 
 class FileGLSurface : public GLSurfaceEglReadback {
  public:
-  explicit FileGLSurface(const base::FilePath& location)
-      : location_(location) {}
+  FileGLSurface(gl::GLDisplayEGL* display, const base::FilePath& location)
+      : GLSurfaceEglReadback(display), location_(location) {}
 
   FileGLSurface(const FileGLSurface&) = delete;
   FileGLSurface& operator=(const FileGLSurface&) = delete;
@@ -188,16 +188,19 @@ class GLOzoneEGLHeadless : public GLOzoneEGL {
 
   // GLOzone:
   scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLDisplay* display,
       gfx::AcceleratedWidget window) override {
     return gl::InitializeGLSurface(base::MakeRefCounted<FileGLSurface>(
+        display->GetAs<gl::GLDisplayEGL>(),
         GetPathForWidget(base_path_, window)));
   }
 
   scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLDisplay* display,
       const gfx::Size& size) override {
     return gl::InitializeGLSurface(
         base::MakeRefCounted<gl::PbufferGLSurfaceEGL>(
-            gl::GLSurfaceEGL::GetGLDisplayEGL(), size));
+            display->GetAs<gl::GLDisplayEGL>(), size));
   }
 
  protected:
@@ -229,8 +232,8 @@ HeadlessSurfaceFactory::~HeadlessSurfaceFactory() = default;
 std::vector<gl::GLImplementationParts>
 HeadlessSurfaceFactory::GetAllowedGLImplementations() {
   return std::vector<gl::GLImplementationParts>{
-      gl::GLImplementationParts(gl::kGLImplementationEGLGLES2),
       gl::GLImplementationParts(gl::ANGLEImplementation::kSwiftShader),
+      gl::GLImplementationParts(gl::kGLImplementationEGLGLES2),
       gl::GLImplementationParts(gl::ANGLEImplementation::kDefault),
   };
 }
@@ -274,13 +277,17 @@ void HeadlessSurfaceFactory::CheckBasePath() const {
     PLOG(FATAL) << "Unable to write to output location";
 }
 
-#if BUILDFLAG(ENABLE_VULKAN) && BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(ENABLE_VULKAN)
 std::unique_ptr<gpu::VulkanImplementation>
 HeadlessSurfaceFactory::CreateVulkanImplementation(
     bool use_swiftshader,
     bool allow_protected_memory) {
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA)
   return std::make_unique<VulkanImplementationHeadless>(use_swiftshader);
-}
+#else
+  return nullptr;
 #endif
+}
+#endif  // BUILDFLAG(ENABLE_VULKAN)
 
 }  // namespace ui

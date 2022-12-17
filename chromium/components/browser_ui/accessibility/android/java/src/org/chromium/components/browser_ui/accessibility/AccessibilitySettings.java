@@ -123,6 +123,10 @@ public class AccessibilitySettings
         } // Vivaldi
 
         Preference captions = findPreference(PREF_CAPTIONS);
+        // Vivaldi: Captions settings activity is not available on AAOS.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            getPreferenceScreen().removePreference(captions);
+        } else {
         captions.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(Settings.ACTION_CAPTIONING_SETTINGS);
 
@@ -133,6 +137,7 @@ public class AccessibilitySettings
 
             return true;
         });
+        } // Vivaldi
 
         mDelegate.addExtraPreferences(this);
     }

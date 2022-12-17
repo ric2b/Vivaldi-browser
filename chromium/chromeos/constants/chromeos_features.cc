@@ -3,16 +3,14 @@
 // found in the LICENSE file.
 
 #include "chromeos/constants/chromeos_features.h"
+
 #include "base/feature_list.h"
 
-namespace chromeos {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/startup/browser_params_proxy.h"
+#endif
 
-// Feature flag for disable/enable Lacros TTS support.
-// Disable by default before the feature is completedly implemented.
-const base::Feature kLacrosTtsSupport{"LacrosTtsSupport",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
-
-namespace features {
+namespace chromeos::features {
 
 // Enables or disables more filtering out of phones from the Bluetooth UI.
 const base::Feature kBluetoothPhoneFilter{"BluetoothPhoneFilter",
@@ -28,6 +26,15 @@ const base::Feature kCloudGamingDevice{"CloudGamingDevice",
 const base::Feature kDarkLightMode{"DarkLightMode",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Disable idle sockets closing on memory pressure for NetworkContexts that
+// belong to Profiles. It only applies to Profiles because the goal is to
+// improve perceived performance of web browsing within the ChromeOS user
+// session by avoiding re-estabshing TLS connections that require client
+// certificates.
+const base::Feature kDisableIdleSocketsCloseOnMemoryPressure{
+    "disable_idle_sockets_close_on_memory_pressure",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Disables "Office Editing for Docs, Sheets & Slides" component app so handlers
 // won't be registered, making it possible to install another version for
 // testing.
@@ -42,16 +49,16 @@ const base::Feature kDisableQuickAnswersV2Translation{
 const base::Feature kQuickAnswersV2SettingsSubToggle{
     "QuickAnswersV2SettingsSubToggle", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether to always trigger Quick Answers with single word selection.
-const base::Feature kQuickAnswersAlwaysTriggerForSingleWord{
-    "QuickAnswersAlwaysTriggerForSingleWord", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enables Quick Answers for more locales.
 const base::Feature kQuickAnswersForMoreLocales{
     "QuickAnswersForMoreLocales", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsCloudGamingDeviceEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::BrowserParamsProxy::Get()->IsCloudGamingDevice();
+#else
   return base::FeatureList::IsEnabled(kCloudGamingDevice);
+#endif
 }
 
 bool IsDarkLightModeEnabled() {
@@ -66,13 +73,8 @@ bool IsQuickAnswersV2SettingsSubToggleEnabled() {
   return base::FeatureList::IsEnabled(kQuickAnswersV2SettingsSubToggle);
 }
 
-bool IsQuickAnswersAlwaysTriggerForSingleWord() {
-  return base::FeatureList::IsEnabled(kQuickAnswersAlwaysTriggerForSingleWord);
-}
-
 bool IsQuickAnswersForMoreLocalesEnabled() {
   return base::FeatureList::IsEnabled(kQuickAnswersForMoreLocales);
 }
 
-}  // namespace features
-}  // namespace chromeos
+}  // namespace chromeos::features

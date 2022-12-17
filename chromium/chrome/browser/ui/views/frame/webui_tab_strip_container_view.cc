@@ -661,8 +661,8 @@ void WebUITabStripContainerView::EndDragToOpen(
 void WebUITabStripContainerView::NewTabButtonPressed(const ui::Event& event) {
   chrome::ExecuteCommand(browser_view_->browser(), IDC_NEW_TAB);
   UMA_HISTOGRAM_ENUMERATION("Tab.NewTab",
-                            TabStripModel::NEW_TAB_BUTTON_IN_TOOLBAR_FOR_TOUCH,
-                            TabStripModel::NEW_TAB_ENUM_COUNT);
+                            NewTabTypes::NEW_TAB_BUTTON_IN_TOOLBAR_FOR_TOUCH,
+                            NewTabTypes::NEW_TAB_ENUM_COUNT);
 }
 
 void WebUITabStripContainerView::TabCounterPressed(const ui::Event& event) {
@@ -832,10 +832,6 @@ TabStripUILayout WebUITabStripContainerView::GetLayout() {
   tab_contents_size.Enlarge(0, -(max_bookmark_height - bookmark_bar_height));
 
   return TabStripUILayout::CalculateForWebViewportSize(tab_contents_size);
-}
-
-SkColor WebUITabStripContainerView::GetColor(int id) const {
-  return GetThemeProvider()->GetColor(id);
 }
 
 SkColor WebUITabStripContainerView::GetColorProviderColor(

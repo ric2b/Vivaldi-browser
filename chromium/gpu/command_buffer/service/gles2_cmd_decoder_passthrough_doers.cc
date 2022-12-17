@@ -21,8 +21,8 @@
 #include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/multi_draw_manager.h"
 #include "gpu/command_buffer/service/passthrough_discardable_manager.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
-#include "gpu/command_buffer/service/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/overlay_plane_data.h"
 #include "ui/gfx/overlay_priority_hint.h"
@@ -1403,14 +1403,6 @@ error::Error GLES2DecoderPassthroughImpl::DoFramebufferTexture2D(
     InsertError(GL_INVALID_OPERATION,
                 "Cannot change the attachments of the default framebuffer.");
     return error::kNoError;
-  }
-  if (feature_info_->workarounds().client_max_texture_size && texture) {
-    GLint max_level = base::bits::Log2Floor(
-        feature_info_->workarounds().client_max_texture_size);
-    if (level > max_level) {
-      InsertError(GL_INVALID_VALUE, "Level too large");
-      return error::kNoError;
-    }
   }
   BindPendingImageForClientIDIfNeeded(texture);
   api()->glFramebufferTexture2DEXTFn(
@@ -3452,61 +3444,6 @@ error::Error GLES2DecoderPassthroughImpl::DoTexStorage2DEXT(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoTexStorage2DImageCHROMIUM(
-    GLenum target,
-    GLenum internalFormat,
-    GLenum bufferUsage,
-    GLsizei width,
-    GLsizei height) {
-  TextureTarget target_enum = GLenumToTextureTarget(target);
-  if (target_enum == TextureTarget::kCubeMap ||
-      target_enum == TextureTarget::kUnkown) {
-    InsertError(GL_INVALID_ENUM, "Invalid target");
-    return error::kNoError;
-  }
-
-  const BoundTexture& bound_texture =
-      bound_textures_[static_cast<size_t>(target_enum)][active_texture_unit_];
-  if (bound_texture.texture == nullptr) {
-    InsertError(GL_INVALID_OPERATION, "No texture bound");
-    return error::kNoError;
-  }
-
-  gfx::BufferFormat buffer_format;
-  if (!GetGFXBufferFormat(internalFormat, &buffer_format)) {
-    InsertError(GL_INVALID_ENUM, "Invalid buffer format");
-    return error::kNoError;
-  }
-
-  gfx::BufferUsage buffer_usage;
-  if (!GetGFXBufferUsage(bufferUsage, &buffer_usage)) {
-    InsertError(GL_INVALID_ENUM, "Invalid buffer usage");
-    return error::kNoError;
-  }
-
-  if (!GetContextGroup()->image_factory()) {
-    InsertError(GL_INVALID_OPERATION, "Cannot create GL image");
-    return error::kNoError;
-  }
-
-  bool is_cleared;
-  scoped_refptr<gl::GLImage> image =
-      GetContextGroup()->image_factory()->CreateAnonymousImage(
-          gfx::Size(width, height), buffer_format, buffer_usage,
-          gpu::kNullSurfaceHandle, &is_cleared);
-  if (!image || !image->BindTexImage(target)) {
-    InsertError(GL_INVALID_OPERATION, "Failed to create or bind GL Image");
-    return error::kNoError;
-  }
-
-  bound_texture.texture->SetLevelImage(target, 0, image.get());
-
-  // Target is already validated
-  UpdateTextureSizeFromTarget(target);
-
-  return error::kNoError;
-}
-
 error::Error GLES2DecoderPassthroughImpl::DoGenQueriesEXT(
     GLsizei n,
     volatile GLuint* queries) {
@@ -4095,11 +4032,11 @@ error::Error GLES2DecoderPassthroughImpl::DoRequestExtensionCHROMIUM(
   InitializeFeatureInfo(feature_info_->context_type(),
                         feature_info_->disallowed_features(), true);
 
-  // Support for CHROMIUM_texture_storage_image depends on the underlying
+  // Support for texture_storage_image depends on the underlying
   // ImageFactory's ability to create anonymous images.
   gpu::ImageFactory* image_factory = group_->image_factory();
   if (image_factory && image_factory->SupportsCreateAnonymousImage()) {
-    feature_info_->EnableCHROMIUMTextureStorageImage();
+    feature_info_->EnableTextureStorageImage();
   }
 
   return error::kNoError;
@@ -4710,8 +4647,7 @@ error::Error GLES2DecoderPassthroughImpl::DoDescheduleUntilFinishedCHROMIUM() {
 
   DCHECK_EQ(2u, deschedule_until_finished_fences_.size());
   if (deschedule_until_finished_fences_[0]->HasCompleted()) {
-    deschedule_until_finished_fences_.erase(
-        deschedule_until_finished_fences_.begin());
+    deschedule_until_finished_fences_.pop_front();
     return error::kNoError;
   }
 
@@ -4742,28 +4678,6 @@ error::Error GLES2DecoderPassthroughImpl::DoDrawBuffersEXT(
 
 error::Error GLES2DecoderPassthroughImpl::DoDiscardBackbufferCHROMIUM() {
   NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoSetColorSpaceMetadataCHROMIUM(
-    GLuint texture_id,
-    gfx::ColorSpace color_space) {
-  scoped_refptr<TexturePassthrough> passthrough_texture;
-  if (!resources_->texture_object_map.GetServiceID(texture_id,
-                                                   &passthrough_texture) ||
-      passthrough_texture == nullptr) {
-    InsertError(GL_INVALID_VALUE, "unknown texture.");
-    return error::kNoError;
-  }
-
-  scoped_refptr<gl::GLImage> image =
-      passthrough_texture->GetLevelImage(passthrough_texture->target(), 0);
-  if (image == nullptr) {
-    InsertError(GL_INVALID_VALUE, "no image associated with texture.");
-    return error::kNoError;
-  }
-
-  image->SetColorSpace(color_space);
   return error::kNoError;
 }
 
@@ -4970,7 +4884,8 @@ GLES2DecoderPassthroughImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
   resources_->texture_object_map.RemoveClientID(texture_client_id);
   resources_->texture_object_map.SetIDMapping(texture_client_id, texture);
   resources_->texture_shared_image_map[texture_client_id] =
-      PassthroughResources::SharedImageData(std::move(shared_image), api());
+      PassthroughResources::SharedImageData(std::move(shared_image), api(),
+                                            feature_info_.get());
 
   return error::kNoError;
 }
@@ -5017,20 +4932,6 @@ error::Error GLES2DecoderPassthroughImpl::DoEndSharedImageAccessDirectCHROMIUM(
     return error::kNoError;
   }
   found->second.EndAccess();
-  return error::kNoError;
-}
-
-error::Error
-GLES2DecoderPassthroughImpl::DoBeginBatchReadAccessSharedImageCHROMIUM() {
-  DCHECK(group_->shared_image_manager());
-  group_->shared_image_manager()->BeginBatchReadAccess();
-  return error::kNoError;
-}
-
-error::Error
-GLES2DecoderPassthroughImpl::DoEndBatchReadAccessSharedImageCHROMIUM() {
-  DCHECK(group_->shared_image_manager());
-  group_->shared_image_manager()->EndBatchReadAccess();
   return error::kNoError;
 }
 

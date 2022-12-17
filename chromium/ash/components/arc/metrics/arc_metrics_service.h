@@ -25,6 +25,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
 #include "components/guest_os/guest_os_engagement_metrics.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -148,6 +149,22 @@ class ArcMetricsService : public KeyedService,
   void ReportMemoryPressure(const std::vector<uint8_t>& psiFile) override;
   void ReportProvisioningPreSignIn() override;
   void ReportWaylandLateTimingDuration(base::TimeDelta duration) override;
+  void ReportNonAndroidPlayFilesCount(
+      uint32_t number_of_directories,
+      uint32_t number_of_non_directories) override;
+  void ReportPerAppFileStatsOfAndroidDataDirs(
+      uint32_t number_of_directories,
+      uint32_t number_of_non_directories,
+      uint32_t size_in_kilobytes) override;
+  void ReportTotalFileStatsOfAndroidDataDirs(uint32_t number_of_directories,
+                                             uint32_t number_of_non_directories,
+                                             uint32_t size_in_kilobytes,
+                                             base::TimeDelta duration) override;
+  void ReportTotalFileStatsOfAndroidDataSubdir(
+      mojom::AndroidDataSubdirectory target,
+      uint32_t number_of_directories,
+      uint32_t number_of_non_directories,
+      uint32_t size_in_kilobytes) override;
 
   // wm::ActivationChangeObserver overrides.
   // Records to UMA when a user has interacted with an ARC app window.
@@ -188,11 +205,17 @@ class ArcMetricsService : public KeyedService,
   // to MemoryKillsMonitor via ArcMetricsServiceProxy.
   void ReportMemoryPressureArcVmKills(int count, int estimated_freed_kb);
 
-  // Make a request to ArcProcessService for App kill counts, so that those
-  // counts can be logged to UMA. Public for testing.
-  void RequestLowMemoryKillCountsForTesting();
+  // Make a request to Concierge service for running VMs, then a request to
+  // ArcProcessService for kill counts. Public for testing.
+  void RequestKillCountsForTesting();
 
   void set_prefs(PrefService* prefs) { prefs_ = prefs; }
+
+  // Sets the UserId hash (cryptohome ID). Required to not have a dependency on
+  // browser codebase.
+  void set_user_id_hash(const std::string& user_id_hash) {
+    user_id_hash_ = user_id_hash;
+  }
 
   // Record the starting time of ARC provisioning, for later use.
   void ReportProvisioningStartTime(const base::TimeTicks& start_time,
@@ -279,8 +302,12 @@ class ArcMetricsService : public KeyedService,
   void RequestProcessList();
   void ParseProcessList(std::vector<mojom::RunningAppProcessInfoPtr> processes);
 
-  void RequestLowMemoryKillCounts();
-  void LogLowMemoryKillCounts(mojom::LowMemoryKillCountsPtr counts);
+  void OnRequestKillCountTimer();
+  void OnListVmsResponse(
+      absl::optional<vm_tools::concierge::ListVmsResponse> response);
+  void OnLowMemoryKillCounts(
+      absl::optional<vm_tools::concierge::ListVmsResponse> vms_list,
+      mojom::LowMemoryKillCountsPtr counts);
 
   // DBus callbacks.
   void OnArcStartTimeRetrieved(std::vector<mojom::BootProgressEventPtr> events,
@@ -289,6 +316,9 @@ class ArcMetricsService : public KeyedService,
   void OnArcStartTimeForPriAbiMigration(
       base::TimeTicks durationTicks,
       absl::optional<base::TimeTicks> arc_start_time);
+
+  void OnVmsListedForKillCounts(
+      absl::optional<vm_tools::concierge::ListVmsResponse> response);
 
   // Notify AppKillObservers.
   void NotifyLowMemoryKill();
@@ -310,6 +340,8 @@ class ArcMetricsService : public KeyedService,
   // A function that appends a suffix to the base of a histogram name based on
   // the current user profile.
   HistogramNamer histogram_namer_;
+
+  std::string user_id_hash_;
 
   ProcessObserver process_observer_;
   base::RepeatingTimer request_process_list_timer_;

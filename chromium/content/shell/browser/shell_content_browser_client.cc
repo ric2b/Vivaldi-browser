@@ -28,6 +28,7 @@
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_state_manager.h"
 #include "components/metrics/test/test_enabled_state_provider.h"
+#include "components/network_hints/browser/simple_network_hints_handler_impl.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -39,6 +40,7 @@
 #include "components/variations/service/variations_field_trial_creator.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/service/variations_service_client.h"
+#include "components/variations/variations_switches.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_throttle.h"
@@ -143,8 +145,8 @@ class ShellControllerImpl : public mojom::ShellController {
                          ExecuteJavaScriptCallback callback) override {
     CHECK(!Shell::windows().empty());
     WebContents* contents = Shell::windows()[0]->web_contents();
-    contents->GetMainFrame()->ExecuteJavaScriptForTests(script,
-                                                        std::move(callback));
+    contents->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
+        script, std::move(callback));
   }
 
   void ShutDown() override { Shell::Shutdown(); }
@@ -191,6 +193,14 @@ std::string GetShellReducedUserAgent() {
   return content::GetReducedUserAgent(
       command_line->HasSwitch(switches::kUseMobileUserAgent),
       CONTENT_SHELL_MAJOR_VERSION);
+}
+
+void BindNetworkHintsHandler(
+    content::RenderFrameHost* frame_host,
+    mojo::PendingReceiver<network_hints::mojom::NetworkHintsHandler> receiver) {
+  DCHECK(frame_host);
+  network_hints::SimpleNetworkHintsHandlerImpl::Create(frame_host,
+                                                       std::move(receiver));
 }
 
 }  // namespace
@@ -472,6 +482,8 @@ void ShellContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     mojo::BinderMapWithContext<RenderFrameHost*>* map) {
   performance_manager::PerformanceManagerRegistry::GetInstance()
       ->ExposeInterfacesToRenderFrame(map);
+  map->Add<network_hints::mojom::NetworkHintsHandler>(
+      base::BindRepeating(&BindNetworkHintsHandler));
 }
 
 void ShellContentBrowserClient::OpenURL(
@@ -715,13 +727,16 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
 
   variations::SafeSeedManager safe_seed_manager(local_state_.get());
 
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
   // Since this is a test-only code path, some arguments to SetUpFieldTrials are
   // null.
   // TODO(crbug/1248066): Consider passing a low entropy provider and source.
   field_trial_creator.SetUpFieldTrials(
       variation_ids,
-      content::GetSwitchDependentFeatureOverrides(
-          *base::CommandLine::ForCurrentProcess()),
+      command_line->GetSwitchValueASCII(
+          variations::switches::kForceVariationIds),
+      content::GetSwitchDependentFeatureOverrides(*command_line),
       /*low_entropy_provider=*/nullptr, std::move(feature_list),
       metrics_state_manager.get(), field_trials_.get(), &safe_seed_manager,
       /*low_entropy_source_value=*/absl::nullopt);

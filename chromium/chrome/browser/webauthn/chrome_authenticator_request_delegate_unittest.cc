@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
@@ -20,15 +19,15 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/test/web_contents_tester.h"
 #include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_constants.h"
-#include "device/fido/fido_device_authenticator.h"
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/test_callback_receiver.h"
+#include "device/fido/virtual_ctap2_device.h"
+#include "device/fido/virtual_fido_device_authenticator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -43,6 +42,8 @@
 
 namespace {
 
+static constexpr char kRelyingPartyID[] = "example.com";
+
 class ChromeAuthenticatorRequestDelegateTest
     : public ChromeRenderViewHostTestHarness {};
 
@@ -53,6 +54,11 @@ class TestAuthenticatorModelObserver final
       AuthenticatorRequestDialogModel* model)
       : model_(model) {
     last_step_ = model_->current_step();
+  }
+  ~TestAuthenticatorModelObserver() override {
+    if (model_) {
+      model_->RemoveObserver(this);
+    }
   }
 
   AuthenticatorRequestDialogModel::Step last_step() { return last_step_; }
@@ -120,11 +126,11 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, IndividualAttestation) {
     PrefService* prefs =
         Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
     if (!test.permit_attestation_policy_values.empty()) {
-      std::vector<base::Value> policy_values;
+      base::Value::List policy_values;
       for (const std::string& v : test.permit_attestation_policy_values)
-        policy_values.emplace_back(v);
-      prefs->Set(prefs::kSecurityKeyPermitAttestation,
-                 base::Value(std::move(policy_values)));
+        policy_values.Append(v);
+      prefs->SetList(prefs::kSecurityKeyPermitAttestation,
+                     std::move(policy_values));
     } else {
       prefs->ClearPref(prefs::kSecurityKeyPermitAttestation);
     }
@@ -312,7 +318,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, ConditionalUI) {
     delegate.OnTransportAvailabilityEnumerated(
         AuthenticatorRequestDialogModel::TransportAvailabilityInfo());
     EXPECT_EQ(observer.last_step() ==
-                  AuthenticatorRequestDialogModel::Step::kLocationBarBubble,
+                  AuthenticatorRequestDialogModel::Step::kConditionalMediation,
               conditional_ui);
   }
 }
@@ -364,6 +370,22 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, MaybeGetRelyingPartyIdOverride) {
   }
 }
 
+// Tests that attestation is returned if the virtual environment is enabled and
+// the UI is disabled.
+// Regression test for crbug.com/1342458
+TEST_F(ChromeAuthenticatorRequestDelegateTest, VirtualEnvironmentAttestation) {
+  ChromeAuthenticatorRequestDelegate delegate(main_rfh());
+  delegate.DisableUI();
+  delegate.SetVirtualEnvironment(true);
+  device::VirtualFidoDeviceAuthenticator authenticator(
+      std::make_unique<device::VirtualCtap2Device>());
+  device::test::ValueCallbackReceiver<bool> cb;
+  delegate.ShouldReturnAttestation(kRelyingPartyID, &authenticator,
+                                   /*is_enterprise_attestation=*/false,
+                                   cb.callback());
+  EXPECT_TRUE(cb.value());
+}
+
 #if BUILDFLAG(IS_MAC)
 std::string TouchIdMetadataSecret(ChromeWebAuthenticationDelegate& delegate,
                                   content::BrowserContext* browser_context) {
@@ -403,8 +425,6 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest,
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_WIN)
-
-static constexpr char kRelyingPartyID[] = "example.com";
 
 // Tests that ShouldReturnAttestation() returns with true if |authenticator|
 // is the Windows native WebAuthn API with WEBAUTHN_API_VERSION_2 or higher,
@@ -457,8 +477,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateWindowsBehaviorTest,
   AuthenticatorRequestDialogModel::TransportAvailabilityInfo tai;
   tai.has_win_native_api_authenticator = true;
   tai.win_native_api_authenticator_id = "ID";
-  tai.available_transports.insert(
-      device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
+  tai.available_transports.insert(device::FidoTransportProtocol::kHybrid);
 
   CreateObjectsUnderTest();
   delegate_->dialog_model()->set_cable_transport_info(

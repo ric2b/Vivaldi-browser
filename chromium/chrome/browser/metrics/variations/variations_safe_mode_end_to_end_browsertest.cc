@@ -34,11 +34,9 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/service/variations_field_trial_creator.h"
-#include "components/variations/service/variations_safe_mode_constants.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/variations_switches.h"
 #include "components/variations/variations_test_utils.h"
-#include "components/version_info/channel.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -172,8 +170,7 @@ class VariationsSafeModeEndToEndBrowserTest : public ::testing::Test {
       PrefService* pref_service) {
     static constexpr wchar_t kDummyWindowsRegistryKey[] = L"";
     auto clean_exit_beacon = std::make_unique<metrics::CleanExitBeacon>(
-        kDummyWindowsRegistryKey, user_data_dir(), pref_service,
-        version_info::Channel::UNKNOWN);
+        kDummyWindowsRegistryKey, user_data_dir(), pref_service);
     clean_exit_beacon->Initialize();
     return clean_exit_beacon;
   }
@@ -186,7 +183,13 @@ class VariationsSafeModeEndToEndBrowserTest : public ::testing::Test {
   base::FilePath local_state_file_;
 };
 
-TEST_F(VariationsSafeModeEndToEndBrowserTest, ExtendedSafeModeEndToEnd) {
+// TODO(crbug.com/1344852): test is flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ExtendedSafeModeEndToEnd DISABLED_ExtendedSafeModeEndToEnd
+#else
+#define MAYBE_ExtendedSafeModeEndToEnd ExtendedSafeModeEndToEnd
+#endif
+TEST_F(VariationsSafeModeEndToEndBrowserTest, MAYBE_ExtendedSafeModeEndToEnd) {
   // Reuse the browser_tests binary (i.e., that this test code is in), to
   // manually run the sub-test.
   base::CommandLine sub_test =
@@ -200,16 +203,8 @@ TEST_F(VariationsSafeModeEndToEndBrowserTest, ExtendedSafeModeEndToEnd) {
   sub_test.AppendSwitch(::switches::kSingleProcessTests);
   sub_test.AppendSwitchPath(::switches::kUserDataDir, user_data_dir());
 
-  const std::string group_name = kEnabledGroup;
-  // Select the extended variations safe mode field trial group. The "*"
-  // prefix forces the experiment/trial state to "active" at startup.
-  sub_test.AppendSwitchASCII(
-      ::switches::kForceFieldTrials,
-      base::StrCat({"*", kExtendedSafeModeTrial, "/", group_name, "/"}));
-
-  // Assign the test environment to be on the "Canary" channel. This ensures
-  // compatibility with both the extended safe mode trial and the crashing
-  // study in the seed.
+  // Assign the test environment to be on the Canary channel. This ensures
+  // compatibility with the crashing study in the seed.
   sub_test.AppendSwitchASCII(switches::kFakeVariationsChannel, "canary");
 
   // Explicitly avoid any terminal control characters in the output.
@@ -228,8 +223,6 @@ TEST_F(VariationsSafeModeEndToEndBrowserTest, ExtendedSafeModeEndToEnd) {
     WriteSeedData(local_state.get(), kTestSeedData, kSafeSeedPrefKeys);
     WriteSeedData(local_state.get(), kCrashingSeedData, kRegularSeedPrefKeys);
   }
-
-  SetUpExtendedSafeModeExperiment(group_name);
 
   // The next run will be |kCrashStreakThreshold| crashing runs of the sub-test.
   {

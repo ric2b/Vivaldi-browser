@@ -80,6 +80,7 @@ class FindBarMatchCountLabel : public views::Label {
   }
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ax::mojom::Role::kStatus;
     if (!last_result_) {
       node_data->SetNameExplicitlyEmpty();
     } else if (last_result_->number_of_matches() < 1) {
@@ -91,7 +92,6 @@ class FindBarMatchCountLabel : public views::Label {
           base::FormatNumber(last_result_->active_match_ordinal()),
           base::FormatNumber(last_result_->number_of_matches())));
     }
-    node_data->role = ax::mojom::Role::kStatus;
   }
 
   void SetResult(const find_in_page::FindNotificationDetails& result) {
@@ -183,6 +183,7 @@ FindBarView::FindBarView(FindBarHost* host) {
           views::Builder<views::Separator>()
               .CopyAddressTo(&separator_)
               .SetCanProcessEventsWithinSubtree(false)
+              .SetColorId(kColorFindBarSeparator)
               .SetProperty(views::kMarginsKey,
                            gfx::Insets(toast_control_vertical_margin +
                                        horizontal_margin)),
@@ -455,7 +456,6 @@ void FindBarView::OnThemeChanged() {
       color_provider->GetColor(kColorFindBarBackground));
   match_count_text_->SetEnabledColor(
       color_provider->GetColor(kColorFindBarMatchCount));
-  separator_->SetColor(color_provider->GetColor(kColorFindBarSeparator));
 
   const SkColor fg_color = color_provider->GetColor(kColorFindBarButtonIcon);
   const SkColor fg_disabled_color =

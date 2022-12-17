@@ -55,13 +55,11 @@
 namespace payments {
 
 namespace {
-const auto kBillingAddressType = autofill::ADDRESS_BILLING_LINE1;
-
 // This is preferred to SelectValue, since only SetSelectedRow fires the events
 // as if done by a user.
 void SelectComboboxRowForValue(views::Combobox* combobox,
                                const std::u16string& text) {
-  int i;
+  size_t i;
   for (i = 0; i < combobox->GetRowCount(); i++) {
     if (combobox->GetTextForRow(i) == text)
       break;
@@ -560,7 +558,7 @@ void PaymentRequestBrowserTestBase::CreatePaymentRequestForTest(
   delegate_ = delegate.get();
   auto display_manager = delegate->GetDisplayManager()->GetWeakPtr();
   auto* request = new PaymentRequest(
-      render_frame_host, std::move(delegate), std::move(display_manager),
+      *render_frame_host, std::move(delegate), std::move(display_manager),
       std::move(receiver), SPCTransactionMode::NONE, GetWeakPtr());
   requests_.push_back(request->GetWeakPtr());
 }
@@ -775,7 +773,7 @@ std::u16string PaymentRequestBrowserTestBase::GetComboboxValue(
       static_cast<ValidatingCombobox*>(delegate_->dialog_view()->GetViewByID(
           EditorViewController::GetInputFieldViewId(type)));
   DCHECK(combobox);
-  return combobox->GetModel()->GetItemAt(combobox->GetSelectedIndex());
+  return combobox->GetModel()->GetItemAt(combobox->GetSelectedIndex().value());
 }
 
 void PaymentRequestBrowserTestBase::SetComboboxValue(
@@ -791,9 +789,9 @@ void PaymentRequestBrowserTestBase::SetComboboxValue(
 
 void PaymentRequestBrowserTestBase::SelectBillingAddress(
     const std::string& billing_address_id) {
-  views::Combobox* address_combobox(
-      static_cast<views::Combobox*>(dialog_view()->GetViewByID(
-          EditorViewController::GetInputFieldViewId(kBillingAddressType))));
+  views::Combobox* address_combobox(static_cast<views::Combobox*>(
+      dialog_view()->GetViewByID(EditorViewController::GetInputFieldViewId(
+          autofill::ADDRESS_HOME_LINE1))));
   ASSERT_NE(address_combobox, nullptr);
   autofill::AddressComboboxModel* address_combobox_model(
       static_cast<autofill::AddressComboboxModel*>(

@@ -13,6 +13,7 @@
 #include "ash/wm/desks/desks_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -178,8 +180,17 @@ BrowserShortcutShelfItemController::GetAppMenuItems(
               (browser->profile() && browser->profile()->IsIncognitoProfile())
                   ? IDR_ASH_SHELF_LIST_INCOGNITO_BROWSER
                   : IDR_ASH_SHELF_LIST_BROWSER);
-      items.push_back({static_cast<int>(app_menu_items.size() - 1),
-                       controller->GetAppMenuTitle(tab), icon.AsImageSkia()});
+
+      // Set the title of the app menu item to the browser window title if the
+      // user set one on the window. Otherwise, use the title defined in
+      // ChromeShelfController.
+      std::string browser_title = browser->user_title();
+      std::u16string item_title = browser_title.empty()
+                                      ? controller->GetAppMenuTitle(tab)
+                                      : base::UTF8ToUTF16(browser_title);
+
+      items.push_back({static_cast<int>(app_menu_items.size() - 1), item_title,
+                       icon.AsImageSkia()});
     } else {
       base::RecordAction(
           base::UserMetricsAction("Shelf_BrowserShortcutShelfItem_ShowTabs"));
@@ -228,7 +239,7 @@ void BrowserShortcutShelfItemController::ExecuteCommand(bool from_context_menu,
         tab_strip->CloseAllTabs();
       } else if (tab_strip->ContainsIndex(tab_index)) {
         tab_strip->CloseWebContentsAt(tab_index,
-                                      TabStripModel::CLOSE_USER_GESTURE);
+                                      TabCloseTypes::CLOSE_USER_GESTURE);
       }
     } else {
       multi_user_util::MoveWindowToCurrentDesktop(

@@ -8,9 +8,13 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
-#include "components/history/core/browser/history_backend.h"
+#include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
 #include "components/history/core/browser/history_backend_observer.h"
+#include "components/history/core/browser/history_types.h"
+#include "components/history/core/browser/sync/history_backend_for_sync.h"
 #include "components/sync/model/model_type_sync_bridge.h"
 
 namespace syncer {
@@ -21,6 +25,7 @@ class ModelTypeChangeProcessor;
 namespace history {
 
 class HistorySyncMetadataDatabase;
+class VisitIDRemapper;
 
 class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
                           public HistoryBackendObserver {
@@ -28,7 +33,7 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
   // `sync_metadata_store` is owned by `history_backend`, and must outlive
   // HistorySyncBridge.
   HistorySyncBridge(
-      HistoryBackend* history_backend,
+      HistoryBackendForSync* history_backend,
       HistorySyncMetadataDatabase* sync_metadata_store,
       std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor);
 
@@ -53,9 +58,8 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
 
   // HistoryBackendObserver:
   void OnURLVisited(HistoryBackend* history_backend,
-                    ui::PageTransition transition,
-                    const URLRow& row,
-                    base::Time visit_time) override;
+                    const URLRow& url_row,
+                    const VisitRow& visit_row) override;
   void OnURLsModified(HistoryBackend* history_backend,
                       const URLRows& changed_urls,
                       bool is_from_expiration) override;
@@ -64,10 +68,63 @@ class HistorySyncBridge : public syncer::ModelTypeSyncBridge,
                      bool expired,
                      const URLRows& deleted_rows,
                      const std::set<GURL>& favicon_urls) override;
+  void OnVisitUpdated(const VisitRow& visit_row) override;
+  void OnVisitDeleted(const VisitRow& visit_row) override;
 
   // Called by HistoryBackend when database error is reported through
   // DatabaseErrorCallback.
   void OnDatabaseError();
+
+ private:
+  // Synchronously loads sync metadata from the HistorySyncMetadataDatabase and
+  // passes it to the processor so that it can start tracking changes.
+  void LoadMetadata();
+
+  // Adds visit(s) corresponding to the `specifics` to the HistoryBackend.
+  // Returns true on success, or false in case of backend errors.
+  bool AddEntityInBackend(VisitIDRemapper* id_remapper,
+                          const sync_pb::HistorySpecifics& specifics);
+
+  // Updates the visit(s) corresponding to the `specifics` in the
+  // HistoryBackend. Returns true on success, or false in case of errors (most
+  // commonly, because no matching entry exists in the backend).
+  bool UpdateEntityInBackend(VisitIDRemapper* id_remapper,
+                             const sync_pb::HistorySpecifics& specifics);
+
+  // Untracks all entities from the processor, and clears their (persisted)
+  // metadata, except for entities that are "unsynced", i.e. that are waiting to
+  // be committed.
+  void UntrackAndClearMetadataForSyncedEntities();
+
+  // Returns the cache GUID of the Sync client on this device. Must only be
+  // called after `change_processor()->IsTrackingMetadata()` returns true
+  // (because before that, the cache GUID isn't known).
+  std::string GetLocalCacheGuid() const;
+
+  // For each entry in `visits`, queries the corresponding URLRow from the
+  // history backend.
+  std::vector<URLRow> QueryURLsForVisits(const std::vector<VisitRow>& visits);
+
+  // A non-owning pointer to the backend, which we're syncing local changes from
+  // and sync changes to. Never null.
+  const raw_ptr<HistoryBackendForSync> history_backend_;
+
+  // Whether we're currently processing changes from the syncer. While this is
+  // true, we ignore any local url changes, since we triggered them.
+  bool processing_syncer_changes_ = false;
+
+  // A non-owning pointer to the database, which is for storing sync metadata
+  // and state. Can be null in case of unrecoverable database errors.
+  raw_ptr<HistorySyncMetadataDatabase> sync_metadata_database_;
+
+  // HistoryBackend uses SequencedTaskRunner, so this makes sure
+  // HistorySyncBridge is used on the correct sequence.
+  base::SequenceChecker sequence_checker_;
+
+  // Tracks observed history backend, for receiving updates from history
+  // backend.
+  base::ScopedObservation<HistoryBackendForSync, HistoryBackendObserver>
+      history_backend_observation_{this};
 };
 
 }  // namespace history

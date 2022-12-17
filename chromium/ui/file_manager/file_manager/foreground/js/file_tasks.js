@@ -443,6 +443,10 @@ export class FileTasks {
           task.iconType = 'gsheet';
           task.title = loadTimeData.getString('TASK_OPEN_GSHEET');
           task.verb = chrome.fileManagerPrivate.Verb.OPEN_WITH;
+        } else if (parsedActionId === 'upload-office-to-drive') {
+          task.iconType = 'generic';
+          task.title = 'Upload to Drive';
+          task.verb = undefined;
         } else if (parsedActionId === 'open-web-drive-office-powerpoint') {
           task.iconType = 'gslides';
           task.title = loadTimeData.getString('TASK_OPEN_GSLIDES');
@@ -467,38 +471,6 @@ export class FileTasks {
       }
       if (!task.iconType && taskType === 'web-intent') {
         task.iconType = 'generic';
-      }
-
-      // Add verb to title.
-      if (task.verb) {
-        let verbButtonLabel = '';
-        switch (task.verb) {
-          case chrome.fileManagerPrivate.Verb.ADD_TO:
-            verbButtonLabel = 'ADD_TO_VERB_BUTTON_LABEL';
-            break;
-          case chrome.fileManagerPrivate.Verb.PACK_WITH:
-            verbButtonLabel = 'PACK_WITH_VERB_BUTTON_LABEL';
-            break;
-          case chrome.fileManagerPrivate.Verb.SHARE_WITH:
-            // Even when the task has SHARE_WITH verb, we don't prefix the title
-            // with "Share with" when the task is from SEND/SEND_MULTIPLE intent
-            // handlers from Android apps, since the title can already have an
-            // appropriate verb.
-            if (!(taskType == 'arc' &&
-                  (parsedActionId == 'send' ||
-                   parsedActionId == 'send_multiple'))) {
-              verbButtonLabel = 'SHARE_WITH_VERB_BUTTON_LABEL';
-            }
-            break;
-          case chrome.fileManagerPrivate.Verb.OPEN_WITH:
-            verbButtonLabel = 'OPEN_WITH_VERB_BUTTON_LABEL';
-            break;
-          default:
-            console.error('Invalid task verb: ' + task.verb);
-        }
-        if (verbButtonLabel) {
-          task.label = loadTimeData.getStringF(verbButtonLabel, task.title);
-        }
       }
 
       result.push(task);
@@ -686,7 +658,7 @@ export class FileTasks {
       const descriptor = {
         appId: LEGACY_FILES_EXTENSION_ID,
         taskType: 'file',
-        actionId: 'view-in-browser'
+        actionId: 'view-in-browser',
       };
       chrome.fileManagerPrivate.executeTask(
           descriptor, this.entries_, onViewFiles);
@@ -1105,7 +1077,7 @@ export class FileTasks {
     } else {
       combobutton.defaultItem = {
         type: FileTasks.TaskMenuButtonItemType.ShowMenu,
-        label: str('OPEN_WITH_BUTTON_LABEL')
+        label: str('OPEN_WITH_BUTTON_LABEL'),
       };
     }
 
@@ -1125,7 +1097,7 @@ export class FileTasks {
         combobutton.addSeparator();
         const changeDefaultMenuItem = combobutton.addDropDownItem({
           type: FileTasks.TaskMenuButtonItemType.ChangeDefaultTask,
-          label: loadTimeData.getString('CHANGE_DEFAULT_MENU_ITEM')
+          label: loadTimeData.getString('CHANGE_DEFAULT_MENU_ITEM'),
         });
         changeDefaultMenuItem.classList.add('change-default');
       }
@@ -1197,7 +1169,7 @@ export class FileTasks {
       task: task,
       bold: opt_bold || false,
       isDefault: opt_isDefault || false,
-      isGenericFileHandler: /** @type {boolean} */ (task.isGenericFileHandler)
+      isGenericFileHandler: /** @type {boolean} */ (task.isGenericFileHandler),
     };
   }
 
@@ -1293,7 +1265,7 @@ export class FileTasks {
 FileTasks.INSTALL_LINUX_PACKAGE_TASK_DESCRIPTOR = {
   appId: LEGACY_FILES_EXTENSION_ID,
   taskType: 'app',
-  actionId: 'install-linux-package'
+  actionId: 'install-linux-package',
 };
 
 /**
@@ -1303,7 +1275,7 @@ FileTasks.INSTALL_LINUX_PACKAGE_TASK_DESCRIPTOR = {
 FileTasks.TaskMenuButtonItemType = {
   ShowMenu: 'ShowMenu',
   RunTask: 'RunTask',
-  ChangeDefaultTask: 'ChangeDefaultTask'
+  ChangeDefaultTask: 'ChangeDefaultTask',
 };
 
 /**
@@ -1351,7 +1323,7 @@ FileTasks.UMA_INDEX_KNOWN_EXTENSIONS = Object.freeze([
   '.gslides',  '.arw',         '.cr2',
   '.dng',      '.nef',         '.nrw',
   '.orf',      '.raf',         '.rw2',
-  '.tini'
+  '.tini',
 ]);
 
 /**

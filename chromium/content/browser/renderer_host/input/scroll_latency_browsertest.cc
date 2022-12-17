@@ -84,7 +84,7 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
   RenderWidgetHostImpl* GetWidgetHost() {
     return RenderWidgetHostImpl::From(shell()
                                           ->web_contents()
-                                          ->GetMainFrame()
+                                          ->GetPrimaryMainFrame()
                                           ->GetRenderViewHost()
                                           ->GetWidget());
   }
@@ -147,7 +147,7 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
       // latency histograms being logged).
       // We must install a callback for each gesture since they are one-shot
       // callbacks.
-      shell()->web_contents()->GetMainFrame()->InsertVisualStateCallback(
+      shell()->web_contents()->GetPrimaryMainFrame()->InsertVisualStateCallback(
           base::BindOnce(&ScrollLatencyBrowserTest::InvokeVisualStateCallback,
                          base::Unretained(this)));
 
@@ -224,8 +224,8 @@ IN_PROC_BROWSER_TEST_F(ScrollLatencyBrowserTest, MAYBE_MultipleWheelScroll) {
   RunMultipleWheelScroll();
 }
 
-// Disabled due to flakiness https://crbug.com/1163246.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+// Disabled due to flakiness https://crbug.com/1163246 and https://crbug.com/1349901
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
 #define MAYBE_MultipleWheelScrollOnMain DISABLED_MultipleWheelScrollOnMain
 #else
 #define MAYBE_MultipleWheelScrollOnMain MultipleWheelScrollOnMain
@@ -573,8 +573,9 @@ IN_PROC_BROWSER_TEST_F(ScrollLatencyCompositedScrollbarBrowserTest,
   RunScrollbarThumbDragLatencyTest();
 }
 
+// Disabled due to flakiness https://crbug.com/1188553
 IN_PROC_BROWSER_TEST_F(ScrollLatencyCompositedScrollbarBrowserTest,
-                       ScrollbarThumbDragDeviceChange) {
+                       DISABLED_ScrollbarThumbDragDeviceChange) {
 #if !BUILDFLAG(IS_ANDROID)
   LoadURL();
 

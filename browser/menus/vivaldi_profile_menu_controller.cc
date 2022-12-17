@@ -128,7 +128,7 @@ void ProfileMenuController::SetImage(int command_id,
   gfx::CalculateFaviconTargetSize(&target_dip_width, &target_dip_height);
   gfx::Image sized_icon = profiles::GetSizedAvatarIcon(
       icon, target_dip_width, target_dip_height, profiles::SHAPE_CIRCLE);
-  menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id),
+  menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id).value(),
                       ui::ImageModel::FromImage(sized_icon));
 }
 

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
+
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_cocoa_controller.h"
 
 #import "base/mac/foundation_util.h"
@@ -47,7 +49,7 @@ NSMenuItem* GetItemWithSubmenu(NSMenu* submenu) {
 
 @implementation BookmarkMenuCocoaController {
  @private
-  BookmarkMenuBridge* _bridge;  // Weak. Owns |self|.
+  raw_ptr<BookmarkMenuBridge> _bridge;  // Weak. Owns |self|.
 }
 
 + (NSString*)tooltipForNode:(const BookmarkNode*)node {
@@ -116,7 +118,7 @@ NSMenuItem* GetItemWithSubmenu(NSMenu* submenu) {
       ui::PAGE_TRANSITION_AUTO_BOOKMARK, false);
   browser->OpenURL(params);
   RecordBookmarkLaunch(
-      BOOKMARK_LAUNCH_LOCATION_TOP_MENU,
+      BookmarkLaunchLocation::kTopMenu,
       profile_metrics::GetBrowserProfileType(_bridge->GetProfile()));
 }
 

@@ -205,4 +205,12 @@ public class Features {
 
     // WebViewCompat.getVariationsHeader
     public static final String GET_VARIATIONS_HEADER = "GET_VARIATIONS_HEADER";
+
+    // WebSettingsCompat.setEnterpriseAuthenticationAppLinkPolicyEnabled
+    // WebSettingsCompat.getEnterpriseAuthenticationAppLinkPolicyEnabled
+    public static final String ENTERPRISE_AUTHENTICATION_APP_LINK_POLICY =
+            "ENTERPRISE_AUTHENTICATION_APP_LINK_POLICY";
+
+    // CookieManagerCompat.getCookieInfo
+    public static final String GET_COOKIE_INFO = "GET_COOKIE_INFO";
 }

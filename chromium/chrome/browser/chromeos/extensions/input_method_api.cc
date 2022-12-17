@@ -387,11 +387,12 @@ ExtensionFunction::ResponseAction InputMethodPrivateGetSettingsFunction::Run() {
   const auto params = GetSettings::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  const base::Value* input_methods =
+  const base::Value::Dict& input_methods =
       Profile::FromBrowserContext(browser_context())
           ->GetPrefs()
-          ->GetDictionary(prefs::kLanguageInputMethodSpecificSettings);
-  const base::Value* engine_result = input_methods->FindPath(params->engine_id);
+          ->GetValueDict(prefs::kLanguageInputMethodSpecificSettings);
+  const base::Value* engine_result =
+      input_methods.FindByDottedPath(params->engine_id);
   base::Value result;
   if (engine_result)
     result = engine_result->Clone();
@@ -610,8 +611,8 @@ InputMethodPrivateSetSelectionRangeFunction::Run() {
   if (!engine->InputMethodEngine::SetSelectionRange(
           params.context_id, *params.selection_start, *params.selection_end,
           &error)) {
-    std::vector<base::Value> results;
-    results.emplace_back(false);
+    base::Value::List results;
+    results.Append(false);
     return RespondNow(ErrorWithArguments(
         std::move(results), InformativeError(error, static_function_name())));
   }

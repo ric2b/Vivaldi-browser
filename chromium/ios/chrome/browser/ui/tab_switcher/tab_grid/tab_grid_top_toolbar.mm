@@ -4,14 +4,20 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_top_toolbar.h"
 
+#import "base/check_op.h"
+#import "base/feature_list.h"
+#import "base/ios/ios_util.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -25,7 +31,26 @@ const int kSelectionModeButtonSize = 17;
 const int kSearchBarTrailingSpace = 24;
 
 // The size of top toolbar search symbol image.
-NSInteger kSymbolSearchImagePointSize = 22;
+const CGFloat kSymbolSearchImagePointSize = 22;
+
+// Kill switch guarding a workaround for broken UI around the dynamic island,
+// see crbug.com/1364629. This workaround makes the UIToolbar background
+// transparent and correctly frames a UIVisualEffectView.
+const base::Feature kDynamicIslandToolbarBlurFix{
+    "DynamicIslandToolbarBlurFix", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Kill switch guarding a workaround for broken UI around the dynamic island,
+// see crbug.com/1364629. This workaround manually resizes the incorrectly
+// framed UIVisualEffectView.
+const base::Feature kDynamicIslandToolbarManualOffsetFix{
+    "DynamicIslandToolbarManualOffsetFix", base::FEATURE_ENABLED_BY_DEFAULT};
+}  // namespace
+
+bool ShouldUseToolbarBlurFix() {
+  static bool dynamic_island_toolbar_blur_fix =
+      base::FeatureList::IsEnabled(kDynamicIslandToolbarBlurFix) &&
+      base::ios::HasDynamicIsland();
+  return dynamic_island_toolbar_blur_fix;
 }
 
 @interface TabGridTopToolbar () <UIToolbarDelegate>
@@ -68,7 +93,7 @@ NSInteger kSymbolSearchImagePointSize = 22;
   if (_mode == mode)
     return;
   // Reset search state when exiting search mode.
-  if (IsTabsSearchEnabled() && _mode == TabGridModeSearch) {
+  if (_mode == TabGridModeSearch) {
     _searchBar.text = @"";
     [_searchBar resignFirstResponder];
   }
@@ -225,6 +250,53 @@ NSInteger kSymbolSearchImagePointSize = 22;
   [self setItemsForTraitCollection:self.traitCollection];
 }
 
+- (void)layoutSubviews {
+  [super layoutSubviews];
+
+  // The following is a workaround for crbug.com/1364629, which appears to be a
+  // bug in the UIToolbar when using UIBarPositionTopAttached. Once this is
+  // fixed in a future release of iOS, everything below should be removed.
+  // However, everything below should also be safe to run, including when the
+  // incorrect negative offset is corrected.
+  static bool dynamic_island_toolbar_manual_offset_fix =
+      base::FeatureList::IsEnabled(kDynamicIslandToolbarManualOffsetFix) &&
+      base::ios::HasDynamicIsland();
+  if (!dynamic_island_toolbar_manual_offset_fix)
+    return;
+
+  // Sanity check that we are a UIToolbar with a background blur and content
+  // view.
+  if ([[self subviews] count] != 2)
+    return;
+
+  UIView* view = [self subviews][0];
+  NSString* className = NSStringFromClass([view class]);
+  // Another safety check -- but don't put the actual string in
+  // `_UIBarBackground`.
+  if (![className hasSuffix:@"BarBackground"])
+    return;
+
+  // Make sure we have the 'wrong' offset
+  CGRect frame = view.frame;
+#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
+  if (frame.origin.y != -54) {
+#else
+  if (frame.origin.y != -44) {
+#endif
+    return;
+  }
+
+  // The actual workaround.
+#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
+  const CGFloat kOffsetFix = 5;
+#else
+  const CGFloat kOffsetFix = 15;
+#endif
+  frame.origin.y -= kOffsetFix;
+  frame.size.height += kOffsetFix;
+  view.frame = frame;
+}
+
 #pragma mark - UIBarPositioningDelegate
 
 // Returns UIBarPositionTopAttached, otherwise the toolbar's translucent
@@ -270,7 +342,7 @@ NSInteger kSymbolSearchImagePointSize = 22;
   UIBarButtonItem* trailingButton = _doneButton;
   _selectionModeFixedSpace.width = 0;
   if ([self shouldUseCompactLayout:traitCollection]) {
-    if (IsTabsSearchEnabled() && _mode == TabGridModeNormal) {
+    if (_mode == TabGridModeNormal) {
       _leadingButton = _searchButton;
     } else {
       _leadingButton = _spaceItem;
@@ -317,7 +389,7 @@ NSInteger kSymbolSearchImagePointSize = 22;
 
   [items addObject:_leadingButton];
 
-  if (IsTabsSearchEnabled() && _mode == TabGridModeNormal) {
+  if (_mode == TabGridModeNormal) {
     animated = YES;
     [items
         addObjectsFromArray:@[ _iconButtonAdditionalSpaceItem, _searchButton ]];
@@ -331,7 +403,7 @@ NSInteger kSymbolSearchImagePointSize = 22;
     // cases, there is a floating new tab button on the bottom.
     [items
         addObjectsFromArray:@[ _newTabButton, _iconButtonAdditionalSpaceItem ]];
-  } else if (!IsTabsSearchEnabled() || _mode != TabGridModeNormal) {
+  } else if (_mode != TabGridModeNormal) {
     [items addObject:_selectionModeFixedSpace];
   }
 
@@ -359,9 +431,23 @@ NSInteger kSymbolSearchImagePointSize = 22;
   self.translatesAutoresizingMaskIntoConstraints = NO;
   self.barStyle = UIBarStyleBlack;
   self.translucent = YES;
+
+  // Vivaldi: - Top tool bar support for both light and dark mode
+  if (vivaldi::IsVivaldiRunning()) {
+    self.barStyle = UIBarStyleDefault;
+    self.translucent = NO;
+  }
+  // End Vivaldi
+
   self.delegate = self;
   [self setShadowImage:[[UIImage alloc] init]
       forToolbarPosition:UIBarPositionAny];
+  if (ShouldUseToolbarBlurFix()) {
+    // Do this to make the toolbar transparent instead of translucent.
+    [self setBackgroundImage:[UIImage new]
+          forToolbarPosition:UIToolbarPositionAny
+                  barMetrics:UIBarMetricsDefault];
+  }
 
   _closeAllOrUndoButton = [[UIBarButtonItem alloc] init];
   _closeAllOrUndoButton.tintColor =
@@ -400,54 +486,50 @@ NSInteger kSymbolSearchImagePointSize = 22;
   _selectedTabsItem.enabled = NO;
   [_selectedTabsItem setTitleTextAttributes:@{
     NSForegroundColorAttributeName :
-        UIColorFromRGB(kTabGridToolbarTextButtonColor),
+      UIColorFromRGB(kTabGridToolbarTextButtonColor),
     NSFontAttributeName :
-        [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
-            scaledFontForFont:[UIFont systemFontOfSize:kSelectionModeButtonSize
-                                                weight:UIFontWeightSemibold]]
+      [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
+       scaledFontForFont:[UIFont systemFontOfSize:kSelectionModeButtonSize
+                                           weight:UIFontWeightSemibold]]
   }
                                    forState:UIControlStateDisabled];
 
-  if (IsTabsSearchEnabled()) {
-    if (UseSymbols()) {
-      UIImage* searchImage = DefaultSymbolWithPointSize(
-          kSearchSymbol, kSymbolSearchImagePointSize);
-      _searchButton =
-          [[UIBarButtonItem alloc] initWithImage:searchImage
-                                           style:UIBarButtonItemStylePlain
-                                          target:nil
-                                          action:nil];
-    } else {
-      _searchButton = [[UIBarButtonItem alloc]
-          initWithBarButtonSystemItem:UIBarButtonSystemItemSearch
-                               target:nil
-                               action:nil];
-    }
-
-    _searchButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
-    _searchButton.accessibilityIdentifier = kTabGridSearchButtonIdentifier;
-
-    _searchBar = [[UISearchBar alloc] init];
-    _searchBar.placeholder =
-        l10n_util::GetNSString(IDS_IOS_TAB_GRID_SEARCHBAR_PLACEHOLDER);
-    _searchBar.accessibilityIdentifier = kTabGridSearchBarIdentifier;
-    // Cancel Button for the searchbar doesn't appear in ipadOS. Disable it and
-    // create a custom cancel button.
-    _searchBar.showsCancelButton = NO;
-    _cancelSearchButton = [[UIBarButtonItem alloc] init];
-    _cancelSearchButton.style = UIBarButtonItemStylePlain;
-    _cancelSearchButton.tintColor =
-        UIColorFromRGB(kTabGridToolbarTextButtonColor);
-    _cancelSearchButton.accessibilityIdentifier =
-        kTabGridCancelButtonIdentifier;
-    _cancelSearchButton.title =
-        l10n_util::GetNSString(IDS_IOS_TAB_GRID_CANCEL_BUTTON);
-    _searchBarView = [[UIView alloc] initWithFrame:_searchBar.frame];
-    [_searchBarView addSubview:_searchBar];
-    [_searchBarView sizeToFit];
-    _searchBarItem =
-        [[UIBarButtonItem alloc] initWithCustomView:_searchBarView];
+  if (UseSymbols()) {
+    UIImage* searchImage =
+        DefaultSymbolWithPointSize(kSearchSymbol, kSymbolSearchImagePointSize);
+    _searchButton =
+        [[UIBarButtonItem alloc] initWithImage:searchImage
+                                         style:UIBarButtonItemStylePlain
+                                        target:nil
+                                        action:nil];
+  } else {
+    _searchButton = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemSearch
+                             target:nil
+                             action:nil];
   }
+
+  _searchButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _searchButton.accessibilityIdentifier = kTabGridSearchButtonIdentifier;
+
+  _searchBar = [[UISearchBar alloc] init];
+  _searchBar.placeholder =
+      l10n_util::GetNSString(IDS_IOS_TAB_GRID_SEARCHBAR_PLACEHOLDER);
+  _searchBar.accessibilityIdentifier = kTabGridSearchBarIdentifier;
+  // Cancel Button for the searchbar doesn't appear in ipadOS. Disable it and
+  // create a custom cancel button.
+  _searchBar.showsCancelButton = NO;
+  _cancelSearchButton = [[UIBarButtonItem alloc] init];
+  _cancelSearchButton.style = UIBarButtonItemStylePlain;
+  _cancelSearchButton.tintColor =
+      UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _cancelSearchButton.accessibilityIdentifier = kTabGridCancelButtonIdentifier;
+  _cancelSearchButton.title =
+      l10n_util::GetNSString(IDS_IOS_TAB_GRID_CANCEL_BUTTON);
+  _searchBarView = [[UIView alloc] initWithFrame:_searchBar.frame];
+  [_searchBarView addSubview:_searchBar];
+  [_searchBarView sizeToFit];
+  _searchBarItem = [[UIBarButtonItem alloc] initWithCustomView:_searchBarView];
 
   _newTabButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
@@ -470,6 +552,30 @@ NSInteger kSymbolSearchImagePointSize = 22;
       initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace
                            target:nil
                            action:nil];
+
+  // Vivaldi
+  // Setting up button tint colors
+  if (vivaldi::IsVivaldiRunning()) {
+    _closeAllOrUndoButton.tintColor =
+        [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _doneButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _editButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _selectAllButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _selectedTabsItem.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    [_selectedTabsItem setTitleTextAttributes:@{
+      NSForegroundColorAttributeName :
+        [UIColor colorNamed:vTabGridToolbarTextButtonColor],
+      NSFontAttributeName :
+        [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
+         scaledFontForFont:[UIFont systemFontOfSize:kSelectionModeButtonSize
+                                             weight:UIFontWeightSemibold]]
+    }
+                                     forState:UIControlStateDisabled];
+    _searchButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _cancelSearchButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+    _newTabButton.tintColor = [UIColor colorNamed:vTabGridToolbarTextButtonColor];
+  }
+  // End Vivaldi
 
   [self setItemsForTraitCollection:self.traitCollection];
 }

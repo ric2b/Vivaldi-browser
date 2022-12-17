@@ -69,7 +69,7 @@ syncer::UniquePosition ComputeUniquePositionForTrackedNoteNode(
   // TODO(crbug.com/1113139): precompute UniquePosition to prevent its
   // calculation on each remote update.
   return syncer::UniquePosition::FromProto(
-      child_entity->metadata()->unique_position());
+      child_entity->metadata().unique_position());
 }
 
 size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
@@ -177,7 +177,7 @@ void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
 
   UpdateNoteNodeFromSpecifics(update_entity.specifics.notes(), node, model);
   // Compute index information before updating the |tracker|.
-  const size_t old_index = static_cast<size_t>(old_parent->GetIndexOf(node));
+  const size_t old_index = old_parent->GetIndexOf(node).value();
   const size_t new_index = ComputeChildNodeIndex(
       new_parent, update_entity.specifics.notes().unique_position(), tracker);
   tracker->Update(tracked_entity, update.response_version,
@@ -243,9 +243,9 @@ void NoteRemoteUpdatesHandler::Process(
     }
 
     // Ignore updates that have already been seen according to the version.
-    if (tracked_entity && tracked_entity->metadata()->server_version() >=
+    if (tracked_entity && tracked_entity->metadata().server_version() >=
                               update->response_version) {
-      if (update_entity.id == tracked_entity->metadata()->server_id()) {
+      if (update_entity.id == tracked_entity->metadata().server_id()) {
         // Seen this update before. This update may be a reflection and may have
         // missing the GUID in specifics. Next reupload will populate GUID in
         // specifics and this codepath will not repeat indefinitely. This logic
@@ -317,7 +317,7 @@ void NoteRemoteUpdatesHandler::Process(
         note_tracker_->GetAllEntities();
     for (const SyncedNoteTrackerEntity* entity : all_entities) {
       // No need to recommit tombstones and permanent nodes.
-      if (entity->metadata()->is_deleted()) {
+      if (entity->metadata().is_deleted()) {
         continue;
       }
       DCHECK(entity->note_node());
@@ -325,7 +325,7 @@ void NoteRemoteUpdatesHandler::Process(
         continue;
       }
       if (entities_with_up_to_date_encryption.count(
-              entity->metadata()->server_id()) != 0) {
+              entity->metadata().server_id()) != 0) {
         continue;
       }
       note_tracker_->IncrementSequenceNumber(entity);
@@ -624,7 +624,7 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
          !tracked_entity->note_node()->is_permanent_node());
   DCHECK(!IsPermanentNodeUpdate(update_entity));
 
-  if (tracked_entity->metadata()->is_deleted() && update_entity.is_deleted()) {
+  if (tracked_entity->metadata().is_deleted() && update_entity.is_deleted()) {
     // Both have been deleted, delete the corresponding entity from the tracker.
     note_tracker_->Remove(tracked_entity);
     DLOG(WARNING) << "Conflict: CHANGES_MATCH";
@@ -641,7 +641,7 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
 
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
 
-  if (tracked_entity->metadata()->is_deleted()) {
+  if (tracked_entity->metadata().is_deleted()) {
     // Only local node has been deleted. It should be restored from the server
     // data as a remote creation.
     note_tracker_->Remove(tracked_entity);
@@ -730,7 +730,7 @@ void NoteRemoteUpdatesHandler::ReuploadEntityIfNeeded(
     const syncer::EntityData& entity_data,
     const SyncedNoteTrackerEntity* tracked_entity) {
   DCHECK(tracked_entity);
-  DCHECK_EQ(tracked_entity->metadata()->server_id(), entity_data.id);
+  DCHECK_EQ(tracked_entity->metadata().server_id(), entity_data.id);
   DCHECK(!tracked_entity->note_node() ||
          !tracked_entity->note_node()->is_permanent_node());
 

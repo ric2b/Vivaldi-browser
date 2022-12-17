@@ -143,10 +143,9 @@ HistoryEventRouter::~HistoryEventRouter() {
 }
 
 void HistoryEventRouter::OnURLVisited(history::HistoryService* history_service,
-                                      ui::PageTransition transition,
-                                      const history::URLRow& row,
-                                      base::Time visit_time) {
-  auto args = OnVisited::Create(GetHistoryItem(row));
+                                      const history::URLRow& url_row,
+                                      const history::VisitRow& new_visit) {
+  auto args = OnVisited::Create(GetHistoryItem(url_row));
   DispatchEvent(profile_, events::HISTORY_ON_VISITED,
                 api::history::OnVisited::kEventName, std::move(args));
 }
@@ -170,7 +169,7 @@ void HistoryEventRouter::OnURLsDeleted(
 void HistoryEventRouter::DispatchEvent(Profile* profile,
                                        events::HistogramValue histogram_value,
                                        const std::string& event_name,
-                                       std::vector<base::Value> event_args) {
+                                       base::Value::List event_args) {
   if (profile && EventRouter::Get(profile)) {
     auto event = std::make_unique<Event>(histogram_value, event_name,
                                          std::move(event_args), profile);

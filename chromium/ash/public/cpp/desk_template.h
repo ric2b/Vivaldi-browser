@@ -36,6 +36,10 @@ enum class ASH_PUBLIC_EXPORT DeskTemplateType {
 
   // Desk saved for Save & Recall.
   kSaveAndRecall,
+
+  // Unknown desk type. This desk is probably created by a later version and
+  // should be ignored.
+  kUnknown,
 };
 
 // Class to represent a desk template. It can be used to create a desk with
@@ -44,7 +48,7 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
  public:
   // This constructor is used to instantiate DeskTemplate with a specific
   // source.
-  DeskTemplate(const std::string& uuid,
+  DeskTemplate(base::GUID uuid,
                DeskTemplateSource source,
                const std::string& name,
                const base::Time created_time,

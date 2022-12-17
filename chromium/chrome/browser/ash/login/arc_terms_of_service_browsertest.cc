@@ -46,7 +46,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chromeos/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "components/consent_auditor/fake_consent_auditor.h"
 #include "components/policy/core/common/cloud/test/policy_builder.h"
 #include "components/prefs/pref_service.h"
@@ -616,6 +616,9 @@ IN_PROC_BROWSER_TEST_P(ParameterizedArcTermsOfServiceScreenTest, ClickAccept) {
   histogram_tester_.ExpectTotalCount(
       "OOBE.StepCompletionTimeByExitReason.Arc-tos.Back", 0);
   histogram_tester_.ExpectTotalCount("OOBE.StepCompletionTime.Arc_tos", 1);
+
+  histogram_tester_.ExpectTotalCount(
+      "OOBE.WebViewLoader.FirstLoadResult.ArcTosView", 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -636,7 +639,7 @@ class PublicAccountArcTermsOfServiceScreenTest
 
   void SetUpInProcessBrowserTestFixture() override {
     ArcTermsOfServiceScreenTest::SetUpInProcessBrowserTestFixture();
-    chromeos::SessionManagerClient::InitializeFakeInMemory();
+    SessionManagerClient::InitializeFakeInMemory();
     InitializePolicy();
   }
 
@@ -698,8 +701,8 @@ class PublicAccountArcTermsOfServiceScreenTest
   }
 
  private:
-  chromeos::FakeSessionManagerClient* session_manager_client() {
-    return chromeos::FakeSessionManagerClient::Get();
+  FakeSessionManagerClient* session_manager_client() {
+    return FakeSessionManagerClient::Get();
   }
 
   void RefreshDevicePolicy() { policy_helper()->RefreshDevicePolicy(); }

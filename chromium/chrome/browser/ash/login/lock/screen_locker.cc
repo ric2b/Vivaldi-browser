@@ -6,9 +6,9 @@
 
 #include <algorithm>
 
-#include "ash/components/audio/sounds.h"
 #include "ash/components/login/auth/authenticator.h"
 #include "ash/components/login/auth/extended_authenticator.h"
+#include "ash/components/login/auth/public/auth_failure.h"
 #include "ash/components/login/session/session_termination_manager.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/login_screen.h"
@@ -26,6 +26,7 @@
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
@@ -55,8 +56,9 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/audio/sounds.h"
 #include "chromeos/ash/components/dbus/biod/constants.pb.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "components/password_manager/core/browser/hash_password_manager.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/session_manager/core/session_manager.h"
@@ -273,12 +275,16 @@ void ScreenLocker::OnAuthFailure(const AuthFailure& error) {
 }
 
 void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
+  if (unlock_started_) {
+    VLOG(1) << "OnAuthSuccess called while unlock is already runing";
+    return;
+  }
+
+  unlock_started_ = true;
   CHECK(!IsAuthTemporarilyDisabledForUser(user_context.GetAccountId()))
       << "Authentication is disabled for this user.";
 
   incorrect_passwords_count_ = 0;
-  DCHECK(!unlock_started_);
-  unlock_started_ = true;
   if (authentication_start_time_.is_null()) {
     if (user_context.GetAccountId().is_valid())
       LOG(ERROR) << "Start time is not set at authentication success";
@@ -649,11 +655,28 @@ void ScreenLocker::Hide() {
   }
 
   DCHECK(screen_locker_);
-  SessionControllerClientImpl::Get()->RunUnlockAnimation(base::BindOnce([]() {
-    session_manager::SessionManager::Get()->SetSessionState(
-        session_manager::SessionState::ACTIVE);
-    ScreenLocker::ScheduleDeletion();
-  }));
+  SessionControllerClientImpl::Get()->RunUnlockAnimation(
+      base::BindOnce(&ScreenLocker::OnUnlockAnimationFinished));
+}
+
+void ScreenLocker::ResetToLockedState() {
+  LoginScreen::Get()->GetModel()->ResetFingerprintUIState(
+      user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId());
+  screen_locker_->unlock_started_ = false;
+}
+
+// static
+void ScreenLocker::OnUnlockAnimationFinished(bool aborted) {
+  VLOG(1) << "ScreenLocker::OnUnlockAnimationFinished aborted=" << aborted;
+  if (aborted) {
+    // Reset state that was impacted by successful auth.
+    screen_locker_->ResetToLockedState();
+    return;
+  }
+
+  session_manager::SessionManager::Get()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  ScreenLocker::ScheduleDeletion();
 }
 
 void ScreenLocker::RefreshPinAndFingerprintTimeout() {
@@ -912,7 +935,8 @@ void ScreenLocker::OnFingerprintAuthFailure(const user_manager::User& user) {
   if (quick_unlock_storage &&
       quick_unlock_storage->IsFingerprintAuthenticationAvailable(
           quick_unlock::Purpose::kUnlock)) {
-    quick_unlock_storage->fingerprint_storage()->AddUnlockAttempt();
+    quick_unlock_storage->fingerprint_storage()->AddUnlockAttempt(
+        base::TimeTicks::Now());
     if (quick_unlock_storage->fingerprint_storage()->ExceededUnlockAttempts()) {
       VLOG(1) << "Fingerprint unlock is disabled because it reached maximum"
               << " unlock attempt.";

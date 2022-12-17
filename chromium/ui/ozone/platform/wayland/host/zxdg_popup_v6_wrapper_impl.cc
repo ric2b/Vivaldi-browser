@@ -168,6 +168,8 @@ bool ZXDGPopupV6WrapperImpl::Initialize(const ShellPopupParams& params) {
       parent_xdg_surface->zxdg_surface(), positioner.get()));
   if (!zxdg_popup_v6_)
     return false;
+  connection_->wayland_window_manager()->NotifyWindowRoleAssigned(
+      wayland_window_);
 
   GrabIfPossible(connection_, wayland_window_->parent_window());
 
@@ -205,6 +207,15 @@ void ZXDGPopupV6WrapperImpl::Grab(uint32_t serial) {
 
   zxdg_popup_v6_grab(zxdg_popup_v6_.get(), connection_->seat()->wl_object(),
                      serial);
+}
+
+bool ZXDGPopupV6WrapperImpl::SupportsDecoration() {
+  // zxdg_popup_v6 doesn't support frame configuration.
+  return false;
+}
+
+void ZXDGPopupV6WrapperImpl::Decorate() {
+  NOTREACHED();
 }
 
 wl::Object<zxdg_positioner_v6> ZXDGPopupV6WrapperImpl::CreatePositioner() {

@@ -17,6 +17,9 @@ extern const base::Feature kTranslateSubFrames;
 // Controls whether the TFLite-based language detection is enabled.
 extern const base::Feature kTFLiteLanguageDetectionEnabled;
 
+// Controls whether the Partial Translate function is available.
+extern const base::Feature kDesktopPartialTranslate;
+
 // Isolated world sets following security-origin by default.
 extern const char kSecurityOrigin[];
 
@@ -36,6 +39,24 @@ bool IsTFLiteLanguageDetectionEnabled();
 // Return the threshold used to determine if TFLite language detection model's
 // prediction is reliable.
 float GetTFLiteLanguageDetectionThreshold();
+
+// Feature flag used to control the auto-always and auto-never snackbar
+// parameters (i.e. threshold and maximum-number-of).
+extern const base::Feature kTranslateAutoSnackbars;
+
+// The number of times the user should consecutively translate for "Always
+// Translate" to automatically trigger.
+int GetAutoAlwaysThreshold();
+
+// The number of times the user should consecutively dismiss the translate UI
+// for "Never Translate" to automatically trigger.
+int GetAutoNeverThreshold();
+
+// The maximum number of times "Always Translate" is automatically triggered.
+int GetMaximumNumberOfAutoAlways();
+
+// The maximum number of times "Never Translate" is automatically triggered.
+int GetMaximumNumberOfAutoNever();
 
 }  // namespace translate
 

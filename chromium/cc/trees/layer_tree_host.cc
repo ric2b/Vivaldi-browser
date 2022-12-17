@@ -650,10 +650,12 @@ bool LayerTreeHost::IsDeferringCommits() const {
   return proxy_->IsDeferringCommits();
 }
 
-void LayerTreeHost::OnDeferCommitsChanged(bool defer_status,
-                                          PaintHoldingReason reason) {
+void LayerTreeHost::OnDeferCommitsChanged(
+    bool defer_status,
+    PaintHoldingReason reason,
+    absl::optional<PaintHoldingCommitTrigger> trigger) {
   DCHECK(IsMainThread());
-  client_->OnDeferCommitsChanged(defer_status, reason);
+  client_->OnDeferCommitsChanged(defer_status, reason, trigger);
 }
 
 DISABLE_CFI_PERF
@@ -1978,9 +1980,9 @@ LayerTreeHost::TakeDocumentTransitionCallbacksForTesting() {
   return result;
 }
 
-uint32_t LayerTreeHost::GetAverageThroughput() const {
+double LayerTreeHost::GetPercentDroppedFrames() const {
   DCHECK(IsMainThread());
-  return proxy_->GetAverageThroughput();
+  return proxy_->GetPercentDroppedFrames();
 }
 
 void LayerTreeHost::IncrementVisualUpdateDuration(

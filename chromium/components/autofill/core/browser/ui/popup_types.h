@@ -62,7 +62,11 @@ enum class PopupHidingReason {
   kMouseLocked = 16,
   // The password generation popup would overlap and hide autofill popup.
   kOverlappingWithPasswordGenerationPopup = 17,
-  kMaxValue = kOverlappingWithPasswordGenerationPopup
+  // The Touch To Fill surface is shown instead of autofill suggestions.
+  kOverlappingWithTouchToFillSurface = 18,
+  // The context menu is shown instead of the autofill suggestions.
+  kOverlappingWithAutofillContextMenu = 19,
+  kMaxValue = kOverlappingWithAutofillContextMenu
 };
 
 }  // namespace autofill

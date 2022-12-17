@@ -27,7 +27,7 @@
 #include "net/third_party/quiche/src/quiche/quic/core/quic_server_id.h"
 #include "net/third_party/quiche/src/quiche/quic/platform/api/quic_flags.h"
 #include "net/third_party/quiche/src/quiche/quic/tools/quic_simple_client_session.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/http2_header_block.h"
 
 using std::string;
 
@@ -45,8 +45,7 @@ QuicSimpleClient::QuicSimpleClient(
           config,
           CreateQuicConnectionHelper(),
           CreateQuicAlarmFactory(),
-          base::WrapUnique(
-              new QuicClientMessageLooplNetworkHelper(&clock_, this)),
+          std::make_unique<QuicClientMessageLooplNetworkHelper>(&clock_, this),
           std::move(proof_verifier),
           nullptr) {
   set_server_address(server_address);

@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/ash/shelf/app_window_base.h"
 #include "chrome/browser/ui/ash/shelf/app_window_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -54,7 +55,6 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/chrome_web_contents_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
@@ -67,7 +67,9 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -122,6 +124,9 @@ chrome::FeedbackSource MapToChromeSource(
       return chrome::FeedbackSource::kFeedbackSourceAssistant;
     case ash::NewWindowDelegate::FeedbackSource::kFeedbackSourceQuickAnswers:
       return chrome::FeedbackSource::kFeedbackSourceQuickAnswers;
+    case ash::NewWindowDelegate::FeedbackSource::
+        kFeedbackSourceChannelIndicator:
+      return chrome::FeedbackSource::kFeedbackSourceChannelIndicator;
   }
 }
 
@@ -159,10 +164,10 @@ bool OpenFilesSwa(Profile* const profile,
           /*show_android_picker_apps=*/false,
           /*volume_filter=*/{});
 
-  web_app::SystemAppLaunchParams params;
+  ash::SystemAppLaunchParams params;
   params.url = files_swa_url;
-  web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::FILE_MANAGER,
-                                   params);
+  ash::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::FILE_MANAGER,
+                               params);
   return true;
 }
 
@@ -306,7 +311,23 @@ void ChromeNewWindowClient::NewWindowForDetachingTab(
   std::move(closure).Run(window);
 }
 
-void ChromeNewWindowClient::OpenUrl(const GURL& url, OpenUrlFrom from) {
+namespace {
+WindowOpenDisposition ToWindowOpenDisposition(
+    ash::NewWindowDelegate::Disposition disposition) {
+  switch (disposition) {
+    case ash::NewWindowDelegate::Disposition::kNewForegroundTab:
+      return WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    case ash::NewWindowDelegate::Disposition::kNewWindow:
+      return WindowOpenDisposition::NEW_WINDOW;
+    case ash::NewWindowDelegate::Disposition::kSwitchToTab:
+      return WindowOpenDisposition::SWITCH_TO_TAB;
+  }
+}
+}  // namespace
+
+void ChromeNewWindowClient::OpenUrl(const GURL& url,
+                                    OpenUrlFrom from,
+                                    Disposition disposition) {
   // Opens a URL in a new tab. If the URL is for a chrome://settings page,
   // opens settings in a new window.
   Profile* profile = ProfileManager::GetActiveUserProfile();
@@ -332,6 +353,7 @@ void ChromeNewWindowClient::OpenUrl(const GURL& url, OpenUrlFrom from) {
       profile, url,
       ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                 ui::PAGE_TRANSITION_FROM_API));
+  navigate_params.disposition = ToWindowOpenDisposition(disposition);
 
   // If the |from| is kUserInteraction, then the page will load with a user
   // activation. This means it will be able to autoplay media without
@@ -364,8 +386,13 @@ void ChromeNewWindowClient::OpenCalculator() {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
   DCHECK(proxy);
-  proxy->Launch(ash::calculator_app::GetInstalledCalculatorAppId(profile),
-                ui::EF_NONE, apps::mojom::LaunchSource::kFromKeyboard);
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    proxy->Launch(ash::calculator_app::GetInstalledCalculatorAppId(profile),
+                  ui::EF_NONE, apps::LaunchSource::kFromKeyboard);
+  } else {
+    proxy->Launch(ash::calculator_app::GetInstalledCalculatorAppId(profile),
+                  ui::EF_NONE, apps::mojom::LaunchSource::kFromKeyboard);
+  }
 }
 
 void ChromeNewWindowClient::OpenFileManager() {
@@ -386,12 +413,19 @@ void ChromeNewWindowClient::OpenFileManager() {
       return;
     }
 
-    proxy->Launch(
-        update.AppId(),
-        apps::GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerNone,
-                            WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                            /*preferred_containner=*/true),
-        apps::mojom::LaunchSource::kFromKeyboard);
+    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+      proxy->Launch(
+          update.AppId(),
+          apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                              /*prefer_container=*/true),
+          apps::LaunchSource::kFromKeyboard);
+    } else {
+      proxy->Launch(
+          update.AppId(),
+          apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                              /*prefer_container=*/true),
+          apps::mojom::LaunchSource::kFromKeyboard);
+    }
   };
 
   bool result = proxy->AppRegistryCache().ForOneApp(
@@ -422,15 +456,23 @@ void ChromeNewWindowClient::OpenDownloadsFolder() {
       return;
     }
 
-    apps::mojom::FilePathsPtr launch_files = apps::mojom::FilePaths::New();
-    launch_files->file_paths.push_back(downloads_path);
-
-    proxy->LaunchAppWithFiles(
-        update.AppId(),
-        apps::GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerNone,
-                            WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                            /*preferred_containner=*/true),
-        apps::mojom::LaunchSource::kFromKeyboard, std::move(launch_files));
+    if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+      std::vector<base::FilePath> launch_files;
+      launch_files.push_back(downloads_path);
+      proxy->LaunchAppWithFiles(
+          update.AppId(),
+          apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                              /*prefer_container=*/true),
+          apps::LaunchSource::kFromKeyboard, std::move(launch_files));
+    } else {
+      apps::mojom::FilePathsPtr launch_files = apps::mojom::FilePaths::New();
+      launch_files->file_paths.push_back(downloads_path);
+      proxy->LaunchAppWithFiles(
+          update.AppId(),
+          apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                              /*prefer_container=*/true),
+          apps::mojom::LaunchSource::kFromKeyboard, std::move(launch_files));
+    }
   };
 
   bool result = proxy->AppRegistryCache().ForOneApp(
@@ -441,7 +483,7 @@ void ChromeNewWindowClient::OpenDownloadsFolder() {
 void ChromeNewWindowClient::OpenCrosh() {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (base::FeatureList::IsEnabled(chromeos::features::kCroshSWA)) {
-    web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::CROSH);
+    ash::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::CROSH);
   } else {
     chrome::ScopedTabbedBrowserDisplayer displayer(profile);
     Browser* browser = displayer.browser();
@@ -507,8 +549,7 @@ void ChromeNewWindowClient::OpenFeedbackPage(
 
 void ChromeNewWindowClient::OpenPersonalizationHub() {
   Profile* const profile = ProfileManager::GetActiveUserProfile();
-  web_app::LaunchSystemWebAppAsync(profile,
-                                   ash::SystemWebAppType::PERSONALIZATION);
+  ash::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::PERSONALIZATION);
 }
 
 void ChromeNewWindowClient::LaunchCameraApp(const std::string& queries,
@@ -516,8 +557,7 @@ void ChromeNewWindowClient::LaunchCameraApp(const std::string& queries,
   DCHECK(IsCameraAppEnabled());
   ChromeCameraAppUIDelegate::CameraAppDialog::ShowIntent(
       queries, arc::GetArcWindow(task_id));
-  apps::RecordAppLaunch(web_app::kCameraAppId,
-                        apps::mojom::LaunchSource::kFromArc);
+  apps::RecordAppLaunch(web_app::kCameraAppId, apps::LaunchSource::kFromArc);
 }
 
 void ChromeNewWindowClient::CloseCameraApp() {

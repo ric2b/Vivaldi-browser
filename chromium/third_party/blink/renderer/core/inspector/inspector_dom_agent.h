@@ -257,6 +257,8 @@ class CORE_EXPORT InspectorDOMAgent final
   protocol::Response getFileInfo(const String& object_id,
                                  String* path) override;
 
+  // Find the closest size query container ascendant for a node given an
+  // optional container-name.
   protocol::Response getContainerForNode(
       int node_id,
       protocol::Maybe<String> container_name,
@@ -293,6 +295,7 @@ class CORE_EXPORT InspectorDOMAgent final
   void FrameDocumentUpdated(LocalFrame*);
   void FrameOwnerContentUpdated(LocalFrame*, HTMLFrameOwnerElement*);
   void PseudoElementCreated(PseudoElement*);
+  void TopLayerElementsChanged();
   void PseudoElementDestroyed(PseudoElement*);
   void NodeCreated(Node* node);
   void PortalRemoteFrameCreated(HTMLPortalElement*);
@@ -336,6 +339,8 @@ class CORE_EXPORT InspectorDOMAgent final
                                 Node*&);
   protocol::Response AssertElement(int node_id, Element*&);
   Document* GetDocument() const { return document_.Get(); }
+  protocol::Response getTopLayerElements(
+      std::unique_ptr<protocol::Array<int>>* node_ids) override;
 
  private:
   void SetDocument(Document*);

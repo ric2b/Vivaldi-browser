@@ -107,19 +107,25 @@ bool PasswordStore::Init(
   return true;
 }
 
-void PasswordStore::AddLogin(const PasswordForm& form) {
+void PasswordStore::AddLogin(const PasswordForm& form,
+                             base::OnceClosure completion) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(!form.blocked_by_user ||
+         (form.username_value.empty() && form.password_value.empty()));
   if (!backend_)
     return;  // Once the shutdown started, ignore new requests.
   backend_->AddLoginAsync(
       form, base::BindOnce(&GetPasswordChangesOrEmptyListOnFailure)
                 .Then(base::BindOnce(
-                    &PasswordStore::NotifyLoginsChangedOnMainSequence, this,
-                    LoginsChangedTrigger::Addition)));
+                          &PasswordStore::NotifyLoginsChangedOnMainSequence,
+                          this, LoginsChangedTrigger::Addition)
+                .Then(std::move(completion))));
 }
 
 void PasswordStore::UpdateLogin(const PasswordForm& form) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(!form.blocked_by_user ||
+         (form.username_value.empty() && form.password_value.empty()));
   if (!backend_)
     return;  // Once the shutdown started, ignore new requests.
   backend_->UpdateLoginAsync(
@@ -143,7 +149,7 @@ void PasswordStore::UpdateLoginWithPrimaryKey(
     // If the password changes, the password issues aren't valid
     // any more. Make sure they are cleared before storing the new form.
     new_form_with_correct_password_issues.password_issues.clear();
-  } else if (new_form.username_element != old_primary_key.username_element) {
+  } else if (new_form.username_value != old_primary_key.username_value) {
     // If the username changed then the phished and leaked issues aren't valid
     // any more. Make sure they are erased before storing the new form.
     new_form_with_correct_password_issues.password_issues.erase(
@@ -404,6 +410,8 @@ void PasswordStore::NotifyLoginsChangedOnMainSequence(
   base::UmaHistogramEnumeration(
       "PasswordManager.PasswordStore.OnLoginsRetained", logins_changed_trigger);
   if (!changes.has_value()) {
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+        "passwords", "LoginsRetrievedForOnLoginsRetained", this);
     // If the changes aren't provided, the store propagates the latest logins.
     backend_->GetAllLoginsAsync(base::BindOnce(
         &PasswordStore::NotifyLoginsRetainedOnMainSequence, this));
@@ -447,6 +455,11 @@ void PasswordStore::NotifyLoginsRetainedOnMainSequence(
   for (auto& observer : observers_) {
     observer.OnLoginsRetained(this, retained_logins);
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  TRACE_EVENT_NESTABLE_ASYNC_END0("passwords",
+                                  "LoginsRetrievedForOnLoginsRetained", this);
+#endif
 }
 
 void PasswordStore::NotifySyncEnabledOrDisabledOnMainSequence() {

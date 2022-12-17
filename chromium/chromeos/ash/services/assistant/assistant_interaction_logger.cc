@@ -6,10 +6,9 @@
 
 #include <utility>
 
-#include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
 
-namespace chromeos {
-namespace assistant {
+namespace ash::assistant {
 
 namespace {
 
@@ -126,5 +125,4 @@ void AssistantInteractionLogger::OnWaitStarted() {
   LOG_INTERACTION();
 }
 
-}  // namespace assistant
-}  // namespace chromeos
+}  // namespace ash::assistant

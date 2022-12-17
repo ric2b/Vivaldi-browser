@@ -4,14 +4,17 @@
 
 #include "ash/test/ash_test_util.h"
 
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "ui/gfx/image/image.h"
 #include "ui/snapshot/snapshot_aura.h"
 
-namespace ash::test {
+namespace ash {
 
 namespace {
 void SnapshotCallback(base::RunLoop* run_loop,
@@ -47,4 +50,27 @@ bool TakePrimaryDisplayScreenshotAndSave(const base::FilePath& file_path) {
   return written_size == data_size;
 }
 
-}  // namespace ash::test
+void GiveItSomeTimeForDebugging(base::TimeDelta time_duration) {
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), time_duration);
+  run_loop.Run();
+}
+
+bool IsSystemTrayForRootWindowVisible(size_t root_window_index) {
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  RootWindowController* controller =
+      RootWindowController::ForWindow(root_windows[root_window_index]);
+  return controller->GetStatusAreaWidget()->unified_system_tray()->GetVisible();
+}
+
+gfx::ImageSkia CreateSolidColorTestImage(const gfx::Size& image_size,
+                                         SkColor color) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(image_size.width(), image_size.height());
+  bitmap.eraseColor(color);
+  gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  return image;
+}
+
+}  // namespace ash

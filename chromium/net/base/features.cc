@@ -9,11 +9,7 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 
-namespace net {
-namespace features {
-
-const base::Feature kAcceptLanguageHeader{"AcceptLanguageHeader",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
+namespace net::features {
 
 const base::Feature kAlpsForHttp2{"AlpsForHttp2",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
@@ -23,9 +19,6 @@ const base::Feature kAvoidH2Reprioritization{"AvoidH2Reprioritization",
 
 const base::Feature kCapReferrerToOriginOnCrossOrigin{
     "CapReferrerToOriginOnCrossOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kCookieDomainAttributeEmptyString{
-    "CookieDomainAttributeEmptyString", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDnsTransactionDynamicTimeouts{
     "DnsTransactionDynamicTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -109,6 +102,9 @@ const base::FeatureParam<base::TimeDelta> kUseDnsHttpsSvcbExtraTimeAbsolute{
 const base::FeatureParam<int> kUseDnsHttpsSvcbExtraTimePercent{
     &kUseDnsHttpsSvcb, "UseDnsHttpsSvcbExtraTimePercent", 0};
 
+const base::Feature kUseDnsHttpsSvcbAlpn{"UseDnsHttpsSvcbAlpn",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kEnableTLS13EarlyData{"EnableTLS13EarlyData",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -149,6 +145,14 @@ const base::Feature kPartitionExpectCTStateByNetworkIsolationKey{
 
 const base::Feature kPartitionNelAndReportingByNetworkIsolationKey{
     "PartitionNelAndReportingByNetworkIsolationKey",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableDoubleKeyNetworkAnonymizationKey{
+    "EnableDoubleKeyNetworkAnonymizationKey",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableCrossSiteFlagNetworkAnonymizationKey{
+    "EnableCrossSiteFlagNetworkAnonymizationKey",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kExpectCTPruning{"ExpectCTPruning",
@@ -213,6 +217,11 @@ const base::FeatureParam<int> kCertDualVerificationTrialImpl{
 const base::FeatureParam<int> kCertDualVerificationTrialCacheSize{
     &kCertDualVerificationTrialFeature, "cachesize", 0};
 #endif /* BUILDFLAG(IS_MAC) */
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED) && \
+    BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+const base::FeatureParam<bool> kCertDualVerificationTrialUseCrs{
+    &kCertDualVerificationTrialFeature, "use_crs", false};
+#endif
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
@@ -277,8 +286,8 @@ const base::Feature kPartitionedCookies{"PartitionedCookies",
 const base::Feature kPartitionedCookiesBypassOriginTrial{
     "PartitionedCookiesBypassOriginTrial", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNoncedPartitionedCookies{
-    "NoncedPartitionedCookies", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kNoncedPartitionedCookies{"NoncedPartitionedCookies",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kExtraCookieValidityChecks{
     "ExtraCookieValidityChecks", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -292,14 +301,13 @@ const base::Feature kClampCookieExpiryTo400Days(
 
 const base::Feature kStaticKeyPinningEnforcement(
     "StaticKeyPinningEnforcement",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT);
-#else
     base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 const base::Feature kCookieDomainRejectNonASCII{
     "CookieDomainRejectNonASCII", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kBlockSetCookieHeader{"BlockSetCookieHeader",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Read as much of the net::URLRequest as there is space in the Mojo data pipe.
 const base::Feature kOptimizeNetworkBuffers{"OptimizeNetworkBuffers2",
@@ -318,5 +326,22 @@ const base::FeatureParam<int>
         &kOptimizeNetworkBuffers, "filter_source_stream_buffer_size",
         32 * 1024};
 
-}  // namespace features
-}  // namespace net
+const base::FeatureParam<bool> kOptimizeNetworkBuffersInputStreamCheckAvailable{
+    &kOptimizeNetworkBuffers, "input_stream_check_available", true};
+
+const base::Feature kStorageAccessAPI{"StorageAccessAPI",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+constexpr int kStorageAccessAPIDefaultImplicitGrantLimit = 5;
+const base::FeatureParam<int> kStorageAccessAPIImplicitGrantLimit{
+    &kStorageAccessAPI, "storage-access-api-implicit-grant-limit",
+    kStorageAccessAPIDefaultImplicitGrantLimit};
+const base::FeatureParam<bool> kStorageAccessAPIGrantsUnpartitionedStorage(
+    &kStorageAccessAPI,
+    "storage-access-api-grants-unpartitioned-storage",
+    false);
+
+// Enables partitioning of third party storage (IndexedDB, CacheStorage, etc.)
+// by the top level site to reduce fingerprinting.
+const base::Feature kThirdPartyStoragePartitioning{
+    "ThirdPartyStoragePartitioning", base::FEATURE_DISABLED_BY_DEFAULT};
+}  // namespace net::features

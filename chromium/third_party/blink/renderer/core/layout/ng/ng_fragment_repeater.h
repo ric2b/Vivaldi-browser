@@ -9,6 +9,7 @@
 
 namespace blink {
 
+class LayoutBox;
 class NGLayoutResult;
 class NGPhysicalBoxFragment;
 
@@ -25,7 +26,7 @@ class NGFragmentRepeater {
   STACK_ALLOCATED();
 
  public:
-  explicit NGFragmentRepeater(bool is_first_clone, bool is_last_fragment)
+  NGFragmentRepeater(bool is_first_clone, bool is_last_fragment)
       : is_first_clone_(is_first_clone), is_last_fragment_(is_last_fragment) {}
 
   // Deep-clone the subtree of an already shallowly cloned fragment. This will
@@ -36,6 +37,10 @@ class NGFragmentRepeater {
 
  private:
   const NGLayoutResult* Repeat(const NGLayoutResult& other);
+
+  const NGLayoutResult* GetClonableLayoutResult(
+      const LayoutBox& layout_box,
+      const NGPhysicalBoxFragment& fragment) const;
 
   // True when at the first cloned fragment.
   bool is_first_clone_;

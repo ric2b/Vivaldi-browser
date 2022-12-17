@@ -26,10 +26,12 @@ class TasksSurfaceViewBinder {
     public static class ViewHolder {
         public final ViewGroup parentView;
         public final View tasksSurfaceView;
+        public final ViewGroup feedSwipeRefreshLayout;
 
-        ViewHolder(ViewGroup parentView, View tasksSurfaceView) {
+        ViewHolder(ViewGroup parentView, View tasksSurfaceView, ViewGroup feedSwipeRefreshLayout) {
             this.parentView = parentView;
             this.tasksSurfaceView = tasksSurfaceView;
+            this.feedSwipeRefreshLayout = feedSwipeRefreshLayout;
         }
     }
 
@@ -52,14 +54,26 @@ class TasksSurfaceViewBinder {
             viewHolder.parentView.addView(viewHolder.tasksSurfaceView, pos);
             MarginLayoutParams layoutParams =
                     (MarginLayoutParams) viewHolder.tasksSurfaceView.getLayoutParams();
-            layoutParams.bottomMargin = model.get(BOTTOM_BAR_HEIGHT);
+            if (layoutParams != null) layoutParams.bottomMargin = model.get(BOTTOM_BAR_HEIGHT);
             setTopMargin(viewHolder, model.get(TOP_MARGIN));
         }
 
         View taskSurfaceView = viewHolder.tasksSurfaceView;
+        View feedSwipeRefreshLayout = viewHolder.feedSwipeRefreshLayout;
         if (!isShowing) {
             taskSurfaceView.setVisibility(View.GONE);
+            if (feedSwipeRefreshLayout != null) {
+                feedSwipeRefreshLayout.setVisibility(View.GONE);
+            }
         } else {
+            // We have to set the FeedSwipeRefreshLayout visible even when the Tab switcher is
+            // showing. This is because both the primary_tasks_surface_view and
+            // secondary_tasks_surface_view are created and the FeedSwipeRefreshLayout is the root
+            // view of both surface views.
+            if (feedSwipeRefreshLayout != null
+                    && feedSwipeRefreshLayout.getVisibility() == View.GONE) {
+                feedSwipeRefreshLayout.setVisibility(View.VISIBLE);
+            }
             // TODO(yuezhanggg): Figure out why there is a blink in the tab switcher part when
             // showing overview mode. (crbug.com/995423)
             taskSurfaceView.setAlpha(0f);

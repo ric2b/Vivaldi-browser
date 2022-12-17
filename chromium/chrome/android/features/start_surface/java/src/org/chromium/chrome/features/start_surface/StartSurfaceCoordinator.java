@@ -34,6 +34,8 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.feed.FeedSwipeRefreshLayout;
 import org.chromium.chrome.browser.feed.ScrollListener;
 import org.chromium.chrome.browser.feed.ScrollableContainerDelegate;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.init.ChromeActivityNativeDelegate;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -70,7 +72,6 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * Root coordinator that is responsible for showing start surfaces, like a grid of Tabs, explore
@@ -273,9 +274,8 @@ public class StartSurfaceCoordinator implements StartSurface {
         mTabSwitcherCustomViewManagerSupplier = new OneshotSupplierImpl<>();
         boolean excludeMVTiles = StartSurfaceConfiguration.START_SURFACE_EXCLUDE_MV_TILES.getValue()
                 || !mIsStartSurfaceEnabled;
-        boolean excludeQueryTiles =
-                StartSurfaceConfiguration.START_SURFACE_EXCLUDE_QUERY_TILES.getValue()
-                || !mIsStartSurfaceEnabled;
+        boolean excludeQueryTiles = !mIsStartSurfaceEnabled
+                || !CachedFeatureFlags.isEnabled(ChromeFeatureList.QUERY_TILES_ON_START);
         if (!mIsStartSurfaceEnabled) {
             // Create Tab switcher directly to save one layer in the view hierarchy.
             mTabSwitcher = TabManagementModuleProvider.getDelegate().createGridTabSwitcher(activity,
@@ -437,9 +437,79 @@ public class StartSurfaceCoordinator implements StartSurface {
         }
     }
 
-    @Override
-    public Controller getController() {
+    @VisibleForTesting
+    public StartSurfaceMediator getMediatorForTesting() {
         return mStartSurfaceMediator;
+    }
+
+    @Override
+    public void addTabSwitcherViewObserver(TabSwitcherViewObserver observer) {
+        mStartSurfaceMediator.addTabSwitcherViewObserver(observer);
+    }
+
+    @Override
+    public void removeTabSwitcherViewObserver(TabSwitcherViewObserver listener) {
+        mStartSurfaceMediator.removeTabSwitcherViewObserver(listener);
+    }
+
+    @Override
+    public void hideTabSwitcherView(boolean animate) {
+        mStartSurfaceMediator.hideTabSwitcherView(animate);
+    }
+
+    @Override
+    public void beforeHideTabSwitcherView() {
+        mStartSurfaceMediator.beforeHideTabSwitcherView();
+    }
+
+    @Override
+    public void showOverview(boolean animate) {
+        mStartSurfaceMediator.showOverview(animate);
+    }
+
+    @Override
+    public void setStartSurfaceState(int state, int launchOrigin) {
+        mStartSurfaceMediator.setStartSurfaceState(state, launchOrigin);
+    }
+
+    @Override
+    public void setStartSurfaceState(int state) {
+        mStartSurfaceMediator.setStartSurfaceState(state);
+    }
+
+    @Override
+    public boolean onBackPressed() {
+        return mStartSurfaceMediator.onBackPressed();
+    }
+
+    @Override
+    public void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs) {
+        mStartSurfaceMediator.enableRecordingFirstMeaningfulPaint(activityCreateTimeMs);
+    }
+
+    @Override
+    public int getStartSurfaceState() {
+        return mStartSurfaceMediator.getStartSurfaceState();
+    }
+
+    @Override
+    public int getPreviousStartSurfaceState() {
+        return mStartSurfaceMediator.getPreviousStartSurfaceState();
+    }
+
+    @Override
+    public ViewGroup getTabSwitcherContainer() {
+        return mStartSurfaceMediator.getTabSwitcherContainer();
+    }
+
+    @Override
+    public void setSnackbarParentView(ViewGroup parentView) {
+        mStartSurfaceMediator.setSnackbarParentView(parentView);
+    }
+
+    @Override
+    public boolean isShowingStartSurfaceHomepage() {
+        return mStartSurfaceMediator.isShowingStartSurfaceHomepage();
     }
 
     @Override
@@ -583,11 +653,6 @@ public class StartSurfaceCoordinator implements StartSurface {
     }
 
     @VisibleForTesting
-    public void showTabSelectionEditorForTesting(List<Tab> tabs) {
-        mStartSurfaceMediator.getSecondaryTasksSurfaceController().showTabSelectionEditor(tabs);
-    }
-
-    @VisibleForTesting
     public boolean isMVTilesCleanedUpForTesting() {
         return mTasksSurface.isMVTilesCleanedUp();
     }
@@ -618,10 +683,11 @@ public class StartSurfaceCoordinator implements StartSurface {
         initializeOffsetChangedListener();
         addHeaderOffsetChangeListener(mOffsetChangedListenerToGenerateScrollEvents);
 
-        mTasksSurfacePropertyModelChangeProcessor = PropertyModelChangeProcessor.create(
-                mPropertyModel,
-                new TasksSurfaceViewBinder.ViewHolder(mContainerView, mTasksSurface.getView()),
-                TasksSurfaceViewBinder::bind);
+        mTasksSurfacePropertyModelChangeProcessor =
+                PropertyModelChangeProcessor.create(mPropertyModel,
+                        new TasksSurfaceViewBinder.ViewHolder(
+                                mContainerView, mTasksSurface.getView(), mSwipeRefreshLayout),
+                        TasksSurfaceViewBinder::bind);
     }
 
     private TabSwitcher.Controller initializeSecondaryTasksSurface() {
@@ -649,7 +715,7 @@ public class StartSurfaceCoordinator implements StartSurface {
         mSecondaryTasksSurfacePropertyModelChangeProcessor =
                 PropertyModelChangeProcessor.create(mPropertyModel,
                         new TasksSurfaceViewBinder.ViewHolder(
-                                mContainerView, mSecondaryTasksSurface.getView()),
+                                mContainerView, mSecondaryTasksSurface.getView(), null),
                         SecondaryTasksSurfaceViewBinder::bind);
         if (mOnTabSelectingListener != null) {
             mSecondaryTasksSurface.setOnTabSelectingListener(mOnTabSelectingListener);
@@ -695,6 +761,7 @@ public class StartSurfaceCoordinator implements StartSurface {
         mContainerView.addView(mSwipeRefreshLayout);
         FrameLayout directChildHolder = new FrameLayout(mActivity);
         mSwipeRefreshLayout.addView(directChildHolder);
+        mSwipeRefreshLayout.setVisibility(View.GONE);
         mContainerView = directChildHolder;
     }
 
@@ -758,5 +825,10 @@ public class StartSurfaceCoordinator implements StartSurface {
     @VisibleForTesting
     boolean isSecondaryTasksSurfaceEmptyForTesting() {
         return mSecondaryTasksSurface == null;
+    }
+
+    @VisibleForTesting
+    FeedSwipeRefreshLayout getFeedSwipeRefreshLayoutForTesting() {
+        return mSwipeRefreshLayout;
     }
 }

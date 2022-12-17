@@ -28,16 +28,20 @@ suite('TimezoneSelectorTests', function() {
         'flags': {
           'per_user_timezone_enabled': {
             value: false,
-          }
-        }
-      }
+          },
+        },
+      },
     };
     document.body.appendChild(timezoneSelector);
 
     flush();
 
-    assertEquals(null, timezoneSelector.$$('#userTimeZoneSelector'));
-    assertEquals(null, timezoneSelector.$$('#systemTimezoneSelector'));
+    assertEquals(
+        null,
+        timezoneSelector.shadowRoot.querySelector('#userTimeZoneSelector'));
+    assertEquals(
+        null,
+        timezoneSelector.shadowRoot.querySelector('#systemTimezoneSelector'));
   });
 
   test('Per-user timezone enabled', async () => {
@@ -47,17 +51,17 @@ suite('TimezoneSelectorTests', function() {
         'flags': {
           'per_user_timezone_enabled': {
             value: true,
-          }
-        }
-      }
+          },
+        },
+      },
     };
     document.body.appendChild(timezoneSelector);
 
     flush();
 
-    const userTimezoneSelector =
-        assert(timezoneSelector.$$('#userTimeZoneSelector'));
-    const systemTimezoneSelector =
-        assert(timezoneSelector.$$('#systemTimezoneSelector'));
+    const userTimezoneSelector = assert(
+        timezoneSelector.shadowRoot.querySelector('#userTimeZoneSelector'));
+    const systemTimezoneSelector = assert(
+        timezoneSelector.shadowRoot.querySelector('#systemTimezoneSelector'));
   });
 });

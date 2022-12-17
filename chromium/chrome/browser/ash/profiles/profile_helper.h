@@ -53,6 +53,8 @@ class ProfileHelper
   // knowledge in one place.
   static ProfileHelper* Get();
 
+  // DEPRECATED: Please use
+  // BrowserContextHelper::GetBrowserContextPathByUserIdHash() instead.
   // Returns profile path that corresponds to a given |user_id_hash|.
   static base::FilePath GetProfilePathByUserIdHash(
       const std::string& user_id_hash);
@@ -63,10 +65,14 @@ class ProfileHelper
   // Returns OffTheRecord profile for use during signing phase.
   static Profile* GetSigninProfile();
 
+  // DEPRECATED. Please use
+  // ash::BrowserContextHelper::GetUserIdHashFromBrowserContext() instead.
   // Returns user_id hash for |profile| instance or empty string if hash
   // could not be extracted from |profile|.
   static std::string GetUserIdHashFromProfile(const Profile* profile);
 
+  // DEPRECATED. Please use
+  // ash::BrowserContextHelper::GetUserBrowserContextDirName() instead.
   // Returns user profile dir in a format [u-user_id_hash].
   static base::FilePath GetUserProfileDir(const std::string& user_id_hash);
 
@@ -93,6 +99,10 @@ class ProfileHelper
 
   // Returns the path that corresponds to the lockscreen profile.
   static base::FilePath GetLockScreenProfileDir();
+
+  // Returns OffTheRecord profile for use during online authentication on the
+  // lock screen.
+  static Profile* GetLockScreenProfile();
 
   // Returns true if |profile| is the lockscreen profile.
   static bool IsLockScreenProfile(const Profile* profile);

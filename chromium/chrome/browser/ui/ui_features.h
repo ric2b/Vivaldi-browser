@@ -24,6 +24,12 @@ namespace features {
 // interactive_ui_tests pass on Wayland.
 extern const base::Feature kAllowWindowDragUsingSystemDragDrop;
 
+#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+extern const base::Feature kDesktopPWAsAppHomePage;
+#endif  // !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+
+extern const base::Feature kFlexOrgManagementDisclosure;
+
 extern const base::Feature kChromeLabs;
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -55,18 +61,20 @@ extern const base::Feature kQuickCommands;
 extern const base::Feature kScrollableTabStrip;
 extern const char kMinimumTabWidthFeatureParameterName[];
 
-extern const base::Feature kScrollableTabStripButtons;
-
 // TODO(pbos): Once kReadLater is cleaned up on Desktop, move definition into
 // ui_features.cc. This is currently temporarily in reading_list_switches.h.
 extern const base::Feature kSidePanelImprovedClobbering;
 
 extern const base::Feature kSidePanelJourneys;
+extern const base::FeatureParam<bool> kSidePanelJourneysOpensFromOmnibox;
 
 extern const base::Feature kSideSearch;
 extern const base::Feature kSideSearchFeedback;
 extern const base::Feature kSideSearchDSESupport;
 extern const base::Feature kClobberAllSideSearchSidePanels;
+
+extern const base::Feature kSideSearchAutoTriggering;
+extern const base::FeatureParam<int> kSideSearchAutoTriggeringReturnCount;
 
 extern const base::Feature kSideSearchPageActionLabelAnimation;
 

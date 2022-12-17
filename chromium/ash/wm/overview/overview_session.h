@@ -295,6 +295,7 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // `item_to_focus` on the display associated with `root_window`.
   void ShowDesksTemplatesGrids(bool was_zero_state,
                                const base::GUID& item_to_focus,
+                               const std::u16string& saved_desk_name,
                                aura::Window* const root_window);
 
   void HideDesksTemplatesGrids();
@@ -383,6 +384,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   void set_auto_add_windows_enabled(bool enabled) {
     auto_add_windows_enabled_ = enabled;
+  }
+
+  void set_allow_empty_desk_without_exiting(bool enabled) {
+    allow_empty_desk_without_exiting_ = enabled;
   }
 
  private:
@@ -499,6 +504,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // When true, windows added to the observed desk are automatically added to
   // the overview session.
   bool auto_add_windows_enabled_ = true;
+
+  // When true, the overview session is not exited when the last window is
+  // removed.
+  bool allow_empty_desk_without_exiting_ = false;
 
   base::ScopedObservation<TabletModeController, TabletModeObserver>
       tablet_mode_observation_{this};

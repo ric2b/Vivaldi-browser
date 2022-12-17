@@ -34,7 +34,7 @@ namespace {
 NSMenuItem* VivaldiGetMenuItemByID(ui::MenuModel* model,
                             NSMenu* menu,
                             int command_id) {
-  for (int i = 0; i < model->GetItemCount(); ++i) {
+  for (size_t i = 0; i < model->GetItemCount(); ++i) {
     NSMenuItem* item = [menu itemAtIndex:i];
     if (model->GetCommandIdAt(i) == command_id)
       return item;

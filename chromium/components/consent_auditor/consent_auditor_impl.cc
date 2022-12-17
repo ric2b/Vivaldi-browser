@@ -13,6 +13,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/protocol/user_consent_specifics.pb.h"
+#include "components/sync/protocol/user_consent_types.pb.h"
 
 using ArcPlayTermsOfServiceConsent =
     sync_pb::UserConsentTypes::ArcPlayTermsOfServiceConsent;
@@ -23,10 +25,10 @@ namespace consent_auditor {
 
 namespace {
 
-const char kLocalConsentDescriptionKey[] = "description";
-const char kLocalConsentConfirmationKey[] = "confirmation";
-const char kLocalConsentVersionKey[] = "version";
-const char kLocalConsentLocaleKey[] = "locale";
+constexpr char kLocalConsentDescriptionKey[] = "description";
+constexpr char kLocalConsentConfirmationKey[] = "confirmation";
+constexpr char kLocalConsentVersionKey[] = "version";
+constexpr char kLocalConsentLocaleKey[] = "locale";
 
 std::unique_ptr<sync_pb::UserConsentSpecifics> CreateUserConsentSpecifics(
     const CoreAccountId& account_id,
@@ -137,6 +139,16 @@ void ConsentAuditorImpl::RecordAccountPasswordsConsent(
   std::unique_ptr<sync_pb::UserConsentSpecifics> specifics =
       CreateUserConsentSpecifics(account_id, app_locale_, clock_);
   specifics->mutable_account_passwords_consent()->CopyFrom(consent);
+
+  consent_sync_bridge_->RecordConsent(std::move(specifics));
+}
+
+void ConsentAuditorImpl::RecordAutofillAssistantConsent(
+    const CoreAccountId& account_id,
+    const sync_pb::UserConsentTypes::AutofillAssistantConsent& consent) {
+  std::unique_ptr<sync_pb::UserConsentSpecifics> specifics =
+      CreateUserConsentSpecifics(account_id, app_locale_, clock_);
+  *specifics->mutable_autofill_assistant_consent() = consent;
 
   consent_sync_bridge_->RecordConsent(std::move(specifics));
 }

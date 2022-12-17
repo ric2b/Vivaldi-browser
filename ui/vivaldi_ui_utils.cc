@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "app/vivaldi_constants.h"
-#include "base/json/json_reader.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -34,25 +33,8 @@ namespace {
 
 bool IsMainVivaldiBrowserWindow(VivaldiBrowserWindow* window) {
   DCHECK(window);
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  absl::optional<base::Value> json =
-      base::JSONReader::Read(window->browser()->viv_ext_data(), options);
-  std::string window_type;
-  if (json) {
-    if (base::Value::Dict* dict = json->GetIfDict()) {
-      if (std::string* window_type = dict->FindString("windowType")) {
-        // Don't track popup windows (like settings) in the session.
-        // We have "", "popup" and "settings".
-        // TODO(pettern): Popup windows still rely on vivExtData, this
-        // should go away and we should use the type sent to the apis
-        // instead.
-        if (*window_type == "popup" || *window_type == "settings") {
-          return false;
-        }
-      }
-    }
-  }
-  return true;
+  // Don't track popup windows (like settings) in the session.
+  return !window->browser()->is_type_popup();
 }
 
 }  // namespace
@@ -192,7 +174,7 @@ bool MoveTabToWindow(Browser* source_browser,
     *new_index = target_tab_strip->count();
 
   target_tab_strip->InsertWebContentsAt(*new_index, std::move(web_contents),
-                                        TabStripModel::ADD_PINNED);
+                                        AddTabTypes::ADD_PINNED);
 
   return true;
 }

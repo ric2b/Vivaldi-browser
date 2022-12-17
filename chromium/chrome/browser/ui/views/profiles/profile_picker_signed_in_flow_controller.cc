@@ -36,6 +36,9 @@ ProfilePickerSignedInFlowController::ProfilePickerSignedInFlowController(
 }
 
 ProfilePickerSignedInFlowController::~ProfilePickerSignedInFlowController() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  LOG(WARNING) << "crbug.com/1340791 | Flow controller destruction.";
+#endif
   if (contents())
     contents()->SetDelegate(nullptr);
 }
@@ -69,6 +72,9 @@ void ProfilePickerSignedInFlowController::Cancel() {}
 
 void ProfilePickerSignedInFlowController::SwitchToSyncConfirmation() {
   DCHECK(IsInitialized());
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  PreShowScreenForDebug();
+#endif
   host_->ShowScreen(contents(), GetSyncConfirmationURL(/*loading=*/false),
                     /*navigation_finished_closure=*/
                     base::BindOnce(&ProfilePickerSignedInFlowController::
@@ -82,6 +88,9 @@ void ProfilePickerSignedInFlowController::SwitchToEnterpriseProfileWelcome(
     EnterpriseProfileWelcomeUI::ScreenType type,
     signin::SigninChoiceCallback proceed_callback) {
   DCHECK(IsInitialized());
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  PreShowScreenForDebug();
+#endif
   host_->ShowScreen(contents(),
                     GURL(chrome::kChromeUIEnterpriseProfileWelcomeURL),
                     /*navigation_finished_closure=*/
@@ -99,6 +108,9 @@ void ProfilePickerSignedInFlowController::SwitchToProfileSwitch(
   // The sign-in flow is finished, no profile window should be shown in the end.
   Cancel();
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  PreShowScreenForDebug();
+#endif
   switch_profile_path_ = profile_path;
   host_->ShowScreenInPickerContents(
       GURL(chrome::kChromeUIProfilePickerUrl).Resolve("profile-switch"));
@@ -115,17 +127,10 @@ absl::optional<SkColor> ProfilePickerSignedInFlowController::GetProfileColor()
 }
 
 GURL ProfilePickerSignedInFlowController::GetSyncConfirmationURL(bool loading) {
-  // The color should be set also for the loading case. Namely, the sync
-  // confirmation webUI is not re-initialized when loading a URL for the same
-  // host but with another path. If a policy later changes the value of
-  // `GetProfileColor()`, it's fine. In this case, Chrome shows the enterprise
-  // welcome screen in between the loading URL and the sync confirmation URL and
-  // thus the sync confirmation webUI will get recreated with the right color.
   GURL url = GURL(chrome::kChromeUISyncConfirmationURL);
   return AppendSyncConfirmationQueryParams(
       loading ? url.Resolve(chrome::kChromeUISyncConfirmationLoadingPath) : url,
-      {/*is_modal=*/false, SyncConfirmationUI::DesignVersion::kColored,
-       GetProfileColor()});
+      SyncConfirmationStyle::kWindow);
 }
 
 std::unique_ptr<content::WebContents>

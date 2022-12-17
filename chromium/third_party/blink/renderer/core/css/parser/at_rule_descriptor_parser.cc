@@ -114,6 +114,8 @@ CSSValue* ConsumeFontFaceSrcLocal(CSSParserTokenRange& range,
     String family_name = css_parsing_utils::ConcatenateFamilyName(args);
     if (!args.AtEnd())
       return nullptr;
+    if (family_name.IsEmpty())
+      return nullptr;
     return CSSFontFaceSrcValue::CreateLocal(
         family_name, context.JavascriptWorld(),
         context.IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse,
@@ -266,10 +268,8 @@ CSSValue* AtRuleDescriptorParser::ParseFontFaceDescriptor(
       parsed_value = ConsumeFontMetricOverride(range, context);
       break;
     case AtRuleDescriptorID::SizeAdjust:
-      if (RuntimeEnabledFeatures::CSSFontFaceSizeAdjustEnabled()) {
-        parsed_value = css_parsing_utils::ConsumePercent(
-            range, context, CSSPrimitiveValue::ValueRange::kNonNegative);
-      }
+      parsed_value = css_parsing_utils::ConsumePercent(
+          range, context, CSSPrimitiveValue::ValueRange::kNonNegative);
       break;
     default:
       break;

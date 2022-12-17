@@ -58,6 +58,12 @@
       return;
     }
 
+    // Vivaldi
+    // This prevenets the crash while launching the app on simulator
+    if (!self.fileURL)
+      return;
+    // End Vivaldi
+
     [[NSFileManager defaultManager]
                createDirectoryAtURL:self.fileURL.URLByDeletingLastPathComponent
         withIntermediateDirectories:YES

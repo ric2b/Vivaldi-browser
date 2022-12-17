@@ -48,13 +48,6 @@ constexpr char kKeyCreationResultHistogram[] =
 constexpr char kKeyRotationResultHistogram[] =
     "Enterprise.DeviceTrust.Key.RotationResult";
 
-enterprise_connectors::test::MockKeyPersistenceDelegate::KeyInfo
-CreateEmptyKey() {
-  return {enterprise_management::BrowserPublicKeyUploadRequest::
-              KEY_TRUST_LEVEL_UNSPECIFIED,
-          std::vector<uint8_t>()};
-}
-
 }  // namespace
 
 class DeviceTrustKeyManagerImplTest : public testing::Test {
@@ -70,11 +63,11 @@ class DeviceTrustKeyManagerImplTest : public testing::Test {
 
   void SetUpPersistedKey() {
     // ScopedKeyPersistenceDelegateFactory creates mocked persistence delegates
-    // that already mimic the existence of a TPM key provider and stored key.
+    // that already mimic the existence of a hardware key provider and stored
+    // key.
     auto mock_persistence_delegate =
-        persistence_delegate_factory_.CreateMockedTpmDelegate();
+        persistence_delegate_factory_.CreateMockedHardwareDelegate();
     EXPECT_CALL(*mock_persistence_delegate, LoadKeyPair());
-    EXPECT_CALL(*mock_persistence_delegate, GetTpmBackedKeyProvider());
 
     persistence_delegate_factory_.set_next_instance(
         std::move(mock_persistence_delegate));
@@ -84,7 +77,7 @@ class DeviceTrustKeyManagerImplTest : public testing::Test {
     auto mock_persistence_delegate =
         std::make_unique<test::MockKeyPersistenceDelegate>();
     EXPECT_CALL(*mock_persistence_delegate, LoadKeyPair())
-        .WillOnce(testing::Return(CreateEmptyKey()));
+        .WillOnce(Invoke([]() { return nullptr; }));
 
     persistence_delegate_factory_.set_next_instance(
         std::move(mock_persistence_delegate));
@@ -92,11 +85,11 @@ class DeviceTrustKeyManagerImplTest : public testing::Test {
 
   void RunUntilIdle() { task_environment_.RunUntilIdle(); }
 
-  void ExpectLoadedTpmKeyMetrics(int times_loaded = 1) {
-    // A TPM-generated key was successfully loaded. We don't know which
+  void ExpectLoadedHardwareKeyMetrics(int times_loaded = 1) {
+    // A hardware-generated key was successfully loaded. We don't know which
     // algorithm was used though, so just check that it was logged only once.
     histogram_tester_.ExpectUniqueSample(kLoadedKeyTrustLevelHistogram,
-                                         DTKeyTrustLevel::kTpm, times_loaded);
+                                         DTKeyTrustLevel::kHw, times_loaded);
     histogram_tester_.ExpectTotalCount(kLoadedKeyTypeHistogram, times_loaded);
   }
 
@@ -126,7 +119,7 @@ class DeviceTrustKeyManagerImplTest : public testing::Test {
 
     ExpectManagerHandlesRequests();
 
-    ExpectLoadedTpmKeyMetrics();
+    ExpectLoadedHardwareKeyMetrics();
     histogram_tester_.ExpectTotalCount(kKeyCreationResultHistogram, 0);
     histogram_tester_.ExpectTotalCount(kKeyRotationResultHistogram, 0);
   }
@@ -206,7 +199,7 @@ TEST_F(DeviceTrustKeyManagerImplTest,
       }));
   run_loop.Run();
 
-  ExpectLoadedTpmKeyMetrics();
+  ExpectLoadedHardwareKeyMetrics();
   ExpectKeyCreatedMetrics();
 }
 
@@ -265,7 +258,7 @@ TEST_F(DeviceTrustKeyManagerImplTest,
 
   success_loop.Run();
 
-  ExpectLoadedTpmKeyMetrics();
+  ExpectLoadedHardwareKeyMetrics();
   ExpectKeyCreatedMetrics();
 }
 
@@ -334,7 +327,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, Initialization_CreateFails_Retry) {
   // The client request should be responded to.
   request_loop.Run();
 
-  ExpectLoadedTpmKeyMetrics();
+  ExpectLoadedHardwareKeyMetrics();
   histogram_tester_.ExpectTotalCount(kKeyRotationResultHistogram, 0);
   histogram_tester_.ExpectBucketCount(kKeyCreationResultHistogram,
                                       DTKeyRotationResult::kSucceeded, 1);
@@ -423,7 +416,7 @@ TEST_F(DeviceTrustKeyManagerImplTest,
   // All pending callbacks should get called now.
   barrier_loop.Run();
 
-  ExpectLoadedTpmKeyMetrics();
+  ExpectLoadedHardwareKeyMetrics();
   ExpectKeyCreatedMetrics();
 }
 
@@ -463,7 +456,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_Simple_Success) {
   ExpectSuccessKeyRotateMetrics();
 
   // The manager should have loaded a total of two keys.
-  ExpectLoadedTpmKeyMetrics(/*times_loaded=*/2);
+  ExpectLoadedHardwareKeyMetrics(/*times_loaded=*/2);
 
   ASSERT_TRUE(captured_result.has_value());
   ASSERT_EQ(captured_result.value(), KeyRotationResult::SUCCESS);
@@ -503,7 +496,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_Simple_Failed) {
   ExpectFailedKeyRotateMetrics();
 
   // The manager should have loaded a total of one key, the initial one.
-  ExpectLoadedTpmKeyMetrics(/*times_loaded=*/1);
+  ExpectLoadedHardwareKeyMetrics(/*times_loaded=*/1);
 
   ASSERT_TRUE(captured_result.has_value());
   ASSERT_EQ(captured_result.value(), KeyRotationResult::FAILURE);
@@ -583,7 +576,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_Concurrent_Cancel_Success) {
   ExpectSuccessKeyRotateMetrics(/*times_rotated=*/2);
 
   // The manager should have loaded a total of three keys.
-  ExpectLoadedTpmKeyMetrics(/*times_loaded=*/3);
+  ExpectLoadedHardwareKeyMetrics(/*times_loaded=*/3);
 
   ASSERT_TRUE(first_captured_result.has_value());
   ASSERT_TRUE(second_captured_result.has_value());
@@ -660,7 +653,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_Concurrent_SuccessThenFail) {
   histogram_tester_.ExpectTotalCount(kKeyCreationResultHistogram, 0);
 
   // The manager should have loaded a total of two keys.
-  ExpectLoadedTpmKeyMetrics(/*times_loaded=*/2);
+  ExpectLoadedHardwareKeyMetrics(/*times_loaded=*/2);
 
   ASSERT_TRUE(first_captured_result.has_value());
   ASSERT_TRUE(second_captured_result.has_value());
@@ -696,8 +689,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_AtLoadKey_Success) {
   // same time as it is being loaded.
   auto mock_persistence_delegate =
       persistence_delegate_factory_
-          .CreateMockedTpmDelegateWithLoadingSideEffect(start_rotate);
-  EXPECT_CALL(*mock_persistence_delegate, GetTpmBackedKeyProvider());
+          .CreateMockedHardwareDelegateWithLoadingSideEffect(start_rotate);
   EXPECT_CALL(*mock_persistence_delegate, LoadKeyPair());
 
   persistence_delegate_factory_.set_next_instance(
@@ -720,7 +712,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_AtLoadKey_Success) {
   ExpectSuccessKeyRotateMetrics();
 
   // The manager should have loaded a total of two keys.
-  ExpectLoadedTpmKeyMetrics(/*times_loaded=*/2);
+  ExpectLoadedHardwareKeyMetrics(/*times_loaded=*/2);
 
   ASSERT_TRUE(captured_result.has_value());
   ASSERT_EQ(captured_result.value(), KeyRotationResult::SUCCESS);
@@ -754,8 +746,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_AtLoadKey_Fails) {
   // same time as it is being loaded.
   auto mock_persistence_delegate =
       persistence_delegate_factory_
-          .CreateMockedTpmDelegateWithLoadingSideEffect(start_rotate);
-  EXPECT_CALL(*mock_persistence_delegate, GetTpmBackedKeyProvider());
+          .CreateMockedHardwareDelegateWithLoadingSideEffect(start_rotate);
   EXPECT_CALL(*mock_persistence_delegate, LoadKeyPair());
 
   persistence_delegate_factory_.set_next_instance(
@@ -776,7 +767,7 @@ TEST_F(DeviceTrustKeyManagerImplTest, RotateKey_AtLoadKey_Fails) {
   ExpectFailedKeyRotateMetrics();
 
   // The manager should have loaded a total of one key.
-  ExpectLoadedTpmKeyMetrics(/*times_loaded=*/1);
+  ExpectLoadedHardwareKeyMetrics(/*times_loaded=*/1);
 
   ASSERT_TRUE(captured_result.has_value());
   ASSERT_EQ(captured_result.value(), KeyRotationResult::FAILURE);

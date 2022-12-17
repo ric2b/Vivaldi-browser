@@ -39,9 +39,9 @@
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
+#include "content/browser/gpu/gpu_disk_cache_factory.h"
 #include "content/browser/gpu/gpu_main_thread_factory.h"
 #include "content/browser/gpu/gpu_memory_buffer_manager_singleton.h"
-#include "content/browser/gpu/shader_cache_factory.h"
 #include "content/common/child_process.mojom.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
@@ -65,7 +65,7 @@
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/common/result_codes.h"
-#include "gpu/ipc/host/shader_disk_cache.h"
+#include "gpu/ipc/host/gpu_disk_cache.h"
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
@@ -306,6 +306,7 @@ static const char* const kSwitchNames[] = {
 #endif
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
     switches::kHardwareVideoDecodeFrameRate,
+    switches::kMaxChromeOSDecoderThreads,
 #endif
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     switches::kLacrosEnablePlatformHevc,
@@ -364,6 +365,11 @@ class GpuSandboxedProcessLauncherDelegate
 
 #if BUILDFLAG(IS_WIN)
   bool DisableDefaultPolicy() override { return true; }
+
+  std::string GetSandboxTag() override {
+    return sandbox::policy::SandboxWin::GetSandboxTagForDelegate(
+        "gpu", GetSandboxType());
+  }
 
   enum GPUAppContainerEnableState{
       AC_ENABLED = 0,
@@ -433,15 +439,18 @@ class GpuSandboxedProcessLauncherDelegate
     else
       policy->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
 
+    if (policy->GetConfig()->IsConfigured())
+      return true;
+
     // Block this DLL even if it is not loaded by the browser process.
-    policy->AddDllToUnload(L"cmsetac.dll");
+    policy->GetConfig()->AddDllToUnload(L"cmsetac.dll");
 
     if (cmd_line_.HasSwitch(switches::kEnableLogging)) {
       std::wstring log_file_path = logging::GetLogFileFullPath();
       if (!log_file_path.empty()) {
-        sandbox::ResultCode result = policy->AddRule(
-            sandbox::TargetPolicy::SUBSYS_FILES,
-            sandbox::TargetPolicy::FILES_ALLOW_ANY, log_file_path.c_str());
+        sandbox::ResultCode result = policy->GetConfig()->AddRule(
+            sandbox::SubSystem::kFiles, sandbox::Semantics::kFilesAllowAny,
+            log_file_path.c_str());
         if (result != sandbox::SBOX_ALL_OK)
           return false;
       }
@@ -629,6 +638,7 @@ void GpuProcessHost::GetHasGpuProcess(base::OnceCallback<void(bool)> callback) {
 
 // static
 void GpuProcessHost::CallOnIO(
+    const base::Location& location,
     GpuProcessKind kind,
     bool force_create,
     base::OnceCallback<void(GpuProcessHost*)> callback) {
@@ -636,8 +646,8 @@ void GpuProcessHost::CallOnIO(
   DCHECK_NE(kind, GPU_PROCESS_KIND_INFO_COLLECTION);
 #endif
   GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(&RunCallbackOnIO, kind, force_create,
-                                std::move(callback)));
+      location, base::BindOnce(&RunCallbackOnIO, kind, force_create,
+                               std::move(callback)));
 }
 
 void GpuProcessHost::BindInterface(
@@ -898,8 +908,7 @@ bool GpuProcessHost::Init() {
     // WGL needs to create its own window and pump messages on it.
     options.message_pump_type = base::MessagePumpType::UI;
 #endif
-    if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority))
-      options.priority = base::ThreadPriority::DISPLAY;
+    options.thread_type = base::ThreadType::kCompositing;
     in_process_gpu_thread_->StartWithOptions(std::move(options));
   } else if (!LaunchGpuProcess()) {
     return false;
@@ -1050,9 +1059,9 @@ void GpuProcessHost::DidUpdateDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info) {
 }
 #endif
 
-void GpuProcessHost::BlockDomainFrom3DAPIs(const GURL& url,
-                                           gpu::DomainGuilt guilt) {
-  GpuDataManagerImpl::GetInstance()->BlockDomainFrom3DAPIs(url, guilt);
+void GpuProcessHost::BlockDomainsFrom3DAPIs(const std::set<GURL>& urls,
+                                            gpu::DomainGuilt guilt) {
+  GpuDataManagerImpl::GetInstance()->BlockDomainsFrom3DAPIs(urls, guilt);
 }
 
 bool GpuProcessHost::GpuAccessAllowed() const {
@@ -1073,8 +1082,8 @@ void GpuProcessHost::DisableGpuCompositing() {
 #endif
 }
 
-gpu::ShaderCacheFactory* GpuProcessHost::GetShaderCacheFactory() {
-  return GetShaderCacheFactorySingleton();
+gpu::GpuDiskCacheFactory* GpuProcessHost::GetGpuDiskCacheFactory() {
+  return GetGpuDiskCacheFactorySingleton();
 }
 
 void GpuProcessHost::RecordLogMessage(int32_t severity,

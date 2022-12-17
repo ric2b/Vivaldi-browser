@@ -11,10 +11,6 @@ GEN_INCLUDE([
  * Test fixture for editing tests.
  */
 ChromeVoxEditingTest = class extends ChromeVoxNextE2ETest {
-  constructor() {
-    super();
-  }
-
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
@@ -31,6 +27,7 @@ ChromeVoxEditingTest = class extends ChromeVoxNextE2ETest {
         'TextEditHandler', '/chromevox/background/editing/editing.js');
     await importModule(
         'TtsBackground', '/chromevox/background/tts_background.js');
+    await importModule('KeyCode', '/common/key_code.js');
   }
 
   press(keyCode, modifiers) {
@@ -41,7 +38,7 @@ ChromeVoxEditingTest = class extends ChromeVoxNextE2ETest {
 
   waitForEditableEvent() {
     return new Promise(resolve => {
-      DesktopAutomationInterface.instance.textEditHandler_.onEvent = (e) =>
+      DesktopAutomationInterface.instance.textEditHandler_.onEvent = e =>
           resolve(e);
     });
   }
@@ -67,7 +64,7 @@ line 3
 </textarea>
 `;
 
-TEST_F('ChromeVoxEditingTest', 'Focus', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'Focus', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(doc);
   const singleLine =
@@ -83,10 +80,10 @@ TEST_F('ChromeVoxEditingTest', 'Focus', async function() {
       .expectBraille(
           'textArea Line 1\nline 2\nline 3 mled', {startIndex: 9, endIndex: 9});
 
-  mockFeedback.replay();
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'Multiline', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'Multiline', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(doc);
   const textarea =
@@ -105,10 +102,10 @@ TEST_F('ChromeVoxEditingTest', 'Multiline', async function() {
       .expectSpeech('line 2', 'selected')
       .expectBraille('line 2\n', {startIndex: 0, endIndex: 6});
 
-  mockFeedback.replay();
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'TextButNoSelectionChange', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'TextButNoSelectionChange', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
       <h1>Test doc</h1>
@@ -125,9 +122,9 @@ TEST_F('ChromeVoxEditingTest', 'TextButNoSelectionChange', async function() {
           }
 
           input.value = 'text2';
-          window.clearInterval(timer);
+          clearInterval(timer);
         }
-        timer = window.setInterval(poll, 200);
+        timer = setInterval(poll, 200);
       </script>
     `);
   const input = root.find({role: RoleType.TEXT_FIELD});
@@ -137,10 +134,10 @@ TEST_F('ChromeVoxEditingTest', 'TextButNoSelectionChange', async function() {
       .call(input.setSelection.bind(input, 5, 5))
       .expectBraille('text2 ed', {startIndex: 5, endIndex: 5});
 
-  mockFeedback.replay();
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'RichTextMoveByLine', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'RichTextMoveByLine', async function() {
   // Turn on rich text output settings.
   localStorage['announceRichTextAttributes'] = 'true';
 
@@ -188,11 +185,11 @@ TEST_F('ChromeVoxEditingTest', 'RichTextMoveByLine', async function() {
       .expectBraille('\n')
       .call(moveByLine)
       .expectSpeech('hello', 'Heading 2')
-      .expectBraille('hello h2 mled')
-      .replay();
+      .expectBraille('hello h2 mled');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'RichTextMoveByCharacter', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'RichTextMoveByCharacter', async function() {
   // Turn on rich text output settings.
   localStorage['announceRichTextAttributes'] = 'true';
 
@@ -261,12 +258,12 @@ TEST_F('ChromeVoxEditingTest', 'RichTextMoveByCharacter', async function() {
 
       .call(moveByChar)
       .expectSpeech(' ')
-      .expectBraille(lineText, {startIndex: 9, endIndex: 9})
+      .expectBraille(lineText, {startIndex: 9, endIndex: 9});
 
-      .replay();
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'RichTextMoveByCharacterAllAttributes',
     async function() {
       // Turn on rich text output settings.
@@ -427,13 +424,13 @@ TEST_F(
           .expectSpeech('Black, 100% opacity.')
           .expectSpeech('Not link')
           .expectSpeech('Not underline')
-          .expectBraille(lineText, {startIndex: 35, endIndex: 35})
+          .expectBraille(lineText, {startIndex: 35, endIndex: 35});
 
-          .replay();
+      await mockFeedback.replay();
     });
 
 // Tests specifically for cursor workarounds.
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'RichTextMoveByCharacterNodeWorkaround',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -471,11 +468,11 @@ TEST_F(
           .expectBraille(lineText, {startIndex: 5, endIndex: 5})
           .call(moveByChar)
           .expectSpeech('w')
-          .expectBraille(lineText, {startIndex: 6, endIndex: 6})
-          .replay();
+          .expectBraille(lineText, {startIndex: 6, endIndex: 6});
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'RichTextMoveByCharacterEndOfLine',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -507,12 +504,12 @@ TEST_F(
           .expectBraille(lineText, {startIndex: 3, endIndex: 3})
           .call(moveByChar)
           .expectSpeech('End of text')
-          .expectBraille(lineText, {startIndex: 4, endIndex: 4})
+          .expectBraille(lineText, {startIndex: 4, endIndex: 4});
 
-          .replay();
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'RichTextLinkOutput', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'RichTextLinkOutput', async function() {
   // Turn on rich text output settings.
   localStorage['announceRichTextAttributes'] = 'true';
 
@@ -551,14 +548,15 @@ TEST_F('ChromeVoxEditingTest', 'RichTextLinkOutput', async function() {
       .expectBraille(lineOnLinkText, {startIndex: 4, endIndex: 4})
       .call(moveByChar)
       .expectSpeech('t')
-      .expectBraille(lineOnLinkText, {startIndex: 5, endIndex: 5})
+      .expectBraille(lineOnLinkText, {startIndex: 5, endIndex: 5});
 
-      .replay();
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'RichTextExtendByCharacter', async function() {
-  const mockFeedback = this.createMockFeedback();
-  const root = await this.runWithLoadedTree(`
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'RichTextExtendByCharacter', async function() {
+      const mockFeedback = this.createMockFeedback();
+      const root = await this.runWithLoadedTree(`
     <div role="textbox" contenteditable>Te<br>st</div>
     <button id="go">Go</button>
 
@@ -569,26 +567,26 @@ TEST_F('ChromeVoxEditingTest', 'RichTextExtendByCharacter', async function() {
       }, true);
     </script>
   `);
-  await this.focusFirstTextField(root);
+      await this.focusFirstTextField(root);
 
-  const go = root.find({role: RoleType.BUTTON});
-  const moveByChar = go.doDefault.bind(go);
+      const go = root.find({role: RoleType.BUTTON});
+      const moveByChar = go.doDefault.bind(go);
 
-  mockFeedback.call(moveByChar)
-      .expectSpeech('T', 'selected')
-      .call(moveByChar)
-      .expectSpeech('e', 'selected')
-      .call(moveByChar)
-      .expectSpeech('selected')
-      .call(moveByChar)
-      .expectSpeech('s', 'selected')
-      .call(moveByChar)
-      .expectSpeech('t', 'selected')
+      mockFeedback.call(moveByChar)
+          .expectSpeech('T', 'selected')
+          .call(moveByChar)
+          .expectSpeech('e', 'selected')
+          .call(moveByChar)
+          .expectSpeech('selected')
+          .call(moveByChar)
+          .expectSpeech('s', 'selected')
+          .call(moveByChar)
+          .expectSpeech('t', 'selected');
 
-      .replay();
-});
+      await mockFeedback.replay();
+    });
 
-TEST_F('ChromeVoxEditingTest', 'RichTextImageByCharacter', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'RichTextImageByCharacter', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <p contenteditable>
@@ -628,11 +626,12 @@ TEST_F('ChromeVoxEditingTest', 'RichTextImageByCharacter', async function() {
     {speech: ['s'], braille: [lineText, {startIndex: 5, endIndex: 5}]},
     {speech: [' '], braille: [lineText, {startIndex: 6, endIndex: 6}]},
     {speech: ['a'], braille: [lineText, {startIndex: 7, endIndex: 7}]},
-    {speech: [' '], braille: [lineText, {startIndex: 8, endIndex: 8}]}, {
+    {speech: [' '], braille: [lineText, {startIndex: 8, endIndex: 8}]},
+    {
       speech: ['cat', 'Image'],
-      braille: [lineOnCatText, {startIndex: 9, endIndex: 9}]
+      braille: [lineOnCatText, {startIndex: 9, endIndex: 9}],
     },
-    {speech: [' '], braille: [lineText, {startIndex: 12, endIndex: 12}]}
+    {speech: [' '], braille: [lineText, {startIndex: 12, endIndex: 12}]},
   ];
 
   for (const item of moves) {
@@ -649,10 +648,10 @@ TEST_F('ChromeVoxEditingTest', 'RichTextImageByCharacter', async function() {
     mockFeedback.expectBraille.apply(mockFeedback, backItem.braille);
   }
 
-  mockFeedback.replay();
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'RichTextSelectByLine', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'RichTextSelectByLine', async function() {
   const mockFeedback = this.createMockFeedback();
   // Use digit strings like "11111" and "22222" because the character widths
   // of digits are always the same. This means the test can move down one line
@@ -757,12 +756,12 @@ TEST_F('ChromeVoxEditingTest', 'RichTextSelectByLine', async function() {
       // Shrinking.
       .call(move)
       .expectSpeech('ne', '22222 li', 'unselected')
-      .expectBraille('22222 line\n', {startIndex: 8, endIndex: 11})
+      .expectBraille('22222 line\n', {startIndex: 8, endIndex: 11});
 
-      .replay();
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'RichTextSelectComplexStructure', async function() {
       const mockFeedback = this.createMockFeedback();
       const root = await this.runWithLoadedTree(`
@@ -865,115 +864,117 @@ TEST_F(
           .call(move)
           .expectSpeech('ine', 'Link')
           .expectSpeech('33333 li', 'List item', 'selected')
-          .expectBraille('11111 line h1', {startIndex: 7, endIndex: 10})
+          .expectBraille('11111 line h1', {startIndex: 7, endIndex: 10});
 
-          .replay();
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'EditableLineOneStaticText', async function() {
-  const root = await this.runWithLoadedTree(`
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'EditableLineOneStaticText', async function() {
+      const root = await this.runWithLoadedTree(`
     <p contenteditable style="word-spacing:100000px">this is a test</p>
   `);
-  const staticText = root.find({role: RoleType.STATIC_TEXT});
+      const staticText = root.find({role: RoleType.STATIC_TEXT});
 
-  let e = new EditableLine(staticText, 0, staticText, 0);
-  assertEquals('this ', e.text);
+      let e = new EditableLine(staticText, 0, staticText, 0);
+      assertEquals('this ', e.text);
 
-  assertEquals(0, e.startOffset);
-  assertEquals(0, e.endOffset);
-  assertEquals(0, e.localStartOffset);
-  assertEquals(0, e.localEndOffset);
+      assertEquals(0, e.startOffset);
+      assertEquals(0, e.endOffset);
+      assertEquals(0, e.localStartOffset);
+      assertEquals(0, e.localEndOffset);
 
-  assertEquals(0, e.containerStartOffset);
-  assertEquals(4, e.containerEndOffset);
+      assertEquals(0, e.containerStartOffset);
+      assertEquals(4, e.containerEndOffset);
 
-  e = new EditableLine(staticText, 1, staticText, 1);
-  assertEquals('this ', e.text);
+      e = new EditableLine(staticText, 1, staticText, 1);
+      assertEquals('this ', e.text);
 
-  assertEquals(1, e.startOffset);
-  assertEquals(1, e.endOffset);
-  assertEquals(1, e.localStartOffset);
-  assertEquals(1, e.localEndOffset);
+      assertEquals(1, e.startOffset);
+      assertEquals(1, e.endOffset);
+      assertEquals(1, e.localStartOffset);
+      assertEquals(1, e.localEndOffset);
 
-  assertEquals(0, e.containerStartOffset);
-  assertEquals(4, e.containerEndOffset);
+      assertEquals(0, e.containerStartOffset);
+      assertEquals(4, e.containerEndOffset);
 
-  e = new EditableLine(staticText, 5, staticText, 5);
-  assertEquals('is ', e.text);
+      e = new EditableLine(staticText, 5, staticText, 5);
+      assertEquals('is ', e.text);
 
-  assertEquals(0, e.startOffset);
-  assertEquals(0, e.endOffset);
-  assertEquals(5, e.localStartOffset);
-  assertEquals(5, e.localEndOffset);
+      assertEquals(0, e.startOffset);
+      assertEquals(0, e.endOffset);
+      assertEquals(5, e.localStartOffset);
+      assertEquals(5, e.localEndOffset);
 
-  assertEquals(0, e.containerStartOffset);
-  assertEquals(2, e.containerEndOffset);
+      assertEquals(0, e.containerStartOffset);
+      assertEquals(2, e.containerEndOffset);
 
-  e = new EditableLine(staticText, 7, staticText, 7);
-  assertEquals('is ', e.text);
+      e = new EditableLine(staticText, 7, staticText, 7);
+      assertEquals('is ', e.text);
 
-  assertEquals(2, e.startOffset);
-  assertEquals(2, e.endOffset);
-  assertEquals(7, e.localStartOffset);
-  assertEquals(7, e.localEndOffset);
+      assertEquals(2, e.startOffset);
+      assertEquals(2, e.endOffset);
+      assertEquals(7, e.localStartOffset);
+      assertEquals(7, e.localEndOffset);
 
-  assertEquals(0, e.containerStartOffset);
-  assertEquals(2, e.containerEndOffset);
-});
+      assertEquals(0, e.containerStartOffset);
+      assertEquals(2, e.containerEndOffset);
+    });
 
-TEST_F('ChromeVoxEditingTest', 'EditableLineTwoStaticTexts', async function() {
-  const root = await this.runWithLoadedTree(`
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'EditableLineTwoStaticTexts', async function() {
+      const root = await this.runWithLoadedTree(`
     <p contenteditable>hello <b>world</b></p>
   `);
-  const text = root.find({role: RoleType.STATIC_TEXT});
-  const bold = text.nextSibling;
+      const text = root.find({role: RoleType.STATIC_TEXT});
+      const bold = text.nextSibling;
 
-  let e = new EditableLine(text, 0, text, 0);
-  assertEquals('hello world', e.text);
+      let e = new EditableLine(text, 0, text, 0);
+      assertEquals('hello world', e.text);
 
-  assertEquals(0, e.startOffset);
-  assertEquals(0, e.endOffset);
-  assertEquals(0, e.localStartOffset);
-  assertEquals(0, e.localEndOffset);
+      assertEquals(0, e.startOffset);
+      assertEquals(0, e.endOffset);
+      assertEquals(0, e.localStartOffset);
+      assertEquals(0, e.localEndOffset);
 
-  assertEquals(0, e.containerStartOffset);
-  assertEquals(5, e.containerEndOffset);
+      assertEquals(0, e.containerStartOffset);
+      assertEquals(5, e.containerEndOffset);
 
-  e = new EditableLine(text, 5, text, 5);
-  assertEquals('hello world', e.text);
+      e = new EditableLine(text, 5, text, 5);
+      assertEquals('hello world', e.text);
 
-  assertEquals(5, e.startOffset);
-  assertEquals(5, e.endOffset);
-  assertEquals(5, e.localStartOffset);
-  assertEquals(5, e.localEndOffset);
+      assertEquals(5, e.startOffset);
+      assertEquals(5, e.endOffset);
+      assertEquals(5, e.localStartOffset);
+      assertEquals(5, e.localEndOffset);
 
-  assertEquals(0, e.containerStartOffset);
-  assertEquals(5, e.containerEndOffset);
+      assertEquals(0, e.containerStartOffset);
+      assertEquals(5, e.containerEndOffset);
 
-  e = new EditableLine(bold, 0, bold, 0);
-  assertEquals('hello world', e.text);
+      e = new EditableLine(bold, 0, bold, 0);
+      assertEquals('hello world', e.text);
 
-  assertEquals(6, e.startOffset);
-  assertEquals(6, e.endOffset);
-  assertEquals(0, e.localStartOffset);
-  assertEquals(0, e.localEndOffset);
+      assertEquals(6, e.startOffset);
+      assertEquals(6, e.endOffset);
+      assertEquals(0, e.localStartOffset);
+      assertEquals(0, e.localEndOffset);
 
-  assertEquals(6, e.containerStartOffset);
-  assertEquals(10, e.containerEndOffset);
+      assertEquals(6, e.containerStartOffset);
+      assertEquals(10, e.containerEndOffset);
 
-  e = new EditableLine(bold, 4, bold, 4);
-  assertEquals('hello world', e.text);
+      e = new EditableLine(bold, 4, bold, 4);
+      assertEquals('hello world', e.text);
 
-  assertEquals(10, e.startOffset);
-  assertEquals(10, e.endOffset);
-  assertEquals(4, e.localStartOffset);
-  assertEquals(4, e.localEndOffset);
+      assertEquals(10, e.startOffset);
+      assertEquals(10, e.endOffset);
+      assertEquals(4, e.localStartOffset);
+      assertEquals(4, e.localEndOffset);
 
-  assertEquals(6, e.containerStartOffset);
-  assertEquals(10, e.containerEndOffset);
-});
+      assertEquals(6, e.containerStartOffset);
+      assertEquals(10, e.containerEndOffset);
+    });
 
-TEST_F('ChromeVoxEditingTest', 'EditableLineEquality', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'EditableLineEquality', async function() {
   const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">
       <p style="word-spacing:100000px">this is a test</p>
@@ -1046,61 +1047,63 @@ TEST_F('ChromeVoxEditingTest', 'EditableLineEquality', async function() {
   assertFalse(e1.isSameLine(e2));
 });
 
-TEST_F('ChromeVoxEditingTest', 'EditableLineStrictEquality', async function() {
-  const root = await this.runWithLoadedTree(`
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'EditableLineStrictEquality', async function() {
+      const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">
       <p style="word-spacing:100000px">this is a test</p>
       <p>hello <b>world</b></p>
     </div>
   `);
-  const thisIsATest = root.findAll({role: RoleType.PARAGRAPH})[0].firstChild;
-  const hello = root.findAll({role: RoleType.PARAGRAPH})[1].firstChild;
-  const world = root.findAll({role: RoleType.PARAGRAPH})[1].lastChild;
+      const thisIsATest =
+          root.findAll({role: RoleType.PARAGRAPH})[0].firstChild;
+      const hello = root.findAll({role: RoleType.PARAGRAPH})[1].firstChild;
+      const world = root.findAll({role: RoleType.PARAGRAPH})[1].lastChild;
 
-  // The same position -- sanity check.
-  let e1 = new EditableLine(thisIsATest, 0, thisIsATest, 0);
-  assertEquals('this ', e1.text);
-  assertTrue(e1.isSameLineAndSelection(e1));
+      // The same position -- sanity check.
+      let e1 = new EditableLine(thisIsATest, 0, thisIsATest, 0);
+      assertEquals('this ', e1.text);
+      assertTrue(e1.isSameLineAndSelection(e1));
 
-  // Offset into the same soft line.
-  let e2 = new EditableLine(thisIsATest, 1, thisIsATest, 1);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // Offset into the same soft line.
+      let e2 = new EditableLine(thisIsATest, 1, thisIsATest, 1);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // Boundary.
-  e2 = new EditableLine(thisIsATest, 4, thisIsATest, 4);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // Boundary.
+      e2 = new EditableLine(thisIsATest, 4, thisIsATest, 4);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // Offsets into different soft lines.
-  e2 = new EditableLine(thisIsATest, 5, thisIsATest, 5);
-  assertEquals('is ', e2.text);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // Offsets into different soft lines.
+      e2 = new EditableLine(thisIsATest, 5, thisIsATest, 5);
+      assertEquals('is ', e2.text);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // Sanity check; second soft line.
-  assertTrue(e2.isSameLineAndSelection(e2));
+      // Sanity check; second soft line.
+      assertTrue(e2.isSameLineAndSelection(e2));
 
-  // Different offsets into second soft line.
-  e1 = new EditableLine(thisIsATest, 6, thisIsATest, 6);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // Different offsets into second soft line.
+      e1 = new EditableLine(thisIsATest, 6, thisIsATest, 6);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // Boundary.
-  e1 = new EditableLine(thisIsATest, 7, thisIsATest, 7);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // Boundary.
+      e1 = new EditableLine(thisIsATest, 7, thisIsATest, 7);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // Cross into new paragraph.
-  e2 = new EditableLine(hello, 0, hello, 0);
-  assertEquals('hello world', e2.text);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // Cross into new paragraph.
+      e2 = new EditableLine(hello, 0, hello, 0);
+      assertEquals('hello world', e2.text);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // On same node, with multi-static text line.
-  e1 = new EditableLine(hello, 1, hello, 1);
-  assertFalse(e1.isSameLineAndSelection(e2));
+      // On same node, with multi-static text line.
+      e1 = new EditableLine(hello, 1, hello, 1);
+      assertFalse(e1.isSameLineAndSelection(e2));
 
-  // On same node, with multi-static text line; boundary.
-  e1 = new EditableLine(hello, 5, hello, 5);
-  assertFalse(e1.isSameLineAndSelection(e2));
-});
+      // On same node, with multi-static text line; boundary.
+      e1 = new EditableLine(hello, 5, hello, 5);
+      assertFalse(e1.isSameLineAndSelection(e2));
+    });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'EditableLineBaseLineAnchorOrFocus',
     async function() {
       const root = await this.runWithLoadedTree(`
@@ -1147,7 +1150,7 @@ TEST_F(
       assertEquals(3, e1.endOffset);
     });
 
-TEST_F('ChromeVoxEditingTest', 'IsValidLine', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'IsValidLine', async function() {
   const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">
       <p style="word-spacing:100000px">this is a test</p>
@@ -1188,7 +1191,7 @@ TEST_F('ChromeVoxEditingTest', 'IsValidLine', async function() {
   assertFalse(line.isValidLine());
 });
 
-TEST_F('ChromeVoxEditingTest', 'TelTrimsWhitespace', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'TelTrimsWhitespace', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div id="go"></div>
@@ -1225,11 +1228,11 @@ TEST_F('ChromeVoxEditingTest', 'TelTrimsWhitespace', async function() {
 
       // Deletion.
       .call(enterKey)
-      .expectSpeech('1')
-      .replay();
+      .expectSpeech('1');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'BackwardWordDelete', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'BackwardWordDelete', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div
@@ -1253,11 +1256,11 @@ TEST_F('ChromeVoxEditingTest', 'BackwardWordDelete', async function() {
       .expectSpeech('is , deleted')
       .expectBraille('this\u00a0mled', {startIndex: 5, endIndex: 5})
       .call(this.press(KeyCode.BACK, {ctrl: true}))
-      .expectBraille(' mled', {startIndex: 0, endIndex: 0})
-      .replay();
+      .expectBraille(' mled', {startIndex: 0, endIndex: 0});
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'BackwardWordDeleteAcrossParagraphs',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -1283,11 +1286,11 @@ TEST_F(
           .call(this.press(KeyCode.BACK, {ctrl: true}))
           .expectSpeech('line, deleted')
           .call(this.press(KeyCode.BACK, {ctrl: true}))
-          .expectSpeech('first , deleted')
-          .replay();
+          .expectSpeech('first , deleted');
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'GrammarErrors', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'GrammarErrors', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div contenteditable="true" role="textbox">
@@ -1323,13 +1326,13 @@ TEST_F('ChromeVoxEditingTest', 'GrammarErrors', async function() {
       .call(moveByChar)
       .expectSpeech('e')
       .call(moveByChar)
-      .expectSpeech(' ', 'Leaving grammar error')
+      .expectSpeech(' ', 'Leaving grammar error');
 
-      .replay();
+  await mockFeedback.replay();
 });
 
 // Flaky test, crbug.com/1098642.
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'DISABLED_CharacterTypedAfterNewLine',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -1346,11 +1349,11 @@ TEST_F(
           .call(this.press(KeyCode.RETURN))
           .expectSpeech('\n')
           .call(this.press(KeyCode.A))
-          .expectSpeech('a')
-          .replay();
+          .expectSpeech('a');
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'SelectAll', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'SelectAll', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">
@@ -1372,11 +1375,11 @@ TEST_F('ChromeVoxEditingTest', 'SelectAll', async function() {
       .call(this.press(KeyCode.HOME, {ctrl: true}))
       .expectSpeech('first line')
       .call(this.press(KeyCode.A, {ctrl: true}))
-      .expectSpeech('first line', 'second line', 'third line', 'selected')
-      .replay();
+      .expectSpeech('first line', 'second line', 'third line', 'selected');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'TextAreaBrailleEmptyLine', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'TextAreaBrailleEmptyLine', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree('<textarea></textarea>');
   const textarea = await this.focusFirstTextField(root);
@@ -1386,12 +1389,11 @@ TEST_F('ChromeVoxEditingTest', 'TextAreaBrailleEmptyLine', async function() {
   mockFeedback.call(this.press(KeyCode.UP)).expectBraille('two\n');
   mockFeedback.call(this.press(KeyCode.UP)).expectBraille('one\n');
   mockFeedback.call(this.press(KeyCode.UP)).expectBraille('\n');
-  mockFeedback.call(this.press(KeyCode.UP))
-      .expectBraille('test\nmled')
-      .replay();
+  mockFeedback.call(this.press(KeyCode.UP)).expectBraille('test\nmled');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'MoveByCharacterIntent', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'MoveByCharacterIntent', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">
@@ -1412,11 +1414,11 @@ TEST_F('ChromeVoxEditingTest', 'MoveByCharacterIntent', async function() {
       .call(this.press(KeyCode.LEFT))
       .expectSpeech('\n')
       .call(this.press(KeyCode.LEFT))
-      .expectSpeech('3')
-      .replay();
+      .expectSpeech('3');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'MoveByLineIntent', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'MoveByLineIntent', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">
@@ -1434,11 +1436,11 @@ TEST_F('ChromeVoxEditingTest', 'MoveByLineIntent', async function() {
       .call(this.press(KeyCode.UP))
       .expectSpeech('456')
       .call(this.press(KeyCode.UP))
-      .expectSpeech('123')
-      .replay();
+      .expectSpeech('123');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'SelectAllBareTextContent', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'SelectAllBareTextContent', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(`
     <div contenteditable role="textbox">unread</div>
@@ -1448,18 +1450,16 @@ TEST_F('ChromeVoxEditingTest', 'SelectAllBareTextContent', async function() {
   mockFeedback.call(this.press(KeyCode.END, {ctrl: true}))
       .expectSpeech('unread')
       .call(this.press(KeyCode.A, {ctrl: true}))
-      .expectSpeech('unread', 'selected')
-      .replay();
+      .expectSpeech('unread', 'selected');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'InputEvents', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'InputEvents', async function() {
   const site = `<input type="text"></input>`;
   const root = await this.runWithLoadedTree(site);
   const input = await this.focusFirstTextField(root);
 
   // EventType.TEXT_SELECTION_CHANGED fires on focus as well.
-  //
-  // TODO(nektar): Deprecate and remove TEXT_SELECTION_CHANGED.
   event = await this.waitForEditableEvent();
   assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
   assertEquals(input, event.target);
@@ -1467,32 +1467,32 @@ TEST_F('ChromeVoxEditingTest', 'InputEvents', async function() {
 
   this.press(KeyCode.A)();
 
-  event = await this.waitForEditableEvent();
-  assertEquals(EventType.VALUE_IN_TEXT_FIELD_CHANGED, event.type);
-  assertEquals(input, event.target);
-  assertEquals('a', input.value);
-
-  // We deliberately used EventType.TEXT_SELECTION_CHANGED instead of
+  // We deliberately use EventType.TEXT_SELECTION_CHANGED instead of
   // EventType.DOCUMENT_SELECTION_CHANGED for text fields.
   event = await this.waitForEditableEvent();
   assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
   assertEquals(input, event.target);
   assertEquals('a', input.value);
 
-  this.press(KeyCode.B)();
-
   event = await this.waitForEditableEvent();
   assertEquals(EventType.VALUE_IN_TEXT_FIELD_CHANGED, event.type);
   assertEquals(input, event.target);
-  assertEquals('ab', input.value);
+  assertEquals('a', input.value);
+
+  this.press(KeyCode.B)();
 
   event = await this.waitForEditableEvent();
   assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
   assertEquals(input, event.target);
   assertEquals('ab', input.value);
+
+  event = await this.waitForEditableEvent();
+  assertEquals(EventType.VALUE_IN_TEXT_FIELD_CHANGED, event.type);
+  assertEquals(input, event.target);
+  assertEquals('ab', input.value);
 });
 
-TEST_F('ChromeVoxEditingTest', 'TextAreaEvents', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'TextAreaEvents', async function() {
   const site = `<textarea></textarea>`;
   const root = await this.runWithLoadedTree(site);
   const textArea = await this.focusFirstTextField(root);
@@ -1516,7 +1516,7 @@ TEST_F('ChromeVoxEditingTest', 'TextAreaEvents', async function() {
   assertEquals('ab', textArea.value);
 });
 
-TEST_F('ChromeVoxEditingTest', 'ContentEditableEvents', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'ContentEditableEvents', async function() {
   const site = `<div role="textbox" contenteditable></div>`;
   const root = await this.runWithLoadedTree(site);
   const contentEditable = await this.focusFirstTextField(root);
@@ -1540,7 +1540,7 @@ TEST_F('ChromeVoxEditingTest', 'ContentEditableEvents', async function() {
   assertEquals('ab', contentEditable.value);
 });
 
-TEST_F('ChromeVoxEditingTest', 'MarkedContent', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'MarkedContent', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <div contenteditable role="textbox">
@@ -1572,11 +1572,11 @@ TEST_F('ChromeVoxEditingTest', 'MarkedContent', async function() {
       .call(this.press(KeyCode.DOWN))
       .expectSpeech('This is ')
       .expectSpeech(
-          'Suggest', 'Delete', `everyone's`, 'Delete end', 'Suggest end')
-      .replay();
+          'Suggest', 'Delete', `everyone's`, 'Delete end', 'Suggest end');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'NestedInsertionDeletion', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'NestedInsertionDeletion', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <div contenteditable role="textbox">
@@ -1596,11 +1596,11 @@ TEST_F('ChromeVoxEditingTest', 'NestedInsertionDeletion', async function() {
           'I ', 'Suggest', 'Username', 'Insert', 'was', 'Insert end', 'Delete',
           'am', 'Delete end', 'Suggest end', ' typing')
       .call(this.press(KeyCode.DOWN))
-      .expectSpeech('End')
-      .replay();
+      .expectSpeech('End');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'MoveByCharSuggestions', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'MoveByCharSuggestions', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <div contenteditable="true" role="textbox">
@@ -1644,11 +1644,11 @@ TEST_F('ChromeVoxEditingTest', 'MoveByCharSuggestions', async function() {
       .call(this.press(KeyCode.LEFT))
       .expectSpeech('Suggest', 'Insert', 'w')
       .call(this.press(KeyCode.DOWN))
-      .expectSpeech('End')
-      .replay();
+      .expectSpeech('End');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'MoveByWordSuggestions', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'MoveByWordSuggestions', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <div contenteditable="true" role="textbox">
@@ -1680,11 +1680,11 @@ TEST_F('ChromeVoxEditingTest', 'MoveByWordSuggestions', async function() {
       .call(this.press(KeyCode.LEFT, {ctrl: true}))
       .expectSpeech('I')
       .call(this.press(KeyCode.DOWN))
-      .expectSpeech('End')
-      .replay();
+      .expectSpeech('End');
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'MoveByWordSuggestionsNoIntents', async function() {
       const mockFeedback = this.createMockFeedback();
       const site = `
@@ -1741,11 +1741,11 @@ TEST_F(
           // right arrow key.
           .call(doCmd('nativeNextWord'))
           .call(this.press(KeyCode.RIGHT, {ctrl: true}))
-          .expectSpeech('Suggest', 'Username', 'Insert', 'was', 'Insert end')
-          .replay();
+          .expectSpeech('Suggest', 'Username', 'Insert', 'was', 'Insert end');
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'Separator', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'Separator', async function() {
   // In the past, an ARIA leaf role would cause subtree content to be removed.
   // However, the new decision is to not remove any content the user might
   // interact with.
@@ -1780,16 +1780,16 @@ TEST_F('ChromeVoxEditingTest', 'Separator', async function() {
       .call(this.press(KeyCode.LEFT))
       // Notice this reads the entire line which is generally undesirable
       // except for special cases like this.
-      .expectSpeech('Hello')
+      .expectSpeech('Hello');
 
-      .replay();
+  await mockFeedback.replay();
 });
 
 // Test for the issue in crbug.com/1203840. This case was causing an infinite
 // loop in ChromeVox's editable line data computation. This test ensures we
 // workaround potential infinite loops correctly, and should be removed once the
 // proper fix is implemented in blink.
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'EditableLineInfiniteLoopWorkaround',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -1815,11 +1815,11 @@ TEST_F(
       mockFeedback.call(this.press(KeyCode.DOWN))
           .expectSpeech('This is a test')
           .call(this.press(KeyCode.DOWN))
-          .expectSpeech('End')
-          .replay();
+          .expectSpeech('End');
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'TextEditHandlerCreatesAutomationEditable',
     async function() {
       const site = `
@@ -1920,7 +1920,7 @@ TEST_F(
 
 // TODO(https://crbug.com/1254742): flakes due to underlying bug with
 // accessibility intents.
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'DISABLED_ParagraphNavigation', async function() {
       const mockFeedback = this.createMockFeedback();
       const site = `
@@ -1939,12 +1939,12 @@ TEST_F(
       const ctrlDown = () => chrome.accessibilityPrivate.sendSyntheticKeyEvent({
         type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
         keyCode: KeyCode.DOWN,
-        modifiers: {ctrl: true}
+        modifiers: {ctrl: true},
       });
       const ctrlUp = () => chrome.accessibilityPrivate.sendSyntheticKeyEvent({
         type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
         keyCode: KeyCode.UP,
-        modifiers: {ctrl: true}
+        modifiers: {ctrl: true},
       });
 
       mockFeedback.expectSpeech('Text area')
@@ -1961,11 +1961,11 @@ TEST_F(
           .call(ctrlDown)
           .expectSpeech('Another paragraph, number two.')
           .call(this.press(KeyCode.DOWN))
-          .expectSpeech('paragraph, ')
-          .replay();
+          .expectSpeech('paragraph, ');
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'StartAndEndOfOutputStopAtEditableRoot',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -1984,11 +1984,11 @@ TEST_F(
           .call(this.press(KeyCode.UP))
           .expectNextSpeechUtteranceIsNot('Article')
           .expectNextSpeechUtteranceIsNot('Article end')
-          .expectSpeech('hello')
-          .replay();
+          .expectSpeech('hello');
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'TableNavigation', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'TableNavigation', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <div contenteditable role="textbox" tabindex=0>
@@ -2014,11 +2014,11 @@ TEST_F('ChromeVoxEditingTest', 'TableNavigation', async function() {
       .expectSpeech('hello', 'world')
       .expectSpeech('row 1 column 1')
       .call(this.press(KeyCode.RIGHT))
-      .expectSpeech('e')
-      .replay();
+      .expectSpeech('e');
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'InputTextBrailleContractions', async function() {
       const site = `
     <input type=text value="about that"></input>
@@ -2055,17 +2055,13 @@ TEST_F(
       // Set braille to use 6-dot braille (which is defaulted to UEB grade 2
       // contracted braille).
       localStorage['brailleTable'] = 'en-ueb-g2';
-      BrailleBackground.instance.getTranslatorManager().refresh(
-          localStorage['brailleTable']);
-      // Wait for it to be fully refreshed (liblouis loads the new tables, our
-      // translators are re-created).
-      await new Promise(r => {
-        BrailleBackground.instance.getTranslatorManager().addChangeListener(r);
-      });
+      await new Promise(
+          r => BrailleBackground.instance.getTranslatorManager().refresh(
+              localStorage['brailleTable'], undefined, r));
 
       async function waitForBrailleDots(expectedDots) {
         return new Promise(r => {
-          chrome.brailleDisplayPrivate.writeDots = (dotsBuffer) => {
+          chrome.brailleDisplayPrivate.writeDots = dotsBuffer => {
             const view = new Uint8Array(dotsBuffer);
             const dots = new Array(view.length);
             view.forEach((item, index) => dots[index] = item.toString(2));
@@ -2090,7 +2086,7 @@ TEST_F(
 
         11000000 /* cursor _ */,
 
-        101011 /* ed contraction */
+        101011, /* ed contraction */
       ]);
 
       this.press(KeyCode.HOME)();
@@ -2105,12 +2101,12 @@ TEST_F(
 
         0 /* space */,
 
-        101011 /* ed contraction */
+        101011, /* ed contraction */
       ]);
     });
 
 
-TEST_F('ChromeVoxEditingTest', 'ContextMenus', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'ContextMenus', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <textarea>abc</textarea>
@@ -2127,42 +2123,45 @@ TEST_F('ChromeVoxEditingTest', 'ContextMenus', async function() {
       .call(doCmd('contextMenu'))
       .expectSpeech(' menu opened')
       .call(this.press(KeyCode.ESCAPE))
-      .expectSpeech('ab', 'selected')
-      .replay();
+      .expectSpeech('ab', 'selected');
+  await mockFeedback.replay();
 });
 
-TEST_F('ChromeVoxEditingTest', 'NativeCharWordCommands', async function() {
-  const mockFeedback = this.createMockFeedback();
-  const site = `
+// TODO(crbug.com/1352225): Flaky.
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'DISABLED_NativeCharWordCommands',
+    async function() {
+      const mockFeedback = this.createMockFeedback();
+      const site = `
     <p>start</p>
     <div role="textbox" contenteditable>This is a test</div>
   `;
-  const root = await this.runWithLoadedTree(site);
-  await this.focusFirstTextField(root);
+      const root = await this.runWithLoadedTree(site);
+      await this.focusFirstTextField(root);
 
-  const textField = root.find({role: RoleType.TEXT_FIELD});
-  mockFeedback.expectSpeech('Text area')
-      .call(this.press(KeyCode.HOME, {ctrl: true}))
-      .call(this.press(KeyCode.RIGHT))
-      .expectSpeech('h')
-      .call(this.press(KeyCode.RIGHT))
-      .expectSpeech('i')
-      .call(this.press(KeyCode.LEFT))
-      .expectSpeech('h')
+      const textField = root.find({role: RoleType.TEXT_FIELD});
+      mockFeedback.expectSpeech('Text area')
+          .call(this.press(KeyCode.HOME, {ctrl: true}))
+          .call(this.press(KeyCode.RIGHT))
+          .expectSpeech('h')
+          .call(this.press(KeyCode.RIGHT))
+          .expectSpeech('i')
+          .call(this.press(KeyCode.LEFT))
+          .expectSpeech('h')
 
-      .call(this.press(KeyCode.RIGHT, {ctrl: true}))
-      .expectSpeech('This')
-      .call(this.press(KeyCode.RIGHT, {ctrl: true}))
-      .expectSpeech('is')
-      .call(this.press(KeyCode.LEFT, {ctrl: true}))
-      .expectSpeech('is')
-      .call(this.press(KeyCode.LEFT, {ctrl: true}))
-      .expectSpeech('This')
+          .call(this.press(KeyCode.RIGHT, {ctrl: true}))
+          .expectSpeech('This')
+          .call(this.press(KeyCode.RIGHT, {ctrl: true}))
+          .expectSpeech('is')
+          .call(this.press(KeyCode.LEFT, {ctrl: true}))
+          .expectSpeech('is')
+          .call(this.press(KeyCode.LEFT, {ctrl: true}))
+          .expectSpeech('This');
 
-      .replay();
-});
+      await mockFeedback.replay();
+    });
 
-TEST_F('ChromeVoxEditingTest', 'TablesWithEmptyCells', async function() {
+AX_TEST_F('ChromeVoxEditingTest', 'TablesWithEmptyCells', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <div contenteditable="true" role="textbox">
@@ -2211,12 +2210,12 @@ TEST_F('ChromeVoxEditingTest', 'TablesWithEmptyCells', async function() {
 
       .call(doCmd('nativeNextCharacter'))
       .call(() => cell22.setSelection(0, 0))
-      .expectSpeech('\u00a0', 'row 2 column 2')
+      .expectSpeech('\u00a0', 'row 2 column 2');
 
-      .replay();
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxEditingTest', 'NonbreakingSpaceNewLineOrSpace', async function() {
       const mockFeedback = this.createMockFeedback();
       const site = `
@@ -2283,14 +2282,15 @@ TEST_F(
           .call(this.press(KeyCode.LEFT))
           .expectSpeech('\n')
           .call(this.press(KeyCode.LEFT))
-          .expectSpeech('e')
+          .expectSpeech('e');
 
-          .replay();
+      await mockFeedback.replay();
     });
 
-TEST_F('ChromeVoxEditingTest', 'JumpCommandsSyncSelection', async function() {
-  const mockFeedback = this.createMockFeedback();
-  const site = `
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'JumpCommandsSyncSelection', async function() {
+      const mockFeedback = this.createMockFeedback();
+      const site = `
     <div contenteditable="true" role="textbox">
       <p>first</p>
       <h1>second</h1>
@@ -2298,27 +2298,80 @@ TEST_F('ChromeVoxEditingTest', 'JumpCommandsSyncSelection', async function() {
       <table border=1><r><td>fifth</td></tr></table>
     </div>
   `;
+      const root = await this.runWithLoadedTree(site);
+      await this.focusFirstTextField(root);
+
+      const textField = root.find({role: RoleType.TEXT_FIELD});
+      mockFeedback.expectSpeech('Text area')
+          .call(doCmd('nextTable'))
+          .expectSpeech('fifth', 'row 1 column 1', 'Table , 1 by 1')
+
+          // Verifies selection is where we expect.
+          .call(this.press(KeyCode.RIGHT, {shift: true, ctrl: true}))
+          .expectSpeech('fifth', 'row 1 column 1', 'Table , 1 by 1', 'selected')
+
+          .call(doCmd('previousHeading'))
+          .expectSpeech('second', 'Heading 1')
+          .call(this.press(KeyCode.RIGHT, {shift: true, ctrl: true}))
+          .expectSpeech('second', 'Heading 1', 'selected')
+
+          .call(doCmd('nextLink'))
+          .expectSpeech('fourth', 'Internal link')
+          .call(this.press(KeyCode.RIGHT, {shift: true, ctrl: true}))
+          .expectSpeech('fourth', 'Link', 'selected');
+
+      await mockFeedback.replay();
+    });
+
+AX_TEST_F(
+    'ChromeVoxEditingTest', 'BackspaceToEmptyTextField', async function() {
+      const mockFeedback = this.createMockFeedback();
+      const site = `
+    <p>start</p>
+    <div aria-label="test" role="textbox" contenteditable></div>
+  `;
+      const root = await this.runWithLoadedTree(site);
+      await this.focusFirstTextField(root);
+
+      const textField = root.find({role: RoleType.TEXT_FIELD});
+      mockFeedback.expectSpeech('Text area')
+          .expectBraille('test mled', {startIndex: -1, endIndex: -1})
+          .call(this.press(KeyCode.A))
+          .expectBraille('a mled', {startIndex: 1, endIndex: 1})
+          .call(this.press(KeyCode.BACK))
+          .expectBraille(' mled', {startIndex: 0, endIndex: 0});
+
+      await mockFeedback.replay();
+    });
+
+// Regression test that large text areas produce output.
+AX_TEST_F('ChromeVoxEditingTest', 'GiantTextAreaPerformance', async function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `
+    <p>start</p>
+    <textarea></textarea>
+    <script>
+      const codepointCount = 35536 * 10;
+      const greeking1024Codepoints = 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse    cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua elit.';
+
+      let value = '';
+      while (value.length < codepointCount) {
+        value += greeking1024Codepoints;
+      }
+      let textarea = document.querySelector('textarea');
+      textarea.value = value;
+      textarea.setSelectionRange(0, 0);
+    </script>
+  `;
   const root = await this.runWithLoadedTree(site);
   await this.focusFirstTextField(root);
 
   const textField = root.find({role: RoleType.TEXT_FIELD});
   mockFeedback.expectSpeech('Text area')
-      .call(doCmd('nextTable'))
-      .expectSpeech('fifth', 'row 1 column 1', 'Table , 1 by 1')
-
-      // Verifies selection is where we expect.
-      .call(this.press(KeyCode.RIGHT, {shift: true, ctrl: true}))
-      .expectSpeech('fifth', 'row 1 column 1', 'Table , 1 by 1', 'selected')
-
-      .call(doCmd('previousHeading'))
-      .expectSpeech('second', 'Heading 1')
-      .call(this.press(KeyCode.RIGHT, {shift: true, ctrl: true}))
-      .expectSpeech('second', 'Heading 1', 'selected')
-
-      .call(doCmd('nextLink'))
-      .expectSpeech('fourth', 'Internal link')
-      .call(this.press(KeyCode.RIGHT, {shift: true, ctrl: true}))
-      .expectSpeech('fourth', 'Link', 'selected')
+      .call(this.press(KeyCode.DOWN))
+      .expectSpeech('amet, consectetur')
+      .call(this.press(KeyCode.RIGHT))
+      .expectSpeech('m')
 
       .replay();
 });

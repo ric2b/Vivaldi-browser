@@ -37,12 +37,10 @@ class OmniboxPopupMediatorDelegate {
   virtual void OnMatchSelectedForAppending(const AutocompleteMatch& match) = 0;
   virtual void OnMatchSelectedForDeletion(const AutocompleteMatch& match) = 0;
   virtual void OnScroll() = 0;
-  virtual void OnHighlightCanceled() = 0;
-
-  virtual void OnMatchHighlighted(size_t row) = 0;
 };
 
 @interface OmniboxPopupMediator : NSObject <AutocompleteResultConsumerDelegate,
+                                            AutocompleteResultDataSource,
                                             ImageRetriever,
                                             FaviconRetriever>
 
@@ -75,7 +73,7 @@ class OmniboxPopupMediatorDelegate {
 // The annotator to create pedals for ths mediator.
 @property(nonatomic) OmniboxPedalAnnotator* pedalAnnotator;
 
-// Designated initializer. Takes ownership of |imageFetcher|.
+// Designated initializer. Takes ownership of `imageFetcher`.
 - (instancetype)initWithFetcher:
                     (std::unique_ptr<image_fetcher::ImageDataFetcher>)
                         imageFetcher
@@ -87,7 +85,7 @@ class OmniboxPopupMediatorDelegate {
 // Sets the text alignment of the popup content.
 - (void)setTextAlignment:(NSTextAlignment)alignment;
 
-// Updates the popup with the |results|.
+// Updates the popup with the `results`.
 - (void)updateWithResults:(const AutocompleteResult&)results;
 
 @end

@@ -7,19 +7,20 @@
  * Settings subpage for managing Bluetooth properties and devices.
  */
 
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import './os_paired_bluetooth_list.js';
 import './settings_fast_pair_toggle.js';
 
-import {BluetoothUiSurface, recordBluetoothUiSurfaceMetrics} from '//resources/cr_components/chromeos/bluetooth/bluetooth_metrics_utils.js';
-import {I18nBehavior, I18nBehaviorInterface} from '//resources/js/i18n_behavior.m.js';
-import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from '//resources/js/web_ui_listener_behavior.m.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {BluetoothUiSurface, recordBluetoothUiSurfaceMetrics} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_metrics_utils.js';
 import {getBluetoothConfig} from 'chrome://resources/cr_components/chromeos/bluetooth/cros_bluetooth_config.js';
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {BluetoothSystemProperties, BluetoothSystemState, DeviceConnectionState, PairedBluetoothDeviceProperties} from 'chrome://resources/mojo/chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom-webui.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {routes} from '../os_route.js';
@@ -37,8 +38,10 @@ import {OsBluetoothDevicesSubpageBrowserProxy, OsBluetoothDevicesSubpageBrowserP
  */
 const SettingsBluetoothDevicesSubpageElementBase = mixinBehaviors(
     [
-      I18nBehavior, RouteObserverBehavior, DeepLinkingBehavior,
-      WebUIListenerBehavior
+      I18nBehavior,
+      RouteObserverBehavior,
+      DeepLinkingBehavior,
+      WebUIListenerBehavior,
     ],
     PolymerElement);
 
@@ -71,14 +74,11 @@ class SettingsBluetoothDevicesSubpageElement extends
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
-        value: () => new Set([
-          chromeos.settings.mojom.Setting.kBluetoothOnOff,
-          chromeos.settings.mojom.Setting.kFastPairOnOff
-        ]),
+        value: () => new Set([Setting.kBluetoothOnOff, Setting.kFastPairOnOff]),
       },
 
       /**
@@ -110,12 +110,22 @@ class SettingsBluetoothDevicesSubpageElement extends
       },
 
       /**
+       * @private
+       */
+      savedDevicesSublabel_: {
+        type: String,
+        value() {
+          return loadTimeData.getString('sublabelWithEmail');
+        },
+      },
+
+      /**
        * @private {!Array<!PairedBluetoothDeviceProperties>}
        */
       unconnectedDevices_: {
         type: Array,
         value: [],
-      }
+      },
     };
   }
 
@@ -298,6 +308,30 @@ class SettingsBluetoothDevicesSubpageElement extends
   isFastPairToggleVisible_() {
     return this.isFastPairSupportedByDevice_ &&
         loadTimeData.getBoolean('enableFastPairFlag');
+  }
+
+  /**
+   * Determines if we allow access to the Saved Devices page. Unlike the Fast
+   * Pair toggle, the device does not need to support Fast Pair because a device
+   * could be saved to the user's account from a different device but managed on
+   * this device. However Fast Pair must be enabled to confirm we have all Fast
+   * Pair (and Saved Device) related code working on the device.
+   * @return {boolean}
+   * @private
+   */
+  isFastPairSavedDevicesRowVisible_() {
+    return loadTimeData.getBoolean('enableFastPairFlag') &&
+        loadTimeData.getBoolean('enableSavedDevicesFlag') &&
+        !loadTimeData.getBoolean('isGuest');
+  }
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onClicked_(event) {
+    Router.getInstance().navigateTo(routes.BLUETOOTH_SAVED_DEVICES);
+    event.stopPropagation();
   }
 }
 

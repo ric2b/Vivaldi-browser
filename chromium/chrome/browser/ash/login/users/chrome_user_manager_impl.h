@@ -99,6 +99,7 @@ class ChromeUserManagerImpl
   bool IsGuestSessionAllowed() const override;
   bool IsGaiaUserAllowed(const user_manager::User& user) const override;
   bool IsUserAllowed(const user_manager::User& user) const override;
+  bool AreEphemeralUsersEnabled() const override;
   const AccountId& GetGuestAccountId() const override;
   bool IsFirstExecAfterBoot() const override;
   void AsyncRemoveCryptohome(const AccountId& account_id) const override;
@@ -133,7 +134,6 @@ class ChromeUserManagerImpl
   void OnProfileAdded(Profile* profile) override;
 
   // UserManagerBase:
-  bool AreEphemeralUsersEnabled() const override;
   void OnUserRemoved(const AccountId& account_id) override;
 
   // ChromeUserManager:
@@ -142,8 +142,6 @@ class ChromeUserManagerImpl
       const AccountId& account_id,
       const AffiliationIDSet& user_affiliation_ids) override;
   bool ShouldReportUser(const std::string& user_id) const override;
-  bool IsManagedSessionEnabledForUser(
-      const user_manager::User& active_user) const override;
   bool IsFullManagementDisclosureNeeded(
       policy::DeviceLocalAccountPolicyBroker* broker) const override;
   void CacheRemovedUser(const std::string& user_email,

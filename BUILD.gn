@@ -30,13 +30,16 @@ group("All") {
   # x86 is disabled due to compile issues, in addition to not running tests.
   # Don't build tests for ARM, either
 
-  deps = [
-    ":vivaldi",
-    ":generate_files_json",
-    "//vivaldi/app:write_translation_xml_generation_script",
-    "//vivaldi/app:write_pakfile_xml_generation_script",
-    "//vivaldi/app:write_full_pakfile_xml_generation_script",
-  ]
+  deps = []
+  if (!is_ios) {
+    deps += [
+      ":vivaldi",
+      ":generate_files_json",
+      "//vivaldi/app:write_translation_xml_generation_script",
+      "//vivaldi/app:write_pakfile_xml_generation_script",
+      "//vivaldi/app:write_full_pakfile_xml_generation_script",
+    ]
+  }
   if (is_android) {
     deps += [
         "//vivaldi/notes",
@@ -82,7 +85,7 @@ group("All") {
         "//sandbox/win:sbox_validation_tests",
       ]
     }
-  } else if (!is_linux || !is_component_build) {
+  } else if (!is_ios && (!is_linux || !is_component_build)) {
     deps += [ "//chrome/installer" ]
   }
   if (is_mac) {
@@ -146,8 +149,12 @@ group("All") {
       "//vivaldi/app:generate_untranslated"
     ]
   }
+  if (is_ios) {
+    deps += ["//ios/chrome/app:chrome"]
+  }
 }
 
+if (!is_ios) {
 group("vivaldi") {
   deps = [
     ":standalone",
@@ -165,6 +172,7 @@ group("vivaldi") {
   if (is_win) {
     deps += [ "//vivaldi/tools/vivaldi_proxy" ]
   }
+}
 }
 
 copy("standalone") {
@@ -218,7 +226,7 @@ action("generate_files_json") {
     if (target_cpu == "x86") {
       plat="win32"
     }
-  } else if (is_mac) {
+  } else if (is_mac || is_ios) {
     plat = "mac"
     if (target_cpu == "arm64") {
       plat="$plat-$target_cpu"

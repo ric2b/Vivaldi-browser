@@ -58,6 +58,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
+import org.chromium.content.webid.IdentityRequestDialogDismissReason;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -116,12 +117,11 @@ public class AccountSelectionIntegrationTest {
     @Before
     public void setUp() throws InterruptedException {
         MockitoAnnotations.initMocks(this);
-        mAccountSelection = new AccountSelectionCoordinator();
         mActivityTestRule.startMainActivityOnBlankPage();
         runOnUiThreadBlocking(() -> {
             mBottomSheetController = BottomSheetControllerProvider.from(
                     mActivityTestRule.getActivity().getWindowAndroid());
-            mAccountSelection.initialize(
+            mAccountSelection = new AccountSelectionCoordinator(
                     mActivityTestRule.getActivity(), mBottomSheetController, mMockBridge);
         });
 
@@ -144,7 +144,7 @@ public class AccountSelectionIntegrationTest {
 
         Espresso.pressBack();
 
-        waitForEvent(mMockBridge).onDismissed(/*shouldEmbargo=*/false);
+        waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.OTHER);
         verify(mMockBridge, never()).onAccountSelected(any());
     }
 
@@ -210,7 +210,7 @@ public class AccountSelectionIntegrationTest {
             mAccountSelection.showAccounts(EXAMPLE_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1,
                     Arrays.asList(ANA, BOB), IDP_METADATA, mClientIdMetadata, false);
         });
-        waitForEvent(mMockBridge).onDismissed(/*shouldEmbargo=*/false);
+        waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.OTHER);
         verify(mMockBridge, never()).onAccountSelected(any());
         Espresso.onView(withText("Another bottom sheet content")).check(matches(isDisplayed()));
 

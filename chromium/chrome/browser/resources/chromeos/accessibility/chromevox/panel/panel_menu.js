@@ -5,7 +5,12 @@
 /**
  * @fileoverview A drop-down menu in the ChromeVox panel.
  */
-import {PanelMenuItem} from '/chromevox/panel/panel_menu_item.js';
+import {BackgroundBridge} from '../common/background_bridge.js';
+import {BridgeCallbackManager} from '../common/bridge_callback_manager.js';
+import {Msgs} from '../common/msgs.js';
+import {PanelNodeMenuItemData} from '../common/panel_menu_data.js';
+
+import {PanelMenuItem} from './panel_menu_item.js';
 
 export class PanelMenu {
   /**
@@ -43,7 +48,7 @@ export class PanelMenu {
     this.items_ = [];
 
     /**
-     * The return value from window.setTimeout for a function to update the
+     * The return value from setTimeout for a function to update the
      * scroll bars after an item has been added to a menu. Used so that we
      * don't re-layout too many times.
      * @type {?number}
@@ -94,7 +99,7 @@ export class PanelMenu {
     // to avoid excessive layout, schedule this once per batch of adding
     // menu items rather than after each add.
     if (!this.updateScrollbarsTimeout_) {
-      this.updateScrollbarsTimeout_ = window.setTimeout(
+      this.updateScrollbarsTimeout_ = setTimeout(
           (function() {
             const menuBounds = this.menuElement.getBoundingClientRect();
             const maxHeight = window.innerHeight - menuBounds.top;
@@ -167,7 +172,7 @@ export class PanelMenu {
     this.menuBarItemElement.classList.remove('active');
     this.activeIndex_ = -1;
 
-    window.setTimeout(
+    setTimeout(
         (function() {
           this.menuContainerElement.style.visibility = 'hidden';
         }).bind(this),
@@ -323,10 +328,11 @@ export class PanelNodeMenu extends PanelMenu {
 
   /** @param {!PanelNodeMenuItemData} data */
   addItemFromData(data) {
-    this.addMenuItem(
-        data.title, '', '', '',
-        () => BackgroundBridge.PanelBackground.nodeMenuCallback(
-            data.callbackNodeIndex));
+    this.addMenuItem(data.title, '', '', '', () => {
+      if (data.callbackId) {
+        BridgeCallbackManager.performCallback(data.callbackId);
+      }
+    });
     if (data.isActive) {
       this.activeIndex_ = this.items_.length - 1;
     }

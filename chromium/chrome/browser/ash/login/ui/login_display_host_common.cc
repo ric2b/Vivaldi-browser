@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/login/ui/login_display_host_common.h"
+#include <memory>
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/login_accelerators.h"
@@ -10,7 +11,6 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
-#include "base/feature_list.h"
 #include "base/notreached.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/language_preferences.h"
@@ -33,15 +33,12 @@
 #include "chrome/browser/ash/system/device_disabling_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/webui/chromeos/diagnostics_dialog.h"
-#include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
-#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/locale_switch_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/management_transition_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/os_install_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/reset_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/saml_confirm_password_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
@@ -49,15 +46,13 @@
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/oobe_quick_start/target_device_bootstrap_controller.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/browser/notification_service.h"
 #include "extensions/common/features/feature_session_type.h"
-#include "extensions/common/mojom/feature_session_type.mojom.h"
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ime/ash/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/ui_base_features.h"
 
 namespace ash {
 namespace {
@@ -183,10 +178,11 @@ LoginDisplayHostCommon::LoginDisplayHostCommon()
     : keep_alive_(KeepAliveOrigin::LOGIN_DISPLAY_HOST_WEBUI,
                   KeepAliveRestartOption::DISABLED),
       wizard_context_(std::make_unique<WizardContext>()) {
-  // Close the login screen on NOTIFICATION_APP_TERMINATING (for the case where
-  // shutdown occurs before login completes).
-  registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
-                 content::NotificationService::AllSources());
+  // Close the login screen on app termination (for the case where shutdown
+  // occurs before login completes).
+  app_terminating_subscription_ =
+      browser_shutdown::AddAppTerminatingCallback(base::BindOnce(
+          &LoginDisplayHostCommon::OnAppTerminating, base::Unretained(this)));
   BrowserList::AddObserver(this);
 }
 
@@ -539,6 +535,12 @@ void LoginDisplayHostCommon::ShowSigninError(SigninError error,
     if (!IsOobeUIDialogVisible())
       // Handled by Views UI.
       return;
+    OfflineLoginScreen* offline_login_screen =
+        GetWizardController()->GetScreen<OfflineLoginScreen>();
+    if (GetWizardController()->current_screen() == offline_login_screen) {
+      offline_login_screen->ShowPasswordMismatchMessage();
+      return;
+    }
   }
 
   std::string error_text;
@@ -598,17 +600,9 @@ void LoginDisplayHostCommon::OnBrowserAdded(Browser* browser) {
     // Lock window has to be closed at this point so that a browser window
     // exists and the window can acquire input focus.
     OnBrowserCreated();
-    registrar_.RemoveAll();
+    app_terminating_subscription_ = {};
     BrowserList::RemoveObserver(this);
   }
-}
-
-void LoginDisplayHostCommon::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  if (type == chrome::NOTIFICATION_APP_TERMINATING)
-    ShutdownDisplayHost();
 }
 
 WizardContext* LoginDisplayHostCommon::GetWizardContext() {
@@ -662,6 +656,16 @@ void LoginDisplayHostCommon::AddWizardCreatedObserverForTests(
   on_wizard_controller_created_for_tests_ = std::move(on_created);
 }
 
+base::WeakPtr<quick_start::TargetDeviceBootstrapController>
+LoginDisplayHostCommon::GetQuickStartBootstrapController() {
+  DCHECK(features::IsOobeQuickStartEnabled());
+  if (!bootstrap_controller_) {
+    bootstrap_controller_ =
+        std::make_unique<ash::quick_start::TargetDeviceBootstrapController>();
+  }
+  return bootstrap_controller_->GetAsWeakPtrForClient();
+}
+
 void LoginDisplayHostCommon::NotifyWizardCreated() {
   if (on_wizard_controller_created_for_tests_)
     on_wizard_controller_created_for_tests_.Run();
@@ -669,8 +673,12 @@ void LoginDisplayHostCommon::NotifyWizardCreated() {
 
 void LoginDisplayHostCommon::Cleanup() {
   SigninProfileHandler::Get()->ClearSigninProfile(base::DoNothing());
-  registrar_.RemoveAll();
+  app_terminating_subscription_ = {};
   BrowserList::RemoveObserver(this);
+}
+
+void LoginDisplayHostCommon::OnAppTerminating() {
+  ShutdownDisplayHost();
 }
 
 }  // namespace ash

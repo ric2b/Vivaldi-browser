@@ -31,6 +31,9 @@ class SimTest : public testing::Test {
   // Create a remote frame as the main frame and create a local child frame.
   void InitializeRemote();
 
+  // Create a WebView with a main frame being a fenced frame root.
+  void InitializeFencedFrameRoot(mojom::blink::FencedFrameMode mode);
+
   // Load URL in the local frame root.
   void LoadURL(const String& url);
 
@@ -43,12 +46,12 @@ class SimTest : public testing::Test {
   WebViewImpl& WebView();
   WebLocalFrameImpl& MainFrame();
   WebLocalFrameImpl& LocalFrameRoot();
-  frame_test_helpers::TestWebViewClient& WebViewClient();
   frame_test_helpers::TestWebFrameClient& WebFrameClient();
   SimWebFrameWidget& GetWebFrameWidget();
   SimCompositor& Compositor();
 
   Vector<String>& ConsoleMessages();
+  void ResizeView(const gfx::Size&);
 
   // Creates a SimWebFrameWidget. Subclasses can override this if the
   // wish to create their own.
@@ -96,7 +99,6 @@ class SimTest : public testing::Test {
   std::unique_ptr<SimNetwork> network_;
   std::unique_ptr<SimCompositor> compositor_;
   std::unique_ptr<frame_test_helpers::TestWebFrameClient> web_frame_client_;
-  std::unique_ptr<frame_test_helpers::TestWebViewClient> web_view_client_;
   std::unique_ptr<SimPage> page_;
   std::unique_ptr<frame_test_helpers::WebViewHelper> web_view_helper_;
   UntracedMember<WebLocalFrameImpl> local_frame_root_;

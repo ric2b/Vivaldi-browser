@@ -10,25 +10,23 @@
 #include "components/sync/base/sync_util.h"
 #include "components/sync/engine/net/url_translator.h"
 #include "components/sync/protocol/sync.pb.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "sync/vivaldi_sync_auth_manager.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 
 namespace vivaldi {
 
 VivaldiSyncServiceImpl::VivaldiSyncServiceImpl(
-    SyncServiceImpl::InitParams* init_params,
-    Profile* profile,
+    SyncServiceImpl::InitParams init_params,
+    PrefService* prefs,
     VivaldiAccountManager* account_manager)
-    : SyncServiceImpl(std::move(*init_params)),
-      profile_(profile),
-      ui_helper_(profile, this),
+    : SyncServiceImpl(std::move(init_params)),
+      ui_helper_(this, account_manager),
       weak_factory_(this) {
   if (!vivaldi::ForcedVivaldiRunning()) {
     auth_manager_ = std::make_unique<VivaldiSyncAuthManager>(
@@ -42,7 +40,7 @@ VivaldiSyncServiceImpl::VivaldiSyncServiceImpl(
 
   // Notes must be re-synchronized to correct the note-duplication issues.
   base::Version last_seen_version(
-      profile_->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion));
+      prefs->GetString(vivaldiprefs::kStartupLastSeenVersion));
 
   base::Version up_to_date_version(std::vector<uint32_t>({2, 8, 0, 0}));
 
@@ -123,11 +121,8 @@ void VivaldiSyncServiceImpl::ClearSyncData() {
   clear_data_url_loader_->AttachStringForUpload(request_content,
                                                 "application/octet-stream");
 
-  auto url_loader_factory = profile_->GetDefaultStoragePartition()
-                                ->GetURLLoaderFactoryForBrowserProcess();
-
   clear_data_url_loader_->DownloadHeadersOnly(
-      url_loader_factory.get(),
+      url_loader_factory_.get(),
       base::BindOnce(&VivaldiSyncServiceImpl::OnClearDataComplete,
                      base::Unretained(this)));
 
@@ -146,9 +141,9 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
   error.error_type = syncer::CLIENT_DATA_OBSOLETE;
   error.action = syncer::RESET_LOCAL_SYNC_DATA;
 
-  content::GetUIThreadTaskRunner({})->PostTask(
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&SyncServiceImpl::OnActionableError,
-                                base::Unretained(this), error));
+                                weak_factory_.GetWeakPtr(), error));
 }
 
 void VivaldiSyncServiceImpl::ResetEngine(syncer::ShutdownReason reason,

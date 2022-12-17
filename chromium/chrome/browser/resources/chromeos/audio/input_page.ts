@@ -56,14 +56,24 @@ export class InputPage extends Page {
   }
 
   visualize() {
-    const pairs = [
-      {'canvas': $('channel-l'), 'analyser': this.analyserLeft},
-      {'canvas': $('channel-r'), 'analyser': this.analyserRight},
-    ];
+    const pairs: Array<{
+      canvas: HTMLCanvasElement,
+      analyser: AnalyserNode | undefined,
+    }> =
+        [
+          {
+            canvas: $('channel-l') as HTMLCanvasElement,
+            analyser: this.analyserLeft,
+          },
+          {
+            canvas: $('channel-r') as HTMLCanvasElement,
+            analyser: this.analyserRight,
+          },
+        ];
     const draw = () => {
       this.animationRequestId = requestAnimationFrame(draw);
       for (const channel of pairs) {
-        const canvas = <HTMLCanvasElement>channel['canvas'];
+        const canvas = channel['canvas'];
         const canvasContext = canvas.getContext('2d');
         const analyser = channel['analyser'];
 
@@ -141,7 +151,7 @@ export class InputPage extends Page {
   }
 
   record(source: MediaStream) {
-    let chunks = new Array<Blob>();
+    let chunks: Blob[] = [];
     const recordButton = $('record-btn');
     const clipSection = $('audio-file');
     this.mediaRecorder = new MediaRecorder(source);
@@ -164,7 +174,7 @@ export class InputPage extends Page {
 
         audio.controls = true;
         const blob = new Blob(chunks, {'type': 'audio/ogg; codecs=opus'});
-        chunks = new Array<Blob>();
+        chunks = [];
         const audioURL = window.URL.createObjectURL(blob);
         audio.src = audioURL;
         this.testInputFeedback.set('audioUrl', audioURL);

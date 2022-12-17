@@ -87,8 +87,6 @@ TEST_F(CSSScrollTimelineTest, IdObserverRuleInsertion) {
   ASSERT_FALSE(HasObservers("scroller2"));
   ASSERT_FALSE(HasObservers("scroller3"));
   ASSERT_FALSE(HasObservers("redefined"));
-  ASSERT_FALSE(HasObservers("offset1"));
-  ASSERT_FALSE(HasObservers("offset2"));
 
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -101,7 +99,6 @@ TEST_F(CSSScrollTimelineTest, IdObserverRuleInsertion) {
       }
       @scroll-timeline timeline2 {
         source: selector(#scroller2);
-        start: selector(#offset1);
       }
       div {
         animation: anim 10s;
@@ -120,7 +117,6 @@ TEST_F(CSSScrollTimelineTest, IdObserverRuleInsertion) {
 
   EXPECT_TRUE(HasObservers("scroller1"));
   EXPECT_TRUE(HasObservers("scroller2"));
-  EXPECT_TRUE(HasObservers("offset1"));
 
   Element* element1 = GetDocument().getElementById("element1");
   Element* element2 = GetDocument().getElementById("element2");
@@ -134,7 +130,6 @@ TEST_F(CSSScrollTimelineTest, IdObserverRuleInsertion) {
   style_element->setTextContent(R"CSS(
       @scroll-timeline timeline2 {
         source: selector(#redefined);
-        start: selector(#offset2);
       }
       @scroll-timeline timeline3 {
         source: selector(#scroller3);
@@ -150,8 +145,6 @@ TEST_F(CSSScrollTimelineTest, IdObserverRuleInsertion) {
   EXPECT_FALSE(HasObservers("scroller2"));
   EXPECT_TRUE(HasObservers("scroller3"));
   EXPECT_TRUE(HasObservers("redefined"));
-  EXPECT_FALSE(HasObservers("offset1"));
-  EXPECT_TRUE(HasObservers("offset2"));
 
   // Remove the <style> element again.
   style_element->remove();
@@ -161,8 +154,6 @@ TEST_F(CSSScrollTimelineTest, IdObserverRuleInsertion) {
   EXPECT_TRUE(HasObservers("scroller2"));
   EXPECT_FALSE(HasObservers("scroller3"));
   EXPECT_FALSE(HasObservers("redefined"));
-  EXPECT_TRUE(HasObservers("offset1"));
-  EXPECT_FALSE(HasObservers("offset2"));
 }
 
 TEST_F(CSSScrollTimelineTest, SharedTimelines) {
@@ -253,10 +244,10 @@ TEST_F(CSSScrollTimelineTest, MultipleLifecyclePasses) {
         animation: anim 10s timeline;
       }
     </style>
-    <div id=element></div>
     <div id=scroller>
       <div id=contents></div>
     </div>
+    <div id=element></div>
   )HTML");
 
   Element* element = GetDocument().getElementById("element");
@@ -274,7 +265,7 @@ TEST_F(CSSScrollTimelineTest, MultipleLifecyclePasses) {
   //
   // [1] https://drafts.csswg.org/scroll-animations-1/#avoiding-cycles
   // [2] https://github.com/w3c/csswg-drafts/issues/5261
-  EXPECT_EQ(MakeRGB(0, 128, 0),
+  EXPECT_EQ(Color::FromRGB(0, 128, 0),
             element->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
 }
@@ -344,8 +335,8 @@ TEST_F(CSSScrollTimelineTest, ResizeObserverTriggeredTimelines) {
   Element* main = GetDocument().getElementById("main");
   ASSERT_TRUE(main);
   main->AppendChild(style);
-  main->AppendChild(element);
   main->AppendChild(scroller);
+  main->AppendChild(element);
 
   auto* delegate = MakeGarbageCollected<AnimationTriggeringDelegate>(style);
   ResizeObserver* observer =

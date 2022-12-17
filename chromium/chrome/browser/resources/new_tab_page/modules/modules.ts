@@ -4,7 +4,7 @@
 
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
@@ -64,15 +64,23 @@ export class ModulesElement extends PolymerElement {
 
   static get properties() {
     return {
+      disabledModules_: {
+        type: Object,
+        value: () => ({all: true, ids: []}),
+      },
+
       dismissedModules_: {
         type: Array,
         value: () => [],
       },
 
-      disabledModules_: {
-        type: Object,
-        value: () => ({all: true, ids: []}),
+      dragEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('modulesDragAndDropEnabled'),
+        reflectToAttribute: true,
       },
+
+      moduleImpressionDetected_: Boolean,
 
       modulesFreRemoved_: {
         type: Boolean,
@@ -97,17 +105,7 @@ export class ModulesElement extends PolymerElement {
         value: false,
       },
 
-      /** Data about the most recently removed module. */
-      removedModuleData_: {
-        type: Object,
-        value: null,
-      },
-
-      moduleImpressionDetected_: Boolean,
-
       modulesLoaded_: Boolean,
-
-      modulesVisibilityDetermined_: Boolean,
 
       modulesLoadedAndVisibilityDetermined_: {
         type: Boolean,
@@ -117,22 +115,23 @@ export class ModulesElement extends PolymerElement {
         observer: 'onModulesLoadedAndVisibilityDeterminedChange_',
       },
 
-      modulesShownToUser: {
-        type: Boolean,
-        notify: true,
-      },
-
-      /** @private {boolean} */
       modulesRedesignedLayoutEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('modulesRedesignedLayoutEnabled'),
         reflectToAttribute: true,
       },
 
-      dragEnabled_: {
+      modulesShownToUser: {
         type: Boolean,
-        value: () => loadTimeData.getBoolean('modulesDragAndDropEnabled'),
-        reflectToAttribute: true,
+        notify: true,
+      },
+
+      modulesVisibilityDetermined_: Boolean,
+
+      /** Data about the most recently removed module. */
+      removedModuleData_: {
+        type: Object,
+        value: null,
       },
     };
   }
@@ -143,16 +142,17 @@ export class ModulesElement extends PolymerElement {
 
   private dismissedModules_: string[];
   private disabledModules_: {all: boolean, ids: string[]};
-  private removedModuleData_: {message: string, undo: () => void}|null;
+  private dragEnabled_: boolean;
+  private moduleImpressionDetected_: boolean;
   private modulesFreRemoved_: boolean;
   private modulesFreShown: boolean;
   private modulesFreVisible_: boolean;
-  private moduleImpressionDetected_: boolean;
   private modulesLoaded_: boolean;
-  private modulesVisibilityDetermined_: boolean;
   private modulesLoadedAndVisibilityDetermined_: boolean;
+  private modulesRedesignedLayoutEnabled_: boolean;
   private modulesShownToUser: boolean;
-  private dragEnabled_: boolean;
+  private modulesVisibilityDetermined_: boolean;
+  private removedModuleData_: {message: string, undo: () => void}|null;
 
   private setDisabledModulesListenerId_: number|null = null;
   private setModulesFreVisibilityListenerId_: number|null = null;
@@ -201,7 +201,7 @@ export class ModulesElement extends PolymerElement {
       if (!moduleContainer.hidden) {
         this.modulesShownToUser = !moduleContainer.hidden;
       }
-      if (loadTimeData.getBoolean('modulesRedesignedLayoutEnabled')) {
+      if (this.modulesRedesignedLayoutEnabled_) {
         // Remove short module sibling container class name from short modules
         // that were in a sibling container before.
         moduleContainer.classList.toggle(SHORT_MODULE_SIBLING_1, false);
@@ -284,7 +284,7 @@ export class ModulesElement extends PolymerElement {
         });
         const moduleContainer = this.ownerDocument.createElement('div');
         moduleContainer.classList.add('module-container');
-        if (loadTimeData.getBoolean('modulesRedesignedLayoutEnabled')) {
+        if (this.modulesRedesignedLayoutEnabled_) {
           if (module.descriptor.height === ModuleHeight.SHORT) {
             moduleContainer.classList.add(SHORT_CLASS_NAME);
           }
@@ -312,7 +312,7 @@ export class ModulesElement extends PolymerElement {
     for (const moduleDescriptorId of moduleDescriptorIds) {
       moduleDescriptorIds.forEach(id => {
         if (id !== moduleDescriptorId) {
-          chrome.metricsPrivate.recordSparseHashable(
+          chrome.metricsPrivate.recordSparseValueWithPersistentHash(
               `NewTabPage.Modules.LoadedWith.${moduleDescriptorId}`, id);
         }
       });
@@ -338,8 +338,7 @@ export class ModulesElement extends PolymerElement {
     return this.modulesLoaded_ && this.modulesVisibilityDetermined_;
   }
 
-  /** @private */
-  onModulesLoadedAndVisibilityDeterminedChange_() {
+  private onModulesLoadedAndVisibilityDeterminedChange_() {
     if (this.modulesLoadedAndVisibilityDetermined_) {
       ModuleRegistry.getInstance().getDescriptors().forEach(({id}) => {
         chrome.metricsPrivate.recordBoolean(
@@ -392,18 +391,18 @@ export class ModulesElement extends PolymerElement {
           restoreCallback();
         }
         NewTabPageProxy.getInstance().handler.setModuleDisabled(id, false);
-        chrome.metricsPrivate.recordSparseHashable(
+        chrome.metricsPrivate.recordSparseValueWithPersistentHash(
             'NewTabPage.Modules.Enabled', id);
-        chrome.metricsPrivate.recordSparseHashable(
+        chrome.metricsPrivate.recordSparseValueWithPersistentHash(
             'NewTabPage.Modules.Enabled.Toast', id);
       },
     };
 
     NewTabPageProxy.getInstance().handler.setModuleDisabled(id, true);
     this.$.removeModuleToast.show();
-    chrome.metricsPrivate.recordSparseHashable(
+    chrome.metricsPrivate.recordSparseValueWithPersistentHash(
         'NewTabPage.Modules.Disabled', id);
-    chrome.metricsPrivate.recordSparseHashable(
+    chrome.metricsPrivate.recordSparseValueWithPersistentHash(
         'NewTabPage.Modules.Disabled.ModuleRequest', id);
   }
 
@@ -412,8 +411,7 @@ export class ModulesElement extends PolymerElement {
         this.disabledModules_.ids.includes(id);
   }
 
-  /** @private */
-  onUndoRemoveModuleButtonClick_() {
+  private onUndoRemoveModuleButtonClick_() {
     if (!this.removedModuleData_) {
       return;
     }
@@ -433,9 +431,8 @@ export class ModulesElement extends PolymerElement {
 
   /**
    * Hides and reveals modules depending on removed status.
-   * @private
    */
-  onRemovedModulesChange_() {
+  private onRemovedModulesChange_() {
     this.shadowRoot!.querySelectorAll('ntp-module-wrapper')
         .forEach(moduleWrapper => {
           moduleWrapper.parentElement!.hidden =
@@ -544,7 +541,7 @@ export class ModulesElement extends PolymerElement {
         ...this.shadowRoot!.querySelectorAll<HTMLElement>(
             '.module-container:not([hidden])'),
         ...this.shadowRoot!.querySelectorAll<HTMLElement>(
-            '.module-container[hidden]')
+            '.module-container[hidden]'),
       ];
       const dragIndex = moduleContainers.indexOf(dragElement.parentElement!);
       const dropIndex =

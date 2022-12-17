@@ -8,7 +8,6 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/public/cpp/desk_template.h"
-#include "ash/public/cpp/view_shadow.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -16,7 +15,6 @@
 #include "ash/style/close_button.h"
 #include "ash/style/pill_button.h"
 #include "ash/style/style_util.h"
-#include "ash/style/system_shadow.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_textfield.h"
 #include "ash/wm/desks/templates/saved_desk_dialog_controller.h"
@@ -31,6 +29,7 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_highlight_controller.h"
+#include "ash/wm/overview/overview_highlightable_view.h"
 #include "ash/wm/overview/overview_session.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
@@ -40,15 +39,18 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/metadata/view_factory_internal.h"
@@ -86,6 +88,9 @@ constexpr int kManagedStatusIndicatorSize = 20;
 // There is a gap between the background of the name view and the name view's
 // actual text.
 constexpr auto kTemplateNameInsets = gfx::Insets::VH(0, 2);
+
+// The time duration for the hover and icon containers to fade in and out.
+constexpr int kFadeDurationMs = 100;
 
 std::u16string GetTimeStr(base::Time timestamp) {
   std::u16string date, time, time_str;
@@ -127,6 +132,8 @@ SavedDeskItemView::SavedDeskItemView(
   const bool is_admin_managed =
       desk_template_->source() == DeskTemplateSource::kPolicy;
 
+  SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+
   views::Builder<SavedDeskItemView>(this)
       .SetPreferredSize(kPreferredSize)
       .SetUseDefaultFillLayout(true)
@@ -136,6 +143,9 @@ SavedDeskItemView::SavedDeskItemView(
           color_provider->GetBaseLayerColor(
               AshColorProvider::BaseLayerType::kTransparent80),
           kCornerRadius))
+      .SetBorder(std::make_unique<views::HighlightBorder>(
+          kCornerRadius, views::HighlightBorder::Type::kHighlightBorder1,
+          /*use_light_colors=*/false))
       .AddChildren(
           views::Builder<views::FlexLayoutView>()
               .SetOrientation(views::LayoutOrientation::kVertical)
@@ -239,13 +249,6 @@ SavedDeskItemView::SavedDeskItemView(
   name_view_->parent()->SetProperty(views::kMarginsKey, -kTemplateNameInsets);
   name_view_observation_.Observe(name_view_);
 
-  // Add a shadow with system UI shadow type.
-  shadow_ = std::make_unique<ViewShadow>(
-      this,
-      SystemShadow::GetElevationFromType(SystemShadow::Type::kElevation12));
-  shadow_->shadow()->SetShadowStyle(gfx::ShadowStyle::kChromeOSSystemUI);
-  shadow_->SetRoundedCornerRadius(kCornerRadius);
-
   StyleUtil::SetUpInkDropForButton(this, gfx::Insets(),
                                    /*highlight_on_hover=*/false,
                                    /*highlight_on_focus=*/false);
@@ -257,8 +260,15 @@ SavedDeskItemView::SavedDeskItemView(
   focus_ring->SetHasFocusPredicate([](views::View* view) {
     return static_cast<SavedDeskItemView*>(view)->IsViewHighlighted();
   });
+  focus_ring->SetColorId(ui::kColorAshFocusRing);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
+
+  hover_container_->SetPaintToLayer();
+  icon_container_view_->SetPaintToLayer();
+
+  hover_container_->layer()->SetFillsBoundsOpaquely(false);
+  icon_container_view_->layer()->SetFillsBoundsOpaquely(false);
 }
 
 SavedDeskItemView::~SavedDeskItemView() {
@@ -273,33 +283,64 @@ void SavedDeskItemView::UpdateHoverButtonsVisibility(
 
   // For switch access, setting the hover buttons to visible allows users to
   // navigate to it.
-  const bool visible =
+  bool previous_hover_container_visibility = hover_container_should_be_visible_;
+  hover_container_should_be_visible_ =
       !is_template_name_being_modified_ &&
       ((is_touch && HitTestPoint(location_in_view)) ||
        (!is_touch && IsMouseHovered()) ||
        Shell::Get()->accessibility_controller()->IsSwitchAccessRunning());
-  hover_container_->SetVisible(visible);
-  icon_container_view_->SetVisible(!visible);
+
+  if (previous_hover_container_visibility ==
+      hover_container_should_be_visible_) {
+    return;
+  }
+
+  if (hover_container_should_be_visible_) {
+    hover_container_->SetVisible(true);
+    AnimateHover(hover_container_->layer(), icon_container_view_->layer());
+  } else {
+    icon_container_view_->SetVisible(true);
+    AnimateHover(icon_container_view_->layer(), hover_container_->layer());
+  }
 }
 
 bool SavedDeskItemView::IsNameBeingModified() const {
   return name_view_->HasFocus();
 }
 
-void SavedDeskItemView::MaybeRemoveNameNumber() {
-  // When there are existing matched Desk name and Template name (ie.
+void SavedDeskItemView::MaybeRemoveNameNumber(
+    const std::u16string& saved_desk_name) {
+  // When there is a matched `saved_desk_name` and existing Template name (ie.
   // "Desk 1"), creating a new template from "Desk 1" will get auto generated
-  // template name from the frontend as "Desk 1 (1)", to prevent template
-  // duplication, we show the template view name to be "Desk 1" by removing name
-  // number, save template under such name will call out template replace
-  // dialog.
+  // template name from the frontend as "Desk 1 (1)". To prevent template
+  // duplication, we show the template view name to be "Desk 1" by removing the
+  // appended name number. Saving the template under the new name will trigger
+  // the template replace dialog.
   if (saved_desk_util::GetSavedDeskPresenter()->FindOtherEntryWithName(
-          DesksController::Get()->active_desk()->name(), desk_template().type(),
-          uuid())) {
+          saved_desk_name, desk_template().type(), uuid())) {
     // Replace the name number.
-    name_view_->SetTemporaryName(DesksController::Get()->active_desk()->name());
-    name_view_->SetViewName(DesksController::Get()->active_desk()->name());
+    name_view_->SetTemporaryName(saved_desk_name);
+    name_view_->SetViewName(saved_desk_name);
   }
+}
+
+void SavedDeskItemView::MaybeShowReplaceDialog(DeskTemplateType type,
+                                               const base::GUID& uuid) {
+  // If the user has somehow exited the overview session don't attempt to
+  // show the dialogue in order to avoid the DCHECK crash.
+  // TODO(avynn): Find a more permanent fix for this.
+  if (!Shell::Get()->overview_controller()->InOverviewSession())
+    return;
+
+  // Show replace template dialog. If accepted, replace old template and commit
+  // name change.
+  aura::Window* root_window = GetWidget()->GetNativeWindow()->GetRootWindow();
+  saved_desk_util::GetSavedDeskDialogController()->ShowReplaceDialog(
+      root_window, name_view_->GetText(), type,
+      base::BindOnce(&SavedDeskItemView::ReplaceTemplate,
+                     weak_ptr_factory_.GetWeakPtr(), uuid.AsLowercaseString()),
+      base::BindOnce(&SavedDeskItemView::RevertTemplateName,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void SavedDeskItemView::ReplaceTemplate(const std::string& uuid) {
@@ -310,7 +351,7 @@ void SavedDeskItemView::ReplaceTemplate(const std::string& uuid) {
   saved_desk_util::GetSavedDeskPresenter()->DeleteEntry(
       uuid, /*record_for_type=*/absl::nullopt);
   UpdateTemplateName();
-  RecordReplaceTemplateHistogram();
+  RecordReplaceSavedDeskHistogram(desk_template_->type());
 }
 
 void SavedDeskItemView::RevertTemplateName() {
@@ -390,9 +431,6 @@ void SavedDeskItemView::OnThemeChanged() {
   time_view_->SetBackgroundColor(SK_ColorTRANSPARENT);
   time_view_->SetEnabledColor(color_provider->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kTextColorSecondary));
-
-  views::FocusRing::Get(this)->SetColor(color_provider->GetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kFocusRingColor));
 }
 
 void SavedDeskItemView::OnViewFocused(views::View* observed_view) {
@@ -416,14 +454,20 @@ void SavedDeskItemView::OnViewFocused(views::View* observed_view) {
   // Hide the hover container when we are modifying the template name.
   hover_container_->SetVisible(false);
   icon_container_view_->SetVisible(true);
+  hover_container_->layer()->SetOpacity(0.0f);
+  icon_container_view_->layer()->SetOpacity(1.0f);
 
   // Set the Overview highlight to move focus with the `name_view_`.
   auto* highlight_controller = Shell::Get()
                                    ->overview_controller()
                                    ->overview_session()
                                    ->highlight_controller();
-  if (highlight_controller->IsFocusHighlightVisible())
+  if (highlight_controller->IsFocusHighlightVisible()) {
     highlight_controller->MoveHighlightToView(name_view_);
+
+    // Update a11y focus window.
+    highlight_controller->UpdateA11yFocusWindow(name_view_);
+  }
 
   if (!defer_select_all_)
     name_view_->SelectAll(false);
@@ -503,17 +547,25 @@ void SavedDeskItemView::OnViewBlurred(views::View* observed_view) {
   UpdateTemplateName();
 }
 
-void SavedDeskItemView::MaybeShowReplaceDialog(DeskTemplateType type,
-                                               const base::GUID& uuid) {
-  // Show replace template dialog. If accepted, replace old template and commit
-  // name change.
-  aura::Window* root_window = GetWidget()->GetNativeWindow()->GetRootWindow();
-  saved_desk_util::GetSavedDeskDialogController()->ShowReplaceDialog(
-      root_window, name_view_->GetText(), type,
-      base::BindOnce(&SavedDeskItemView::ReplaceTemplate,
-                     weak_ptr_factory_.GetWeakPtr(), uuid.AsLowercaseString()),
-      base::BindOnce(&SavedDeskItemView::RevertTemplateName,
-                     weak_ptr_factory_.GetWeakPtr()));
+void SavedDeskItemView::OnFocus() {
+  auto* highlight_controller = Shell::Get()
+                                   ->overview_controller()
+                                   ->overview_session()
+                                   ->highlight_controller();
+  DCHECK(highlight_controller);
+  AccessibilityControllerImpl* accessibility_controller =
+      Shell::Get()->accessibility_controller();
+  if (highlight_controller->IsFocusHighlightVisible() ||
+      accessibility_controller->spoken_feedback().enabled()) {
+    highlight_controller->MoveHighlightToView(this);
+  }
+  OnViewHighlighted();
+  View::OnFocus();
+}
+
+void SavedDeskItemView::OnBlur() {
+  OnViewUnhighlighted();
+  View::OnBlur();
 }
 
 views::Button::KeyClickAction SavedDeskItemView::GetKeyClickActionForEvent(
@@ -533,6 +585,30 @@ void SavedDeskItemView::UpdateTemplateName() {
   saved_desk_util::GetSavedDeskPresenter()->SaveOrUpdateDeskTemplate(
       /*is_update=*/true, GetWidget()->GetNativeWindow()->GetRootWindow(),
       desk_template_->Clone());
+}
+
+void SavedDeskItemView::OnHoverAnimationEnded() {
+  hover_container_->SetVisible(hover_container_should_be_visible_);
+  icon_container_view_->SetVisible(!hover_container_should_be_visible_);
+}
+
+void SavedDeskItemView::AnimateHover(ui::Layer* layer_to_show,
+                                     ui::Layer* layer_to_hide) {
+  views::AnimationBuilder()
+      .SetPreemptionStrategy(ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET)
+      .OnEnded(base::BindOnce(
+          [](base::WeakPtr<SavedDeskItemView> view) {
+            if (view)
+              view->OnHoverAnimationEnded();
+          },
+          weak_ptr_factory_.GetWeakPtr()))
+      .Once()
+      .SetOpacity(layer_to_show, 0.0f)
+      .SetOpacity(layer_to_hide, 1.0f)
+      .Then()
+      .SetDuration(base::Milliseconds(kFadeDurationMs))
+      .SetOpacity(layer_to_show, 1.0f)
+      .SetOpacity(layer_to_hide, 0.0f);
 }
 
 void SavedDeskItemView::ContentsChanged(views::Textfield* sender,
@@ -672,8 +748,8 @@ void SavedDeskItemView::MaybeLaunchTemplate(bool should_delay) {
     delay = base::Seconds(3);
 #endif
 
-  saved_desk_util::GetSavedDeskPresenter()->LaunchDeskTemplate(
-      desk_template_->uuid().AsLowercaseString(), delay,
+  saved_desk_util::GetSavedDeskPresenter()->LaunchSavedDesk(
+      desk_template_->Clone(), delay,
       GetWidget()->GetNativeWindow()->GetRootWindow());
 }
 

@@ -15,6 +15,7 @@
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "net/base/request_priority.h"
+#include "net/dns/opt_record_rdata.h"
 #include "net/dns/public/secure_dns_mode.h"
 #include "net/dns/record_rdata.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -63,7 +64,7 @@ class NET_EXPORT_PRIVATE DnsTransaction {
 class DnsProbeRunner {
  public:
   // Destruction cancels the probes.
-  virtual ~DnsProbeRunner() {}
+  virtual ~DnsProbeRunner() = default;
 
   // Starts all applicable probes that are not already running. May be called
   // multiple times, but should not be called after destruction of the
@@ -124,7 +125,7 @@ class NET_EXPORT_PRIVATE DnsTransactionFactory {
 
   // The given EDNS0 option will be included in all DNS queries performed by
   // transactions from this factory.
-  virtual void AddEDNSOption(const OptRecordRdata::Opt& opt) = 0;
+  virtual void AddEDNSOption(std::unique_ptr<OptRecordRdata::Opt> opt) = 0;
 
   // Returns the default SecureDnsMode in the config.
   virtual SecureDnsMode GetSecureDnsModeForTest() = 0;

@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/fido_authentication_strike_database.h"
@@ -440,6 +441,18 @@ void CreditCardFIDOAuthenticator::OnDidGetAssertion(
           autofill_client_->GetLastCommittedURL().DeprecatedGetOriginAsURL();
     }
 
+#if BUILDFLAG(IS_ANDROID)
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillEnableFIDOProgressDialog)) {
+      // Open the progress dialog when authenticating and getting the full card
+      // from FIDO.
+      autofill_client_->ShowAutofillProgressDialog(
+          AutofillProgressDialogType::kAndroidFIDOProgressDialog,
+          base::BindOnce(&CreditCardFIDOAuthenticator::CancelVerification,
+                         weak_ptr_factory_.GetWeakPtr()));
+    }
+#endif
+
     full_card_request_->GetFullCardViaFIDO(
         *card_, AutofillClient::UnmaskCardReason::kAutofill,
         weak_ptr_factory_.GetWeakPtr(), std::move(response),
@@ -811,18 +824,16 @@ void CreditCardFIDOAuthenticator::UpdateUserPref() {
 }
 
 webauthn::InternalAuthenticator* CreditCardFIDOAuthenticator::authenticator() {
-  if (authenticator_)
-    return authenticator_;
-
-  authenticator_ =
-      autofill_driver_->GetOrCreateCreditCardInternalAuthenticator();
-
-  // |authenticator_| may be null for unsupported platforms.
-  if (authenticator_) {
-    authenticator()->SetEffectiveOrigin(
-        url::Origin::Create(payments::GetBaseSecureUrl()));
+  if (!authenticator_) {
+    authenticator_ = autofill_client_->CreateCreditCardInternalAuthenticator(
+        autofill_driver_.get());
+    // `authenticator_` may be null for unsupported platforms.
+    if (authenticator_) {
+      authenticator_->SetEffectiveOrigin(
+          url::Origin::Create(payments::GetBaseSecureUrl()));
+    }
   }
-
-  return authenticator_;
+  return authenticator_.get();
 }
+
 }  // namespace autofill

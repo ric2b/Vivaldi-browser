@@ -31,6 +31,9 @@
 <translation id="4167670741834902166">Neuer privater Tab</translation>
 <translation id="4243710787042215766">Im privaten Tab öffnen</translation>
 <translation id="4526803704855831732">Private Tabs</translation>
+<translation id="4719086422742491124">Erfahren Sie mehr über Themen auf Webseiten ohne sie zu verlassen. Wählen Sie eines oder mehrere Wörter auf der Seite, um nach ihnen zu suchen.
+
+"Zum Suchen berühren" kann nur ausgeführt werden, wenn Google als Standardsuchmaschine in Vivaldi definiert ist.</translation>
 <translation id="4759238208242260848">Downloads</translation>
 <translation id="4883379392681899581">Privatmodus verlassen</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
@@ -40,9 +43,6 @@
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Neuer Tab</translation>
 <translation id="572328651809341494">Zuletzt geöffnete Tabs</translation>
-<translation id="5840488417521835756">Erfahren Sie mehr über die Inhalte von Websites, ohne die Seite zu verlassen. “Zum Suchen tippen” ist eine Funktion, die nur verfügbar ist, wenn Google als Standard-Suchmaschine in Vivaldi eingestellt ist. Das Wort und sein Kontext wird an die Google Suche gesendet und Sie erhalten Definitionen, Bilder, Suchergebnisse und andere Details zurück.
-
-Ihren Suchbegriff können Sie anpassen, wenn Sie die Suche erweitern. Um einen Suchvorschlag auszuwählen, schieben Sie das Ergebnisfeld nach oben und tippen Sie darauf.</translation>
 <translation id="6150320133806434356">Lesezeichen gespeichert</translation>
 <translation id="6336451774241870485">Neuer privater Tab</translation>
 <translation id="6585139692466700358">Übersetzung von Seiten in andere Sprachen mit Hilfe des Vivaldi-Übersetzungsdienstes anbieten</translation>
@@ -53,7 +53,6 @@ Ihren Suchbegriff können Sie anpassen, wenn Sie die Suche erweitern. Um einen S
 <translation id="732145680195464316">Lesezeichen in <ph name="PRODUCT_NAME" /> gespeichert</translation>
 <translation id="7427132068601343474">Über Vivaldi</translation>
 <translation id="7465104139234185284">Alle privaten Tabs schließen</translation>
-<translation id="7519434535192513364">Die “Zum Suchen tippen”-Funktion ist nur verfügbar, wenn Google als Standard-Suchmaschine in Vivaldi eingestellt ist. Das ausgewählte Wort und sein Kontext werden an die Google Suche gesendet. Sie können die Funktion in den <ph name="BEGIN_LINK" />Einstellungen<ph name="END_LINK" /> deaktivieren.</translation>
 <translation id="804786196054284061">Endbenutzer-Lizenzvereinbarung</translation>
 <translation id="85991616550051997">Startseite</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>

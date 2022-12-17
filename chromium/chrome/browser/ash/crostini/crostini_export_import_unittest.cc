@@ -15,13 +15,13 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/chunneld/chunneld_client.h"
 #include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
 #include "chromeos/ash/components/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/fake_seneschal_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_service.pb.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -46,13 +46,13 @@ struct ImportProgressOptionalArguments {
 class CrostiniExportImportTest : public testing::Test {
  public:
   base::WeakPtr<CrostiniExportImportNotificationController> GetController(
-      const ContainerId& container_id) {
+      const guest_os::GuestId& container_id) {
     return crostini_export_import_->GetNotificationControllerForTesting(
         container_id);
   }
 
   const message_center::Notification& GetNotification(
-      const ContainerId& container_id) {
+      const guest_os::GuestId& container_id) {
     // Assertions in this function are wrap in IILEs because you cannot assert
     // in a function with a non-void return type.
     const base::WeakPtr<CrostiniExportImportNotificationController>&
@@ -89,7 +89,7 @@ class CrostiniExportImportTest : public testing::Test {
   }
 
   void SendExportProgress(
-      const ContainerId& container_id,
+      const guest_os::GuestId& container_id,
       vm_tools::cicerone::ExportLxdContainerProgressSignal_Status status,
       const ExportProgressOptionalArguments& arguments = {}) {
     vm_tools::cicerone::ExportLxdContainerProgressSignal signal;
@@ -105,7 +105,7 @@ class CrostiniExportImportTest : public testing::Test {
   }
 
   void SendImportProgress(
-      const ContainerId& container_id,
+      const guest_os::GuestId& container_id,
       vm_tools::cicerone::ImportLxdContainerProgressSignal_Status status,
       const ImportProgressOptionalArguments& arguments = {}) {
     vm_tools::cicerone::ImportLxdContainerProgressSignal signal;
@@ -122,10 +122,9 @@ class CrostiniExportImportTest : public testing::Test {
   }
 
   CrostiniExportImportTest()
-      : default_container_id_(kCrostiniDefaultVmName,
-                              kCrostiniDefaultContainerName),
-        custom_container_id_("MyVM", "MyContainer") {
-    chromeos::DBusThreadManager::Initialize();
+      : default_container_id_(DefaultContainerId()),
+        custom_container_id_(kCrostiniDefaultVmType, "MyVM", "MyContainer") {
+    ash::ChunneldClient::InitializeFake();
     ash::CiceroneClient::InitializeFake();
     ash::ConciergeClient::InitializeFake();
     ash::SeneschalClient::InitializeFake();
@@ -140,7 +139,7 @@ class CrostiniExportImportTest : public testing::Test {
     ash::SeneschalClient::Shutdown();
     ash::ConciergeClient::Shutdown();
     ash::CiceroneClient::Shutdown();
-    chromeos::DBusThreadManager::Shutdown();
+    ash::ChunneldClient::Shutdown();
   }
 
   void SetUp() override {
@@ -196,8 +195,8 @@ class CrostiniExportImportTest : public testing::Test {
       notification_display_service_tester_;
   StubNotificationDisplayService* notification_display_service_;
 
-  ContainerId default_container_id_;
-  ContainerId custom_container_id_;
+  guest_os::GuestId default_container_id_;
+  guest_os::GuestId custom_container_id_;
   base::FilePath tarball_;
 
   content::BrowserTaskEnvironment task_environment_;

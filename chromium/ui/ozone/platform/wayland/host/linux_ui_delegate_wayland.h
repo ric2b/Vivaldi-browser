@@ -5,9 +5,10 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_LINUX_UI_DELEGATE_WAYLAND_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_LINUX_UI_DELEGATE_WAYLAND_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "ui/base/linux/linux_ui_delegate.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/linux/linux_ui_delegate.h"
 
 namespace ui {
 
@@ -31,7 +32,7 @@ class LinuxUiDelegateWayland : public LinuxUiDelegate {
   void OnHandleForward(base::OnceCallback<void(std::string)> callback,
                        const std::string& handle);
 
-  WaylandConnection* const connection_;
+  const raw_ptr<WaylandConnection> connection_;
   base::WeakPtrFactory<LinuxUiDelegateWayland> weak_factory_{this};
 };
 

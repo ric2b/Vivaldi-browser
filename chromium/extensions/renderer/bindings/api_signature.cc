@@ -353,9 +353,12 @@ bool ArgumentParser::ResolveArguments(
   }
 
   // A required argument was not matched. There is only one case in which this
-  // is allowed: a required callback when Promises are supported instead; if
-  // this is the case, |allow_omitted_final_argument| is true.
-  if (allow_omitted_final_argument && expected.size() == 1) {
+  // is allowed: a required callback has been left off of the provided arguments
+  // when Promises are supported; if this is the case,
+  // |allow_omitted_final_argument| is true and there should be no provided
+  // arguments left.
+  if (allow_omitted_final_argument && provided.size() == 0 &&
+      expected.size() == 1) {
     (*result)[index] = v8::Local<v8::Value>();
     return true;
   }
@@ -636,7 +639,7 @@ APISignature::JSONParseResult APISignature::ConvertArgumentsIgnoringSchema(
     }
   }
 
-  base::Value::ListStorage json;
+  base::Value::List json;
   json.reserve(size);
 
   std::unique_ptr<content::V8ValueConverter> converter =
@@ -656,10 +659,10 @@ APISignature::JSONParseResult APISignature::ConvertArgumentsIgnoringSchema(
       // null). Duplicate that behavior here.
       converted = std::make_unique<base::Value>();
     }
-    json.push_back(base::Value::FromUniquePtrValue(std::move(converted)));
+    json.Append(base::Value::FromUniquePtrValue(std::move(converted)));
   }
 
-  result.arguments_list = std::make_unique<base::ListValue>(std::move(json));
+  result.arguments_list = std::make_unique<base::Value>(std::move(json));
   return result;
 }
 

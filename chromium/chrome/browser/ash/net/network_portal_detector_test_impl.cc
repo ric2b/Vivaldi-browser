@@ -8,13 +8,11 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
-#include "chromeos/network/network_state.h"
+#include "chromeos/ash/components/network/network_state.h"
 
 namespace ash {
 
-NetworkPortalDetectorTestImpl::NetworkPortalDetectorTestImpl()
-    : strategy_id_(PortalDetectorStrategy::STRATEGY_ID_LOGIN_SCREEN) {
-}
+NetworkPortalDetectorTestImpl::NetworkPortalDetectorTestImpl() = default;
 
 NetworkPortalDetectorTestImpl::~NetworkPortalDetectorTestImpl() {
   for (auto& observer : observers_)
@@ -102,8 +100,7 @@ bool NetworkPortalDetectorTestImpl::IsEnabled() {
   return true;
 }
 
-void NetworkPortalDetectorTestImpl::Enable(bool start_detection) {
-}
+void NetworkPortalDetectorTestImpl::Enable() {}
 
 void NetworkPortalDetectorTestImpl::StartPortalDetection() {
   if (portal_detection_in_progress_)
@@ -116,11 +113,6 @@ void NetworkPortalDetectorTestImpl::StartPortalDetection() {
     std::move(callback).Run();
 
   return;
-}
-
-void NetworkPortalDetectorTestImpl::SetStrategy(
-    PortalDetectorStrategy::StrategyId id) {
-  strategy_id_ = id;
 }
 
 }  // namespace ash

@@ -29,9 +29,6 @@ namespace {
 constexpr base::TimeDelta kTaskLatencySampleDuration = base::Seconds(3);
 }
 
-const base::Feature kThreadWrapperUsesMetronome{
-    "ThreadWrapperUsesMetronome", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Class intended to conditionally live for the duration of ThreadWrapper
 // that periodically captures task latencies (definition in docs for
 // SetLatencyAndTaskDurationCallbacks).
@@ -139,7 +136,6 @@ ThreadWrapper::ThreadWrapper(
     : Thread(std::make_unique<rtc::PhysicalSocketServer>()),
       task_runner_(task_runner),
       send_allowed_(false),
-      use_metronome_(base::FeatureList::IsEnabled(kThreadWrapperUsesMetronome)),
       last_task_id_(0),
       pending_send_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                           base::WaitableEvent::InitialState::NOT_SIGNALED) {
@@ -161,6 +157,10 @@ ThreadWrapper::~ThreadWrapper() {
 
   Clear(nullptr, rtc::MQID_ANY, nullptr);
   coalesced_tasks_.Clear();
+}
+
+rtc::SocketServer* ThreadWrapper::SocketServer() {
+  return rtc::Thread::socketserver();
 }
 
 void ThreadWrapper::WillDestroyCurrentMessageLoop() {
@@ -331,43 +331,34 @@ void ThreadWrapper::PostTaskInternal(const rtc::Location& posted_from,
   }
 }
 
-void ThreadWrapper::PostTask(std::unique_ptr<webrtc::QueuedTask> task) {
+void ThreadWrapper::PostTask(absl::AnyInvocable<void() &&> task) {
   task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&ThreadWrapper::RunTaskQueueTask, weak_ptr_,
                                 std::move(task)));
 }
 
-void ThreadWrapper::PostDelayedTask(std::unique_ptr<webrtc::QueuedTask> task,
-                                    uint32_t milliseconds) {
+void ThreadWrapper::PostDelayedTask(absl::AnyInvocable<void() &&> task,
+                                    TimeDelta delay) {
   base::TimeTicks target_time =
-      base::TimeTicks::Now() + base::Milliseconds(milliseconds);
-  if (use_metronome_) {
-    // Coalesce tasks onto the metronome.
-    base::TimeTicks snapped_target_time =
-        blink::MetronomeSource::TimeSnappedToNextTick(target_time);
-    if (coalesced_tasks_.QueueDelayedTask(target_time, std::move(task),
-                                          snapped_target_time)) {
-      task_runner_->PostDelayedTaskAt(
-          base::subtle::PostDelayedTaskPassKey(), FROM_HERE,
-          base::BindOnce(&ThreadWrapper::RunCoalescedTaskQueueTasks, weak_ptr_,
-                         snapped_target_time),
-          snapped_target_time, base::subtle::DelayPolicy::kPrecise);
-    }
-    return;
+      base::TimeTicks::Now() + base::Microseconds(delay.us());
+  // Coalesce low precision tasks onto the metronome.
+  base::TimeTicks snapped_target_time =
+      blink::MetronomeSource::TimeSnappedToNextTick(target_time);
+  if (coalesced_tasks_.QueueDelayedTask(target_time, std::move(task),
+                                        snapped_target_time)) {
+    task_runner_->PostDelayedTaskAt(
+        base::subtle::PostDelayedTaskPassKey(), FROM_HERE,
+        base::BindOnce(&ThreadWrapper::RunCoalescedTaskQueueTasks, weak_ptr_,
+                       snapped_target_time),
+        snapped_target_time, base::subtle::DelayPolicy::kPrecise);
   }
-  // Do not coalesce tasks onto the metronome.
-  task_runner_->PostDelayedTaskAt(
-      base::subtle::PostDelayedTaskPassKey(), FROM_HERE,
-      base::BindOnce(&ThreadWrapper::RunTaskQueueTask, weak_ptr_,
-                     std::move(task)),
-      target_time, base::subtle::DelayPolicy::kPrecise);
 }
 
 void ThreadWrapper::PostDelayedHighPrecisionTask(
-    std::unique_ptr<webrtc::QueuedTask> task,
-    uint32_t milliseconds) {
+    absl::AnyInvocable<void() &&> task,
+    webrtc::TimeDelta delay) {
   base::TimeTicks target_time =
-      base::TimeTicks::Now() + base::Milliseconds(milliseconds);
+      base::TimeTicks::Now() + base::Microseconds(delay.us());
   task_runner_->PostDelayedTaskAt(
       base::subtle::PostDelayedTaskPassKey(), FROM_HERE,
       base::BindOnce(&ThreadWrapper::RunTaskQueueTask, weak_ptr_,
@@ -388,15 +379,11 @@ absl::optional<base::TimeTicks> ThreadWrapper::PrepareRunTask() {
   return task_start_timestamp;
 }
 
-void ThreadWrapper::RunTaskQueueTask(std::unique_ptr<webrtc::QueuedTask> task) {
+void ThreadWrapper::RunTaskQueueTask(absl::AnyInvocable<void() &&> task) {
   absl::optional<base::TimeTicks> task_start_timestamp = PrepareRunTask();
 
-  // Follow QueuedTask::Run() semantics: delete if it returns true, release
-  // otherwise.
-  if (task->Run())
-    task.reset();
-  else
-    task.release();
+  std::move(task)();
+  task = nullptr;
 
   FinalizeRunTask(std::move(task_start_timestamp));
 }

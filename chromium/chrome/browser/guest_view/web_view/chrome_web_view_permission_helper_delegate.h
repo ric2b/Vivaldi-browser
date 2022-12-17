@@ -98,7 +98,7 @@ class ChromeWebViewPermissionHelperDelegate
                                        const GURL& url,
                                        bool allowed);
 
-  GuestViewBase* web_view_guest() {
+  WebViewGuest* web_view_guest() {
     return web_view_permission_helper()->web_view_guest();
   }
 

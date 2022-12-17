@@ -5,9 +5,16 @@
 /**
  * @fileoverview Monitors user actions.
  */
-import {Output} from '/chromevox/background/output/output.js';
-import {KeySequence} from '/chromevox/common/key_sequence.js';
-import {PanelCommand, PanelCommandType} from '/chromevox/common/panel_command.js';
+import {KeyCode} from '../../common/key_code.js';
+import {BridgeConstants} from '../common/bridge_constants.js';
+import {BridgeHelper} from '../common/bridge_helper.js';
+import {KeySequence} from '../common/key_sequence.js';
+import {KeyUtil} from '../common/key_util.js';
+import {PanelCommand, PanelCommandType} from '../common/panel_command.js';
+import {QueueMode} from '../common/tts_interface.js';
+
+import {CommandHandlerInterface} from './command_handler_interface.js';
+import {Output} from './output/output.js';
 
 /**
  * The types of actions we want to monitor.
@@ -104,6 +111,16 @@ export class UserActionMonitor {
     this.expectedActionMatched_();
     return expectedAction.shouldPropagate;
   }
+
+  /**
+   * @param {Event} evt The key down event to process.
+   * @return {boolean} Whether the event should continue propagating.
+   */
+  onKeyDown(evt) {
+    const keySequence = KeyUtil.keyEventToKeySequence(evt);
+    return this.onKeySequence(keySequence);
+  }
+
 
   // Private methods.
 
@@ -305,7 +322,7 @@ UserActionMonitor.Action = class {
       value,
       shouldPropagate,
       beforeActionCallback,
-      afterActionCallback
+      afterActionCallback,
     });
   }
 
@@ -351,9 +368,20 @@ UserActionMonitor.Action = class {
 UserActionMonitor.instance;
 
 BridgeHelper.registerHandler(
-    BridgeTargets.USER_ACTION_MONITOR, BridgeActions.CREATE,
+    BridgeConstants.UserActionMonitor.TARGET,
+    BridgeConstants.UserActionMonitor.Action.CREATE,
     actions =>
         new Promise(resolve => UserActionMonitor.create(actions, resolve)));
 BridgeHelper.registerHandler(
-    BridgeTargets.USER_ACTION_MONITOR, BridgeActions.DESTROY,
+    BridgeConstants.UserActionMonitor.TARGET,
+    BridgeConstants.UserActionMonitor.Action.DESTROY,
     () => UserActionMonitor.destroy());
+BridgeHelper.registerHandler(
+    BridgeConstants.UserActionMonitor.TARGET,
+    BridgeConstants.UserActionMonitor.Action.ON_KEY_DOWN, evt => {
+      if (!UserActionMonitor.instance) {
+        // Continue propagating.
+        return true;
+      }
+      return UserActionMonitor.instance.onKeyDown(evt);
+    });

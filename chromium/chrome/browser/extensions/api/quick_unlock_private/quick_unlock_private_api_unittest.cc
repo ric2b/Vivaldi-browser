@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "ash/components/cryptohome/system_salt_getter.h"
 #include "ash/components/login/auth/fake_extended_authenticator.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -43,8 +42,9 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/dbus/userdataauth/fake_cryptohome_misc_client.h"
-#include "chromeos/dbus/userdataauth/fake_userdataauth_client.h"
+#include "chromeos/ash/components/cryptohome/system_salt_getter.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_cryptohome_misc_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -179,7 +179,7 @@ class QuickUnlockPrivateUnitTest
     ash::UserDataAuthClient::InitializeFake();
     if (std::get<0>(param) == TestType::kCryptohome) {
       auto* fake_userdataauth_client_testapi =
-          chromeos::FakeUserDataAuthClient::TestApi::Get();
+          ash::FakeUserDataAuthClient::TestApi::Get();
       fake_userdataauth_client_testapi->set_supports_low_entropy_credentials(
           true);
       fake_userdataauth_client_testapi->set_enable_auth_check(true);
@@ -682,7 +682,7 @@ TEST_P(QuickUnlockPrivateUnitTest, GetAuthTokenValid) {
   EXPECT_EQ(token_info->token,
             quick_unlock_storage->GetAuthToken()->Identifier());
   EXPECT_EQ(token_info->lifetime_seconds,
-            ash::quick_unlock::AuthToken::kTokenExpirationSeconds);
+            ash::quick_unlock::AuthToken::kTokenExpiration.InSeconds());
 }
 
 // Verifies that GetAuthTokenValid fails when an invalid password is provided.

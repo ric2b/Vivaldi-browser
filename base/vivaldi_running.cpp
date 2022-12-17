@@ -16,7 +16,6 @@ bool g_cancelled_drag = false;
 namespace {
 bool g_checked_vivaldi_status = false;
 bool g_vivaldi_is_running = false;
-bool g_debugging_vivaldi = false;
 bool g_forced_vivaldi_status = false;
 bool g_tab_drag_in_progress = false;
 
@@ -25,10 +24,6 @@ bool TestIsVivaldiRunning(const base::CommandLine& cmd_line) {
     return false;
   }
   return true;
-}
-
-bool TestIsDebuggingVivaldi(const base::CommandLine& cmd_line) {
-  return cmd_line.HasSwitch(switches::kDebugVivaldi);
 }
 
 void CheckVivaldiStatus() {
@@ -40,7 +35,6 @@ void CheckVivaldiStatus() {
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   DCHECK(cmd_line);
   g_vivaldi_is_running = cmd_line != NULL && TestIsVivaldiRunning(*cmd_line);
-  g_debugging_vivaldi = cmd_line != NULL && TestIsDebuggingVivaldi(*cmd_line);
 }
 
 }  // namespace
@@ -62,18 +56,9 @@ bool IsVivaldiRunning(const base::CommandLine& cmd_line) {
   return IsVivaldiRunning();
 }
 
-bool IsDebuggingVivaldi(const base::CommandLine& cmd_line) {
-  return TestIsDebuggingVivaldi(cmd_line);
-}
-
 bool IsVivaldiRunning() {
   CheckVivaldiStatus();
   return g_vivaldi_is_running;
-}
-
-bool IsDebuggingVivaldi() {
-  CheckVivaldiStatus();
-  return g_debugging_vivaldi;
 }
 
 bool IsTabDragInProgress() {

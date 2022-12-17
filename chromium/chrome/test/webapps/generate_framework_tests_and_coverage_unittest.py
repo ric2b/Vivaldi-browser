@@ -39,7 +39,7 @@ class GenerateFrameworkTestsAndCoverageTest(unittest.TestCase):
             action_name_prefixes=set(),
             browsertest_dir=TEST_DATA_DIR,
             test_file_prefix="tests_default",
-            test_fixture="WebAppIntegrationBrowserTest")
+            test_fixture="WebAppIntegrationTest")
 
         with open(actions_filename, "r", encoding="utf-8") as actions_file, \
                 open(supported_actions_filename, "r", encoding="utf-8") \
@@ -69,8 +69,10 @@ class GenerateFrameworkTestsAndCoverageTest(unittest.TestCase):
                         as coverage_file, \
                         open(expected_coverage_filename, "r", \
                         encoding="utf-8") as expected_file:
-                    self.assertListEqual(list(coverage_file.readlines()),
-                                         list(expected_file.readlines()))
+                    self.assertListEqual(
+                        list(expected_file.readlines()),
+                        list(coverage_file.readlines()),
+                        f"file: {expected_coverage_filename}")
 
 
 if __name__ == '__main__':

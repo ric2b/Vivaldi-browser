@@ -126,7 +126,7 @@ AutofillProfile ConstructCompleteProfile() {
   // Set testing values for the birthdate.
   profile.SetRawInfoAsInt(BIRTHDATE_DAY, 14);
   profile.SetRawInfoAsInt(BIRTHDATE_MONTH, 3);
-  profile.SetRawInfoAsInt(BIRTHDATE_YEAR_4_DIGITS, 1997);
+  profile.SetRawInfoAsInt(BIRTHDATE_4_DIGIT_YEAR, 1997);
 
   return profile;
 }
@@ -292,8 +292,7 @@ TEST_F(AutofillProfileSyncUtilTest, CreateEntityDataFromAutofillProfile) {
   structured_names_feature.InitWithFeatures(
       {features::kAutofillEnableSupportForMoreStructureInAddresses,
        features::kAutofillEnableSupportForMoreStructureInNames,
-       features::kAutofillEnableSupportForHonorificPrefixes,
-       features::kAutofillEnableCompatibilitySupportForBirthdates},
+       features::kAutofillEnableSupportForHonorificPrefixes},
       {});
 
   AutofillProfile profile = ConstructCompleteProfile();

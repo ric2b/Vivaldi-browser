@@ -8,7 +8,8 @@ import './strings.m.js';
 
 import {CustomElement} from 'chrome://resources/js/custom_element.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
+
+import {getTemplate} from './policy_row.html.js';
 
 /**
  * @typedef {{
@@ -33,7 +34,7 @@ export let Policy;
 
 export class PolicyRowElement extends CustomElement {
   static get template() {
-    return getTrustedHTML`{__html_template__}`;
+    return getTemplate();
   }
 
   connectedCallback() {
@@ -86,8 +87,9 @@ export class PolicyRowElement extends CustomElement {
       const link = this.shadowRoot.querySelector('.name .link');
       link.href = policy.link;
       link.title = loadTimeData.getStringF('policyLearnMore', policy.name);
+      this.toggleAttribute('no-help-link', false);
     } else {
-      this.classList.add('no-help-link');
+      this.toggleAttribute('no-help-link', true);
     }
 
     // Populate the remaining columns with policy scope, level and value if a
@@ -145,8 +147,12 @@ export class PolicyRowElement extends CustomElement {
           this.policy.ignored ? loadTimeData.getString('ignored') : '';
       let notice =
           [
-            errorsNotice, deprecationNotice, futureNotice, warningsNotice,
-            ignoredNotice, conflictsNotice
+            errorsNotice,
+            deprecationNotice,
+            futureNotice,
+            warningsNotice,
+            ignoredNotice,
+            conflictsNotice,
           ].filter(x => !!x)
               .join(', ') ||
           loadTimeData.getString('ok');

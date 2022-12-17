@@ -30,6 +30,7 @@
         ja poista valinta kohdasta <ph name="NO_PREFETCH_DESCRIPTION" />.
         Ellei ongelma ratkea, palauta asetus käyttöön
         suorituskyvyn parantamiseksi.</translation>
+<translation id="7496505986576158197">Vivaldin ovat mahdollistaneet avoimen lähdekoodin <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />-projekti ja muut <ph name="BEGIN_LINK_OSS" />avoimen lähdekoodin ohjelmat<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Avaa
           Sovellukset &gt; Järjestelmäasetukset &gt; Verkko &gt; Lisäasetukset &gt; Välityspalvelimet
           ja poista valinta kaikilta välityspalvelimilta.</translation>

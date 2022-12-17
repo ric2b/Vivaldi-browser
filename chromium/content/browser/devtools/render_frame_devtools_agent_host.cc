@@ -66,7 +66,6 @@
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -157,7 +156,7 @@ bool RenderFrameDevToolsAgentHost::ShouldCreateDevToolsForHost(
 }
 
 // static
-scoped_refptr<DevToolsAgentHost>
+scoped_refptr<RenderFrameDevToolsAgentHost>
 RenderFrameDevToolsAgentHost::CreateForLocalRootOrEmbeddedPageNavigation(
     NavigationRequest* request) {
   // Note that this method does not use FrameTreeNode::current_frame_host(),
@@ -172,8 +171,8 @@ RenderFrameDevToolsAgentHost::CreateForLocalRootOrEmbeddedPageNavigation(
 }
 
 // static
-scoped_refptr<DevToolsAgentHost> RenderFrameDevToolsAgentHost::FindForDangling(
-    FrameTreeNode* frame_tree_node) {
+scoped_refptr<RenderFrameDevToolsAgentHost>
+RenderFrameDevToolsAgentHost::FindForDangling(FrameTreeNode* frame_tree_node) {
   return FindAgentHost(frame_tree_node);
 }
 
@@ -196,16 +195,21 @@ bool DevToolsAgentHost::IsDebuggerAttached(WebContents* web_contents) {
 void RenderFrameDevToolsAgentHost::AddAllAgentHosts(
     DevToolsAgentHost::List* result) {
   for (WebContentsImpl* wc : WebContentsImpl::GetAllWebContents()) {
-    // TODO(https://crbug.com/1264031): With MPArch a WebContents might have
-    // multiple FrameTrees. This probably needs to iterate over all FrameTrees.
-    // Investigate.
-    for (FrameTreeNode* node : wc->GetPrimaryFrameTree().Nodes()) {
-      if (!node->current_frame_host() || !ShouldCreateDevToolsForNode(node))
-        continue;
-      if (!node->current_frame_host()->IsRenderFrameLive())
-        continue;
-      result->push_back(RenderFrameDevToolsAgentHost::GetOrCreateFor(node));
-    }
+    // Inner web contents such as portals or guestviews are already handled by
+    // ForEachRenderFrameHost.
+    if (wc->GetOutermostWebContents() != wc)
+      continue;
+    wc->GetPrimaryMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
+        [](DevToolsAgentHost::List* result,
+           RenderFrameHost* render_frame_host) {
+          FrameTreeNode* node = FrameTreeNode::From(render_frame_host);
+          if (!ShouldCreateDevToolsForNode(node))
+            return;
+          if (!render_frame_host->IsRenderFrameLive())
+            return;
+          result->push_back(RenderFrameDevToolsAgentHost::GetOrCreateFor(node));
+        },
+        result));
   }
 }
 
@@ -252,7 +256,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
   SetFrameTreeNode(frame_tree_node);
   ChangeFrameHostAndObservedProcess(frame_host);
   render_frame_alive_ = frame_host_ && frame_host_->IsRenderFrameLive();
-  if (frame_tree_node->parent()) {
+  if (frame_tree_node->GetFrameType() != FrameType::kPrimaryMainFrame) {
     render_frame_crashed_ = !render_frame_alive_;
   } else {
     WebContents* web_contents = WebContents::FromRenderFrameHost(frame_host);
@@ -365,13 +369,6 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   if (sessions().empty()) {
-#if BUILDFLAG(IS_ANDROID)
-    // With video capture API snapshots happen in TracingHandler. However, the
-    // video capture API cannot be used with Android WebView so
-    // DevToolsFrameTraceRecorder takes snapshots.
-    if (!CompositorImpl::IsInitialized())
-      frame_trace_recorder_ = std::make_unique<DevToolsFrameTraceRecorder>();
-#endif
     UpdateRawHeadersAccess(frame_host_);
 #if BUILDFLAG(IS_ANDROID)
     if (acquire_wake_lock)
@@ -384,9 +381,6 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
 void RenderFrameDevToolsAgentHost::DetachSession(DevToolsSession* session) {
   // Destroying session automatically detaches in renderer.
   if (sessions().empty()) {
-#if BUILDFLAG(IS_ANDROID)
-    frame_trace_recorder_.reset();
-#endif
     UpdateRawHeadersAccess(frame_host_);
 #if BUILDFLAG(IS_ANDROID)
     GetWakeLock()->CancelWakeLock();
@@ -671,7 +665,7 @@ void RenderFrameDevToolsAgentHost::DisconnectWebContents() {
 
 void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
   RenderFrameHostImpl* host =
-      static_cast<RenderFrameHostImpl*>(wc->GetMainFrame());
+      static_cast<RenderFrameHostImpl*>(wc->GetPrimaryMainFrame());
   DCHECK(host);
   SetFrameTreeNode(host->frame_tree_node());
   UpdateFrameHost(host);
@@ -720,7 +714,7 @@ std::string RenderFrameDevToolsAgentHost::GetType() {
   if (IsChildFrame())
     return kTypeFrame;
   if (frame_tree_node_ && frame_tree_node_->IsFencedFrameRoot())
-    return kTypePage;
+    return kTypeFrame;
   if (web_contents() &&
       static_cast<WebContentsImpl*>(web_contents())->IsPortal()) {
     return kTypePage;
@@ -824,39 +818,6 @@ base::TimeTicks RenderFrameDevToolsAgentHost::GetLastActivityTime() {
     return contents->GetLastActiveTime();
   return base::TimeTicks();
 }
-
-#if BUILDFLAG(IS_ANDROID)
-void RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(
-    RenderFrameHost* frame_host,
-    const cc::RenderFrameMetadata& frame_metadata) {
-  scoped_refptr<RenderFrameDevToolsAgentHost> dtah(FindAgentHost(
-      static_cast<RenderFrameHostImpl*>(frame_host)->frame_tree_node()));
-  if (dtah) {
-    // Unblock the compositor.
-    GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame,
-            dtah.get(), frame_metadata));
-  }
-}
-
-void RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame(
-    const cc::RenderFrameMetadata& frame_metadata) {
-  for (auto* page : protocol::PageHandler::ForAgentHost(this))
-    page->OnSynchronousSwapCompositorFrame(frame_metadata);
-
-  if (!frame_trace_recorder_)
-    return;
-  bool did_initiate_recording = false;
-  for (auto* tracing : protocol::TracingHandler::ForAgentHost(this))
-    did_initiate_recording |= tracing->did_initiate_recording();
-  if (did_initiate_recording) {
-    frame_trace_recorder_->OnSynchronousSwapCompositorFrame(frame_host_,
-                                                            frame_metadata);
-  }
-}
-#endif
 
 void RenderFrameDevToolsAgentHost::UpdateRendererChannel(bool force) {
   mojo::PendingAssociatedRemote<blink::mojom::DevToolsAgent> agent_remote;

@@ -17,7 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
@@ -27,7 +27,7 @@ namespace app_list {
 
 namespace {
 
-using chromeos::assistant::AssistantAllowedState;
+using ::ash::assistant::AssistantAllowedState;
 
 constexpr char kIdPrefix[] = "googleassistant_text://";
 
@@ -55,6 +55,7 @@ class AssistantTextSearchResult : public ChromeSearchResult {
     SetResultType(ash::AppListSearchResultType::kAssistantText);
     SetMetricsType(ash::SearchResultType::ASSISTANT_OMNIBOX_RESULT);
     SetTitle(text);
+    SetDetails(l10n_util::GetStringUTF16(IDS_APP_LIST_START_ASSISTANT));
     SetAccessibleName(l10n_util::GetStringFUTF16(
         IDS_ASH_ASSISTANT_QUERY_ACCESSIBILITY_ANNOUNCEMENT, text));
     SetIcon(IconInfo(
@@ -62,6 +63,7 @@ class AssistantTextSearchResult : public ChromeSearchResult {
                               gfx::kPlaceholderColor),
         kSystemIconDimension));
 
+    SetSkipUpdateAnimation(true);
     set_dismiss_view_on_open(false);
   }
 
@@ -113,7 +115,7 @@ void AssistantTextSearchProvider::OnAssistantControllerDestroying() {
 }
 
 void AssistantTextSearchProvider::OnAssistantFeatureAllowedChanged(
-    chromeos::assistant::AssistantAllowedState allowed_state) {
+    AssistantAllowedState allowed_state) {
   UpdateResults();
 }
 

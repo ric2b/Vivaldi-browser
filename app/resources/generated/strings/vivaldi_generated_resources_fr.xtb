@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Sorties de veille</translation>
 <translation id="119944043368869598">Tout effacer</translation>
 <translation id="1221825588892235038">Sélection uniquement</translation>
+<translation id="1234736487471201993">Créer un code QR pour cette image</translation>
 <translation id="1244303850296295656">Erreur au niveau des extensions</translation>
 <translation id="125220115284141797">Par défaut</translation>
 <translation id="1297175357211070620">Destination</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Caster l’onglet</translation>
 <translation id="2150139952286079145">Rechercher des destinations</translation>
 <translation id="215753907730220065">Quitter le mode plein écran</translation>
+<translation id="2158475082070321257">Copier le lien vers le texte en surbrillance</translation>
 <translation id="2177950615300672361">Onglet de navigation privée : <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Module Native Client : <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Coller en texte brut</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Les sites peuvent aussi avoir besoin reconnaître votre appareil grâce à un identifiant</translation>
 <translation id="2445081178310039857">Le répertoire racine de l’extension doit être indiqué.</translation>
 <translation id="2470702053775288986">Désactivation des extensions non compatibles</translation>
-<translation id="2476578072172137802">Paramètres du site</translation>
+<translation id="2485422356828889247">Désinstaller</translation>
 <translation id="2498539833203011245">Réduire</translation>
 <translation id="2509495747794740764">Le facteur d’échelle doit être un nombre compris entre 10 et 200.</translation>
 <translation id="253557089021624350">Nombre de keepalive (pour extensions)</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Signaler un abus</translation>
 <translation id="2941112035454246133">Faible</translation>
 <translation id="2972581237482394796">&amp;Rétablir</translation>
+<translation id="2993517869960930405">Infos sur l’application</translation>
 <translation id="3003623123441819449">Cache CSS</translation>
 <translation id="3008272652534848354">Réinitialiser les autorisations</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Ouvrir le lien avec le compte</translation>
 <translation id="3222066309010235055">Pré-rendu : <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Sélectionnez le répertoire racine de l’extension à empaqueter. Pour mettre à jour une extension, sélectionnez également le fichier de clé privée à réutiliser.</translation>
+<translation id="3275778913554317645">Ouvrir dans une fenêtre</translation>
 <translation id="3280237271814976245">Enregistrer &amp;sous…</translation>
 <translation id="3285322247471302225">Nouvel ongle&amp;t</translation>
 <translation id="3288047731229977326">Les extensions exécutées en mode développeur peuvent nuire à votre ordinateur. Si vous n’êtes pas un développeur, nous vous recommandons de désactiver celles-ci afin d’assurer la sécurité de votre ordinateur.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Ouvrir l’aperçu du PDF</translation>
 <translation id="3308134619352333507">Cacher le bouton</translation>
 <translation id="3317459757438853210">Recto verso</translation>
+<translation id="3331974543021145906">Infos sur l’application</translation>
 <translation id="3341703758641437857">Autoriser l’accès aux URLs de fichiers</translation>
 <translation id="3347086966102161372">C&amp;opier l’adresse de l’image</translation>
 <translation id="3360297538363969800">Échec de l’impression. Veuillez vérifier votre imprimante, puis réessayer.</translation>
 <translation id="3378572629723696641">Cette extension a pu être corrompue.</translation>
 <translation id="3387614642886316601">Utiliser le correcteur orthographique amélioré</translation>
+<translation id="3390013585654699824">Détails sur l’application</translation>
 <translation id="3393582007140394275">Impossible de caster l’écran.</translation>
 <translation id="3432227430032737297">Supprimer tous les cookies affichés</translation>
 <translation id="345693547134384690">Ouvrir l’&amp;image dans un nouvel onglet</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Rechercher une image avec <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Autoriser les sites à lire les contenus protégés (recommandé)</translation>
 <translation id="3979395879372752341">Nouvelle extension (<ph name="EXTENSION_NAME" />) ajoutée</translation>
+<translation id="398477389655464998">Copier le lien vers le texte en surbrillance</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Ajouter au dictionnaire</translation>
 <translation id="407520071244661467">Mise à l’échelle</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Fermer le navigateur avant l’importation de ses données</translation>
 <translation id="4130207949184424187">Cette extension a modifié la page qui s’affiche lorsque vous effectuez une recherche dans la barre d’adresses.</translation>
 <translation id="4131410914670010031">Noir et blanc</translation>
+<translation id="4165986682804962316">Paramètres de site</translation>
 <translation id="4176463684765177261">Désactivé</translation>
 <translation id="4200983522494130825">Nouvel ongle&amp;t</translation>
 <translation id="4225397296022057997">Sur tous les sites</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Restaurer les paramètres</translation>
 <translation id="4726710629007580002">Il y a eu des messages d’avertissement lors de l’installation de cette extension :</translation>
 <translation id="479536056609751218">Page Web, fichier HTML seul</translation>
+<translation id="4827904420700932487">Créer un code QR pour cette image</translation>
 <translation id="4839303808932127586">En&amp;registrer la vidéo sous…</translation>
 <translation id="4840096453115567876">Quitter quand même le mode navigation privée ?</translation>
 <translation id="488785315393301722">Afficher les détails</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Demander l’autorisation avant d’accéder (recommandé)</translation>
 <translation id="5677928146339483299">Bloqué</translation>
 <translation id="5707185214361380026">Impossible de charger l’extension depuis :</translation>
+<translation id="5713171467967533494">Ouvrir dans le navigateur Vivaldi</translation>
 <translation id="5715711091495208045">Gestionnaire de plugins : "<ph name="PLUGIN_NAME" />"</translation>
 <translation id="5746169159649715125">Enregistrer au format PDF</translation>
 <translation id="5747809636523347288">Coller et accéder à <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Options</translation>
 <translation id="6579369886355986318">Afficher tous les contrôles</translation>
 <translation id="6639554308659482635">Mémoire SQLite</translation>
+<translation id="666731172850799929">Ouvrir dans <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Enregistrer votre mot de passe</translation>
 <translation id="6691936601825168937">P&amp;age suivante</translation>
 <translation id="6798954102094737107">Plugin : <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="9003647077635673607">Autoriser sur tous les sites Web</translation>
 <translation id="9027459031423301635">Ouvrir le lien dans un nouvel ongle&amp;t</translation>
 <translation id="9056810968620647706">Aucune correspondance trouvée.</translation>
+<translation id="9084064520949870008">Ouvrir dans une fenêtre</translation>
 <translation id="9137916601698928395">Ouvrir le lien avec le compte <ph name="USER" /></translation>
 <translation id="91568222606626347">Créer un raccourci…</translation>
 <translation id="916607977885256133">Mode PiP (Picture-in-Picture)</translation>

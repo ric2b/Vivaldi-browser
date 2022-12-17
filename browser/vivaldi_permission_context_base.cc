@@ -38,23 +38,3 @@ void NotificationPermissionContext::UpdateTabContext(
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }
-
-namespace permissions {
-
-int PermissionContextBase::RemoveBridgeID(int bridge_id) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  std::map<int, int>::iterator bridge_itr =
-      bridge_id_to_request_id_map_.find(bridge_id);
-
-  if (bridge_itr == bridge_id_to_request_id_map_.end())
-    return webview::kInvalidPermissionRequestID;
-
-  int request_id = bridge_itr->second;
-  bridge_id_to_request_id_map_.erase(bridge_itr);
-#else
-  int request_id = 0;
-#endif
-  return request_id;
-}
-
-}  // namespace permissions

@@ -4,17 +4,16 @@
 
 #include "chrome/browser/ash/crostini/ansible/ansible_management_service.h"
 
+#include <sstream>
+
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/crostini/ansible/ansible_management_service_factory.h"
-#include "chrome/browser/ash/crostini/crostini_manager_factory.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_service.h"
 
 namespace crostini {
@@ -52,7 +51,7 @@ AnsibleManagementService::AnsibleManagementService(Profile* profile)
 AnsibleManagementService::~AnsibleManagementService() = default;
 
 void AnsibleManagementService::ConfigureContainer(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     base::FilePath playbook_path,
     base::OnceCallback<void(bool success)> callback) {
   if (configuration_tasks_.count(container_id) > 0) {
@@ -61,7 +60,7 @@ void AnsibleManagementService::ConfigureContainer(
     std::move(callback).Run(false);
     return;
   }
-  if (container_id == ContainerId::GetDefault() &&
+  if (container_id == DefaultContainerId() &&
       !ShouldConfigureDefaultContainer(profile_)) {
     LOG(ERROR) << "Trying to configure default Crostini container when it "
                << "should not be configured";
@@ -92,7 +91,7 @@ void AnsibleManagementService::ConfigureContainer(
 }
 
 void AnsibleManagementService::OnInstallAnsibleInContainer(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     CrostiniResult result) {
   if (result == CrostiniResult::INSTALL_LINUX_PACKAGE_FAILED) {
     LOG(ERROR) << "Ansible installation failed";
@@ -111,10 +110,11 @@ void AnsibleManagementService::OnInstallAnsibleInContainer(
 }
 
 void AnsibleManagementService::OnInstallLinuxPackageProgress(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     InstallLinuxPackageProgressStatus status,
     int progress_percent,
     const std::string& error_message) {
+  std::stringstream status_line;
   switch (status) {
     case InstallLinuxPackageProgressStatus::SUCCEEDED: {
       GetAnsiblePlaybookToApply(container_id);
@@ -126,10 +126,21 @@ void AnsibleManagementService::OnInstallLinuxPackageProgress(
       return;
     // TODO(okalitova): Report Ansible downloading/installation progress.
     case InstallLinuxPackageProgressStatus::DOWNLOADING:
-      VLOG(1) << "Ansible downloading progress: " << progress_percent << "%";
+      status_line << "Ansible downloading progress: " << progress_percent
+                  << "%";
+      VLOG(1) << status_line.str();
+      for (auto& observer : observers_) {
+        observer.OnAnsibleSoftwareConfigurationProgress(
+            container_id, std::vector<std::string>({status_line.str()}));
+      }
       return;
     case InstallLinuxPackageProgressStatus::INSTALLING:
-      VLOG(1) << "Ansible installing progress: " << progress_percent << "%";
+      status_line << "Ansible installing progress: " << progress_percent << "%";
+      VLOG(1) << status_line.str();
+      for (auto& observer : observers_) {
+        observer.OnAnsibleSoftwareConfigurationProgress(
+            container_id, std::vector<std::string>({status_line.str()}));
+      }
       return;
     default:
       NOTREACHED();
@@ -137,7 +148,7 @@ void AnsibleManagementService::OnInstallLinuxPackageProgress(
 }
 
 void AnsibleManagementService::GetAnsiblePlaybookToApply(
-    const ContainerId& container_id) {
+    const guest_os::GuestId& container_id) {
   DCHECK_GT(configuration_tasks_.count(container_id), 0);
   const base::FilePath& ansible_playbook_file_path =
       configuration_tasks_[container_id]->path;
@@ -154,7 +165,7 @@ void AnsibleManagementService::GetAnsiblePlaybookToApply(
 }
 
 void AnsibleManagementService::OnAnsiblePlaybookRetrieved(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     bool success) {
   if (!success) {
     LOG(ERROR) << "Failed to retrieve Ansible playbook content";
@@ -166,7 +177,7 @@ void AnsibleManagementService::OnAnsiblePlaybookRetrieved(
 }
 
 void AnsibleManagementService::ApplyAnsiblePlaybook(
-    const ContainerId& container_id) {
+    const guest_os::GuestId& container_id) {
   DCHECK_GT(configuration_tasks_.count(container_id), 0);
   if (!GetCiceroneClient()->IsApplyAnsiblePlaybookProgressSignalConnected()) {
     // Technically we could still start the application, but we wouldn't be able
@@ -190,7 +201,7 @@ void AnsibleManagementService::ApplyAnsiblePlaybook(
 }
 
 void AnsibleManagementService::OnApplyAnsiblePlaybook(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     absl::optional<vm_tools::cicerone::ApplyAnsiblePlaybookResponse> response) {
   if (!response) {
     LOG(ERROR) << "Failed to apply Ansible playbook. Empty response.";
@@ -216,7 +227,8 @@ void AnsibleManagementService::OnApplyAnsiblePlaybook(
 
 void AnsibleManagementService::OnApplyAnsiblePlaybookProgress(
     const vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal& signal) {
-  ContainerId container_id(signal.vm_name(), signal.container_name());
+  guest_os::GuestId container_id(kCrostiniDefaultVmType, signal.vm_name(),
+                                 signal.container_name());
   switch (signal.status()) {
     case vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal::SUCCEEDED:
       OnConfigurationFinished(container_id, true);
@@ -227,7 +239,12 @@ void AnsibleManagementService::OnApplyAnsiblePlaybookProgress(
       OnConfigurationFinished(container_id, false);
       break;
     case vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal::IN_PROGRESS:
-      // TODO(okalitova): Report Ansible playbook application progress.
+      for (auto& observer : observers_) {
+        observer.OnAnsibleSoftwareConfigurationProgress(
+            container_id,
+            std::vector<std::string>(signal.status_string().begin(),
+                                     signal.status_string().end()));
+      }
       break;
     default:
       NOTREACHED();
@@ -244,17 +261,17 @@ void AnsibleManagementService::RemoveObserver(Observer* observer) {
 }
 
 void AnsibleManagementService::OnUninstallPackageProgress(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     UninstallPackageProgressStatus status,
     int progress_percent) {
   NOTIMPLEMENTED();
 }
 
 void AnsibleManagementService::OnConfigurationFinished(
-    const ContainerId& container_id,
+    const guest_os::GuestId& container_id,
     bool success) {
   DCHECK_GT(configuration_tasks_.count(container_id), 0);
-  if (success && container_id == ContainerId::GetDefault()) {
+  if (success && container_id == DefaultContainerId()) {
     profile_->GetPrefs()->SetBoolean(prefs::kCrostiniDefaultContainerConfigured,
                                      true);
   }

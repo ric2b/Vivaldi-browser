@@ -533,6 +533,8 @@ void ExecutionContext::SetReferrerPolicy(
 void ExecutionContext::SetPolicyContainer(
     std::unique_ptr<PolicyContainer> container) {
   policy_container_ = std::move(container);
+  security_context_.SetSandboxFlags(
+      policy_container_->GetPolicies().sandbox_flags);
 }
 
 std::unique_ptr<PolicyContainer> ExecutionContext::TakePolicyContainer() {
@@ -660,8 +662,7 @@ bool ExecutionContext::IsFeatureEnabled(
 }
 
 bool ExecutionContext::RequireTrustedTypes() const {
-  return require_safe_types_ &&
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled(this);
+  return require_safe_types_;
 }
 
 }  // namespace blink

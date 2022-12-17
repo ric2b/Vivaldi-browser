@@ -32,6 +32,15 @@ class GLOzoneEGL : public GLOzone {
   bool InitializeExtensionSettingsOneOffPlatform(
       gl::GLDisplay* display) override;
   void ShutdownGL(gl::GLDisplay* display) override;
+  bool CanImportNativePixmap() override;
+  std::unique_ptr<NativePixmapGLBinding> ImportNativePixmap(
+      scoped_refptr<gfx::NativePixmap> pixmap,
+      gfx::BufferFormat plane_format,
+      gfx::BufferPlane plane,
+      gfx::Size plane_size,
+      const gfx::ColorSpace& color_space,
+      GLenum target,
+      GLuint texture_id) override;
   bool GetGLWindowSystemBindingInfo(
       const gl::GLVersionInfo& gl_info,
       gl::GLWindowSystemBindingInfo* info) override;
@@ -40,10 +49,13 @@ class GLOzoneEGL : public GLOzone {
       gl::GLSurface* compatible_surface,
       const gl::GLContextAttribs& attribs) override;
   scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLDisplay* display,
       gfx::AcceleratedWidget window) override = 0;
   scoped_refptr<gl::GLSurface> CreateSurfacelessViewGLSurface(
+      gl::GLDisplay* display,
       gfx::AcceleratedWidget window) override;
   scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLDisplay* display,
       const gfx::Size& size) override = 0;
 
  protected:

@@ -9,12 +9,11 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
-#include "ash/public/cpp/style/color_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -23,6 +22,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -91,36 +91,11 @@ TEST_F(AssistantButtonTest, IconColor) {
       *button->GetImage(views::Button::STATE_NORMAL).bitmap()));
 }
 
-TEST_F(AssistantButtonTest, IconColorTypeDefaultLight) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      /*enabled_features=*/{},
-      /*disabled_features=*/{features::kNotificationsRefresh,
-                             chromeos::features::kDarkLightMode});
-
-  AssistantButton::InitParams params;
-  params.size_in_dip = kSizeInDip;
-  params.icon_size_in_dip = kIconSizeInDip;
-  params.accessible_name_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_ACCNAME;
-  params.icon_color_type = ColorProvider::ContentLayerType::kIconColorPrimary;
-
-  std::unique_ptr<AssistantButton> button = AssistantButton::Create(
-      nullptr, vector_icons::kKeyboardIcon,
-      AssistantButtonId::kKeyboardInputToggle, std::move(params));
-
-  EXPECT_TRUE(gfx::test::AreBitmapsEqual(
-      *gfx::CreateVectorIcon(vector_icons::kKeyboardIcon, kIconSizeInDip,
-                             ash::features::IsProductivityLauncherEnabled()
-                                 ? gfx::kGoogleGrey200
-                                 : gfx::kGoogleGrey900)
-           .bitmap(),
-      *button->GetImage(views::Button::STATE_NORMAL).bitmap()));
-}
-
 TEST_F(AssistantButtonTest, IconColorType) {
   base::test::ScopedFeatureList scoped_feature_list_enable_dark_light_mode(
       chromeos::features::kDarkLightMode);
-  AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
+  auto* dark_light_mode_controller = DarkLightModeControllerImpl::Get();
+  dark_light_mode_controller->OnActiveUserPrefServiceChanged(
       Shell::Get()->session_controller()->GetActivePrefService());
 
   AssistantButton::InitParams params;
@@ -130,11 +105,13 @@ TEST_F(AssistantButtonTest, IconColorType) {
   params.size_in_dip = kSizeInDip;
   params.icon_size_in_dip = kIconSizeInDip;
   params.accessible_name_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_ACCNAME;
-  params.icon_color_type = ColorProvider::ContentLayerType::kIconColorPrimary;
+  params.icon_color_type = cros_tokens::kColorPrimary;
 
-  std::unique_ptr<AssistantButton> button = AssistantButton::Create(
-      nullptr, vector_icons::kKeyboardIcon,
-      AssistantButtonId::kKeyboardInputToggle, std::move(params));
+  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  AssistantButton* button =
+      widget->GetContentsView()->AddChildView(AssistantButton::Create(
+          nullptr, vector_icons::kKeyboardIcon,
+          AssistantButtonId::kKeyboardInputToggle, std::move(params)));
 
   const SkBitmap light_mode_expected_image =
       *gfx::CreateVectorIcon(vector_icons::kKeyboardIcon, kIconSizeInDip,
@@ -144,8 +121,8 @@ TEST_F(AssistantButtonTest, IconColorType) {
       *gfx::CreateVectorIcon(vector_icons::kKeyboardIcon, kIconSizeInDip,
                              gfx::kGoogleGrey200)
            .bitmap();
-  auto* color_provider = AshColorProvider::Get();
-  const bool initial_dark_mode_status = color_provider->IsDarkModeEnabled();
+  const bool initial_dark_mode_status =
+      dark_light_mode_controller->IsDarkModeEnabled();
 
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(
       initial_dark_mode_status ? dark_mode_expected_image
@@ -153,13 +130,9 @@ TEST_F(AssistantButtonTest, IconColorType) {
       *button->GetImage(views::Button::STATE_NORMAL).bitmap()));
 
   // Switch the color mode.
-  color_provider->ToggleColorMode();
-  const bool dark_mode_status = color_provider->IsDarkModeEnabled();
+  dark_light_mode_controller->ToggleColorMode();
+  const bool dark_mode_status = dark_light_mode_controller->IsDarkModeEnabled();
   ASSERT_NE(initial_dark_mode_status, dark_mode_status);
-
-  // Manually triggers OnThemeChanged as the button is not attached to an UI
-  // tree.
-  button->OnThemeChanged();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(
       dark_mode_status ? dark_mode_expected_image : light_mode_expected_image,
       *button->GetImage(views::Button::STATE_NORMAL).bitmap()));
@@ -176,7 +149,7 @@ TEST_F(AssistantButtonTest, FocusAndHoverColor) {
   params.size_in_dip = kSizeInDip;
   params.icon_size_in_dip = kIconSizeInDip;
   params.accessible_name_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_ACCNAME;
-  params.icon_color_type = ColorProvider::ContentLayerType::kIconColorPrimary;
+  params.icon_color_type = cros_tokens::kColorPrimaryDark;
 
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
   AssistantButton* button =
@@ -225,14 +198,15 @@ TEST_F(AssistantButtonTest, FocusAndHoverColor) {
 TEST_F(AssistantButtonTest, FocusAndHoverColorDarkLightMode) {
   base::test::ScopedFeatureList scoped_feature_list_enable_dark_light_mode(
       chromeos::features::kDarkLightMode);
-  AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
+  auto* dark_light_mode_controller = DarkLightModeControllerImpl::Get();
+  dark_light_mode_controller->OnActiveUserPrefServiceChanged(
       Shell::Get()->session_controller()->GetActivePrefService());
 
   AssistantButton::InitParams params;
   params.size_in_dip = kSizeInDip;
   params.icon_size_in_dip = kIconSizeInDip;
   params.accessible_name_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_ACCNAME;
-  params.icon_color_type = ColorProvider::ContentLayerType::kIconColorPrimary;
+  params.icon_color_type = cros_tokens::kColorPrimary;
 
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
   AssistantButton* button =
@@ -246,8 +220,8 @@ TEST_F(AssistantButtonTest, FocusAndHoverColorDarkLightMode) {
   const SkColor light_icon_color = gfx::kGoogleGrey900;
   const SkColor dark_icon_color = gfx::kGoogleGrey200;
 
-  auto* color_provider = AshColorProvider::Get();
-  const bool initial_dark_mode_status = color_provider->IsDarkModeEnabled();
+  const bool initial_dark_mode_status =
+      dark_light_mode_controller->IsDarkModeEnabled();
 
   SkBitmap dark_light_mode_button_image_with_focus =
       CreateExpectedImageWithFocus(
@@ -283,8 +257,8 @@ TEST_F(AssistantButtonTest, FocusAndHoverColorDarkLightMode) {
       dark_light_mode_button_image_without_focus, canvas.GetBitmap()));
 
   // Switch the color mode.
-  color_provider->ToggleColorMode();
-  const bool dark_mode_status = color_provider->IsDarkModeEnabled();
+  dark_light_mode_controller->ToggleColorMode();
+  const bool dark_mode_status = dark_light_mode_controller->IsDarkModeEnabled();
   ASSERT_NE(initial_dark_mode_status, dark_mode_status);
 
   canvas.RecreateBackingCanvas(gfx::Size(kSizeInDip, kSizeInDip),

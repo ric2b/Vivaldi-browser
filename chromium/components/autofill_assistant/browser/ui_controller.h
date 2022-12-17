@@ -15,8 +15,8 @@
 #include "components/autofill_assistant/browser/basic_interactions.h"
 #include "components/autofill_assistant/browser/bottom_sheet_state.h"
 #include "components/autofill_assistant/browser/client.h"
-#include "components/autofill_assistant/browser/controller_observer.h"
 #include "components/autofill_assistant/browser/element_area.h"
+#include "components/autofill_assistant/browser/empty_controller_observer.h"
 #include "components/autofill_assistant/browser/event_handler.h"
 #include "components/autofill_assistant/browser/execution_delegate.h"
 #include "components/autofill_assistant/browser/metrics.h"
@@ -41,7 +41,7 @@ class UiControllerTest;
 class UiController : public ScriptExecutorUiDelegate,
                      public virtual UiDelegate,
                      public AutofillAssistantTtsController::TtsEventDelegate,
-                     public ControllerObserver,
+                     public EmptyControllerObserver,
                      private UserModel::Observer {
  public:
   // |client| and |execution_delegate| must remain valid for the lifetime of the
@@ -93,6 +93,12 @@ class UiController : public ScriptExecutorUiDelegate,
       std::unique_ptr<FormProto> form,
       base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
       base::OnceCallback<void(const ClientStatus&)> cancel_callback) override;
+  void ShowQrCodeScanUi(
+      std::unique_ptr<PromptQrCodeScanProto> qr_code_scan,
+      base::OnceCallback<void(const ClientStatus&,
+                              const absl::optional<ValueProto>&)> callback)
+      override;
+  void ClearQrCodeScanUi() override;
   void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
@@ -151,6 +157,8 @@ class UiController : public ScriptExecutorUiDelegate,
   void OnTtsButtonClicked() override;
   void SetAdditionalValue(const std::string& client_memory_key,
                           const ValueProto& value) override;
+  void OnQrCodeScanFinished(const ClientStatus& status,
+                            const absl::optional<ValueProto>& value) override;
   ConfigureBottomSheetProto::PeekMode GetPeekMode() override;
   BottomSheetState GetBottomSheetState() override;
   void SetBottomSheetState(BottomSheetState state) override;
@@ -164,36 +172,13 @@ class UiController : public ScriptExecutorUiDelegate,
   void RemoveObserver(const UiControllerObserver* observer) override;
   bool ShouldPromptActionExpandSheet() const override;
   BasicInteractions* GetBasicInteractions() override;
+  const PromptQrCodeScanProto* GetPromptQrCodeScanProto() const override;
   const GenericUserInterfaceProto* GetGenericUiProto() const override;
   const GenericUserInterfaceProto* GetPersistentGenericUiProto() const override;
   void OnKeyboardVisibilityChanged(bool visible) override;
   void OnInputTextFocusChanged(bool is_text_focused) override;
   EventHandler* GetEventHandler() override;
   void DispatchEvent(const EventHandler::EventKey& key) override;
-
-  // Overrides ControllerObserver.
-  void OnStateChanged(AutofillAssistantState new_state) override;
-  void OnKeyboardSuppressionStateChanged(
-      bool should_suppress_keyboard) override;
-  void CloseCustomTab() override;
-  void OnError(const std::string& error_message,
-               Metrics::DropOutReason reason) override;
-  void OnUserDataChanged(const UserData& user_data,
-                         UserDataFieldChange field_change) override;
-  void OnTouchableAreaChanged(
-      const RectF& visual_viewport,
-      const std::vector<RectF>& touchable_areas,
-      const std::vector<RectF>& restricted_areas) override;
-  void OnViewportModeChanged(ViewportMode mode) override;
-  void OnOverlayColorsChanged(
-      const ExecutionDelegate::OverlayColors& colors) override;
-  void OnClientSettingsChanged(const ClientSettings& settings) override;
-  void OnShouldShowOverlayChanged(bool should_show) override;
-  void OnExecuteScript(const std::string& start_message) override;
-  void OnStart(const TriggerContext& trigger_context) override;
-  void OnStop() override;
-  void OnResetState() override;
-  void OnUiShownChanged(bool shown) override;
   bool SupportsExternalActions() override;
   void ExecuteExternalAction(
       const external::Action& external_action,
@@ -201,6 +186,17 @@ class UiController : public ScriptExecutorUiDelegate,
           start_dom_checks_callback,
       base::OnceCallback<void(const external::Result& result)>
           end_action_callback) override;
+
+  // Overrides ControllerObserver.
+  void OnError(const std::string& error_message,
+               Metrics::DropOutReason reason) override;
+  void OnUserDataChanged(const UserData& user_data,
+                         UserDataFieldChange field_change) override;
+  void OnExecuteScript(const std::string& start_message) override;
+  void OnStart(const TriggerContext& trigger_context) override;
+  void OnStop() override;
+  void OnResetState() override;
+  void OnUiShownChanged(bool shown) override;
 
   // Overrides AutofillAssistantTtsController::TtsEventDelegate
   void OnTtsEvent(AutofillAssistantTtsController::TtsEventType event) override;
@@ -336,6 +332,12 @@ class UiController : public ScriptExecutorUiDelegate,
   bool tts_enabled_ = false;
   std::unique_ptr<AutofillAssistantTtsController> tts_controller_;
   TtsButtonState tts_button_state_ = TtsButtonState::DEFAULT;
+
+  // Only set during a PromptQrCodeScanAction.
+  std::unique_ptr<PromptQrCodeScanProto> qr_code_scan_;
+  base::OnceCallback<void(const ClientStatus&,
+                          const absl::optional<ValueProto>&)>
+      qr_code_scan_callback_;
 
   // Only set during a ShowGenericUiAction.
   std::unique_ptr<GenericUserInterfaceProto> generic_user_interface_;

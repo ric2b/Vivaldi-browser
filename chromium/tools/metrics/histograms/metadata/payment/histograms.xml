@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="DigitalGoods.CrossSite" enum="Boolean"
-    expires_after="2022-11-20">
+    expires_after="2023-01-22">
   <owner>glenrob@chromium.org</owner>
   <owner>dominickn@chromium.org</owner>
   <owner>rouslan@chromium.org</owner>
@@ -37,7 +37,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PaymentRequest.CheckoutFunnel"
-    enum="PaymentRequestCheckoutFunnelSteps" expires_after="2022-11-13">
+    enum="PaymentRequestCheckoutFunnelSteps" expires_after="2023-01-15">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
@@ -66,7 +66,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PaymentRequest.EventResponse.CanMakePayment" enum="Boolean"
-    expires_after="2022-11-27">
+    expires_after="2023-02-12">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
@@ -82,7 +82,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PaymentRequest.EventResponse.IsReadyToPay" enum="Boolean"
-    expires_after="2022-11-27">
+    expires_after="2023-02-12">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
@@ -99,7 +99,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PaymentRequest.Events" units="bitfield value"
-    expires_after="2022-10-16">
+    expires_after="2022-12-18">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
@@ -119,7 +119,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PaymentRequest.JourneyLoggerHasRecorded" enum="Boolean"
-    expires_after="2022-10-23">
+    expires_after="2022-12-25">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
@@ -184,13 +184,35 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="PaymentRequest.NumberOfSupportedMethods.AndroidApp"
+    units="methods" expires_after="2023-07-14">
+  <owner>rouslan@chromium.org</owner>
+  <owner>web-payments-team@google.com</owner>
+  <summary>
+    The number of payment methods that an installed Android payment app declares
+    to support. Recorded when a website creates a new PaymentRequest JS object.
+  </summary>
+</histogram>
+
 <histogram name="PaymentRequest.PaymentHandlerInstallSuccess"
-    enum="BooleanSuccess" expires_after="2022-10-30">
+    enum="BooleanSuccess" expires_after="2023-01-01">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
     Whether an attempted just-in-time payment handler installation was
     successful. Recorded when the attempted installation is finished.
+  </summary>
+</histogram>
+
+<histogram name="PaymentRequest.PrePurchaseQuery"
+    enum="PaymentRequestPrePurchaseQuery" expires_after="2023-07-07">
+  <owner>rouslan@chromium.org</owner>
+  <owner>web-payments-team@google.com</owner>
+  <summary>
+    A count of the number of queries to the payment apps of different types,
+    where the query happens before the purchase flow is initiated. Recorded when
+    a PaymentRequest object is constructed with payment method parameters that
+    match with the already installed payment apps on the user device.
   </summary>
 </histogram>
 
@@ -297,63 +319,8 @@ chromium-metrics-reviews@google.com.
   <summary>True when a service worker times out 5 mins after request.</summary>
 </histogram>
 
-<histogram name="PaymentRequest.TimeToCheckout.Completed" units="ms"
-    expires_after="2022-11-13">
-  <owner>rouslan@chromium.org</owner>
-  <owner>web-payments-team@google.com</owner>
-  <summary>
-    Records the time between a payment request .show() and its completion.
-  </summary>
-</histogram>
-
-<histogram name="PaymentRequest.TimeToCheckout.Completed.Shown" units="ms"
-    expires_after="2022-11-22">
-<!-- Name completed by histogram_suffixes name="PaymentRequestCompletedInstrument" -->
-
-  <owner>rouslan@chromium.org</owner>
-  <owner>web-payments-team@google.com</owner>
-  <summary>
-    Records the time between a payment request .show() and its completion when
-    payment sheet is shown.
-  </summary>
-</histogram>
-
-<histogram name="PaymentRequest.TimeToCheckout.Completed.SkippedShow"
-    units="ms" expires_after="2022-11-13">
-<!-- Name completed by histogram_suffixes name="PaymentRequestCompletedInstrument" -->
-
-  <owner>rouslan@chromium.org</owner>
-  <owner>web-payments-team@google.com</owner>
-  <summary>
-    Records the time between a payment request .show() and its completion when
-    payment sheet is skipped.
-  </summary>
-</histogram>
-
-<histogram name="PaymentRequest.TimeToCheckout.OtherAborted" units="ms"
-    expires_after="2022-05-01">
-  <owner>rouslan@chromium.org</owner>
-  <owner>web-payments-team@google.com</owner>
-  <summary>
-    Records the time between a payment request .show() and its termination by
-    any factors other than the user (e.g. merchant).
-  </summary>
-</histogram>
-
-<histogram name="PaymentRequest.TimeToCheckout.UserAborted" units="ms"
-    expires_after="2022-07-03">
-<!-- Name completed by histogram_suffixes name="PaymentRequestPaymentSheetShowStatus" -->
-
-  <owner>rouslan@chromium.org</owner>
-  <owner>web-payments-team@google.com</owner>
-  <summary>
-    Records the time between a payment request .show() and its termination by
-    user.
-  </summary>
-</histogram>
-
 <histogram name="PaymentRequest.TransactionAmount.Completed"
-    enum="PaymentRequestTransactionSize" expires_after="2022-11-13">
+    enum="PaymentRequestTransactionSize" expires_after="2023-01-15">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>
@@ -363,7 +330,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PaymentRequest.TransactionAmount.Triggered"
-    enum="PaymentRequestTransactionSize" expires_after="2022-11-13">
+    enum="PaymentRequestTransactionSize" expires_after="2023-01-15">
   <owner>rouslan@chromium.org</owner>
   <owner>web-payments-team@google.com</owner>
   <summary>

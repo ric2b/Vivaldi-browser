@@ -40,7 +40,7 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelDelegate {
   friend class DialogModel;
   void set_dialog_model(DialogModel* model) { dialog_model_ = model; }
 
-  DialogModel* dialog_model_ = nullptr;
+  raw_ptr<DialogModel> dialog_model_ = nullptr;
 };
 
 // DialogModel represents a platform-and-toolkit agnostic data + behavior
@@ -146,6 +146,11 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
                      ImageModel dark_mode_icon = ImageModel()) {
       model_->icon_ = std::move(icon);
       model_->dark_mode_icon_ = std::move(dark_mode_icon);
+      return *this;
+    }
+
+    Builder& SetMainImage(ImageModel main_image) {
+      model_->main_image_ = std::move(main_image);
       return *this;
     }
 
@@ -372,6 +377,10 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
     return title_;
   }
 
+  const ImageModel& main_image(base::PassKey<DialogModelHost>) const {
+    return main_image_;
+  }
+
   const ImageModel& icon(base::PassKey<DialogModelHost>) const { return icon_; }
 
   const ImageModel& dark_mode_icon(base::PassKey<DialogModelHost>) const {
@@ -439,6 +448,8 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
   std::u16string title_;
   ImageModel icon_;
   ImageModel dark_mode_icon_;
+
+  ImageModel main_image_;
 
   ImageModel banner_;
   ImageModel dark_mode_banner_;

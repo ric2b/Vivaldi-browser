@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
@@ -124,7 +125,7 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
     base::TimeDelta GetConfigureDelay() const;
 
    private:
-    DisplayConfigurator* configurator_;  // not owned
+    raw_ptr<DisplayConfigurator> configurator_;  // not owned
   };
 
   // Flags that can be passed to SetDisplayPower().
@@ -237,6 +238,12 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // current set of connected displays).
   void SetDisplayMode(MultipleDisplayState new_state);
 
+  // Request the display's refresh rate to be throttled. Currently
+  // only supports internal displays. If the underlying panel/display driver
+  // do not support this, it is a no-op.
+  void MaybeSetRefreshRateThrottleState(int64_t display_id,
+                                        RefreshRateThrottleState state);
+
   // NativeDisplayDelegate::Observer overrides:
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override;
@@ -342,6 +349,14 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // otherwise.
   bool ShouldRunConfigurationTask() const;
 
+  // Returns true if there are pending configuration changes that should be done
+  // seamlessly.
+  bool HasPendingSeamlessConfiguration() const;
+
+  // Returns true if there are pending configuration changes that require a full
+  // modeset.
+  bool HasPendingFullConfiguration() const;
+
   // Helper functions which will call the callbacks in
   // |in_progress_configuration_callbacks_| and
   // |queued_configuration_callbacks_| and clear the lists after. |success| is
@@ -362,8 +377,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   void SendRelinquishDisplayControl(DisplayControlCallback callback,
                                     bool success);
 
-  StateController* state_controller_;
-  SoftwareMirroringController* mirroring_controller_;
+  raw_ptr<StateController> state_controller_;
+  raw_ptr<SoftwareMirroringController> mirroring_controller_;
   std::unique_ptr<NativeDisplayDelegate> native_display_delegate_;
 
   // Used to enable modes which rely on panel fitting.
@@ -396,6 +411,9 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
 
   // Bitwise-or value of the |kSetDisplayPower*| flags defined above.
   int pending_power_flags_;
+
+  // Stores the requested refresh rate throttle state.
+  absl::optional<RefreshRateThrottleState> pending_refresh_rate_throttle_state_;
 
   // List of callbacks from callers waiting for the display configuration to
   // start/finish. Note these callbacks belong to the pending request, not a

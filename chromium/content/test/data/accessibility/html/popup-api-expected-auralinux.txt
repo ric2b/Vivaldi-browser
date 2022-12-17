@@ -3,26 +3,26 @@
 ++[entry] selectable-text
 ++[static] name='Text input pointing to hidden popup '
 ++[push button] name='Show button pointing to hidden hint' description='Hint' description-from:tooltip
-++[entry] description='Hint' selectable-text description-from:tooltip
-++[static] name='Search input pointing to hidden hint '
-++[push button] name='Hide button pointing to hidden async'
 ++[entry] selectable-text
-++[static] name='Email input pointing to hidden async '
+++[static] name='Search input pointing to hidden hint '
+++[push button] name='Hide button pointing to hidden manual'
+++[entry] selectable-text
+++[static] name='Email input pointing to hidden manual '
 ++[push button] name='Button pointing to showing popup'
 ++[entry] selectable-text
 ++[static] name='Tel input pointing to showing popup '
 ++[push button] name='Show button pointing to showing hint' description='Hint (nested)' described-by description-from:tooltip
-++[entry] description='Hint (nested)' selectable-text described-by description-from:tooltip
+++[entry] selectable-text
 ++[static] name='Url input pointing to showing hint '
 ++[section]
 ++++[static] name='Popup'
 ++++[section] description-for
 ++++++[static] name='Hint (nested)'
-++[push button] name='Hide button pointing to showing async'
+++[push button] name='Hide button pointing to showing manual'
 ++[entry] selectable-text
-++[static] name='Text input pointing to showing async '
+++[static] name='Text input pointing to showing manual '
 ++[section]
-++++[static] name='Async'
+++++[static] name='Manual'
 ++[push button] name='Button pointing to non-popup'
 ++[entry] selectable-text
 ++[static] name='Text input pointing to non-popup'

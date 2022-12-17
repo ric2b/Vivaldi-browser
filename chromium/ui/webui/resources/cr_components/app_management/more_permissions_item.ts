@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import './app_management_shared_style.css.js';
-import '//resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -37,7 +37,7 @@ export class AppManagementMorePermissionsItemElement extends PolymerElement {
     this.addEventListener('click', this.onClick_);
   }
 
-  onClick_() {
+  private onClick_() {
     BrowserProxy.getInstance().handler.openNativeSettings(this.app.id);
     recordAppManagementUserAction(
         this.app.type, AppManagementUserAction.NATIVE_SETTINGS_OPENED);

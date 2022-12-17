@@ -10,7 +10,7 @@ import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 import {BluetoothSystemProperties, BluetoothSystemState, DeviceConnectionState, SystemPropertiesObserverInterface} from 'chrome://resources/mojo/chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {createDefaultBluetoothDevice, FakeBluetoothConfig} from 'chrome://test/cr_components/chromeos/bluetooth/fake_bluetooth_config.js';
-import {eventToPromise, waitAfterNextRender} from 'chrome://test/test_util.js';
+import {eventToPromise, isVisible, waitAfterNextRender} from 'chrome://test/test_util.js';
 
 import {assertEquals, assertNotEquals, assertTrue} from '../../../chai_assert.js';
 
@@ -55,7 +55,7 @@ suite('OsBluetoothDevicesSubpageTest', function() {
        */
       onPropertiesUpdated(properties) {
         bluetoothDevicesSubpage.systemProperties = properties;
-      }
+      },
     };
     bluetoothConfig.observeSystemProperties(propertiesObserver);
     Router.getInstance().navigateTo(routes.BLUETOOTH_DEVICES, opt_urlParams);
@@ -71,6 +71,53 @@ suite('OsBluetoothDevicesSubpageTest', function() {
     await init();
     assertTrue(!!bluetoothDevicesSubpage);
   });
+
+  test('Only show saved devices link row when flag is true', async function() {
+    bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+    await init();
+
+    bluetoothDevicesSubpage.remove();
+    // Set flag to True and check that the row is visible.
+    loadTimeData.overrideValues({'enableSavedDevicesFlag': true});
+    bluetoothDevicesSubpage =
+        document.createElement('os-settings-bluetooth-devices-subpage');
+    document.body.appendChild(bluetoothDevicesSubpage);
+    flush();
+    assertTrue(isVisible(bluetoothDevicesSubpage.shadowRoot.querySelector(
+        '#savedDevicesRowLink')));
+
+    bluetoothDevicesSubpage.remove();
+    // Set flag to False and check that the row is not visible.
+    loadTimeData.overrideValues({'enableSavedDevicesFlag': false});
+    bluetoothDevicesSubpage =
+        document.createElement('os-settings-bluetooth-devices-subpage');
+    document.body.appendChild(bluetoothDevicesSubpage);
+    flush();
+    assertFalse(isVisible(bluetoothDevicesSubpage.shadowRoot.querySelector(
+        '#savedDevicesRowLink')));
+  });
+
+  test(
+      'Selecting saved devices row routes to saved devices subpage',
+      async function() {
+        bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+        await init();
+
+        bluetoothDevicesSubpage.remove();
+        // Set flag to True and check that the row is visible.
+        loadTimeData.overrideValues({'enableSavedDevicesFlag': true});
+        bluetoothDevicesSubpage =
+            document.createElement('os-settings-bluetooth-devices-subpage');
+        document.body.appendChild(bluetoothDevicesSubpage);
+        flush();
+
+        bluetoothDevicesSubpage.shadowRoot.querySelector('#savedDevicesRowLink')
+            .click();
+        await flushAsync();
+        assertEquals(
+            Router.getInstance().getCurrentRoute(),
+            routes.BLUETOOTH_SAVED_DEVICES);
+      });
 
   test('Toggle button creation and a11y', async function() {
     bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
@@ -307,4 +354,56 @@ suite('OsBluetoothDevicesSubpageTest', function() {
         deepLinkElement, getDeepActiveElement(),
         'Enable Fast Pair toggle should be focused for settingId=105.');
   });
+
+  test('Show saved devices link row when flag is true', async function() {
+    bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+    loadTimeData.overrideValues({isGuest: false, enableSavedDevicesFlag: true});
+    await init();
+
+    assertTrue(isVisible(bluetoothDevicesSubpage.shadowRoot.querySelector(
+        '#savedDevicesRowLink')));
+  });
+
+  test(
+      'Do not show saved devices link row when flag is false',
+      async function() {
+        bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+        loadTimeData.overrideValues(
+            {isGuest: false, enableSavedDevicesFlag: false});
+        await init();
+
+        assertFalse(isVisible(bluetoothDevicesSubpage.shadowRoot.querySelector(
+            '#savedDevicesRowLink')));
+      });
+
+  test('Do not show saved devices link row in guest mode', async function() {
+    bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+    loadTimeData.overrideValues({isGuest: true, enableSavedDevicesFlag: true});
+    await init();
+
+    assertFalse(isVisible(bluetoothDevicesSubpage.shadowRoot.querySelector(
+        '#savedDevicesRowLink')));
+  });
+
+  test('Single separator line when Fast Pair UI disabled', async function() {
+    bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+    loadTimeData.overrideValues({'enableFastPairFlag': false});
+    await init();
+
+    const sepLines = bluetoothDevicesSubpage.shadowRoot.querySelectorAll(
+        '.device-lists-separator');
+    assertEquals(sepLines.length, 1);
+  });
+
+  test(
+      'Greater than 1 separator line when Fast Pair UI enabled',
+      async function() {
+        bluetoothConfig.setSystemState(BluetoothSystemState.kEnabled);
+        loadTimeData.overrideValues({'enableFastPairFlag': true});
+        await init();
+
+        const sepLines = bluetoothDevicesSubpage.shadowRoot.querySelectorAll(
+            '.device-lists-separator');
+        assertGT(sepLines.length, 1);
+      });
 });

@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
@@ -136,12 +137,12 @@
   self.view.locationBarContainer.alpha = progress;
   self.view.separator.alpha = progress;
 
-  // When the locationBarContainer is hidden, show the |fakeOmniboxTarget|.
+  // When the locationBarContainer is hidden, show the `fakeOmniboxTarget`.
   if (progress == 0 && !self.view.fakeOmniboxTarget) {
     [self.view addFakeOmniboxTarget];
-    UITapGestureRecognizer* tapRecognizer =
-        [[UITapGestureRecognizer alloc] initWithTarget:self.dispatcher
-                                                action:@selector(focusOmnibox)];
+    UITapGestureRecognizer* tapRecognizer = [[UITapGestureRecognizer alloc]
+        initWithTarget:self.omniboxCommandsHandler
+                action:@selector(focusOmnibox)];
     [self.view.fakeOmniboxTarget addGestureRecognizer:tapRecognizer];
   } else if (progress > 0 && self.view.fakeOmniboxTarget) {
     [self.view removeFakeOmniboxTarget];
@@ -255,7 +256,7 @@
   // When this method is called when the toolbar is expanded, prevent the
   // color from changing, if necessary.
   BOOL isToolbarExpanded = self.view.expandedConstraints.firstObject.active;
-  if ([self isUpdatedPopupTreatment2Enabled] && isToolbarExpanded) {
+  if (IsOmniboxActionsVisualTreatment2() && isToolbarExpanded) {
     self.view.locationBarContainer.backgroundColor =
         self.buttonFactory.toolbarConfiguration
             .focusedLocationBarBackgroundColor;
@@ -289,7 +290,7 @@
   [NSLayoutConstraint activateConstraints:self.view.expandedConstraints];
   [self.view layoutIfNeeded];
 
-  if ([self isUpdatedPopupTreatment2Enabled]) {
+  if (IsOmniboxActionsVisualTreatment2()) {
     self.view.backgroundColor =
         self.buttonFactory.toolbarConfiguration.focusedBackgroundColor;
     self.view.locationBarContainer.backgroundColor =
@@ -308,7 +309,7 @@
   }
   [self.view layoutIfNeeded];
 
-  if ([self isUpdatedPopupTreatment2Enabled]) {
+  if (IsOmniboxActionsVisualTreatment2()) {
     self.view.backgroundColor =
         self.buttonFactory.toolbarConfiguration.backgroundColor;
     self.view.locationBarContainer.backgroundColor =
@@ -364,7 +365,7 @@
 }
 
 // Returns the desired height of the location bar, based on the fullscreen
-// |progress|.
+// `progress`.
 - (CGFloat)locationBarHeightForFullscreenProgress:(CGFloat)progress {
   CGFloat expandedHeight =
       LocationBarHeight(self.traitCollection.preferredContentSizeCategory);
@@ -376,7 +377,7 @@
 }
 
 // Returns the vertical margin to the location bar based on fullscreen
-// |progress|, aligned to the nearest pixel.
+// `progress`, aligned to the nearest pixel.
 - (CGFloat)verticalMarginForLocationBarForFullscreenProgress:(CGFloat)progress {
   // The vertical bottom margin for the location bar is such that the location
   // bar looks visually centered. However, the constraints are not geometrically
@@ -402,16 +403,6 @@
 // Exits fullscreen.
 - (void)exitFullscreen {
   [self.delegate exitFullscreen];
-}
-
-// Convenience helper for checking kIOSOmniboxUpdatedPopupUI flag being set to
-// Variation2 aka "UI treatment 2"
-- (BOOL)isUpdatedPopupTreatment2Enabled {
-  return base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI) &&
-         base::GetFieldTrialParamValueByFeature(
-             kIOSOmniboxUpdatedPopupUI,
-             kIOSOmniboxUpdatedPopupUIVariationName) ==
-             kIOSOmniboxUpdatedPopupUIVariation2;
 }
 
 @end

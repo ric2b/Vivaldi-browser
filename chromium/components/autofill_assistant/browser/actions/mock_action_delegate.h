@@ -25,6 +25,7 @@
 #include "components/autofill_assistant/browser/web/fake_element_store.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace password_manager {
 class PasswordChangeSuccessTracker;
@@ -103,6 +104,7 @@ class MockActionDelegate : public ActionDelegate {
       RetrieveElementFormAndFieldData,
       void(const Selector& selector,
            base::OnceCallback<void(const ClientStatus&,
+                                   content::RenderFrameHost* rfh,
                                    const autofill::FormData&,
                                    const autofill::FormFieldData&)> callback));
   MOCK_METHOD1(StoreScrolledToElement,
@@ -129,6 +131,7 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(Shutdown, void(bool show_feedback_chip));
   MOCK_METHOD0(Close, void());
   MOCK_METHOD0(Restart, void());
+  MOCK_CONST_METHOD0(GetMutableUserData, UserData*());
   MOCK_CONST_METHOD0(GetUserData, UserData*());
   MOCK_CONST_METHOD0(GetPersonalDataManager, autofill::PersonalDataManager*());
   MOCK_CONST_METHOD0(GetWebsiteLoginManager, WebsiteLoginManager*());
@@ -173,6 +176,12 @@ class MockActionDelegate : public ActionDelegate {
            base::RepeatingCallback<void(const FormProto::Result*)>
                changed_callback,
            base::OnceCallback<void(const ClientStatus&)> cancel_callback));
+  MOCK_METHOD2(ShowQrCodeScanUi,
+               void(std::unique_ptr<PromptQrCodeScanProto> qr_code_scan,
+                    base::OnceCallback<void(const ClientStatus&,
+                                            const absl::optional<ValueProto>&)>
+                        callback));
+  MOCK_METHOD0(ClearQrCodeScanUi, void());
   MOCK_CONST_METHOD0(GetUserModel, UserModel*());
   MOCK_METHOD1(WaitForWindowHeightChange,
                void(base::OnceCallback<void(const ClientStatus&)> callback));
@@ -229,6 +238,16 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_CONST_METHOD0(MustUseBackendData, bool());
   MOCK_METHOD1(MaybeSetPreviousAction,
                void(const ProcessedActionProto& processed_action));
+  MOCK_CONST_METHOD0(GetIntent, absl::optional<std::string>());
+  MOCK_CONST_METHOD0(GetLocale, const std::string());
+  MOCK_CONST_METHOD1(IsXmlSigned, bool(const std::string& xml_string));
+  MOCK_CONST_METHOD2(
+      ExtractValuesFromSingleTagXml,
+      const std::vector<std::string>(const std::string& xml_string,
+                                     const std::vector<std::string>& keys));
+  MOCK_METHOD2(ReportProgress,
+               void(const std::string& payload,
+                    base::OnceCallback<void(bool)> callback));
 
   base::WeakPtr<ActionDelegate> GetWeakPtr() const override {
     return weak_ptr_factory_.GetWeakPtr();
@@ -242,6 +261,7 @@ class MockActionDelegate : public ActionDelegate {
   FakeElementStore fake_element_store_;
   ClientSettings client_settings_;
   ProcessedActionStatusDetailsProto log_info_;
+  UserData user_data_;
 
   base::WeakPtrFactory<MockActionDelegate> weak_ptr_factory_{this};
 };

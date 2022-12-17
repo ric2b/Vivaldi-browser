@@ -12,6 +12,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
+#include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_serial_tracker.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
@@ -45,7 +46,7 @@ void WaylandTouch::Down(void* data,
   if (!surface)
     return;
 
-  WaylandTouch* touch = static_cast<WaylandTouch*>(data);
+  auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);
 
   touch->connection_->serial_tracker().UpdateSerial(wl::SerialType::kTouchPress,
@@ -56,7 +57,7 @@ void WaylandTouch::Down(void* data,
       gfx::PointF(wl_fixed_to_double(x), wl_fixed_to_double(y)), window);
   base::TimeTicks timestamp = base::TimeTicks() + base::Milliseconds(time);
   touch->delegate_->OnTouchPressEvent(window, location, timestamp, id,
-                                      Delegate::EventDispatchPolicy::kOnFrame);
+                                      wl::EventDispatchPolicy::kOnFrame);
 }
 
 void WaylandTouch::Up(void* data,
@@ -64,12 +65,22 @@ void WaylandTouch::Up(void* data,
                       uint32_t serial,
                       uint32_t time,
                       int32_t id) {
-  WaylandTouch* touch = static_cast<WaylandTouch*>(data);
+  auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);
 
+  // TODO(https://crbug.com/1353873): Gnome/Wayland, KDE and Weston compositors
+  // have a bug where wl_touch.up does not come accompanied by a respective
+  // wl_touch.frame event. On these particular set ups, dispatch the event
+  // immediately.
+  auto event_dispatch_policy =
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      wl::EventDispatchPolicy::kOnFrame;
+#else
+      wl::EventDispatchPolicy::kImmediate;
+#endif
+
   base::TimeTicks timestamp = base::TimeTicks() + base::Milliseconds(time);
-  touch->delegate_->OnTouchReleaseEvent(
-      timestamp, id, Delegate::EventDispatchPolicy::kOnFrame);
+  touch->delegate_->OnTouchReleaseEvent(timestamp, id, event_dispatch_policy);
 }
 
 void WaylandTouch::Motion(void* data,
@@ -78,8 +89,9 @@ void WaylandTouch::Motion(void* data,
                           int32_t id,
                           wl_fixed_t x,
                           wl_fixed_t y) {
-  WaylandTouch* touch = static_cast<WaylandTouch*>(data);
+  auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);
+
   const WaylandWindow* target = touch->delegate_->GetTouchTarget(id);
   if (!target) {
     LOG(WARNING) << "Touch event fired with wrong id";
@@ -89,18 +101,20 @@ void WaylandTouch::Motion(void* data,
       gfx::PointF(wl_fixed_to_double(x), wl_fixed_to_double(y)), target);
   base::TimeTicks timestamp = base::TimeTicks() + base::Milliseconds(time);
   touch->delegate_->OnTouchMotionEvent(location, timestamp, id,
-                                       Delegate::EventDispatchPolicy::kOnFrame);
+                                       wl::EventDispatchPolicy::kOnFrame);
 }
 
 void WaylandTouch::Cancel(void* data, wl_touch* obj) {
-  WaylandTouch* touch = static_cast<WaylandTouch*>(data);
+  auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);
+
   touch->delegate_->OnTouchCancelEvent();
 }
 
 void WaylandTouch::Frame(void* data, wl_touch* obj) {
   auto* touch = static_cast<WaylandTouch*>(data);
   DCHECK(touch);
+
   touch->delegate_->OnTouchFrame();
 }
 
@@ -123,7 +137,8 @@ void WaylandTouch::Tool(void* data,
                         struct zcr_touch_stylus_v2* obj,
                         uint32_t id,
                         uint32_t stylus_type) {
-  auto* pointer = static_cast<WaylandTouch*>(data);
+  auto* touch = static_cast<WaylandTouch*>(data);
+  DCHECK(touch);
 
   ui::EventPointerType pointer_type = ui::EventPointerType::kTouch;
   switch (stylus_type) {
@@ -137,7 +152,7 @@ void WaylandTouch::Tool(void* data,
       break;
   }
 
-  pointer->delegate_->OnTouchStylusToolChanged(id, pointer_type);
+  touch->delegate_->OnTouchStylusToolChanged(id, pointer_type);
 }
 
 // static
@@ -146,7 +161,10 @@ void WaylandTouch::Force(void* data,
                          uint32_t time,
                          uint32_t id,
                          wl_fixed_t force) {
-  NOTIMPLEMENTED_LOG_ONCE();
+  auto* touch = static_cast<WaylandTouch*>(data);
+  DCHECK(touch);
+
+  touch->delegate_->OnTouchStylusForceChanged(id, wl_fixed_to_double(force));
 }
 
 // static
@@ -156,7 +174,12 @@ void WaylandTouch::Tilt(void* data,
                         uint32_t id,
                         wl_fixed_t tilt_x,
                         wl_fixed_t tilt_y) {
-  NOTIMPLEMENTED_LOG_ONCE();
+  auto* touch = static_cast<WaylandTouch*>(data);
+  DCHECK(touch);
+
+  touch->delegate_->OnTouchStylusTiltChanged(
+      id,
+      gfx::Vector2dF(wl_fixed_to_double(tilt_x), wl_fixed_to_double(tilt_y)));
 }
 
 }  // namespace ui

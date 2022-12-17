@@ -199,9 +199,8 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
   // HistoryBackendNotifier:
   void NotifyFaviconsChanged(const std::set<GURL>& page_urls,
                              const GURL& icon_url) override {}
-  void NotifyURLVisited(ui::PageTransition transition,
-                        const URLRow& row,
-                        base::Time visit_time) override {}
+  void NotifyURLVisited(const URLRow& url_row,
+                        const VisitRow& visit_row) override {}
   void NotifyURLsModified(const URLRows& rows,
                           bool is_from_expiration) override {
     urls_modified_notifications_.push_back(
@@ -210,6 +209,7 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
   void NotifyURLsDeleted(DeletionInfo deletion_info) override {
     urls_deleted_notifications_.push_back(std::move(deletion_info));
   }
+  void NotifyVisitUpdated(const VisitRow& visit) override {}
   void NotifyVisitDeleted(const VisitRow& visit) override {}
 };
 

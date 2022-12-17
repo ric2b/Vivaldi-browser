@@ -15,6 +15,7 @@
 #include "ash/public/cpp/external_arc/message_center/arc_notification_manager.h"
 #include "ash/public/cpp/message_center/arc_notification_manager_delegate.h"
 #include "base/run_loop.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -26,7 +27,13 @@ namespace ash {
 
 namespace {
 
-const char kDummyNotificationKey[] = "DUMMY_NOTIFICATION_KEY";
+constexpr char kDummyNotificationKey[] = "DUMMY_NOTIFICATION_KEY";
+constexpr char kHistogramNameActionEnabled[] =
+    "Arc.Notifications.ActionEnabled";
+constexpr char kHistogramNameExpandState[] = "Arc.Notifications.ExpandState";
+constexpr char kHistogramNameStyle[] = "Arc.Notifications.Style";
+constexpr char kHistogramNameInlineReplyEnabled[] =
+    "Arc.Notifications.InlineReplyEnabled";
 
 class TestArcAppIdProvider : public ArcAppIdProvider {
  public:
@@ -322,6 +329,29 @@ TEST_F(ArcNotificationManagerTest, DoNotDisturbSyncInitialEnabledState) {
       arc_notifications_instance()->latest_do_not_disturb_status().is_null());
   EXPECT_TRUE(
       arc_notifications_instance()->latest_do_not_disturb_status()->enabled);
+}
+
+TEST_F(ArcNotificationManagerTest,
+       UmaMeticsPublishedOnlyWhenNotificationCreated) {
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectTotalCount(kHistogramNameActionEnabled, 0);
+  histogram_tester.ExpectTotalCount(kHistogramNameExpandState, 0);
+  histogram_tester.ExpectTotalCount(kHistogramNameStyle, 0);
+  histogram_tester.ExpectTotalCount(kHistogramNameInlineReplyEnabled, 0);
+
+  // Create notification
+  std::string key = CreateNotification();
+  histogram_tester.ExpectTotalCount(kHistogramNameActionEnabled, 1);
+  histogram_tester.ExpectTotalCount(kHistogramNameExpandState, 1);
+  histogram_tester.ExpectTotalCount(kHistogramNameStyle, 1);
+  histogram_tester.ExpectTotalCount(kHistogramNameInlineReplyEnabled, 1);
+
+  // Update notification
+  CreateNotificationWithKey(key);
+  histogram_tester.ExpectTotalCount(kHistogramNameActionEnabled, 1);
+  histogram_tester.ExpectTotalCount(kHistogramNameExpandState, 1);
+  histogram_tester.ExpectTotalCount(kHistogramNameStyle, 1);
+  histogram_tester.ExpectTotalCount(kHistogramNameInlineReplyEnabled, 1);
 }
 
 }  // namespace ash

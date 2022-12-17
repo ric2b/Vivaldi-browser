@@ -7,7 +7,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
-#include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy_helper.h"
 #include "chrome/browser/performance_manager/test_support/page_discarding_utils.h"
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
@@ -23,6 +22,10 @@ class HighEfficiencyModeTest
 
     feature_list_.InitAndEnableFeature(
         performance_manager::features::kHighEfficiencyModeAvailable);
+    // This is usually called when the profile is created. Fake it here since it
+    // doesn't happen in tests.
+    PageDiscardingHelper::GetFromGraph(graph())->SetNoDiscardPatternsForProfile(
+        static_cast<PageNode*>(page_node())->GetBrowserContextID(), {});
 
     auto policy = std::make_unique<HighEfficiencyModePolicy>();
     policy_ = policy.get();

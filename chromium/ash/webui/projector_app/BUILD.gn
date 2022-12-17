@@ -18,6 +18,8 @@ static_library("projector_app") {
     "projector_message_handler.h",
     "projector_oauth_token_fetcher.cc",
     "projector_oauth_token_fetcher.h",
+    "projector_screencast.cc",
+    "projector_screencast.h",
     "projector_xhr_sender.cc",
     "projector_xhr_sender.h",
     "trusted_projector_annotator_ui.cc",
@@ -88,4 +90,11 @@ source_set("unit_tests") {
     "//content/test:test_support",
     "//testing/gtest",
   ]
+}
+
+# Used to turn off tests that only work with our CIPD package e.g. loading ink.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+
+  flags = [ "ENABLE_CROS_PROJECTOR_APP=$enable_cros_projector_app" ]
 }

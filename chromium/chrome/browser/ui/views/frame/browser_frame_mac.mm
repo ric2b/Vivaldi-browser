@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
+
 #import "chrome/browser/ui/views/frame/browser_frame_mac.h"
 
 #import "base/mac/foundation_util.h"
@@ -18,6 +20,7 @@
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -69,7 +72,7 @@ bool ShouldHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event) {
 // BrowserWindowTouchBarController.
 @interface BrowserWindowTouchBarViewsDelegate
     : NSObject<WindowTouchBarDelegate> {
-  Browser* _browser;  // Weak.
+  raw_ptr<Browser> _browser;  // Weak.
   NSWindow* _window;  // Weak.
   base::scoped_nsobject<BrowserWindowTouchBarController> _touchBarController;
 }
@@ -229,9 +232,15 @@ void BrowserFrameMac::ValidateUserInterfaceItem(
       break;
     }
     case IDC_TOGGLE_FULLSCREEN_TOOLBAR: {
-      PrefService* prefs = browser->profile()->GetPrefs();
-      result->new_toggle_state =
-          prefs->GetBoolean(prefs::kShowFullscreenToolbar);
+      web_app::AppBrowserController* app_controller = browser->app_controller();
+      if (app_controller) {
+        result->new_toggle_state =
+            app_controller->AlwaysShowToolbarInFullscreen();
+      } else {
+        PrefService* prefs = browser->profile()->GetPrefs();
+        result->new_toggle_state =
+            prefs->GetBoolean(prefs::kShowFullscreenToolbar);
+      }
       break;
     }
     case IDC_SHOW_FULL_URLS: {
@@ -433,6 +442,10 @@ bool BrowserFrameMac::HandleKeyboardEvent(
 }
 
 bool BrowserFrameMac::ShouldRestorePreviousBrowserWidgetState() const {
+  return true;
+}
+
+bool BrowserFrameMac::ShouldUseInitialVisibleOnAllWorkspaces() const {
   return true;
 }
 

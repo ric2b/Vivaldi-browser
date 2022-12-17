@@ -18,8 +18,8 @@ size_t GetMemorySectionSize(void* address) {
   if (!::VirtualQuery(address, &memory_info, sizeof(memory_info)))
     return 0;
   return memory_info.RegionSize -
-         (static_cast<char*>(address) -
-          static_cast<char*>(memory_info.AllocationBase));
+         static_cast<size_t>(static_cast<char*>(address) -
+                             static_cast<char*>(memory_info.AllocationBase));
 }
 }  // namespace
 
@@ -37,7 +37,7 @@ absl::optional<span<uint8_t>> PlatformSharedMemoryMapper::Map(
         static_cast<DWORD>(offset >> 32), static_cast<DWORD>(offset), size);
     if (address)
       break;
-    ReleaseReservation();
+    partition_alloc::ReleaseReservation();
   }
   if (!address) {
     DPLOG(ERROR) << "Failed executing MapViewOfFile";

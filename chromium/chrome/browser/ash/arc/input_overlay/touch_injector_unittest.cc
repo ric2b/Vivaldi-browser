@@ -266,7 +266,7 @@ class TouchInjectorTest : public views::ViewsTestBase {
 
   aura::Window* root_window() { return GetContext(); }
 
-  input_overlay::test::EventCapturer event_capturer_;
+  test::EventCapturer event_capturer_;
   std::unique_ptr<ui::test::EventGenerator> event_generator_;
 
   std::unique_ptr<views::Widget> widget_;
@@ -307,9 +307,9 @@ class TouchInjectorTest : public views::ViewsTestBase {
 };
 
 TEST_F(TouchInjectorTest, TestEventRewriterActionTapKey) {
-  base::JSONReader::ValueWithError json_value =
+  auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
-  injector_->ParseActions(json_value.value.value());
+  injector_->ParseActions(*json_value);
   // Extra Action with the same ID is removed.
   EXPECT_EQ(2, (int)injector_->actions().size());
   auto* actionA = injector_->actions()[0].get();
@@ -337,7 +337,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionTapKey) {
   EXPECT_TRUE(IsPointsEqual(expectA1, event->root_location_f()));
   EXPECT_EQ(0, event->pointer_details().id);
   // Next touch position.
-  EXPECT_EQ(1, actionA->current_position_index());
+  EXPECT_EQ(1, actionA->current_position_idx());
   // Unregister the event rewriter to see if extra events are sent.
   injector_->UnRegisterEventRewriter();
 
@@ -461,10 +461,10 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionTapKey) {
 
 TEST_F(TouchInjectorTest, TestEventRewriterActionTapMouse) {
   injector_->set_enable_mouse_lock(true);
-  base::JSONReader::ValueWithError json_value =
+  auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapMouse);
-  EXPECT_FALSE(!json_value.value || !json_value.value->is_dict());
-  injector_->ParseActions(json_value.value.value());
+  EXPECT_TRUE(json_value.has_value() && json_value->is_dict());
+  injector_->ParseActions(*json_value);
   EXPECT_EQ(2u, injector_->actions().size());
   injector_->RegisterEventRewriter();
 
@@ -524,9 +524,9 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionTapMouse) {
 }
 
 TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
-  base::JSONReader::ValueWithError json_value =
+  auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionMoveKey);
-  injector_->ParseActions(json_value.value.value());
+  injector_->ParseActions(*json_value);
   EXPECT_EQ(1u, injector_->actions().size());
   auto* action = injector_->actions()[0].get();
   injector_->RegisterEventRewriter();
@@ -603,7 +603,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
   event_generator_->PressKey(ui::VKEY_A, ui::EF_NONE, 1 /* keyboard id */);
   EXPECT_TRUE(*(action->touch_id()) == 0);
   EXPECT_TRUE(event_capturer_.key_events().empty());
-  task_environment()->FastForwardBy(input_overlay::kSendTouchMoveDelay);
+  task_environment()->FastForwardBy(kSendTouchMoveDelay);
   EXPECT_TRUE((int)event_capturer_.touch_events().size() == 2);
   // Generate touch down event.
   event = event_capturer_.touch_events()[0].get();
@@ -620,10 +620,10 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveKey) {
 
 TEST_F(TouchInjectorTest, TestEventRewriterActionMoveMouse) {
   injector_->set_enable_mouse_lock(true);
-  base::JSONReader::ValueWithError json_value =
+  auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionMoveMouse);
-  EXPECT_FALSE(!json_value.value || !json_value.value->is_dict());
-  injector_->ParseActions(json_value.value.value());
+  EXPECT_TRUE(json_value.has_value() && json_value->is_dict());
+  injector_->ParseActions(*json_value);
   EXPECT_EQ(2u, injector_->actions().size());
   injector_->RegisterEventRewriter();
   auto* hover_action = static_cast<ActionMove*>(injector_->actions()[0].get());
@@ -634,8 +634,7 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveMouse) {
   EXPECT_TRUE(hover_binding->mouse_types().contains(ui::ET_MOUSE_EXITED));
   EXPECT_EQ(0, hover_binding->mouse_flags());
 
-  auto* right_action =
-      static_cast<input_overlay::ActionMove*>(injector_->actions()[1].get());
+  auto* right_action = static_cast<ActionMove*>(injector_->actions()[1].get());
   auto* right_binding = right_action->current_binding();
   EXPECT_EQ(right_binding->mouse_action(), MouseAction::SECONDARY_DRAG_MOVE);
   EXPECT_TRUE(right_binding->mouse_types().contains(ui::ET_MOUSE_PRESSED));
@@ -701,9 +700,9 @@ TEST_F(TouchInjectorTest, TestEventRewriterActionMoveMouse) {
 
 TEST_F(TouchInjectorTest, TestEventRewriterTouchToTouch) {
   // Setup.
-  base::JSONReader::ValueWithError json_value =
+  auto json_value =
       base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
-  injector_->ParseActions(json_value.value.value());
+  injector_->ParseActions(*json_value);
   injector_->RegisterEventRewriter();
 
   // Verify initial states.

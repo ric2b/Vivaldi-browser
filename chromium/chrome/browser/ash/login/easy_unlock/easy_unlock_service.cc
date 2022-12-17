@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/login/auth/user_context.h"
+#include "ash/components/login/auth/public/user_context.h"
 #include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/proximity_auth/proximity_auth_local_state_pref_manager.h"
 #include "ash/components/proximity_auth/proximity_auth_profile_pref_manager.h"
@@ -40,7 +40,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "components/account_id/account_id.h"
@@ -266,12 +266,10 @@ bool EasyUnlockService::GetPersistedHardlockState(
   if (!local_state)
     return false;
 
-  const base::Value* dict =
-      local_state->GetDictionary(prefs::kEasyUnlockHardlockState);
-  if (!dict)
-    return false;
+  const base::Value::Dict& dict =
+      local_state->GetValueDict(prefs::kEasyUnlockHardlockState);
 
-  absl::optional<int> state_int = dict->FindIntKey(account_id.GetUserEmail());
+  absl::optional<int> state_int = dict.FindInt(account_id.GetUserEmail());
   if (!state_int.has_value())
     return false;
 

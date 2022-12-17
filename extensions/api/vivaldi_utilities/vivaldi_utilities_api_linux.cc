@@ -45,7 +45,7 @@ std::map<char, std::string> dateFormatMods = {
     {'m', "MM"},       {'M', "mm"},   {'p', "A"},          {'S', "ss"},
     {'T', "HH:mm:ss"}, {'u', "E"},    {'w', "d"},          {'W', "WW"},
     {'x', "ll"},       {'X', "LTS"},  {'y', "YY"},         {'Y', "YYYY"},
-    {'z', ""},         {'Z', ""},     {'f', "SSS"},        {'r', "HH:mm:ss A"}};
+    {'z', ""},         {'Z', ""},     {'f', "SSS"},        {'r', "hh:mm:ss A"}};
 
 // TODO: Three known languages that still might need special treatment are
 // Tongan, Farsi and Vietnamese, out of 92 tested so far.

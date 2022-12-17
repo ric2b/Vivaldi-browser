@@ -5,9 +5,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
-#include "chrome/browser/cart/cart_db_content.pb.h"
 #include "chrome/browser/cart/cart_service.h"
-#include "chrome/browser/persisted_state_db/profile_proto_db.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -15,10 +13,12 @@
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/commerce/core/proto/cart_db_content.pb.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
+#include "components/session_proto_db/session_proto_db.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
@@ -44,7 +44,7 @@ const char kFakeMerchantURLB[] = "https://www.bar.com/cart.html";
 const char kMockMerchant[] = "walmart.com";
 const char kMockMerchantURL[] = "https://www.walmart.com";
 using ShoppingCarts =
-    std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>;
+    std::vector<SessionProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>;
 }  // namespace
 
 std::unique_ptr<net::test_server::HttpResponse> BasicResponse(
@@ -175,7 +175,14 @@ IN_PROC_BROWSER_TEST_F(CartServiceBrowserTest, TestNotShowSkippedMerchants) {
   run_loop[5].Run();
 }
 
-IN_PROC_BROWSER_TEST_F(CartServiceBrowserTest, TestNavigationUKMCollection) {
+// TODO(crbug.com/1246293): Flaky on Linux, ChromeOS, and Mac.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+#define MAYBE_TestNavigationUKMCollection DISABLED_TestNavigationUKMCollection
+#else
+#define MAYBE_TestNavigationUKMCollection TestNavigationUKMCollection
+#endif
+IN_PROC_BROWSER_TEST_F(CartServiceBrowserTest,
+                       MAYBE_TestNavigationUKMCollection) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   GURL foo_url(kFakeMerchantURLA);
   GURL bar_url(kFakeMerchantURLB);

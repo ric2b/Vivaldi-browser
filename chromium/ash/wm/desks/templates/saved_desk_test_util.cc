@@ -9,6 +9,7 @@
 #include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/desks/expanded_desks_bar_button.h"
 #include "ash/wm/desks/templates/saved_desk_dialog_controller.h"
+#include "ash/wm/desks/templates/saved_desk_feedback_button.h"
 #include "ash/wm/desks/templates/saved_desk_item_view.h"
 #include "ash/wm/desks/templates/saved_desk_library_view.h"
 #include "ash/wm/desks/templates/saved_desk_presenter.h"
@@ -77,6 +78,18 @@ SavedDeskPresenterTestApi::SavedDeskPresenterTestApi(
 }
 
 SavedDeskPresenterTestApi::~SavedDeskPresenterTestApi() = default;
+
+// static
+void SavedDeskPresenterTestApi::WaitForSaveAndRecallBlockingDialog() {
+  base::RunLoop loop;
+  SavedDeskPresenter::SetModalDialogCallbackForTesting(loop.QuitClosure());
+  loop.Run();
+}
+
+// static
+void SavedDeskPresenterTestApi::FireWindowWatcherTimer() {
+  SavedDeskPresenter::FireWindowWatcherTimerForTesting();
+}
 
 void SavedDeskPresenterTestApi::SetOnUpdateUiClosure(
     base::OnceClosure closure) {
@@ -198,6 +211,11 @@ views::Button* GetSaveDeskAsTemplateButton() {
   return overview_grid->GetSaveDeskAsTemplateButton();
 }
 
+views::Button* GetSaveDeskForLaterButton() {
+  const auto* overview_grid = GetPrimaryOverviewGrid();
+  return overview_grid ? overview_grid->GetSaveDeskForLaterButton() : nullptr;
+}
+
 views::Button* GetTemplateItemButton(int index) {
   auto* item = GetItemViewFromTemplatesGrid(index);
   return item ? static_cast<views::Button*>(item) : nullptr;
@@ -216,6 +234,15 @@ views::Button* GetSavedDeskDialogAcceptButton() {
   if (!dialog_widget)
     return nullptr;
   return dialog_widget->widget_delegate()->AsDialogDelegate()->GetOkButton();
+}
+
+FeedbackButton* GetSavedDeskFeedbackButton() {
+  const auto* overview_grid = GetPrimaryOverviewGrid();
+  if (!overview_grid)
+    return nullptr;
+  auto* saved_desk_library_view = overview_grid->GetSavedDeskLibraryView();
+  return saved_desk_library_view ? saved_desk_library_view->feedback_button()
+                                 : nullptr;
 }
 
 void WaitForDesksTemplatesUI() {

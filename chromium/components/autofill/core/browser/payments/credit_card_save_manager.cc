@@ -283,10 +283,16 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
 
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 
+  int save_card_ui_experiment_arm =
+      features::kAutofillSaveCardUiExperimentSelectorInNumber.Get();
+
   // Adding the Save Card UI Experiment to the active experiments in upload
-  // request if the experiment is active.
+  // request if the experiment is active. If 3rd save card ui experiment, aka
+  // Current with Avatar and Email, is selected then we would not add
+  // AutofillSaveCardUiExperiment to the active experiments list, as we want the
+  // current footer to be displayed.
   if (base::FeatureList::IsEnabled(features::kAutofillSaveCardUiExperiment) &&
-      features::kAutofillSaveCardUiExperimentSelectorInNumber.Get() != 0) {
+      (save_card_ui_experiment_arm == 1 || save_card_ui_experiment_arm == 2)) {
     upload_request_.active_experiments.push_back(
         "AutofillSaveCardUiExperiment");
   }
@@ -1021,18 +1027,17 @@ void CreditCardSaveManager::LogCardUploadDecisions(
 void CreditCardSaveManager::LogCardUploadDecisionsToAutofillInternals(
     int upload_decision_metrics) {
   LogManager* log_manager = client_->GetLogManager();
-  if (!log_manager)
-    return;
 
   auto final_decision =
       (upload_decision_metrics_ & AutofillMetrics::UPLOAD_OFFERED)
           ? LogMessage::kCardUploadDecisionUploadOffered
           : LogMessage::kCardUploadDecisionUploadNotOffered;
 
-  auto buffer = log_manager->Log();
-  buffer << LoggingScope::kCardUploadDecision << final_decision;
-  buffer << Tag{"div"} << Attrib{"class", "form"} << Tag{"tr"} << Tag{"td"}
-         << "Decision Metrics:" << CTag{"td"} << Tag{"td"} << Tag{"table"};
+  LogBuffer buffer(IsLoggingActive(log_manager));
+  LOG_AF(buffer) << LoggingScope::kCardUploadDecision << final_decision;
+  LOG_AF(buffer) << Tag{"div"} << Attrib{"class", "form"} << Tag{"tr"}
+                 << Tag{"td"} << "Decision Metrics:" << CTag{"td"} << Tag{"td"}
+                 << Tag{"table"};
 
   for (int i = 0; i < AutofillMetrics::kNumCardUploadDecisionMetrics; i++) {
     AutofillMetrics::CardUploadDecisionMetric currentBitmaskValue =
@@ -1100,9 +1105,10 @@ void CreditCardSaveManager::LogCardUploadDecisionsToAutofillInternals(
         result = "UPLOAD_NOT_OFFERED_INVALID_LEGAL_MESSAGE";
         break;
     }
-    buffer << Tr{} << result;
+    LOG_AF(buffer) << Tr{} << result;
   }
-  buffer << CTag{"table"} << CTag{"td"} << CTag{"tr"} << CTag{"div"};
+  LOG_AF(buffer) << CTag{"table"} << CTag{"td"} << CTag{"tr"} << CTag{"div"};
+  LOG_AF(log_manager) << std::move(buffer);
 }
 
 void CreditCardSaveManager::LogSaveCardRequestExpirationDateReasonMetric() {

@@ -17,7 +17,6 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/public/renderer/render_view.h"
 #include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/extension.h"
 #include "extensions/renderer/script_context.h"
@@ -184,10 +183,11 @@ void GuestViewInternalCustomBindings::AttachIframeGuest(
   content::RenderFrame* render_frame = GetRenderFrame(args[3]);
   RenderFrameStatus render_frame_status(render_frame);
 
-  std::unique_ptr<base::DictionaryValue> params = base::DictionaryValue::From(
-      content::V8ValueConverter::Create()->FromV8Value(
-          args[2], context()->v8_context()));
+  std::unique_ptr<base::Value> params =
+      content::V8ValueConverter::Create()->FromV8Value(args[2],
+                                                       context()->v8_context());
   CHECK(params);
+  CHECK(params->is_dict());
 
   if (!render_frame_status.is_ok())
     return;
@@ -220,7 +220,7 @@ void GuestViewInternalCustomBindings::AttachIframeGuest(
   std::unique_ptr<guest_view::GuestViewAttachRequest> request =
       std::make_unique<guest_view::GuestViewAttachRequest>(
           guest_view_container, render_frame->GetRoutingID(), guest_instance_id,
-          std::move(params),
+          std::move(params->GetDict()),
           args.Length() == (num_required_params + 1)
               ? args[num_required_params].As<v8::Function>()
               : v8::Local<v8::Function>(),

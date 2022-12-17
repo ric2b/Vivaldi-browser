@@ -264,7 +264,8 @@ class BaseSearchProviderTest : public testing::TestWithParam<bool>,
 
   // AutocompleteProviderListener:
   // If we're waiting for the provider to finish, this exits the message loop.
-  void OnProviderUpdate(bool updated_matches) override;
+  void OnProviderUpdate(bool updated_matches,
+                        const AutocompleteProvider* provider) override;
 
   // Runs a nested run loop until provider_ is done. The message loop is
   // exited by way of OnProviderUpdate.
@@ -462,7 +463,9 @@ void BaseSearchProviderTest::RunTest(TestData* cases,
   }
 }
 
-void BaseSearchProviderTest::OnProviderUpdate(bool updated_matches) {
+void BaseSearchProviderTest::OnProviderUpdate(
+    bool updated_matches,
+    const AutocompleteProvider* provider) {
   if (run_loop_ && provider_->done()) {
     run_loop_->Quit();
     run_loop_ = nullptr;
@@ -3404,7 +3407,7 @@ TEST_P(SearchProviderTest, ParseDeletionUrl) {
   }
 }
 
-TEST_P(SearchProviderTest, CanSendURL) {
+TEST_P(SearchProviderTest, CanSendRequestWithURL) {
   TemplateURLData template_url_data;
   template_url_data.SetShortName(u"t");
   template_url_data.SetURL("http://www.google.com/{searchTerms}");
@@ -3413,68 +3416,68 @@ TEST_P(SearchProviderTest, CanSendURL) {
   TemplateURL google_template_url(template_url_data);
 
   // All conditions should be met.
-  EXPECT_TRUE(SearchProvider::CanSendURL(
+  EXPECT_TRUE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       true));
 
   // Invalid page URL.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("badpageurl"), GURL("https://www.google.com/complete/search"),
       &google_template_url, metrics::OmniboxEventProto::OTHER,
       SearchTermsData(), client_.get(), true));
 
   // Invalid page classification.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::INSTANT_NTP_WITH_FAKEBOX_AS_STARTING_FOCUS,
       SearchTermsData(), client_.get(), true));
 
   // Invalid page classification.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS,
       SearchTermsData(), client_.get(), true));
 
   // Invalid page classification.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::NTP, SearchTermsData(), client_.get(), true));
 
   // Invalid page classification.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OBSOLETE_INSTANT_NTP, SearchTermsData(),
       client_.get(), true));
 
   // HTTPS page URL on same domain as provider.
-  EXPECT_TRUE(SearchProvider::CanSendURL(
+  EXPECT_TRUE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("https://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       true));
 
   // Non-HTTP[S] page URL on same domain as provider.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("ftp://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       true));
 
   // Non-HTTP page URL on different domain.
-  EXPECT_TRUE(SearchProvider::CanSendURL(
+  EXPECT_TRUE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("https://www.notgoogle.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       true));
 
   // Non-HTTPS provider.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("http://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
@@ -3482,7 +3485,7 @@ TEST_P(SearchProviderTest, CanSendURL) {
 
   // Suggest disabled.
   profile_->GetPrefs()->SetBoolean(prefs::kSearchSuggestEnabled, false);
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
@@ -3492,7 +3495,7 @@ TEST_P(SearchProviderTest, CanSendURL) {
   // Incognito.
   ChromeAutocompleteProviderClient client_incognito(
       profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true));
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), &client_incognito,
@@ -3503,25 +3506,25 @@ TEST_P(SearchProviderTest, CanSendURL) {
   // empty.
   client_->set_is_personalized_url_data_collection_active(false);
   // Different origin, with search terms.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("https://www.different-origin.com"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       true));
   // Same origin, with search terms.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("https://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       true));
   // Different origin, empty search terms.
-  EXPECT_FALSE(SearchProvider::CanSendURL(
+  EXPECT_FALSE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("https://www.different-origin.com"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
       false));
   // Same origin, empty search terms.
-  EXPECT_TRUE(SearchProvider::CanSendURL(
+  EXPECT_TRUE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("https://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),
@@ -3529,7 +3532,7 @@ TEST_P(SearchProviderTest, CanSendURL) {
   client_->set_is_personalized_url_data_collection_active(true);
 
   // Check that there were no side effects from previous tests.
-  EXPECT_TRUE(SearchProvider::CanSendURL(
+  EXPECT_TRUE(SearchProvider::CanSendCurrentPageURLInRequest(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), client_.get(),

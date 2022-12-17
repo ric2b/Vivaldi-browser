@@ -27,20 +27,28 @@ namespace {
 
 class CountingAXTreeObserver : public ui::AXTreeObserver {
  public:
-  CountingAXTreeObserver() {}
-  ~CountingAXTreeObserver() override {}
+  CountingAXTreeObserver() = default;
+  ~CountingAXTreeObserver() override = default;
+  CountingAXTreeObserver(const CountingAXTreeObserver&) = delete;
+  CountingAXTreeObserver& operator=(const CountingAXTreeObserver&) = delete;
 
+  int reparent_count() { return reparent_count_; }
   int update_count() { return update_count_; }
   int node_count() { return node_count_; }
 
  private:
+  void OnNodeReparented(ui::AXTree* tree, ui::AXNode* node) override {
+    ++reparent_count_;
+  }
+
   void OnAtomicUpdateFinished(ui::AXTree* tree,
                               bool root_changed,
                               const std::vector<Change>& changes) override {
-    update_count_++;
+    ++update_count_;
     node_count_ += static_cast<int>(changes.size());
   }
 
+  int reparent_count_ = 0;
   int update_count_ = 0;
   int node_count_ = 0;
 };
@@ -59,21 +67,20 @@ class BrowserAccessibilityManagerTest : public testing::Test {
   ~BrowserAccessibilityManagerTest() override = default;
 
  protected:
+  void SetUp() override;
+
   std::unique_ptr<TestBrowserAccessibilityDelegate>
       test_browser_accessibility_delegate_;
   const content::BrowserTaskEnvironment task_environment_;
-
- private:
-  void SetUp() override;
 };
 
 void BrowserAccessibilityManagerTest::SetUp() {
+  testing::Test::SetUp();
   test_browser_accessibility_delegate_ =
       std::make_unique<TestBrowserAccessibilityDelegate>();
 }
 
-// Temporarily disabled due to bug http://crbug.com/765490
-TEST_F(BrowserAccessibilityManagerTest, DISABLED_TestFatalError) {
+TEST_F(BrowserAccessibilityManagerTest, TestErrorOnCreateIsFatal) {
   // Test that BrowserAccessibilityManager raises a fatal error
   // (which will crash the renderer) if the same id is used in
   // two places in the tree.
@@ -85,42 +92,52 @@ TEST_F(BrowserAccessibilityManagerTest, DISABLED_TestFatalError) {
   root.child_ids.push_back(2);
 
   std::unique_ptr<BrowserAccessibilityManager> manager;
-  ASSERT_FALSE(test_browser_accessibility_delegate_->got_fatal_error());
-  manager.reset(BrowserAccessibilityManager::Create(
-      MakeAXTreeUpdate(root), test_browser_accessibility_delegate_.get()));
-  ASSERT_TRUE(test_browser_accessibility_delegate_->got_fatal_error());
+  EXPECT_DEATH_IF_SUPPORTED(
+      manager.reset(BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root), test_browser_accessibility_delegate_.get())),
+      "Node 1 has duplicate child id 2");
+}
 
-  ui::AXNodeData root2;
-  root2.id = 1;
-  root2.role = ax::mojom::Role::kRootWebArea;
-  root2.child_ids.push_back(2);
-  root2.child_ids.push_back(3);
+TEST_F(BrowserAccessibilityManagerTest, TestErrorOnUpdate) {
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
 
-  ui::AXNodeData child1;
-  child1.id = 2;
-  child1.child_ids.push_back(4);
-  child1.child_ids.push_back(5);
+  ui::AXNodeData node2;
+  node2.id = 2;
+  root.child_ids.push_back(2);
 
-  ui::AXNodeData child2;
-  child2.id = 3;
-  child2.child_ids.push_back(6);
-  child2.child_ids.push_back(5);  // Duplicate
+  ui::AXNodeData node3;
+  node3.id = 3;
+  root.child_ids.push_back(3);
 
-  ui::AXNodeData grandchild4;
-  grandchild4.id = 4;
+  ui::AXNodeData node4;
+  node4.id = 4;
+  node3.child_ids.push_back(4);
 
-  ui::AXNodeData grandchild5;
-  grandchild5.id = 5;
+  ui::AXNodeData node5;
+  node5.id = 5;
+  root.child_ids.push_back(5);
 
-  ui::AXNodeData grandchild6;
-  grandchild6.id = 6;
+  std::unique_ptr<BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root, node2, node3, node4, node5),
+          test_browser_accessibility_delegate_.get()));
 
-  test_browser_accessibility_delegate_->reset_got_fatal_error();
-  manager.reset(BrowserAccessibilityManager::Create(
-      MakeAXTreeUpdate(root2, child1, child2, grandchild4, grandchild5,
-                       grandchild6),
-      test_browser_accessibility_delegate_.get()));
-  ASSERT_TRUE(test_browser_accessibility_delegate_->got_fatal_error());
+  // node4 has two child ids now.
+  node4.child_ids.push_back(5);
+  node4.child_ids.push_back(5);
+  ui::AXTreeUpdate update = MakeAXTreeUpdate(node4, node5);
+  AXEventNotificationDetails events;
+  events.updates = {update};
+
+#if defined(AX_FAIL_FAST_BUILD)
+  // Update errors are fatal in AX_FAIL_FAST_BUILD builds.
+  EXPECT_DEATH_IF_SUPPORTED(manager->OnAccessibilityEvents(events),
+                            "Node 4 has duplicate child id 5");
+#else
+  ASSERT_FALSE(manager->OnAccessibilityEvents(events));
+#endif
 }
 
 // This test depends on hypertext, which is only used on
@@ -1338,11 +1355,10 @@ TEST_F(BrowserAccessibilityManagerTest, TreeUpdatesAreMergedWhenPossible) {
   tree.nodes[3].id = 4;
   tree.nodes[3].role = ax::mojom::Role::kMenuItemRadio;
 
+  CountingAXTreeObserver observer;
   std::unique_ptr<BrowserAccessibilityManager> manager(
       BrowserAccessibilityManager::Create(
           tree, test_browser_accessibility_delegate_.get()));
-
-  CountingAXTreeObserver observer;
   manager->ax_tree()->AddObserver(&observer);
 
   // Update each of the children using separate AXTreeUpdates.
@@ -1367,9 +1383,6 @@ TEST_F(BrowserAccessibilityManagerTest, TreeUpdatesAreMergedWhenPossible) {
             manager->GetFromID(2)->GetRole());
   EXPECT_EQ(ax::mojom::Role::kMenuItemRadio, manager->GetFromID(3)->GetRole());
   EXPECT_EQ(ax::mojom::Role::kMenuItem, manager->GetFromID(4)->GetRole());
-
-  // Remove the observer before the manager is destroyed.
-  manager->ax_tree()->RemoveObserver(&observer);
 }
 
 TEST_F(BrowserAccessibilityManagerTest, TestHitTestScaled) {
@@ -1408,25 +1421,23 @@ TEST_F(BrowserAccessibilityManagerTest, TestHitTestScaled) {
   ui::AXNodeData parent_childtree;
   parent_childtree.id = 3;
   parent_childtree.AddChildTreeId(child_update.tree_data.tree_id);
+  parent_childtree.role = ax::mojom::Role::kGenericContainer;
   parent_childtree.SetName("parent_childtree");
   parent_childtree.relative_bounds.bounds = gfx::RectF(100, 100, 100, 100);
 
   ui::AXTreeUpdate parent_update =
       MakeAXTreeUpdate(parent_root, parent_child, parent_childtree);
 
-  // Link the child tree to its parent.
+  // Link the child trees to their parent trees.
   child_update.tree_data.parent_tree_id = parent_update.tree_data.tree_id;
 
   // Create the two managers.
   std::unique_ptr<BrowserAccessibilityManager> parent_manager(
-      BrowserAccessibilityManager::Create(
-          parent_update, test_browser_accessibility_delegate_.get()));
+      BrowserAccessibilityManager::Create(parent_update, nullptr));
 
   std::unique_ptr<BrowserAccessibilityManager> child_manager(
-      BrowserAccessibilityManager::Create(
-          child_update, test_browser_accessibility_delegate_.get()));
+      BrowserAccessibilityManager::Create(child_update, nullptr));
 
-  // Verify that they're properly connected.
   ASSERT_EQ(parent_manager.get(), child_manager->GetRootManager());
 
   // Set scaling factor for testing to be 200%
@@ -1584,31 +1595,42 @@ TEST_F(BrowserAccessibilityManagerTest, TestApproximateHitTestCache) {
 TEST_F(BrowserAccessibilityManagerTest, TestOnNodeReparented) {
   ui::AXNodeData root;
   root.id = 1;
-  root.child_ids = {2, 3};
+  root.role = ax::mojom::Role::kRootWebArea;
 
   ui::AXNodeData child1;
+  child1.role = ax::mojom::Role::kGenericContainer;
   child1.id = 2;
 
   ui::AXNodeData child2;
+  child2.role = ax::mojom::Role::kGenericContainer;
   child2.id = 3;
 
-  ui::AXTreeUpdate initial_state = MakeAXTreeUpdate(root, child1, child2);
+  root.child_ids = {child1.id, child2.id};
 
-  // Create manager.
+  const ui::AXTreeUpdate update1 = MakeAXTreeUpdate(root, child1, child2);
+  CountingAXTreeObserver observer;
   std::unique_ptr<BrowserAccessibilityManager> manager(
       BrowserAccessibilityManager::Create(
-          initial_state, test_browser_accessibility_delegate_.get()));
+          update1, test_browser_accessibility_delegate_.get()));
+  manager->ax_tree()->AddObserver(&observer);
+  ASSERT_EQ(0, observer.reparent_count());
+  ASSERT_EQ(0, observer.node_count());
 
   // Reparenting a child found in the tree should not crash.
-  root.child_ids = {2};
-  child1.child_ids = {3};
-  ui::AXTreeUpdate update = MakeAXTreeUpdate(root, child1, child2);
-  ui::AXTree tree(update);
-  manager->OnNodeReparented(&tree, tree.GetFromId(3));
+  root.child_ids = {child1.id};
+  child1.child_ids = {child2.id};
+  const ui::AXTreeUpdate update2 = MakeAXTreeUpdate(root, child1, child2);
+  manager->ax_tree()->Unserialize(update2);
+  EXPECT_EQ(1, observer.reparent_count());
+  EXPECT_EQ(3, observer.node_count());
 
-  // Reparenting a new child not found in the tree should not crash.
-  ui::AXNode child3(nullptr, nullptr, 4, 0);
-  manager->OnNodeReparented(&tree, &child3);
+  // Reparenting a new child that is not found in the tree should not crash.
+  ui::AXNode child3(manager->ax_tree(), /* parent */ nullptr, /* id */ 4,
+                    /* index_in_parent */ 0u);
+  manager->OnNodeReparented(manager->ax_tree(), &child3);
+  // We avoid checking the observer on purpose, since reparenting a non-existent
+  // node should not trigger any tree observers. The node is not in the tree,
+  // hence the normal tree update process cannot be followed.
 }
 
 }  // namespace content

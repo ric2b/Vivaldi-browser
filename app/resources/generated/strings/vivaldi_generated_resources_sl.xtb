@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Prekinitev mirovanja</translation>
 <translation id="119944043368869598">Počisti vse</translation>
 <translation id="1221825588892235038">Samo izbor</translation>
+<translation id="1234736487471201993">Ustvari QR kodo za to sliko</translation>
 <translation id="1244303850296295656">Napaka razširitve</translation>
 <translation id="125220115284141797">Privzeto</translation>
 <translation id="1297175357211070620">Cilj</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Predvajanje zavihka</translation>
 <translation id="2150139952286079145">Iskanje ciljev</translation>
 <translation id="215753907730220065">Izhod iz celozaslonskega načina</translation>
+<translation id="2158475082070321257">Kopiraj povezavo do poudarka</translation>
 <translation id="2177950615300672361">Zavihek za način brez beleženja zgodovine: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul »Native Client«: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Prilepi kot navadno besedilo</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Spletna mesta bodo morda morala prepoznati tudi vašo napravo z identifikatorjem</translation>
 <translation id="2445081178310039857">Potreben je korenski imenik razširitve.</translation>
 <translation id="2470702053775288986">Nepodprte razširitve onemogočene</translation>
-<translation id="2476578072172137802">Nastavitve spletnega mesta</translation>
+<translation id="2485422356828889247">Deinstaliraj</translation>
 <translation id="2498539833203011245">Minimiziraj</translation>
 <translation id="2509495747794740764">Vrednost za prilagajanje velikosti mora biti število med 10 in 200.</translation>
 <translation id="253557089021624350">Štetje ohranjanja dejavnosti</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Prijavite zlorabo</translation>
 <translation id="2941112035454246133">Nizka</translation>
 <translation id="2972581237482394796">&amp;Uveljavi</translation>
+<translation id="2993517869960930405">Informacije o aplikaciji</translation>
 <translation id="3003623123441819449">Predpomnilnik CSS</translation>
 <translation id="3008272652534848354">Ponastavi dovoljenja</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Odpri povezavo kot</translation>
 <translation id="3222066309010235055">Vnaprejšnje upodabljanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Izberite korenski imenik razširitve, ki jo želite zapakirati. Če želite posodobiti razširitev, izberite tudi datoteko z zasebnim ključem, ki jo želite znova uporabiti.</translation>
+<translation id="3275778913554317645">Odpri kot okno</translation>
 <translation id="3280237271814976245">Shrani &amp;kot ...</translation>
 <translation id="3285322247471302225">Nov &amp;zavihek</translation>
 <translation id="3288047731229977326">Razširitve, ki se izvajajo v razvijalskem načinu, lahko škodijo vašemu računalniku. Če niste razvijalec, zaradi varnosti onemogočite razširitve, ki se izvajajo v razvijalskem načinu.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Odpri PDF v predogledu</translation>
 <translation id="3308134619352333507">Skrij gumb</translation>
 <translation id="3317459757438853210">Obojestransko</translation>
+<translation id="3331974543021145906">Informacije o aplikaciji</translation>
 <translation id="3341703758641437857">Dovoli dostop do URL-jev datotek</translation>
 <translation id="3347086966102161372">K&amp;opiraj naslov slike</translation>
 <translation id="3360297538363969800">Tiskanje ni uspelo. Preverite tiskalnik in poskusite znova.</translation>
 <translation id="3378572629723696641">Ta razširitev je morda poškodovana.</translation>
 <translation id="3387614642886316601">Uporabi izboljšano preverjanje črkovanja</translation>
+<translation id="3390013585654699824">Podrobnosti o aplikaciji</translation>
 <translation id="3393582007140394275">Zaslona ni mogoče predvajati.</translation>
 <translation id="3432227430032737297">Odstrani vse prikazane</translation>
 <translation id="345693547134384690">Odpri &amp;sliko v novem zavihku</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Išči sliko tu <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Dovoli spletnim mestom predvajanje zaščitene vsebine (priporočeno)</translation>
 <translation id="3979395879372752341">Nova razširitev je dodana (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kopiraj povezavo do poudarka</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Dodaj v slovar</translation>
 <translation id="407520071244661467">Lestvica</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Pred uvozom zaprite brskalnik</translation>
 <translation id="4130207949184424187">Zaradi te razširitve se je spremenila stran, ki je prikazana, ko iščete v naslovni vrstici.</translation>
 <translation id="4131410914670010031">Črno-belo</translation>
+<translation id="4165986682804962316">Nastavitve spletnega mesta</translation>
 <translation id="4176463684765177261">Onemogočeno</translation>
 <translation id="4200983522494130825">Nov &amp;zavihek</translation>
 <translation id="4225397296022057997">Na vseh spletnih mestih</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Obnovi nastavitve</translation>
 <translation id="4726710629007580002">Pri poskusu namestitve razširitve so bila opozorila:</translation>
 <translation id="479536056609751218">Spletna stran, samo HTML</translation>
+<translation id="4827904420700932487">Ustvari QR kodo za to sliko</translation>
 <translation id="4839303808932127586">Shr&amp;ani video posnetek kot...</translation>
 <translation id="4840096453115567876">Vseeno zapustim način brez beleženja zgodovine?</translation>
 <translation id="488785315393301722">Pokaži podrobnosti</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Vprašaj pred dostopom (priporočljivo)</translation>
 <translation id="5677928146339483299">Blokirano</translation>
 <translation id="5707185214361380026">Ni mogoče naložiti razširitev iz:</translation>
+<translation id="5713171467967533494">Odpri v brskalniku Vivaldi</translation>
 <translation id="5715711091495208045">Posrednik za vtičnik: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Shrani kot PDF</translation>
 <translation id="5747809636523347288">Pr&amp;ilepi in pojdi na <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Možnosti</translation>
 <translation id="6579369886355986318">Pokaži vse &amp;kontrolnike</translation>
 <translation id="6639554308659482635">SQLite pomnilnik</translation>
+<translation id="666731172850799929">Odpri v <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Shranite geslo</translation>
 <translation id="6691936601825168937">&amp;Posreduj</translation>
 <translation id="6798954102094737107">Vtičnik: <ph name="PLUGIN_NAME" /></translation>
@@ -430,6 +441,7 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="9003647077635673607">Dovoli na vseh spletnih mestih</translation>
 <translation id="9027459031423301635">Odpri povezavo v novem &amp;zavihku</translation>
 <translation id="9056810968620647706">Ni ujemanj.</translation>
+<translation id="9084064520949870008">Odpri kot okno</translation>
 <translation id="9137916601698928395">Odpri povezavo kot <ph name="USER" /></translation>
 <translation id="91568222606626347">Ustvari bližnjico...</translation>
 <translation id="916607977885256133">Slika v sliki</translation>

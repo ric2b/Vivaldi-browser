@@ -146,14 +146,20 @@ TEST_F(ContainerQueryTest, PreludeParsing) {
       "(width < 300px)",
       SerializeCondition(ParseAtContainer("@container (width < 300px) {}")));
 
+  EXPECT_EQ("not (width)", SerializeCondition(ParseAtContainer(
+                               "@container somename not (width) {}")));
+
+  EXPECT_EQ("(width) and (height)", SerializeCondition(ParseAtContainer(
+                                        "@container (width) and (height) {}")));
+
+  EXPECT_EQ("(width) or (height)", SerializeCondition(ParseAtContainer(
+                                       "@container (width) or (height) {}")));
+
   // Invalid:
   EXPECT_FALSE(ParseAtContainer("@container 100px {}"));
   EXPECT_FALSE(ParseAtContainer("@container calc(1) {}"));
   EXPECT_FALSE(ParseAtContainer("@container {}"));
   EXPECT_FALSE(ParseAtContainer("@container (min-width: 300px) nonsense {}"));
-  EXPECT_FALSE(ParseAtContainer("@container somename not (width) {}"));
-  EXPECT_FALSE(ParseAtContainer("@container (width) and (height) {}"));
-  EXPECT_FALSE(ParseAtContainer("@container (width) or (height) {}"));
   EXPECT_FALSE(ParseAtContainer("@container size(width) {}"));
 }
 
@@ -266,8 +272,8 @@ TEST_F(ContainerQueryTest, RuleParsing) {
   ASSERT_TRUE(container);
 
   CSSStyleSheet* sheet = css_test_helpers::CreateStyleSheet(GetDocument());
-  auto* rule =
-      DynamicTo<CSSContainerRule>(container->CreateCSSOMWrapper(sheet));
+  auto* rule = DynamicTo<CSSContainerRule>(
+      container->CreateCSSOMWrapper(/*position_hint=*/0, sheet));
   ASSERT_TRUE(rule);
   ASSERT_EQ(2u, rule->length());
 
@@ -569,21 +575,19 @@ TEST_F(ContainerQueryTest, OldStyleForTransitions) {
   EXPECT_EQ("10px", ComputedValueString(target, "height"));
   EXPECT_EQ(0u, GetAnimationsCount(target));
 
-  LogicalAxes contained_axes(kLogicalAxisInline);
-
   // Simulate a style and layout pass with multiple rounds of style recalc.
   {
     PostStyleUpdateScope post_style_update_scope(GetDocument());
 
     // Should transition between [10px, 20px]. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(120, -1), contained_axes);
+        *container, LogicalSize(120, -1), kLogicalAxisInline);
     EXPECT_EQ("15px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
     // Should transition between [10px, 30px]. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(130, -1), contained_axes);
+        *container, LogicalSize(130, -1), kLogicalAxisInline);
     EXPECT_EQ("20px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
@@ -640,21 +644,19 @@ TEST_F(ContainerQueryTest, TransitionAppearingInFinalPass) {
   EXPECT_EQ("10px", ComputedValueString(target, "height"));
   EXPECT_EQ(0u, GetAnimationsCount(target));
 
-  LogicalAxes contained_axes(kLogicalAxisInline);
-
   // Simulate a style and layout pass with multiple rounds of style recalc.
   {
     PostStyleUpdateScope post_style_update_scope(GetDocument());
 
     // No transition property present. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(120, -1), contained_axes);
+        *container, LogicalSize(120, -1), kLogicalAxisInline);
     EXPECT_EQ("20px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
     // Still no transition property present. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(130, -1), contained_axes);
+        *container, LogicalSize(130, -1), kLogicalAxisInline);
     EXPECT_EQ("30px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
@@ -711,21 +713,19 @@ TEST_F(ContainerQueryTest, TransitionTemporarilyAppearing) {
   EXPECT_EQ("10px", ComputedValueString(target, "height"));
   EXPECT_EQ(0u, GetAnimationsCount(target));
 
-  LogicalAxes contained_axes(kLogicalAxisInline);
-
   // Simulate a style and layout pass with multiple rounds of style recalc.
   {
     PostStyleUpdateScope post_style_update_scope(GetDocument());
 
     // No transition property present yet. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(120, -1), contained_axes);
+        *container, LogicalSize(120, -1), kLogicalAxisInline);
     EXPECT_EQ("20px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
     // Transition between [10px, 90px]. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(130, -1), contained_axes);
+        *container, LogicalSize(130, -1), kLogicalAxisInline);
     EXPECT_EQ("50px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
@@ -782,21 +782,19 @@ TEST_F(ContainerQueryTest, RedefiningAnimations) {
 
   EXPECT_EQ("auto", ComputedValueString(target, "height"));
 
-  LogicalAxes contained_axes(kLogicalAxisInline);
-
   // Simulate a style and layout pass with multiple rounds of style recalc.
   {
     PostStyleUpdateScope post_style_update_scope(GetDocument());
 
     // Animation at 20%. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(120, -1), contained_axes);
+        *container, LogicalSize(120, -1), kLogicalAxisInline);
     EXPECT_EQ("20px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
     // Animation at 30%. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(130, -1), contained_axes);
+        *container, LogicalSize(130, -1), kLogicalAxisInline);
     EXPECT_EQ("30px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
 
@@ -851,15 +849,13 @@ TEST_F(ContainerQueryTest, UnsetAnimation) {
   ASSERT_EQ(1u, target->getAnimations().size());
   Animation* animation_before = target->getAnimations()[0].Get();
 
-  LogicalAxes contained_axes(kLogicalAxisInline);
-
   // Simulate a style and layout pass with multiple rounds of style recalc.
   {
     PostStyleUpdateScope post_style_update_scope(GetDocument());
 
     // Animation should appear to be canceled. (Intermediate round).
     GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
-        *container, LogicalSize(130, -1), contained_axes);
+        *container, LogicalSize(130, -1), kLogicalAxisInline);
     EXPECT_EQ("auto", ComputedValueString(target, "height"));
     EXPECT_EQ(1u, GetAnimationsCount(target));
 
@@ -1133,6 +1129,86 @@ TEST_F(ContainerQueryTest, NoContainerQueryEvaluatorWhenDisabled) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_FALSE(
       GetDocument().getElementById("container")->GetContainerQueryEvaluator());
+}
+
+TEST_F(ContainerQueryTest, QueryViewportDependency) {
+  ScopedCSSViewportUnits4ForTest viewport_units(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #container {
+        container-type: size;
+      }
+      @container (width: 200px) {
+        #target1 { color: pink; }
+      }
+      @container (width: 100vw) {
+        #target2 { color: pink; }
+      }
+      @container (width: 100svw) {
+        #target3 { color: pink; }
+      }
+      @container (width: 100dvw) {
+        #target4 { color: pink; }
+      }
+    </style>
+    <div id="container">
+      <span id=target1></span>
+      <span id=target2></span>
+      <span id=target3></span>
+      <span id=target4></span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target1 = GetDocument().getElementById("target1");
+  Element* target2 = GetDocument().getElementById("target2");
+  Element* target3 = GetDocument().getElementById("target3");
+  Element* target4 = GetDocument().getElementById("target4");
+
+  ASSERT_TRUE(target1);
+  ASSERT_TRUE(target2);
+  ASSERT_TRUE(target3);
+  ASSERT_TRUE(target4);
+
+  EXPECT_FALSE(target1->ComputedStyleRef().HasStaticViewportUnits());
+  EXPECT_FALSE(target1->ComputedStyleRef().HasDynamicViewportUnits());
+
+  EXPECT_TRUE(target2->ComputedStyleRef().HasStaticViewportUnits());
+  EXPECT_FALSE(target2->ComputedStyleRef().HasDynamicViewportUnits());
+
+  EXPECT_TRUE(target3->ComputedStyleRef().HasStaticViewportUnits());
+  EXPECT_FALSE(target3->ComputedStyleRef().HasDynamicViewportUnits());
+
+  EXPECT_FALSE(target4->ComputedStyleRef().HasStaticViewportUnits());
+  EXPECT_TRUE(target4->ComputedStyleRef().HasDynamicViewportUnits());
+}
+
+TEST_F(ContainerQueryTest, NoStyleQueryWhenDisabled) {
+  ScopedCSSStyleQueriesForTest scope(false);
+
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      @container style(--foo: bar) {
+        span { display: block }
+      }
+      @container (width > 0px) and (not style(--no: match)) {
+        span { vertical-align: middle }
+      }
+    </style>
+    <div style="container-type: inline-size; --foo: bar">
+      <span id="span"></span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  const ComputedStyle& style =
+      GetDocument().getElementById("span")->ComputedStyleRef();
+  EXPECT_EQ(style.Display(), EDisplay::kInline)
+      << "style() should not match when disabled";
+  EXPECT_EQ(style.VerticalAlign(), EVerticalAlign::kBaseline)
+      << "style() should be unknown when disabled";
 }
 
 }  // namespace blink

@@ -21,7 +21,10 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
+#include "chrome/common/apps/platform_apps/api/enterprise_remote_apps.h"
 #include "chrome/grit/generated_resources.h"
+#include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_event_histogram_value.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
@@ -124,6 +127,7 @@ class RemoteAppsPlaceholderIcon : public gfx::CanvasImageSource {
 
 RemoteAppsManager::RemoteAppsManager(Profile* profile)
     : profile_(profile),
+      event_router_(extensions::EventRouter::Get(profile)),
       remote_apps_(std::make_unique<apps::RemoteApps>(
           apps::AppServiceProxyFactory::GetForProfile(profile_),
           this)),
@@ -204,6 +208,7 @@ void RemoteAppsManager::MaybeAddFolder(const std::string& folder_id) {
     remote_folder->SetMetadata(
         app_list::GenerateItemMetadataFromSyncItem(*sync_item));
     remote_folder->SetIsSystemFolder(true);
+    remote_folder->SetIsEphemeral(true);
     app_list_syncable_service_->AddItem(std::move(remote_folder));
     return;
   }
@@ -213,6 +218,7 @@ void RemoteAppsManager::MaybeAddFolder(const std::string& folder_id) {
   const RemoteAppsModel::FolderInfo& info = model_->GetFolderInfo(folder_id);
   remote_folder->SetChromeName(info.name);
   remote_folder->SetIsSystemFolder(true);
+  remote_folder->SetIsEphemeral(true);
   remote_folder->SetChromeIsFolder(true);
   syncer::StringOrdinal position =
       info.add_to_front ? model_updater_->GetPositionBeforeFirstItem()
@@ -310,12 +316,22 @@ RemoteAppsManager::GetApps() {
   return model_->GetAllAppInfo();
 }
 
-void RemoteAppsManager::LaunchApp(const std::string& id) {
-  auto it = app_id_to_source_id_map_.find(id);
+void RemoteAppsManager::LaunchApp(const std::string& app_id) {
+  auto it = app_id_to_source_id_map_.find(app_id);
   if (it == app_id_to_source_id_map_.end())
     return;
+  std::string source_id = it->second;
 
-  remote_apps_impl_.OnAppLaunched(it->second, id);
+  std::unique_ptr<extensions::Event> event = std::make_unique<
+      extensions::Event>(
+      extensions::events::ENTERPRISE_REMOTE_APPS_ON_REMOTE_APP_LAUNCHED,
+      chrome_apps::api::enterprise_remote_apps::OnRemoteAppLaunched::kEventName,
+      chrome_apps::api::enterprise_remote_apps::OnRemoteAppLaunched::Create(
+          app_id));
+
+  event_router_->DispatchEventToExtension(source_id, std::move(event));
+
+  remote_apps_impl_.OnAppLaunched(source_id, app_id);
 }
 
 gfx::ImageSkia RemoteAppsManager::GetIcon(const std::string& id) {
@@ -340,7 +356,7 @@ gfx::ImageSkia RemoteAppsManager::GetPlaceholderIcon(const std::string& id,
 apps::mojom::MenuItemsPtr RemoteAppsManager::GetMenuModel(
     const std::string& id) {
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
-  // TODO(jityao): Temporary string for menu item.
+  // TODO(b/236785623): Temporary string for menu item.
   apps::AddCommandItem(ash::LAUNCH_NEW, IDS_APP_CONTEXT_MENU_ACTIVATE_ARC,
                        &menu_items);
   return menu_items;

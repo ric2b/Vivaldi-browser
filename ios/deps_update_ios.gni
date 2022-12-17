@@ -1,0 +1,159 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+update_template_instance("//ios/chrome/app:chrome") {
+  deps += [
+    "//vivaldi/ios/sync",
+    "//vivaldi/prefs:prefs_definitions",
+  ]
+}
+
+update_target("//components/browser_sync:browser_sync") {
+  deps += [
+    "//vivaldi/ios/sync:sync_notes",
+  ]
+}
+
+update_target("//ios/chrome/browser:browser_impl") {
+  deps += [
+    "//vivaldi/prefs",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
+  deps -= [
+    "resources:toolbar_back",
+    "resources:toolbar_forward",
+    "resources:toolbar_new_tab_page",
+    "resources:toolbar_stop",
+    "resources:toolbar_switcher",
+  ]
+  deps += [
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_back",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_forward",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_new_tab_page",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_stop",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_switcher",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/popup_menu:popup_menu") {
+  deps -= [
+    "resources:popup_menu_add_bookmark",
+    "resources:popup_menu_bookmarks",
+    "resources:popup_menu_downloads",
+    "resources:popup_menu_history",
+    "resources:popup_menu_new_incognito_tab",
+    "resources:popup_menu_new_tab",
+    "resources:popup_menu_reading_list",
+    "resources:popup_menu_recent_tabs",
+    "resources:popup_menu_reload",
+    "resources:popup_menu_settings",
+    "resources:popup_menu_stop",
+  ]
+  deps += [
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_add_bookmark",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_bookmarks",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_downloads",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_history",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_new_incognito_tab",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_new_tab",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_reading_list",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_recent_tabs",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_reload",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_settings",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_stop",
+    "//vivaldi/ios/ui/popup_menu/resources:popup_menu_notes",
+  ]
+}
+
+
+update_target("//ios/chrome/browser/ui/popup_menu/overflow_menu:overflow_menu") {
+  deps -= [
+    "resources:overflow_menu_action_incognito",
+    "resources:overflow_menu_destination_bookmarks",
+    "resources:overflow_menu_destination_downloads",
+    "resources:overflow_menu_destination_history",
+    "resources:overflow_menu_destination_reading_list",
+    "resources:overflow_menu_destination_settings",
+  ]
+  deps += [
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_action_incognito",
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_destination_notes",
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_destination_bookmarks",
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_destination_downloads",
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_destination_history",
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_destination_reading_list",
+    "//vivaldi/ios/ui/popup_menu/overflow_menu/resources:overflow_menu_destination_settings",
+
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/settings/default_browser:default_browser") {
+  deps -= [
+    "resources:chrome_icon",
+  ]
+  deps += [
+    "//vivaldi/ios/ui/settings/resources:chrome_icon",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants") {
+  deps -= [
+    "resources:grid_background_color"
+  ]
+  deps += [
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_background_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_title_text_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_body_text_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_toolbar_text_button_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_background_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_icon_not_selected_color"
+
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui") {
+  deps -= [
+    "resources:page_control_assets",
+    "resources:new_tab_floating_button",
+    "resources:new_tab_floating_button_incognito",
+    "resources:new_tab_toolbar_button",
+    "resources:new_tab_toolbar_button_incognito",
+    "resources:tab_grid_incognito_tabs_empty",
+    "resources:tab_grid_regular_tabs_empty",
+  ]
+  deps += [
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_assets",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:new_tab_floating_button",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:new_tab_floating_button_incognito",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:new_tab_toolbar_button",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:new_tab_toolbar_button_incognito",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_incognito_tabs_empty",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_regular_tabs_empty",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_remote_tabs_empty",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_closed_tabs_empty",
+  ]
+}
+
+update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension_swift") {
+  deps -= [
+    "resources:widget_background_color",
+    "resources:widget_search_bar_color",
+    "resources:widget_separator_color",
+    "resources:widget_text_color",
+    "resources:widget_incognito_icon",
+    "resources:widget_qr_icon",
+    "resources:widget_voice_search_icon",
+  ]
+  deps += [
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_vivaldi_logo",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_background_color",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_search_bar_color",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_separator_color",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_text_color",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_button_background_color",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_incognito_icon",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_qr_icon",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_voice_search_icon",
+  ]
+}

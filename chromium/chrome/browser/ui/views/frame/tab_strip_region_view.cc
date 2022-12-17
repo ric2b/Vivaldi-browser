@@ -56,9 +56,9 @@ END_METADATA
 }  // namespace
 
 TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip) {
-  views::SetCascadingThemeProviderColor(
+  views::SetCascadingColorProviderColor(
       this, views::kCascadingBackgroundColor,
-      ThemeProperties::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE);
+      kColorTabBackgroundInactiveFrameInactive);
 
   layout_manager_ = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout_manager_->SetOrientation(views::LayoutOrientation::kHorizontal);
@@ -115,8 +115,7 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip) {
   const auto control_padding = gfx::Insets::TLBR(
       0, 0, 0, GetLayoutConstant(TABSTRIP_REGION_VIEW_CONTROL_PADDING));
 
-  tip_marquee_view_ = AddChildView(
-      std::make_unique<TipMarqueeView>(views::style::CONTEXT_LABEL));
+  tip_marquee_view_ = AddChildView(std::make_unique<TipMarqueeView>());
   tip_marquee_view_->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(

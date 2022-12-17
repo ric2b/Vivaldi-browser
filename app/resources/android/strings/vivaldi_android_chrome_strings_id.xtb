@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
 <translation id="1397811292916898096">Telusuri dengan <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin telusur utama Vivaldi. Ia mengirim kata yang dipilih dan halaman terkini sebagai konteks ke Penelusuran Google. Anda dapat menonaktifkannya di <ph name="BEGIN_LINK" />Setelan<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alihkan tab normal/pribadi</translation>
 <translation id="1644574205037202324">Riwayat</translation>
 <translation id="17513872634828108">Buka tab</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Tab Pribadi Baru</translation>
 <translation id="4243710787042215766">Buka di tab pribadi</translation>
 <translation id="4526803704855831732">Tab Pribadi</translation>
+<translation id="4719086422742491124">Pelajari topik-topik di situs web tanpa meninggalkan halaman. Pilih satu atau lebih kata pada halaman untuk mencarinya.
+
+Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin telusur utama Vivaldi.</translation>
 <translation id="4759238208242260848">Unduhan</translation>
 <translation id="4883379392681899581">Tinggalkan mode pribadi</translation>
 <translation id="4943872375798546930">Tidak ada hasil</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542">Penyimpanan <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Pribadi</translation>
 <translation id="5233638681132016545">Tab baru</translation>
-<translation id="572328651809341494">Tab terakhir</translation>
-<translation id="5840488417521835756">Pelajari topik di situs tanpa meninggalkan halaman. Ketuk untuk Menelusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin pencari standar Vivaldi. Ia akan mengirim kata dan konteks yang terlingkupi ke Pencarian Google, lalu menampilkan definisi, gambar, hasil penelusuran, dan detail lainnya.
+<translation id="5375131951310889874">Pelajari topik-topik di situs web tanpa meninggalkan halaman. Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin telusur utama Vivaldi. Ia mengirim kata dan konteks ke Penelusuran Google, yang akan menampilkan definisi, gambar, hasil penelusuran, dan rincian lainnya.
 
-Untuk menyesuaikan penelusuran kata Anda, tekan lama untuk memilih. Untuk memerinci penelusuran, geser panel ke atas, lalu ketuk kotak penelusuran.</translation>
+Untuk menyesuaikan term telusuran Anda, pencet lama untuk memilih. Untuk menyaring penelusuran Anda, geser panel ke atas lalu ketuk kotak telusur.</translation>
+<translation id="572328651809341494">Tab terakhir</translation>
 <translation id="6150320133806434356">Penanda telah disimpan</translation>
 <translation id="6336451774241870485">Tab pribadi baru</translation>
 <translation id="6585139692466700358">Tawarkan untuk menerjemahkan bahasa ke bahasa lain dengan layanan terjemahan Vivaldi</translation>
@@ -53,7 +57,6 @@ Untuk menyesuaikan penelusuran kata Anda, tekan lama untuk memilih. Untuk memeri
 <translation id="732145680195464316">Penanda disimpan di <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Tentang Vivaldi</translation>
 <translation id="7465104139234185284">Tutup semua tab pribadi</translation>
-<translation id="7519434535192513364">Ketuk untuk Menelusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin pencari standar Vivaldi. Ia mengirim kata yang dipilih dan halaman yang dibuka sebagai konteks ke Pencarian Google. Anda dapat menonaktifkannya di <ph name="BEGIN_LINK" />Pengaturan<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Perjanjian Lisensi Pengguna Akhir</translation>
 <translation id="85991616550051997">Ke beranda</translation>
 <translation id="8820817407110198400">Penanda</translation>

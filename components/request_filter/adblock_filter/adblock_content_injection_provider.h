@@ -4,8 +4,8 @@
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_CONTENT_INJECTION_PROVIDER_H_
 
 #include "base/memory/weak_ptr.h"
+#include "components/ad_blocker/adblock_metadata.h"
 #include "components/content_injection/content_injection_provider.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/adblock_resources.h"
 
 namespace content {

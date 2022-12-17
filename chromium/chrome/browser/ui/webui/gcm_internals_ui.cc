@@ -51,10 +51,10 @@ class GcmInternalsUIMessageHandler : public content::WebUIMessageHandler {
                      const gcm::GCMClient::GCMStatistics* stats);
 
   // Request all of the GCM related infos through gcm profile service.
-  void RequestAllInfo(const base::ListValue* args);
+  void RequestAllInfo(const base::Value::List& args);
 
   // Enables/disables GCM activity recording through gcm profile service.
-  void SetRecording(const base::ListValue* args);
+  void SetRecording(const base::Value::List& args);
 
   // Callback function of the request for all gcm related infos.
   void RequestGCMStatisticsFinished(const gcm::GCMClient::GCMStatistics& args);
@@ -71,16 +71,14 @@ void GcmInternalsUIMessageHandler::ReturnResults(
     Profile* profile,
     gcm::GCMProfileService* profile_service,
     const gcm::GCMClient::GCMStatistics* stats) {
-  base::DictionaryValue results;
-  gcm_driver::SetGCMInternalsInfo(stats, profile_service, profile->GetPrefs(),
-                                  &results);
+  base::Value::Dict results = gcm_driver::SetGCMInternalsInfo(
+      stats, profile_service, profile->GetPrefs());
   FireWebUIListener(gcm_driver::kSetGcmInternalsInfo, results);
 }
 
 void GcmInternalsUIMessageHandler::RequestAllInfo(
-    const base::ListValue* args) {
+    const base::Value::List& list) {
   AllowJavascript();
-  const auto& list = args->GetListDeprecated();
   if (list.size() != 1) {
     NOTREACHED();
     return;
@@ -105,8 +103,7 @@ void GcmInternalsUIMessageHandler::RequestAllInfo(
   }
 }
 
-void GcmInternalsUIMessageHandler::SetRecording(const base::ListValue* args) {
-  const auto& list = args->GetListDeprecated();
+void GcmInternalsUIMessageHandler::SetRecording(const base::Value::List& list) {
   if (list.size() != 1) {
     NOTREACHED();
     return;
@@ -142,11 +139,11 @@ void GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished(
 void GcmInternalsUIMessageHandler::RegisterMessages() {
   // It is safe to use base::Unretained here, since web_ui owns this message
   // handler.
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       gcm_driver::kGetGcmInternalsInfo,
       base::BindRepeating(&GcmInternalsUIMessageHandler::RequestAllInfo,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       gcm_driver::kSetGcmInternalsRecording,
       base::BindRepeating(&GcmInternalsUIMessageHandler::SetRecording,
                           base::Unretained(this)));

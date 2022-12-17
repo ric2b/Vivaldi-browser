@@ -14,6 +14,7 @@
 #include "ash/app_list/views/app_list_a11y_announcer.h"
 #include "ash/app_list/views/app_list_folder_view.h"
 #include "ash/app_list/views/app_list_item_view.h"
+#include "ash/app_list/views/app_list_keyboard_controller.h"
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_nudge_controller.h"
 #include "ash/app_list/views/app_list_toast_container_view.h"
@@ -23,6 +24,7 @@
 #include "ash/app_list/views/continue_section_view.h"
 #include "ash/app_list/views/folder_background_view.h"
 #include "ash/app_list/views/page_switcher.h"
+#include "ash/app_list/views/recent_apps_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/app_list/views/search_result_page_dialog_controller.h"
 #include "ash/app_list/views/suggestion_chip_container_view.h"
@@ -34,17 +36,17 @@
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/style/color_provider.h"
-#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/search_box/search_box_constants.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/pill_button.h"
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/time/time.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animator.h"
@@ -53,13 +55,15 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/focus_manager.h"
-#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
@@ -165,10 +169,10 @@ constexpr base::TimeDelta kZeroStateSearchTimeout = base::Milliseconds(16);
 // makes applying identical transforms to suggested content views easier.
 class AppsContainerView::ContinueContainer : public views::View {
  public:
-  ContinueContainer(AppsContainerView* apps_container,
+  ContinueContainer(AppListKeyboardController* keyboard_controller,
                     AppListViewDelegate* view_delegate,
-                    SearchResultPageDialogController* dialog_controller)
-      : view_delegate_(view_delegate), separator_(apps_container->separator()) {
+                    views::Separator* separator)
+      : view_delegate_(view_delegate), separator_(separator) {
     DCHECK(view_delegate_);
     DCHECK(separator_);
     SetPaintToLayer(ui::LAYER_NOT_DRAWN);
@@ -176,33 +180,14 @@ class AppsContainerView::ContinueContainer : public views::View {
     SetLayoutManager(std::make_unique<views::FlexLayout>())
         ->SetOrientation(views::LayoutOrientation::kVertical);
 
-    // Add the button to show the continue section, wrapped in a view to center
-    // it horizontally.
-    auto* button_container = AddChildView(std::make_unique<views::View>());
-    button_container
-        ->SetLayoutManager(std::make_unique<views::BoxLayout>(
-            views::BoxLayout::Orientation::kVertical))
-        ->set_cross_axis_alignment(
-            views::BoxLayout::CrossAxisAlignment::kCenter);
-    show_continue_section_button_ =
-        button_container->AddChildView(std::make_unique<PillButton>(
-            base::BindRepeating(&AppsContainerView::ContinueContainer::
-                                    OnPressShowContinueSection,
-                                base::Unretained(this)),
-            l10n_util::GetStringUTF16(IDS_ASH_LAUNCHER_SHOW_CONTINUE_SECTION),
-            PillButton::Type::kIcon, &kExpandAllIcon));
-    show_continue_section_button_->SetUseDefaultLabelFont();
-    // Put the icon on the right.
-    show_continue_section_button_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
-
     continue_section_ = AddChildView(std::make_unique<ContinueSectionView>(
-        view_delegate, dialog_controller, kContinueColumnCount,
+        view_delegate, kContinueColumnCount,
         /*tablet_mode=*/true));
     continue_section_->SetPaintToLayer();
     continue_section_->layer()->SetFillsBoundsOpaquely(false);
 
     recent_apps_ = AddChildView(
-        std::make_unique<RecentAppsView>(apps_container, view_delegate));
+        std::make_unique<RecentAppsView>(keyboard_controller, view_delegate));
     recent_apps_->SetPaintToLayer();
     recent_apps_->layer()->SetFillsBoundsOpaquely(false);
 
@@ -219,15 +204,6 @@ class AppsContainerView::ContinueContainer : public views::View {
       UpdateRecentAppsMargins();
   }
 
-  void OnThemeChanged() override {
-    views::View::OnThemeChanged();
-    // The "show continue section" button appears directly over the wallpaper,
-    // so use a "base layer" color for its background.
-    show_continue_section_button_->SetBackgroundColor(
-        AshColorProvider::Get()->GetBaseLayerColor(
-            AshColorProvider::BaseLayerType::kTransparent40));
-  }
-
   bool HasRecentApps() const { return recent_apps_->GetVisible(); }
 
   void UpdateAppListConfig(AppListConfig* config) {
@@ -235,9 +211,6 @@ class AppsContainerView::ContinueContainer : public views::View {
   }
 
   void UpdateContinueSectionVisibility() {
-    // Show the "Show continue section" button if continue section is hidden.
-    bool hide_continue_section = view_delegate_->ShouldHideContinueSection();
-    show_continue_section_button_->SetVisible(hide_continue_section);
     // The continue section view and recent apps view manage their own
     // visibility internally.
     continue_section_->UpdateElementsVisibility();
@@ -245,9 +218,23 @@ class AppsContainerView::ContinueContainer : public views::View {
     UpdateSeparatorVisibility();
   }
 
-  PillButton* show_continue_section_button() {
-    return show_continue_section_button_;
+  // Animates a fade-in for the continue section, recent apps and separator.
+  void FadeInViews() {
+    continue_section_->layer()->SetOpacity(0.0f);
+    recent_apps_->layer()->SetOpacity(0.0f);
+    separator_->layer()->SetOpacity(0.0f);
+
+    views::AnimationBuilder()
+        .SetPreemptionStrategy(ui::LayerAnimator::PreemptionStrategy::
+                                   IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
+        .Once()
+        .At(base::Milliseconds(100))
+        .SetOpacity(continue_section_, 1.0f)
+        .SetOpacity(recent_apps_, 1.0f)
+        .SetOpacity(separator_, 1.0f)
+        .SetDuration(base::Milliseconds(200));
   }
+
   ContinueSectionView* continue_section() { return continue_section_; }
   RecentAppsView* recent_apps() { return recent_apps_; }
 
@@ -266,13 +253,7 @@ class AppsContainerView::ContinueContainer : public views::View {
                            continue_section_->GetVisible());
   }
 
-  void OnPressShowContinueSection(const ui::Event& event) {
-    view_delegate_->SetHideContinueSection(false);
-    UpdateContinueSectionVisibility();
-  }
-
   AppListViewDelegate* const view_delegate_;
-  PillButton* show_continue_section_button_ = nullptr;
   ContinueSectionView* continue_section_ = nullptr;
   RecentAppsView* recent_apps_ = nullptr;
   views::Separator* separator_ = nullptr;
@@ -280,6 +261,8 @@ class AppsContainerView::ContinueContainer : public views::View {
 
 AppsContainerView::AppsContainerView(ContentsView* contents_view)
     : contents_view_(contents_view),
+      app_list_keyboard_controller_(
+          std::make_unique<AppListKeyboardController>(this)),
       app_list_nudge_controller_(std::make_unique<AppListNudgeController>()) {
   AppListModelProvider::Get()->AddObserver(this);
 
@@ -299,8 +282,7 @@ AppsContainerView::AppsContainerView(ContentsView* contents_view)
   if (features::IsProductivityLauncherEnabled()) {
     separator_ = scrollable_container_->AddChildView(
         std::make_unique<views::Separator>());
-    separator_->SetColor(ColorProvider::Get()->GetContentLayerColor(
-        ColorProvider::ContentLayerType::kSeparatorColor));
+    separator_->SetColorId(ui::kColorAshSystemUIMenuSeparator);
     separator_->SetPreferredSize(
         gfx::Size(kSeparatorWidth, views::Separator::kThickness));
     // Initially set the vertical inset to kRegularSeparatorVerticalInset. The
@@ -317,7 +299,7 @@ AppsContainerView::AppsContainerView(ContentsView* contents_view)
 
     continue_container_ =
         scrollable_container_->AddChildView(std::make_unique<ContinueContainer>(
-            this, view_delegate, dialog_controller_.get()));
+            app_list_keyboard_controller_.get(), view_delegate, separator_));
     continue_container_->continue_section()->SetNudgeController(
         app_list_nudge_controller_.get());
     // Update the suggestion tasks after the app list nudge controller is set in
@@ -329,7 +311,9 @@ AppsContainerView::AppsContainerView(ContentsView* contents_view)
     if (features::IsLauncherAppSortEnabled()) {
       toast_container_ = scrollable_container_->AddChildView(
           std::make_unique<AppListToastContainerView>(
-              app_list_nudge_controller_.get(), a11y_announcer, view_delegate,
+              app_list_nudge_controller_.get(),
+              app_list_keyboard_controller_.get(), a11y_announcer,
+              view_delegate,
               /*delegate=*/this, /*tablet_mode=*/true));
       toast_container_->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
     }
@@ -340,11 +324,12 @@ AppsContainerView::AppsContainerView(ContentsView* contents_view)
         std::make_unique<SuggestionChipContainerView>(contents_view), 0);
   }
 
-  apps_grid_view_ = scrollable_container_->AddChildView(
-      std::make_unique<PagedAppsGridView>(contents_view, a11y_announcer,
-                                          /*folder_delegate=*/nullptr,
-                                          /*folder_controller=*/this,
-                                          /*container_delegate=*/this));
+  apps_grid_view_ =
+      scrollable_container_->AddChildView(std::make_unique<PagedAppsGridView>(
+          contents_view, a11y_announcer,
+          /*folder_delegate=*/nullptr,
+          /*folder_controller=*/this,
+          /*container_delegate=*/this, app_list_keyboard_controller_.get()));
   apps_grid_view_->Init();
   apps_grid_view_->pagination_model()->AddObserver(this);
   if (features::IsProductivityLauncherEnabled())
@@ -739,42 +724,6 @@ void AppsContainerView::OnCardifiedStateEnded() {
   MaybeRemoveGradientMask();
 }
 
-// RecentAppsView::Delegate:
-void AppsContainerView::MoveFocusUpFromRecents() {
-  DCHECK(!GetRecentApps()->children().empty());
-  views::View* first_recent = GetRecentApps()->children()[0];
-  DCHECK(views::IsViewClass<AppListItemView>(first_recent));
-  // Find the view one step in reverse from the first recent app.
-  views::View* previous_view = GetFocusManager()->GetNextFocusableView(
-      first_recent, GetWidget(), /*reverse=*/true, /*dont_loop=*/false);
-  DCHECK(previous_view);
-  previous_view->RequestFocus();
-}
-
-void AppsContainerView::MoveFocusDownFromRecents(int column) {
-  if (toast_container_ && toast_container_->HandleFocus(column))
-    return;
-
-  int top_level_item_count = apps_grid_view_->view_model()->view_size();
-  if (top_level_item_count <= 0)
-    return;
-  // Attempt to focus the item at `column` in the first row, or the last item if
-  // there aren't enough items. This could happen if the user's apps are in a
-  // small number of folders.
-  int index = std::min(column, top_level_item_count - 1);
-  AppListItemView* item = apps_grid_view_->GetItemViewAt(index);
-  DCHECK(item);
-  item->RequestFocus();
-}
-
-bool AppsContainerView::MoveFocusUpFromToast(int column) {
-  return false;
-}
-
-bool AppsContainerView::MoveFocusDownFromToast(int column) {
-  return false;
-}
-
 void AppsContainerView::OnNudgeRemoved() {
   const int continue_container_height =
       continue_container_->GetPreferredSize().height();
@@ -830,7 +779,7 @@ void AppsContainerView::UpdateForNewSortingOrder(
 
   // Abort the old reorder animation if any before closure update to avoid data
   // races on closures.
-  apps_grid_view_->MaybeAbortReorderAnimation();
+  apps_grid_view_->MaybeAbortWholeGridAnimation();
   DCHECK(!update_position_closure_);
   update_position_closure_ = std::move(update_position_closure);
   DCHECK(!reorder_animation_done_closure_);
@@ -852,20 +801,75 @@ void AppsContainerView::UpdateForNewSortingOrder(
 }
 
 void AppsContainerView::UpdateContinueSectionVisibility() {
-  if (continue_container_)
-    continue_container_->UpdateContinueSectionVisibility();
+  if (!continue_container_)
+    return;
+
+  // Get the continue container's height before Layout().
+  const int initial_height = continue_container_->height();
+
+  // Update continue container visibility and bounds.
+  continue_container_->UpdateContinueSectionVisibility();
+  Layout();
+
+  // Only play animations if the tablet mode app list is visible. This function
+  // can be called in clamshell mode when the tablet app list is cached.
+  if (!contents_view_->app_list_view()->is_tablet_mode())
+    return;
+
+  // The change in continue container height is the amount by which the apps
+  // grid view will be offset.
+  const int vertical_offset = initial_height - continue_container_->height();
+
+  AppListViewDelegate* view_delegate =
+      contents_view_->GetAppListMainView()->view_delegate();
+  if (view_delegate->ShouldHideContinueSection()) {
+    // Continue section is being hidden. Slide each row of app icons up with a
+    // different offset per row.
+    apps_grid_view_->SlideVisibleItemsForHideContinueSection(vertical_offset);
+
+    // Don't try to fade out the views on hide because they are already
+    // invisible.
+    return;
+  }
+
+  // Continue section is being shown. Transform the apps grid view up to its
+  // original pre-Layout() position.
+  gfx::Transform transform;
+  transform.Translate(0, vertical_offset);
+  apps_grid_view_->SetTransform(transform);
+
+  // Animate to the identity transform to slide the apps grid view down to its
+  // final position.
+  views::AnimationBuilder()
+      .SetPreemptionStrategy(ui::LayerAnimator::PreemptionStrategy::
+                                 IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
+      .Once()
+      .SetTransform(apps_grid_view_, gfx::Transform(),
+                    gfx::Tween::ACCEL_LIN_DECEL_100_3)
+      .SetDuration(base::Milliseconds(300));
+
+  // Fade in the continue tasks and recent apps views.
+  continue_container_->FadeInViews();
 }
 
-ContinueSectionView* AppsContainerView::GetContinueSection() {
+ContinueSectionView* AppsContainerView::GetContinueSectionView() {
   if (!continue_container_)
     return nullptr;
   return continue_container_->continue_section();
 }
 
-RecentAppsView* AppsContainerView::GetRecentApps() {
+RecentAppsView* AppsContainerView::GetRecentAppsView() {
   if (!continue_container_)
     return nullptr;
   return continue_container_->recent_apps();
+}
+
+AppsGridView* AppsContainerView::GetAppsGridView() {
+  return apps_grid_view_;
+}
+
+AppListToastContainerView* AppsContainerView::GetToastContainerView() {
+  return toast_container_;
 }
 
 void AppsContainerView::UpdateControlVisibility(AppListViewState app_list_state,
@@ -1149,12 +1153,25 @@ void AppsContainerView::OnBoundsChanged(const gfx::Rect& old_bounds) {
     UpdateForActiveAppListModel();
 }
 
-void AppsContainerView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-  if (separator_) {
-    separator_->SetColor(ColorProvider::Get()->GetContentLayerColor(
-        ColorProvider::ContentLayerType::kSeparatorColor));
-  }
+void AppsContainerView::AddedToWidget() {
+  GetFocusManager()->AddFocusChangeListener(this);
+}
+
+void AppsContainerView::RemovedFromWidget() {
+  GetFocusManager()->RemoveFocusChangeListener(this);
+}
+
+void AppsContainerView::OnDidChangeFocus(View* focused_before,
+                                         View* focused_now) {
+  // Ensure that `continue_container_` is visible (the first page is active)
+  // after moving focus down from the last row on 2nd+ page to the search box
+  // and then to `continue_container_`.
+  if (!is_active_page_)
+    return;
+  if (!continue_container_ || !continue_container_->Contains(focused_now))
+    return;
+  if (apps_grid_view_->pagination_model()->selected_page() != 0)
+    apps_grid_view_->pagination_model()->SelectPage(0, /*animate=*/false);
 }
 
 void AppsContainerView::OnGestureEvent(ui::GestureEvent* event) {
@@ -1423,12 +1440,13 @@ const gfx::Insets& AppsContainerView::CalculateMarginsForAvailableBounds(
 }
 
 void AppsContainerView::UpdateRecentApps(bool needs_layout) {
-  if (!GetRecentApps() || !app_list_config_)
+  RecentAppsView* recent_apps = GetRecentAppsView();
+  if (!recent_apps || !app_list_config_)
     return;
 
   AppListModelProvider* const model_provider = AppListModelProvider::Get();
-  GetRecentApps()->SetModels(model_provider->search_model(),
-                             model_provider->model());
+  recent_apps->SetModels(model_provider->search_model(),
+                         model_provider->model());
   if (needs_layout)
     Layout();
 }
@@ -1556,11 +1574,14 @@ void AppsContainerView::DisableFocusForShowingActiveFolder(bool disabled) {
     suggestion_chip_container_view_->DisableFocusForShowingActiveFolder(
         disabled);
   }
-  if (auto* recent_apps = GetRecentApps(); recent_apps) {
+  if (auto* recent_apps = GetRecentAppsView(); recent_apps) {
     recent_apps->DisableFocusForShowingActiveFolder(disabled);
   }
-  if (auto* continue_section = GetContinueSection(); continue_section) {
+  if (auto* continue_section = GetContinueSectionView(); continue_section) {
     continue_section->DisableFocusForShowingActiveFolder(disabled);
+  }
+  if (toast_container_) {
+    toast_container_->DisableFocusForShowingActiveFolder(disabled);
   }
   apps_grid_view_->DisableFocusForShowingActiveFolder(disabled);
 
@@ -1780,12 +1801,6 @@ int AppsContainerView::GetSeparatorHeight() {
     return 0;
   return separator_->GetProperty(views::kMarginsKey)->height() +
          views::Separator::kThickness;
-}
-
-views::View* AppsContainerView::GetShowContinueSectionButtonForTest() {
-  return continue_container_
-             ? continue_container_->show_continue_section_button()
-             : nullptr;
 }
 
 }  // namespace ash

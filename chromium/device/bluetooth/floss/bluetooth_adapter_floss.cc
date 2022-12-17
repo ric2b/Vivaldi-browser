@@ -9,6 +9,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/task/single_thread_task_runner.h"
@@ -19,13 +20,18 @@
 #include "device/bluetooth/floss/floss_dbus_manager.h"
 #include "device/bluetooth/public/cpp/bluetooth_address.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "device/bluetooth/chromeos/bluetooth_connection_logger.h"
+#include "device/bluetooth/chromeos/bluetooth_utils.h"
+#endif
+
 namespace floss {
 
 namespace {
 using device::UMABluetoothDiscoverySessionOutcome;
 
 UMABluetoothDiscoverySessionOutcome TranslateDiscoveryErrorToUMA(
-    const std::string& error_name) {
+    const Error& error) {
   // TODO(b/192289534) - Deal with UMA later
   return UMABluetoothDiscoverySessionOutcome::NOT_IMPLEMENTED;
 }
@@ -131,9 +137,7 @@ void BluetoothAdapterFloss::RemoveAdapter() {
 }
 
 void BluetoothAdapterFloss::PopulateInitialDevices() {
-  FlossDBusManager::Get()->GetAdapterClient()->GetBondedDevices(
-      base::BindOnce(&BluetoothAdapterFloss::OnGetBondedDevices,
-                     weak_ptr_factory_.GetWeakPtr()));
+  FlossDBusManager::Get()->GetAdapterClient()->GetBondedDevices();
 }
 
 void BluetoothAdapterFloss::ClearAllDevices() {
@@ -202,7 +206,9 @@ std::string BluetoothAdapterFloss::GetName() const {
 }
 
 std::string BluetoothAdapterFloss::GetSystemName() const {
-  return std::string();
+  // TODO(b/238230098): Floss should expose system information, i.e. stack name
+  // and version.
+  return "Floss";
 }
 
 void BluetoothAdapterFloss::SetName(const std::string& name,
@@ -296,12 +302,10 @@ bool BluetoothAdapterFloss::IsDiscovering() const {
   return NumScanningDiscoverySessions() > 0;
 }
 
-void BluetoothAdapterFloss::OnMethodResponse(
-    base::OnceClosure callback,
-    ErrorCallback error_callback,
-    const absl::optional<Void>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
+void BluetoothAdapterFloss::OnMethodResponse(base::OnceClosure callback,
+                                             ErrorCallback error_callback,
+                                             DBusResult<Void> ret) {
+  if (!ret.has_value()) {
     std::move(error_callback).Run();
     return;
   }
@@ -334,9 +338,8 @@ void BluetoothAdapterFloss::OnRepeatedDiscoverySessionResult(
 
 void BluetoothAdapterFloss::OnStartDiscovery(
     DiscoverySessionResultCallback callback,
-    const absl::optional<Void>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
+    DBusResult<Void> ret) {
+  if (!ret.has_value()) {
     // Adapter path only exists if active adapter hasn't disappeared
     auto adapter_path = FlossDBusManager::Get()->HasActiveAdapter()
                             ? FlossDBusManager::Get()
@@ -345,9 +348,8 @@ void BluetoothAdapterFloss::OnStartDiscovery(
                                   ->value()
                             : std::string();
     BLUETOOTH_LOG(ERROR) << adapter_path
-                         << ": Failed to start discovery: " << error->name
-                         << ": " << error->message;
-    std::move(callback).Run(true, TranslateDiscoveryErrorToUMA(error->name));
+                         << ": Failed to start discovery: " << ret.error();
+    std::move(callback).Run(true, TranslateDiscoveryErrorToUMA(ret.error()));
 
     return;
   }
@@ -365,9 +367,8 @@ void BluetoothAdapterFloss::OnStartDiscovery(
 
 void BluetoothAdapterFloss::OnStopDiscovery(
     DiscoverySessionResultCallback callback,
-    const absl::optional<Void>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
+    DBusResult<Void> ret) {
+  if (!ret.has_value()) {
     // Adapter path only exists if active adapter hasn't disappeared
     auto adapter_path = FlossDBusManager::Get()->HasActiveAdapter()
                             ? FlossDBusManager::Get()
@@ -376,9 +377,8 @@ void BluetoothAdapterFloss::OnStopDiscovery(
                                   ->value()
                             : std::string();
     BLUETOOTH_LOG(ERROR) << adapter_path
-                         << ": Failed to stop discovery: " << error->name
-                         << ": " << error->message;
-    std::move(callback).Run(true, TranslateDiscoveryErrorToUMA(error->name));
+                         << ": Failed to stop discovery: " << ret.error();
+    std::move(callback).Run(true, TranslateDiscoveryErrorToUMA(ret.error()));
 
     return;
   }
@@ -389,28 +389,8 @@ void BluetoothAdapterFloss::OnStopDiscovery(
   std::move(callback).Run(false, UMABluetoothDiscoverySessionOutcome::SUCCESS);
 }
 
-void BluetoothAdapterFloss::OnGetBondedDevices(
-    const absl::optional<std::vector<FlossDeviceId>>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
-    LOG(ERROR) << "Error on GetBondedDevices: " << error->name;
-    return;
-  }
-
-  if (!ret.has_value()) {
-    LOG(ERROR) << "Error on GetBondedDevices: No return value";
-    return;
-  }
-
-  for (const auto& device_id : *ret) {
-    AdapterFoundDevice(device_id);
-  }
-}
-
-void BluetoothAdapterFloss::OnGetConnectionState(
-    const FlossDeviceId& device_id,
-    const absl::optional<uint32_t>& ret,
-    const absl::optional<Error>& error) {
+void BluetoothAdapterFloss::OnGetConnectionState(const FlossDeviceId& device_id,
+                                                 DBusResult<uint32_t> ret) {
   BluetoothDeviceFloss* device =
       static_cast<BluetoothDeviceFloss*>(GetDevice(device_id.address));
 
@@ -427,8 +407,7 @@ void BluetoothAdapterFloss::OnGetConnectionState(
 }
 
 void BluetoothAdapterFloss::OnGetBondState(const FlossDeviceId& device_id,
-                                           const absl::optional<uint32_t>& ret,
-                                           const absl::optional<Error>& error) {
+                                           DBusResult<uint32_t> ret) {
   BluetoothDeviceFloss* device =
       static_cast<BluetoothDeviceFloss*>(GetDevice(device_id.address));
 
@@ -480,6 +459,34 @@ void BluetoothAdapterFloss::NotifyAdapterPoweredChanged(bool powered) {
   for (auto& observer : observers_) {
     observer.AdapterPoweredChanged(this, powered);
   }
+}
+
+void BluetoothAdapterFloss::NotifyDeviceConnectedStateChanged(
+    BluetoothDeviceFloss* device,
+    bool is_now_connected) {
+  DCHECK_EQ(device->IsConnected(), is_now_connected);
+
+#if BUILDFLAG(IS_CHROMEOS)
+  if (is_now_connected) {
+    device::BluetoothConnectionLogger::RecordDeviceConnected(
+        device->GetIdentifier(), device->GetDeviceType());
+  } else {
+    device::RecordDeviceDisconnect(device->GetDeviceType());
+  }
+
+  // Also log the total number of connected devices. This uses a sampled
+  // histogram rather than a enumeration.
+  int count = 0;
+  for (auto& [address, device] : devices_) {
+    if (device->IsPaired() && device->IsConnected()) {
+      count++;
+    }
+  }
+
+  UMA_HISTOGRAM_COUNTS_100("Bluetooth.ConnectedDeviceCount", count);
+#endif
+
+  BluetoothAdapter::NotifyDeviceConnectedStateChanged(device, is_now_connected);
 }
 
 // Observers

@@ -21,7 +21,7 @@ using password_manager::PasswordChangeSuccessTracker;
 
 namespace {
 
-password_manager::CredentialView ConvertJavaObjectToCredentialView(
+password_manager::CredentialUIEntry ConvertJavaObjectToCredential(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& credential) {
   std::string signon_realm = ConvertJavaStringToUTF8(
@@ -36,40 +36,30 @@ password_manager::CredentialView ConvertJavaObjectToCredentialView(
                  : *url::GURLAndroid::ToNativeGURL(
                        env, Java_CompromisedCredential_getAssociatedUrl(
                                 env, credential));
-  return password_manager::CredentialView(
-      std::move(signon_realm), std::move(url),
-      ConvertJavaStringToUTF16(
-          env, Java_CompromisedCredential_getUsername(env, credential)),
-      ConvertJavaStringToUTF16(
-          env, Java_CompromisedCredential_getPassword(env, credential)),
-      base::Time::FromJavaTime(
-          Java_CompromisedCredential_getLastUsedTime(env, credential)));
+  password_manager::CredentialUIEntry entry;
+  entry.signon_realm = std::move(signon_realm);
+  entry.url = std::move(url);
+  entry.username = ConvertJavaStringToUTF16(
+      env, Java_CompromisedCredential_getUsername(env, credential));
+  entry.password = ConvertJavaStringToUTF16(
+      env, Java_CompromisedCredential_getPassword(env, credential));
+  entry.last_used_time = base::Time::FromJavaTime(
+      Java_CompromisedCredential_getLastUsedTime(env, credential));
+  return entry;
 }
 
 // Checks whether the credential is leaked but not phished. Other compromising
 // states are ignored (e.g. weak or reused).
 constexpr bool IsOnlyLeaked(
-    const password_manager::InsecureCredentialTypeFlags& flags) {
-  using password_manager::InsecureCredentialTypeFlags;
-  if ((flags & InsecureCredentialTypeFlags::kCredentialPhished) !=
-      InsecureCredentialTypeFlags::kSecure) {
-    return false;
-  }
-  return (flags & InsecureCredentialTypeFlags::kCredentialLeaked) !=
-         InsecureCredentialTypeFlags::kSecure;
+    const PasswordCheckManager::CompromisedCredentialForUI& credential) {
+  return credential.IsLeaked() && !credential.IsPhished();
 }
 
 // Checks whether the credential is phished but not leaked. Other compromising
 // states are ignored (e.g. weak or reused).
 constexpr bool IsOnlyPhished(
-    const password_manager::InsecureCredentialTypeFlags& flags) {
-  using password_manager::InsecureCredentialTypeFlags;
-  if ((flags & InsecureCredentialTypeFlags::kCredentialLeaked) !=
-      InsecureCredentialTypeFlags::kSecure) {
-    return false;
-  }
-  return (flags & InsecureCredentialTypeFlags::kCredentialPhished) !=
-         InsecureCredentialTypeFlags::kSecure;
+    const PasswordCheckManager::CompromisedCredentialForUI& credential) {
+  return credential.IsPhished() && !credential.IsLeaked();
 }
 
 }  // namespace
@@ -126,11 +116,10 @@ void PasswordCheckBridge::GetCompromisedCredentials(
         base::android::ConvertUTF8ToJavaString(env,
                                                credential.change_password_url),
         base::android::ConvertUTF8ToJavaString(env, credential.package_name),
-        credential.create_time.ToJavaTime(),
-        credential.last_used_time.ToJavaTime(),
-        IsOnlyLeaked(credential.insecure_type),
-        IsOnlyPhished(credential.insecure_type),
-        credential.has_startable_script, credential.has_auto_change_button);
+        credential.GetLastLeakedOrPhishedTime().ToJavaTime(),
+        credential.last_used_time.ToJavaTime(), IsOnlyLeaked(credential),
+        IsOnlyPhished(credential), credential.has_startable_script,
+        credential.has_auto_change_button);
   }
 }
 
@@ -149,7 +138,7 @@ void PasswordCheckBridge::UpdateCredential(
     const base::android::JavaParamRef<jobject>& credential,
     const base::android::JavaParamRef<jstring>& new_password) {
   check_manager_.UpdateCredential(
-      ConvertJavaObjectToCredentialView(env, credential),
+      ConvertJavaObjectToCredential(env, credential),
       base::android::ConvertJavaStringToUTF8(new_password));
 }
 
@@ -159,7 +148,7 @@ void PasswordCheckBridge::OnEditCredential(
     const base::android::JavaParamRef<jobject>& context,
     const base::android::JavaParamRef<jobject>& settings_launcher) {
   check_manager_.OnEditCredential(
-      ConvertJavaObjectToCredentialView(env, credential), context,
+      ConvertJavaObjectToCredential(env, credential), context,
       settings_launcher);
 }
 
@@ -167,7 +156,7 @@ void PasswordCheckBridge::RemoveCredential(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& credential) {
   check_manager_.RemoveCredential(
-      ConvertJavaObjectToCredentialView(env, credential));
+      ConvertJavaObjectToCredential(env, credential));
 }
 
 void PasswordCheckBridge::Destroy(JNIEnv* env) {

@@ -277,7 +277,7 @@ void TtsExtensionEngine::Speak(content::TtsUtterance* utterance,
 
   auto event = std::make_unique<extensions::Event>(
       extensions::events::TTS_ENGINE_ON_SPEAK, tts_engine_events::kOnSpeak,
-      std::move(*args).TakeListDeprecated(), profile);
+      std::move(args->GetList()), profile);
   event_router->DispatchEventToExtension(engine_id, std::move(event));
 }
 
@@ -286,7 +286,7 @@ void TtsExtensionEngine::Stop(content::TtsUtterance* utterance) {
       Profile::FromBrowserContext(utterance->GetBrowserContext());
   auto event = std::make_unique<extensions::Event>(
       extensions::events::TTS_ENGINE_ON_STOP, tts_engine_events::kOnStop,
-      std::vector<base::Value>(), profile);
+      base::Value::List(), profile);
   EventRouter::Get(profile)->DispatchEventToExtension(utterance->GetEngineId(),
                                                       std::move(event));
 }
@@ -296,7 +296,7 @@ void TtsExtensionEngine::Pause(content::TtsUtterance* utterance) {
       Profile::FromBrowserContext(utterance->GetBrowserContext());
   auto event = std::make_unique<extensions::Event>(
       extensions::events::TTS_ENGINE_ON_PAUSE, tts_engine_events::kOnPause,
-      std::vector<base::Value>(), profile);
+      base::Value::List(), profile);
   EventRouter* event_router = EventRouter::Get(profile);
   std::string id = utterance->GetEngineId();
   event_router->DispatchEventToExtension(id, std::move(event));
@@ -308,7 +308,7 @@ void TtsExtensionEngine::Resume(content::TtsUtterance* utterance) {
       Profile::FromBrowserContext(utterance->GetBrowserContext());
   auto event = std::make_unique<extensions::Event>(
       extensions::events::TTS_ENGINE_ON_RESUME, tts_engine_events::kOnResume,
-      std::vector<base::Value>(), profile);
+      base::Value::List(), profile);
   EventRouter* event_router = EventRouter::Get(profile);
   std::string id = utterance->GetEngineId();
   event_router->DispatchEventToExtension(id, std::move(event));
@@ -411,23 +411,21 @@ ExtensionTtsEngineSendTtsEventFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(utterance_id_value.is_int());
   int utterance_id = utterance_id_value.GetInt();
 
-  const base::DictionaryValue* event;
-  EXTENSION_FUNCTION_VALIDATE(args()[1].GetAsDictionary(&event));
+  EXTENSION_FUNCTION_VALIDATE(args()[1].is_dict());
+  const base::Value::Dict& event = args()[1].GetDict();
 
-  std::string event_type;
-  EXTENSION_FUNCTION_VALIDATE(
-      event->GetString(constants::kEventTypeKey, &event_type));
+  const std::string* event_type = event.FindString(constants::kEventTypeKey);
+  EXTENSION_FUNCTION_VALIDATE(event_type);
 
   int char_index = 0;
-  const base::Value* char_index_value =
-      event->FindKey(constants::kCharIndexKey);
+  const base::Value* char_index_value = event.Find(constants::kCharIndexKey);
   if (char_index_value) {
     EXTENSION_FUNCTION_VALIDATE(char_index_value->is_int());
     char_index = char_index_value->GetInt();
   }
 
   int length = -1;
-  const base::Value* length_value = event->FindKey(constants::kLengthKey);
+  const base::Value* length_value = event.Find(constants::kLengthKey);
   if (length_value) {
     EXTENSION_FUNCTION_VALIDATE(length_value->is_int());
     length = length_value->GetInt();
@@ -442,7 +440,7 @@ ExtensionTtsEngineSendTtsEventFunction::Run() {
 
   for (size_t i = 0; i < tts_voices->size(); i++) {
     const extensions::TtsVoice& voice = tts_voices->at(i);
-    if (voice.event_types.find(event_type) != voice.event_types.end()) {
+    if (voice.event_types.find(*event_type) != voice.event_types.end()) {
       event_type_allowed = true;
       break;
     }
@@ -451,30 +449,31 @@ ExtensionTtsEngineSendTtsEventFunction::Run() {
     return RespondNow(Error(constants::kErrorUndeclaredEventType));
 
   content::TtsController* controller = content::TtsController::GetInstance();
-  if (event_type == constants::kEventTypeStart) {
+  if (*event_type == constants::kEventTypeStart) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_START, char_index,
                            length, std::string());
-  } else if (event_type == constants::kEventTypeEnd) {
+  } else if (*event_type == constants::kEventTypeEnd) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_END, char_index,
                            length, std::string());
-  } else if (event_type == constants::kEventTypeWord) {
+  } else if (*event_type == constants::kEventTypeWord) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_WORD, char_index,
                            length, std::string());
-  } else if (event_type == constants::kEventTypeSentence) {
+  } else if (*event_type == constants::kEventTypeSentence) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_SENTENCE,
                            char_index, length, std::string());
-  } else if (event_type == constants::kEventTypeMarker) {
+  } else if (*event_type == constants::kEventTypeMarker) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_MARKER, char_index,
                            length, std::string());
-  } else if (event_type == constants::kEventTypeError) {
-    std::string error_message;
-    event->GetString(constants::kErrorMessageKey, &error_message);
+  } else if (*event_type == constants::kEventTypeError) {
+    const std::string* error_message =
+        event.FindString(constants::kErrorMessageKey);
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_ERROR, char_index,
-                           length, error_message);
-  } else if (event_type == constants::kEventTypePause) {
+                           length,
+                           error_message != nullptr ? *error_message : "");
+  } else if (*event_type == constants::kEventTypePause) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_PAUSE, char_index,
                            length, std::string());
-  } else if (event_type == constants::kEventTypeResume) {
+  } else if (*event_type == constants::kEventTypeResume) {
     controller->OnTtsEvent(utterance_id, content::TTS_EVENT_RESUME, char_index,
                            length, std::string());
   } else {
@@ -493,11 +492,11 @@ ExtensionTtsEngineSendTtsAudioFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(utterance_id_value.is_int());
   int utterance_id = utterance_id_value.GetInt();
 
-  const base::DictionaryValue* audio = nullptr;
-  EXTENSION_FUNCTION_VALIDATE(args()[1].GetAsDictionary(&audio));
+  const base::Value::Dict* audio = args()[1].GetIfDict();
+  EXTENSION_FUNCTION_VALIDATE(audio);
 
   const std::vector<uint8_t>* audio_buffer_blob =
-      audio->FindBlobPath(tts_extension_api_constants::kAudioBufferKey);
+      audio->FindBlob(tts_extension_api_constants::kAudioBufferKey);
   if (!audio_buffer_blob)
     return RespondNow(Error("No audio buffer found."));
 
@@ -513,13 +512,13 @@ ExtensionTtsEngineSendTtsAudioFunction::Run() {
 
   int char_index = 0;
   const base::Value* char_index_value =
-      audio->FindKey(tts_extension_api_constants::kCharIndexKey);
+      audio->Find(tts_extension_api_constants::kCharIndexKey);
   EXTENSION_FUNCTION_VALIDATE(char_index_value);
   EXTENSION_FUNCTION_VALIDATE(char_index_value->is_int());
   char_index = char_index_value->GetInt();
 
   absl::optional<bool> is_last_buffer =
-      audio->FindBoolPath(tts_extension_api_constants::kIsLastBufferKey);
+      audio->FindBool(tts_extension_api_constants::kIsLastBufferKey);
   EXTENSION_FUNCTION_VALIDATE(is_last_buffer);
 
   TtsExtensionEngine::GetInstance()->SendAudioBuffer(

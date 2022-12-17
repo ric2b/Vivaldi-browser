@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.history_clusters;
 import android.view.View;
 import android.view.View.OnClickListener;
 
+import org.chromium.components.browser_ui.widget.MoreProgressButton;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -19,6 +20,18 @@ class HistoryClustersViewBinder {
         if (key == HistoryClustersItemProperties.CLICK_HANDLER) {
             OnClickListener clickListener = model.get(HistoryClustersItemProperties.CLICK_HANDLER);
             itemView.setOnClickListener(clickListener);
+        } else if (key == HistoryClustersItemProperties.CLUSTER_VISIT) {
+            itemView.setItem(model.get(HistoryClustersItemProperties.CLUSTER_VISIT));
+        } else if (key == HistoryClustersItemProperties.DIVIDER_IS_THICK) {
+            itemView.setHasThickDivider(model.get(HistoryClustersItemProperties.DIVIDER_IS_THICK));
+        } else if (key == HistoryClustersItemProperties.DIVIDER_VISIBLE) {
+            itemView.setDividerVisibility(model.get(HistoryClustersItemProperties.DIVIDER_VISIBLE));
+        } else if (key == HistoryClustersItemProperties.END_BUTTON_CLICK_HANDLER) {
+            itemView.setEndButtonClickHandler(
+                    model.get(HistoryClustersItemProperties.END_BUTTON_CLICK_HANDLER));
+        } else if (key == HistoryClustersItemProperties.END_BUTTON_VISIBLE) {
+            itemView.setEndButtonVisibility(
+                    model.get(HistoryClustersItemProperties.END_BUTTON_VISIBLE));
         } else if (key == HistoryClustersItemProperties.ICON_DRAWABLE) {
             itemView.setIconDrawable(model.get(HistoryClustersItemProperties.ICON_DRAWABLE));
         } else if (key == HistoryClustersItemProperties.TITLE) {
@@ -35,8 +48,11 @@ class HistoryClustersViewBinder {
         if (key == HistoryClustersToolbarProperties.QUERY_STATE) {
             QueryState queryState = model.get(HistoryClustersToolbarProperties.QUERY_STATE);
             if (queryState.isSearching()) {
-                toolbar.showSearchView();
-                toolbar.setSearchText(queryState.getQuery());
+                String query = queryState.getQuery();
+                toolbar.setSearchText(query, query.isEmpty() || toolbar.isSearchTextFocused());
+                if (!toolbar.isSearching()) {
+                    toolbar.showSearchView(queryState.getQuery().isEmpty());
+                }
             } else {
                 toolbar.hideSearchView();
             }
@@ -48,7 +64,7 @@ class HistoryClustersViewBinder {
         if (key == HistoryClustersToolbarProperties.QUERY_STATE) {
             QueryState queryState = model.get(HistoryClustersToolbarProperties.QUERY_STATE);
             if (queryState.isSearching()) {
-                listLayout.onStartSearch("");
+                listLayout.onStartSearch(queryState.getSearchEmptyString());
             } else {
                 listLayout.onEndSearch();
             }
@@ -57,8 +73,19 @@ class HistoryClustersViewBinder {
 
     public static void bindClusterView(PropertyModel model, View view, PropertyKey key) {
         HistoryClusterView clusterView = (HistoryClusterView) view;
-        if (key == HistoryClustersItemProperties.CLICK_HANDLER) {
-            clusterView.setOnClickListener(model.get(HistoryClustersItemProperties.CLICK_HANDLER));
+        if (key == HistoryClustersItemProperties.ACCESSIBILITY_STATE) {
+            clusterView.setAccessibilityState(
+                    model.get(HistoryClustersItemProperties.ACCESSIBILITY_STATE));
+        } else if (key == HistoryClustersItemProperties.CLICK_HANDLER) {
+            OnClickListener clickListener = model.get(HistoryClustersItemProperties.CLICK_HANDLER);
+            clusterView.setOnClickListener(clickListener);
+            clusterView.setEndButtonClickListener(clickListener);
+        } else if (key == HistoryClustersItemProperties.DIVIDER_IS_THICK) {
+            clusterView.setHasThickDivider(
+                    model.get(HistoryClustersItemProperties.DIVIDER_IS_THICK));
+        } else if (key == HistoryClustersItemProperties.DIVIDER_VISIBLE) {
+            clusterView.setDividerVisibility(
+                    model.get(HistoryClustersItemProperties.DIVIDER_VISIBLE));
         } else if (key == HistoryClustersItemProperties.END_BUTTON_DRAWABLE) {
             clusterView.setEndButtonDrawable(
                     model.get(HistoryClustersItemProperties.END_BUTTON_DRAWABLE));
@@ -66,6 +93,9 @@ class HistoryClustersViewBinder {
             clusterView.setIconDrawable(model.get(HistoryClustersItemProperties.ICON_DRAWABLE));
         } else if (key == HistoryClustersItemProperties.LABEL) {
             clusterView.setLabel(model.get(HistoryClustersItemProperties.LABEL));
+        } else if (key == HistoryClustersItemProperties.START_ICON_VISIBILITY) {
+            clusterView.setIconDrawableVisibility(
+                    model.get(HistoryClustersItemProperties.START_ICON_VISIBILITY));
         } else if (key == HistoryClustersItemProperties.TITLE) {
             clusterView.setTitle(model.get(HistoryClustersItemProperties.TITLE));
         }
@@ -77,6 +107,12 @@ class HistoryClustersViewBinder {
         if (key == HistoryClustersItemProperties.CHIP_CLICK_HANDLER) {
             relatedSearchesChipLayout.setOnChipClickHandler(
                     model.get(HistoryClustersItemProperties.CHIP_CLICK_HANDLER));
+        } else if (key == HistoryClustersItemProperties.DIVIDER_IS_THICK) {
+            relatedSearchesChipLayout.setHasThickDivider(
+                    model.get(HistoryClustersItemProperties.DIVIDER_IS_THICK));
+        } else if (key == HistoryClustersItemProperties.DIVIDER_VISIBLE) {
+            relatedSearchesChipLayout.setDividerVisibility(
+                    model.get(HistoryClustersItemProperties.DIVIDER_VISIBLE));
         } else if (key == HistoryClustersItemProperties.RELATED_SEARCHES) {
             List<String> relatedSearches =
                     model.get(HistoryClustersItemProperties.RELATED_SEARCHES);
@@ -87,9 +123,22 @@ class HistoryClustersViewBinder {
         }
     }
 
-    public static void bindToggleView(
+    public static void noopBindView(
             PropertyModel propertyModel, View view, PropertyKey propertyKey) {
-        // The toggle view's appearance and behavior are dictated by our parent component, so we
+        // This view's appearance and behavior are dictated by our parent component, so we
         // don't manipulate it here.
+    }
+
+    public static void bindMoreProgressView(
+            PropertyModel propertyModel, View view, PropertyKey key) {
+        MoreProgressButton button = (MoreProgressButton) view;
+        if (key == HistoryClustersItemProperties.CLICK_HANDLER) {
+            button.setOnClickRunnable(
+                    ()
+                            -> propertyModel.get(HistoryClustersItemProperties.CLICK_HANDLER)
+                                       .onClick(null));
+        } else if (key == HistoryClustersItemProperties.PROGRESS_BUTTON_STATE) {
+            button.setState(propertyModel.get(HistoryClustersItemProperties.PROGRESS_BUTTON_STATE));
+        }
     }
 }

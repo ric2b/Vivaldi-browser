@@ -8,8 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/components/cryptohome/cryptohome_util.h"
-#include "ash/components/cryptohome/userdataauth_util.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -30,11 +28,13 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_util.h"
+#include "chromeos/ash/components/cryptohome/userdataauth_util.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
@@ -239,26 +239,16 @@ FirstScreen GetFirstScreenForMode(EncryptionMigrationMode mode) {
 }  // namespace
 
 EncryptionMigrationScreen::EncryptionMigrationScreen(
-    EncryptionMigrationScreenView* view)
+    base::WeakPtr<EncryptionMigrationScreenView> view)
     : BaseScreen(EncryptionMigrationScreenView::kScreenId,
                  OobeScreenPriority::DEFAULT),
-      view_(view) {
+      view_(std::move(view)) {
   DCHECK(view_);
-  if (view_)
-    view_->SetDelegate(this);
 }
 
 EncryptionMigrationScreen::~EncryptionMigrationScreen() {
   userdataauth_observer_.reset();
   power_manager_observation_.Reset();
-  if (view_)
-    view_->SetDelegate(nullptr);
-}
-
-void EncryptionMigrationScreen::OnViewDestroyed(
-    EncryptionMigrationScreenView* view) {
-  if (view_ == view)
-    view_ = nullptr;
 }
 
 void EncryptionMigrationScreen::ShowImpl() {
@@ -266,33 +256,28 @@ void EncryptionMigrationScreen::ShowImpl() {
     view_->Show();
 }
 
-void EncryptionMigrationScreen::HideImpl() {
-  if (view_)
-    view_->Hide();
-}
+void EncryptionMigrationScreen::HideImpl() {}
 
 void EncryptionMigrationScreen::SetUserContext(
     const UserContext& user_context) {
-  DCHECK(view_);
   user_context_ = user_context;
 }
 
 void EncryptionMigrationScreen::SetMode(EncryptionMigrationMode mode) {
-  DCHECK(view_);
   mode_ = mode;
-  view_->SetIsResuming(IsStartImmediately());
+  if (view_)
+    view_->SetIsResuming(IsStartImmediately());
 }
 
 void EncryptionMigrationScreen::SetSkipMigrationCallback(
     SkipMigrationCallback skip_migration_callback) {
-  DCHECK(view_);
   skip_migration_callback_ = std::move(skip_migration_callback);
 }
 
 void EncryptionMigrationScreen::SetupInitialView() {
-  DCHECK(view_);
   // Pass constant value(s) to the UI.
-  view_->SetNecessaryBatteryPercent(arc::kMigrationMinimumBatteryPercent);
+  if (view_)
+    view_->SetNecessaryBatteryPercent(arc::kMigrationMinimumBatteryPercent);
 
   // If old encryption is detected in ARC kiosk mode, skip all checks (user
   // confirmation, battery level, and remaining space) and start migration
@@ -312,8 +297,8 @@ void EncryptionMigrationScreen::SetEncryptionMigrationScreenTestDelegate(
   test_delegate = delegate;
 }
 
-void EncryptionMigrationScreen::OnUserActionDeprecated(
-    const std::string& action_id) {
+void EncryptionMigrationScreen::OnUserAction(const base::Value::List& args) {
+  const std::string& action_id = args[0].GetString();
   if (action_id == kUserActionStartMigration) {
     HandleStartMigration();
   } else if (action_id == kUserActionSkipMigration) {
@@ -325,7 +310,7 @@ void EncryptionMigrationScreen::OnUserActionDeprecated(
   } else if (action_id == kUserActionOpenFeedbackDialog) {
     HandleOpenFeedbackDialog();
   } else {
-    BaseScreen::OnUserActionDeprecated(action_id);
+    BaseScreen::OnUserAction(args);
   }
 }
 
@@ -348,13 +333,13 @@ void EncryptionMigrationScreen::PowerChanged(
     // immediately.
     current_battery_percent_ = 100.0;
   }
-
-  view_->SetBatteryState(
-      *current_battery_percent_,
-      *current_battery_percent_ >= arc::kMigrationMinimumBatteryPercent,
-      proto.battery_state() ==
-          power_manager::PowerSupplyProperties_BatteryState_CHARGING);
-
+  if (view_) {
+    view_->SetBatteryState(
+        *current_battery_percent_,
+        *current_battery_percent_ >= arc::kMigrationMinimumBatteryPercent,
+        proto.battery_state() ==
+            power_manager::PowerSupplyProperties_BatteryState_CHARGING);
+  }
   // If the migration was already requested and the battery level is enough now,
   // The migration should start immediately.
   if (*current_battery_percent_ >= arc::kMigrationMinimumBatteryPercent &&
@@ -413,7 +398,8 @@ void EncryptionMigrationScreen::UpdateUIState(
     return;
 
   current_ui_state_ = state;
-  view_->SetUIState(state);
+  if (view_)
+    view_->SetUIState(state);
 
   // When this handler is about to show the READY screen, we should get the
   // latest battery status and show it on the screen.
@@ -462,10 +448,12 @@ void EncryptionMigrationScreen::OnGetAvailableStorage(int64_t size) {
     }
   } else {
     RecordFirstScreen(FirstScreen::FIRST_SCREEN_LOW_STORAGE);
-    view_->SetSpaceInfoInString(
-        size /* availableSpaceSize */,
-        arc::kMigrationMinimumAvailableStorage /* necessarySpaceSize */);
-    UpdateUIState(EncryptionMigrationScreenView::NOT_ENOUGH_STORAGE);
+    if (view_) {
+      view_->SetSpaceInfoInString(
+          size /* availableSpaceSize */,
+          arc::kMigrationMinimumAvailableStorage /* necessarySpaceSize */);
+      UpdateUIState(EncryptionMigrationScreenView::NOT_ENOUGH_STORAGE);
+    }
   }
 }
 
@@ -614,9 +602,11 @@ void EncryptionMigrationScreen::DircryptoMigrationProgress(
     case user_data_auth::DircryptoMigrationStatus::
         DIRCRYPTO_MIGRATION_IN_PROGRESS:
       UpdateUIState(EncryptionMigrationScreenView::MIGRATING);
-      view_->SetMigrationProgress(
-          static_cast<double>(progress.current_bytes()) /
-          progress.total_bytes());
+      if (view_) {
+        view_->SetMigrationProgress(
+            static_cast<double>(progress.current_bytes()) /
+            progress.total_bytes());
+      }
       break;
     case user_data_auth::DircryptoMigrationStatus::DIRCRYPTO_MIGRATION_SUCCESS:
       RecordMigrationResultSuccess(IsResumingIncompleteMigration(),
@@ -686,7 +676,7 @@ void EncryptionMigrationScreen::MaybeStopForcingMigration() {
   // |mode_| will be START_MIGRATION if migration was forced.
   // If an incomplete migration is being resumed, it would be RESUME_MIGRATION.
   // We only want to disable auto-starting migration in the first case.
-  if (mode_ == EncryptionMigrationMode::START_MIGRATION)
+  if (mode_ == EncryptionMigrationMode::START_MIGRATION && view_)
     view_->SetIsResuming(false);
 }
 

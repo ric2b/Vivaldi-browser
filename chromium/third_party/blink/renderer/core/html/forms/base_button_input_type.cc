@@ -41,8 +41,8 @@
 
 namespace blink {
 
-BaseButtonInputType::BaseButtonInputType(HTMLInputElement& element)
-    : InputType(element), KeyboardClickableInputTypeView(element) {}
+BaseButtonInputType::BaseButtonInputType(Type type, HTMLInputElement& element)
+    : InputType(type, element), KeyboardClickableInputTypeView(element) {}
 
 void BaseButtonInputType::Trace(Visitor* visitor) const {
   KeyboardClickableInputTypeView::Trace(visitor);
@@ -61,7 +61,7 @@ void BaseButtonInputType::CreateShadowSubtree() {
 
 HTMLFormControlElement::PopupTriggerSupport
 BaseButtonInputType::SupportsPopupTriggering() const {
-  return HTMLFormControlElement::PopupTriggerSupport::kActivate;
+  return HTMLFormControlElement::PopupTriggerSupport::kSupported;
 }
 
 void BaseButtonInputType::ValueAttributeChanged() {

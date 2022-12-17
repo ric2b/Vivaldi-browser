@@ -170,6 +170,7 @@
 <translation id="7113310725918019676">Laat <ph name="BLOCKED_TYPE" /> van <ph name="DOMAIN" /> toe</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoen nie aan sekuriteitstandaarde nie.</translation>
 <translation id="7219179957768738017">Die verbinding gebruik <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Toon kennisgewings</translation>
 <translation id="7260504762447901703">Herroep toegang</translation>
 <translation id="7353601530677266744">Opdragreël</translation>
 <translation id="7364115444476960850">Die blad wat u probeer besoek is versper deur Vivaldi se <ph name="BLOCKER_NAME" /></translation>

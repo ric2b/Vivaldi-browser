@@ -66,7 +66,6 @@ static jlong JNI_CronetUrlRequest_CreateRequestAdapter(
     jint jpriority,
     jboolean jdisable_cache,
     jboolean jdisable_connection_migration,
-    jboolean jenable_metrics,
     jboolean jtraffic_stats_tag_set,
     jint jtraffic_stats_tag,
     jboolean jtraffic_stats_uid_set,
@@ -85,8 +84,8 @@ static jlong JNI_CronetUrlRequest_CreateRequestAdapter(
   CronetURLRequestAdapter* adapter = new CronetURLRequestAdapter(
       context_adapter, env, jurl_request, url,
       static_cast<net::RequestPriority>(jpriority), jdisable_cache,
-      jdisable_connection_migration, jenable_metrics, jtraffic_stats_tag_set,
-      jtraffic_stats_tag, jtraffic_stats_uid_set, jtraffic_stats_uid,
+      jdisable_connection_migration, jtraffic_stats_tag_set, jtraffic_stats_tag,
+      jtraffic_stats_uid_set, jtraffic_stats_uid,
       static_cast<net::Idempotency>(jidempotency), jnetwork_handle);
 
   return reinterpret_cast<jlong>(adapter);
@@ -100,7 +99,6 @@ CronetURLRequestAdapter::CronetURLRequestAdapter(
     net::RequestPriority priority,
     jboolean jdisable_cache,
     jboolean jdisable_connection_migration,
-    jboolean jenable_metrics,
     jboolean jtraffic_stats_tag_set,
     jint jtraffic_stats_tag,
     jboolean jtraffic_stats_uid_set,
@@ -114,7 +112,6 @@ CronetURLRequestAdapter::CronetURLRequestAdapter(
                                priority,
                                jdisable_cache == JNI_TRUE,
                                jdisable_connection_migration == JNI_TRUE,
-                               jenable_metrics == JNI_TRUE,
                                jtraffic_stats_tag_set == JNI_TRUE,
                                jtraffic_stats_tag,
                                jtraffic_stats_uid_set == JNI_TRUE,
@@ -304,7 +301,9 @@ void CronetURLRequestAdapter::OnMetricsCollected(
     const base::TimeTicks& request_end,
     bool socket_reused,
     int64_t sent_bytes_count,
-    int64_t received_bytes_count) {
+    int64_t received_bytes_count,
+    bool quic_connection_migration_attempted,
+    bool quic_connection_migration_successful) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_CronetUrlRequest_onMetricsCollected(
       env, owner_,
@@ -322,7 +321,9 @@ void CronetURLRequestAdapter::OnMetricsCollected(
       metrics_util::ConvertTime(receive_headers_end, start_ticks, start_time),
       metrics_util::ConvertTime(request_end, start_ticks, start_time),
       socket_reused ? JNI_TRUE : JNI_FALSE, sent_bytes_count,
-      received_bytes_count);
+      received_bytes_count,
+      quic_connection_migration_attempted ? JNI_TRUE : JNI_FALSE,
+      quic_connection_migration_successful ? JNI_TRUE : JNI_FALSE);
 }
 
 }  // namespace cronet

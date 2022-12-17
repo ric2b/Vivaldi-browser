@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
@@ -93,22 +94,21 @@ base::Value DecodeStringListProto(const em::StringListPolicyProto& proto) {
 base::Value DecodeJsonProto(const em::StringPolicyProto& proto,
                             std::string* error) {
   const std::string& json = proto.value();
-  base::JSONReader::ValueWithError value_with_error =
-      base::JSONReader::ReadAndReturnValueWithError(
-          json, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
+  auto value_with_error = base::JSONReader::ReadAndReturnValueWithError(
+      json, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
 
-  if (!value_with_error.value) {
+  if (!value_with_error.has_value()) {
     // Can't parse as JSON so return it as a string, and leave it to the handler
     // to validate.
     LOG(WARNING) << "Invalid JSON: " << json;
-    *error = value_with_error.error_message;
+    *error = value_with_error.error().message;
     return base::Value(json);
   }
 
   // Accept any Value type that parsed as JSON, and leave it to the handler to
   // convert and check the concrete type.
   error->clear();
-  return std::move(value_with_error.value.value());
+  return std::move(*value_with_error);
 }
 
 bool PerProfileMatches(bool policy_per_profile,
@@ -121,6 +121,18 @@ bool PerProfileMatches(bool policy_per_profile,
     case PolicyPerProfileFilter::kAny:
       return true;
   }
+}
+
+bool UseExternalDataFetcher(const char* policy_name,
+                            StringPolicyType policy_type) {
+  if (policy_type == StringPolicyType::EXTERNAL)
+    return true;
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  if (strcmp(policy_name, key::kWebAppInstallForceList) == 0)
+    return true;
+#endif
+  return false;
 }
 
 }  // namespace
@@ -187,8 +199,7 @@ void DecodeProtoFields(
     // needs an ExternalDataFetcher. If we ever create a second such policy,
     // create a new type for it instead of special-casing the policies here.
     std::unique_ptr<ExternalDataFetcher> external_data_fetcher =
-        (access.type == StringPolicyType::EXTERNAL ||
-         strcmp(access.policy_key, key::kWebAppInstallForceList) == 0)
+        UseExternalDataFetcher(access.policy_key, access.type)
             ? std::make_unique<ExternalDataFetcher>(external_data_manager,
                                                     access.policy_key)
             : nullptr;

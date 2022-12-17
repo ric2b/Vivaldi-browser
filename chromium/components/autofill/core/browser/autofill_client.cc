@@ -51,6 +51,14 @@ AutofillClient::GetSingleFieldFormFillRouter() {
       GetAutocompleteHistoryManager(), GetMerchantPromoCodeManager());
 }
 
+CreditCardCVCAuthenticator* AutofillClient::GetCVCAuthenticator() {
+  return nullptr;
+}
+
+CreditCardOtpAuthenticator* AutofillClient::GetOtpAuthenticator() {
+  return nullptr;
+}
+
 AutofillOfferManager* AutofillClient::GetAutofillOfferManager() {
   return nullptr;
 }
@@ -104,8 +112,7 @@ void AutofillClient::HideVirtualCardEnrollBubbleAndIconIfVisible() {
 
 #if !BUILDFLAG(IS_IOS)
 std::unique_ptr<webauthn::InternalAuthenticator>
-AutofillClient::CreateCreditCardInternalAuthenticator(
-    content::RenderFrameHost* rfh) {
+AutofillClient::CreateCreditCardInternalAuthenticator(AutofillDriver* driver) {
   return nullptr;
 }
 #endif
@@ -149,6 +156,7 @@ void AutofillClient::ShowVirtualCardErrorDialog(bool is_permanent_error) {
 }
 
 void AutofillClient::ShowAutofillProgressDialog(
+    AutofillProgressDialogType autofill_progress_dialog_type,
     base::OnceClosure cancel_callback) {
   // This is overridden by platform subclasses. Currently only
   // ChromeAutofillClient (Chrome Desktop & Android) implements this.

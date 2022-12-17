@@ -25,12 +25,15 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_origin_text.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/window_controls_overlay_toggle_button.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/window/hit_test_utils.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 
@@ -79,15 +82,20 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
 
   const auto* app_controller = browser_view_->browser()->app_controller();
 
-  if (app_controller->HasTitlebarAppOriginText()) {
+  // App's origin will not be shown in the borderless mode, it will only be
+  // visible in App Settings UI.
+  if (app_controller->HasTitlebarAppOriginText() &&
+      !browser_view_->IsBorderlessModeEnabled()) {
     web_app_origin_text_ = AddChildView(
         std::make_unique<WebAppOriginText>(browser_view_->browser()));
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (app_controller->system_app()) {
     AddChildView(std::make_unique<SystemAppAccessibleName>(
         app_controller->GetAppShortName()));
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (app_controller->AppUsesWindowControlsOverlay()) {
     window_controls_overlay_toggle_button_ = AddChildView(
@@ -120,9 +128,14 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
   params.page_action_icon_delegate = this;
   page_action_icon_controller_->Init(params, this);
 
+  bool create_extensions_container = true;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Do not create the extensions or browser actions container if it is a
   // System Web App.
-  if (!web_app::IsSystemWebApp(browser_view_->browser())) {
+  create_extensions_container = !ash::IsSystemWebApp(browser_view_->browser());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  if (create_extensions_container) {
     // Extensions toolbar area with pinned extensions is lower priority than,
     // for example, the menu button or other toolbar buttons, and pinned
     // extensions should hide before other toolbar buttons.

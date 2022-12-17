@@ -38,7 +38,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
-#include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -53,6 +53,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -370,11 +371,10 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, PolicyId) {
             app_url.spec());
   EXPECT_TRUE(mock_app_publisher.get_deltas().back()->policy_id->empty());
 
-  // Set policy to pin the web app.
-  web_app::ExternallyInstalledWebAppPrefs web_app_prefs(
-      browser()->profile()->GetPrefs());
-  web_app_prefs.Insert(install_url, app_id,
-                       web_app::ExternalInstallSource::kExternalPolicy);
+  // Writing to the external prefs to set policy to pin the app.
+  web_app::test::AddInstallUrlData(
+      browser()->profile()->GetPrefs(), &provider().sync_bridge(), app_id,
+      install_url, ExternalInstallSource::kExternalPolicy);
 
   provider().install_manager().NotifyWebAppInstalledWithOsHooks(app_id);
 
@@ -492,7 +492,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, Launch) {
   navigation_observer.StartWatchingNewWebContents();
   auto launch_params = crosapi::mojom::LaunchParams::New();
   launch_params->app_id = app_id;
-  launch_params->launch_source = apps::mojom::LaunchSource::kFromTest;
+  launch_params->launch_source = apps::LaunchSource::kFromTest;
   lacros_web_apps_controller.Launch(std::move(launch_params),
                                     base::DoNothing());
   navigation_observer.Wait();
@@ -517,7 +517,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, LaunchWithFiles) {
   navigation_observer.StartWatchingNewWebContents();
   auto launch_params = crosapi::mojom::LaunchParams::New();
   launch_params->app_id = app_id;
-  launch_params->launch_source = apps::mojom::LaunchSource::kFromTest;
+  launch_params->launch_source = apps::LaunchSource::kFromTest;
   launch_params->intent = crosapi::mojom::Intent::New();
   launch_params->intent->action = apps_util::kIntentActionView;
   launch_params->intent->activity_name = launch_url.spec();
@@ -529,10 +529,9 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, LaunchWithFiles) {
   launch_params->intent->files = std::move(files);
 
   // Skip past the permission dialog.
-  web_app::ScopedRegistryUpdate(
-      &web_app::WebAppProvider::GetForTest(profile())->sync_bridge())
+  ScopedRegistryUpdate(&WebAppProvider::GetForTest(profile())->sync_bridge())
       ->UpdateApp(app_id)
-      ->SetFileHandlerApprovalState(web_app::ApiApprovalState::kAllowed);
+      ->SetFileHandlerApprovalState(ApiApprovalState::kAllowed);
 
   lacros_web_apps_controller.Launch(std::move(launch_params),
                                     base::DoNothing());
@@ -601,8 +600,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, GetMenuModel) {
 
   const GURL app_url =
       https_server()->GetURL("/web_app_shortcuts/shortcuts.html");
-  const web_app::AppId app_id =
-      web_app::InstallWebAppFromPage(browser(), app_url);
+  const AppId app_id = InstallWebAppFromPage(browser(), app_url);
   crosapi::mojom::AppController& lacros_web_apps_controller =
       *apps::AppServiceProxyFactory::GetForProfile(profile())
            ->LacrosWebAppsControllerForTesting();
@@ -634,8 +632,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest,
                        ExecuteContextMenuCommand) {
   const GURL app_url =
       https_server()->GetURL("/web_app_shortcuts/shortcuts.html");
-  const web_app::AppId app_id =
-      web_app::InstallWebAppFromPage(browser(), app_url);
+  const AppId app_id = InstallWebAppFromPage(browser(), app_url);
   LacrosWebAppsController& lacros_web_apps_controller =
       *apps::AppServiceProxyFactory::GetForProfile(profile())
            ->LacrosWebAppsControllerForTesting();
@@ -853,7 +850,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, GetLink) {
   {
     auto launch_params = apps::CreateCrosapiLaunchParamsWithEventFlags(
         apps::AppServiceProxyFactory::GetForProfile(profile()), app_id,
-        /*event_flags=*/0, apps::mojom::LaunchSource::kFromSharesheet,
+        /*event_flags=*/0, apps::LaunchSource::kFromSharesheet,
         display::kInvalidDisplayId);
     launch_params->intent = apps_util::ConvertAppServiceToCrosapiIntent(
         apps_util::CreateShareIntentFromText(shared_link, shared_title),
@@ -909,7 +906,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, ShareImage) {
 
     auto launch_params = apps::CreateCrosapiLaunchParamsWithEventFlags(
         apps::AppServiceProxyFactory::GetForProfile(profile()), app_id,
-        /*event_flags=*/0, apps::mojom::LaunchSource::kFromSharesheet,
+        /*event_flags=*/0, apps::LaunchSource::kFromSharesheet,
         display::kInvalidDisplayId);
     launch_params->intent = std::move(crosapi_intent);
 
@@ -972,7 +969,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppsControllerBrowserTest, ShareMultimedia) {
 
     auto launch_params = apps::CreateCrosapiLaunchParamsWithEventFlags(
         apps::AppServiceProxyFactory::GetForProfile(profile()), app_id,
-        /*event_flags=*/0, apps::mojom::LaunchSource::kFromSharesheet,
+        /*event_flags=*/0, apps::LaunchSource::kFromSharesheet,
         display::kInvalidDisplayId);
     launch_params->intent = std::move(crosapi_intent);
 

@@ -15,8 +15,8 @@
 #include "base/i18n/message_formatter.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/services/libassistant/public/cpp/assistant_notification.h"
 #include "chromeos/services/libassistant/public/cpp/assistant_timer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -293,7 +293,7 @@ AssistantAlarmTimerControllerImpl::~AssistantAlarmTimerControllerImpl() {
 }
 
 void AssistantAlarmTimerControllerImpl::SetAssistant(
-    chromeos::assistant::Assistant* assistant) {
+    assistant::Assistant* assistant) {
   assistant_ = assistant;
 }
 
@@ -361,10 +361,10 @@ void AssistantAlarmTimerControllerImpl::OnDeepLinkReceived(
 }
 
 void AssistantAlarmTimerControllerImpl::OnAssistantStatusChanged(
-    chromeos::assistant::AssistantStatus status) {
+    assistant::AssistantStatus status) {
   // If LibAssistant is no longer running we need to clear our cache to
   // accurately reflect LibAssistant alarm/timer state.
-  if (status == chromeos::assistant::AssistantStatus::NOT_READY)
+  if (status == assistant::AssistantStatus::NOT_READY)
     model_.RemoveAllTimers();
 }
 

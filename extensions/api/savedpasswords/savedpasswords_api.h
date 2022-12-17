@@ -8,8 +8,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/ui/passwords/settings/password_manager_presenter.h"
-#include "chrome/browser/ui/passwords/settings/password_ui_view.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/web_ui.h"

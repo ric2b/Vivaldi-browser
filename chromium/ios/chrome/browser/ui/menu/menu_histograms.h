@@ -25,13 +25,15 @@ enum class MenuScenario {
   kToolbarMenu = 13,
   kTabGridSearchResult = 14,
   kThumbStrip = 15,
-  kMaxValue = kThumbStrip,
+  kNoteEntry = 16, // Vivaldi
+  kNoteFolder = 17, // Vivaldi
+  kMaxValue = kNoteFolder, // Vivaldi
 };
 
-// Records a menu shown histogram metric for the |scenario|.
+// Records a menu shown histogram metric for the `scenario`.
 void RecordMenuShown(MenuScenario scenario);
 
-// Retrieves a histogram name for the given menu |scenario|'s actions.
+// Retrieves a histogram name for the given menu `scenario`'s actions.
 const char* GetActionsHistogramName(MenuScenario scenario);
 
 #endif  // IOS_CHROME_BROWSER_UI_MENU_MENU_HISTOGRAMS_H_

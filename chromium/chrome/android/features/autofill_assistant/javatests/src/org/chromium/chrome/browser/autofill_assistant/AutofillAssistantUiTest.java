@@ -42,7 +42,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
-import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
+import org.chromium.chrome.browser.customtabs.CustomTabsIntentTestUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.autofill_assistant.AssistantCoordinator;
@@ -64,9 +64,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Instrumentation tests for autofill assistant UI.
- */
+/** Instrumentation tests for autofill assistant UI. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class AutofillAssistantUiTest {
     private String mTestPage;
@@ -134,7 +132,7 @@ public class AutofillAssistantUiTest {
     public void testStartAndAccept() {
         InOrder inOrder = inOrder(mRunnableMock);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
-                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                CustomTabsIntentTestUtils.createMinimalCustomTabIntent(
                         InstrumentationRegistry.getTargetContext(), mTestPage));
         AssistantCoordinator assistantCoordinator = createAndShowAssistantCoordinator();
 
@@ -195,8 +193,9 @@ public class AutofillAssistantUiTest {
                                         descriptionLine3,
                                         /* priceAttribution = */ "",
                                         /* userApprovalRequired= */ false,
-                                        /* highlightTitle= */ false, /* highlightLine1= */
-                                        false, /* highlightLine2 = */ false,
+                                        /* highlightTitle= */ false,
+                                        /* highlightLine1= */ false,
+                                        /* highlightLine2 = */ false,
                                         /* highlightLine3 = */ false,
                                         AutofillAssistantDetailsUiTest.NO_PLACEHOLDERS))));
         onView(withId(R.id.details_title))
@@ -227,8 +226,8 @@ public class AutofillAssistantUiTest {
                 ()
                         -> assistantCoordinator.getModel().getInfoBoxModel().set(
                                 AssistantInfoBoxModel.INFO_BOX,
-                                new AssistantInfoBox(
-                                        /* imagePath = */ "", infoBoxExplanation)));
+                                new AssistantInfoBox(null, infoBoxExplanation,
+                                        /*useIntrinsicDimensions=*/false)));
         TextView infoBoxExplanationView =
                 bottomSheetContent.findViewById(R.id.info_box_explanation);
         onView(is(infoBoxExplanationView)).check(matches(withText(infoBoxExplanation)));
@@ -262,7 +261,7 @@ public class AutofillAssistantUiTest {
         InOrder inOrder = inOrder(mRunnableMock);
 
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
-                CustomTabsTestUtils.createMinimalCustomTabIntent(
+                CustomTabsIntentTestUtils.createMinimalCustomTabIntent(
                         InstrumentationRegistry.getTargetContext(), mTestPage));
         AssistantCoordinator assistantCoordinator = createAndShowAssistantCoordinator();
 

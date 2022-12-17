@@ -17,10 +17,6 @@
 #include "base/compiler_specific.h"
 #include "build/build_config.h"
 
-#if defined(COMPILER_MSVC)
-#include <intrin.h>
-#endif
-
 namespace base {
 namespace bits {
 
@@ -39,7 +35,8 @@ constexpr bool IsPowerOfTwo(T value) {
 }
 
 // Round down |size| to a multiple of alignment, which must be a power of two.
-inline constexpr size_t AlignDown(size_t size, size_t alignment) {
+template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+constexpr T AlignDown(T size, T alignment) {
   DCHECK(IsPowerOfTwo(alignment));
   return size & ~(alignment - 1);
 }
@@ -47,13 +44,14 @@ inline constexpr size_t AlignDown(size_t size, size_t alignment) {
 // Move |ptr| back to the previous multiple of alignment, which must be a power
 // of two. Defined for types where sizeof(T) is one byte.
 template <typename T, typename = typename std::enable_if<sizeof(T) == 1>::type>
-inline T* AlignDown(T* ptr, size_t alignment) {
+inline T* AlignDown(T* ptr, uintptr_t alignment) {
   return reinterpret_cast<T*>(
-      AlignDown(reinterpret_cast<size_t>(ptr), alignment));
+      AlignDown(reinterpret_cast<uintptr_t>(ptr), alignment));
 }
 
 // Round up |size| to a multiple of alignment, which must be a power of two.
-inline constexpr size_t AlignUp(size_t size, size_t alignment) {
+template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+constexpr T AlignUp(T size, T alignment) {
   DCHECK(IsPowerOfTwo(alignment));
   return (size + alignment - 1) & ~(alignment - 1);
 }
@@ -61,9 +59,9 @@ inline constexpr size_t AlignUp(size_t size, size_t alignment) {
 // Advance |ptr| to the next multiple of alignment, which must be a power of
 // two. Defined for types where sizeof(T) is one byte.
 template <typename T, typename = typename std::enable_if<sizeof(T) == 1>::type>
-inline T* AlignUp(T* ptr, size_t alignment) {
+inline T* AlignUp(T* ptr, uintptr_t alignment) {
   return reinterpret_cast<T*>(
-      AlignUp(reinterpret_cast<size_t>(ptr), alignment));
+      AlignUp(reinterpret_cast<uintptr_t>(ptr), alignment));
 }
 
 // CountLeadingZeroBits(value) returns the number of zero bits following the
@@ -79,86 +77,8 @@ inline T* AlignUp(T* ptr, size_t alignment) {
 // C does not have an operator to do this, but fortunately the various
 // compilers have built-ins that map to fast underlying processor instructions.
 //
-// Prefer the clang path on Windows, as _BitScanReverse() and friends are not
-// constexpr.
-//
 // TODO(pkasting): When C++20 is available, replace with std::countl_zero() and
 // similar.
-#if defined(COMPILER_MSVC) && !defined(__clang__)
-
-template <typename T, int bits = sizeof(T) * 8>
-ALWAYS_INLINE
-    typename std::enable_if<std::is_unsigned<T>::value && sizeof(T) <= 4,
-                            int>::type
-    CountLeadingZeroBits(T x) {
-  static_assert(bits > 0, "invalid instantiation");
-  unsigned long index;
-  return LIKELY(_BitScanReverse(&index, static_cast<uint32_t>(x)))
-             ? (31 - index - (32 - bits))
-             : bits;
-}
-
-template <typename T, int bits = sizeof(T) * 8>
-ALWAYS_INLINE
-    typename std::enable_if<std::is_unsigned<T>::value && sizeof(T) == 8,
-                            int>::type
-    CountLeadingZeroBits(T x) {
-  static_assert(bits > 0, "invalid instantiation");
-  unsigned long index;
-// MSVC only supplies _BitScanReverse64 when building for a 64-bit target.
-#if defined(ARCH_CPU_64_BITS)
-  return LIKELY(_BitScanReverse64(&index, static_cast<uint64_t>(x)))
-             ? (63 - index)
-             : 64;
-#else
-  uint32_t left = static_cast<uint32_t>(x >> 32);
-  if (LIKELY(_BitScanReverse(&index, left)))
-    return 31 - index;
-
-  uint32_t right = static_cast<uint32_t>(x);
-  if (LIKELY(_BitScanReverse(&index, right)))
-    return 63 - index;
-
-  return 64;
-#endif
-}
-
-template <typename T, int bits = sizeof(T) * 8>
-ALWAYS_INLINE
-    typename std::enable_if<std::is_unsigned<T>::value && sizeof(T) <= 4,
-                            int>::type
-    CountTrailingZeroBits(T x) {
-  static_assert(bits > 0, "invalid instantiation");
-  unsigned long index;
-  return LIKELY(_BitScanForward(&index, static_cast<uint32_t>(x))) ? index
-                                                                   : bits;
-}
-
-template <typename T, int bits = sizeof(T) * 8>
-ALWAYS_INLINE
-    typename std::enable_if<std::is_unsigned<T>::value && sizeof(T) == 8,
-                            int>::type
-    CountTrailingZeroBits(T x) {
-  static_assert(bits > 0, "invalid instantiation");
-  unsigned long index;
-// MSVC only supplies _BitScanForward64 when building for a 64-bit target.
-#if defined(ARCH_CPU_64_BITS)
-  return LIKELY(_BitScanForward64(&index, static_cast<uint64_t>(x))) ? index
-                                                                     : 64;
-#else
-  uint32_t right = static_cast<uint32_t>(x);
-  if (LIKELY(_BitScanForward(&index, right)))
-    return index;
-
-  uint32_t left = static_cast<uint32_t>(x >> 32);
-  if (LIKELY(_BitScanForward(&index, left)))
-    return 32 + index;
-
-  return 64;
-#endif
-}
-
-#elif defined(COMPILER_GCC) || defined(__clang__)
 
 // __builtin_clz has undefined behaviour for an input of 0, even though there's
 // clearly a return value that makes sense, and even though some processor clz
@@ -187,8 +107,6 @@ ALWAYS_INLINE constexpr
                              : __builtin_ctz(static_cast<uint32_t>(value))
                        : bits;
 }
-
-#endif
 
 // Returns the integer i such as 2^i <= n < 2^(i+1).
 //

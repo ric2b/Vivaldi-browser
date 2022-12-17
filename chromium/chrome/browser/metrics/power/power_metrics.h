@@ -7,15 +7,19 @@
 
 #include <vector>
 
+#include "base/power_monitor/power_monitor_buildflags.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/metrics/power/battery_level_provider.h"
 #include "chrome/browser/metrics/power/process_monitor.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/metrics/power/coalition_resource_usage_provider_mac.h"
 #include "components/power_metrics/resource_coalition_mac.h"
+#endif
+
+#if BUILDFLAG(HAS_BATTERY_LEVEL_PROVIDER_IMPL)
+#include "base/power_monitor/battery_level_provider.h"
 #endif
 
 // Report aggregated process metrics to histograms with |suffixes|.
@@ -29,12 +33,15 @@ enum class BatteryDischargeMode {
   kDischarging = 0,
   kPluggedIn = 1,
   kStateChanged = 2,
-  kChargeLevelUnavailable = 3,
+  kRetrievalError = 3,
   kNoBattery = 4,
   kBatteryLevelIncreased = 5,
   kInvalidInterval = 6,
   kMacFullyCharged = 7,
-  kMaxValue = kMacFullyCharged
+  kMultipleBatteries = 8,
+  kFullChargedCapacityIsZero = 9,
+  kInsufficientResolution = 10,
+  kMaxValue = kInsufficientResolution,
 };
 
 struct BatteryDischarge {
@@ -43,20 +50,22 @@ struct BatteryDischarge {
   absl::optional<int64_t> rate;
 };
 
-#if HAS_BATTERY_LEVEL_PROVIDER_IMPL()
+#if BUILDFLAG(HAS_BATTERY_LEVEL_PROVIDER_IMPL)
 // Computes and returns the battery discharge mode and rate during the interval.
 // If the discharge rate isn't valid, the returned rate is nullopt and the
 // reason is indicated per BatteryDischargeMode.
 BatteryDischarge GetBatteryDischargeDuringInterval(
-    const BatteryLevelProvider::BatteryState& previous_battery_state,
-    const BatteryLevelProvider::BatteryState& new_battery_state,
+    const absl::optional<base::BatteryLevelProvider::BatteryState>&
+        previous_battery_state,
+    const absl::optional<base::BatteryLevelProvider::BatteryState>&
+        new_battery_state,
     base::TimeDelta interval_duration);
 
 // Report battery metrics to histograms with |suffixes|.
 void ReportBatteryHistograms(base::TimeDelta interval_duration,
                              BatteryDischarge battery_discharge,
                              const std::vector<const char*>& suffixes);
-#endif  // HAS_BATTERY_LEVEL_PROVIDER_IMPL()
+#endif  // BUILDFLAG(HAS_BATTERY_LEVEL_PROVIDER_IMPL)
 
 #if BUILDFLAG(IS_MAC)
 void ReportShortIntervalHistograms(

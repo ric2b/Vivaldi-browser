@@ -54,6 +54,10 @@ SHIM_ALWAYS_EXPORT void* __wrap_valloc(size_t size) {
   return ShimValloc(size, nullptr);
 }
 
+SHIM_ALWAYS_EXPORT size_t __wrap_malloc_usable_size(void* address) {
+  return ShimGetSizeEstimate(address, nullptr);
+}
+
 const size_t kPathMaxSize = 8192;
 static_assert(kPathMaxSize >= PATH_MAX, "");
 
@@ -122,7 +126,10 @@ SHIM_ALWAYS_EXPORT int __wrap_vasprintf(char** strp,
       malloc(kInitialSize));  // Our malloc() doesn't return nullptr.
 
   int actual_size = vsnprintf(*strp, kInitialSize, fmt, va_args);
-  *strp = static_cast<char*>(realloc(*strp, actual_size + 1));
+  if (actual_size < 0)
+    return actual_size;
+  *strp =
+      static_cast<char*>(realloc(*strp, static_cast<size_t>(actual_size + 1)));
 
   // Now we know the size. This is not very efficient, but we cannot really do
   // better without accessing internal libc functions, or reimplementing
@@ -131,7 +138,7 @@ SHIM_ALWAYS_EXPORT int __wrap_vasprintf(char** strp,
   // This is very lightly used in Chromium in practice, see crbug.com/116558 for
   // details.
   if (actual_size >= kInitialSize)
-    return vsnprintf(*strp, actual_size + 1, fmt, va_args);
+    return vsnprintf(*strp, static_cast<size_t>(actual_size + 1), fmt, va_args);
 
   return actual_size;
 }

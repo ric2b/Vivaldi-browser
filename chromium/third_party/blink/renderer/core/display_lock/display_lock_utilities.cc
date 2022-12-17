@@ -363,10 +363,8 @@ void DisplayLockUtilities::ScopedForcedUpdate::Impl::EnsureMinimumForcedPhase(
   // Our `phase_` is already at least as permissive as `phase`.
   if (static_cast<int>(phase_) >= static_cast<int>(phase))
     return;
-  for (auto context : forced_context_set_) {
-    context->NotifyForcedUpdateScopeEnded(phase_);
-    context->NotifyForcedUpdateScopeStarted(phase, emit_warnings_);
-  }
+  for (auto context : forced_context_set_)
+    context->UpgradeForcedScope(phase_, phase, emit_warnings_);
   phase_ = phase;
 }
 
@@ -395,37 +393,6 @@ void DisplayLockUtilities::ScopedForcedUpdate::Impl::ForceDisplayLockIfNeeded(
     forced_context_set_.insert(context);
     context->NotifyForcedUpdateScopeStarted(phase_, emit_warnings_);
   }
-}
-
-Element* DisplayLockUtilities::NearestHiddenMatchableInclusiveAncestor(
-    Element& element) {
-  if (!element.isConnected() ||
-      element.GetDocument()
-              .GetDisplayLockDocumentState()
-              .LockedDisplayLockCount() == 0 ||
-      element.IsShadowRoot()) {
-    return nullptr;
-  }
-
-  if (auto* context = element.GetDisplayLockContext()) {
-    if (context->GetState() == EContentVisibility::kHiddenMatchable) {
-      return &element;
-    }
-  }
-
-  // TODO(crbug.com/924550): Once we figure out a more efficient way to
-  // determine whether we're inside a locked subtree or not, change this.
-  for (Node& ancestor : FlatTreeTraversal::AncestorsOf(element)) {
-    auto* ancestor_element = DynamicTo<Element>(ancestor);
-    if (!ancestor_element)
-      continue;
-    if (auto* context = ancestor_element->GetDisplayLockContext()) {
-      if (context->GetState() == EContentVisibility::kHiddenMatchable) {
-        return ancestor_element;
-      }
-    }
-  }
-  return nullptr;
 }
 
 Element*

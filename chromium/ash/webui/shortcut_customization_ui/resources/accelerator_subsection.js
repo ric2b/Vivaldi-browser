@@ -5,9 +5,10 @@
 import './accelerator_row.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
+import {getTemplate} from './accelerator_subsection.html.js';
 import {fakeSubCategories} from './fake_data.js';
 import {AcceleratorInfo, AcceleratorState, AcceleratorType} from './shortcut_types.js';
 
@@ -19,10 +20,6 @@ import {AcceleratorInfo, AcceleratorState, AcceleratorType} from './shortcut_typ
 export class AcceleratorSubsectionElement extends PolymerElement {
   static get is() {
     return 'accelerator-subsection';
-  }
-
-  static get template() {
-    return html`{__html_template__}`;
   }
 
   static get properties() {
@@ -53,7 +50,7 @@ export class AcceleratorSubsectionElement extends PolymerElement {
       acceleratorContainer: {
         type: Array,
         value: [],
-      }
+      },
     };
   }
 
@@ -115,6 +112,10 @@ export class AcceleratorSubsectionElement extends PolymerElement {
       tempAccelContainer.push(accel);
     });
     this.acceleratorContainer = tempAccelContainer;
+  }
+
+  static get template() {
+    return getTemplate();
   }
 }
 

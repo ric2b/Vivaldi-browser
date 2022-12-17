@@ -12,6 +12,7 @@
 #include "base/strings/string_piece.h"
 #include "media/formats/hls/items.h"
 #include "media/formats/hls/parse_status.h"
+#include "media/formats/hls/playlist.h"
 #include "media/formats/hls/playlist_common.h"
 #include "media/formats/hls/source_string.h"
 #include "media/formats/hls/tags.h"
@@ -31,9 +32,21 @@ MultivariantPlaylist& MultivariantPlaylist::operator=(MultivariantPlaylist&&) =
 
 MultivariantPlaylist::~MultivariantPlaylist() = default;
 
+Playlist::Kind MultivariantPlaylist::GetKind() const {
+  return Kind::kMultivariantPlaylist;
+}
+
+// static
 ParseStatus::Or<MultivariantPlaylist> MultivariantPlaylist::Parse(
     base::StringPiece source,
-    GURL uri) {
+    GURL uri,
+    types::DecimalInteger version) {
+  DCHECK(version != 0);
+  if (version < Playlist::kMinSupportedVersion ||
+      version > Playlist::kMaxSupportedVersion) {
+    return ParseStatusCode::kPlaylistHasUnsupportedVersion;
+  }
+
   if (!uri.is_valid()) {
     return ParseStatusCode::kInvalidUri;
   }
@@ -98,9 +111,26 @@ ParseStatus::Or<MultivariantPlaylist> MultivariantPlaylist::Parse(
       }
 
       switch (static_cast<MultivariantPlaylistTagName>(*tag->GetName())) {
-        case MultivariantPlaylistTagName::kXMedia:
+        case MultivariantPlaylistTagName::kXContentSteering: {
+          // TODO(crbug.com/1266991): Implement the EXT-X-CONTENT-STEERING tag
+          break;
+        }
+        case MultivariantPlaylistTagName::kXIFrameStreamInf: {
+          // TODO(crbug.com/1266991): Implement the EXT-X-I-FRAME-STREAM-INF tag
+          break;
+        }
+        case MultivariantPlaylistTagName::kXMedia: {
           // TODO(crbug.com/1266991): Implement the EXT-X-MEDIA tag
           break;
+        }
+        case MultivariantPlaylistTagName::kXSessionData: {
+          // TODO(crbug.com/1266991): Implement the EXT-X-SESSION-DATA tag
+          break;
+        }
+        case MultivariantPlaylistTagName::kXSessionKey: {
+          // TODO(crbug.com/1266991): Implement the EXT-X-SESSION-KEY tag
+          break;
+        }
         case MultivariantPlaylistTagName::kXStreamInf: {
           auto error = ParseUniqueTag(*tag, inf_tag, common_state.variable_dict,
                                       sub_buffer);
@@ -109,18 +139,6 @@ ParseStatus::Or<MultivariantPlaylist> MultivariantPlaylist::Parse(
           }
           break;
         }
-        case MultivariantPlaylistTagName::kXIFrameStreamInf:
-          // TODO(crbug.com/1266991): Implement the EXT-X-I-FRAME-STREAM-INF tag
-          break;
-        case MultivariantPlaylistTagName::kXSessionData:
-          // TODO(crbug.com/1266991): Implement the EXT-X-SESSION-DATA tag
-          break;
-        case MultivariantPlaylistTagName::kXSessionKey:
-          // TODO(crbug.com/1266991): Implement the EXT-X-SESSION-KEY tag
-          break;
-        case MultivariantPlaylistTagName::kXContentSteering:
-          // TODO(crbug.com/1266991): Implement the EXT-X-CONTENT-STEERING tag
-          break;
       }
 
       continue;
@@ -156,7 +174,12 @@ ParseStatus::Or<MultivariantPlaylist> MultivariantPlaylist::Parse(
     return ParseStatusCode::kXStreamInfTagNotFollowedByUri;
   }
 
-  return MultivariantPlaylist(std::move(uri), common_state.GetVersion(),
+  // Version must match what was expected.
+  if (!common_state.CheckVersion(version)) {
+    return ParseStatusCode::kPlaylistHasVersionMismatch;
+  }
+
+  return MultivariantPlaylist(std::move(uri), version,
                               common_state.independent_segments_tag.has_value(),
                               std::move(variants),
                               std::move(common_state.variable_dict));

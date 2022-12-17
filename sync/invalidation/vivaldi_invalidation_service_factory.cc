@@ -4,8 +4,11 @@
 
 #include "sync/invalidation/vivaldi_invalidation_service_factory.h"
 
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "content/public/browser/storage_partition.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "sync/invalidation/vivaldi_invalidation_service.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
@@ -36,6 +39,17 @@ VivaldiInvalidationServiceFactory::~VivaldiInvalidationServiceFactory() =
 KeyedService* VivaldiInvalidationServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
-  return new VivaldiInvalidationService(profile);
+  return new VivaldiInvalidationService(
+      profile->GetPrefs(),
+      g_browser_process->local_state()->GetString(
+          vivaldiprefs::kVivaldiSyncNotificationsServerUrl),
+      VivaldiAccountManagerFactory::GetForProfile(profile),
+      base::BindRepeating(
+          [](content::BrowserContext* context) {
+            return context->GetDefaultStoragePartition()->GetNetworkContext();
+          },
+          // Unretained OK, because the service can't outlive the browser
+          // context.
+          base::Unretained(context)));
 }
 }  // namespace vivaldi

@@ -280,8 +280,7 @@ void ExtensionActionAPI::DispatchEventToExtension(
     return;
 
   auto event = std::make_unique<Event>(
-      histogram_value, event_name, std::move(*event_args).TakeListDeprecated(),
-      context);
+      histogram_value, event_name, std::move(event_args->GetList()), context);
   event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
   EventRouter::Get(context)
       ->DispatchEventToExtension(extension_id, std::move(event));
@@ -486,9 +485,9 @@ ExtensionActionSetIconFunction::RunExtensionAction() {
 ExtensionFunction::ResponseAction
 ExtensionActionSetTitleFunction::RunExtensionAction() {
   EXTENSION_FUNCTION_VALIDATE(details_);
-  std::string title;
-  EXTENSION_FUNCTION_VALIDATE(details_->GetString("title", &title));
-  extension_action_->SetTitle(tab_id_, title);
+  const std::string* title = details_->GetDict().FindString("title");
+  EXTENSION_FUNCTION_VALIDATE(title);
+  extension_action_->SetTitle(tab_id_, *title);
   NotifyChange();
   return RespondNow(NoArguments());
 }

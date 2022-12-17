@@ -72,6 +72,10 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
+// Vivaldigit
+#import "ios/notes/note_interaction_controller.h"
+
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -143,6 +147,13 @@
     GridContextMenuHelper* regularTabsGridContextMenuHelper;
 @property(nonatomic, strong)
     GridContextMenuHelper* incognitoTabsGridContextMenuHelper;
+
+// Vivaldi
+// Mediator for recently closed Tabs.
+@property(nonatomic, strong) RecentTabsMediator* closedTabsMediator;
+@property(nonatomic, strong)
+    RecentTabsContextMenuHelper* closedTabsContextMenuHelper;
+// End Vivaldi
 
 @end
 
@@ -272,6 +283,8 @@
   if (_bookmarkInteractionController) {
     [_bookmarkInteractionController dismissBookmarkModalControllerAnimated:YES];
   }
+
+
   // History may be presented on top of the tab grid.
   if (self.historyCoordinator) {
     [self.historyCoordinator stopWithCompletion:completion];
@@ -507,11 +520,12 @@
 - (BookmarkInteractionController*)bookmarkInteractionController {
   if (!_bookmarkInteractionController) {
     _bookmarkInteractionController = [[BookmarkInteractionController alloc]
-         initWithBrowser:self.regularBrowser
-        parentController:self.baseViewController];
+        initWithBrowser:self.regularBrowser];
+    _bookmarkInteractionController.parentController = self.baseViewController;
   }
   return _bookmarkInteractionController;
 }
+
 
 #pragma mark - Private (Thumb Strip)
 
@@ -669,6 +683,11 @@
   self.baseViewController.remoteTabsViewController.menuProvider =
       self.recentTabsContextMenuHelper;
 
+  // Vivaldi
+  [self setupRecentlyClosedTab:baseViewController
+           regularBrowserState:regularBrowserState regularWebStateList:regularWebStateList];
+  // End Vivaldi
+
   self.regularTabsGridContextMenuHelper =
       [[GridContextMenuHelper alloc] initWithBrowser:self.regularBrowser
                                    actionsDataSource:self.regularTabsMediator
@@ -790,6 +809,14 @@
   self.snackbarCoordinator = nil;
   [self.incognitoSnackbarCoordinator stop];
   self.incognitoSnackbarCoordinator = nil;
+
+  // Vivaldi
+  [self.baseViewController.closedTabsViewController dismissModals];
+  self.baseViewController.closedTabsViewController.browser = nil;
+  [self.closedTabsMediator disconnect];
+  self.closedTabsMediator = nil;
+  // End Vivaldi
+
 }
 
 #pragma mark - TabPresentationDelegate
@@ -836,6 +863,22 @@
       // This appears to come up in release -- see crbug.com/1069243.
       // Defensively early return instead of continuing.
       return;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      if ([self isThumbStripEnabled]) {
+        [self showTabViewController:nil
+                          incognito:NO
+                 shouldCloseTabGrid:closeTabGrid
+                         completion:nil];
+        return;
+      }
+      NOTREACHED() << "It is invalid to have an active tab in recently closed tabs.";
+      // This appears to come up in release -- see crbug.com/1069243.
+      // Defensively early return instead of continuing.
+      return;
+    // End Vivaldi
+
   }
   // Trigger the transition through the delegate. This will in turn call back
   // into this coordinator.
@@ -1172,6 +1215,48 @@
   }
 
   return bottomToolbarGuide.constrainedView.frame.size.height;
+}
+
+#pragma mark - Vivaldi
+
+// Setup recently closed tab and context menu
+- (void) setupRecentlyClosedTab:(TabGridViewController*)baseViewController
+            regularBrowserState:(ChromeBrowserState*)regularBrowserState
+            regularWebStateList:(WebStateList*)regularWebStateList {
+  // Context menu setup
+  self.closedTabsContextMenuHelper =
+      [[RecentTabsContextMenuHelper alloc] initWithBrowser:self.regularBrowser
+              recentTabsPresentationDelegate:self
+              tabContextMenuDelegate:self];
+  self.baseViewController.closedTabsViewController.menuProvider =
+  self.closedTabsContextMenuHelper;
+
+  // Recently closed tab setup
+  baseViewController.closedTabsViewController.browser = self.regularBrowser;
+  self.closedTabsMediator = [[RecentTabsMediator alloc] init];
+  self.closedTabsMediator.browserState = regularBrowserState;
+  self.closedTabsMediator.consumer = baseViewController.closedTabsConsumer;
+  self.closedTabsMediator.webStateList = regularWebStateList;
+
+  baseViewController.closedTabsViewController.imageDataSource =
+      self.closedTabsMediator;
+  baseViewController.closedTabsViewController.delegate =
+      self.closedTabsMediator;
+  baseViewController.closedTabsViewController.handler =
+      HandlerForProtocol(self.dispatcher, ApplicationCommands);
+  baseViewController.closedTabsViewController.loadStrategy =
+      UrlLoadStrategy::ALWAYS_NEW_FOREGROUND_TAB;
+  baseViewController.closedTabsViewController.restoredTabDisposition =
+      WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  baseViewController.closedTabsViewController.presentationDelegate = self;
+
+  self.firstPresentation = YES;
+
+  self.window.rootViewController = self.baseViewController;
+  if (self.closedTabsMediator.browserState) {
+    [self.closedTabsMediator initObservers];
+    [self.closedTabsMediator refreshSessionsView];
+  }
 }
 
 @end

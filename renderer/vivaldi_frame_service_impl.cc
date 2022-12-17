@@ -6,7 +6,6 @@
 #include "components/translate/core/language_detection/language_detection_util.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/public/renderer/render_view.h"
 #include "content/renderer/render_frame_impl.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -53,8 +52,9 @@ void VivaldiFrameServiceImpl::Register(content::RenderFrame* render_frame) {
 
   // Unretained() is safe as the render frame owns both the registry and the
   // service.
-  registry->AddInterface(base::BindRepeating(
-      &VivaldiFrameServiceImpl::BindService, base::Unretained(service.get())));
+  registry->AddInterface<vivaldi::mojom::VivaldiFrameService>(
+      base::BindRepeating(&VivaldiFrameServiceImpl::BindService,
+                          base::Unretained(service.get())));
   render_frame->SetUserData(kFrameServiceKey, std::move(service));
 }
 
@@ -72,7 +72,7 @@ void VivaldiFrameServiceImpl::GetAccessKeysForPage(
   std::vector<vivaldi::mojom::AccessKeyPtr> access_keys;
 
   blink::WebLocalFrame* frame =
-      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
+      render_frame_->GetWebView()->FocusedFrame();
   if (!frame) {
     std::move(callback).Run(std::move(access_keys));
     return;
@@ -100,7 +100,7 @@ void VivaldiFrameServiceImpl::GetAccessKeysForPage(
 
 void VivaldiFrameServiceImpl::AccessKeyAction(const std::string& access_key) {
   blink::WebLocalFrame* frame =
-      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
+      render_frame_->GetWebView()->FocusedFrame();
   if (!frame) {
     return;
   }
@@ -115,7 +115,7 @@ void VivaldiFrameServiceImpl::AccessKeyAction(const std::string& access_key) {
 
 blink::Document* VivaldiFrameServiceImpl::GetDocument() {
   blink::WebLocalFrame* frame =
-      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
+      render_frame_->GetWebView()->FocusedFrame();
   if (!frame) {
     return nullptr;
   }
@@ -146,7 +146,7 @@ void VivaldiFrameServiceImpl::ScrollPage(
   using ScrollType = ::vivaldi::mojom::ScrollType;
   blink::Document* document = GetDocument();
   blink::WebLocalFrame* web_local_frame =
-      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
+      render_frame_->GetWebView()->FocusedFrame();
   if (!web_local_frame) {
     return;
   }
@@ -208,9 +208,7 @@ void VivaldiFrameServiceImpl::UpdateSpatnavQuads() {
     return;
   }
 
-  float scale = render_frame_->GetRenderView()
-                    ->GetWebView()
-                    ->ZoomFactorForDeviceScaleFactor();
+  float scale = render_frame_->GetWebView()->ZoomFactorForDeviceScaleFactor();
   if (scale == 0) {
     scale = 1.0;
   }
@@ -340,7 +338,7 @@ void VivaldiFrameServiceImpl::MoveSpatnavRect(
     }
 
     QuadPtr next_quad;
-    next_quad = NextQuadInDirection(direction);
+    next_quad = current_quad_ ? NextQuadInDirection(direction): nullptr;
 
     if (next_quad != nullptr) {
       current_quad_ = next_quad;
@@ -383,7 +381,7 @@ void VivaldiFrameServiceImpl::MoveSpatnavRect(
 void VivaldiFrameServiceImpl::GetFocusedElementInfo(
     GetFocusedElementInfoCallback callback) {
   blink::WebLocalFrame* frame =
-      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
+      render_frame_->GetWebView()->FocusedFrame();
   if (!frame) {
     frame = render_frame_->GetWebFrame();
   }
@@ -505,7 +503,7 @@ void VivaldiFrameServiceImpl::RequestThumbnailForFrame(
     RequestThumbnailForFrameCallback callback) {
   base::ReadOnlySharedMemoryRegion shared_region;
   gfx::Size ack_size;
-  blink::WebView* webview = render_frame_->GetRenderView()->GetWebView();
+  blink::WebView* webview = render_frame_->GetWebView();
   do {
     if (!webview)
       break;

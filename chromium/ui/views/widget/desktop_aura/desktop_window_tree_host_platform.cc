@@ -85,7 +85,8 @@ ui::PlatformWindowOpacity GetPlatformWindowOpacity(
 }
 
 ui::PlatformWindowType GetPlatformWindowType(
-    Widget::InitParams::Type window_type) {
+    Widget::InitParams::Type window_type,
+    bool requires_accelerated_widget) {
   switch (window_type) {
     case Widget::InitParams::TYPE_WINDOW:
       return ui::PlatformWindowType::kWindow;
@@ -96,7 +97,8 @@ ui::PlatformWindowType GetPlatformWindowType(
     case Widget::InitParams::TYPE_DRAG:
       return ui::PlatformWindowType::kDrag;
     case Widget::InitParams::TYPE_BUBBLE:
-      return ui::PlatformWindowType::kBubble;
+      return requires_accelerated_widget ? ui::PlatformWindowType::kTooltip
+                                         : ui::PlatformWindowType::kBubble;
     default:
       return ui::PlatformWindowType::kPopup;
   }
@@ -119,14 +121,18 @@ ui::PlatformWindowShadowType GetPlatformWindowShadowType(
 }
 
 ui::PlatformWindowInitProperties ConvertWidgetInitParamsToInitProperties(
-    const Widget::InitParams& params) {
+    const Widget::InitParams& params,
+    bool requires_accelerated_widget) {
   ui::PlatformWindowInitProperties properties;
-  properties.type = GetPlatformWindowType(params.type);
+  properties.type =
+      GetPlatformWindowType(params.type, requires_accelerated_widget);
   properties.activatable =
       params.activatable == Widget::InitParams::Activatable::kYes;
   properties.force_show_in_taskbar = params.force_show_in_taskbar;
-  properties.keep_on_top =
-      params.EffectiveZOrderLevel() != ui::ZOrderLevel::kNormal;
+  properties.z_order = params.EffectiveZOrderLevel();
+  properties.keep_on_top = properties.z_order != ui::ZOrderLevel::kNormal;
+  properties.is_security_surface =
+      properties.z_order == ui::ZOrderLevel::kSecuritySurface;
   properties.visible_on_all_workspaces = params.visible_on_all_workspaces;
   properties.remove_standard_frame = params.remove_standard_frame;
   properties.workspace = params.workspace;
@@ -250,8 +256,14 @@ void DesktopWindowTreeHostPlatform::Init(const Widget::InitParams& params) {
   if (params.type == Widget::InitParams::TYPE_WINDOW)
     GetContentWindow()->SetProperty(aura::client::kAnimationsDisabledKey, true);
 
+#if defined(USE_AURA) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+  const bool requires_accelerated_widget = params.requires_accelerated_widget;
+#else
+  const bool requires_accelerated_widget = false;
+#endif
   ui::PlatformWindowInitProperties properties =
-      ConvertWidgetInitParamsToInitProperties(params);
+      ConvertWidgetInitParamsToInitProperties(params,
+                                              requires_accelerated_widget);
   AddAdditionalInitProperties(params, &properties);
 
   // If we have a parent, record the parent/child relationship. We use this
@@ -265,7 +277,7 @@ void DesktopWindowTreeHostPlatform::Init(const Widget::InitParams& params) {
   }
 
   // Calculate initial bounds.
-  properties.bounds = ToPixelRect(params.bounds);
+  properties.bounds = params.bounds;
 
   // Set extensions delegate.
   DCHECK(!properties.workspace_extension_delegate);
@@ -438,10 +450,9 @@ bool DesktopWindowTreeHostPlatform::IsVisible() const {
 }
 
 void DesktopWindowTreeHostPlatform::SetSize(const gfx::Size& size) {
-  gfx::Size size_in_pixels = ToPixelRect(gfx::Rect(size)).size();
-  auto bounds_in_pixels = GetBoundsInPixels();
-  bounds_in_pixels.set_size(size_in_pixels);
-  WindowTreeHostPlatform::SetBoundsInPixels(bounds_in_pixels);
+  auto bounds_in_dip = platform_window()->GetBoundsInDIP();
+  bounds_in_dip.set_size(size);
+  platform_window()->SetBoundsInDIP(bounds_in_dip);
 }
 
 void DesktopWindowTreeHostPlatform::StackAbove(aura::Window* window) {
@@ -893,17 +904,10 @@ absl::optional<ui::MenuType> DesktopWindowTreeHostPlatform::GetMenuType() {
 }
 
 absl::optional<ui::OwnedWindowAnchor>
-DesktopWindowTreeHostPlatform::GetOwnedWindowAnchorAndRectInPx() {
-  auto* anchor =
+DesktopWindowTreeHostPlatform::GetOwnedWindowAnchorAndRectInDIP() {
+  const auto* anchor =
       GetContentWindow()->GetProperty(aura::client::kOwnedWindowAnchor);
-  if (!anchor)
-    return absl::nullopt;
-  // Make a copy of the structure. Otherwise, conversion will result in
-  // overriding the stored property's value.
-  ui::OwnedWindowAnchor window_anchor = *anchor;
-  // Anchor rect must be translated from DIP to px.
-  window_anchor.anchor_rect = ToPixelRect(window_anchor.anchor_rect);
-  return window_anchor;
+  return anchor ? absl::make_optional(*anchor) : absl::nullopt;
 }
 
 gfx::Rect DesktopWindowTreeHostPlatform::ConvertRectToPixels(

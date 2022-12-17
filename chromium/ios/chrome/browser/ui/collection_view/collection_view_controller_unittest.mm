@@ -85,7 +85,7 @@ class CollectionViewControllerTest : public BlockCleanupTest {
         toSectionWithIdentifier:SectionIdentifierFoo];
 
     // The collection view is not visible on screen, so it has not created any
-    // of its cells.  Swizzle |cellsForItemAtIndexPath:| and inject an
+    // of its cells.  Swizzle `cellsForItemAtIndexPath:` and inject an
     // implementation for testing that always returns a non-nil cell.
     MDCCollectionViewCell* dummyCell = [[MDCCollectionViewCell alloc] init];
     {
@@ -113,20 +113,6 @@ class CollectionViewControllerTest : public BlockCleanupTest {
 };
 
 }  // namespace
-
-TEST_F(CollectionViewControllerTest, InitDefaultStyle) {
-  CollectionViewController* controller = [[CollectionViewController alloc]
-      initWithLayout:[[MDCCollectionViewFlowLayout alloc] init]
-               style:CollectionViewControllerStyleDefault];
-  EXPECT_EQ(nil, controller.appBarViewController);
-}
-
-TEST_F(CollectionViewControllerTest, InitAppBarStyle) {
-  CollectionViewController* controller = [[CollectionViewController alloc]
-      initWithLayout:[[MDCCollectionViewFlowLayout alloc] init]
-               style:CollectionViewControllerStyleAppBar];
-  EXPECT_NE(nil, controller.appBarViewController);
-}
 
 TEST_F(CollectionViewControllerTest, CellForItemAtIndexPath) {
   CollectionViewController* controller = [[CollectionViewController alloc]

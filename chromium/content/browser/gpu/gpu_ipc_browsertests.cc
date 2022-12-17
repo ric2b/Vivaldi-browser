@@ -82,8 +82,8 @@ class ContextTestBase : public content::ContentBrowserTest {
   }
 
  protected:
-  raw_ptr<gpu::gles2::GLES2Interface> gl_ = nullptr;
-  raw_ptr<gpu::ContextSupport> context_support_ = nullptr;
+  raw_ptr<gpu::gles2::GLES2Interface, DanglingUntriaged> gl_ = nullptr;
+  raw_ptr<gpu::ContextSupport, DanglingUntriaged> context_support_ = nullptr;
 
  private:
   scoped_refptr<viz::ContextProviderCommandBuffer> provider_;
@@ -262,7 +262,8 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
       content::GpuBrowsertestCreateContext(GetGpuChannel());
   ContextLostRunLoop run_loop(provider.get());
   ASSERT_EQ(provider->BindToCurrentThread(), gpu::ContextResult::kSuccess);
-  GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
+  GpuProcessHost::CallOnIO(FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
+                           false /* force_create */,
                            base::BindOnce([](GpuProcessHost* host) {
                              if (host)
                                host->gpu_service()->Crash();

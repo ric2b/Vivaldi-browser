@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Uppvakningar ur vila</translation>
 <translation id="119944043368869598">Töm alla</translation>
 <translation id="1221825588892235038">Endast markering</translation>
+<translation id="1234736487471201993">Skapa QR-kod för den här bilden</translation>
 <translation id="1244303850296295656">Fel i tillägg</translation>
 <translation id="125220115284141797">Förval</translation>
 <translation id="1297175357211070620">Destination</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Casta fliken</translation>
 <translation id="2150139952286079145">Sök destinationer</translation>
 <translation id="215753907730220065">Avsluta helskärmsläge</translation>
+<translation id="2158475082070321257">Kopiera länk till markering</translation>
 <translation id="2177950615300672361">Privat flik: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Lokal Client-modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Klistra in som oformaterad text</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Webbplatser kanske även känner igen din enhet med hjälp av en identifierare</translation>
 <translation id="2445081178310039857">Tilläggets rotkatalog måste anges.</translation>
 <translation id="2470702053775288986">Tillägg som inte stöds har inaktiverats</translation>
-<translation id="2476578072172137802">Inställningar för webbplatsen</translation>
+<translation id="2485422356828889247">Avinstallera</translation>
 <translation id="2498539833203011245">Minimera</translation>
 <translation id="2509495747794740764">Förstoringsgraden måste vara ett tal mellan 10 och 200.</translation>
 <translation id="253557089021624350">Keepalive-antal</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Anmäl otillåten användning</translation>
 <translation id="2941112035454246133">Låg</translation>
 <translation id="2972581237482394796">&amp;Upprepa</translation>
+<translation id="2993517869960930405">Appinformation</translation>
 <translation id="3003623123441819449">CSS-cacheminne</translation>
 <translation id="3008272652534848354">Återställ behörigheter</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Öppna länk som</translation>
 <translation id="3222066309010235055">För-renderare <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Välj rotkatalogen för tillägget som ska packas. Om du vill uppdatera ett tillägg väljer du också den privata nyckel som ska återanvändas.</translation>
+<translation id="3275778913554317645">Öppna som fönster</translation>
 <translation id="3280237271814976245">Spara &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;flik</translation>
 <translation id="3288047731229977326">Tillägg som körs i utvecklarläge kan skada datorn. Om du inte är en utvecklare bör du inaktivera tillägg som körs i utvecklarläge för att skydda dig.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Öppna PDF i Förhandsvisning</translation>
 <translation id="3308134619352333507">Dölj knapp</translation>
 <translation id="3317459757438853210">Dubbelsidig</translation>
+<translation id="3331974543021145906">Appinformation</translation>
 <translation id="3341703758641437857">Tillåt tillgång till fil-URL:er</translation>
 <translation id="3347086966102161372">K&amp;opiera bildadress</translation>
 <translation id="3360297538363969800">Utskriften misslyckades. Kontrollera skrivaren och försök igen.</translation>
 <translation id="3378572629723696641">Det här tillägget kan vara skadat.</translation>
 <translation id="3387614642886316601">Använd förbättrad stavningskontroll</translation>
+<translation id="3390013585654699824">Appdetaljer</translation>
 <translation id="3393582007140394275">Det gick inte att casta skärmen.</translation>
 <translation id="3432227430032737297">Ta bort alla som visas</translation>
 <translation id="345693547134384690">Öppna &amp;bild i ny flik</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Sök efter bild på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Tillåt att skyddat innehåll spelas upp på webbplatser (rekommenderas)</translation>
 <translation id="3979395879372752341">Ett nytt tillägg har lagts till (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kopiera länk till markering</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Lägg till i ordlistan</translation>
 <translation id="407520071244661467">Skaländra</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Stäng webbläsare innan import</translation>
 <translation id="4130207949184424187">Det här tillägget har ändrat vilken sida som visas när du söker i adressfältet.</translation>
 <translation id="4131410914670010031">Svartvitt</translation>
+<translation id="4165986682804962316">Webbplatsinställningar</translation>
 <translation id="4176463684765177261">Inaktiverad</translation>
 <translation id="4200983522494130825">Ny &amp;flik</translation>
 <translation id="4225397296022057997">På alla webbsidor</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Återställ inställningar</translation>
 <translation id="4726710629007580002">Det uppstod varningar när tillägget skulle installeras:</translation>
 <translation id="479536056609751218">Webbsida, endast HTML</translation>
+<translation id="4827904420700932487">Skapa QR-kod för den här bilden</translation>
 <translation id="4839303808932127586">S&amp;para video som...</translation>
 <translation id="4840096453115567876">Avsluta inkognitoläget ändå?</translation>
 <translation id="488785315393301722">Visa detaljer</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Fråga innan informationen används (rekommenderas)</translation>
 <translation id="5677928146339483299">Blockerad</translation>
 <translation id="5707185214361380026">Misslyckades läsa tillägg från:</translation>
+<translation id="5713171467967533494">Öppna i Vivaldi-webbläsaren</translation>
 <translation id="5715711091495208045">Agent för insticksprogram: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Spara som PDF</translation>
 <translation id="5747809636523347288">Klistra in och &amp;gå till <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Alternativ</translation>
 <translation id="6579369886355986318">Visa alla &amp;kontroller</translation>
 <translation id="6639554308659482635">SQLite-minne</translation>
+<translation id="666731172850799929">Öppna i <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Spara ditt lösenord</translation>
 <translation id="6691936601825168937">&amp;Framåt</translation>
 <translation id="6798954102094737107">Insticksprogram: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="9003647077635673607">Tillåt på alla webbplatser</translation>
 <translation id="9027459031423301635">Öppna länk i ny &amp;flik</translation>
 <translation id="9056810968620647706">Inga träffar hittades.</translation>
+<translation id="9084064520949870008">Öppna som fönster</translation>
 <translation id="9137916601698928395">Öppna länk som <ph name="USER" /></translation>
 <translation id="91568222606626347">Skapa genväg ...</translation>
 <translation id="916607977885256133">Bild i bild</translation>

@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
-import("//build/config/chromecast_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
@@ -34,9 +33,17 @@ declare_args() {
   # unconditionally enabled on all platforms.
   builtin_cert_verifier_policy_supported = is_mac
 
+  # Platforms where the ChromeRootStoreEnabled enterprise policy is
+  # supported. This must must match the supported_on/future_on list of the
+  # policy in policy_templates.json and be a subset of the
+  # chrome_root_store_supported platforms.
+  # See https://crbug.com/1228958. This can be removed when the Chrome Root
+  # Store is unconditionally enabled on all platforms.
+  chrome_root_store_policy_supported = is_mac || is_win
+
   # Enables support for background apps.
-  enable_background_contents = !is_android && !is_castos
-  enable_background_mode = !is_android && !is_castos && !is_chromeos
+  enable_background_contents = !is_android
+  enable_background_mode = !is_android && !is_chromeos
 
   # Enable the printing system dialog for platforms that support printing
   # and have a system dialog.
@@ -56,11 +63,7 @@ declare_args() {
 
   # Enables use of the session service, which is enabled by default.
   # Android stores them separately on the Java side.
-  enable_session_service = !is_android && !is_castos
-
-  # Enables supervision for Family Link users.
-  # Supervision is only supported on Chrome OS and Android.
-  enable_supervised_users = is_chromeos || is_android
+  enable_session_service = !is_android
 
   # Enables usage of the system-provided notification center.
   enable_system_notifications =
@@ -69,8 +72,15 @@ declare_args() {
   # Indicates if Wayland display server support is enabled.
   enable_wayland_server = is_chromeos_ash
 
+  # Enables the webui certificate viewer dialog.
+  enable_webui_certificate_viewer = toolkit_views
+
   # optimize_webui was moved to ui/base/ui_features.gni
 }
+
+# Enables supervision for Family Link users.
+# Supervision is only supported on Chrome OS and Android.
+enable_supervised_users = is_chromeos || is_android
 
 # Use brlapi from brltty for braille display support.
 use_brlapi = is_chromeos_ash
@@ -78,6 +88,7 @@ use_brlapi = is_chromeos_ash
 # Every grit target in //chrome should apply these defines so that the
 # proper build flags can be set.
 chrome_grit_defines = [
+  "chrome_root_store_supported=$chrome_root_store_supported",
   "enable_arcore=$enable_arcore",
   "enable_background_mode=$enable_background_mode",
   "enable_background_contents=$enable_background_contents",
@@ -91,6 +102,7 @@ chrome_grit_defines = [
   "enable_service_discovery=$enable_service_discovery",
   "enable_supervised_users=$enable_supervised_users",
   "enable_vr=$enable_vr",
+  "enable_webui_certificate_viewer=$enable_webui_certificate_viewer",
   "enable_webui_tab_strip=$enable_webui_tab_strip",
   "safe_browsing_mode=$safe_browsing_mode",
   "optimize_webui=$optimize_webui",

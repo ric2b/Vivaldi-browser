@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/webui/help/version_updater.h"
@@ -24,7 +25,6 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace base {
-class DictionaryValue;
 class FilePath;
 class Clock;
 }  // namespace base
@@ -51,9 +51,6 @@ class AboutHandler : public settings::SettingsPageUIHandler,
 
   // UpgradeObserver implementation.
   void OnUpgradeRecommended() override;
-
-  // Returns the browser version as a string.
-  static std::u16string BuildBrowserVersionString();
 
  protected:
   // Used to test the EOL string displayed in the About details page.
@@ -102,9 +99,11 @@ class AboutHandler : public settings::SettingsPageUIHandler,
 
   // Retrieves OS, ARC and firmware versions.
   void HandleGetVersionInfo(const base::Value::List& args);
-  void OnGetVersionInfoReady(
-      std::string callback_id,
-      std::unique_ptr<base::DictionaryValue> version_info);
+  void OnGetVersionInfoReady(std::string callback_id,
+                             base::Value::Dict version_info);
+
+  // Retrieves the number of firmware updates available.
+  void HandleGetFirmwareUpdateCount(const base::Value::List& args);
 
   // Retrieves channel info.
   void HandleGetChannelInfo(const base::Value::List& args);
@@ -118,6 +117,9 @@ class AboutHandler : public settings::SettingsPageUIHandler,
   void OnGetTargetChannel(std::string callback_id,
                           const std::string& current_channel,
                           const std::string& target_channel);
+
+  // Applies deferred update, triggered by JS.
+  void HandleApplyDeferredUpdate(const base::Value::List& args);
 
   // Checks for and applies update, triggered by JS.
   void HandleRequestUpdate(const base::Value::List& args);
@@ -179,7 +181,7 @@ class AboutHandler : public settings::SettingsPageUIHandler,
 
   // Callbacks for version_updater_->GetEolInfo calls.
   void OnGetEndOfLifeInfo(std::string callback_id,
-                          chromeos::UpdateEngineClient::EolInfo eol_info);
+                          ash::UpdateEngineClient::EolInfo eol_info);
 
   // Get the managed auto update cros setting.
   void HandleIsManagedAutoUpdateEnabled(const base::Value::List& args);

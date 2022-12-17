@@ -42,8 +42,10 @@
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/pref_names.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extension_l10n_util.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_constants.h"
@@ -97,10 +99,11 @@ static bool enable_background_extensions_during_testing = false;
 
 std::string GenerateId(const base::DictionaryValue* manifest,
                        const base::FilePath& path) {
-  std::string raw_key;
   std::string id_input;
-  CHECK(manifest->GetString(manifest_keys::kPublicKey, &raw_key));
-  CHECK(Extension::ParsePEMKeyBytes(raw_key, &id_input));
+  const std::string* raw_key =
+      manifest->GetDict().FindString(manifest_keys::kPublicKey);
+  CHECK(raw_key != nullptr);
+  CHECK(Extension::ParsePEMKeyBytes(*raw_key, &id_input));
   std::string id = crx_file::id_util::GenerateId(id_input);
   return id;
 }
@@ -393,17 +396,6 @@ void ComponentLoader::AddFileManagerExtension() {
   }
 }
 
-void ComponentLoader::AddAudioPlayerExtension() {
-  // TODO(b/189172062): Delete this entirely around M106 when it has has a
-  // chance to be cleaned up.
-  if (extensions::ExtensionPrefs::Get(profile_)
-          ->ShouldInstallObsoleteComponentExtension(
-              file_manager::kAudioPlayerAppId)) {
-    Add(IDR_AUDIO_PLAYER_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("audio_player")));
-  }
-}
-
 void ComponentLoader::AddImageLoaderExtension() {
   Add(IDR_IMAGE_LOADER_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("image_loader")));
@@ -441,26 +433,24 @@ void ComponentLoader::EnableBackgroundExtensionsForTesting() {
 
 void ComponentLoader::AddDefaultComponentExtensions(
     bool skip_session_components) {
-  bool is_vivaldi =
-      vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
-  if (is_vivaldi && !Exists(vivaldi::kVivaldiAppId)) {
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            apps::kLoadAndLaunchApp)) {
+  if (vivaldi::IsVivaldiRunning()) {
+    if (!Exists(vivaldi::kVivaldiAppId)) {
+      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+              apps::kLoadAndLaunchApp)) {
+        // If it's not added already, add it now as this might be for a guest
+        // window or a new profile from the user profile management window.
+        base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+        base::CommandLine::StringType path =
+            command_line.GetSwitchValueNative(apps::kLoadAndLaunchApp);
+        base::FilePath filepath(path);
+
+        AddVivaldiApp(&filepath);
+      } else {
       // If it's not added already, add it now as this might be for a guest
       // window or a new profile from the user profile management window.
-      base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-      base::CommandLine::StringType path =
-          command_line.GetSwitchValueNative(apps::kLoadAndLaunchApp);
-      base::FilePath filepath(path);
-
-      AddVivaldiApp(&filepath);
-    } else {
-    // If it's not added already, add it now as this might be for a guest
-    // window or a new profile from the user profile management window.
-      AddVivaldiApp(nullptr);
+        AddVivaldiApp(nullptr);
+      }
     }
-  }
-  if (vivaldi::IsVivaldiRunning()) {
     AddVivaldiPIP();
     AddVivaldiThemeStore();
   }
@@ -477,7 +467,7 @@ void ComponentLoader::AddDefaultComponentExtensions(
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   AddKeyboardApp();
-#else  // BUILDFLAG(IS_CHROMEOS_ASH)
+#else   // BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK(!skip_session_components);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -528,21 +518,30 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 
   // Component extensions with background pages are not enabled during tests
   // because they generate a lot of background behavior that can interfere.
-  if (!enable_background_extensions_during_testing &&
+  const bool should_disable_background_extensions =
+      !enable_background_extensions_during_testing &&
       (command_line->HasSwitch(::switches::kTestType) ||
        command_line->HasSwitch(
-           ::switches::kDisableComponentExtensionsWithBackgroundPages))) {
-    return;
-  }
+           ::switches::kDisableComponentExtensionsWithBackgroundPages));
 
-  if (!skip_session_components) {
 #if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
-    if (profile_->GetPrefs()->GetBoolean(
-      vivaldiprefs::kPrivacyGoogleComponentExtensionsHangoutServices)) {
+  const bool enable_hangout_services_extension_for_testing =
+      command_line->HasSwitch(::switches::kTestType) &&
+      command_line->HasSwitch(
+          ::switches::kEnableHangoutServicesExtensionForTesting);
+  if (!skip_session_components &&
+      profile_->GetPrefs()->GetBoolean(
+      vivaldiprefs::kPrivacyGoogleComponentExtensionsHangoutServices) &&
+      (!should_disable_background_extensions ||
+       enable_hangout_services_extension_for_testing)) {
     AddHangoutServicesExtension();
-    }
+  }
 #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
 
+  if (should_disable_background_extensions)
+    return;
+
+  if (!skip_session_components) {
 #if BUILDFLAG(IS_CHROMEOS)
     Add(IDR_ECHO_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("/usr/share/chromeos-assets/echo")));
@@ -562,7 +561,6 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
           switches::kLoadGuestModeTestExtension));
       AddGuestModeTestExtension(path);
     }
-    AddAudioPlayerExtension();
     AddFileManagerExtension();
     AddImageLoaderExtension();
 
@@ -572,11 +570,6 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     if (!IsNormalSession())
       ExtensionsBrowserClient::Get()->GetOffTheRecordContext(profile_);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
-    if (!command_line->HasSwitch(ash::switches::kGuestSession)) {
-      Add(IDR_WALLPAPERMANAGER_MANIFEST,
-          base::FilePath(FILE_PATH_LITERAL("chromeos/wallpaper_manager")));
-    }
 
     Add(IDR_ARC_SUPPORT_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("chromeos/arc_support")));
@@ -590,10 +583,14 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-  if (profile_->GetPrefs()->GetBoolean(
+  if ((base::FeatureList::IsEnabled(
+          extensions_features::kLoadCryptoTokenExtension) ||
+      ExtensionPrefs::Get(profile_)->pref_service()->GetBoolean(
+          pref_names::kLoadCryptoTokenExtension)) &&
+      profile_->GetPrefs()->GetBoolean(
           vivaldiprefs::kPrivacyGoogleComponentExtensionsCryptoToken)) {
-  Add(IDR_CRYPTOTOKEN_MANIFEST,
-      base::FilePath(FILE_PATH_LITERAL("cryptotoken")));
+    Add(IDR_CRYPTOTOKEN_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("cryptotoken")));
   }
 }
 
@@ -611,12 +608,12 @@ void ComponentLoader::
     return;
   }
 
+#if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
   if (profile_->GetPrefs()->GetBoolean(
           vivaldiprefs::kPrivacyGoogleComponentExtensionsHangoutServices)) {
-#if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
   AddHangoutServicesExtension();
-#endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
   }
+#endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
 }
 
 void ComponentLoader::UnloadComponent(ComponentExtensionInfo* component) {

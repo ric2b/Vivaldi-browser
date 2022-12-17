@@ -5,30 +5,44 @@
 package org.chromium.android_webview.test.services;
 
 import android.content.Context;
+import android.os.Build;
 
+import androidx.annotation.RequiresApi;
+import androidx.javascriptengine.EvaluationFailedException;
+import androidx.javascriptengine.IsolateStartupParameters;
+import androidx.javascriptengine.IsolateTerminatedException;
+import androidx.javascriptengine.JavaScriptIsolate;
+import androidx.javascriptengine.JavaScriptSandbox;
+import androidx.javascriptengine.SandboxDeadException;
 import androidx.test.filters.MediumTest;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.android_webview.js_sandbox.client.AwJsIsolate;
-import org.chromium.android_webview.js_sandbox.client.AwJsSandbox;
-import org.chromium.android_webview.js_sandbox.client.EvaluationFailedException;
-import org.chromium.android_webview.js_sandbox.client.IsolateTerminatedException;
 import org.chromium.android_webview.test.AwJUnit4ClassRunner;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-/** Instrumentation test for JsSandboxService. */
+/** Instrumentation test for JavaScriptSandbox. */
 @RunWith(AwJUnit4ClassRunner.class)
+@MinAndroidSdkLevel(Build.VERSION_CODES.O)
+@RequiresApi(Build.VERSION_CODES.O)
 public class JsSandboxServiceTest {
+    // This value is somewhat arbitrary. It might need bumping if V8 snapshots become significantly
+    // larger in future. However, we don't want it too large as that will make the tests slower and
+    // require more memory.
+    private static final long REASONABLE_HEAP_SIZE = 100 * 1024 * 1024;
+
     @Test
     @MediumTest
     public void testSimpleJsEvaluation() throws Throwable {
@@ -36,16 +50,15 @@ public class JsSandboxServiceTest {
         final String expected = "PASS";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture = jsIsolate.evaluateJavascript(code);
-        String result = resultFuture.get(5, TimeUnit.SECONDS);
-        jsIsolate.close();
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+            String result = resultFuture.get(5, TimeUnit.SECONDS);
 
-        Assert.assertEquals(expected, result);
+            Assert.assertEquals(expected, result);
+        }
     }
 
     @Test
@@ -55,18 +68,18 @@ public class JsSandboxServiceTest {
         final String expected = "PASS";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate1 = jsSandbox.createIsolate();
-        AwJsIsolate jsIsolate2 = jsSandbox.createIsolate();
-        jsIsolate1.close();
-        ListenableFuture<String> resultFuture = jsIsolate2.evaluateJavascript(code);
-        String result = resultFuture.get(5, TimeUnit.SECONDS);
-        jsIsolate2.close();
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate1 = jsSandbox.createIsolate()) {
+            JavaScriptIsolate jsIsolate2 = jsSandbox.createIsolate();
+            jsIsolate2.close();
 
-        Assert.assertEquals(expected, result);
+            ListenableFuture<String> resultFuture = jsIsolate1.evaluateJavaScriptAsync(code);
+            String result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            Assert.assertEquals(expected, result);
+        }
     }
 
     @Test
@@ -79,21 +92,19 @@ public class JsSandboxServiceTest {
 
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate1 = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture1 = jsIsolate1.evaluateJavascript(code1);
-        String result1 = resultFuture1.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate2 = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture2 = jsIsolate2.evaluateJavascript(code2);
-        String result2 = resultFuture2.get(5, TimeUnit.SECONDS);
-        jsIsolate1.close();
-        jsIsolate2.close();
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate1 = jsSandbox.createIsolate();
+                JavaScriptIsolate jsIsolate2 = jsSandbox.createIsolate()) {
+            ListenableFuture<String> resultFuture1 = jsIsolate1.evaluateJavaScriptAsync(code1);
+            String result1 = resultFuture1.get(5, TimeUnit.SECONDS);
+            ListenableFuture<String> resultFuture2 = jsIsolate2.evaluateJavaScriptAsync(code2);
+            String result2 = resultFuture2.get(5, TimeUnit.SECONDS);
 
-        Assert.assertEquals(expected1, result1);
-        Assert.assertEquals(expected2, result2);
+            Assert.assertEquals(expected1, result1);
+            Assert.assertEquals(expected2, result2);
+        }
     }
 
     @Test
@@ -105,21 +116,19 @@ public class JsSandboxServiceTest {
         final String expected2 = "undefined PASS";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate1 = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture1 = jsIsolate1.evaluateJavascript(code1);
-        String result1 = resultFuture1.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate2 = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture2 = jsIsolate2.evaluateJavascript(code2);
-        String result2 = resultFuture2.get(5, TimeUnit.SECONDS);
-        jsIsolate1.close();
-        jsIsolate2.close();
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate1 = jsSandbox.createIsolate();
+                JavaScriptIsolate jsIsolate2 = jsSandbox.createIsolate()) {
+            ListenableFuture<String> resultFuture1 = jsIsolate1.evaluateJavaScriptAsync(code1);
+            String result1 = resultFuture1.get(5, TimeUnit.SECONDS);
+            ListenableFuture<String> resultFuture2 = jsIsolate2.evaluateJavaScriptAsync(code2);
+            String result2 = resultFuture2.get(5, TimeUnit.SECONDS);
 
-        Assert.assertEquals(expected1, result1);
-        Assert.assertEquals(expected2, result2);
+            Assert.assertEquals(expected1, result1);
+            Assert.assertEquals(expected2, result2);
+        }
     }
 
     @Test
@@ -131,19 +140,18 @@ public class JsSandboxServiceTest {
         final String expected2 = "PASS PASS";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate1 = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture1 = jsIsolate1.evaluateJavascript(code1);
-        String result1 = resultFuture1.get(5, TimeUnit.SECONDS);
-        ListenableFuture<String> resultFuture2 = jsIsolate1.evaluateJavascript(code2);
-        String result2 = resultFuture2.get(5, TimeUnit.SECONDS);
-        jsIsolate1.close();
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate1 = jsSandbox.createIsolate()) {
+            ListenableFuture<String> resultFuture1 = jsIsolate1.evaluateJavaScriptAsync(code1);
+            String result1 = resultFuture1.get(5, TimeUnit.SECONDS);
+            ListenableFuture<String> resultFuture2 = jsIsolate1.evaluateJavaScriptAsync(code2);
+            String result2 = resultFuture2.get(5, TimeUnit.SECONDS);
 
-        Assert.assertEquals(expected1, result1);
-        Assert.assertEquals(expected2, result2);
+            Assert.assertEquals(expected1, result1);
+            Assert.assertEquals(expected2, result2);
+        }
     }
 
     @Test
@@ -153,24 +161,24 @@ public class JsSandboxServiceTest {
         final String contains = "RandomLinkError";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture = jsIsolate.evaluateJavascript(code);
-        boolean isOfCorrectType = false;
-        String error = "";
-        try {
-            String result = resultFuture.get(5, TimeUnit.SECONDS);
-        } catch (ExecutionException e) {
-            isOfCorrectType = e.getCause().getClass().equals(EvaluationFailedException.class);
-            error = e.getCause().getMessage();
-        }
-        jsIsolate.close();
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+            boolean isOfCorrectType = false;
+            String error = "";
+            try {
+                resultFuture.get(5, TimeUnit.SECONDS);
+                Assert.fail("Should have thrown.");
+            } catch (ExecutionException e) {
+                isOfCorrectType = e.getCause().getClass().equals(EvaluationFailedException.class);
+                error = e.getCause().getMessage();
+            }
 
-        Assert.assertTrue(isOfCorrectType);
-        Assert.assertTrue(error.contains(contains));
+            Assert.assertTrue(isOfCorrectType);
+            Assert.assertTrue(error.contains(contains));
+        }
     }
 
     @Test
@@ -179,21 +187,26 @@ public class JsSandboxServiceTest {
         final String code = "while(true){}";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate = jsSandbox.createIsolate();
-        ListenableFuture<String> resultFuture = jsIsolate.evaluateJavascript(code);
-        boolean isOfCorrectType = false;
-        try {
-            jsIsolate.close();
-            String result = resultFuture.get(5, TimeUnit.SECONDS);
-        } catch (ExecutionException e) {
-            isOfCorrectType = e.getCause().getClass().equals(IsolateTerminatedException.class);
-        }
-        jsSandbox.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS)) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_ISOLATE_TERMINATION));
 
-        Assert.assertTrue(isOfCorrectType);
+            ListenableFuture<String> resultFuture;
+            try (JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+                resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+            }
+
+            try {
+                resultFuture.get(5, TimeUnit.SECONDS);
+                Assert.fail("Should have thrown.");
+            } catch (ExecutionException e) {
+                if (!(e.getCause() instanceof IsolateTerminatedException)) {
+                    throw e;
+                }
+            }
+        }
     }
 
     @Test
@@ -203,27 +216,48 @@ public class JsSandboxServiceTest {
         final int num_of_evaluations = 10;
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-        AwJsIsolate jsIsolate = jsSandbox.createIsolate();
-        Vector<ListenableFuture<String>> resultFutures = new Vector<ListenableFuture<String>>();
-        for (int i = 0; i < num_of_evaluations; i++) {
-            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavascript(code);
-            resultFutures.add(resultFuture);
-        }
-        jsIsolate.close();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS)) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_ISOLATE_TERMINATION));
 
-        for (int i = 0; i < num_of_evaluations; i++) {
-            boolean isOfCorrectType = false;
-            try {
-                String result = resultFutures.elementAt(i).get(5, TimeUnit.SECONDS);
-            } catch (ExecutionException e) {
-                isOfCorrectType = e.getCause().getClass().equals(IsolateTerminatedException.class);
+            Vector<ListenableFuture<String>> resultFutures = new Vector<ListenableFuture<String>>();
+            try (JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+                for (int i = 0; i < num_of_evaluations; i++) {
+                    ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+                    resultFutures.add(resultFuture);
+                }
             }
-            Assert.assertTrue(isOfCorrectType);
+
+            for (int i = 0; i < num_of_evaluations; i++) {
+                try {
+                    resultFutures.elementAt(i).get(5, TimeUnit.SECONDS);
+                    Assert.fail("Should have thrown.");
+                } catch (ExecutionException e) {
+                    if (!(e.getCause() instanceof IsolateTerminatedException)) {
+                        throw e;
+                    }
+                }
+            }
         }
-        jsSandbox.close();
+    }
+
+    @Test
+    @MediumTest
+    @DisabledTest(
+            message =
+                    "Enable it back once we have a WebView version to see if the feature is actually supported in that version")
+    public void
+    testFeatureDetection() throws Throwable {
+        Context context = ContextUtils.getApplicationContext();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(
+                        ContextUtils.getApplicationContext());
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS)) {
+            Assert.assertFalse(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_ISOLATE_TERMINATION));
+        }
     }
 
     @Test
@@ -239,13 +273,18 @@ public class JsSandboxServiceTest {
                 + " return ab2str(value);"
                 + "});";
         Context context = ContextUtils.getApplicationContext();
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        try (AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-                AwJsIsolate jsIsolate = jsSandbox.createIsolate()) {
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN));
+            Assume.assumeTrue(jsSandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_PROVIDE_CONSUME_ARRAY_BUFFER));
+
             boolean provideNamedDataReturn = jsIsolate.provideNamedData("id-1", bytes);
             Assert.assertTrue(provideNamedDataReturn);
-            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavascript(code);
+            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavaScriptAsync(code);
             String result = resultFuture1.get(5, TimeUnit.SECONDS);
 
             Assert.assertEquals(provideString, result);
@@ -265,13 +304,20 @@ public class JsSandboxServiceTest {
                 + "  });"
                 + "});";
         Context context = ContextUtils.getApplicationContext();
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        try (AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-                AwJsIsolate jsIsolate = jsSandbox.createIsolate()) {
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN));
+            Assume.assumeTrue(jsSandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_PROVIDE_CONSUME_ARRAY_BUFFER));
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_WASM_COMPILATION));
+
             boolean provideNamedDataReturn = jsIsolate.provideNamedData("id-1", bytes);
             Assert.assertTrue(provideNamedDataReturn);
-            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavascript(code);
+            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavaScriptAsync(code);
             String result = resultFuture1.get(5, TimeUnit.SECONDS);
 
             Assert.assertEquals(success, result);
@@ -284,11 +330,14 @@ public class JsSandboxServiceTest {
         final String code = "Promise.resolve(\"PASS\")";
         final String expected = "PASS";
         Context context = ContextUtils.getApplicationContext();
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        try (AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-                AwJsIsolate jsIsolate = jsSandbox.createIsolate()) {
-            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavascript(code);
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN));
+
+            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
             String result = resultFuture.get(5, TimeUnit.SECONDS);
 
             Assert.assertEquals(expected, result);
@@ -307,12 +356,15 @@ public class JsSandboxServiceTest {
         final String expected = "PASS";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        try (AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-                AwJsIsolate jsIsolate = jsSandbox.createIsolate()) {
-            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavascript(code1);
-            ListenableFuture<String> resultFuture2 = jsIsolate.evaluateJavascript(code2);
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN));
+
+            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavaScriptAsync(code1);
+            ListenableFuture<String> resultFuture2 = jsIsolate.evaluateJavaScriptAsync(code2);
             String result = resultFuture1.get(5, TimeUnit.SECONDS);
 
             Assert.assertEquals(expected, result);
@@ -340,17 +392,22 @@ public class JsSandboxServiceTest {
                 + " });"
                 + "});";
         Context context = ContextUtils.getApplicationContext();
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        try (AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-                AwJsIsolate jsIsolate = jsSandbox.createIsolate()) {
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN));
+            Assume.assumeTrue(jsSandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_PROVIDE_CONSUME_ARRAY_BUFFER));
+
             jsIsolate.provideNamedData("id-1", bytes);
             jsIsolate.provideNamedData("id-2", bytes);
             jsIsolate.provideNamedData("id-3", bytes);
             jsIsolate.provideNamedData("id-4", bytes);
             jsIsolate.provideNamedData("id-5", bytes);
             Thread.sleep(1000);
-            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavascript(code);
+            ListenableFuture<String> resultFuture1 = jsIsolate.evaluateJavaScriptAsync(code);
             String result = resultFuture1.get(5, TimeUnit.SECONDS);
 
             Assert.assertEquals(success, result);
@@ -369,19 +426,164 @@ public class JsSandboxServiceTest {
         final String contains = "RandomLinkError";
         Context context = ContextUtils.getApplicationContext();
 
-        ListenableFuture<AwJsSandbox> awJsSandboxFuture =
-                AwJsSandbox.newConnectedInstanceForTesting(context);
-        try (AwJsSandbox jsSandbox = awJsSandboxFuture.get(5, TimeUnit.SECONDS);
-                AwJsIsolate jsIsolate = jsSandbox.createIsolate()) {
-            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavascript(code);
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            Assume.assumeTrue(
+                    jsSandbox.isFeatureSupported(JavaScriptSandbox.JS_FEATURE_PROMISE_RETURN));
+            Assume.assumeTrue(jsSandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_PROVIDE_CONSUME_ARRAY_BUFFER));
+
+            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
             try {
-                String result = resultFuture.get(5, TimeUnit.SECONDS);
+                resultFuture.get(5, TimeUnit.SECONDS);
                 Assert.fail("Should have thrown.");
             } catch (ExecutionException e) {
                 if (!(e.getCause() instanceof EvaluationFailedException)) {
                     throw e;
                 }
                 Assert.assertTrue(e.getCause().getMessage().contains(contains));
+            }
+        }
+    }
+
+    @Test
+    @MediumTest
+    public void testEvaluationThrowsWhenSandboxDead() throws Throwable {
+        final String code = "while(true){}";
+        Context context = ContextUtils.getApplicationContext();
+
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+            ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+            jsSandbox.close();
+            try {
+                resultFuture.get(5, TimeUnit.SECONDS);
+                Assert.fail("Should have thrown.");
+            } catch (ExecutionException e) {
+                if (!(e.getCause() instanceof IsolateTerminatedException)) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    @Test
+    @MediumTest
+    public void testMultipleSandboxesCannotCoexist() throws Throwable {
+        Context context = ContextUtils.getApplicationContext();
+        final String contains = "already bound";
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture1 =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox1 = jsSandboxFuture1.get(5, TimeUnit.SECONDS)) {
+            ListenableFuture<JavaScriptSandbox> jsSandboxFuture2 =
+                    JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+            try {
+                try (JavaScriptSandbox jsSandbox2 = jsSandboxFuture2.get(5, TimeUnit.SECONDS)) {
+                    Assert.fail("Should have thrown.");
+                }
+            } catch (ExecutionException e) {
+                if (!(e.getCause() instanceof RuntimeException)) {
+                    throw e;
+                }
+                Assert.assertTrue(e.getCause().getMessage().contains(contains));
+            }
+        }
+    }
+
+    @Test
+    @MediumTest
+    public void testSandboxCanBeCreatedAfterClosed() throws Throwable {
+        final String code = "\"PASS\"";
+        final String expected = "PASS";
+        final int num_of_startups = 2;
+        Context context = ContextUtils.getApplicationContext();
+
+        for (int i = 0; i < num_of_startups; i++) {
+            ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                    JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+            try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS);
+                    JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
+                ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+                String result = resultFuture.get(5, TimeUnit.SECONDS);
+
+                Assert.assertEquals(expected, result);
+            }
+        }
+    }
+
+    @Test
+    @MediumTest
+    public void testHeapSizeAdjustment() throws Throwable {
+        final String code = "\"PASS\"";
+        final String expected = "PASS";
+        final long[] heapSizes = {
+                0,
+                REASONABLE_HEAP_SIZE,
+                REASONABLE_HEAP_SIZE - 1,
+                REASONABLE_HEAP_SIZE + 1,
+                REASONABLE_HEAP_SIZE + 4095,
+                REASONABLE_HEAP_SIZE + 4096,
+                REASONABLE_HEAP_SIZE + 65535,
+                REASONABLE_HEAP_SIZE + 65536,
+                1L << 50,
+        };
+        Context context = ContextUtils.getApplicationContext();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS)) {
+            Assume.assumeTrue(jsSandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_ISOLATE_MAX_HEAP_SIZE));
+            for (long heapSize : heapSizes) {
+                IsolateStartupParameters isolateStartupParameters = new IsolateStartupParameters();
+                isolateStartupParameters.setMaxHeapSizeBytes(heapSize);
+                try (JavaScriptIsolate jsIsolate =
+                                jsSandbox.createIsolate(isolateStartupParameters)) {
+                    ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+                    String result = resultFuture.get(5, TimeUnit.SECONDS);
+                    Assert.assertEquals(expected, result);
+                } catch (Throwable e) {
+                    throw new AssertionError(
+                            "Failed to evaluate JavaScript using max heap size setting " + heapSize,
+                            e);
+                }
+            }
+        }
+    }
+
+    @Test
+    @MediumTest
+    public void testHeapSizeEnforced() throws Throwable {
+        final long maxHeapSize = REASONABLE_HEAP_SIZE;
+        // We need to beat the v8 optimizer to ensure it really allocates the required memory.
+        // Note that we're allocating an array of elements - not bytes.
+        final String code = "this.array = Array(" + maxHeapSize + ").fill(Math.random(), 0);"
+                + "var arrayLength = this.array.length;"
+                + "var sum = 0;"
+                + "for (var i = 0; i < arrayLength; i++) {"
+                + " sum+=this.array[i];"
+                + "}";
+        Context context = ContextUtils.getApplicationContext();
+        ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
+                JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
+        try (JavaScriptSandbox jsSandbox = jsSandboxFuture.get(5, TimeUnit.SECONDS)) {
+            Assume.assumeTrue(jsSandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_ISOLATE_MAX_HEAP_SIZE));
+            IsolateStartupParameters isolateStartupParameters = new IsolateStartupParameters();
+            isolateStartupParameters.setMaxHeapSizeBytes(maxHeapSize);
+            try (JavaScriptIsolate jsIsolate = jsSandbox.createIsolate(isolateStartupParameters)) {
+                ListenableFuture<String> resultFuture = jsIsolate.evaluateJavaScriptAsync(code);
+                try {
+                    resultFuture.get(10, TimeUnit.SECONDS);
+                    Assert.fail("Should have thrown.");
+                } catch (ExecutionException e) {
+                    if (!(e.getCause() instanceof SandboxDeadException)) {
+                        throw e;
+                    }
+                }
             }
         }
     }

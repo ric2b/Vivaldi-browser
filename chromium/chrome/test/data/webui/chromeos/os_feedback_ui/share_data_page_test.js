@@ -6,11 +6,16 @@ import 'chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom-lite.js'
 import 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-lite.js';
 
 import {fakeEmptyFeedbackContext, fakeFeedbackContext} from 'chrome://os-feedback/fake_data.js';
+import {FakeFeedbackServiceProvider} from 'chrome://os-feedback/fake_feedback_service_provider.js';
 import {FeedbackFlowState} from 'chrome://os-feedback/feedback_flow.js';
+import {FeedbackAppPreSubmitAction, FeedbackContext} from 'chrome://os-feedback/feedback_types.js';
+import {setFeedbackServiceProviderForTesting} from 'chrome://os-feedback/mojo_interface_provider.js';
 import {ShareDataPageElement} from 'chrome://os-feedback/share_data_page.js';
 import {mojoString16ToString, stringToMojoString16} from 'chrome://resources/ash/common/mojo_utils.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {assertArrayEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 import {eventToPromise, flushTasks, isVisible} from '../../test_util.js';
 
 /** @type {string} */
@@ -20,8 +25,14 @@ export function shareDataPageTestSuite() {
   /** @type {?ShareDataPageElement} */
   let page = null;
 
+  /** @type {?FakeFeedbackServiceProvider} */
+  let feedbackServiceProvider;
+
   setup(() => {
     document.body.innerHTML = '';
+
+    feedbackServiceProvider = new FakeFeedbackServiceProvider();
+    setFeedbackServiceProviderForTesting(feedbackServiceProvider);
   });
 
   teardown(() => {
@@ -59,6 +70,17 @@ export function shareDataPageTestSuite() {
   }
 
   /**
+   * @param {number} callCounts
+   * @param {FeedbackAppPreSubmitAction} action
+   * @private
+   */
+  function verifyRecordPreSubmitActionCallCount(callCounts, action) {
+    assertEquals(
+        callCounts,
+        feedbackServiceProvider.getRecordPreSubmitActionCallCount(action));
+  }
+
+  /**
    * Helper function which will click the send button, wait for the event
    * 'continue-click', and return the detail data of the event.
    * @param {!Element} element
@@ -85,18 +107,58 @@ export function shareDataPageTestSuite() {
   test('shareDataPageLoaded', async () => {
     await initializePage();
     // Verify the title is in the page.
-    assertEquals('Send feedback', getElementContent('#title'));
+    assertEquals('Send feedback', getElementContent('.page-title'));
+    assertTrue(page.i18nExists('pageTitle'));
 
     // Verify the back button is in the page.
     assertEquals('Back', getElementContent('#buttonBack'));
+    assertTrue(page.i18nExists('backButtonLabel'));
 
     // Verify the send button is in the page.
     assertEquals('Send', getElementContent('#buttonSend'));
+    assertTrue(page.i18nExists('sendButtonLabel'));
+
+    // Verify the attach files label is in the page.
+    assertTrue(page.i18nExists('attachFilesLabel'));
+    assertEquals('Attach files', getElementContent('#attachFilesLabel'));
+
+    // Verify the add files Icon is in the page.
+    const addFilesIcon = getElement('#attachFilesIcon');
+    assertTrue(!!addFilesIcon);
+
+    // Verify the user email label is in the page.
+    assertTrue(page.i18nExists('userEmailLabel'));
+    assertEquals('Email', getElementContent('#userEmailLabel'));
+
+    // Verify the role and aria label of the user email dropdown.
+    const userEmailDropDown = getElement('#userEmailDropDown');
+    assertEquals('listbox', userEmailDropDown.role);
+    assertTrue(page.i18nExists('userEmailAriaLabel'));
+    assertEquals('Select email', userEmailDropDown.ariaLabel);
+
+    // Verify don't include email address is in the page.
+    assertTrue(page.i18nExists('anonymousUser'));
+    assertEquals(
+        `Don't include email address`, getElementContent('#anonymousUser'));
+
+    // Verify the share diagnostic data label is in the page.
+    assertTrue(page.i18nExists('shareDiagnosticDataLabel'));
+    assertEquals(
+        'Share diagnostic data',
+        getElementContent('#shareDiagnosticDataLabel'));
 
     // Screenshot elements.
-    assertTrue(!!getElement('#screenshotCheckbox'));
+    const screenshotCheckbox = getElement('#screenshotCheckbox');
+    assertTrue(!!screenshotCheckbox);
+    assertTrue(page.i18nExists('attachScreenshotCheckboxAriaLabel'));
+    assertEquals('Attach screenshot', screenshotCheckbox.ariaDescription);
+
+    assertTrue(page.i18nExists('attachScreenshotLabel'));
     assertEquals('Screenshot', getElementContent('#screenshotCheckLabel'));
+
     assertTrue(!!getElement('#screenshotImage'));
+    assertEquals('Preview Screenshot', getElement('#imageButton').ariaLabel);
+    assertTrue(page.i18nExists('previewImageAriaLabel'));
 
     // Add file attachment element.
     assertTrue(!!getElement('file-attachment'));
@@ -106,15 +168,23 @@ export function shareDataPageTestSuite() {
     assertTrue(!!getElement('#userEmailDropDown'));
 
     // URL elements.
-    assertEquals('share url:', getElementContent('#pageUrlLabel'));
+    assertEquals('Share URL:', getElementContent('#pageUrlLabel'));
+    assertTrue(page.i18nExists('sharePageUrlLabel'));
     assertTrue(!!getElement('#pageUrlCheckbox'));
     assertTrue(!!getElement('#pageUrlText'));
 
     // System info label is a localized string in HTML format.
-    assertTrue(getElementContent('#sysInfoLabel').length > 0);
+    assertTrue(getElementContent('#sysInfoCheckboxLabel').length > 0);
 
     // Privacy note is a long localized string in HTML format.
-    assertTrue(getElementContent('#privacyNote').length > 0);
+    assertTrue(page.i18nExists('privacyNote'));
+    assertEquals(
+        'Go to the Legal Help page to request content changes for ' +
+            'legal reasons. Some account and system information ' +
+            'may be sent to Google. We will use the information you ' +
+            'give us to help address technical issues and to improve our ' +
+            'services, subject to our Privacy Policy and Terms of Service.',
+        getElementContent('#privacyNote'));
   });
 
   // Test that the email drop down is populated with two options.
@@ -127,12 +197,13 @@ export function shareDataPageTestSuite() {
     assertEquals(2, emailDropdown.options.length);
 
     const firstOption = emailDropdown.options.item(0);
-    assertEquals('test.user2@test.com', firstOption.textContent);
-    assertEquals('test.user2@test.com', firstOption.value);
+    assertEquals('test.user2@test.com', firstOption.textContent.trim());
+    assertEquals('test.user2@test.com', firstOption.value.trim());
 
     const secondOption = emailDropdown.options.item(1);
-    assertEquals('Don\'t include email address', secondOption.textContent);
-    assertEquals('', secondOption.value);
+    assertEquals(
+        'Don\'t include email address', secondOption.textContent.trim());
+    assertEquals('', secondOption.value.trim());
 
     // The user email section should be visible.
     const userEmailElement = getElement('#userEmail');
@@ -155,7 +226,22 @@ export function shareDataPageTestSuite() {
     await initializePage();
     page.feedbackContext = fakeFeedbackContext;
 
-    assertEquals('chrome://tab/', getElement('#pageUrlText').value);
+    assertEquals('chrome://tab/', getElementContent('#pageUrlText'));
+  });
+
+  // Test that the pageUrl section is hidden when the url is empty string.
+  test('pageUrlHidden', async () => {
+    await initializePage();
+    fakeFeedbackContext.pageUrl.url = '';
+    page.feedbackContext = fakeFeedbackContext;
+
+    // The pageUrl section should be hidden
+    const pageUrl = getElement('#pageUrl');
+    assertTrue(!!pageUrl);
+    assertFalse(isVisible(pageUrl));
+
+    // Change it back otherwise it will effect other tests.
+    fakeFeedbackContext.pageUrl.url = 'chrome://tab/';
   });
 
   /**
@@ -324,6 +410,43 @@ export function shareDataPageTestSuite() {
     assertEquals(imgUrl, screenshotImage.src);
   });
 
+
+  // Test that clicking the screenshot will open preview dialog and set the
+  // focus on the close dialog icon button.
+  test('screenshotPreview', async () => {
+    await initializePage();
+    verifyRecordPreSubmitActionCallCount(
+        0, FeedbackAppPreSubmitAction.kViewedScreenshot);
+    page.feedbackContext = fakeFeedbackContext;
+    page.screenshotUrl = fakeImageUrl;
+    assertEquals(fakeImageUrl, getElement('#screenshotImage').src);
+
+    const closeDialogButton = getElement('#closeDialogButton');
+    // The preview dialog's close icon button is not visible.
+    assertFalse(isVisible(closeDialogButton));
+
+    // The screenshot is displayed as an image button.
+    const imageButton = /** @type {!Element} */ (getElement('#imageButton'));
+    const imageClickPromise = eventToPromise('click', imageButton);
+    imageButton.click();
+    await imageClickPromise;
+
+    // The preview dialog's close icon button is visible now.
+    assertTrue(isVisible(closeDialogButton));
+    // The preview dialog's close icon button is focused.
+    assertEquals(closeDialogButton, getDeepActiveElement());
+    verifyRecordPreSubmitActionCallCount(
+        1, FeedbackAppPreSubmitAction.kViewedScreenshot);
+
+    // Press enter should close the preview dialog.
+    closeDialogButton.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Enter'}));
+    await flushTasks();
+
+    // The preview dialog's close icon button is not visible now.
+    assertFalse(isVisible(closeDialogButton));
+  });
+
   /**
    * Test that when when the send button is clicked, the getAttachedFile has
    * been called.
@@ -339,7 +462,7 @@ export function shareDataPageTestSuite() {
         fileName: stringToMojoString16('fake.zip'),
         fileData: {
           bytes: fakeFileData,
-        }
+        },
       };
     };
 
@@ -351,5 +474,226 @@ export function shareDataPageTestSuite() {
     assertArrayEquals(
         fakeFileData,
         /** @type {!Array<Number>} */ (attachedFile.fileData.bytes));
+  });
+
+  /**
+   * Test that when page initially loaded "user-consent" checkbox is false and
+   * expected localize message displayed.
+   */
+  test('UserConsentGrantedCheckbox_StartsFalse', async () => {
+    const expectedUserConsentMessage =
+        'Allow Google to email you about this issue';
+    await initializePage();
+
+    assertTrue(page.i18nExists('userConsentLabel'));
+
+    const userConsentCheckboxChecked =
+        getElement('#userConsentCheckbox').checked;
+    const userConsentText = getElementContent('#userConsentLabel');
+
+    assertFalse(userConsentCheckboxChecked);
+    assertEquals(expectedUserConsentMessage, userConsentText);
+  });
+
+  /**
+   * Test that report "contact_user_consent_granted" matches "user-consent"
+   * checkbox value.
+   */
+  test(
+      'UserConsentGrantedCheckbox_UpdatesReportContactUserConsentGranted',
+      async () => {
+        await initializePage();
+        page.feedbackContext = fakeFeedbackContext;
+        getElement('#userConsentCheckbox').checked = true;
+        await flushTasks();
+
+        const reportWithConsent = (await clickSendAndWait(page)).report;
+
+        assertTrue(reportWithConsent.contactUserConsentGranted);
+
+        page.reEnableSendReportButton();
+        page.feedbackContext = fakeFeedbackContext;
+        getElement('#userConsentCheckbox').checked = false;
+        await flushTasks();
+
+        const reportWithoutConsent = (await clickSendAndWait(page)).report;
+        assertFalse(reportWithoutConsent.contactUserConsentGranted);
+      });
+
+  /**
+   * Test that when report is anonymous (no email provided), "user-consent"
+   * checkbox is disabled and value is false.
+   */
+  test(
+      'UserConsentGrantedCheckbox_ReportAnonymous_FalseAndDisabled',
+      async () => {
+        await initializePage();
+        page.feedbackContext = fakeFeedbackContext;
+        const disabledInputClass = 'disabled-input-text';
+
+        const consentLabel = getElement('#userConsentLabel');
+        const consentCheckbox = getElement('#userConsentCheckbox');
+        const emailDropdown = getElement('#userEmailDropDown');
+
+        // Select the email.
+        emailDropdown.value = 'test.user2@test.com';
+        await flushTasks();
+
+        // With email selected and consent not granted.
+        assertFalse(consentCheckbox.disabled);
+        assertFalse(consentCheckbox.checked);
+        assertFalse(consentLabel.classList.contains(disabledInputClass));
+
+        // Check checkbox.
+        consentCheckbox.click();
+        await flushTasks();
+
+        // With email selected and consent granted.
+        assertFalse(consentCheckbox.disabled);
+        assertTrue(consentCheckbox.checked);
+        assertFalse(consentLabel.classList.contains(disabledInputClass));
+
+        // Select the "Do Not Provide Email" option.
+        emailDropdown.value = '';
+        emailDropdown.dispatchEvent(new CustomEvent('change'));
+        flush();
+
+        // With anonymous email selected and consent not granted.
+        assertTrue(consentCheckbox.disabled);
+        assertFalse(consentCheckbox.checked);
+        assertTrue(consentLabel.classList.contains(disabledInputClass));
+      });
+
+  /**
+   * Test that when feedback context contains extra_diagnostics matching value
+   * is set on report.
+   */
+  test('AdditionalContext_ExtraDiagnostics', async () => {
+    await initializePage();
+    page.feedbackContext = fakeFeedbackContext;
+
+    const reportWithoutExtraDiagnostics = (await clickSendAndWait(page)).report;
+    assertFalse(
+        !!reportWithoutExtraDiagnostics.feedbackContext.extraDiagnostics);
+
+    page.reEnableSendReportButton();
+    const fakeFeedbackContextWithExtraDiagnostics =
+        /** @type {!FeedbackContext} */ ({extraDiagnostics: 'some extra info'});
+    page.feedbackContext = fakeFeedbackContextWithExtraDiagnostics;
+    await flushTasks();
+
+    const reportWithExtraDiagnostics = (await clickSendAndWait(page)).report;
+    assertEquals(
+        fakeFeedbackContextWithExtraDiagnostics.extraDiagnostics,
+        reportWithExtraDiagnostics.feedbackContext.extraDiagnostics);
+
+    getElement('#sysInfoCheckbox').checked = false;
+    page.reEnableSendReportButton();
+    const reportNoSysInfo = (await clickSendAndWait(page)).report;
+    assertFalse(!!reportNoSysInfo.feedbackContext.extraDiagnostics);
+  });
+
+  /**
+   * Test that openMetricsDialog and recordPreSubmitAction are called when
+   * #histogramsLink ("metrics") link is clicked.
+   */
+  test('openMetricsDialog', async () => {
+    await initializePage();
+
+    assertEquals(0, feedbackServiceProvider.getOpenMetricsDialogCallCount());
+    verifyRecordPreSubmitActionCallCount(
+        0, FeedbackAppPreSubmitAction.kViewedMetrics);
+
+    getElement('#histogramsLink').click();
+
+    assertEquals(1, feedbackServiceProvider.getOpenMetricsDialogCallCount());
+    verifyRecordPreSubmitActionCallCount(
+        1, FeedbackAppPreSubmitAction.kViewedMetrics);
+  });
+
+  /**
+   * Test that openSystemInfoDialog and recordPreSubmitAction are called when
+   * #sysInfoLink ("system and app info") link is clicked.
+   */
+  test('openSystemInfoDialog', async () => {
+    await initializePage();
+
+    assertEquals(0, feedbackServiceProvider.getOpenSystemInfoDialogCallCount());
+    verifyRecordPreSubmitActionCallCount(
+        0, FeedbackAppPreSubmitAction.kViewedSystemAndAppInfo);
+
+    getElement('#sysInfoLink').click();
+
+    assertEquals(1, feedbackServiceProvider.getOpenSystemInfoDialogCallCount());
+    verifyRecordPreSubmitActionCallCount(
+        1, FeedbackAppPreSubmitAction.kViewedSystemAndAppInfo);
+  });
+
+  /**
+   * Test that feedbackServiceProvider.openBluetoothLogsInfoDialog is called
+   * when #bluetoothLogsLink link is clicked.
+   */
+  test('openBluetoothLogsInfoDialog', async () => {
+    await initializePage();
+
+    assertEquals(
+        0, feedbackServiceProvider.getOpenBluetoothLogsInfoDialogCallCount());
+
+    getElement('#bluetoothLogsInfoLink').click();
+
+    assertEquals(
+        1, feedbackServiceProvider.getOpenBluetoothLogsInfoDialogCallCount());
+  });
+
+  /**
+   * Test that sendBluetoothLogs flag is true and categoryTag is marked as
+   * 'BluetoothReportWithLogs' when bluetooth logs checkbox is checked.
+   */
+  test('sendReportWithBluetoothLogsFlagChecked', async () => {
+    await initializePage();
+    page.feedbackContext = fakeFeedbackContext;
+
+    const bluetoothLogsCheckbox = getElement('#bluetoothLogsCheckbox');
+
+    // Check the bluetoothLogs checkbox, it is default to be checked.
+    assertTrue(!!bluetoothLogsCheckbox);
+    assertTrue(bluetoothLogsCheckbox.checked);
+
+    // Report should have sendBluetoothLogs flag true,and category marked as
+    // "BluetoothReportWithLogs".
+    const requestWithBluetoothFlag = (await clickSendAndWait(page)).report;
+
+    assertTrue(requestWithBluetoothFlag.sendBluetoothLogs);
+    assertTrue(!!requestWithBluetoothFlag.feedbackContext.categoryTag);
+    assertEquals(
+        'BluetoothReportWithLogs',
+        requestWithBluetoothFlag.feedbackContext.categoryTag);
+  });
+
+  /**
+   * Test that sendBluetoothLogs flag is false and categoryTag is not marked as
+   * 'BluetoothReportWithLogs' when bluetooth logs checkbox is unchecked.
+   */
+  test('sendReportWithoutBluetoothLogsFlagChecked', async () => {
+    await initializePage();
+    page.feedbackContext = fakeFeedbackContext;
+
+    const bluetoothLogsCheckbox = getElement('#bluetoothLogsCheckbox');
+
+    // BluetoothLogs checkbox is default to be checked.
+    assertTrue(!!bluetoothLogsCheckbox);
+    assertTrue(bluetoothLogsCheckbox.checked);
+
+    // Verify that unchecking the checkbox will remove the flag in the report.
+    bluetoothLogsCheckbox.click();
+    assertFalse(bluetoothLogsCheckbox.checked);
+    await flushTasks();
+
+    // Report should not have sendBluetoothLogs flag,
+    // and category marked as "BluetoothReportWithLogs".
+    const requestWithoutBluetoothFlag = (await clickSendAndWait(page)).report;
+
+    assertFalse(requestWithoutBluetoothFlag.sendBluetoothLogs);
+    assertFalse(!!requestWithoutBluetoothFlag.feedbackContext.categoryTag);
   });
 }

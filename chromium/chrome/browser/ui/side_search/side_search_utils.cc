@@ -14,18 +14,16 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/side_search/side_search_prefs.h"
 #include "chrome/browser/ui/side_search/side_search_tab_contents_helper.h"
 #include "chrome/browser/ui/side_search/side_search_tab_data.pb.h"
-#include "chrome/browser/ui/side_search/side_search_window_data.pb.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/session_id.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/buildflags.h"
-
-#include "chrome/browser/ui/side_search/side_search_window_data.pb.h"
 
 namespace side_search {
 
@@ -51,10 +49,6 @@ void MaybeAddSideSearchTabRestoreData(
         SerializeSideSearchTabDataAsString(helper);
 }
 
-void MaybeAddSideSearchWindowRestoreData(
-    bool toggled_open,
-    std::map<std::string, std::string>& extra_data) {}
-
 absl::optional<std::pair<std::string, std::string>>
 MaybeGetSideSearchTabRestoreData(content::WebContents* web_contents) {
   SideSearchTabContentsHelper* helper =
@@ -66,14 +60,6 @@ MaybeGetSideSearchTabRestoreData(content::WebContents* web_contents) {
 
   return absl::nullopt;
 }
-
-void MaybeRestoreSideSearchWindowState(
-    SideSearchTabContentsHelper::Delegate* delegate,
-    const std::map<std::string, std::string>& extra_data) {}
-
-void MaybeSaveSideSearchWindowSessionData(Profile* profile,
-                                          SessionID window_id,
-                                          bool toggled_open) {}
 
 void MaybeSaveSideSearchTabSessionData(content::WebContents* web_contents) {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
@@ -127,6 +113,10 @@ bool IsSidePanelWebContents(content::WebContents* web_contents) {
 bool IsDSESupportEnabled(const Profile* profile) {
   return base::FeatureList::IsEnabled(features::kSideSearchDSESupport) &&
          IsSideSearchEnabled(profile);
+}
+
+bool IsEnabledForBrowser(const Browser* browser) {
+  return IsSideSearchEnabled(browser->profile()) && browser->is_type_normal();
 }
 
 }  // namespace side_search

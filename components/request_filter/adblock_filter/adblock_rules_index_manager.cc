@@ -6,6 +6,8 @@
 
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/ad_blocker/adblock_rule_service.h"
+#include "components/ad_blocker/utils.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_builder.h"
 #include "components/request_filter/adblock_filter/utils.h"
@@ -114,7 +116,7 @@ RulesIndexManager::RulesIndexManager(
     scoped_refptr<base::SequencedTaskRunner> file_task_runner)
     : group_(group),
       reload_in_progress_(!index_checksum.empty()),
-      rule_sources_(rule_service->GetRuleSources(group)),
+      rule_sources_(rule_service->GetRuleManager()->GetRuleSources(group)),
       rules_list_folder_(context->GetPath()
                              .Append(GetRulesFolderName())
                              .Append(GetGroupFolderName(group_))),
@@ -123,7 +125,7 @@ RulesIndexManager::RulesIndexManager(
       rule_buffer_read_fail_callback_(rule_buffer_read_fail_callback),
       file_task_runner_(file_task_runner),
       weak_factory_(this) {
-  rule_service->AddObserver(this);
+  rule_service->GetRuleManager()->AddObserver(this);
 
   for (const auto& rule_source : rule_sources_) {
     ReadRules(rule_source.second);

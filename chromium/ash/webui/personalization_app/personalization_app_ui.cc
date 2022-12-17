@@ -44,7 +44,7 @@ bool IsAmbientModeAllowed() {
 }
 
 void AddResources(content::WebUIDataSource* source) {
-  source->AddResourcePath("", IDR_ASH_PERSONALIZATION_APP_TRUSTED_INDEX_HTML);
+  source->AddResourcePath("", IDR_ASH_PERSONALIZATION_APP_INDEX_HTML);
   source->AddResourcePaths(base::make_span(
       kAshPersonalizationAppResources, kAshPersonalizationAppResourcesSize));
   source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
@@ -53,8 +53,8 @@ void AddResources(content::WebUIDataSource* source) {
                           IDR_WEBUI_JS_TEST_LOADER_UTIL_JS);
 
 #if !DCHECK_IS_ON()
-  // Add a default path to avoid crash when not debugging.
-  source->SetDefaultResource(IDR_ASH_PERSONALIZATION_APP_TRUSTED_INDEX_HTML);
+  // Add a default path to avoid crashes when not debugging.
+  source->SetDefaultResource(IDR_ASH_PERSONALIZATION_APP_INDEX_HTML);
 #endif  // !DCHECK_IS_ON()
 }
 
@@ -77,7 +77,8 @@ void AddStrings(content::WebUIDataSource* source) {
       {"dailyRefresh", IDS_PERSONALIZATION_APP_DAILY_REFRESH},
       {"unknownImageAttribution",
        IDS_PERSONALIZATION_APP_UNKNOWN_IMAGE_ATTRIBUTION},
-      {"networkError", IDS_PERSONALIZATION_APP_NETWORK_ERROR},
+      {"wallpaperNetworkError",
+       IDS_PERSONALIZATION_APP_WALLPAPER_NETWORK_ERROR},
       {"ariaLabelLoading", IDS_PERSONALIZATION_APP_ARIA_LABEL_LOADING},
       // Using old wallpaper app error string pending final revision.
       // TODO(b/195609442)
@@ -199,6 +200,8 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_TURN_ON_LABEL},
       {"ariaLabelChangeScreensaver",
        IDS_PERSONALIZATION_APP_ARIA_LABEL_CHANGE_SCREENSAVER},
+      {"ambientModeNetworkError",
+       IDS_PERSONALIZATION_APP_AMBIENT_MODE_NETWORK_ERROR},
 
       // Keyboard backlight strings
       {"keyboardBacklightTitle",
@@ -222,6 +225,8 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_PURPLE_COLOR_LABEL},
       {"rainbowColor",
        IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_RAINBOW_COLOR_LABEL},
+      {"wallpaperColorNudgeText",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_WALLPAPER_COLOR_NUDGE_TEXT},
 
       // Google Photos strings
       // TODO(b/229149314): Finalize error and retry strings.
@@ -250,30 +255,6 @@ void AddStrings(content::WebUIDataSource* source) {
 
   source->UseStringsJs();
   source->EnableReplaceI18nInJS();
-}
-
-void AddBooleans(content::WebUIDataSource* source) {
-  source->AddBoolean("fullScreenPreviewEnabled",
-                     features::IsWallpaperFullScreenPreviewEnabled());
-
-  source->AddBoolean("isGooglePhotosIntegrationEnabled",
-                     features::IsWallpaperGooglePhotosIntegrationEnabled());
-
-  source->AddBoolean("isPersonalizationHubEnabled",
-                     features::IsPersonalizationHubEnabled());
-
-  source->AddBoolean("isAmbientModeAnimationEnabled",
-                     features::IsAmbientModeAnimationEnabled());
-
-  source->AddBoolean("isDarkLightModeEnabled",
-                     features::IsDarkLightModeEnabled());
-
-  source->AddBoolean("isAmbientModeAllowed", IsAmbientModeAllowed());
-
-  source->AddBoolean(
-      "isRgbKeyboardSupported",
-      features::IsRgbKeyboardEnabled() &&
-          Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported());
 }
 
 }  // namespace
@@ -339,6 +320,31 @@ void PersonalizationAppUI::BindInterface(
 void PersonalizationAppUI::BindInterface(
     mojo::PendingReceiver<personalization_app::mojom::UserProvider> receiver) {
   user_provider_->BindInterface(std::move(receiver));
+}
+
+void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
+  source->AddBoolean("fullScreenPreviewEnabled",
+                     features::IsWallpaperFullScreenPreviewEnabled());
+
+  source->AddBoolean("isGooglePhotosIntegrationEnabled",
+                     features::IsWallpaperGooglePhotosIntegrationEnabled() &&
+                         wallpaper_provider_->IsEligibleForGooglePhotos());
+
+  source->AddBoolean("isPersonalizationHubEnabled",
+                     features::IsPersonalizationHubEnabled());
+
+  source->AddBoolean("isAmbientModeAnimationEnabled",
+                     features::IsAmbientModeAnimationEnabled());
+
+  source->AddBoolean("isDarkLightModeEnabled",
+                     features::IsDarkLightModeEnabled());
+
+  source->AddBoolean("isAmbientModeAllowed", IsAmbientModeAllowed());
+
+  source->AddBoolean(
+      "isRgbKeyboardSupported",
+      features::IsRgbKeyboardEnabled() &&
+          Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported());
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(PersonalizationAppUI)

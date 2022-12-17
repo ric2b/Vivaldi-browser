@@ -125,24 +125,25 @@ class SessionTest : public mojom::ResourceProvider,
   // Called when sends an outbound message.
   MOCK_METHOD1(OnOutboundMessage, void(const std::string& message_type));
 
+  MOCK_METHOD0(OnInitDone, void());
+
   // mojom::CastMessageHandler implementation. For outbound messages.
   void Send(mojom::CastMessagePtr message) override {
     EXPECT_TRUE(message->message_namespace == mojom::kWebRtcNamespace ||
                 message->message_namespace == mojom::kRemotingNamespace);
-    std::unique_ptr<base::Value> value =
-        base::JSONReader::ReadDeprecated(message->json_format_data);
+    absl::optional<base::Value> value =
+        base::JSONReader::Read(message->json_format_data);
     ASSERT_TRUE(value);
     std::string message_type;
     EXPECT_TRUE(GetString(*value, "type", &message_type));
     if (message_type == "OFFER") {
       EXPECT_TRUE(GetInt(*value, "seqNum", &offer_sequence_number_));
-      auto* offer = value->FindKey("offer");
+      base::Value::Dict* offer = value->GetDict().FindDict("offer");
       ASSERT_TRUE(offer);
-      auto* raw_streams = offer->FindKey("supportedStreams");
+      base::Value* raw_streams = offer->Find("supportedStreams");
       if (raw_streams) {
-        base::Value::ListView streams = raw_streams->GetListDeprecated();
-        for (auto it = streams.begin(); it != streams.end(); ++it) {
-          EXPECT_EQ(it->FindKey("targetDelay")->GetInt(),
+        for (auto& value : raw_streams->GetList()) {
+          EXPECT_EQ(*value.GetDict().FindInt("targetDelay"),
                     target_playout_delay_ms_);
         }
       }
@@ -232,6 +233,10 @@ class SessionTest : public mojom::ResourceProvider,
     task_environment_.RunUntilIdle();
   }
 
+  Session::AsyncInitializeDoneCB MakeInitDoneCB() {
+    return base::BindOnce(&SessionTest::OnInitDone, base::Unretained(this));
+  }
+
   // Create a mirroring session. Expect to send OFFER message.
   void CreateSession(SessionType session_type) {
     session_type_ = session_type;
@@ -258,11 +263,14 @@ class SessionTest : public mojom::ResourceProvider,
     EXPECT_CALL(*this, OnGetNetworkContext()).Times(1);
     EXPECT_CALL(*this, OnError(_)).Times(0);
     EXPECT_CALL(*this, OnOutboundMessage("OFFER")).Times(1);
+    EXPECT_CALL(*this, OnInitDone()).Times(1);
+
     session_ = std::make_unique<Session>(
         std::move(session_params), gfx::Size(1920, 1080),
         std::move(session_observer_remote), std::move(resource_provider_remote),
         std::move(outbound_channel_remote),
         inbound_channel_.BindNewPipeAndPassReceiver(), nullptr);
+    session_->AsyncInitialize(MakeInitDoneCB());
     task_environment_.RunUntilIdle();
     Mock::VerifyAndClear(this);
   }

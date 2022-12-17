@@ -40,6 +40,7 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
@@ -69,6 +70,7 @@ import java.util.concurrent.TimeoutException;
 @Restriction(
         {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+@DoNotBatch(reason = "StartSurface*Test tests startup behaviours and thus can't be batched.")
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group"})
 public class StartSurfaceNoTabsTest {
@@ -79,8 +81,7 @@ public class StartSurfaceNoTabsTest {
                     new ParameterSet().value(false, true).name("NoInstant_Return"),
                     new ParameterSet().value(true, true).name("Instant_Return"));
 
-    private static final String BASE_PARAMS =
-            "force-fieldtrial-params=Study.Group:start_surface_variation";
+    private static final String BASE_PARAMS = "force-fieldtrial-params=Study.Group:";
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -122,7 +123,7 @@ public class StartSurfaceNoTabsTest {
     @LargeTest
     @Feature({"StartSurface"})
     // clang-format off
-    @CommandLineFlags.Add({BASE_PARAMS + "/single/tab_count_button_on_start_surface/true"})
+    @CommandLineFlags.Add({BASE_PARAMS + "tab_count_button_on_start_surface/true"})
     @DisabledTest(message = "https://crbug.com/1263910")
     public void testShow_SingleAsHomepage_NoTabs() throws TimeoutException {
         // clang-format on
@@ -154,8 +155,7 @@ public class StartSurfaceNoTabsTest {
     @MediumTest
     @Feature({"StartSurface"})
     // clang-format off
-    @CommandLineFlags.Add({BASE_PARAMS + "/single/exclude_mv_tiles/true" +
-        "/show_last_active_tab_only/true/open_ntp_instead_of_start/true"})
+    @CommandLineFlags.Add({BASE_PARAMS + "exclude_mv_tiles/true"})
     @DisabledTest(message = "https://crbug.com/1263910")
     public void testShow_SingleAsHomepage_SingleTabSwitcher_NoTabs() {
         // clang-format on

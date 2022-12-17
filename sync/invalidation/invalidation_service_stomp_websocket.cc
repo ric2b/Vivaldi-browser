@@ -10,8 +10,6 @@
 #include "base/json/json_reader.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
-#include "content/public/browser/browser_context.h"
-#include "content/public/browser/storage_partition.h"
 #include "url/origin.h"
 
 namespace vivaldi {
@@ -84,7 +82,7 @@ constexpr char kContentLengthHeader[] = "content-length";
 InvalidationServiceStompWebsocket::Client::~Client() = default;
 
 InvalidationServiceStompWebsocket::InvalidationServiceStompWebsocket(
-    content::BrowserContext* browser_context,
+    network::mojom::NetworkContext* network_context,
     const GURL& url,
     Client* client)
     : url_(url),
@@ -99,21 +97,18 @@ InvalidationServiceStompWebsocket::InvalidationServiceStompWebsocket(
   handshake_receiver_.set_disconnect_handler(
       base::BindOnce(&InvalidationServiceStompWebsocket::OnMojoPipeDisconnect,
                      base::Unretained(this)));
-  browser_context->GetDefaultStoragePartition()
-      ->GetNetworkContext()
-      ->CreateWebSocket(
-          url, {kStomp12Protocol}, net::SiteForCookies(),
-          net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
-                                     origin, origin, net::SiteForCookies()),
-          std::move(headers), network::mojom::kBrowserProcessId,
-          url::Origin::Create(url),
-          network::mojom::kWebSocketOptionBlockAllCookies,
-          net::MutableNetworkTrafficAnnotationTag(kTrafficAnnotation),
-          std::move(remote),
-          /*auth_cert_observer=*/mojo::NullRemote(),
-          /*auth_handler=*/mojo::NullRemote(),
-          /*header_client=*/mojo::NullRemote(),
-          /*throttling_profile_id=*/absl::nullopt);
+  network_context->CreateWebSocket(
+      url, {kStomp12Protocol}, net::SiteForCookies(),
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                 origin, origin, net::SiteForCookies()),
+      std::move(headers), network::mojom::kBrowserProcessId,
+      url::Origin::Create(url), network::mojom::kWebSocketOptionBlockAllCookies,
+      net::MutableNetworkTrafficAnnotationTag(kTrafficAnnotation),
+      std::move(remote),
+      /*auth_cert_observer=*/mojo::NullRemote(),
+      /*auth_handler=*/mojo::NullRemote(),
+      /*header_client=*/mojo::NullRemote(),
+      /*throttling_profile_id=*/absl::nullopt);
 }
 
 InvalidationServiceStompWebsocket::~InvalidationServiceStompWebsocket() {

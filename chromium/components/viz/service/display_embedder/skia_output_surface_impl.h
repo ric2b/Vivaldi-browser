@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/memory/raw_ptr.h"
@@ -23,12 +24,12 @@
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
-#include "gpu/ipc/in_process_command_buffer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkDeferredDisplayListRecorder.h"
 #include "third_party/skia/include/core/SkOverdrawCanvas.h"
 #include "third_party/skia/include/core/SkSurfaceCharacterization.h"
+#include "ui/gfx/presentation_feedback.h"
 
 namespace gfx {
 namespace mojom {
@@ -117,6 +118,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
                                  sk_sp<SkColorSpace> color_space,
                                  bool is_overlay,
                                  const gpu::Mailbox& mailbox) override;
+  SkCanvas* RecordOverdrawForCurrentPaint() override;
   void EndPaint(base::OnceClosure on_finished,
                 base::OnceCallback<void(gfx::GpuFenceHandle)>
                     return_release_fence_cb) override;
@@ -178,6 +180,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
   SkSurfaceCharacterization CreateSkSurfaceCharacterization(
       const gfx::Size& surface_size,
       SkColorType color_type,
+      SkAlphaType alpha_type,
       bool mipmap,
       sk_sp<SkColorSpace> color_space,
       bool is_root_render_pass,
@@ -195,6 +198,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
                       std::vector<gpu::SyncToken> sync_tokens,
                       bool make_current,
                       bool need_framebuffer);
+  void ScheduleOrRetainGpuTask(base::OnceClosure callback,
+                               std::vector<gpu::SyncToken> tokens);
 
   enum class SyncMode {
     kNoWait = 0,

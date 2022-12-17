@@ -146,7 +146,7 @@ void ClipboardProvider::Start(const AutocompleteInput& input,
     return;
 
   // Image matched was kicked off asynchronously, so proceed when that ends.
-  if (CreateImageMatch(input))
+  if (!input.omit_asynchronous_matches() && CreateImageMatch(input))
     return;
 
   bool read_clipboard_content = false;
@@ -173,19 +173,23 @@ void ClipboardProvider::Start(const AutocompleteInput& input,
     return;
   }
 
+  done_ = true;
+
   // On iOS 14, accessing the clipboard contents shows a notification to the
   // user. To avoid this, all the methods above will not check the contents and
   // will return false/absl::nullopt. Instead, check the existence of content
   // without accessing the actual content and create blank matches.
-  done_ = false;
-  // Image matched was kicked off asynchronously, so proceed when that ends.
-  CheckClipboardContent(input);
+  if (!input.omit_asynchronous_matches()) {
+    // Image matched was kicked off asynchronously, so proceed when that ends.
+    CheckClipboardContent(input);
+  }
 }
 
 void ClipboardProvider::Stop(bool clear_cached_results,
                              bool due_to_user_inactivity) {
-  callback_weak_ptr_factory_.InvalidateWeakPtrs();
   AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
+
+  callback_weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 void ClipboardProvider::DeleteMatch(const AutocompleteMatch& match) {
@@ -249,12 +253,8 @@ void ClipboardProvider::AddCreatedMatchWithTracking(
   // If the omnibox is not empty, add a default match.
   // This match will be opened when the user presses "Enter".
   if (!input.text().empty()) {
-    const std::u16string description =
-        (base::FeatureList::IsEnabled(omnibox::kDisplayTitleForCurrentUrl))
-            ? input.current_title()
-            : std::u16string();
     AutocompleteMatch verbatim_match = VerbatimMatchForURL(
-        this, client_, input, input.current_url(), description, -1);
+        this, client_, input, input.current_url(), input.current_title(), -1);
     matches_.push_back(verbatim_match);
   }
 
@@ -295,6 +295,8 @@ void ClipboardProvider::CheckClipboardContent(const AutocompleteInput& input) {
   if (TemplateURLSupportsImageSearch()) {
     desired_types.insert(ClipboardContentType::Image);
   }
+
+  done_ = false;
 
   // We want to get the age here because the contents of the clipboard could
   // change after this point. We want the age of the contents we actually use,

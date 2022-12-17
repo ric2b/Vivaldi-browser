@@ -162,12 +162,35 @@ void LayoutTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
   NOT_DESTROYED();
   bool wrap_in_anonymous_section = !child->IsOutOfFlowPositioned();
 
+  // TODO(crbug.com/1345894): TODO(crbug.com/1341619): The |child| should never
+  // be NG, but the Container Queries crbug.com/1145970 may break the rule. When
+  // that happens, and if the |child|'s legacy/NG are not in the super/sub-class
+  // relationship, |To<>| will fail.
+  //
+  // The proper fix will be to fix callers preventing such code path, and for
+  // |LayoutTable*| to use proper legacy-only |Is*()| functions with
+  // |NOTREACHED()| where appropriate, but for now, |CHECK|s are added to
+  // prevent NG table-part children being added to legacy table-part parents.
+  //
+  // Following class is in super-/subclass relationships:
+  // - LayoutTableCaption
+  // Following classes are not:
+  // - LayoutTableCell
+  // - LayoutTableCol
+  // - LayoutTableRow
+  // - LayoutTableSection
   if (child->IsTableCaption()) {
     wrap_in_anonymous_section = false;
   } else if (child->IsLayoutTableCol()) {
+    // TODO(crbug.com/1345894): See the TODO at the top of this function.
+    // |LayoutNGTableColumn| is not a subclass of |LayoutTableCol|.
+    CHECK(IsA<LayoutTableCol>(child));
     has_col_elements_ = true;
     wrap_in_anonymous_section = false;
   } else if (child->IsTableSection()) {
+    // TODO(crbug.com/1345894): See the TODO at the top of this function.
+    // |LayoutNGTableSection| is not a subclass of |LayoutTableSection|.
+    CHECK(IsA<LayoutTableSection>(child));
     switch (child->StyleRef().Display()) {
       case EDisplay::kTableHeaderGroup:
         ResetSectionPointerIfNotBefore(head_, before_child);
@@ -1708,7 +1731,7 @@ PhysicalRect LayoutTable::OverflowClipRect(
 bool LayoutTable::NodeAtPoint(HitTestResult& result,
                               const HitTestLocation& hit_test_location,
                               const PhysicalOffset& accumulated_offset,
-                              HitTestAction action) {
+                              HitTestPhase phase) {
   NOT_DESTROYED();
   // Check kids first.
   bool skip_children = (result.GetHitTestRequest().GetStopNode() == this);
@@ -1722,7 +1745,7 @@ bool LayoutTable::NodeAtPoint(HitTestResult& result,
         PhysicalOffset child_accumulated_offset =
             accumulated_offset + To<LayoutBox>(child)->PhysicalLocation(this);
         if (child->NodeAtPoint(result, hit_test_location,
-                               child_accumulated_offset, action)) {
+                               child_accumulated_offset, phase)) {
           UpdateHitTestResult(result,
                               hit_test_location.Point() - accumulated_offset);
           return true;
@@ -1734,8 +1757,7 @@ bool LayoutTable::NodeAtPoint(HitTestResult& result,
   // Check our bounds next.
   PhysicalRect bounds_rect(accumulated_offset, Size());
   if (VisibleToHitTestRequest(result.GetHitTestRequest()) &&
-      (action == kHitTestBlockBackground ||
-       action == kHitTestChildBlockBackground) &&
+      (phase == HitTestPhase::kSelfBlockBackground) &&
       hit_test_location.Intersects(bounds_rect)) {
     UpdateHitTestResult(result, hit_test_location.Point() - accumulated_offset);
     if (result.AddNodeToListBasedTestResult(GetNode(), hit_test_location,

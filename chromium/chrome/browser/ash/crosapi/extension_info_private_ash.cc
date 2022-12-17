@@ -13,6 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
+#include "build/config/chromebox_for_meetings/buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/login/startup_utils.h"
@@ -25,11 +26,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/components/chromebox_for_meetings/buildflags/buildflags.h"
+#include "chromeos/ash/components/network/device_state.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/constants/devicetype.h"
-#include "chromeos/network/device_state.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state_handler.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
@@ -38,7 +38,7 @@
 #include "extensions/common/error_utils.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
-using chromeos::NetworkHandler;
+using ash::NetworkHandler;
 
 namespace crosapi {
 
@@ -289,9 +289,9 @@ std::unique_ptr<base::Value> GetValue(const std::string& property_name) {
   }
 
   if (property_name == kPropertyHomeProvider) {
-    const chromeos::DeviceState* cellular_device =
+    const ash::DeviceState* cellular_device =
         NetworkHandler::Get()->network_state_handler()->GetDeviceStateByType(
-            chromeos::NetworkTypePattern::Cellular());
+            ash::NetworkTypePattern::Cellular());
     std::string home_provider_id;
     if (cellular_device) {
       if (!cellular_device->country_code().empty()) {
@@ -390,7 +390,8 @@ std::unique_ptr<base::Value> GetValue(const std::string& property_name) {
   }
 
   if (property_name == kPropertySupportedTimezones) {
-    return ash::system::GetTimezoneList();
+    return base::Value::ToUniquePtrValue(
+        base::Value(ash::system::GetTimezoneList()));
   }
 
   const char* pref_name = GetBoolPrefNameForApiProperty(property_name.c_str());

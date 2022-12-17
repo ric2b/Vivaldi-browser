@@ -15,6 +15,7 @@
 
 #include "base/base_export.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
@@ -270,7 +271,7 @@ class BASE_EXPORT ProcessMetrics {
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || \
     BUILDFLAG(IS_AIX)
-  CPU::CoreType GetCoreType(int core_index);
+  CPU::CoreType GetCoreType(uint32_t core_index);
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
         // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_AIX)
 
@@ -312,7 +313,7 @@ class BASE_EXPORT ProcessMetrics {
   // Queries the port provider if it's set.
   mach_port_t TaskForPid(ProcessHandle process) const;
 
-  PortProvider* port_provider_;
+  raw_ptr<PortProvider> port_provider_;
 #endif  // BUILDFLAG(IS_MAC)
 };
 
@@ -433,7 +434,7 @@ BASE_EXPORT int ParseProcStatCPU(StringPiece input);
 // This should be used with care as no synchronization with running threads is
 // done. This is mostly useful to guarantee being single-threaded.
 // Returns 0 on failure.
-BASE_EXPORT int GetNumberOfThreads(ProcessHandle process);
+BASE_EXPORT int64_t GetNumberOfThreads(ProcessHandle process);
 
 // /proc/self/exe refers to the current executable.
 BASE_EXPORT extern const char kProcSelfExe[];
@@ -449,10 +450,10 @@ struct BASE_EXPORT VmStatInfo {
   // Serializes the platform specific fields to value.
   Value ToValue() const;
 
-  unsigned long pswpin = 0;
-  unsigned long pswpout = 0;
-  unsigned long pgmajfault = 0;
-  unsigned long oom_kill = 0;
+  uint64_t pswpin = 0;
+  uint64_t pswpout = 0;
+  uint64_t pgmajfault = 0;
+  uint64_t oom_kill = 0;
 };
 
 // Retrieves data from /proc/vmstat about system-wide vm operations.

@@ -5,7 +5,7 @@
 
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "goma", "os")
+load("//lib/builders.star", "goma", "os", "reclient")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
 load("//project.star", "settings")
@@ -141,18 +141,6 @@ try_.builder(
 )
 
 try_.builder(
-    name = "linux-clang-tidy-dbg",
-    executable = "recipe:tricium_clang_tidy_wrapper",
-    goma_jobs = goma.jobs.J150,
-)
-
-try_.builder(
-    name = "linux-clang-tidy-rel",
-    executable = "recipe:tricium_clang_tidy_wrapper",
-    goma_jobs = goma.jobs.J150,
-)
-
-try_.builder(
     name = "linux-dcheck-off-rel",
     mirrors = builder_config.copy_from("linux-rel"),
 )
@@ -186,7 +174,7 @@ try_.builder(
 )
 
 try_.builder(
-    name = "linux-fieldtrial-fyi-rel",
+    name = "linux-fieldtrial-rel",
 )
 
 try_.builder(
@@ -218,6 +206,9 @@ try_.builder(
     executable = "recipe:chromium_libfuzzer_trybot",
     main_list_view = "try",
     tryjob = try_.job(),
+    experiments = {
+        "enable_weetbix_queries": 100,
+    },
 )
 
 try_.builder(
@@ -237,6 +228,7 @@ try_.orchestrator_builder(
     name = "linux-rel",
     compilator = "linux-rel-compilator",
     branch_selector = branches.STANDARD_MILESTONE,
+    check_for_flakiness = True,
     mirrors = [
         "ci/Linux Builder",
         "ci/Linux Tests",
@@ -254,6 +246,8 @@ try_.orchestrator_builder(
     tryjob = try_.job(),
     experiments = {
         "remove_src_checkout_experiment": 100,
+        "enable_weetbix_queries": 100,
+        "retry_findit_exonerations": 100,
     },
     use_orchestrator_pool = True,
 )
@@ -261,6 +255,7 @@ try_.orchestrator_builder(
 try_.compilator_builder(
     name = "linux-rel-compilator",
     branch_selector = branches.STANDARD_MILESTONE,
+    check_for_flakiness = True,
     main_list_view = "try",
 )
 
@@ -306,6 +301,19 @@ try_.builder(
     builderless = not settings.is_main,
     main_list_view = "try",
     tryjob = try_.job(),
+    experiments = {
+        "enable_weetbix_queries": 100,
+    },
+)
+
+# b/236069482: Experimental builder to test reclient migration
+try_.builder(
+    name = "linux-wayland-rel-reclient",
+    mirrors = builder_config.copy_from("linux-wayland-rel"),
+    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
+    tryjob = try_.job(
+        experiment_percentage = 5,
+    ),
 )
 
 try_.builder(
@@ -359,7 +367,9 @@ try_.orchestrator_builder(
     ),
     experiments = {
         "remove_src_checkout_experiment": 100,
+        "enable_weetbix_queries": 100,
     },
+    use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
@@ -388,6 +398,7 @@ try_.builder(
     # TODO(crbug/1144484): Remove this timeout once we figure out the
     # regression in compiler or toolchain.
     execution_timeout = 7 * time.hour,
+    ssd = True,
 )
 
 try_.builder(
@@ -407,6 +418,8 @@ try_.builder(
         "ci/Linux ChromiumOS MSan Tests",
     ],
     goma_jobs = goma.jobs.J150,
+    ssd = True,
+    cores = 16,
 )
 
 try_.builder(
@@ -515,7 +528,9 @@ try_.orchestrator_builder(
     tryjob = try_.job(),
     experiments = {
         "remove_src_checkout_experiment": 100,
+        "enable_weetbix_queries": 100,
     },
+    use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
@@ -583,6 +598,7 @@ try_.builder(
     # OS version that's the oldest used on any bot.
     os = os.LINUX_BIONIC,
     notifies = ["chrome-rust-toolchain"],
+    execution_timeout = 5 * time.hour,
 )
 
 try_.builder(
@@ -689,5 +705,5 @@ try_.builder(
     ),
     cores = 16,
     builderless = False,
-    experiments = {"chromium_rts.ml_model": 100},
+    experiments = {"chromium_rts.experimental_model": 100},
 )

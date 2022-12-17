@@ -195,27 +195,27 @@ void ContactEventRouter::ExtensiveContactChangesEnded(ContactService* model) {}
 void ContactEventRouter::OnContactCreated(ContactService* service,
                                           const contact::ContactRow& row) {
   Contact createdEvent = GetContact(row);
-  std::vector<base::Value> args = OnContactCreated::Create(createdEvent);
+  base::Value::List args = OnContactCreated::Create(createdEvent);
   DispatchEvent(OnContactCreated::kEventName, std::move(args));
 }
 
 void ContactEventRouter::OnContactDeleted(ContactService* service,
                                           const contact::ContactRow& row) {
   Contact deletedEvent = GetContact(row);
-  std::vector<base::Value> args = OnContactRemoved::Create(deletedEvent);
+  base::Value::List args = OnContactRemoved::Create(deletedEvent);
   DispatchEvent(OnContactRemoved::kEventName, std::move(args));
 }
 
 void ContactEventRouter::OnContactChanged(ContactService* service,
                                           const contact::ContactRow& row) {
   Contact changedEvent = GetContact(row);
-  std::vector<base::Value> args = OnContactChanged::Create(changedEvent);
+  base::Value::List args = OnContactChanged::Create(changedEvent);
   DispatchEvent(OnContactChanged::kEventName, std::move(args));
 }
 
 // Helper to actually dispatch an event to extension listeners.
 void ContactEventRouter::DispatchEvent(const std::string& event_name,
-                                       std::vector<base::Value> event_args) {
+                                       base::Value::List event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
     event_router->BroadcastEvent(base::WrapUnique(

@@ -60,9 +60,11 @@ IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, SuccessInstall) {
   info->start_url = GURL("http://test.com/path");
 
   const webapps::WebappInstallSource install_source =
-      AreSystemWebAppsSupported()
-          ? webapps::WebappInstallSource::SYSTEM_DEFAULT
-          : webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      webapps::WebappInstallSource::SYSTEM_DEFAULT;
+#else
+      webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON;
+#endif
 
   base::RunLoop loop;
   AppId result_app_id;
@@ -101,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(InstallFromInfoCommandTest, InstallWithParams) {
   info->title = u"Test name";
   info->start_url = GURL("http://test.com/path");
 
-  web_app::WebAppInstallParams install_params;
+  WebAppInstallParams install_params;
   install_params.bypass_os_hooks = false;
   install_params.add_to_applications_menu = true;
   install_params.add_to_desktop = true;

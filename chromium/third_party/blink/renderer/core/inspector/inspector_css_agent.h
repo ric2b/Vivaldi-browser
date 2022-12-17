@@ -59,6 +59,7 @@ class CSSRule;
 class CSSStyleRule;
 class CSSStyleSheet;
 class CSSSupportsRule;
+class CSSScopeRule;
 class Document;
 class Element;
 class FontCustomPlatformData;
@@ -88,8 +89,10 @@ class CORE_EXPORT InspectorCSSAgent final
     STACK_ALLOCATED();
 
    public:
-    explicit InlineStyleOverrideScope(ExecutionContext* context)
-        : content_security_policy_(context->GetContentSecurityPolicy()) {
+    explicit InlineStyleOverrideScope(ExecutionContext* context) {
+      DCHECK(context);
+      content_security_policy_ = context->GetContentSecurityPolicy();
+      DCHECK(content_security_policy_);
       content_security_policy_->SetOverrideAllowInlineStyle(true);
     }
 
@@ -105,6 +108,7 @@ class CORE_EXPORT InspectorCSSAgent final
   static CSSMediaRule* AsCSSMediaRule(CSSRule*);
   static CSSContainerRule* AsCSSContainerRule(CSSRule*);
   static CSSSupportsRule* AsCSSSupportsRule(CSSRule*);
+  static CSSScopeRule* AsCSSScopeRule(CSSRule*);
 
   static void CollectAllDocumentStyleSheets(Document*,
                                             HeapVector<Member<CSSStyleSheet>>&);
@@ -154,8 +158,8 @@ class CORE_EXPORT InspectorCSSAgent final
       protocol::Maybe<protocol::Array<protocol::CSS::InheritedStyleEntry>>*,
       protocol::Maybe<
           protocol::Array<protocol::CSS::InheritedPseudoElementMatches>>*,
-      protocol::Maybe<protocol::Array<protocol::CSS::CSSKeyframesRule>>*)
-      override;
+      protocol::Maybe<protocol::Array<protocol::CSS::CSSKeyframesRule>>*,
+      protocol::Maybe<int>*) override;
   protocol::Response getInlineStylesForNode(
       int node_id,
       protocol::Maybe<protocol::CSS::CSSStyle>* inline_style,
@@ -202,6 +206,11 @@ class CORE_EXPORT InspectorCSSAgent final
       std::unique_ptr<protocol::CSS::SourceRange>,
       const String& text,
       std::unique_ptr<protocol::CSS::CSSContainerQuery>*) override;
+  protocol::Response setScopeText(
+      const String& style_sheet_id,
+      std::unique_ptr<protocol::CSS::SourceRange>,
+      const String& text,
+      std::unique_ptr<protocol::CSS::CSSScope>*) override;
   protocol::Response setSupportsText(
       const String& style_sheet_id,
       std::unique_ptr<protocol::CSS::SourceRange>,
@@ -371,6 +380,11 @@ class CORE_EXPORT InspectorCSSAgent final
                              protocol::Array<protocol::CSS::CSSLayer>*);
 
   void FillAncestorData(CSSRule* rule, protocol::CSS::CSSRule* result);
+
+  // Scope at-rule implementation
+  std::unique_ptr<protocol::CSS::CSSScope> BuildScopeObject(CSSScopeRule*);
+  void CollectScopesFromRule(CSSRule*,
+                             protocol::Array<protocol::CSS::CSSScope>*);
 
   // InspectorDOMAgent::DOMListener implementation
   void DidAddDocument(Document*) override;

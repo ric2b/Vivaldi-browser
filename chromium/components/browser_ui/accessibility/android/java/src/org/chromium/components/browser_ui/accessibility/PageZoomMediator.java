@@ -4,9 +4,10 @@
 
 package org.chromium.components.browser_ui.accessibility;
 
-import static org.chromium.components.browser_ui.accessibility.PageZoomUtils.AVAILABLE_ZOOM_FACTORS;
 import static org.chromium.components.browser_ui.accessibility.PageZoomUtils.PAGE_ZOOM_MAXIMUM_SEEKBAR_VALUE;
 import static org.chromium.components.browser_ui.accessibility.PageZoomUtils.convertZoomFactorToSeekBarValue;
+import static org.chromium.content_public.browser.HostZoomMap.AVAILABLE_ZOOM_FACTORS;
+import static org.chromium.content_public.browser.HostZoomMap.SYSTEM_FONT_SCALE;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
@@ -17,8 +18,6 @@ import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.HostZoomMap;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modelutil.PropertyModel;
-
-import java.util.Arrays;
 
 /**
  * Internal Mediator for the page zoom feature. Created by the |PageZoomCoordinator|, and should
@@ -35,6 +34,11 @@ public class PageZoomMediator {
         mModel.set(PageZoomProperties.INCREASE_ZOOM_CALLBACK, this::handleIncreaseClicked);
         mModel.set(PageZoomProperties.SEEKBAR_CHANGE_CALLBACK, this::handleSeekBarValueChanged);
         mModel.set(PageZoomProperties.MAXIMUM_SEEK_VALUE, PAGE_ZOOM_MAXIMUM_SEEKBAR_VALUE);
+
+        // Update the stored system font scale based on OS-level configuration. |this| will be
+        // re-constructed after configuration changes, so this will be up-to-date for this session.
+        SYSTEM_FONT_SCALE =
+                ContextUtils.getApplicationContext().getResources().getConfiguration().fontScale;
     }
 
     /**
@@ -59,14 +63,12 @@ public class PageZoomMediator {
         }
 
         // The default (float) |fontScale| is 1, the default page zoom is 1.
-        boolean defaultSystemFontSize = MathUtils.areFloatsEqual(
-                ContextUtils.getApplicationContext().getResources().getConfiguration().fontScale,
-                1f);
+        boolean isUsingDefaultSystemFontScale = MathUtils.areFloatsEqual(SYSTEM_FONT_SCALE, 1f);
 
         // TODO(mschillaci): Replace with a delegate call, cannot depend directly on Profile.
-        boolean defaultDefaultPageZoom = true;
+        boolean isUsingDefaultPageZoom = true;
 
-        return !defaultSystemFontSize || !defaultDefaultPageZoom;
+        return !isUsingDefaultSystemFontScale || !isUsingDefaultPageZoom;
     }
 
     /**
@@ -82,9 +84,7 @@ public class PageZoomMediator {
     void handleDecreaseClicked(Void unused) {
         // When decreasing zoom, "snap" to the greatest preset value that is less than the current.
         double currentZoomFactor = getZoomLevel(mWebContents);
-        if (currentZoomFactor <= AVAILABLE_ZOOM_FACTORS[0]) return;
-
-        int index = getNextIndex(true, currentZoomFactor);
+        int index = PageZoomUtils.getNextIndex(true, currentZoomFactor);
 
         if (index >= 0) {
             mModel.set(PageZoomProperties.CURRENT_SEEK_VALUE,
@@ -98,9 +98,7 @@ public class PageZoomMediator {
     void handleIncreaseClicked(Void unused) {
         // When increasing zoom, "snap" to the smallest preset value that is more than the current.
         double currentZoomFactor = getZoomLevel(mWebContents);
-        if (currentZoomFactor >= AVAILABLE_ZOOM_FACTORS[AVAILABLE_ZOOM_FACTORS.length - 1]) return;
-
-        int index = getNextIndex(false, currentZoomFactor);
+        int index = PageZoomUtils.getNextIndex(false, currentZoomFactor);
 
         if (index <= AVAILABLE_ZOOM_FACTORS.length - 1) {
             mModel.set(PageZoomProperties.CURRENT_SEEK_VALUE,
@@ -128,36 +126,7 @@ public class PageZoomMediator {
         updateButtonStates(currentZoomFactor);
     }
 
-    private int getNextIndex(boolean decrease, double currentZoomFactor) {
-        // BinarySearch will return the index of the first value equal to or greater than the given.
-        // Otherwise it will return (-(index) - 1). If this is the case add one and negate.
-        int index = Arrays.binarySearch(AVAILABLE_ZOOM_FACTORS, currentZoomFactor);
-
-        // If the value is found, index will be >=0 and we will decrement/increment accordingly:
-        if (index >= 0) {
-            if (decrease) {
-                --index;
-            } else {
-                ++index;
-            }
-        }
-
-        // If the value is not found, index will be (-(index) - 1), so negate and add one:
-        if (index < 0) {
-            index = ++index * -1;
-
-            // Index will now be the first index above the current value, so in the case of
-            // decreasing zoom, we will decrement once.
-            if (decrease) --index;
-        }
-
-        return index;
-    }
-
     private void updateButtonStates(double newZoomFactor) {
-        // Round the new zoom factor to two decimal places (since our preset values are rounded).
-        newZoomFactor = (double) Math.round(newZoomFactor * 100) / 100;
-
         // If the new zoom factor is greater than the minimum zoom factor, enable decrease button.
         mModel.set(PageZoomProperties.DECREASE_ZOOM_ENABLED,
                 newZoomFactor > AVAILABLE_ZOOM_FACTORS[0]);

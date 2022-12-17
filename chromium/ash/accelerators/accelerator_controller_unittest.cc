@@ -77,6 +77,7 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/media_keys_util.h"
 #include "ui/base/accelerators/test_accelerator_target.h"
 #include "ui/base/ime/ash/fake_ime_keyboard.h"
@@ -90,8 +91,10 @@
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/event_sink.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
@@ -254,7 +257,10 @@ class MockNewWindowDelegate : public testing::NiceMock<TestNewWindowDelegate> {
   // TestNewWindowDelegate:
   MOCK_METHOD(void, OpenCalculator, (), (override));
   MOCK_METHOD(void, ShowKeyboardShortcutViewer, (), (override));
-  MOCK_METHOD(void, OpenUrl, (const GURL& url, OpenUrlFrom from), (override));
+  MOCK_METHOD(void,
+              OpenUrl,
+              (const GURL& url, OpenUrlFrom from, Disposition disposition),
+              (override));
 };
 
 class MockAcceleratorObserver
@@ -2256,6 +2262,88 @@ TEST_F(AcceleratorControllerTest, ChangeIMEMode_SwitchesInputMethod) {
   EXPECT_EQ(1, client.next_ime_count_);
 }
 
+class AcceleratorControllerImprovedKeyboardShortcutsTest
+    : public AcceleratorControllerTest {
+ public:
+  AcceleratorControllerImprovedKeyboardShortcutsTest() = default;
+  ~AcceleratorControllerImprovedKeyboardShortcutsTest() override = default;
+
+  class TestInputMethodManager : public input_method::MockInputMethodManager {
+   public:
+    void AddObserver(
+        input_method::InputMethodManager::Observer* observer) override {
+      observers_.AddObserver(observer);
+    }
+
+    void RemoveObserver(
+        input_method::InputMethodManager::Observer* observer) override {
+      observers_.RemoveObserver(observer);
+    }
+
+    // Calls all observers with Observer::InputMethodChanged
+    void NotifyInputMethodChanged() {
+      for (auto& observer : observers_) {
+        observer.InputMethodChanged(
+            /*manager=*/this, /*profile=*/nullptr, /*show_message=*/false);
+      }
+    }
+
+    bool ArePositionalShortcutsUsedByCurrentInputMethod() const override {
+      return use_positional_shortcuts_;
+    }
+
+    base::ObserverList<InputMethodManager::Observer>::Unchecked observers_;
+    bool use_positional_shortcuts_ = false;
+  };
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        ::features::kImprovedKeyboardShortcuts);
+
+    // Setup our own |InputMethodManager| to test that the accelerator
+    // controller respects ArePositionalShortcutsUsedByCurrentInputMethod value
+    // from the |InputMethodManager|.
+    input_method_manager_ = new TestInputMethodManager();
+    input_method::InputMethodManager::Initialize(input_method_manager_);
+
+    AcceleratorControllerTest::SetUp();
+    EXPECT_TRUE(input_method_manager_->observers_.HasObserver(controller_));
+  }
+
+  void TearDown() override {
+    AcceleratorControllerTest::TearDown();
+    EXPECT_FALSE(input_method_manager_->observers_.HasObserver(controller_));
+
+    input_method::InputMethodManager::Shutdown();
+    input_method_manager_ = nullptr;
+  }
+
+ protected:
+  TestInputMethodManager* input_method_manager_ = nullptr;  // Not owned.
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AcceleratorControllerImprovedKeyboardShortcutsTest, InputMethodChanged) {
+  // Accelerator for Alt + Left Bracket on DE layout.
+  const ui::Accelerator accelerator = ui::Accelerator(
+      ui::VKEY_OEM_1, ui::DomCode::BRACKET_LEFT, ui::EF_ALT_DOWN);
+
+  // With positional shortcuts disabled, the accelerator should not match
+  // WINDOW_CYCLE_SNAP_LEFT.
+  input_method_manager_->use_positional_shortcuts_ = false;
+  input_method_manager_->NotifyInputMethodChanged();
+  EXPECT_FALSE(controller_->DoesAcceleratorMatchAction(accelerator,
+                                                       WINDOW_CYCLE_SNAP_LEFT));
+
+  // When enabled, accelerator should match WINDOW_CYCLE_SNAP_LEFT.
+  input_method_manager_->use_positional_shortcuts_ = true;
+  input_method_manager_->NotifyInputMethodChanged();
+  EXPECT_TRUE(controller_->DoesAcceleratorMatchAction(accelerator,
+                                                      WINDOW_CYCLE_SNAP_LEFT));
+}
+
 class AcceleratorControllerInputMethodTest : public AcceleratorControllerTest {
  public:
   AcceleratorControllerInputMethodTest() = default;
@@ -2341,185 +2429,6 @@ TEST_F(AcceleratorControllerDeprecatedTest, DeskShortcuts_Old) {
       ui::VKEY_OEM_PLUS, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)));
   EXPECT_FALSE(controller_->IsRegistered(ui::Accelerator(
       ui::VKEY_OEM_MINUS, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)));
-}
-
-// Overrides SetUp() to do nothing so that the flag can be tested in both
-// directions during setup.
-// TODO(crbug.com/1179893): Remove suite once the feature is enabled by
-// default.
-class AcceleratorControllerStartupNotificationTest
-    : public NoSessionAshTestBase {
- public:
-  AcceleratorControllerStartupNotificationTest() {
-    auto delegate = std::make_unique<MockNewWindowDelegate>();
-    new_window_delegate_ = delegate.get();
-    delegate_provider_ =
-        std::make_unique<TestNewWindowDelegateProvider>(std::move(delegate));
-  }
-
-  ~AcceleratorControllerStartupNotificationTest() override {
-    // Set back to false to avoid any future test having the wrong value.
-    AcceleratorControllerImpl::SetShouldShowShortcutNotificationForTest(false);
-  }
-
-  // Setup is a no-op to allow changing features/flags before SetUp(). Tests
-  // need to call SetupLater() manually.
-  void SetUp() override {}
-
- protected:
-  // Perform the setup, but defer it to be called manually by the test.
-  void SetUpLater(bool improved_shortcuts_enabled) {
-    if (improved_shortcuts_enabled) {
-      scoped_feature_list_.InitAndEnableFeature(
-          ::features::kImprovedKeyboardShortcuts);
-    } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          ::features::kImprovedKeyboardShortcuts);
-    }
-
-    NoSessionAshTestBase::SetUp();
-    AcceleratorControllerImpl::SetShouldShowShortcutNotificationForTest(true);
-  }
-
-  message_center::MessageCenter* message_center() const {
-    return message_center::MessageCenter::Get();
-  }
-
-  MockNewWindowDelegate* new_window_delegate_ = nullptr;  // Not owned.
-  std::unique_ptr<TestNewWindowDelegateProvider> delegate_provider_;
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationShownWhenEnabled) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  // Notification should be shown at login.
-  SimulateUserLogin("user1@email.com");
-  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationNotShownWhenDisabled) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/false);
-
-  // Notification should not be shown at login.
-  SimulateUserLogin("user1@email.com");
-  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationNotShownWhenInGuestMode) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  // Notification should not be shown at login.
-  SimulateUserLogin("user1@email.com", user_manager::USER_TYPE_GUEST);
-  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationNotShownWhenInFirstLogin) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  SimulateNewUserFirstLogin("user1@email.com");
-
-  // Notification should not be shown at a new user's first login.
-  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationShownOnlyOnce) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  // Notification should be shown at login.
-  SimulateUserLogin("user1@email.com");
-  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
-
-  // Reset the notifications.
-  message_center()->RemoveAllNotifications(
-      /*by_user=*/false, message_center::MessageCenter::RemoveType::ALL);
-
-  // Login again and there should not be another notification.
-  SimulateUserLogin("user1@email.com");
-  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationShownToEachUser) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  // Notification should be shown at first login.
-  SimulateUserLogin("user1@email.com");
-  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
-
-  // Reset the notifications.
-  message_center()->RemoveAllNotifications(
-      /*by_user=*/false, message_center::MessageCenter::RemoveType::ALL);
-
-  // Switch to user 2, and also should be shown at first login.
-  SimulateUserLogin("user2@email.com");
-  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
-
-  // Reset the notifications.
-  message_center()->RemoveAllNotifications(
-      /*by_user=*/false, message_center::MessageCenter::RemoveType::ALL);
-
-  // Switch back to to user 1, and it should not be shown.
-  auto* session = GetSessionControllerClient();
-  session->SwitchActiveUser(AccountId::FromUserEmail("user1@email.com"));
-  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
-
-  // Switch again to user 2, and it should not be shown.
-  session->SwitchActiveUser(AccountId::FromUserEmail("user2@email.com"));
-  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationLearnMoreLink) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  // Notification should be shown at login.
-  SimulateUserLogin("user1@email.com");
-  auto* notification = FindShortcutsChangedNotificationForTest();
-  EXPECT_TRUE(notification);
-
-  // Setup the expectation that the learn more button opens this shortcut
-  // help link.
-  EXPECT_CALL(*new_window_delegate_,
-              OpenUrl(GURL(kKeyboardShortcutHelpPageUrl),
-                      NewWindowDelegate::OpenUrlFrom::kUserInteraction));
-  // Clicking the learn more button should trigger the NewWindowDelegate and
-  // complete the expectation above.
-  notification->delegate()->Click(/*button_index=*/0,
-                                  /*reply=*/absl::nullopt);
-}
-
-TEST_F(AcceleratorControllerStartupNotificationTest,
-       StartupNotificationOpenShortcutViewer) {
-  // Set up the shell and controller.
-  SetUpLater(/*improved_shortcuts_enabled=*/true);
-
-  // Notification should be shown at login.
-  SimulateUserLogin("user1@email.com");
-  auto* notification = FindShortcutsChangedNotificationForTest();
-  EXPECT_TRUE(notification);
-
-  // Setup the expectation that clicking the message body will show the
-  // shortcut viewer.
-  EXPECT_CALL(*new_window_delegate_, ShowKeyboardShortcutViewer)
-      .WillOnce(testing::Return());
-
-  // Clicking the message body should trigger the NewWindowDelegate and
-  // complete the expectation above.
-  notification->delegate()->Click(/*button_index=*/absl::nullopt,
-                                  /*reply=*/absl::nullopt);
 }
 
 // defines a class to test the behavior of deprecated accelerators.
@@ -2865,6 +2774,40 @@ TEST_F(AccessibilityAcceleratorTester, DisableAccessibilityAccelerators) {
         test_data.pref_name, test_data.notification_id, test_data.histogram_id,
         test_data.accelerator);
   }
+}
+
+// Tests that the shortcuts for starting another screen capture session will be
+// treated as no-op if a capture session is already running.
+TEST_F(AccessibilityAcceleratorTester,
+       DisableScreenCaptureAcceleratorsIfSessionIsActive) {
+  auto* controller = CaptureModeController::Get();
+  EXPECT_FALSE(controller->IsActive());
+
+  // Start a window capture session.
+  EXPECT_TRUE(ProcessInController(ui::Accelerator(
+      ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(controller->IsActive());
+  EXPECT_EQ(CaptureModeSource::kWindow, controller->source());
+
+  //  Accelerators for partial screenshot will be a no-op if a
+  //  session is already running.
+  EXPECT_TRUE(ProcessInController(ui::Accelerator(
+      ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_EQ(CaptureModeSource::kWindow, controller->source());
+
+  controller->Stop();
+
+  // Start a partial screenshot capture session.
+  EXPECT_TRUE(ProcessInController(ui::Accelerator(
+      ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(controller->IsActive());
+  EXPECT_EQ(CaptureModeSource::kRegion, controller->source());
+
+  //  Accelerators for window screenshot will be a no-op if a
+  //  session is already running.
+  EXPECT_TRUE(ProcessInController(ui::Accelerator(
+      ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_EQ(CaptureModeSource::kRegion, controller->source());
 }
 
 struct MediaSessionAcceleratorTestConfig {

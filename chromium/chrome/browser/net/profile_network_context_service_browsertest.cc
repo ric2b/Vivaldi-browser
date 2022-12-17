@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -70,7 +71,6 @@
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
-#include "services/cert_verifier/test_cert_verifier_service_factory.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -81,8 +81,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_features.h"
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 // Most tests for this class are in NetworkContextConfigurationBrowserTest.
@@ -552,127 +552,7 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceDiskCacheBrowsertest,
   EXPECT_EQ(kCacheSize, network_context_params.http_cache_max_size);
 }
 
-#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-namespace {
-void UnblockOnProfileCreation(base::RunLoop* run_loop,
-                              Profile* profile,
-                              Profile::CreateStatus status) {
-  if (status == Profile::CREATE_STATUS_INITIALIZED)
-    run_loop->Quit();
-}
-}  // namespace
-
-class ProfileNetworkContextServiceCertVerifierBuiltinPermissionsPolicyTest
-    : public policy::PolicyTest,
-      public testing::WithParamInterface<bool> {
- public:
-  void SetUpInProcessBrowserTestFixture() override {
-    scoped_feature_list_.InitWithFeatureState(
-        net::features::kCertVerifierBuiltinFeature,
-        use_builtin_cert_verifier());
-
-    content::SetCertVerifierServiceFactoryForTesting(
-        &test_cert_verifier_service_factory_);
-
-    policy::PolicyTest::SetUpInProcessBrowserTestFixture();
-  }
-
-  void TearDownInProcessBrowserTestFixture() override {
-    content::SetCertVerifierServiceFactoryForTesting(nullptr);
-  }
-
-  void SetUpOnMainThread() override {
-    test_cert_verifier_service_factory_.ReleaseAllCertVerifierParams();
-  }
-
-  void ExpectUseBuiltinCertVerifierCorrect(
-      cert_verifier::mojom::CertVerifierCreationParams::CertVerifierImpl
-          use_builtin_cert_verifier) {
-    ASSERT_LE(1ul, test_cert_verifier_service_factory_.num_captured_params());
-    for (size_t i = 0;
-         i < test_cert_verifier_service_factory_.num_captured_params(); i++) {
-      ASSERT_TRUE(test_cert_verifier_service_factory_.GetParamsAtIndex(i)
-                      ->creation_params);
-      EXPECT_EQ(use_builtin_cert_verifier,
-                test_cert_verifier_service_factory_.GetParamsAtIndex(i)
-                    ->creation_params->use_builtin_cert_verifier);
-    }
-
-    // Send them to the actual CertVerifierServiceFactory.
-    test_cert_verifier_service_factory_.ReleaseAllCertVerifierParams();
-  }
-
-  Profile* CreateNewProfile() {
-    ProfileManager* profile_manager = g_browser_process->profile_manager();
-    base::FilePath new_path =
-        profile_manager->GenerateNextProfileDirectoryPath();
-    base::RunLoop run_loop;
-    profile_manager->CreateProfileAsync(
-        new_path, base::BindRepeating(&UnblockOnProfileCreation, &run_loop));
-    run_loop.Run();
-    return profile_manager->GetProfileByPath(new_path);
-  }
-
-  bool use_builtin_cert_verifier() const { return GetParam(); }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  cert_verifier::TestCertVerifierServiceFactoryImpl
-      test_cert_verifier_service_factory_;
-};
-
-IN_PROC_BROWSER_TEST_P(
-    ProfileNetworkContextServiceCertVerifierBuiltinPermissionsPolicyTest,
-    Test) {
-  {
-    CreateNewProfile()->GetDefaultStoragePartition()->GetNetworkContext();
-
-    ExpectUseBuiltinCertVerifierCorrect(
-        use_builtin_cert_verifier()
-            ? cert_verifier::mojom::CertVerifierCreationParams::
-                  CertVerifierImpl::kBuiltin
-            : cert_verifier::mojom::CertVerifierCreationParams::
-                  CertVerifierImpl::kSystem);
-  }
-
-#if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
-  // If the BuiltinCertificateVerifierEnabled policy is set it should override
-  // the feature flag.
-  policy::PolicyMap policies;
-  SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            base::Value(true));
-  UpdateProviderPolicy(policies);
-
-  {
-    CreateNewProfile()->GetDefaultStoragePartition()->GetNetworkContext();
-
-    ExpectUseBuiltinCertVerifierCorrect(
-        cert_verifier::mojom::CertVerifierCreationParams::CertVerifierImpl::
-            kBuiltin);
-  }
-
-  SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            base::Value(false));
-  UpdateProviderPolicy(policies);
-
-  {
-    CreateNewProfile()->GetDefaultStoragePartition()->GetNetworkContext();
-
-    ExpectUseBuiltinCertVerifierCorrect(
-        cert_verifier::mojom::CertVerifierCreationParams::CertVerifierImpl::
-            kSystem);
-  }
-#endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ProfileNetworkContextServiceCertVerifierBuiltinPermissionsPolicyTest,
-    ::testing::Bool());
-#endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 class ProfileNetworkContextServiceMemoryPressureFeatureBrowsertest
     : public ProfileNetworkContextServiceBrowsertest,
       public ::testing::WithParamInterface<absl::optional<bool>> {
@@ -726,7 +606,7 @@ INSTANTIATE_TEST_SUITE_P(
     ProfileNetworkContextServiceMemoryPressureFeatureBrowsertest,
     /*disable_idle_sockets_close_on_memory_pressure=*/
     ::testing::Values(absl::nullopt, true, false));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 class ProfileNetworkContextTrustTokensBrowsertest
     : public ProfileNetworkContextServiceBrowsertest {
@@ -807,8 +687,7 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextTrustTokensBrowsertest,
       PrivacySandboxSettingsFactory::GetForProfile(browser()->profile());
   auto privacy_sandbox_delegate = std::make_unique<
       privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate>();
-  privacy_sandbox_delegate->SetupDefaultResponse(/*restricted=*/false,
-                                                 /*confirmed=*/true);
+  privacy_sandbox_delegate->SetUpDefaultResponse(/*restricted=*/false);
   privacy_sandbox_settings->SetDelegateForTesting(
       std::move(privacy_sandbox_delegate));
   privacy_sandbox_settings->SetPrivacySandboxEnabled(true);

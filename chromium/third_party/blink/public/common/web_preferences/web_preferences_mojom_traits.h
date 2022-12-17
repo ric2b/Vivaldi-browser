@@ -200,6 +200,11 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.hide_scrollbars;
   }
 
+  static bool enable_webkit_scrollbar_styling(
+      const blink::web_pref::WebPreferences& r) {
+    return r.enable_webkit_scrollbar_styling;
+  }
+
   static bool accelerated_2d_canvas_enabled(
       const blink::web_pref::WebPreferences& r) {
     return r.accelerated_2d_canvas_enabled;
@@ -428,6 +433,11 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.record_whole_document;
   }
 
+  static bool stylus_handwriting_enabled(
+      const blink::web_pref::WebPreferences& r) {
+    return r.stylus_handwriting_enabled;
+  }
+
   static bool cookie_enabled(const blink::web_pref::WebPreferences& r) {
     return r.cookie_enabled;
   }
@@ -489,11 +499,6 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static const std::string& text_track_window_color(
       const blink::web_pref::WebPreferences& r) {
     return r.text_track_window_color;
-  }
-
-  static const std::string& text_track_window_padding(
-      const blink::web_pref::WebPreferences& r) {
-    return r.text_track_window_padding;
   }
 
   static const std::string& text_track_window_radius(
@@ -753,14 +758,14 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.webxr_immersive_ar_allowed;
   }
 
+  static bool renderer_wide_named_frame_lookup(
+      const blink::web_pref::WebPreferences& r) {
+    return r.renderer_wide_named_frame_lookup;
+  }
+
   static bool allow_tab_cycle_from_webpage_into_ui(
       const blink::web_pref::WebPreferences& r) {
     return r.allow_tab_cycle_from_webpage_into_ui;
-  }
-
-  static bool serve_resources_only_from_cache(
-      const blink::web_pref::WebPreferences& r) {
-    return r.serve_resources_only_from_cache;
   }
 
   static bool allow_access_keys(

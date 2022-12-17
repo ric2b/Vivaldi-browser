@@ -23,8 +23,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/common/task_util.h"
 
-namespace file_manager {
-namespace io_task {
+namespace file_manager::io_task {
 namespace {
 
 // Generates and updates the `entry` with the standard contents of the
@@ -59,17 +58,6 @@ storage::FileSystemOperationRunner::OperationID StartCreateDirectoryOnIOThread(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   return file_system_context->operation_runner()->CreateDirectory(
       url, /*exclusive=*/false, /*recursive=*/true, std::move(callback));
-}
-
-storage::FileSystemOperationRunner::OperationID StartMoveFileLocalOnIOThread(
-    scoped_refptr<storage::FileSystemContext> file_system_context,
-    const storage::FileSystemURL source_url,
-    const storage::FileSystemURL destination_url,
-    storage::FileSystemOperation::CopyOrMoveOptionSet options,
-    storage::FileSystemOperation::StatusCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  return file_system_context->operation_runner()->MoveFileLocal(
-      source_url, destination_url, options, std::move(callback));
 }
 
 bool WriteMetadataFileOnBlockingThread(const base::FilePath& destination_path,
@@ -130,10 +118,15 @@ void TrashIOTask::Execute(IOTask::ProgressCallback progress_callback,
   progress_callback_ = std::move(progress_callback);
   complete_callback_ = std::move(complete_callback);
 
+  if (progress_.sources.size() == 0) {
+    Complete(State::kSuccess);
+    return;
+  }
+
   // Build the list of known paths that are enabled, for now Downloads is a bind
   // mount at MyFiles/Downloads so treat them as separate volumes.
   free_space_map_ =
-      GenerateEnabledTrashLocationsForProfile(profile_, base_path_);
+      trash::GenerateEnabledTrashLocationsForProfile(profile_, base_path_);
   progress_.state = State::kInProgress;
 
   UpdateTrashEntry(0);
@@ -159,7 +152,7 @@ void TrashIOTask::UpdateTrashEntry(size_t source_idx) {
   // sorted by key. base::FilePath keys will insert in lexicographical order
   // however in the case of nested directories, reverse lexicographical order is
   // preferred to ensure the closer parent path by depth is chosen.
-  const TrashPathsMap::reverse_iterator& trash_parent_path_it =
+  const trash::TrashPathsMap::reverse_iterator& trash_parent_path_it =
       std::find_if(free_space_map_.rbegin(), free_space_map_.rend(),
                    [&source_path](const auto& it) -> bool {
                      return it.first.IsParent(source_path);
@@ -174,11 +167,11 @@ void TrashIOTask::UpdateTrashEntry(size_t source_idx) {
     return;
   }
 
-  TrashLocation& trash_location = trash_parent_path_it->second;
+  trash::TrashLocation& trash_location = trash_parent_path_it->second;
   const base::FilePath trash_parent_path = trash_parent_path_it->first;
   TrashEntry& entry = trash_entries_[source_idx];
-  entry.trash_path =
-      trash_parent_path.Append(trash_location.relative_folder_path);
+  entry.trash_mount_path = trash_parent_path;
+  entry.relative_trash_path = trash_location.relative_folder_path;
 
   if (!UpdateTrashInfoContents(source_path, trash_parent_path,
                                trash_location.prefix_restore_path, entry)) {
@@ -200,7 +193,7 @@ void TrashIOTask::UpdateTrashEntry(size_t source_idx) {
 
 void TrashIOTask::ValidateAndDecrementFreeSpace(
     size_t source_idx,
-    const TrashPathsMap::reverse_iterator& it) {
+    const trash::TrashPathsMap::reverse_iterator& it) {
   size_t trash_contents_size =
       trash_entries_[source_idx].trash_info_contents.size();
   progress_.total_bytes += trash_contents_size;
@@ -259,12 +252,13 @@ void TrashIOTask::GotFileSize(size_t source_idx,
   SetupSubDirectory(it, it->second.trash_files);
 }
 
-void TrashIOTask::GetFreeDiskSpace(size_t source_idx,
-                                   const TrashPathsMap::reverse_iterator& it) {
+void TrashIOTask::GetFreeDiskSpace(
+    size_t source_idx,
+    const trash::TrashPathsMap::reverse_iterator& it) {
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
       base::BindOnce(&base::SysInfo::AmountOfFreeDiskSpace,
-                     it->second.trash_parent_path),
+                     it->second.mount_point_path),
       base::BindOnce(&TrashIOTask::GotFreeDiskSpace,
                      weak_ptr_factory_.GetWeakPtr(), source_idx,
                      base::OwnedRef(it)));
@@ -284,17 +278,20 @@ base::FilePath TrashIOTask::MakeRelativeFromBasePath(
   return base::FilePath(relative_path);
 }
 
-void TrashIOTask::GotFreeDiskSpace(size_t source_idx,
-                                   const TrashPathsMap::reverse_iterator& it,
-                                   int64_t free_space) {
-  auto& trash_location = it->second;
-  base::FilePath trash_path =
-      MakeRelativeFromBasePath(trash_location.trash_parent_path.Append(
-          trash_location.relative_folder_path));
-  trash_location.trash_files = CreateFileSystemURL(
-      progress_.sources[source_idx].url, trash_path.Append(kFilesFolderName));
-  trash_location.trash_info = CreateFileSystemURL(
-      progress_.sources[source_idx].url, trash_path.Append(kInfoFolderName));
+void TrashIOTask::GotFreeDiskSpace(
+    size_t source_idx,
+    const trash::TrashPathsMap::reverse_iterator& it,
+    int64_t free_space) {
+  trash::TrashLocation& trash_location = it->second;
+  const base::FilePath& trash_parent_path = it->first;
+  base::FilePath trash_path = MakeRelativeFromBasePath(
+      trash_parent_path.Append(trash_location.relative_folder_path));
+  trash_location.trash_files =
+      CreateFileSystemURL(progress_.sources[source_idx].url,
+                          trash_path.Append(trash::kFilesFolderName));
+  trash_location.trash_info =
+      CreateFileSystemURL(progress_.sources[source_idx].url,
+                          trash_path.Append(trash::kInfoFolderName));
   trash_location.free_space = free_space;
   trash_location.require_setup = true;
 
@@ -302,7 +299,7 @@ void TrashIOTask::GotFreeDiskSpace(size_t source_idx,
 }
 
 void TrashIOTask::SetupSubDirectory(
-    TrashPathsMap::const_iterator& it,
+    trash::TrashPathsMap::const_iterator& it,
     const storage::FileSystemURL trash_subdirectory) {
   // All enabled trash directories exist in the `free_space_map_` however some
   // may not be used for this IO task. Skip the ones that don't require setup.
@@ -331,7 +328,7 @@ void TrashIOTask::SetupSubDirectory(
 }
 
 void TrashIOTask::OnSetupSubDirectory(
-    TrashPathsMap::const_iterator& it,
+    trash::TrashPathsMap::const_iterator& it,
     const storage::FileSystemURL trash_subdirectory,
     base::File::Error error) {
   if (error != base::File::FILE_OK) {
@@ -363,8 +360,10 @@ void TrashIOTask::GenerateDestinationURL(size_t source_idx, size_t output_idx) {
   DCHECK(source_idx < progress_.sources.size());
   DCHECK(source_idx < trash_entries_.size());
 
+  const TrashEntry& entry = trash_entries_[source_idx];
   const auto trash_path = MakeRelativeFromBasePath(
-      trash_entries_[source_idx].trash_path.Append(kFilesFolderName));
+      entry.trash_mount_path.Append(entry.relative_trash_path)
+          .Append(trash::kFilesFolderName));
 
   const storage::FileSystemURL files_location =
       CreateFileSystemURL(progress_.sources[source_idx].url, trash_path);
@@ -386,9 +385,14 @@ void TrashIOTask::WriteMetadata(
     TrashComplete(source_idx, output_idx, destination_result.error());
     return;
   }
-  const base::FilePath destination_path =
-      GenerateTrashPath(trash_entries_[source_idx].trash_path, kInfoFolderName,
-                        destination_result.value().path().BaseName().value());
+  const base::FilePath absolute_trash_path =
+      trash_entries_[source_idx].trash_mount_path.Append(
+          trash_entries_[source_idx].relative_trash_path);
+  const std::string file_name =
+      destination_result.value().path().BaseName().value();
+
+  const base::FilePath destination_path = trash::GenerateTrashPath(
+      absolute_trash_path, trash::kInfoFolderName, file_name);
   progress_.outputs.emplace_back(
       CreateFileSystemURL(progress_.sources[source_idx].url, destination_path),
       absl::nullopt);
@@ -516,5 +520,4 @@ void TrashIOTask::SetCurrentOperationID(
   operation_id_.emplace(id);
 }
 
-}  // namespace io_task
-}  // namespace file_manager
+}  // namespace file_manager::io_task

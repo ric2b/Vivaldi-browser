@@ -71,6 +71,7 @@ class ExtensionTabUtil {
     std::unique_ptr<bool> active;
     std::unique_ptr<bool> pinned;
     std::unique_ptr<int> index;
+    std::unique_ptr<int> bookmark_id;
     std::unique_ptr<ui::PageTransition> transition;
     std::unique_ptr<std::string> viv_ext_data;
   };

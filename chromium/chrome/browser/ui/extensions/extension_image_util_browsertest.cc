@@ -5,14 +5,15 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/common/image_util.h"
 #include "ui/base/buildflags.h"
-#include "ui/base/theme_provider.h"
+#include "ui/color/color_provider.h"
 #include "ui/native_theme/native_theme.h"
 
 #if BUILDFLAG(USE_GTK)
-#include "ui/views/linux_ui/linux_ui.h"
+#include "ui/linux/linux_ui.h"
 #endif
 
 namespace {
@@ -32,14 +33,13 @@ IN_PROC_BROWSER_TEST_F(ImageUtilTest, CheckDefaultToolbarColor) {
   // This test relies on being run with the default light mode system theme.
   ui::NativeTheme::GetInstanceForNativeUi()->set_use_dark_colors(false);
 #if BUILDFLAG(USE_GTK)
-  views::LinuxUI::instance()->SetUseSystemThemeCallback(
+  ui::LinuxUi::instance()->SetUseSystemThemeCallback(
       base::BindRepeating([](aura::Window* window) { return false; }));
 #endif  // BUILDFLAG(USE_GTK)
   ui::NativeTheme::GetInstanceForNativeUi()->NotifyOnNativeThemeUpdated();
 
   EXPECT_EQ(extensions::image_util::kDefaultToolbarColor,
-            browser()->window()->GetThemeProvider()->GetColor(
-                ThemeProperties::COLOR_TOOLBAR))
+            browser()->window()->GetColorProvider()->GetColor(kColorToolbar))
       << "Please update image_util::kDefaultToolbarColor to the new value";
 }
 

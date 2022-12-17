@@ -84,10 +84,10 @@ std::unique_ptr<PageSchedulerImpl> CreatePageScheduler(
 std::unique_ptr<FrameSchedulerImpl> CreateFrameScheduler(
     PageSchedulerImpl* page_scheduler,
     FrameScheduler::Delegate* delegate,
-    blink::BlameContext* blame_context,
+    bool is_in_embedded_frame_tree,
     FrameScheduler::FrameType frame_type) {
-  auto frame_scheduler =
-      page_scheduler->CreateFrameScheduler(delegate, blame_context, frame_type);
+  auto frame_scheduler = page_scheduler->CreateFrameScheduler(
+      delegate, is_in_embedded_frame_tree, frame_type);
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler_impl(
       static_cast<FrameSchedulerImpl*>(frame_scheduler.release()));
   return frame_scheduler_impl;
@@ -110,6 +110,7 @@ constexpr TaskType kAllFrameTaskTypes[] = {
     TaskType::kNetworking,
     TaskType::kNetworkingUnfreezable,
     TaskType::kNetworkingControl,
+    TaskType::kLowPriorityScriptExecution,
     TaskType::kDOMManipulation,
     TaskType::kHistoryTraversal,
     TaskType::kEmbed,
@@ -154,10 +155,11 @@ constexpr TaskType kAllFrameTaskTypes[] = {
     TaskType::kInternalInputBlocking,
     TaskType::kWakeLock,
     TaskType::kWebGPU,
-    TaskType::kInternalPostMessageForwarding};
+    TaskType::kInternalPostMessageForwarding,
+    TaskType::kInternalNavigationCancellation};
 
 static_assert(
-    static_cast<int>(TaskType::kMaxValue) == 79,
+    static_cast<int>(TaskType::kMaxValue) == 81,
     "When adding a TaskType, make sure that kAllFrameTaskTypes is updated.");
 
 void AppendToVectorTestTask(Vector<String>* vector, String value) {
@@ -225,15 +227,18 @@ class FrameSchedulerImplTest : public testing::Test {
     frame_scheduler_delegate_ = std::make_unique<
         testing::StrictMock<FrameSchedulerDelegateForTesting>>();
     frame_scheduler_ = CreateFrameScheduler(
-        page_scheduler_.get(), frame_scheduler_delegate_.get(), nullptr,
+        page_scheduler_.get(), frame_scheduler_delegate_.get(),
+        /*is_in_embedded_frame_tree=*/false,
         FrameScheduler::FrameType::kSubframe);
   }
 
-  void ResetFrameScheduler(FrameScheduler::FrameType frame_type) {
+  void ResetFrameScheduler(bool is_in_embedded_frame_tree,
+                           FrameScheduler::FrameType frame_type) {
     auto new_delegate_ = std::make_unique<
         testing::StrictMock<FrameSchedulerDelegateForTesting>>();
-    frame_scheduler_ = CreateFrameScheduler(
-        page_scheduler_.get(), new_delegate_.get(), nullptr, frame_type);
+    frame_scheduler_ =
+        CreateFrameScheduler(page_scheduler_.get(), new_delegate_.get(),
+                             is_in_embedded_frame_tree, frame_type);
     frame_scheduler_delegate_ = std::move(new_delegate_);
   }
 
@@ -754,10 +759,10 @@ TEST_F(FrameSchedulerImplTest,
   LazyInitThrottleableTaskQueue();
   EXPECT_FALSE(IsThrottled());
   frame_scheduler_->SetFrameVisible(false);
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
-  frame_scheduler_->SetCrossOriginToMainFrame(false);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(false);
   EXPECT_FALSE(IsThrottled());
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
   EXPECT_TRUE(IsThrottled());
   frame_scheduler_->SetFrameVisible(true);
   EXPECT_FALSE(IsThrottled());
@@ -767,7 +772,7 @@ TEST_F(FrameSchedulerImplTest,
 
 TEST_F(FrameSchedulerImplTest, FrameHidden_CrossOrigin_LazyInit) {
   frame_scheduler_->SetFrameVisible(false);
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
   LazyInitThrottleableTaskQueue();
   EXPECT_TRUE(IsThrottled());
 }
@@ -791,13 +796,13 @@ TEST_F(FrameSchedulerImplTest, FrameVisible_CrossOrigin_ExplicitInit) {
   EXPECT_TRUE(throttleable_task_queue());
   frame_scheduler_->SetFrameVisible(true);
   EXPECT_FALSE(IsThrottled());
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
   EXPECT_FALSE(IsThrottled());
 }
 
 TEST_F(FrameSchedulerImplTest, FrameVisible_CrossOrigin_LazyInit) {
   frame_scheduler_->SetFrameVisible(true);
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
   LazyInitThrottleableTaskQueue();
   EXPECT_FALSE(IsThrottled());
 }
@@ -1035,26 +1040,35 @@ TEST_F(FrameSchedulerImplTest, PagePostsCpuTasks) {
 
 TEST_F(FrameSchedulerImplTest, FramePostsCpuTasksThroughReloadRenavigate) {
   const struct {
+    bool embedded_frame_tree;
     FrameScheduler::FrameType frame_type;
     FrameScheduler::NavigationType navigation_type;
     bool expect_task_time_zero;
     int expected_total_calls;
-  } kTestCases[] = {{FrameScheduler::FrameType::kMainFrame,
+  } kTestCases[] = {{false, FrameScheduler::FrameType::kMainFrame,
                      FrameScheduler::NavigationType::kOther, false, 0},
-                    {FrameScheduler::FrameType::kMainFrame,
+                    {false, FrameScheduler::FrameType::kMainFrame,
                      FrameScheduler::NavigationType::kReload, false, 0},
-                    {FrameScheduler::FrameType::kMainFrame,
+                    {false, FrameScheduler::FrameType::kMainFrame,
                      FrameScheduler::NavigationType::kSameDocument, true, 1},
-                    {FrameScheduler::FrameType::kSubframe,
+                    {false, FrameScheduler::FrameType::kSubframe,
                      FrameScheduler::NavigationType::kOther, true, 1},
-                    {FrameScheduler::FrameType::kSubframe,
+                    {false, FrameScheduler::FrameType::kSubframe,
+                     FrameScheduler::NavigationType::kSameDocument, true, 1},
+                    {true, FrameScheduler::FrameType::kMainFrame,
+                     FrameScheduler::NavigationType::kOther, true, 1},
+                    {true, FrameScheduler::FrameType::kMainFrame,
+                     FrameScheduler::NavigationType::kSameDocument, true, 1},
+                    {true, FrameScheduler::FrameType::kSubframe,
+                     FrameScheduler::NavigationType::kOther, true, 1},
+                    {true, FrameScheduler::FrameType::kSubframe,
                      FrameScheduler::NavigationType::kSameDocument, true, 1}};
   for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(String::Format(
         "FrameType: %d, NavigationType: %d : TaskTime.is_zero %d, CallCount %d",
         test_case.frame_type, test_case.navigation_type,
         test_case.expect_task_time_zero, test_case.expected_total_calls));
-    ResetFrameScheduler(test_case.frame_type);
+    ResetFrameScheduler(test_case.embedded_frame_tree, test_case.frame_type);
     EXPECT_TRUE(GetTaskTime().is_zero());
     EXPECT_EQ(0, GetTotalUpdateTaskTimeCalls());
 
@@ -1610,7 +1624,8 @@ TEST_F(LowPriorityHiddenFrameDuringLoadingExperimentTest,
   // Main thread scheduler is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
   ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
@@ -1672,7 +1687,8 @@ TEST_F(LowPrioritySubFrameExperimentTest, FrameQueuesPriorities) {
             TaskQueue::QueuePriority::kLowPriority);
 
   frame_scheduler_ =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
 
   // Main Frame Task Queues.
@@ -1703,7 +1719,8 @@ TEST_F(LowPrioritySubFrameDuringLoadingExperimentTest, FrameQueuesPriorities) {
   // Main thread scheduler is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
   ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
@@ -1767,7 +1784,8 @@ TEST_F(LowPrioritySubFrameThrottleableTaskExperimentTest,
             TaskQueue::QueuePriority::kNormalPriority);
 
   frame_scheduler_ =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
 
   // Main Frame Task Queues.
@@ -1799,7 +1817,8 @@ TEST_F(LowPrioritySubFrameThrottleableTaskDuringLoadingExperimentTest,
   // Main thread scheduler is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
   ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
@@ -1862,7 +1881,8 @@ TEST_F(LowPriorityThrottleableTaskExperimentTest, FrameQueuesPriorities) {
             TaskQueue::QueuePriority::kNormalPriority);
 
   frame_scheduler_ =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
 
   // Main Frame Task Queues.
@@ -1894,7 +1914,8 @@ TEST_F(LowPriorityThrottleableTaskDuringLoadingExperimentTest,
   // Main thread is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
   ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
@@ -1937,7 +1958,8 @@ TEST_F(LowPriorityThrottleableTaskDuringLoadingExperimentTest,
   frame_scheduler_->OnFirstMeaningfulPaint();
 
   frame_scheduler_ =
-      CreateFrameScheduler(page_scheduler_.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler_.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
 
   // Main thread is in the loading use case.
@@ -2051,7 +2073,8 @@ TEST_F(LowPriorityAdFrameDuringLoadingExperimentTest, FrameQueuesPriorities) {
   // Main thread scheduler is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
   ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
@@ -2164,7 +2187,8 @@ TEST_F(BestEffortPriorityAdFrameDuringLoadingExperimentTest,
   // Main thread scheduler is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
   ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
@@ -2235,57 +2259,6 @@ TEST_F(ResourceFetchPriorityExperimentTest, DidChangePriority) {
             TaskQueue::QueuePriority::kHighPriority);
 }
 
-class ResourceFetchPriorityExperimentOnlyWhenLoadingTest
-    : public FrameSchedulerImplTest {
- public:
-  ResourceFetchPriorityExperimentOnlyWhenLoadingTest()
-      : FrameSchedulerImplTest({kUseResourceFetchPriorityOnlyWhenLoading}, {}) {
-    base::FieldTrialParams params{{"HIGHEST", "HIGH"}, {"MEDIUM", "NORMAL"},
-                                  {"LOW", "NORMAL"},   {"LOWEST", "LOW"},
-                                  {"IDLE", "LOW"},     {"THROTTLED", "LOW"}};
-
-    const char kStudyName[] = "ResourceFetchPriorityExperiment";
-    const char kGroupName[] = "GroupName2";
-
-    base::AssociateFieldTrialParams(kStudyName, kGroupName, params);
-    base::FieldTrialList::CreateFieldTrial(kStudyName, kGroupName);
-  }
-};
-
-TEST_F(ResourceFetchPriorityExperimentOnlyWhenLoadingTest, DidChangePriority) {
-  std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
-      CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
-                           FrameScheduler::FrameType::kMainFrame);
-
-  std::unique_ptr<ResourceLoadingTaskRunnerHandleImpl> handle =
-      GetResourceLoadingTaskRunnerHandleImpl();
-  scoped_refptr<MainThreadTaskQueue> task_queue = handle->task_queue();
-
-  EXPECT_EQ(task_queue->GetQueuePriority(),
-            TaskQueue::QueuePriority::kNormalPriority);
-
-  // Experiment is only enabled during the loading phase.
-  DidChangeResourceLoadingPriority(task_queue, net::RequestPriority::LOWEST);
-  EXPECT_EQ(task_queue->GetQueuePriority(),
-            TaskQueue::QueuePriority::kNormalPriority);
-
-  // Main thread scheduler is in the loading use case.
-  main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
-  ASSERT_EQ(scheduler_->current_use_case(), UseCase::kLoading);
-
-  handle = GetResourceLoadingTaskRunnerHandleImpl();
-  task_queue = handle->task_queue();
-
-  DidChangeResourceLoadingPriority(task_queue, net::RequestPriority::LOWEST);
-  EXPECT_EQ(task_queue->GetQueuePriority(),
-            TaskQueue::QueuePriority::kLowPriority);
-
-  DidChangeResourceLoadingPriority(task_queue, net::RequestPriority::HIGHEST);
-  EXPECT_EQ(task_queue->GetQueuePriority(),
-            TaskQueue::QueuePriority::kHighPriority);
-}
-
 TEST_F(
     FrameSchedulerImplTest,
     DidChangeResourceLoadingPriority_ResourceFecthPriorityExperimentDisabled) {
@@ -2312,7 +2285,7 @@ class LowPriorityCrossOriginTaskExperimentTest : public FrameSchedulerImplTest {
 };
 
 TEST_F(LowPriorityCrossOriginTaskExperimentTest, FrameQueuesPriorities) {
-  EXPECT_FALSE(frame_scheduler_->IsCrossOriginToMainFrame());
+  EXPECT_FALSE(frame_scheduler_->IsCrossOriginToNearestMainFrame());
 
   // Same Origin Task Queues.
   EXPECT_EQ(LoadingTaskQueue()->GetQueuePriority(),
@@ -2328,8 +2301,8 @@ TEST_F(LowPriorityCrossOriginTaskExperimentTest, FrameQueuesPriorities) {
   EXPECT_EQ(UnpausableTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kNormalPriority);
 
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
-  EXPECT_TRUE(frame_scheduler_->IsCrossOriginToMainFrame());
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
+  EXPECT_TRUE(frame_scheduler_->IsCrossOriginToNearestMainFrame());
 
   EXPECT_EQ(LoadingTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kLowPriority);
@@ -2358,7 +2331,8 @@ TEST_F(LowPriorityCrossOriginTaskDuringLoadingExperimentTest,
   // Main thread is in the loading use case.
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
 
   main_frame_scheduler->OnFirstContentfulPaintInMainFrame();
@@ -2377,8 +2351,8 @@ TEST_F(LowPriorityCrossOriginTaskDuringLoadingExperimentTest,
   EXPECT_EQ(UnpausableTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kNormalPriority);
 
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
-  EXPECT_TRUE(frame_scheduler_->IsCrossOriginToMainFrame());
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
+  EXPECT_TRUE(frame_scheduler_->IsCrossOriginToNearestMainFrame());
 
   EXPECT_EQ(LoadingTaskQueue()->GetQueuePriority(),
             TaskQueue::QueuePriority::kLowPriority);
@@ -2522,6 +2496,14 @@ TEST_F(FrameSchedulerImplTest, ComputePriorityForDetachedFrame) {
   frame_scheduler_->ComputePriority(task_queue.get());
 }
 
+TEST_F(FrameSchedulerImplTest,
+       LowPriorityScriptExecutionHasBestEffortPriority) {
+  auto task_queue = GetTaskQueue(TaskType::kLowPriorityScriptExecution);
+
+  EXPECT_EQ(TaskQueue::QueuePriority::kBestEffortPriority,
+            task_queue->GetQueuePriority());
+}
+
 namespace {
 
 // Mask is a preferred way of plumbing the list of features, but a list
@@ -2654,7 +2636,8 @@ TEST_F(FrameSchedulerImplTest, BackForwardCacheOptOut_FrameNavigated) {
 }
 
 TEST_F(FrameSchedulerImplTest, FeatureUpload) {
-  ResetFrameScheduler(FrameScheduler::FrameType::kMainFrame);
+  ResetFrameScheduler(/*is_in_embedded_frame_tree=*/false,
+                      FrameScheduler::FrameType::kMainFrame);
 
   frame_scheduler_->GetTaskRunner(TaskType::kJavascriptTimerImmediate)
       ->PostTask(
@@ -2691,7 +2674,8 @@ TEST_F(FrameSchedulerImplTest, FeatureUpload) {
 }
 
 TEST_F(FrameSchedulerImplTest, FeatureUpload_FrameDestruction) {
-  ResetFrameScheduler(FrameScheduler::FrameType::kMainFrame);
+  ResetFrameScheduler(/*is_in_embedded_frame_tree=*/false,
+                      FrameScheduler::FrameType::kMainFrame);
 
   FeatureHandle feature_handle;
 
@@ -2935,7 +2919,8 @@ TEST_F(FrameSchedulerImplTest, ReportFMPAndFCPForMainFrames) {
       nullptr, &mock_main_thread_scheduler, *agent_group_scheduler);
 
   std::unique_ptr<FrameSchedulerImpl> main_frame_scheduler =
-      CreateFrameScheduler(page_scheduler.get(), nullptr, nullptr,
+      CreateFrameScheduler(page_scheduler.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kMainFrame);
 
   EXPECT_CALL(mock_main_thread_scheduler, OnMainFramePaint).Times(2);
@@ -2956,15 +2941,30 @@ TEST_F(FrameSchedulerImplTest, DontReportFMPAndFCPForSubframes) {
   std::unique_ptr<PageSchedulerImpl> page_scheduler = CreatePageScheduler(
       nullptr, &mock_main_thread_scheduler, *agent_group_scheduler);
 
-  std::unique_ptr<FrameSchedulerImpl> subframe_scheduler =
-      CreateFrameScheduler(page_scheduler.get(), nullptr, nullptr,
-                           FrameScheduler::FrameType::kSubframe);
+  // Test for direct subframes.
+  {
+    std::unique_ptr<FrameSchedulerImpl> subframe_scheduler =
+        CreateFrameScheduler(page_scheduler.get(), nullptr,
+                             /*is_in_embedded_frame_tree=*/false,
+                             FrameScheduler::FrameType::kSubframe);
 
-  EXPECT_CALL(mock_main_thread_scheduler, OnMainFramePaint).Times(0);
+    EXPECT_CALL(mock_main_thread_scheduler, OnMainFramePaint).Times(0);
 
-  subframe_scheduler->OnFirstMeaningfulPaint();
+    subframe_scheduler->OnFirstMeaningfulPaint();
+  }
 
-  subframe_scheduler = nullptr;
+  // Now test for embedded main frames.
+  {
+    std::unique_ptr<FrameSchedulerImpl> subframe_scheduler =
+        CreateFrameScheduler(page_scheduler.get(), nullptr,
+                             /*is_in_embedded_frame_tree=*/true,
+                             FrameScheduler::FrameType::kMainFrame);
+
+    EXPECT_CALL(mock_main_thread_scheduler, OnMainFramePaint).Times(0);
+
+    subframe_scheduler->OnFirstMeaningfulPaint();
+  }
+
   page_scheduler = nullptr;
   agent_group_scheduler = nullptr;
   mock_main_thread_scheduler.Shutdown();
@@ -2974,7 +2974,7 @@ TEST_F(FrameSchedulerImplTest, DontReportFMPAndFCPForSubframes) {
 // the main frame with intensive wake up throttling.
 TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
        TaskExecutionSameOriginFrame) {
-  ASSERT_FALSE(frame_scheduler_->IsCrossOriginToMainFrame());
+  ASSERT_FALSE(frame_scheduler_->IsCrossOriginToNearestMainFrame());
 
   // Throttled TaskRunner to which tasks are posted in this test.
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
@@ -3145,7 +3145,7 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
 // with the main frame with intensive wake up throttling.
 TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
        TaskExecutionCrossOriginFrame) {
-  frame_scheduler_->SetCrossOriginToMainFrame(true);
+  frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
 
   // Throttled TaskRunner to which tasks are posted in this test.
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
@@ -3316,7 +3316,7 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
 // frame run at the expected time.
 TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
        ManySameOriginFrames) {
-  ASSERT_FALSE(frame_scheduler_->IsCrossOriginToMainFrame());
+  ASSERT_FALSE(frame_scheduler_->IsCrossOriginToNearestMainFrame());
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       GetTaskRunner();
 
@@ -3324,9 +3324,10 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
   // associated throttled TaskRunner.
   std::unique_ptr<FrameSchedulerImpl> other_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
-  ASSERT_FALSE(other_frame_scheduler->IsCrossOriginToMainFrame());
+  ASSERT_FALSE(other_frame_scheduler->IsCrossOriginToNearestMainFrame());
   const scoped_refptr<base::SingleThreadTaskRunner> other_task_runner =
       GetTaskRunner(other_frame_scheduler.get());
 
@@ -3378,7 +3379,8 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
   // |other_task_runner| is throttled. It belongs to a different frame on the
   // same page.
   const auto other_frame_scheduler = CreateFrameScheduler(
-      page_scheduler_.get(), frame_scheduler_delegate_.get(), nullptr,
+      page_scheduler_.get(), frame_scheduler_delegate_.get(),
+      /*is_in_embedded_frame_tree=*/false,
       FrameScheduler::FrameType::kSubframe);
   const scoped_refptr<base::SingleThreadTaskRunner> other_task_runner =
       GetTaskRunner(other_frame_scheduler.get());
@@ -3497,7 +3499,7 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
 // same-origin and cross-origin with the main frame.
 TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
        FrameChangesOriginType) {
-  EXPECT_FALSE(frame_scheduler_->IsCrossOriginToMainFrame());
+  EXPECT_FALSE(frame_scheduler_->IsCrossOriginToNearestMainFrame());
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       GetTaskRunner();
 
@@ -3505,9 +3507,10 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
   // throughout the test.
   std::unique_ptr<FrameSchedulerImpl> cross_origin_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
-  cross_origin_frame_scheduler->SetCrossOriginToMainFrame(true);
+  cross_origin_frame_scheduler->SetCrossOriginToNearestMainFrame(true);
   const scoped_refptr<base::SingleThreadTaskRunner> cross_origin_task_runner =
       GetTaskRunner(cross_origin_frame_scheduler.get());
 
@@ -3540,7 +3543,7 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
 
     // Make the |frame_scheduler_| cross-origin. Its task must now run at an
     // aligned time.
-    frame_scheduler_->SetCrossOriginToMainFrame(true);
+    frame_scheduler_->SetCrossOriginToNearestMainFrame(true);
 
     task_environment_.FastForwardBy(kDefaultThrottledWakeUpInterval);
     if (IsIntensiveThrottlingExpected()) {
@@ -3575,7 +3578,7 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
 
     // Make the |frame_scheduler_| same-origin. Its task can now run at a
     // 1-second aligned time, since there was no wake up in the last minute.
-    frame_scheduler_->SetCrossOriginToMainFrame(false);
+    frame_scheduler_->SetCrossOriginToNearestMainFrame(false);
 
     task_environment_.FastForwardBy(kLongUnalignedDelay);
     if (IsIntensiveThrottlingExpected()) {
@@ -3630,8 +3633,9 @@ class FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled
     : public FrameSchedulerImplTest {
  public:
   FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled()
-      : FrameSchedulerImplTest({kQuickIntensiveWakeUpThrottlingAfterLoading},
-                               {}) {}
+      : FrameSchedulerImplTest(
+            {features::kQuickIntensiveWakeUpThrottlingAfterLoading},
+            {}) {}
 };
 
 TEST_F(FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled,
@@ -3660,7 +3664,8 @@ class DeprioritizeDOMTimerTest : public FrameSchedulerImplTest {
   void SetUp() override {
     FrameSchedulerImplTest::SetUp();
     scheduler_of_main_frame_ = CreateFrameScheduler(
-        page_scheduler_.get(), frame_scheduler_delegate_.get(), nullptr,
+        page_scheduler_.get(), frame_scheduler_delegate_.get(),
+        /*is_in_embedded_frame_tree=*/false,
         FrameScheduler::FrameType::kMainFrame);
   }
 
@@ -4015,10 +4020,11 @@ TEST_F(FrameSchedulerImplThrottleForegroundTimersEnabledTest,
        VisibleCrossOriginFrameThrottling) {
   std::unique_ptr<FrameSchedulerImpl> cross_origin_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
   page_scheduler_->SetPageVisible(true);
-  cross_origin_frame_scheduler->SetCrossOriginToMainFrame(true);
+  cross_origin_frame_scheduler->SetCrossOriginToNearestMainFrame(true);
   const scoped_refptr<base::SingleThreadTaskRunner> cross_origin_task_runner =
       cross_origin_frame_scheduler->GetTaskRunner(
           TaskType::kJavascriptTimerDelayedLowNesting);
@@ -4049,10 +4055,11 @@ TEST_F(FrameSchedulerImplThrottleForegroundTimersEnabledTest,
        HiddenCrossOriginFrameThrottling) {
   std::unique_ptr<FrameSchedulerImpl> cross_origin_frame_scheduler =
       CreateFrameScheduler(page_scheduler_.get(),
-                           frame_scheduler_delegate_.get(), nullptr,
+                           frame_scheduler_delegate_.get(),
+                           /*is_in_embedded_frame_tree=*/false,
                            FrameScheduler::FrameType::kSubframe);
   page_scheduler_->SetPageVisible(true);
-  cross_origin_frame_scheduler->SetCrossOriginToMainFrame(true);
+  cross_origin_frame_scheduler->SetCrossOriginToNearestMainFrame(true);
   const scoped_refptr<base::SingleThreadTaskRunner> cross_origin_task_runner =
       cross_origin_frame_scheduler->GetTaskRunner(
           TaskType::kJavascriptTimerDelayedLowNesting);

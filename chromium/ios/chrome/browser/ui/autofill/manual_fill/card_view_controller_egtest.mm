@@ -446,13 +446,28 @@ BOOL WaitForKeyboardToAppear() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"G")]
       performAction:grey_tap()];
 
-  // Verify the credit card controller table view and the credit card icon is
-  // NOT visible.
-  [[EarlGrey
-      selectElementWithMatcher:ManualFallbackCreditCardTableViewMatcher()]
-      assertWithMatcher:grey_notVisible()];
-  [[EarlGrey selectElementWithMatcher:ManualFallbackKeyboardIconMatcher()]
-      assertWithMatcher:grey_notVisible()];
+  // As of Xcode 14 beta 2, tapping the keyboard does not dismiss the
+  // accessory view popup.
+  bool systemDismissesView = true;
+#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
+  if (@available(iOS 16, *)) {
+    systemDismissesView = false;
+  }
+#endif  // defined(__IPHONE_16_0)
+
+  if (systemDismissesView) {
+    // Verify the credit card controller table view and the credit card icon is
+    // not visible.
+    [[EarlGrey
+        selectElementWithMatcher:ManualFallbackCreditCardTableViewMatcher()]
+        assertWithMatcher:grey_notVisible()];
+    [[EarlGrey selectElementWithMatcher:ManualFallbackKeyboardIconMatcher()]
+        assertWithMatcher:grey_notVisible()];
+  } else {
+    [[EarlGrey
+        selectElementWithMatcher:ManualFallbackCreditCardTableViewMatcher()]
+        assertWithMatcher:grey_sufficientlyVisible()];
+  }
 }
 
 // Tests that after switching fields the content size of the table view didn't

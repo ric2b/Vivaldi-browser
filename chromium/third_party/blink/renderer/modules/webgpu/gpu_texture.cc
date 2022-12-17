@@ -89,10 +89,6 @@ WGPUTextureViewDescriptor AsDawnType(
   return dawn_desc;
 }
 
-void popErrorDiscardCallback(WGPUErrorType, const char*, void*) {
-  // This callback is used to silently consume expected error messages
-}
-
 }  // anonymous namespace
 
 // static
@@ -120,33 +116,20 @@ GPUTexture* GPUTexture::Create(GPUDevice* device,
 
   GPUTexture* texture = MakeGarbageCollected<GPUTexture>(
       device,
-      device->GetProcs().deviceCreateTexture(device->GetHandle(), &dawn_desc),
-      dawn_desc.dimension, dawn_desc.format,
-      static_cast<WGPUTextureUsage>(dawn_desc.usage));
+      device->GetProcs().deviceCreateTexture(device->GetHandle(), &dawn_desc));
   if (webgpu_desc->hasLabel())
     texture->setLabel(webgpu_desc->label());
   return texture;
 }
 
 // static
-GPUTexture* GPUTexture::CreateError(GPUDevice* device) {
+GPUTexture* GPUTexture::CreateError(GPUDevice* device,
+                                    const WGPUTextureDescriptor* desc) {
   DCHECK(device);
-
-  // Force the creation of an invalid texture and consume the errors that it
-  // causes. It would be nice if Dawn provided a more direct way of creating
-  // an error texture to simplify this.
-  WGPUTextureDescriptor dawn_desc = {};
-  device->GetProcs().devicePushErrorScope(device->GetHandle(),
-                                          WGPUErrorFilter_Validation);
-  GPUTexture* texture = MakeGarbageCollected<GPUTexture>(
+  DCHECK(desc);
+  return MakeGarbageCollected<GPUTexture>(
       device,
-      device->GetProcs().deviceCreateTexture(device->GetHandle(), &dawn_desc),
-      dawn_desc.dimension, dawn_desc.format,
-      static_cast<WGPUTextureUsage>(dawn_desc.usage));
-  device->GetProcs().devicePopErrorScope(device->GetHandle(),
-                                         &popErrorDiscardCallback, nullptr);
-
-  return texture;
+      device->GetProcs().deviceCreateErrorTexture(device->GetHandle(), desc));
 }
 
 // static
@@ -243,15 +226,11 @@ GPUTexture* GPUTexture::FromCanvas(GPUDevice* device,
                                           std::move(mailbox_texture));
 }
 
-GPUTexture::GPUTexture(GPUDevice* device,
-                       WGPUTexture texture,
-                       WGPUTextureDimension dimension,
-                       WGPUTextureFormat format,
-                       WGPUTextureUsage usage)
+GPUTexture::GPUTexture(GPUDevice* device, WGPUTexture texture)
     : DawnObject<WGPUTexture>(device, texture),
-      dimension_(dimension),
-      format_(format),
-      usage_(usage) {}
+      dimension_(GetProcs().textureGetDimension(GetHandle())),
+      format_(GetProcs().textureGetFormat(GetHandle())),
+      usage_(GetProcs().textureGetUsage(GetHandle())) {}
 
 GPUTexture::GPUTexture(GPUDevice* device,
                        WGPUTextureFormat format,
@@ -291,6 +270,38 @@ GPUTextureView* GPUTexture::createView(
 void GPUTexture::destroy() {
   GetProcs().textureDestroy(GetHandle());
   mailbox_texture_.reset();
+}
+
+uint32_t GPUTexture::width() const {
+  return GetProcs().textureGetWidth(GetHandle());
+}
+
+uint32_t GPUTexture::height() const {
+  return GetProcs().textureGetHeight(GetHandle());
+}
+
+uint32_t GPUTexture::depthOrArrayLayers() const {
+  return GetProcs().textureGetDepthOrArrayLayers(GetHandle());
+}
+
+uint32_t GPUTexture::mipLevelCount() const {
+  return GetProcs().textureGetMipLevelCount(GetHandle());
+}
+
+uint32_t GPUTexture::sampleCount() const {
+  return GetProcs().textureGetSampleCount(GetHandle());
+}
+
+String GPUTexture::dimension() const {
+  return FromDawnEnum(GetProcs().textureGetDimension(GetHandle()));
+}
+
+String GPUTexture::format() const {
+  return FromDawnEnum(GetProcs().textureGetFormat(GetHandle()));
+}
+
+uint32_t GPUTexture::usage() const {
+  return GetProcs().textureGetUsage(GetHandle());
 }
 
 }  // namespace blink

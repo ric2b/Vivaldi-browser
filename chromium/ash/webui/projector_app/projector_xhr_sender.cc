@@ -6,11 +6,13 @@
 
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "ash/webui/projector_app/projector_app_client.h"
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "google_apis/google_api_keys.h"
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -35,6 +37,10 @@ constexpr net::NetworkTrafficAnnotationTag kNetworkTrafficAnnotationTag =
           })");
 
 constexpr char kAuthorizationHeaderPrefix[] = "Bearer ";
+
+constexpr char kTranslationApiDomain[] = "translation.googleapis.com";
+
+constexpr char kApiKeyParam[] = "key";
 
 // List of URL prefix supported by `ProjectorXhrSender`.
 const char* kUrlAllowlist[] = {
@@ -70,7 +76,8 @@ void ProjectorXhrSender::Send(const GURL& url,
                               const std::string& method,
                               const std::string& request_body,
                               bool use_credentials,
-                              SendRequestCallback callback) {
+                              SendRequestCallback callback,
+                              const base::Value::Dict& headers) {
   if (!IsUrlAllowlisted(url.spec())) {
     std::move(callback).Run(
         /*success=*/false,
@@ -79,11 +86,22 @@ void ProjectorXhrSender::Send(const GURL& url,
     return;
   }
 
-  if (use_credentials) {
-    // Use end user credentials to authorize the request. Doesn't need to fetch
-    // OAuth token.
-    SendRequest(url, method, request_body, /*token=*/std::string(),
-                std::move(callback));
+  // TODO(b/244190982): pass an option to use api key from the XhrSender api
+  // instead.
+  bool use_api_key =
+      ash::features::IsProjectorUseApiKeyForTranslationEnabled() &&
+      url.DomainIs(kTranslationApiDomain);
+  GURL request_url = url;
+  if (use_api_key) {
+    request_url =
+        net::AppendQueryParameter(url, kApiKeyParam, google_apis::GetAPIKey());
+  }
+
+  if (use_credentials || use_api_key) {
+    // Use end user credentials or API key to authorize the request. Doesn't
+    // need to fetch OAuth token.
+    SendRequest(request_url, method, request_body, /*token=*/std::string(),
+                headers, std::move(callback));
     return;
   }
 
@@ -95,14 +113,15 @@ void ProjectorXhrSender::Send(const GURL& url,
   oauth_token_fetcher_.GetAccessTokenFor(
       primary_account.email,
       base::BindOnce(&ProjectorXhrSender::OnAccessTokenRequestCompleted,
-                     weak_factory_.GetWeakPtr(), url, method, request_body,
-                     std::move(callback)));
+                     weak_factory_.GetWeakPtr(), request_url, method,
+                     request_body, headers.Clone(), std::move(callback)));
 }
 
 void ProjectorXhrSender::OnAccessTokenRequestCompleted(
     const GURL& url,
     const std::string& method,
     const std::string& request_body,
+    const base::Value::Dict& headers,
     SendRequestCallback callback,
     const std::string& email,
     GoogleServiceAuthError error,
@@ -115,13 +134,15 @@ void ProjectorXhrSender::OnAccessTokenRequestCompleted(
     return;
   }
 
-  SendRequest(url, method, request_body, info.token, std::move(callback));
+  SendRequest(url, method, request_body, info.token, headers,
+              std::move(callback));
 }
 
 void ProjectorXhrSender::SendRequest(const GURL& url,
                                      const std::string& method,
                                      const std::string& request_body,
                                      const std::string& token,
+                                     const base::Value::Dict& headers,
                                      SendRequestCallback callback) {
   // Build resource request.
   auto resource_request = std::make_unique<network::ResourceRequest>();
@@ -135,6 +156,10 @@ void ProjectorXhrSender::SendRequest(const GURL& url,
   }
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
                                       "application/json");
+
+  for (auto [key, value] : headers) {
+    resource_request->headers.SetHeader(key, value.GetString());
+  }
 
   // Send resource request.
   auto loader = network::SimpleURLLoader::Create(std::move(resource_request),

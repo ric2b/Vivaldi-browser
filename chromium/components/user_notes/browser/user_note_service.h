@@ -11,14 +11,20 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/safe_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
 #include "components/user_notes/interfaces/user_note_service_delegate.h"
+#include "components/user_notes/interfaces/user_note_storage.h"
 #include "components/user_notes/interfaces/user_notes_ui_delegate.h"
 #include "components/user_notes/model/user_note.h"
+#include "content/public/browser/weak_document_ptr.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/mojom/annotation/annotation.mojom.h"
 
 class UserNoteUICoordinatorTest;
 
@@ -26,19 +32,23 @@ namespace content {
 class RenderFrameHost;
 }  // namespace content
 
-namespace gfx {
-class Rect;
-}  // namespace gfx
-
 namespace user_notes {
 
+class FrameUserNoteChanges;
 class UserNoteManager;
+class UserNoteMetadataSnapshot;
 
 // Keyed service coordinating the different parts (Renderer, UI layer, storage
 // layer) of the User Notes feature for the current user profile.
-class UserNoteService : public KeyedService, public UserNotesUIDelegate {
+class UserNoteService : public KeyedService,
+                        public UserNotesUIDelegate,
+                        public UserNoteStorage::Observer {
  public:
-  explicit UserNoteService(std::unique_ptr<UserNoteServiceDelegate> delegate);
+  using IdSet =
+      std::unordered_set<base::UnguessableToken, base::UnguessableTokenHash>;
+
+  UserNoteService(std::unique_ptr<UserNoteServiceDelegate> delegate,
+                  std::unique_ptr<UserNoteStorage> storage);
   ~UserNoteService() override;
   UserNoteService(const UserNoteService&) = delete;
   UserNoteService& operator=(const UserNoteService&) = delete;
@@ -73,23 +83,26 @@ class UserNoteService : public KeyedService, public UserNotesUIDelegate {
 
   // Called by a note manager when the user selects "Add a note" from the
   // associated page's context menu. Kicks off the note creation process.
-  // TODO(gujen) and TODO(bokan): Make the renderer notify the manager and the
-  // manager call this method. Also consider pre-creating the agent on the
-  // renderer side so it is immediately ready when the browser side receives the
-  // request.
   void OnAddNoteRequested(content::RenderFrameHost* frame,
-                          std::string original_text,
-                          std::string selector,
-                          gfx::Rect rect);
+                          bool has_selected_text);
+
+  // Called by a note manager when a user selects a web highlight in the page.
+  // This causes the associated note to become focused in the UserNotesUI.
+  void OnWebHighlightFocused(const base::UnguessableToken& id,
+                             content::RenderFrameHost* rfh);
 
   // UserNotesUIDelegate implementation.
-  void OnNoteFocused(const base::UnguessableToken& id) override;
+  void OnNoteSelected(const base::UnguessableToken& id,
+                      content::RenderFrameHost* rfh) override;
   void OnNoteDeleted(const base::UnguessableToken& id) override;
   void OnNoteCreationDone(const base::UnguessableToken& id,
-                          const std::string& note_content) override;
+                          const std::u16string& note_content) override;
   void OnNoteCreationCancelled(const base::UnguessableToken& id) override;
-  void OnNoteUpdated(const base::UnguessableToken& id,
-                     const std::string& note_content) override;
+  void OnNoteEdited(const base::UnguessableToken& id,
+                    const std::u16string& note_content) override;
+
+  // UserNoteStorage implementation
+  void OnNotesChanged() override;
 
  private:
   struct ModelMapEntry {
@@ -103,10 +116,45 @@ class UserNoteService : public KeyedService, public UserNotesUIDelegate {
     std::unordered_set<UserNoteManager*> managers;
   };
 
+  friend class MockUserNoteService;
   friend class UserNoteBaseTest;
   friend class UserNoteInstanceTest;
   friend class UserNoteUtilsTest;
   friend class ::UserNoteUICoordinatorTest;
+  FRIEND_TEST_ALL_PREFIXES(UserNoteServiceTest,
+                           OnNoteMetadataFetchedForNavigationSomeNotes);
+  FRIEND_TEST_ALL_PREFIXES(
+      UserNoteServiceTest,
+      OnNoteMetadataFetchedForNavigationSomeNotesBackground);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteServiceTest,
+                           OnNoteMetadataFetchedForNavigationNoNotes);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteServiceTest,
+                           OnNoteMetadataFetchedForNavigationNoNotesBackground);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteServiceTest, OnNoteMetadataFetched);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteServiceTest, OnNoteModelsFetched);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteServiceTest, OnFrameChangesApplied);
+
+  void InitializeNewNoteForCreation(
+      content::WeakDocumentPtr document,
+      bool is_page_level,
+      mojo::PendingReceiver<blink::mojom::AnnotationAgentHost> host_receiver,
+      mojo::PendingRemote<blink::mojom::AnnotationAgent> agent_remote,
+      const std::string& serialized_selector,
+      const std::u16string& selected_text);
+
+  // Private helpers used when processing note storage changes. Marked virtual
+  // for tests to override.
+  virtual void OnNoteMetadataFetchedForNavigation(
+      const std::vector<content::WeakDocumentPtr>& all_frames,
+      UserNoteMetadataSnapshot metadata_snapshot);
+  virtual void OnNoteMetadataFetched(
+      const std::vector<content::WeakDocumentPtr>& all_frames,
+      UserNoteMetadataSnapshot metadata_snapshot);
+  virtual void OnNoteModelsFetched(
+      const IdSet& new_notes,
+      std::vector<std::unique_ptr<FrameUserNoteChanges>> note_changes,
+      std::vector<std::unique_ptr<UserNote>> notes);
+  virtual void OnFrameChangesApplied(base::UnguessableToken change_id);
 
   // Source of truth for the in-memory note models. Any note currently being
   // displayed in a tab is stored in this data structure. Each entry also
@@ -127,7 +175,15 @@ class UserNoteService : public KeyedService, public UserNotesUIDelegate {
                      base::UnguessableTokenHash>
       creation_map_;
 
+  // A place to store the user note changes of a frame while they are being
+  // applied.
+  std::unordered_map<base::UnguessableToken,
+                     std::unique_ptr<FrameUserNoteChanges>,
+                     base::UnguessableTokenHash>
+      note_changes_in_progress_;
+
   std::unique_ptr<UserNoteServiceDelegate> delegate_;
+  std::unique_ptr<UserNoteStorage> storage_;
   base::WeakPtrFactory<UserNoteService> weak_ptr_factory_{this};
 };
 

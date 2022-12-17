@@ -125,12 +125,15 @@ class VizCompositorThreadRunnerWebView;
 namespace ash {
 class MojoUtils;
 class BrowserDataMigrator;
+bool CameraAppUIShouldEnableLocalOverride(const std::string&);
 }  // namespace ash
 namespace audio {
 class OutputDevice;
 }
 namespace blink {
+class CategorizedWorkerPool;
 class DiskDataAllocator;
+class IdentifiabilityActiveSampler;
 class RTCVideoDecoderAdapter;
 class RTCVideoEncoder;
 class SourceStream;
@@ -139,7 +142,7 @@ class WebRtcVideoFrameAdapter;
 class LegacyWebRtcVideoFrameAdapter;
 class WorkerThread;
 namespace scheduler {
-class WorkerThread;
+class NonMainThreadImpl;
 }
 }  // namespace blink
 namespace cc {
@@ -166,7 +169,6 @@ class BrowserGpuChannelHostFactory;
 class BrowserMainLoop;
 class BrowserProcessIOThread;
 class BrowserTestBase;
-class CategorizedWorkerPool;
 class DesktopCaptureDevice;
 class DWriteFontCollectionProxy;
 class DWriteFontProxyImpl;
@@ -196,7 +198,7 @@ class CronetPrefsManager;
 class CronetContext;
 }  // namespace cronet
 namespace crosapi {
-class LacrosThreadPriorityDelegate;
+class LacrosThreadTypeDelegate;
 }  // namespace crosapi
 namespace dbus {
 class Bus;
@@ -224,17 +226,13 @@ class HistoryReportJniBridge;
 namespace ios_web_view {
 class WebViewBrowserState;
 }
-namespace leveldb_env {
-class DBTracker;
-}
-namespace location {
-namespace nearby {
-namespace chrome {
+namespace leveldb::port {
+class ScopedAllowWait;
+}  // namespace leveldb::port
+namespace location::nearby::chrome {
 class ScheduledExecutor;
 class SubmittableExecutor;
-}  // namespace chrome
-}  // namespace nearby
-}  // namespace location
+}  // namespace location::nearby::chrome
 namespace media {
 class AudioInputDevice;
 class AudioOutputDevice;
@@ -283,6 +281,9 @@ class HttpBridge;
 }  // namespace syncer
 namespace ui {
 class DrmThreadProxy;
+}
+namespace value_store {
+class LeveldbValueStore;
 }
 namespace weblayer {
 class BrowserContextImpl;
@@ -354,11 +355,9 @@ bool HasWaylandDisplay(base::Environment* env);
 
 namespace base {
 
-namespace sequence_manager {
-namespace internal {
+namespace sequence_manager::internal {
 class TaskQueueImpl;
-}
-}  // namespace sequence_manager
+}  // namespace sequence_manager::internal
 
 namespace android {
 class JavaHandlerThread;
@@ -467,7 +466,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class content::WebContentsViewMac;
   friend class cronet::CronetPrefsManager;
   friend class cronet::CronetContext;
-  friend class crosapi::LacrosThreadPriorityDelegate;
+  friend class crosapi::LacrosThreadTypeDelegate;
   friend class ios_web_view::WebViewBrowserState;
   friend class media::FileVideoCaptureDeviceFactory;
   friend class memory_instrumentation::OSMetrics;
@@ -495,6 +494,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend Profile* ::GetLastProfileMac();  // crbug.com/1176734
   friend bool ::HasWaylandDisplay(base::Environment* env);  // crbug.com/1246928
   friend bool PathProviderWin(int, FilePath*);
+  friend bool ash::CameraAppUIShouldEnableLocalOverride(const std::string&);
   friend bool chromeos::system::IsCoreSchedulingAvailable();
   friend int chromeos::system::NumberOfPhysicalCores();
   friend bool disk_cache::CleanupDirectorySync(const base::FilePath&);
@@ -577,9 +577,10 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class ::ChromeNSSCryptoModuleDelegate;
   friend class base::internal::GetAppOutputScopedAllowBaseSyncPrimitives;
   friend class base::SimpleThread;
+  friend class blink::IdentifiabilityActiveSampler;
   friend class blink::SourceStream;
   friend class blink::WorkerThread;
-  friend class blink::scheduler::WorkerThread;
+  friend class blink::scheduler::NonMainThreadImpl;
   friend class chrome_cleaner::ResetShortcutsComponent;
   friend class chrome_cleaner::SystemReportComponent;
   friend class content::BrowserMainLoop;
@@ -592,7 +593,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class functions::ExecScriptScopedAllowBaseSyncPrimitives;
   friend class history_report::HistoryReportJniBridge;
   friend class internal::TaskTracker;
-  friend class leveldb_env::DBTracker;
+  friend class leveldb::port::ScopedAllowWait;
   friend class location::nearby::chrome::ScheduledExecutor;
   friend class location::nearby::chrome::SubmittableExecutor;
   friend class media::BlockingUrlProtocol;
@@ -611,6 +612,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class ::chromeos::system::
       StatisticsProviderImpl;                      // http://crbug.com/125385
   friend class blink::VideoFrameResourceProvider;  // http://crbug.com/878070
+  friend class value_store::LeveldbValueStore;     // http://crbug.com/1330845
 
   ScopedAllowBaseSyncPrimitives() EMPTY_BODY_IF_DCHECK_IS_OFF;
   ~ScopedAllowBaseSyncPrimitives() EMPTY_BODY_IF_DCHECK_IS_OFF;
@@ -652,12 +654,12 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class base::internal::JobTaskSource;
   friend class base::ScopedAllowThreadRecallForStackSamplingProfiler;
   friend class base::StackSamplingProfiler;
+  friend class blink::CategorizedWorkerPool;
   friend class blink::RTCVideoDecoderAdapter;
   friend class blink::RTCVideoEncoder;
   friend class blink::WebRtcVideoFrameAdapter;
   friend class blink::LegacyWebRtcVideoFrameAdapter;
   friend class cc::TileTaskManagerImpl;
-  friend class content::CategorizedWorkerPool;
   friend class content::DesktopCaptureDevice;
   friend class content::EmergencyTraceFinalisationCoordinator;
   friend class content::InProcessUtilityThread;

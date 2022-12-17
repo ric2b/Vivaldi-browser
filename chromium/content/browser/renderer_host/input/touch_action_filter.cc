@@ -429,6 +429,17 @@ bool TouchActionFilter::ShouldSuppressScrolling(
   const float absDeltaXHint = fabs(deltaXHint);
   const float absDeltaYHint = fabs(deltaYHint);
 
+  // We need to wait for main-thread touch action to see if touch region is
+  // writable for stylus handwriting, and accumulate scroll events until then.
+  if ((gesture_event.primary_pointer_type ==
+           blink::WebPointerProperties::PointerType::kPen ||
+       gesture_event.primary_pointer_type ==
+           blink::WebPointerProperties::PointerType::kEraser) &&
+      !is_active_touch_action &&
+      (touch_action & cc::TouchAction::kInternalNotWritable) !=
+          cc::TouchAction::kInternalNotWritable)
+    return true;
+
   cc::TouchAction minimal_conforming_touch_action = cc::TouchAction::kNone;
   if (absDeltaXHint > absDeltaYHint) {
     // If we're performing a horizontal gesture over a region that could

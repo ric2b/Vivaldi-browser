@@ -59,7 +59,7 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
                                   WebAppInstallInfo* web_app_info);
 
 // Form a list of icons to download: Remove icons with invalid urls.
-std::vector<GURL> GetValidIconUrlsToDownload(
+base::flat_set<GURL> GetValidIconUrlsToDownload(
     const WebAppInstallInfo& web_app_info);
 
 // Populate non-product icons in WebAppInstallInfo using the IconsMap. This
@@ -80,6 +80,11 @@ void PopulateProductIcons(WebAppInstallInfo* web_app_info,
 // Record an app banner added to homescreen event to ensure banners are not
 // shown for this app.
 void RecordAppBanner(content::WebContents* contents, const GURL& app_url);
+
+// Records downloaded icons result and http code and code class.
+void RecordDownloadedIconsResultAndHttpStatusCodes(
+    IconsDownloadedResult result,
+    const DownloadedIconsHttpResults& icons_http_results);
 
 // Records the class of http status code (2XX, 3XX, 4XX, 5XX) for each processed
 // icon url.

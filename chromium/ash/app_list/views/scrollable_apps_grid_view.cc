@@ -7,16 +7,12 @@
 #include <memory>
 #include <string>
 
-#include "ash/app_list/app_list_util.h"
 #include "ash/app_list/app_list_view_delegate.h"
 #include "ash/app_list/model/app_list_item.h"
-#include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/views/app_list_item_view.h"
-#include "ash/controls/scroll_view_gradient_helper.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/notreached.h"
 #include "base/time/time.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/animation/bounds_animator.h"
@@ -53,12 +49,12 @@ ScrollableAppsGridView::ScrollableAppsGridView(
     AppsGridViewFolderDelegate* folder_delegate,
     views::ScrollView* parent_scroll_view,
     AppListFolderController* folder_controller,
-    AppsGridViewFocusDelegate* focus_delegate)
+    AppListKeyboardController* keyboard_controller)
     : AppsGridView(a11y_announcer,
                    view_delegate,
                    folder_delegate,
                    folder_controller,
-                   focus_delegate),
+                   keyboard_controller),
       scroll_view_(parent_scroll_view) {
   DCHECK(scroll_view_);
   view_structure_.Init(PagedViewStructure::Mode::kSinglePage);
@@ -86,7 +82,7 @@ void ScrollableAppsGridView::Layout() {
   items_container()->SetBoundsRect(GetContentsBounds());
 
   CalculateIdealBounds();
-  for (int i = 0; i < view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < view_model()->view_size(); ++i) {
     AppListItemView* view = GetItemViewAt(i);
     view->SetBoundsRect(view_model()->ideal_bounds(i));
   }
@@ -119,7 +115,7 @@ gfx::Insets ScrollableAppsGridView::GetTilePadding(int page) const {
 
 gfx::Size ScrollableAppsGridView::GetTileGridSize() const {
   // AppListItemList may contain page break items, so use the view_model().
-  int items = view_model()->view_size();
+  size_t items = view_model()->view_size();
   // Tests sometimes start with 0 items. Ensure space for at least 1 item.
   if (items == 0) {
     items = 1;
@@ -313,7 +309,7 @@ ScrollableAppsGridView::GetVisibleItemIndexRange() const {
   absl::optional<int> first_invisible_row;
 
   const gfx::Rect scroll_view_visible_rect = scroll_view_->GetVisibleRect();
-  for (int view_index = 0; view_index < view_model()->view_size();
+  for (size_t view_index = 0; view_index < view_model()->view_size();
        view_index += cols()) {
     // Calculate an item view's bounds in the scroll content's coordinates.
     gfx::Point item_view_local_origin;

@@ -414,22 +414,25 @@
   <message name="IDS_AUTOFILL_CARD_UNMASK_CONFIRMATION_MESSAGE" desc="Message displayed after tapping a Virtual Card, and the response from the bank indicates that no further verification is required.">
     Your card is confirmed
   </message>
+  <message name="IDS_AUTOFILL_FIDO_AUTHENTICATION_PROMPT_TITLE" desc="Title for FIDO authentication progress dialog">
+      Verifying...
+  </message>
 
   <!-- WebAuthn fingerprint opt-in dialog -->
   <!-- Desktop only -->
   <if expr="not is_ios and not is_android">
     <if expr="is_macosx">
       <message name="IDS_AUTOFILL_WEBAUTHN_OPT_IN_DIALOG_TITLE" desc="Headline asking the user if they want to use their device's platform authenticator to confirm their cards in the future instead of CVC.">
-        Use Touch ID instead of CVC?
+        Use device unlock instead of CVC?
       </message>
       <message name="IDS_AUTOFILL_WEBAUTHN_OPT_IN_DIALOG_TITLE_ERROR" desc="Headline explaining to users there were errors in the attempt to opt in using platform's authenticator.">
-        Couldn't use Touch ID
+        Couldn't use device unlock
       </message>
       <message name="IDS_AUTOFILL_WEBAUTHN_OPT_IN_DIALOG_INSTRUCTION" desc="Subheading that appears below the headline explaining to the user that they won't have to enter their card's security code if they decide to use their device's platform authenticator in the future.">
-        Confirm your cards faster by using Touch ID from now on
+        Confirm your cards faster by using device unlock from now on
       </message>
       <message name="IDS_AUTOFILL_WEBAUTHN_OPT_IN_DIALOG_OK_BUTTON_LABEL" desc="Button that allows the user to use their device's platform authenticator to confirm card use in the future.">
-        Use Touch ID
+        Use device unlock
       </message>
     </if>
     <if expr="is_win">
@@ -605,6 +608,12 @@
     <message name="IDS_AUTOFILL_VIRTUAL_CARD_NUMBER_SNACKBAR_ACTION_TEXT" desc="Text to be displayed as the snackbar action shown after a virtual card number id autofilled.">
       View card
     </message>
+    <message name="IDS_AUTOFILL_VIRTUAL_CARD_ENROLLMENT_ELIGIBLE_TEXT" desc="Text to be displayed in the Settings page as label for cards that are not enrolled into virtual card number, but are eligible." formatter_data="android_java">
+      Virtual card available
+    </message>
+    <message name="IDS_AUTOFILL_VIRTUAL_CARD_ENROLLED_TEXT" desc="Text to be displayed in the Settings page as label for cards that are enrolled into virtual card number." formatter_data="android_java">
+      Virtual card turned on
+    </message>
   </if>
   <!-- virtual cards related strings - end -->
 
@@ -703,7 +712,7 @@
     <message name="IDS_AUTOFILL_PROMO_CODE_OFFER_BUTTON_TOOLTIP_CLICKED" desc="The tooltip message for a button containing a copyable promo code in the merchant promo code offer notification bubble on Desktop. This message is shown when the button is hovered over and if the button has been clicked.">
       Copied to clipboard
     </message>
-    <message name="IDS_AUTOFILL_GPAY_PROMO_CODE_OFFERS_REMINDER_VALUE_PROP_TEXT" desc="The first line of the GPay promo ocde notification bubble, consisting of the value prop text and a see details link">
+    <message name="IDS_AUTOFILL_GPAY_PROMO_CODE_OFFERS_REMINDER_VALUE_PROP_TEXT" desc="The first line of the GPay promo code notification bubble, consisting of the value prop text and a see details link">
       <ph name="VALUE_PROP">$1<ex>5% off on shoes. Up to $50.</ex></ph> <ph name="DETAILS">$2<ex>See Details</ex></ph>
     </message>
   </if>

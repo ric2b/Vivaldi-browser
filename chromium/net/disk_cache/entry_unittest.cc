@@ -606,9 +606,9 @@ void DiskCacheEntryTest::StreamAccess() {
   const int kBufferSize = 1024;
   const int kNumStreams = 3;
   scoped_refptr<net::IOBuffer> reference_buffers[kNumStreams];
-  for (int i = 0; i < kNumStreams; i++) {
-    reference_buffers[i] = base::MakeRefCounted<net::IOBuffer>(kBufferSize);
-    CacheTestFillBuffer(reference_buffers[i]->data(), kBufferSize, false);
+  for (auto& reference_buffer : reference_buffers) {
+    reference_buffer = base::MakeRefCounted<net::IOBuffer>(kBufferSize);
+    CacheTestFillBuffer(reference_buffer->data(), kBufferSize, false);
   }
   scoped_refptr<net::IOBuffer> buffer1 =
       base::MakeRefCounted<net::IOBuffer>(kBufferSize);
@@ -2552,7 +2552,7 @@ TEST_F(DiskCacheEntryTest, SparseClipEnd) {
 
   // Blockfile refuses to deal with sparse indices over 64GiB.
   SparseClipEnd(std::numeric_limits<int64_t>::max(),
-                /* expect_unsupported = */ true);
+                /*expected_unsupported=*/true);
 }
 
 TEST_F(DiskCacheEntryTest, SparseClipEnd2) {
@@ -2561,7 +2561,7 @@ TEST_F(DiskCacheEntryTest, SparseClipEnd2) {
   const int64_t kLimit = 64ll * 1024 * 1024 * 1024;
   // Separate test for blockfile for indices right at the edge of its address
   // space limit. kLimit must match kMaxEndOffset in sparse_control.cc
-  SparseClipEnd(kLimit, /* expect_unsupported = */ false);
+  SparseClipEnd(kLimit, /*expected_unsupported=*/false);
 
   // Test with things after kLimit, too, which isn't an issue for backends
   // supporting the entire 64-bit offset range.
@@ -2594,14 +2594,14 @@ TEST_F(DiskCacheEntryTest, MemoryOnlySparseClipEnd) {
   SetMemoryOnlyMode();
   InitCache();
   SparseClipEnd(std::numeric_limits<int64_t>::max(),
-                /* expect_unsupported = */ false);
+                /* expected_unsupported = */ false);
 }
 
 TEST_F(DiskCacheEntryTest, SimpleSparseClipEnd) {
   SetSimpleCacheMode();
   InitCache();
   SparseClipEnd(std::numeric_limits<int64_t>::max(),
-                /* expect_unsupported = */ false);
+                /* expected_unsupported = */ false);
 }
 
 // Tests that corrupt sparse children are removed automatically.
@@ -2625,16 +2625,16 @@ TEST_F(DiskCacheEntryTest, CleanupSparseEntry) {
 
   std::unique_ptr<TestIterator> iter = CreateIterator();
   int count = 0;
-  std::string child_key[2];
+  std::string child_keys[2];
   while (iter->OpenNextEntry(&entry) == net::OK) {
     ASSERT_TRUE(entry != nullptr);
     // Writing to an entry will alter the LRU list and invalidate the iterator.
     if (entry->GetKey() != key && count < 2)
-      child_key[count++] = entry->GetKey();
+      child_keys[count++] = entry->GetKey();
     entry->Close();
   }
-  for (int i = 0; i < 2; i++) {
-    ASSERT_THAT(OpenEntry(child_key[i], &entry), IsOk());
+  for (const auto& child_key : child_keys) {
+    ASSERT_THAT(OpenEntry(child_key, &entry), IsOk());
     // Overwrite the header's magic and signature.
     EXPECT_EQ(12, WriteData(entry, 2, 0, buf1.get(), 12, false));
     entry->Close();

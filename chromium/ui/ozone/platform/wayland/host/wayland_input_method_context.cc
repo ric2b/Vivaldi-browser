@@ -39,7 +39,7 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "base/check.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/startup/browser_init_params.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #endif
 
 namespace ui {
@@ -75,10 +75,10 @@ bool IsImeEnabled() {
   // Lacros-chrome side, which helps us on releasing.
   // TODO(crbug.com/1159237): In the future, we may want to unify the behavior
   // of ozone/wayland across platforms.
-  const crosapi::mojom::BrowserInitParams* init_params =
-      chromeos::BrowserInitParams::Get();
-  if (init_params && init_params->exo_ime_support !=
-                         crosapi::mojom::ExoImeSupport::kUnsupported) {
+  const chromeos::BrowserParamsProxy* init_params =
+      chromeos::BrowserParamsProxy::Get();
+  if (init_params->ExoImeSupport() !=
+      crosapi::mojom::ExoImeSupport::kUnsupported) {
     return true;
   }
 #endif
@@ -122,12 +122,10 @@ ConvertStyle(uint32_t style) {
 WaylandInputMethodContext::WaylandInputMethodContext(
     WaylandConnection* connection,
     WaylandKeyboard::Delegate* key_delegate,
-    LinuxInputMethodContextDelegate* ime_delegate,
-    bool is_simple)
+    LinuxInputMethodContextDelegate* ime_delegate)
     : connection_(connection),
       key_delegate_(key_delegate),
       ime_delegate_(ime_delegate),
-      is_simple_(is_simple),
       text_input_(nullptr) {
   connection_->wayland_window_manager()->AddObserver(this);
   Init();
@@ -135,8 +133,8 @@ WaylandInputMethodContext::WaylandInputMethodContext(
 
 WaylandInputMethodContext::~WaylandInputMethodContext() {
   if (text_input_) {
+    DismissVirtualKeyboard();
     text_input_->Deactivate();
-    text_input_->HideInputPanel();
   }
   connection_->wayland_window_manager()->RemoveObserver(this);
 }
@@ -147,7 +145,7 @@ void WaylandInputMethodContext::Init(bool initialize_for_testing) {
   // If text input instance is not created then all ime context operations
   // are noop. This option is because in some environments someone might not
   // want to enable ime/virtual keyboard even if it's available.
-  if (use_ozone_wayland_vkb && !is_simple_ && !text_input_ &&
+  if (use_ozone_wayland_vkb && !text_input_ &&
       connection_->text_input_manager_v1()) {
     text_input_ = std::make_unique<ZWPTextInputWrapperV1>(
         connection_, this, connection_->text_input_manager_v1(),
@@ -209,32 +207,24 @@ void WaylandInputMethodContext::Reset() {
 void WaylandInputMethodContext::UpdateFocus(bool has_client,
                                             TextInputType old_type,
                                             TextInputType new_type) {
-  // TODO(b/226781965): Known issue that this does not work.
-  if (is_simple_) {
-    // simple context can be used in any textfield, including password box, and
-    // even if the focused text input client's text input type is
-    // ui::TEXT_INPUT_TYPE_NONE.
-    if (has_client)
-      Focus();
-    else
-      Blur();
-  } else {
-    // Otherwise We only focus when the focus is in a textfield.
-    if (old_type != TEXT_INPUT_TYPE_NONE)
-      Blur();
-    if (new_type != TEXT_INPUT_TYPE_NONE)
-      Focus();
-  }
+  // This prevents unnecessarily hiding/showing the virtual keyboard.
+  bool skip_vk_update =
+      old_type != TEXT_INPUT_TYPE_NONE && new_type != TEXT_INPUT_TYPE_NONE;
+
+  if (old_type != TEXT_INPUT_TYPE_NONE)
+    Blur(skip_vk_update);
+  if (new_type != TEXT_INPUT_TYPE_NONE)
+    Focus(skip_vk_update);
 }
 
-void WaylandInputMethodContext::Focus() {
+void WaylandInputMethodContext::Focus(bool skip_virtual_keyboard_update) {
   focused_ = true;
-  MaybeUpdateActivated();
+  MaybeUpdateActivated(skip_virtual_keyboard_update);
 }
 
-void WaylandInputMethodContext::Blur() {
+void WaylandInputMethodContext::Blur(bool skip_virtual_keyboard_update) {
   focused_ = false;
-  MaybeUpdateActivated();
+  MaybeUpdateActivated(skip_virtual_keyboard_update);
 }
 
 void WaylandInputMethodContext::SetCursorLocation(const gfx::Rect& rect) {
@@ -347,6 +337,21 @@ void WaylandInputMethodContext::SetContentType(TextInputType type,
   text_input_->SetContentType(type, mode, flags, should_do_learning);
 }
 
+void WaylandInputMethodContext::SetGrammarFragmentAtCursor(
+    const GrammarFragment& fragment) {
+  if (!text_input_)
+    return;
+  text_input_->SetGrammarFragmentAtCursor(fragment);
+}
+
+void WaylandInputMethodContext::SetAutocorrectInfo(
+    const gfx::Range& autocorrect_range,
+    const gfx::Rect& autocorrect_bounds) {
+  if (!text_input_)
+    return;
+  text_input_->SetAutocorrectInfo(autocorrect_range, autocorrect_bounds);
+}
+
 VirtualKeyboardController*
 WaylandInputMethodContext::GetVirtualKeyboardController() {
   if (!text_input_)
@@ -421,7 +426,37 @@ void WaylandInputMethodContext::OnPreeditString(
 }
 
 void WaylandInputMethodContext::OnCommitString(base::StringPiece text) {
+  if (pending_keep_selection_) {
+    ime_delegate_->OnConfirmCompositionText(true);
+    pending_keep_selection_ = false;
+    return;
+  }
   ime_delegate_->OnCommit(base::UTF8ToUTF16(text));
+}
+
+void WaylandInputMethodContext::OnCursorPosition(int32_t index,
+                                                 int32_t anchor) {
+  if (surrounding_text_.empty()) {
+    LOG(ERROR) << "SetSurroundingText should run before OnCursorPosition.";
+    return;
+  }
+
+  if (index < 0 || static_cast<uint32_t>(index) > surrounding_text_.size()) {
+    LOG(ERROR) << "Invalid index is specified.";
+    return;
+  }
+  if (anchor < 0 || static_cast<uint32_t>(anchor) > surrounding_text_.size()) {
+    LOG(ERROR) << "Invalid anchor is specified.";
+    return;
+  }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (selection_range_utf8_ == gfx::Range(index, anchor)) {
+    pending_keep_selection_ = true;
+  } else {
+    NOTIMPLEMENTED_LOG_ONCE();
+  }
+#endif
 }
 
 void WaylandInputMethodContext::OnDeleteSurroundingText(int32_t index,
@@ -576,6 +611,33 @@ void WaylandInputMethodContext::OnSetPreeditRegion(
                                     ime_text_spans);
 }
 
+void WaylandInputMethodContext::OnClearGrammarFragments(
+    const gfx::Range& range) {
+  std::vector<size_t> offsets = {range.start(), range.end()};
+  base::UTF8ToUTF16AndAdjustOffsets(surrounding_text_, &offsets);
+  ime_delegate_->OnClearGrammarFragments(gfx::Range(
+      static_cast<uint32_t>(offsets[0]), static_cast<uint32_t>(offsets[1])));
+}
+
+void WaylandInputMethodContext::OnAddGrammarFragment(
+    const GrammarFragment& fragment) {
+  std::vector<size_t> offsets = {fragment.range.start(), fragment.range.end()};
+  base::UTF8ToUTF16AndAdjustOffsets(surrounding_text_, &offsets);
+  ime_delegate_->OnAddGrammarFragment(
+      {GrammarFragment(gfx::Range(static_cast<uint32_t>(offsets[0]),
+                                  static_cast<uint32_t>(offsets[1])),
+                       fragment.suggestion)});
+}
+
+void WaylandInputMethodContext::OnSetAutocorrectRange(const gfx::Range& range) {
+  ime_delegate_->OnSetAutocorrectRange(range);
+}
+
+void WaylandInputMethodContext::OnSetVirtualKeyboardOccludedBounds(
+    const gfx::Rect& screen_bounds) {
+  ime_delegate_->OnSetVirtualKeyboardOccludedBounds(screen_bounds);
+}
+
 void WaylandInputMethodContext::OnInputPanelState(uint32_t state) {
   virtual_keyboard_visible_ = (state & 1) != 0;
   // Note: Currently there's no support of VirtualKeyboardControllerObserver.
@@ -590,10 +652,11 @@ void WaylandInputMethodContext::OnModifiersMap(
 }
 
 void WaylandInputMethodContext::OnKeyboardFocusedWindowChanged() {
-  MaybeUpdateActivated();
+  MaybeUpdateActivated(false);
 }
 
-void WaylandInputMethodContext::MaybeUpdateActivated() {
+void WaylandInputMethodContext::MaybeUpdateActivated(
+    bool skip_virtual_keyboard_update) {
   if (!text_input_)
     return;
 
@@ -613,10 +676,12 @@ void WaylandInputMethodContext::MaybeUpdateActivated() {
   activated_ = activated;
   if (activated) {
     text_input_->Activate(window);
-    text_input_->ShowInputPanel();
+    if (!skip_virtual_keyboard_update)
+      DisplayVirtualKeyboard();
   } else {
+    if (!skip_virtual_keyboard_update)
+      DismissVirtualKeyboard();
     text_input_->Deactivate();
-    text_input_->HideInputPanel();
   }
 }
 

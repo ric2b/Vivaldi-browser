@@ -69,7 +69,7 @@ class CONTENT_EXPORT URLDataSource {
 
   // Return the mimetype that should be sent with this response, or empty
   // string to specify no mime type.
-  virtual std::string GetMimeType(const std::string& path) = 0;
+  virtual std::string GetMimeType(const GURL& url) = 0;
 
   // Returns true if the URLDataSource should replace an existing URLDataSource
   // with the same name that has already been registered. The default is true.
@@ -78,7 +78,7 @@ class CONTENT_EXPORT URLDataSource {
   virtual bool ShouldReplaceExistingSource();
 
   // Returns true if responses from this URLDataSource can be cached.
-  virtual bool AllowCaching(const std::string& path);
+  virtual bool AllowCaching(const GURL& url);
 
   // NOTE(igor@vivaldi.com): Make the original AllowCaching() private to produce
   // compilation errors if Chromium adds more calls to it.

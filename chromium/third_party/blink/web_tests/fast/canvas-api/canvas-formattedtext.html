@@ -24,12 +24,12 @@ function getCanvas2DContext(name)
 
 /*
   This method checks to see if something was rendered on the canvas
-  at the passed in location. The purposed of these tests are not to 
+  at the passed in location. The purposed of these tests are not to
   accuratley validate rendering results but to check that mutations
-  on the CanvasFormattedText succeed, hence the all sanity check 
+  on the CanvasFormattedText succeed, hence the all sanity check
   validates is that there are expected number of rendered pixels.
 
-  After checking, this method also draws a line over the pixels that 
+  After checking, this method also draws a line over the pixels that
   we tested for visual diagnostics.
 */
 function sanity_check_rendering(context, x, y, expect_content=true)
@@ -70,6 +70,24 @@ function assert_exception(f, exception_name, error_message)
   }
 }
 
+function garbageCollect() {
+  if (self.gc) {
+    // Use --expose_gc for V8 (and Node.js)
+    // Exposed in SpiderMonkey shell as well
+    self.gc();
+  } else if (self.GCController) {
+    // Present in some WebKit development environments
+    GCController.collect();
+  } else {
+    /* eslint-disable no-console */
+    console.warn('Tests are running without the ability to do manual garbage ' +
+                 'collection. They will still work, but coverage will be ' +
+                 'suboptimal.');
+    /* eslint-enable no-console */
+  }
+}
+
+
 test(function(t) {
   var text = new CanvasFormattedText();
   text.appendRun(new CanvasFormattedTextRun("A"));
@@ -99,7 +117,7 @@ test(function(t) {
   text.appendRun(run);
   assert_exception(()=> { text.appendRun(run); },
    "InvalidModificationError",
-   "Expect that an already inserted run cant be appended.");
+   "Expect that an already inserted run can't be appended.");
 
    // Check the the canvas formatted text can still render the existing run.
   var context = getCanvas2DContext(t.name);
@@ -171,7 +189,7 @@ test(function(t) {
    assert_exception(()=> { text2[0] = text[0]; },
    "InvalidModificationError",
    "can't set any parented run from another canvas formatted text.");
-   
+
    assert_equals(text.length, 1, "Unexpected length for CanvasFormattedText");
    assert_equals(text2.length, 1,
     "Unexpected length for CanvasFormattedText text2");
@@ -256,7 +274,7 @@ test(function(t) {
   var runA = new CanvasFormattedTextRun("E1");
   var runB = new CanvasFormattedTextRun("E2");
   text.appendRun(runA);
-  text.appendRun(runB);  
+  text.appendRun(runB);
   var context = getCanvas2DContext(t.name);
   context.fillFormattedText(text, 0, 0, 100);
   sanity_check_rendering(context, 2, 0);
@@ -376,13 +394,13 @@ test(function(t) {
   var text = new CanvasFormattedText();
   assert_exception(()=> { text.appendRun(null); },
    "TypeError",
-   "cant append a null run.");
+   "can't append a null run.");
   assert_exception(()=> { text[0] = null; },
    "TypeError",
-   "cant set a null run.");
+   "can't set a null run.");
    assert_exception(()=> { text.insertRun(0, null); },
    "TypeError",
-   "cant insert a null run.");
+   "can't insert a null run.");
 }, 'NullRun: Check that append,insert,set are protected against null run');
 
 test(function(t) {
@@ -397,4 +415,35 @@ test(function(t) {
   context.fillFormattedText(text, 0, 10, 100);
   sanity_check_rendering(context, 3, 10);
 }, 'Constructor Variants');
+
+test(function (t) {
+  // Create an iframe and CFT on that frame
+  var frame = document.body.appendChild(document.createElement("iframe"));
+  var cft = new frame.contentWindow.CanvasFormattedText();
+  var cftrun = new frame.contentWindow.CanvasFormattedTextRun("1");
+
+  // Destroy the frame & call GC to make sure it gets cleaned up
+  frame.remove();
+  frame = null;
+  garbageCollect();
+
+  // Try to use the CFT objects
+  assert_exception(() => { cft.appendRun(cftrun); },
+    "InvalidStateError",
+    "run owned by destroyed iframe");
+}, 'Use after iframe destroyed');
+
+test(function (t) {
+  // Create two iframes, and CFT/run on different frames
+  var frame1 = document.body.appendChild(document.createElement("iframe"));
+  var frame2 = document.body.appendChild(document.createElement("iframe"));
+  var cft = new frame1.contentWindow.CanvasFormattedText();
+  var cftrun = new frame2.contentWindow.CanvasFormattedTextRun("1");
+
+  // Try to use the CFT objects
+  assert_exception(() => { cft.appendRun(cftrun); },
+    "WrongDocumentError",
+    "different iframes");
+}, 'Cft & Run belong to different iframes');
+
 </script>

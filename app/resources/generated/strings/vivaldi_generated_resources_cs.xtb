@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Probuzení z nečinnosti</translation>
 <translation id="119944043368869598">Vymazat vše</translation>
 <translation id="1221825588892235038">Pouze výběr</translation>
+<translation id="1234736487471201993">Vytvořit QR kód pro tento obrázek</translation>
 <translation id="1244303850296295656">Chyba rozšíření</translation>
 <translation id="125220115284141797">Výchozí</translation>
 <translation id="1297175357211070620">Cíl</translation>
@@ -84,7 +85,7 @@
 <translation id="2443487764245141020">Weby také mohou potřebovat rozpoznávat vaše zařízení pomocí identifikátoru</translation>
 <translation id="2445081178310039857">Je vyžadován kořenový adresář rozšíření.</translation>
 <translation id="2470702053775288986">Nepodporovaná rozšíření byla zakázána</translation>
-<translation id="2476578072172137802">Nastavení stránky</translation>
+<translation id="2485422356828889247">Odinstalovat</translation>
 <translation id="2498539833203011245">Minimalizovat</translation>
 <translation id="2509495747794740764">Hodnota měřítka musí být v intervalu 10 až 200.</translation>
 <translation id="253557089021624350">Aktivity zabraňující ukončení</translation>
@@ -108,6 +109,7 @@
 <translation id="2932883381142163287">Nahlásit zneužití</translation>
 <translation id="2941112035454246133">Nízká</translation>
 <translation id="2972581237482394796">&amp;Opakovat</translation>
+<translation id="2993517869960930405">O aplikaci</translation>
 <translation id="3003623123441819449">Mezipaměť CSS</translation>
 <translation id="3008272652534848354">Resetovat oprávnění</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +126,7 @@
 <translation id="3144647712221361880">Otevřít odkaz jako</translation>
 <translation id="3222066309010235055">Předběžně vykreslit: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Vyberte kořenový adresář rozšíření, které chcete zabalit. Chcete-li rozšíření aktualizovat, vyberte také soubor soukromého klíče, jenž chcete znovu použít.</translation>
+<translation id="3275778913554317645">Otevřít jako okno</translation>
 <translation id="3280237271814976245">Uložit &amp;jako…</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
 <translation id="3288047731229977326">Rozšíření spuštěná ve vývojářském režimu mohou poškodit počítač. Pokud nejste vývojář, měli byste s ohledem na svou bezpečnost rozšíření spuštěná v tomto režimu zakázat.</translation>
@@ -133,11 +136,13 @@
 <translation id="3305661444342691068">Zobrazovat náhled PDF</translation>
 <translation id="3308134619352333507">Skrýt tlačítko</translation>
 <translation id="3317459757438853210">Oboustranně</translation>
+<translation id="3331974543021145906">O aplikaci</translation>
 <translation id="3341703758641437857">Povolit přístup ke vzdáleným souborům</translation>
 <translation id="3347086966102161372">K&amp;opírovat adresu obrázku</translation>
 <translation id="3360297538363969800">Tisk se nezdařil. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="3378572629723696641">Toto rozšíření mohlo být poškozeno.</translation>
 <translation id="3387614642886316601">Použít vylepšenou kontrolu pravopisu</translation>
+<translation id="3390013585654699824">Podrobnosti aplikace</translation>
 <translation id="3393582007140394275">Obrazovku nelze sdílet.</translation>
 <translation id="3432227430032737297">Odstranit všechny zobrazené</translation>
 <translation id="345693547134384690">Otevřít obrázek v novém l&amp;istu</translation>
@@ -183,6 +188,7 @@
 <translation id="4109898769411476438">Před importem zavřete prohlížeč</translation>
 <translation id="4130207949184424187">Toto rozšíření změnilo stránku, která se zobrazí při vyhledávání z omniboxu.</translation>
 <translation id="4131410914670010031">Černobíle</translation>
+<translation id="4165986682804962316">Nastavení webu</translation>
 <translation id="4176463684765177261">Zakázano</translation>
 <translation id="4200983522494130825">Nový &amp;list</translation>
 <translation id="4225397296022057997">Na všech webech</translation>
@@ -206,6 +212,7 @@
 <translation id="4711638718396952945">Obnovit nastavení</translation>
 <translation id="4726710629007580002">Na tomto rozšíření závisejí následující rozšíření:</translation>
 <translation id="479536056609751218">Webová stránka, prosté HTML</translation>
+<translation id="4827904420700932487">Vytvořit QR kód pro tento obrázek</translation>
 <translation id="4839303808932127586">Uložit &amp;video jako…</translation>
 <translation id="4840096453115567876">Přesto ukončit soukromý režim?</translation>
 <translation id="488785315393301722">Zobrazit podrobnosti</translation>
@@ -262,6 +269,7 @@
 <translation id="563535393368633106">Před přístupem se zeptat (doporučeno)</translation>
 <translation id="5677928146339483299">Blokováno</translation>
 <translation id="5707185214361380026">Nepodařilo se načíst rozšíření z:</translation>
+<translation id="5713171467967533494">Otevřít v prohlížeči Vivaldi</translation>
 <translation id="5715711091495208045">Zprostředkovatel zásuvného modulu: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Uložit jako PDF</translation>
 <translation id="5747809636523347288">Vložit a &amp;přejít na adresu <ph name="URL" /></translation>
@@ -315,6 +323,7 @@
 <translation id="6550675742724504774">Možnosti</translation>
 <translation id="6579369886355986318">Zobrazit všechny ovláda&amp;cí prvky</translation>
 <translation id="6639554308659482635">Paměť SQLite</translation>
+<translation id="666731172850799929">Otevřít v aplikaci <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Uložte si heslo</translation>
 <translation id="6691936601825168937">&amp;Vpřed</translation>
 <translation id="6798954102094737107">Zásuvný modul: <ph name="PLUGIN_NAME" /></translation>
@@ -430,6 +439,7 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="9003647077635673607">Povolit na všech webových stránkách</translation>
 <translation id="9027459031423301635">Otevří&amp;t odkaz v novém listu</translation>
 <translation id="9056810968620647706">Nebyly nalezeny žádné shody.</translation>
+<translation id="9084064520949870008">Otevřít jako okno</translation>
 <translation id="9137916601698928395">Otevřít odkaz jako <ph name="USER" /></translation>
 <translation id="91568222606626347">Vytvořit zástupce…</translation>
 <translation id="916607977885256133">Obraz v obraze</translation>

@@ -13,13 +13,15 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "components/ad_blocker/adblock_known_sources_handler_impl.h"
+#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_rule_manager_impl.h"
+#include "components/ad_blocker/adblock_rule_service_storage.h"
+#include "components/ad_blocker/adblock_rule_source_handler.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/adblock_filter/adblock_content_injection_provider.h"
-#include "components/request_filter/adblock_filter/adblock_known_sources_handler_impl.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/adblock_resources.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_storage.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 
@@ -32,51 +34,31 @@ class BrowserContext;
 }
 
 namespace adblock_filter {
-class RuleSourceHandler;
 class AdBlockRequestFilter;
 
-class RuleServiceImpl : public RuleService {
+class RuleServiceImpl : public RuleServiceContent,
+                        public RuleManager::Observer {
  public:
-  explicit RuleServiceImpl(content::BrowserContext* context);
+  explicit RuleServiceImpl(content::BrowserContext* context,
+                           RuleSourceHandler::RulesCompiler rules_compiler,
+                           std::string locale);
   ~RuleServiceImpl() override;
   RuleServiceImpl(const RuleServiceImpl&) = delete;
   RuleServiceImpl& operator=(const RuleServiceImpl&) = delete;
 
   void Load();
-  Delegate* delegate() { return delegate_; }
-
-  bool AddRulesSource(const KnownRuleSource& known_source);
-  void DeleteRuleSource(const KnownRuleSource& known_source);
 
   // Implementing RuleService
-  void SetDelegate(Delegate* delegate) override;
   bool IsLoaded() const override;
   bool IsRuleGroupEnabled(RuleGroup group) const override;
   void SetRuleGroupEnabled(RuleGroup group, bool enabled) override;
-  absl::optional<RuleSource> GetRuleSource(RuleGroup group,
-                                           uint32_t source_id) override;
-  std::map<uint32_t, RuleSource> GetRuleSources(RuleGroup group) const override;
-  bool FetchRuleSourceNow(RuleGroup group, uint32_t source_id) override;
-  void SetActiveExceptionList(RuleGroup group, ExceptionsList list) override;
-  ExceptionsList GetActiveExceptionList(RuleGroup group) const override;
-
-  void AddExceptionForDomain(RuleGroup group,
-                             ExceptionsList list,
-                             const std::string& domain) override;
-  void RemoveExceptionForDomain(RuleGroup group,
-                                ExceptionsList list,
-                                const std::string& domain) override;
-  void RemoveAllExceptions(RuleGroup group, ExceptionsList list) override;
-  const std::set<std::string>& GetExceptions(
-      RuleGroup group,
-      ExceptionsList list) const override;
-  bool IsExemptOfFiltering(RuleGroup group, url::Origin origin) const override;
   bool IsDocumentBlocked(RuleGroup group,
                          content::RenderFrameHost* frame,
                          const GURL& url) const override;
-  void AddObserver(Observer* observer) override;
-  void RemoveObserver(Observer* observer) override;
+  void AddObserver(RuleService::Observer* observer) override;
+  void RemoveObserver(RuleService::Observer* observer) override;
   std::string GetRulesIndexChecksum(RuleGroup group) override;
+  RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   BlockedUrlsReporter* GetBlockerUrlsReporter() override;
   void InitializeCosmeticFilter(CosmeticFilter* filter) override;
@@ -84,36 +66,21 @@ class RuleServiceImpl : public RuleService {
   // Implementing KeyedService
   void Shutdown() override;
 
- private:
-  void OnStateLoaded(
-      std::unique_ptr<RuleServiceStorage::LoadResult> load_result);
+  // Implementing RuleManager::Observer
+  void OnExceptionListChanged(RuleGroup group,
+                              RuleManager::ExceptionsList list) override;
 
-  void OnSourceUpdated(RuleSourceHandler* rule_source_handler);
+ private:
+  void OnStateLoaded(RuleServiceStorage::LoadResult load_result);
 
   void OnRulesIndexChanged();
   void OnRulesIndexLoaded(RuleGroup group);
-  void OnRulesBufferReadFailCallback(RuleGroup rule_group, uint32_t source_id);
-
-  Delegate* delegate_ = nullptr;
-
-  std::map<int64_t, std::unique_ptr<RuleSourceHandler>>& GetSourceMap(
-      RuleGroup group);
-
-  const std::map<int64_t, std::unique_ptr<RuleSourceHandler>>& GetSourceMap(
-      RuleGroup group) const;
 
   void AddRequestFilter(RuleGroup group);
 
   content::BrowserContext* context_;
-  std::array<std::map<int64_t, std::unique_ptr<RuleSourceHandler>>,
-             kRuleGroupCount>
-      rule_sources_;
-  std::array<ExceptionsList, kRuleGroupCount> active_exceptions_lists_ = {
-      kProcessList, kProcessList};
-
-  std::array<std::array<std::set<std::string>, kExceptionListCount>,
-             kRuleGroupCount>
-      exceptions_;
+  RuleSourceHandler::RulesCompiler rules_compiler_;
+  std::string locale_;
 
   std::array<absl::optional<RulesIndexManager>, kRuleGroupCount>
       index_managers_;
@@ -133,11 +100,12 @@ class RuleServiceImpl : public RuleService {
   absl::optional<Resources> resources_;
 
   bool is_loaded_ = false;
+  absl::optional<RuleManagerImpl> rule_manager_;
   absl::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<RuleService::Observer> observers_;
 };
 
 }  // namespace adblock_filter

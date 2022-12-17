@@ -19,6 +19,8 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/threading/thread_local.h"
+#include "base/trace_event/interned_args_helper.h"
 #include "base/trace_event/typed_macros.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
@@ -28,6 +30,7 @@
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "mojo/public/cpp/bindings/sync_event_watcher.h"
 #include "mojo/public/cpp/bindings/thread_safe_proxy.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_mojo_event_info.pbzero.h"
 
 namespace mojo {
@@ -314,9 +317,27 @@ class ResponderThunk : public MessageReceiverWithStatus {
 
 // ----------------------------------------------------------------------------
 
+InterfaceEndpointClient::PendingAsyncResponse::PendingAsyncResponse(
+    uint32_t request_message_name,
+    std::unique_ptr<MessageReceiver> responder)
+    : request_message_name(request_message_name),
+      responder(std::move(responder)) {}
+
+InterfaceEndpointClient::PendingAsyncResponse::PendingAsyncResponse(
+    PendingAsyncResponse&&) = default;
+
+InterfaceEndpointClient::PendingAsyncResponse&
+InterfaceEndpointClient::PendingAsyncResponse::operator=(
+    PendingAsyncResponse&&) = default;
+
+InterfaceEndpointClient::PendingAsyncResponse::~PendingAsyncResponse() =
+    default;
+
 InterfaceEndpointClient::SyncResponseInfo::SyncResponseInfo(
+    uint32_t request_message_name,
     bool* in_response_received)
-    : response_received(in_response_received) {}
+    : request_message_name(request_message_name),
+      response_received(in_response_received) {}
 
 InterfaceEndpointClient::SyncResponseInfo::~SyncResponseInfo() {}
 
@@ -422,7 +443,7 @@ InterfaceEndpointClient::InterfaceEndpointClient(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     uint32_t interface_version,
     const char* interface_name,
-    MessageToStableIPCHashCallback ipc_hash_callback,
+    MessageToMethodInfoCallback method_info_callback,
     MessageToMethodNameCallback method_name_callback)
     : expect_sync_requests_(expect_sync_requests),
       handle_(std::move(handle)),
@@ -431,7 +452,7 @@ InterfaceEndpointClient::InterfaceEndpointClient(
       task_runner_(std::move(task_runner)),
       control_message_handler_(this, interface_version),
       interface_name_(interface_name),
-      ipc_hash_callback_(ipc_hash_callback),
+      method_info_callback_(method_info_callback),
       method_name_callback_(method_name_callback) {
   DCHECK(handle_.is_valid());
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -604,6 +625,7 @@ bool InterfaceEndpointClient::SendMessageWithResponder(
   // message before calling |SendMessage()| below.
 #endif
 
+  const uint32_t message_name = message->name();
   const bool is_sync = message->has_flag(Message::kFlagIsSync);
   const bool exclusive_wait = message->has_flag(Message::kFlagNoInterrupt);
   if (!controller_->SendMessage(message))
@@ -620,7 +642,8 @@ bool InterfaceEndpointClient::SendMessageWithResponder(
       controller_->RegisterExternalSyncWaiter(request_id);
     }
     base::AutoLock lock(async_responders_lock_);
-    async_responders_[request_id] = std::move(responder);
+    async_responders_.emplace(
+        request_id, PendingAsyncResponse{message_name, std::move(responder)});
     return true;
   }
 
@@ -628,7 +651,8 @@ bool InterfaceEndpointClient::SendMessageWithResponder(
 
   bool response_received = false;
   sync_responses_.insert(std::make_pair(
-      request_id, std::make_unique<SyncResponseInfo>(&response_received)));
+      request_id,
+      std::make_unique<SyncResponseInfo>(message_name, &response_received)));
 
   base::WeakPtr<InterfaceEndpointClient> weak_self =
       weak_ptr_factory_.GetWeakPtr();
@@ -672,6 +696,12 @@ bool InterfaceEndpointClient::HandleIncomingMessage(Message* message) {
 
 void InterfaceEndpointClient::NotifyError(
     const absl::optional<DisconnectReason>& reason) {
+  TRACE_EVENT("toplevel", "Closed mojo endpoint",
+              [&](perfetto::EventContext& ctx) {
+                auto* info = ctx.event()->set_chrome_mojo_event_info();
+                info->set_mojo_interface_tag(interface_name_);
+              });
+
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (encountered_error_)
@@ -806,13 +836,13 @@ void InterfaceEndpointClient::ResetFromAnotherSequenceUnsafe() {
 }
 
 void InterfaceEndpointClient::ForgetAsyncRequest(uint64_t request_id) {
-  std::unique_ptr<MessageReceiver> responder;
+  absl::optional<PendingAsyncResponse> response;
   {
     base::AutoLock lock(async_responders_lock_);
     auto it = async_responders_.find(request_id);
     if (it == async_responders_.end())
       return;
-    responder = std::move(it->second);
+    response = std::move(it->second);
     async_responders_.erase(it);
   }
 }
@@ -845,8 +875,29 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
               perfetto::StaticString{method_name_callback_(*message)},
               [&](perfetto::EventContext& ctx) {
                 auto* info = ctx.event()->set_chrome_mojo_event_info();
-                info->set_mojo_interface_tag(interface_name_);
-                info->set_ipc_hash(ipc_hash_callback_(*message));
+                // Generate mojo interface tag only for local traces.
+                //
+                // This saves trace buffer space for field traces. The
+                // interface tag can be extracted from the interface method
+                // after symbolization.
+                //
+                // For local traces, this produces a raw string so that the
+                // trace doesn't require symbolization to be useful.
+                if (!ctx.ShouldFilterDebugAnnotations()) {
+                  info->set_mojo_interface_tag(interface_name_);
+                }
+                const auto method_info = method_info_callback_(*message);
+                if (method_info) {
+                  info->set_ipc_hash((*method_info)());
+                  const auto method_address =
+                      reinterpret_cast<uintptr_t>(method_info);
+                  const absl::optional<size_t> location_iid =
+                      base::trace_event::InternedUnsymbolizedSourceLocation::
+                          Get(&ctx, method_address);
+                  if (location_iid) {
+                    info->set_mojo_interface_method_iid(*location_iid);
+                  }
+                }
 
                 static const uint8_t* flow_enabled =
                     TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED("toplevel.flow");
@@ -893,6 +944,10 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
         return false;
 
       if (it->second) {
+        if (message->name() != it->second->request_message_name) {
+          return false;
+        }
+
         it->second->response = std::move(*message);
         *it->second->response_received = true;
         return true;
@@ -903,18 +958,22 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
       sync_responses_.erase(it);
     }
 
-    std::unique_ptr<MessageReceiver> responder;
+    absl::optional<PendingAsyncResponse> pending_response;
     {
       base::AutoLock lock(async_responders_lock_);
       auto it = async_responders_.find(request_id);
       if (it == async_responders_.end())
         return false;
-      responder = std::move(it->second);
+      pending_response = std::move(it->second);
       async_responders_.erase(it);
     }
 
+    if (message->name() != pending_response->request_message_name) {
+      return false;
+    }
+
     internal::MessageDispatchContext dispatch_context(message);
-    return responder->Accept(message);
+    return pending_response->responder->Accept(message);
   } else {
     if (mojo::internal::ControlMessageHandler::IsControlMessage(message))
       return control_message_handler_.Accept(message);

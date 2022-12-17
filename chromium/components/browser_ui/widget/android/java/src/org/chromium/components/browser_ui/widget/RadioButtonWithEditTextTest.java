@@ -237,7 +237,7 @@ public class RadioButtonWithEditTextTest {
 
     @Test
     @SmallTest
-    @DisabledTest(message = "https://crbug.com/1318382")
+    @DisabledTest(message = "Test is flaky: https://crbug.com/1344713")
     public void testFocusChange() {
         Assert.assertFalse(mRadioButtonWithEditText.hasFocus());
         TestThreadUtils.runOnUiThreadBlocking(() -> { mRadioButtonWithEditText.setChecked(true); });

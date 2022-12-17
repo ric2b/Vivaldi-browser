@@ -9,8 +9,8 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/ash/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
 #include "chromeos/assistant/internal/libassistant/shared_headers.h"
-#include "chromeos/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
@@ -20,18 +20,18 @@ namespace libassistant {
 // Class to provide media data source for audio stream decoder.
 // Internally it will read media data from |delegate_|.
 class AudioMediaDataSource
-    : public chromeos::assistant::mojom::AssistantMediaDataSource {
+    : public ash::assistant::mojom::AssistantMediaDataSource {
  public:
   explicit AudioMediaDataSource(
-      mojo::PendingReceiver<
-          chromeos::assistant::mojom::AssistantMediaDataSource> receiver);
+      mojo::PendingReceiver<ash::assistant::mojom::AssistantMediaDataSource>
+          receiver);
 
   AudioMediaDataSource(const AudioMediaDataSource&) = delete;
   AudioMediaDataSource& operator=(const AudioMediaDataSource&) = delete;
 
   ~AudioMediaDataSource() override;
 
-  // chromeos::assistant::mojom::MediaDataSource implementation.
+  // ash::assistant::mojom::MediaDataSource implementation.
   // Must be called after |set_delegate()|.
   // The caller must wait for callback to finish before issuing the next read.
   void Read(uint32_t size, ReadCallback callback) override;

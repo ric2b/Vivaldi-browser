@@ -4,35 +4,25 @@
 
 #include "ash/clipboard/clipboard_history.h"
 
+#include <deque>
+
+#include "ash/clipboard/clipboard_history_metrics.h"
 #include "ash/clipboard/clipboard_history_util.h"
-#include "ash/clipboard/clipboard_nudge_controller.h"
+#include "ash/clipboard/scoped_clipboard_history_pause_impl.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/token.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/clipboard_data.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_non_backed.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 
 namespace ash {
 
-namespace {
-
-// The different operations `ClipboardHistory` sees. These values are written to
-// logs. New enum values can be added, but existing enums must never be
-// renumbered, deleted, or reused. Keep this up to date with the
-// `ClipboardHistoryOperation` enum in enums.xml.
-enum class ClipboardHistoryOperation {
-  // Emitted when the user initiates a clipboard write.
-  kCopy = 0,
-
-  // Emitted when the user initiates a clipboard read.
-  kPaste = 1,
-
-  // Insert new types above this line.
-  kMaxValue = kPaste
-};
-
-}  // namespace
+using PauseBehavior = ClipboardHistoryUtil::PauseBehavior;
 
 ClipboardHistory::ClipboardHistory() {
   ui::ClipboardMonitor::GetInstance()->AddObserver(this);
@@ -78,6 +68,7 @@ void ClipboardHistory::RemoveItemForId(const base::UnguessableToken& id) {
 
   auto removed = std::move(*iter);
   history_list_.erase(iter);
+  SyncClipboardToClipboardHistory();
   for (auto& observer : observers_)
     observer.OnClipboardHistoryItemRemoved(removed);
 }
@@ -86,20 +77,22 @@ void ClipboardHistory::OnClipboardDataChanged() {
   if (!ClipboardHistoryUtil::IsEnabledInCurrentMode())
     return;
 
-  if (num_pause_ > 0)
+  if (!pauses_.empty() &&
+      pauses_.front().pause_behavior == PauseBehavior::kDefault) {
     return;
+  }
 
+  // The clipboard may not exist in tests.
   auto* clipboard = ui::ClipboardNonBacked::GetForCurrentThread();
-  // Clipboard may not exist in tests.
   if (!clipboard)
     return;
 
   ui::DataTransferEndpoint data_dst(ui::EndpointType::kClipboardHistory);
   const auto* clipboard_data = clipboard->GetClipboardData(&data_dst);
   if (!clipboard_data) {
-    // `clipboard_data` is only empty when the Clipboard is cleared. This is
-    // done to prevent data leakage into or from locked forms(Locked Fullscreen
-    // state). Clear ClipboardHistory.
+    // `clipboard_data` is only empty when the clipboard is cleared. This is
+    // done to prevent data leakage into or from locked states (e.g., locked
+    // fullscreen). Clipboard history should also be cleared in this case.
     commit_data_weak_factory_.InvalidateWeakPtrs();
     Clear();
     return;
@@ -117,14 +110,19 @@ void ClipboardHistory::OnClipboardDataChanged() {
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&ClipboardHistory::MaybeCommitData,
-                     commit_data_weak_factory_.GetWeakPtr(), *clipboard_data));
+                     commit_data_weak_factory_.GetWeakPtr(), *clipboard_data,
+                     /*is_reorder_on_paste=*/!pauses_.empty() &&
+                         pauses_.front().pause_behavior ==
+                             PauseBehavior::kAllowReorderOnPaste));
 
-  // Debounce calls to `OnClipboardOperation()`. Certain surfaces
-  // (Omnibox) may Read/Write to the clipboard multiple times in one user
-  // initiated operation. Add a delay because PostTask is too fast to debounce
-  // multiple operations through the async web clipboard API. See
-  // https://crbug.com/1167403.
-  if (num_metrics_pause_ == 0) {
+  // If clipboard history was paused with a contingency that allowed data to be
+  // committed, the operation that changed clipboard data was not a user's copy.
+  if (pauses_.empty()) {
+    // Debounce calls to `OnClipboardOperation()`. Certain surfaces
+    // (Omnibox) may read/write to the clipboard multiple times in one
+    // user-initiated operation. Add a delay because `PostTask()` is too fast to
+    // debounce multiple operations through the async web clipboard API. See
+    // https://crbug.com/1167403.
     clipboard_histogram_weak_factory_.InvalidateWeakPtrs();
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
@@ -136,13 +134,13 @@ void ClipboardHistory::OnClipboardDataChanged() {
 }
 
 void ClipboardHistory::OnClipboardDataRead() {
-  if (num_pause_ > 0 || num_metrics_pause_ > 0)
+  if (!pauses_.empty())
     return;
 
   // Debounce calls to `OnClipboardOperation()`. Certain surfaces
-  // (Omnibox) may Read/Write to the clipboard multiple times in one user
-  // initiated operation. Add a delay because PostTask is too fast to debounce
-  // multiple operations through the async web clipboard API. See
+  // (Omnibox) may read/write to the clipboard multiple times in one
+  // user-initiated operation. Add a delay because `PostTask()` is too fast to
+  // debounce multiple operations through the async web clipboard API. See
   // https://crbug.com/1167403.
   clipboard_histogram_weak_factory_.InvalidateWeakPtrs();
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
@@ -183,7 +181,34 @@ base::WeakPtr<ClipboardHistory> ClipboardHistory::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void ClipboardHistory::MaybeCommitData(ui::ClipboardData data) {
+void ClipboardHistory::SyncClipboardToClipboardHistory() {
+  // The clipboard may not exist in tests.
+  auto* clipboard = ui::ClipboardNonBacked::GetForCurrentThread();
+  if (!clipboard)
+    return;
+
+  ui::DataTransferEndpoint data_dst(ui::EndpointType::kClipboardHistory);
+  const auto* clipboard_data = clipboard->GetClipboardData(&data_dst);
+
+  // Only modify the clipboard if doing so would change its data, so as to avoid
+  // extraneous notifications to clipboard observers. If there is a change to
+  // make, pause clipboard history so that making the clipboard consistent with
+  // clipboard history does not cause clipboard history to update again.
+  ScopedClipboardHistoryPauseImpl scoped_pause(this);
+  if (history_list_.empty()) {
+    if (clipboard_data) {
+      static_cast<ui::Clipboard*>(clipboard)->Clear(
+          ui::ClipboardBuffer::kCopyPaste);
+    }
+  } else if (const auto& top_of_history_data = history_list_.front().data();
+             top_of_history_data != *clipboard_data) {
+    clipboard->WriteClipboardData(
+        std::make_unique<ui::ClipboardData>(top_of_history_data));
+  }
+}
+
+void ClipboardHistory::MaybeCommitData(ui::ClipboardData data,
+                                       bool is_reorder_on_paste) {
   if (!ClipboardHistoryUtil::IsSupported(data))
     return;
 
@@ -196,7 +221,12 @@ void ClipboardHistory::MaybeCommitData(ui::ClipboardData data) {
     // instead of creating a new one because creating a new one will result in a
     // new unique identifier.
     history_list_.splice(history_list_.begin(), history_list_, iter);
+    base::UmaHistogramEnumeration("Ash.ClipboardHistory.ReorderType",
+                                  is_reorder_on_paste
+                                      ? ClipboardHistoryReorderType::kOnPaste
+                                      : ClipboardHistoryReorderType::kOnCopy);
   } else {
+    DCHECK(!is_reorder_on_paste);
     history_list_.emplace_front(std::move(data));
   }
 
@@ -211,12 +241,18 @@ void ClipboardHistory::MaybeCommitData(ui::ClipboardData data) {
   }
 }
 
-void ClipboardHistory::Pause(bool metrics_only) {
-  ++(metrics_only ? num_metrics_pause_ : num_pause_);
+const base::Token& ClipboardHistory::Pause(PauseBehavior pause_behavior) {
+  pauses_.push_front({base::Token::CreateRandom(), pause_behavior});
+  return pauses_.front().pause_id;
 }
 
-void ClipboardHistory::Resume(bool metrics_only) {
-  --(metrics_only ? num_metrics_pause_ : num_pause_);
+void ClipboardHistory::Resume(const base::Token& pause_id) {
+  auto pause_it = std::find_if(pauses_.begin(), pauses_.end(),
+                               [&pause_id](const auto& pause_info) {
+                                 return pause_info.pause_id == pause_id;
+                               });
+  DCHECK(pause_it != pauses_.end());
+  pauses_.erase(pause_it);
 }
 
 }  // namespace ash

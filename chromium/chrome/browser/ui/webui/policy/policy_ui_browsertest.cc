@@ -415,7 +415,13 @@ void PolicyUITest::VerifyExportingPolicies(
   EXPECT_EQ(expected, *value_ptr);
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyUITest, WritePoliciesToJSONFile) {
+#if !defined(NDEBUG)
+// Slow and hangs often in debug builds. https://crbug.com/1338642
+#define MAYBE_WritePoliciesToJSONFile DISABLED_WritePoliciesToJSONFile
+#else
+#define MAYBE_WritePoliciesToJSONFile WritePoliciesToJSONFile
+#endif
+IN_PROC_BROWSER_TEST_F(PolicyUITest, MAYBE_WritePoliciesToJSONFile) {
   // Set policy values and generate expected dictionary.
   policy::PolicyMap values;
   base::DictionaryValue expected_values;
@@ -491,12 +497,13 @@ IN_PROC_BROWSER_TEST_F(PolicyUITest, WritePoliciesToJSONFile) {
   // contents).
   VerifyExportingPolicies(expected_values);
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   // This also checks that we do not bypass the policy that blocks file
   // selection dialogs. This is a desktop only policy.
   values.Set(policy::key::kAllowFileSelectionDialogs,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
              policy::POLICY_SOURCE_PLATFORM, base::Value(false), nullptr);
+
   popups_blocked_for_urls.Append("eeeeee");
   values.Set(policy::key::kPopupsBlockedForUrls, policy::POLICY_LEVEL_MANDATORY,
              policy::POLICY_SCOPE_MACHINE, policy::POLICY_SOURCE_PLATFORM,

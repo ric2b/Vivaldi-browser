@@ -1265,7 +1265,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
 
   blink::mojom::TextAutosizerPageInfo received_page_info;
   auto interceptor = std::make_unique<TextAutosizerPageInfoInterceptor>(
-      web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
 #if BUILDFLAG(IS_ANDROID)
   prefs.device_scale_adjustment += 0.05f;
   // Change the device scale adjustment to trigger a RemotePageInfo update.
@@ -1301,8 +1301,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
 
   GURL c_url = embedded_test_server()->GetURL("c.com", "/title1.html");
   // The following is a hack so we can get an IPC watcher connected to the
-  // RenderProcessHost for C before the RenderView is created for it, and the
-  // TextAutosizerPageInfo IPC is sent to it.
+  // RenderProcessHost for C before the `blink::WebView` is created for it, and
+  // the TextAutosizerPageInfo IPC is sent to it.
   scoped_refptr<SiteInstance> c_site =
       web_contents()->GetSiteInstance()->GetRelatedSiteInstance(c_url);
   // Force creation of a render process for c's SiteInstance, this will get
@@ -1383,8 +1383,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // good way to avoid this due to various device-scale-factor. (e.g. when
   // dsf=3.375, ceil(round(50 * 3.375) / 3.375) = 51. Thus, we allow the screen
   // size in dip to be off by 1 here.
-  EXPECT_NEAR(50, connector->screen_space_rect_in_dip().size().width(), 1);
-  EXPECT_NEAR(50, connector->screen_space_rect_in_dip().size().height(), 1);
+  EXPECT_NEAR(50, connector->rect_in_parent_view_in_dip().size().width(), 1);
+  EXPECT_NEAR(50, connector->rect_in_parent_view_in_dip().size().height(), 1);
   EXPECT_EQ(gfx::Size(100, 100), rwhv_nested->GetViewBounds().size());
   EXPECT_EQ(gfx::Size(100, 100), connector->local_frame_size_in_dip());
   EXPECT_EQ(connector->local_frame_size_in_pixels(),
@@ -2414,10 +2414,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
       actions_template.c_str(), scroll_start_location_in_screen.x(),
       scroll_start_location_in_screen.y(), scroll_end_location_in_screen.x(),
       scroll_end_location_in_screen.y());
-  base::JSONReader::ValueWithError parsed_json =
+  auto parsed_json =
       base::JSONReader::ReadAndReturnValueWithError(touch_move_sequence_json);
-  ASSERT_TRUE(parsed_json.value) << parsed_json.error_message;
-  ActionsParser actions_parser(std::move(*parsed_json.value));
+  ASSERT_TRUE(parsed_json.has_value()) << parsed_json.error().message;
+  ActionsParser actions_parser(std::move(*parsed_json));
 
   ASSERT_TRUE(actions_parser.Parse());
   auto synthetic_scroll_gesture =

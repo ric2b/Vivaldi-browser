@@ -1,167 +1,51 @@
 import("//build/config/features.gni")
 import("//vivaldi/gn/config/features.gni")
 
-if (system_proprietary_codecs) {
-
-update_target("//media/test:pipeline_integration_test_base") {
-  sources += [
-    "//vivaldi/platform_media/test/platform_media_pipeline_integration_test.cc",
-    "//vivaldi/platform_media/test/ipc_pipeline_test_setup.h",
-    "//vivaldi/platform_media/test/ipc_pipeline_test_setup.cc",
-  ]
-
-  if (is_mac) {
-    sources += [
-      "//vivaldi/platform_media/test/mac/avf_data_buffer_queue_unittest.mm",
-      "//vivaldi/platform_media/test/mac/data_request_handler_unittest.mm",
-      "//vivaldi/platform_media/test/ipc_pipeline_test_setup_mac.mm",
-    ]
-  }
-
-  deps += [
-    "//vivaldi/platform_media/common:pipeline_types",
-  ]
+if (vivaldi_use_system_media_demuxer) {
+  import("//vivaldi/platform_media/ipc_demuxer/source_updates.gni")
 }
 
-# Test files
-
-#vivaldi/testdata/test/platform_media/bear_truncated.mp4
-#vivaldi/testdata/test/platform_media/config_change_audio.mp4
-#vivaldi/testdata/test/platform_media/config_change_video.mp4
-#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
-#vivaldi/testdata/test/platform_media/bear-320x240-16x9-aspect.mp4
-#vivaldi/testdata/test/platform_media/bear_corrupt.mp4
-#vivaldi/testdata/test/platform_media/nonzero-start-time.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-bear-320x240-16x9-aspect.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-bear_truncated.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-config_change_audio.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-config_change_video.mp4
-#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
+if (system_proprietary_codecs) {
 
 if (is_mac) {
   update_target("//sandbox/policy/mac:package_sb_files") {
-    sources -= ["renderer.sb",
-                "gpu.sb"]
-    sources += [get_label_info("//vivaldi/platform_media/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
-    sources += [get_label_info("//vivaldi/platform_media/mac:generate_gpu_sb_files", "target_gen_dir")+"/gpu.sb"]
-    deps = ["//vivaldi/platform_media/mac:generate_sb_files",
-            "//vivaldi/platform_media/mac:generate_gpu_sb_files"]
+    if (!defined(deps)) {
+      deps = []
+    }
+    sources -= ["renderer.sb"]
+    sources += [get_label_info("//vivaldi/platform_media/sandbox/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
+    deps += ["//vivaldi/platform_media/sandbox/mac:generate_sb_files"]
   }
-}
-
-update_template_instance("//gpu/ipc/common:gpu_channel_mojom") {
-  # In gpu_channel.mojom allow [EnableIf=system_proprietary_codecs] to add our
-  # extra methods only when the platform media is enabled.
-  if (!defined(enabled_features)) {
-    enabled_features = []
-  }
-  enabled_features += [
-    "system_proprietary_codecs"
-  ]
-}
-
-update_target("//media/filters:filters") {
-  deps += [ "//vivaldi/platform_media/common:mojo" ]
 }
 
 update_target("//media/renderers:renderers") {
-   sources += [
-    "//vivaldi/platform_media/common/feature_toggles.h",
-    "//vivaldi/platform_media/common/platform_logging_util.cc",
-    "//vivaldi/platform_media/common/platform_logging_util.h",
-    "//vivaldi/platform_media/gpu/data_source/ipc_data_source.cc",
-    "//vivaldi/platform_media/gpu/data_source/ipc_data_source.h",
-    "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.cc",
-    "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.h",
-    "//vivaldi/platform_media/gpu/pipeline/ipc_media_pipeline.cc",
-    "//vivaldi/platform_media/gpu/pipeline/ipc_media_pipeline.h",
-    "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline.h",
-    "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline_factory.h",
-    "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.cc",
-    "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_factory.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_factory.h",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder.cc",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder.h",
-    "//vivaldi/platform_media/renderer/decoders/video_frame_transformer.cc",
-    "//vivaldi/platform_media/renderer/decoders/video_frame_transformer.h",
-    "//vivaldi/platform_media/renderer/decoders/vivaldi_decoder_config.h",
-    "//vivaldi/platform_media/renderer/decoders/vivaldi_decoder_config.cc",
-    "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.cc",
-    "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.h",
-    "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.cc",
-    "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.h",
+  sources += [
+    "//vivaldi/platform_media/decoders/platform_logging_util.cc",
+    "//vivaldi/platform_media/decoders/platform_logging_util.h",
+    "//vivaldi/platform_media/decoders/debug_buffer_logger.cc",
+    "//vivaldi/platform_media/decoders/debug_buffer_logger.h",
+    "//vivaldi/platform_media/decoders/vivaldi_decoder_config.h",
+    "//vivaldi/platform_media/decoders/vivaldi_decoder_config.cc",
   ]
   if (is_mac) {
     sources += [
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_audio_tap.h",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_audio_tap.mm",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_data_buffer_queue.mm",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_data_buffer_queue.h",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_media_decoder.h",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_media_decoder.mm",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_media_reader.h",
-      "//vivaldi/platform_media/gpu/decoders/mac/avf_media_reader.mm",
-      "//vivaldi/platform_media/gpu/decoders/mac/data_request_handler.h",
-      "//vivaldi/platform_media/gpu/decoders/mac/data_request_handler.mm",
-      "//vivaldi/platform_media/gpu/decoders/mac/data_source_loader.h",
-      "//vivaldi/platform_media/gpu/decoders/mac/data_source_loader.mm",
-      "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_pipeline.h",
-      "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_pipeline.mm",
-      "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_reader_runner.h",
-      "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_reader_runner.mm",
-      "//vivaldi/platform_media/gpu/pipeline/mac/media_utils_mac.h",
-      "//vivaldi/platform_media/gpu/pipeline/mac/media_utils_mac.mm",
-      "//vivaldi/platform_media/gpu/pipeline/mac/platform_media_pipeline_mac.mm",
-      "//vivaldi/platform_media/common/mac/framework_type_conversions.h",
-      "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
-      "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.cc",
-      "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.h",
-      "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.h",
-      "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.mm",
+      "//vivaldi/platform_media/decoders/mac/viv_video_decoder.h",
+      "//vivaldi/platform_media/decoders/mac/viv_video_decoder.mm",
     ]
-
-    defines = [ "GPU_IMPLEMENTATION" ]
-
     if (!defined(frameworks)) {
       frameworks = []
     }
-
     frameworks += [
-      "AudioToolbox.framework",
-      "AVFoundation.framework",
       "CoreMedia.framework",
       "CoreVideo.framework",
-      "MediaToolbox.framework",
       "VideoToolbox.framework",
-      "CoreServices.framework",
     ]
-
-    cflags = []
-
-    if (!is_debug) {
-      # VB-18038 audio doesn't work with -O2
-      configs -= [ "//build/config/compiler:default_optimization" ]
-      cflags += [ "-O1" ]
-    }
   }
+
   if (is_win) {
     sources += [
-      "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.cc",
-      "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.h",
-      "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",
-      "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.cc",
-      "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.h",
-      "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.cc",
-      "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.h",
-      "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.cc",
-      "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.h",
-      "//vivaldi/platform_media/renderer/decoders/win/wmf_video_decoder.cc",
-      "//vivaldi/platform_media/renderer/decoders/win/wmf_video_decoder.h",
+      "//vivaldi/platform_media/decoders/win/wmf_video_decoder.cc",
+      "//vivaldi/platform_media/decoders/win/wmf_video_decoder.h",
     ]
 
     libs += [
@@ -178,28 +62,9 @@ update_target("//media/renderers:renderers") {
       "//media/base/win:media_foundation_util",
     ]
   }
-  if (is_linux) {
-    sources += [
-      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.cc",
-      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.h",
-      "//vivaldi/platform_media/gpu/pipeline/linux/platform_media_pipeline_linux.cc",
-    ]
-  }
 
   deps += [
     "//base:base_static",   # For vivaldi_switches
-    "//net",  # For GetMimeTypeFromFile
-
-    # For platform media GPU decoders
-    "//vivaldi/platform_media/common:mojo",
-    "//vivaldi/platform_media/common:pipeline_types",
-  ]
-}
-
-update_target("//content/renderer:renderer") {
-  sources += [
-    "//vivaldi/platform_media/renderer/content/init_for_render_thread.cc",
-    "//vivaldi/platform_media/renderer/content/init_for_render_thread.h",
   ]
 }
 
@@ -210,8 +75,8 @@ update_template_instance("//base:base") {
     sources = []
   }
   sources += [
-      "//vivaldi/platform_media/common/win/platform_media_init.cc",
-      "//vivaldi/platform_media/common/win/platform_media_init.h",
+      "//vivaldi/platform_media/sandbox/win/platform_media_init.cc",
+      "//vivaldi/platform_media/sandbox/win/platform_media_init.h",
   ]
 }
 
@@ -234,7 +99,6 @@ if (is_linux || is_mac || is_win) {
     if (is_win) {
       sources += [
         "//vivaldi/platform_media/ffmpeg/wmfaacdec.c",
-        "//vivaldi/platform_media/ffmpeg/wmfaacdec.h",
       ]
       libs += [
         "Mfplat.lib",
@@ -253,28 +117,23 @@ if (is_linux || is_mac || is_win) {
     # Allow to call Chromium logging
     deps += [ "//base" ]
 
-    # Use the generated config files as include files. We replace the original
-    # include directory for FFmpeg config rather than inserting the gen one as
-    # the first element into include_dirs to trigger a compilation error if
-    # generate_config target would not place all config files into gen, see
-    # comments in ffmpeg/BUILD.fn for details.
+    # Use custom generated include files.
+    # We should is able to simplify this at some point.
     deps += ["//vivaldi/platform_media/ffmpeg:generate_config"]
     assert(include_dirs[0] ==
         "chromium/config/$ffmpeg_branding/$os_config/$ffmpeg_arch")
-
-    # This should be just include_dirs[0] = get_path_info(...), but GN
-    # flags that as a potential mistake, so here is a workaround.
-    patched_include_dirs = include_dirs
-    patched_include_dirs[0] =
-        get_path_info("//vivaldi/platform_media/ffmpeg/", "gen_dir")
+    original_include_dir = include_dirs
     include_dirs = []
-    include_dirs = patched_include_dirs
+    include_dirs +=
+        [ get_path_info("//vivaldi/platform_media/ffmpeg/", "gen_dir") ] +
+            original_include_dir
 
-    # Workaround for the byggmakker caching issue. We change the value whenever
-    # we add a new generated header file that should be found before FFmpeg
-    # sources on the include list. Without this the cache may not see that the
-    # include list should re-searched.
-    defines += [ "VIVALDI_FFMPEG_REBUILD=20220717" ]
+    # Workaround for the Byggmakker caching issue. We change the value
+    # whenever we add a new generated header file that should be found
+    # before FFmpeg sources on the include list. The change triggers
+    # a recompilation of all FFmpeg sources. Without this the cache
+    # may not see that the include list should be re-searched.
+    defines += [ "VIVALDI_FFMPEG_REBUILD=20220920" ]
   }
 
   if (is_mac) {
@@ -300,4 +159,4 @@ if (is_linux) {
   update_target("//chrome:chrome_initial") {
     configs += [ "//vivaldi/gn/config:linux_386_linking"]
   }
-} # Linux
+}

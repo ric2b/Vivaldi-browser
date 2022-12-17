@@ -24,7 +24,8 @@ FileSystemServiceSettings::FileSystemServiceSettings(
   // an existing provider.
   const std::string* service_provider_name =
       settings_value.FindStringKey(kKeyServiceProvider);
-  if (service_provider_name) {
+  if (service_provider_name &&
+      service_provider_config.count(*service_provider_name)) {
     file_system_config_ =
         service_provider_config.at(*service_provider_name).file_system;
   }
@@ -164,14 +165,14 @@ bool FileSystemServiceSettings::AddUrlsDisabledByServiceProvider(
     URLMatchingID* id) {
   base::Value disable_value(base::Value::Type::DICTIONARY);
 
-  std::vector<base::Value> urls;
+  base::Value::List urls;
   for (const std::string& url : file_system_config_->disable)
-    urls.emplace_back(url);
-  disable_value.SetKey(kKeyUrlList, base::Value(urls));
+    urls.Append(url);
+  disable_value.SetKey(kKeyUrlList, base::Value(std::move(urls)));
 
-  std::vector<base::Value> mime_types;
-  mime_types.emplace_back(kWildcardMimeType);
-  disable_value.SetKey(kKeyMimeTypes, base::Value(mime_types));
+  base::Value::List mime_types;
+  mime_types.Append(kWildcardMimeType);
+  disable_value.SetKey(kKeyMimeTypes, base::Value(std::move(mime_types)));
 
   bool validated =
       AddUrlPatternSettings(disable_value, /* enabled = */ false, id);
@@ -199,19 +200,21 @@ bool FileSystemServiceSettings::AddUrlPatternSettings(
   }
 
   // Add the URL patterns to the matcher and store the condition set IDs.
-  const base::Value* url_list = url_settings_value.FindListKey(kKeyUrlList);
-  if (!url_list) {
+  const base::Value* url_list_value =
+      url_settings_value.FindListKey(kKeyUrlList);
+  if (!url_list_value) {
     DLOG(ERROR) << "Can't find " << kKeyUrlList << url_settings_value;
     return false;
   }
 
-  for (const base::Value& url : url_list->GetListDeprecated())
+  const base::Value::List& url_list = url_list_value->GetList();
+
+  for (const base::Value& url : url_list)
     CHECK(url.is_string());
 
   // This pre-increments the id by size of url_list_value.
   URLMatchingID pre_id = *id;
-  url_matcher::util::AddFilters(url_matcher_.get(), enabled, id,
-                                &base::Value::AsListValue(*url_list));
+  url_matcher::util::AddFilters(url_matcher_.get(), enabled, id, url_list);
 
   const base::Value* mime_types = url_settings_value.FindListKey(kKeyMimeTypes);
   if (!mime_types)

@@ -16,13 +16,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_display_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_keyboard_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_pointer_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_power_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_stylus_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_features_util.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
@@ -755,6 +755,17 @@ void AddDeviceStorageStrings(content::WebUIDataSource* html_source,
           base::ASCIIToUTF16(chrome::kArcExternalStorageLearnMoreURL)));
 }
 
+void AddDeviceAudioStrings(content::WebUIDataSource* html_source) {
+  static constexpr webui::LocalizedString kAudioStrings[] = {
+      {"audioTitle", IDS_SETTINGS_AUDIO_TITLE},
+      {"audioOutputTitle", IDS_SETTINGS_AUDIO_OUTPUT_TITLE},
+      {"audioVolumeTitle", IDS_SETTINGS_AUDIO_VOLUME_TITLE},
+      {"audioDeviceTitle", IDS_SETTINGS_AUDIO_DEVICE_TITLE},
+  };
+
+  html_source->AddLocalizedStrings(kAudioStrings);
+}
+
 void AddDevicePowerStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kPowerStrings[] = {
       {"powerTitle", IDS_SETTINGS_POWER_TITLE},
@@ -847,7 +858,8 @@ DeviceSection::DeviceSection(Profile* profile,
   // Display search tags are added/removed dynamically.
   ash::BindCrosDisplayConfigController(
       cros_display_config_.BindNewPipeAndPassReceiver());
-  mojo::PendingAssociatedRemote<ash::mojom::CrosDisplayConfigObserver> observer;
+  mojo::PendingAssociatedRemote<crosapi::mojom::CrosDisplayConfigObserver>
+      observer;
   cros_display_config_observer_receiver_.Bind(
       observer.InitWithNewEndpointAndPassReceiver());
   cros_display_config_->AddObserver(std::move(observer));
@@ -890,6 +902,7 @@ void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddDeviceKeyboardStrings(html_source);
   AddDeviceStylusStrings(html_source);
   AddDeviceDisplayStrings(html_source);
+  AddDeviceAudioStrings(html_source);
   AddDeviceStorageStrings(
       html_source, features::ShouldShowExternalStorageSettings(profile()));
   AddDevicePowerStrings(html_source);
@@ -1033,6 +1046,12 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::SearchResultDefaultRank::kMedium,
       mojom::kExternalStorageSubpagePath);
 
+  // Audio.
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_AUDIO_TITLE, mojom::Subpage::kAudio,
+      mojom::SearchResultIcon::kAudio, mojom::SearchResultDefaultRank::kMedium,
+      mojom::kAudioSubpagePath);
+
   // Power.
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_POWER_TITLE, mojom::Subpage::kPower,
@@ -1126,15 +1145,15 @@ void DeviceSection::PowerChanged(
 }
 
 void DeviceSection::OnGetDisplayUnitInfoList(
-    std::vector<ash::mojom::DisplayUnitInfoPtr> display_unit_info_list) {
+    std::vector<crosapi::mojom::DisplayUnitInfoPtr> display_unit_info_list) {
   cros_display_config_->GetDisplayLayoutInfo(base::BindOnce(
       &DeviceSection::OnGetDisplayLayoutInfo, base::Unretained(this),
       std::move(display_unit_info_list)));
 }
 
 void DeviceSection::OnGetDisplayLayoutInfo(
-    std::vector<ash::mojom::DisplayUnitInfoPtr> display_unit_info_list,
-    ash::mojom::DisplayLayoutInfoPtr display_layout_info) {
+    std::vector<crosapi::mojom::DisplayUnitInfoPtr> display_unit_info_list,
+    crosapi::mojom::DisplayLayoutInfoPtr display_layout_info) {
   bool has_multiple_displays = display_unit_info_list.size() > 1u;
 
   // Mirroring mode is active if there's at least one display and if there's a
@@ -1151,7 +1170,7 @@ void DeviceSection::OnGetDisplayLayoutInfo(
 
     unified_desktop_mode |= display_unit_info->is_primary &&
                             display_layout_info->layout_mode ==
-                                ash::mojom::DisplayLayoutMode::kUnified;
+                                crosapi::mojom::DisplayLayoutMode::kUnified;
   }
 
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
@@ -1293,6 +1312,9 @@ void DeviceSection::AddDevicePointersStrings(
   html_source->AddBoolean("allowTouchpadHapticClickSettings",
                           base::FeatureList::IsEnabled(
                               ::features::kAllowTouchpadHapticClickSettings));
+  html_source->AddBoolean(
+      "enableAudioSettingsPage",
+      base::FeatureList::IsEnabled(ash::features::kAudioSettingsPage));
 }
 
 }  // namespace settings

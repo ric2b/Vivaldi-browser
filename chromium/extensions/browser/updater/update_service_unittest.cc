@@ -87,10 +87,13 @@ class FakeUpdateClient : public update_client::UpdateClient {
       observers_.push_back(observer);
   }
   void RemoveObserver(Observer* observer) override {}
-  void Install(const std::string& id,
-               CrxDataCallback crx_data_callback,
-               CrxStateChangeCallback crx_state_change_callback,
-               update_client::Callback callback) override {}
+  base::RepeatingClosure Install(
+      const std::string& id,
+      CrxDataCallback crx_data_callback,
+      CrxStateChangeCallback crx_state_change_callback,
+      update_client::Callback callback) override {
+    return base::DoNothing();
+  }
   void Update(const std::vector<std::string>& ids,
               CrxDataCallback crx_data_callback,
               CrxStateChangeCallback crx_state_change_callback,
@@ -574,8 +577,8 @@ TEST_F(UpdateServiceTest, CheckOmahaMalwareAttributes) {
   const auto& request = update_client()->update_request(0);
   EXPECT_THAT(request.extension_ids, testing::ElementsAre(extension_id));
 
-  update_client()->RunDelayedUpdate(0,
-                                    UpdateClientEvents::COMPONENT_NOT_UPDATED);
+  update_client()->RunDelayedUpdate(
+      0, UpdateClientEvents::COMPONENT_ALREADY_UP_TO_DATE);
   EXPECT_TRUE(registry->disabled_extensions().GetByID(extension_id));
 }
 
@@ -626,8 +629,8 @@ TEST_F(UpdateServiceTest, CheckNoOmahaAttributes) {
   const auto& request = update_client()->update_request(0);
   EXPECT_THAT(request.extension_ids, testing::ElementsAre(extension_id));
 
-  update_client()->RunDelayedUpdate(0,
-                                    UpdateClientEvents::COMPONENT_NOT_UPDATED);
+  update_client()->RunDelayedUpdate(
+      0, UpdateClientEvents::COMPONENT_ALREADY_UP_TO_DATE);
   EXPECT_TRUE(registry->enabled_extensions().GetByID(extension_id));
   EXPECT_EQ(extensions::ALLOWLIST_UNDEFINED,
             extension_system()->GetExtensionAllowlistState(extension_id));

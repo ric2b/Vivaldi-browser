@@ -13,10 +13,12 @@
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_progress.h"
+#include "ash/public/cpp/holding_space/holding_space_util.h"
 #include "ash/public/cpp/rounded_image_view.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/holding_space/holding_space_item_view.h"
 #include "ash/system/holding_space/holding_space_progress_indicator_util.h"
 #include "ash/system/holding_space/holding_space_view_delegate.h"
@@ -239,8 +241,9 @@ views::Builder<views::ImageButton> CreateSecondaryActionBuilder() {
 // TODO(crbug.com/1202796): Create ash colors.
 // Returns the theme color to use for text in multiselect.
 SkColor GetMultiSelectTextColor() {
-  return AshColorProvider::Get()->IsDarkModeEnabled() ? gfx::kGoogleBlue100
-                                                      : gfx::kGoogleBlue800;
+  return DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
+             ? gfx::kGoogleBlue100
+             : gfx::kGoogleBlue800;
 }
 
 }  // namespace
@@ -489,14 +492,13 @@ void HoldingSpaceItemChipView::OnSecondaryActionPressed() {
   if (delegate())
     delegate()->OnHoldingSpaceItemViewSecondaryActionPressed(this);
 
-  // Pause.
-  if (secondary_action_pause_->GetVisible()) {
-    HoldingSpaceController::Get()->client()->PauseItems({item()});
-    return;
-  }
-
-  // Resume.
-  HoldingSpaceController::Get()->client()->ResumeItems({item()});
+  // Pause/Resume.
+  const HoldingSpaceCommandId command_id =
+      secondary_action_pause_->GetVisible()
+          ? HoldingSpaceCommandId::kPauseItem
+          : HoldingSpaceCommandId::kResumeItem;
+  if (!holding_space_util::ExecuteInProgressCommand(item(), command_id))
+    NOTREACHED();
 }
 
 void HoldingSpaceItemChipView::UpdateImage() {
@@ -508,7 +510,8 @@ void HoldingSpaceItemChipView::UpdateImage() {
   // Image.
   image_->SetImage(item()->image().GetImageSkia(
       gfx::Size(kHoldingSpaceChipIconSize, kHoldingSpaceChipIconSize),
-      /*dark_background=*/AshColorProvider::Get()->IsDarkModeEnabled()));
+      /*dark_background=*/DarkLightModeControllerImpl::Get()
+          ->IsDarkModeEnabled()));
   SchedulePaint();
 
   // Transform.
@@ -611,16 +614,15 @@ void HoldingSpaceItemChipView::UpdateLabels() {
   secondary_label_->SetText(
       item()->secondary_text().value_or(base::EmptyString16()));
   secondary_label_->SetEnabledColor(
-      selected() && multiselect
-          ? GetMultiSelectTextColor()
-          : item()->secondary_text_color()
-                ? cros_styles::ResolveColor(
-                      item()->secondary_text_color().value(),
-                      AshColorProvider::Get()->IsDarkModeEnabled(),
-                      base::FeatureList::IsEnabled(
-                          features::kSemanticColorsDebugOverride))
-                : AshColorProvider::Get()->GetContentLayerColor(
-                      AshColorProvider::ContentLayerType::kTextColorSecondary));
+      selected() && multiselect ? GetMultiSelectTextColor()
+      : item()->secondary_text_color()
+          ? cros_styles::ResolveColor(
+                item()->secondary_text_color().value(),
+                DarkLightModeControllerImpl::Get()->IsDarkModeEnabled(),
+                base::FeatureList::IsEnabled(
+                    features::kSemanticColorsDebugOverride))
+          : AshColorProvider::Get()->GetContentLayerColor(
+                AshColorProvider::ContentLayerType::kTextColorSecondary));
   secondary_label_->SetVisible(!secondary_label_->GetText().empty());
 
   // Tooltip.
@@ -637,10 +639,14 @@ void HoldingSpaceItemChipView::UpdateSecondaryAction() {
   if (!item())
     return;
 
-  // NOTE: Only download type items currently support secondary actions.
+  // NOTE: Only in-progress items currently support secondary actions.
   const bool has_secondary_action =
       !checkmark()->GetVisible() && !item()->progress().IsComplete() &&
-      HoldingSpaceItem::IsDownload(item()->type()) && IsMouseHovered();
+      (holding_space_util::SupportsInProgressCommand(
+           item(), HoldingSpaceCommandId::kPauseItem) ||
+       holding_space_util::SupportsInProgressCommand(
+           item(), HoldingSpaceCommandId::kResumeItem)) &&
+      IsMouseHovered();
 
   if (!has_secondary_action) {
     secondary_action_container_->SetVisible(false);
@@ -649,7 +655,8 @@ void HoldingSpaceItemChipView::UpdateSecondaryAction() {
   }
 
   // Pause/resume.
-  const bool is_item_paused = item()->IsPaused();
+  const bool is_item_paused = holding_space_util::SupportsInProgressCommand(
+      item(), HoldingSpaceCommandId::kResumeItem);
   secondary_action_pause_->SetVisible(!is_item_paused);
   secondary_action_resume_->SetVisible(is_item_paused);
 

@@ -2335,24 +2335,6 @@ bool GLES2TraceImplementation::LockDiscardableTextureCHROMIUM(
   return gl_->LockDiscardableTextureCHROMIUM(texture_id);
 }
 
-void GLES2TraceImplementation::TexStorage2DImageCHROMIUM(GLenum target,
-                                                         GLenum internalFormat,
-                                                         GLenum bufferUsage,
-                                                         GLsizei width,
-                                                         GLsizei height) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::TexStorage2DImageCHROMIUM");
-  gl_->TexStorage2DImageCHROMIUM(target, internalFormat, bufferUsage, width,
-                                 height);
-}
-
-void GLES2TraceImplementation::SetColorSpaceMetadataCHROMIUM(
-    GLuint texture_id,
-    GLcolorSpace color_space) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::SetColorSpaceMetadataCHROMIUM");
-  gl_->SetColorSpaceMetadataCHROMIUM(texture_id, color_space);
-}
-
 void GLES2TraceImplementation::WindowRectanglesEXT(GLenum mode,
                                                    GLsizei count,
                                                    const GLint* box) {
@@ -2439,18 +2421,6 @@ void GLES2TraceImplementation::EndSharedImageAccessDirectCHROMIUM(
   TRACE_EVENT_BINARY_EFFICIENT0(
       "gpu", "GLES2Trace::EndSharedImageAccessDirectCHROMIUM");
   gl_->EndSharedImageAccessDirectCHROMIUM(texture);
-}
-
-void GLES2TraceImplementation::BeginBatchReadAccessSharedImageCHROMIUM() {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::BeginBatchReadAccessSharedImageCHROMIUM");
-  gl_->BeginBatchReadAccessSharedImageCHROMIUM();
-}
-
-void GLES2TraceImplementation::EndBatchReadAccessSharedImageCHROMIUM() {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::EndBatchReadAccessSharedImageCHROMIUM");
-  gl_->EndBatchReadAccessSharedImageCHROMIUM();
 }
 
 void GLES2TraceImplementation::EnableiOES(GLenum target, GLuint index) {

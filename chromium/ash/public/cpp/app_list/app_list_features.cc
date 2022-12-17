@@ -19,10 +19,6 @@ const base::Feature kEnableZeroStateMixedTypesRanker{
     "EnableZeroStateMixedTypesRanker", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableAppReinstallZeroState{
     "EnableAppReinstallZeroState", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kEnableSuggestedFiles{"EnableSuggestedFiles",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kEnableSuggestedLocalFiles{
-    "EnableSuggestedLocalFiles", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnableAppListLaunchRecording{
     "EnableAppListLaunchRecording", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kLauncherSettingsSearch{"LauncherSettingsSearch",
@@ -31,22 +27,15 @@ const base::Feature kEnableFuzzyAppSearch{"EnableFuzzyAppSearch",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableExactMatchForNonLatinLocale{
     "EnableExactMatchForNonLatinLocale", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kEnableAggregatedMlSearchRanking{
-    "EnableAggregatedMlSearchRanking", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kEnableLauncherSearchNormalization{
-    "EnableLauncherSearchNormalization", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kCategoricalSearch{"CategoricalSearch",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+// DO NOT REMOVE: Tast integration tests use this feature. (See crbug/1340267)
 const base::Feature kForceShowContinueSection{
     "ForceShowContinueSection", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kSearchResultInlineIcon{"SearchResultInlineIcon",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kDynamicSearchUpdateAnimation{
     "DynamicSearchUpdateAnimation", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kLauncherLacrosIntegration{
-    "LauncherLacrosIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kFeedbackOnContinueSectionRemove{
-    "FeedbackOnContinueSectionRemove", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kCompactBubbleLauncher{"CompactBubbleLauncher",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kLauncherPlayStoreSearch{"LauncherPlayStoreSearch",
@@ -68,14 +57,6 @@ bool IsAppReinstallZeroStateEnabled() {
   return base::FeatureList::IsEnabled(kEnableAppReinstallZeroState);
 }
 
-bool IsSuggestedFilesEnabled() {
-  return base::FeatureList::IsEnabled(kEnableSuggestedFiles);
-}
-
-bool IsSuggestedLocalFilesEnabled() {
-  return base::FeatureList::IsEnabled(kEnableSuggestedLocalFiles);
-}
-
 bool IsLauncherSettingsSearchEnabled() {
   return base::FeatureList::IsEnabled(kLauncherSettingsSearch);
 }
@@ -86,14 +67,6 @@ bool IsFuzzyAppSearchEnabled() {
 
 bool IsExactMatchForNonLatinLocaleEnabled() {
   return base::FeatureList::IsEnabled(kEnableExactMatchForNonLatinLocale);
-}
-
-bool IsAggregatedMlSearchRankingEnabled() {
-  return base::FeatureList::IsEnabled(kEnableAggregatedMlSearchRanking);
-}
-
-bool IsLauncherSearchNormalizationEnabled() {
-  return base::FeatureList::IsEnabled(kEnableLauncherSearchNormalization);
 }
 
 std::string AppSearchResultRankerPredictorName() {
@@ -126,11 +99,6 @@ bool IsDynamicSearchUpdateAnimationEnabled() {
          base::FeatureList::IsEnabled(kDynamicSearchUpdateAnimation);
 }
 
-bool IsLauncherLacrosIntegrationEnabled() {
-  return base::FeatureList::IsEnabled(chromeos::features::kLacrosSupport) &&
-         base::FeatureList::IsEnabled(kLauncherLacrosIntegration);
-}
-
 std::string CategoricalSearchType() {
   return GetFieldTrialParamValueByFeature(kCategoricalSearch, "ranking");
 }
@@ -143,11 +111,6 @@ base::TimeDelta DynamicSearchUpdateAnimationDuration() {
 
 bool IsForceShowContinueSectionEnabled() {
   return base::FeatureList::IsEnabled(kForceShowContinueSection);
-}
-
-bool IsFeedbackOnContinueSectionRemoveEnabled() {
-  return ash::features::IsProductivityLauncherEnabled() &&
-         base::FeatureList::IsEnabled(kFeedbackOnContinueSectionRemove);
 }
 
 bool IsCompactBubbleLauncherEnabled() {

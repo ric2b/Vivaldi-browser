@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/modules/clipboard/clipboard.h"
 #include "third_party/blink/renderer/modules/clipboard/clipboard_reader.h"
 #include "third_party/blink/renderer/modules/clipboard/clipboard_writer.h"
 #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
@@ -209,13 +210,13 @@ void ClipboardPromise::WriteNextRepresentation() {
       clipboard_item_data_[clipboard_representation_index_].second;
 
   DCHECK(!clipboard_writer_);
-  wtf_size_t item_index = custom_format_items_.Find(type);
-  if (item_index != kNotFound) {
-    clipboard_writer_ =
-        ClipboardWriter::Create(local_frame->GetSystemClipboard(), type, this);
-  } else {
-    clipboard_writer_ =
-        ClipboardWriter::Create(local_frame->GetSystemClipboard(), type, this);
+  clipboard_writer_ =
+      ClipboardWriter::Create(local_frame->GetSystemClipboard(), type, this);
+  if (!clipboard_writer_) {
+    script_promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kNotAllowedError,
+        "Type " + type + " is not supported"));
+    return;
   }
   clipboard_writer_->WriteToSystem(blob);
 }
@@ -366,11 +367,9 @@ void ClipboardPromise::ReadNextRepresentation() {
     return;
   }
 
-  String format_name =
-      clipboard_item_data_[clipboard_representation_index_].first;
-
   ClipboardReader* clipboard_reader = ClipboardReader::Create(
-      GetLocalFrame()->GetSystemClipboard(), format_name, this);
+      GetLocalFrame()->GetSystemClipboard(),
+      clipboard_item_data_[clipboard_representation_index_].first, this);
   if (!clipboard_reader) {
     OnRead(nullptr);
     return;
@@ -408,10 +407,16 @@ void ClipboardPromise::HandlePromiseBlobsWrite(
   for (const auto& blob_item : *blob_list) {
     const String& type = clipboard_item_types_[clipboard_item_index];
     const String& type_with_args = blob_item->type();
-    // For normal (not-custom) write, blobs may have a full MIME type with args
-    // (ex. 'text/plain;charset=utf-8'), whereas the type must not have args
-    // (ex. 'text/plain' only), so ensure that Blob->type is contained in type.
-    if (!type_with_args.Contains(type.LowerASCII())) {
+    // For web custom types, extract the MIME type after removing the "web "
+    // prefix. For normal (not-custom) write, blobs may have a full MIME type
+    // with args (ex. 'text/plain;charset=utf-8'), whereas the type must not
+    // have args (ex. 'text/plain' only), so ensure that Blob->type is contained
+    // in type.
+    String web_custom_format = Clipboard::ParseWebCustomFormat(type);
+    if ((!type_with_args.Contains(type.LowerASCII()) &&
+         web_custom_format.IsEmpty()) ||
+        (!web_custom_format.IsEmpty() &&
+         !type_with_args.Contains(web_custom_format))) {
       script_promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNotAllowedError,
           "Type " + type + " does not match the blob's type " +
@@ -559,7 +564,7 @@ void ClipboardPromise::RequestPermission(
   }
 
   auto permission_descriptor = CreateClipboardPermissionDescriptor(
-      permission, false, allow_without_sanitization);
+      permission, /*allow_without_gesture=*/false, allow_without_sanitization);
   if (permission == mojom::blink::PermissionName::CLIPBOARD_WRITE &&
       !allow_without_sanitization) {
     // Check permission (but do not query the user).
@@ -571,7 +576,7 @@ void ClipboardPromise::RequestPermission(
   // Check permission, and query if necessary.
   // See crbug.com/795929 for moving this check into the Browser process.
   permission_service_->RequestPermission(std::move(permission_descriptor),
-                                         /*user_gesture*/ false,
+                                         /*user_gesture=*/false,
                                          std::move(callback));
 }
 

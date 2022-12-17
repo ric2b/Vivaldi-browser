@@ -13,6 +13,8 @@
 #include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/personalization_app/enterprise_policy_delegate.h"
+#include "ash/rgb_keyboard/rgb_keyboard_manager.h"
+#include "ash/shell.h"
 #include "ash/webui/personalization_app/personalization_app_url_constants.h"
 #include "ash/webui/personalization_app/search/search.mojom-shared.h"
 #include "ash/webui/personalization_app/search/search.mojom.h"
@@ -21,8 +23,8 @@
 #include "base/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
-#include "chromeos/components/local_search_service/public/cpp/local_search_service_proxy.h"
-#include "chromeos/components/local_search_service/shared_structs.h"
+#include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy.h"
+#include "chromeos/ash/components/local_search_service/shared_structs.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -112,6 +114,7 @@ const SearchConcept& GetUserImageSearchConcept() {
               IDS_PERSONALIZATION_APP_SEARCH_RESULT_CHANGE_DEVICE_ACCOUNT_IMAGE_ALT2,
               IDS_PERSONALIZATION_APP_SEARCH_RESULT_CHANGE_DEVICE_ACCOUNT_IMAGE_ALT3,
               IDS_PERSONALIZATION_APP_SEARCH_RESULT_CHANGE_DEVICE_ACCOUNT_IMAGE_ALT4,
+              IDS_PERSONALIZATION_APP_SEARCH_RESULT_CHANGE_DEVICE_ACCOUNT_IMAGE_ALT5,
           },
       .relative_url = kUserSubpageRelativeUrl,
   });
@@ -261,6 +264,23 @@ SearchTagRegistry::SearchConceptUpdates GetDarkModePrefChangedUpdates(
           {&GetDarkModeOffSearchConcept(), !dark_mode_on}};
 }
 
+const SearchConcept& GetKeyboardBacklightSearchConcept() {
+  static const base::NoDestructor<const SearchConcept> search_concept({
+      .id = mojom::SearchConceptId::kKeyboardBacklight,
+      .message_id = IDS_PERSONALIZATION_APP_SEARCH_RESULT_KEYBOARD_BACKLIGHT,
+      .alternate_message_ids =
+          {
+              IDS_PERSONALIZATION_APP_SEARCH_RESULT_KEYBOARD_BACKLIGHT_ALT1,
+              IDS_PERSONALIZATION_APP_SEARCH_RESULT_KEYBOARD_BACKLIGHT_ALT2,
+              IDS_PERSONALIZATION_APP_SEARCH_RESULT_KEYBOARD_BACKLIGHT_ALT3,
+              IDS_PERSONALIZATION_APP_SEARCH_RESULT_KEYBOARD_BACKLIGHT_ALT4,
+              IDS_PERSONALIZATION_APP_SEARCH_RESULT_KEYBOARD_BACKLIGHT_ALT5,
+          },
+      .relative_url = "",
+  });
+  return *search_concept;
+}
+
 }  // namespace
 
 SearchTagRegistry::SearchTagRegistry(
@@ -293,6 +313,11 @@ SearchTagRegistry::SearchTagRegistry(
     }
     updates.merge(GetDarkModePrefChangedUpdates(
         pref_service_->GetBoolean(ash::prefs::kDarkModeEnabled)));
+  }
+
+  if (::ash::features::IsRgbKeyboardEnabled() &&
+      Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported()) {
+    updates[&GetKeyboardBacklightSearchConcept()] = true;
   }
 
   if (IsAmbientModeAllowed()) {

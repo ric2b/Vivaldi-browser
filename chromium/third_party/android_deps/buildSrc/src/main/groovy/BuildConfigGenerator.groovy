@@ -56,7 +56,6 @@ class BuildConfigGenerator extends DefaultTask {
         com_ibm_icu_icu4j: '//third_party/icu4j:icu4j_java',
         com_almworks_sqlite4java_sqlite4java: '//third_party/sqlite4java:sqlite4java_java',
         junit_junit: '//third_party/junit:junit',
-        org_bouncycastle_bcprov_jdk15on: '//third_party/bouncycastle:bouncycastle_java',
         org_hamcrest_hamcrest_core: '//third_party/hamcrest:hamcrest_core_java',
         org_hamcrest_hamcrest_integration: '//third_party/hamcrest:hamcrest_integration_java',
         org_hamcrest_hamcrest_library: '//third_party/hamcrest:hamcrest_library_java',
@@ -610,9 +609,7 @@ class BuildConfigGenerator extends DefaultTask {
         addPreconditionsOverrideTreatment(sb, dependencyId)
 
         if (dependencyId.startsWith('org_robolectric')) {
-            // Skip platform checks since it depends on
-            // accessibility_test_framework_java which requires_android.
-            sb.append('  bypass_platform_checks = true\n')
+            sb.append('  is_robolectric = true\n')
         }
         if (dependencyExtension == 'aar' &&
                 (dependencyId.startsWith('androidx') || dependencyId.startsWith('com_android_support'))) {
@@ -659,7 +656,7 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  ignore_aidl = true\n')
                 break
             case 'androidx_test_uiautomator_uiautomator':
-                sb.append('  deps = [":androidx_test_runner_java"]\n')
+                sb.append('  deps += [":androidx_test_runner_java"]\n')
                 break
             case 'androidx_mediarouter_mediarouter':
                 sb.append('  # https://crbug.com/1000382\n')
@@ -691,6 +688,9 @@ class BuildConfigGenerator extends DefaultTask {
                 break
             case 'com_google_android_material_material':
                 sb.with {
+                    append('\n')
+                    append('  # Needed until next material update, see crbug.com/1349521.\n')
+                    append('  enable_bytecode_checks = false\n')
                     append('\n')
                     append('  # Reduce binary size. https:crbug.com/954584\n')
                     append('  ignore_proguard_configs = true\n')
@@ -860,6 +860,10 @@ class BuildConfigGenerator extends DefaultTask {
                 // Every target that has a dep on androidx_window_window will need these checks turned off.
                 sb.append('  enable_bytecode_checks = false\n')
                 break
+            case 'androidx_asynclayoutinflater_asynclayoutinflater':
+                sb.append('\n')
+                sb.append('  # References AppCompatActivity using reflection, if exists.\n')
+                sb.append('  enable_bytecode_checks = false\n')
             case 'androidx_startup_startup_runtime':
                 sb.append('  # Keeps emoji2 code. See http://crbug.com/1205141\n')
                 sb.append('  ignore_proguard_configs = true\n')

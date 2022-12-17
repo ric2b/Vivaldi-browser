@@ -1,0 +1,73 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+source_set("notes") {
+  sources = [
+    "notes_factory.cc",
+    "notes_factory.h",
+    "note_interaction_controller.mm",
+    "note_interaction_controller.h",
+    "note_interaction_controller_delegate.h",
+    "note_home_view_controller.mm",
+    "note_home_view_controller.h",
+    "note_folder_view_controller.mm",
+    "note_folder_view_controller.h",
+    "note_edit_view_controller.mm",
+    "note_edit_view_controller.h",
+    "note_home_shared_state.mm",
+    "note_home_shared_state.h",
+    "note_ui_constants.mm",
+    "note_ui_constants.h",
+    "note_folder_editor_view_controller.mm",
+    "note_folder_editor_view_controller.h",
+    "note_mediator.mm",
+    "note_mediator.h",
+    "note_empty_background.mm",
+    "note_empty_background.h",
+    "note_utils_ios.mm",
+    "note_utils_ios.h",
+    "note_navigation_controller.mm",
+    "note_navigation_controller.h",
+    "note_home_mediator.mm",
+    "note_home_mediator.h",
+    "note_navigation_controller_delegate.mm",
+    "note_navigation_controller_delegate.h",
+    "note_model_bridge_observer.mm",
+    "note_model_bridge_observer.h",
+    "note_path_cache.mm",
+    "note_path_cache.h",
+    "note_transitioning_delegate.mm",
+    "note_transitioning_delegate.h",
+    "note_home_consumer.h"
+ ]
+
+  deps = [
+    "//components/keyed_service/core",
+    "//components/keyed_service/ios",
+    "//components/prefs",
+    "//ios/chrome/browser/browser_state",
+    "//vivaldi/ios/sync:sync_notes",
+    "//vivaldi/notes:browser",
+    "//ios/third_party/material_components_ios",
+    "//ios/chrome/browser/main:public",
+    "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/ui/table_view",
+    "//ios/chrome/browser/ui/table_view:presentation",
+    "//ios/chrome/browser/ui/table_view:styler",
+    "//ios/chrome/browser/ui/table_view:utils",
+    "//ios/chrome/browser/ui/table_view:views",
+    "//ios/chrome/browser/ui/util:url_with_title",
+    "//ios/chrome/browser/url_loading",
+    "//ios/chrome/browser/web_state_list",
+    "//ios/chrome/browser/window_activities",
+    "//ios/chrome/common/ui/colors",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+    "//base",
+    "//vivaldi/ios/notes/cells",
+    "//vivaldi/ios/notes/resources:panel_notes"
+  ]
+ frameworks = [ "UIKit.framework" ]
+
+ configs += [ "//build/config/compiler:enable_arc" ]
+
+}

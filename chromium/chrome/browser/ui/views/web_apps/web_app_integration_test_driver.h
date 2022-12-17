@@ -42,20 +42,25 @@ namespace web_app::integration_tests {
 // versions of the enumerations in the file chrome/test/webapps/data/enums.md.
 
 enum class Site {
-  kSiteA,
-  kSiteAFoo,
-  kSiteABar,
-  kSiteB,
-  kSiteC,
-  kSiteWco,
-  kSiteIsolatedApp,
+  kStandalone,
+  kStandaloneNestedA,
+  kStandaloneNestedB,
+  kMinimalUi,
+  kNotPromotable,
+  kWco,
+  kIsolated,
 };
 
-enum class InstallableSite { kSiteA, kSiteAFoo, kSiteABar, kSiteB, kSiteWco };
+enum class InstallableSite {
+  kStandalone,
+  kStandaloneNestedA,
+  kStandaloneNestedB,
+  kMinimalUi,
+  kWco,
+  kIsolated
+};
 
-enum class Scope { kSiteARoot };
-
-enum class Title { kSiteAOriginal, kSiteAUpdated };
+enum class Title { kStandaloneOriginal, kStandaloneUpdated };
 
 enum class Color { kRed, kGreen };
 
@@ -67,7 +72,11 @@ enum class IsShown { kShown, kNotShown };
 
 enum class IsOn { kOn, kOff };
 
-enum class Display { kBrowser, kStandalone, kMinimal, kWco };
+enum class Display { kBrowser, kStandalone, kMinimalUi, kWco };
+
+enum class WindowOptions { kWindowed, kBrowser };
+
+enum class ShortcutOptions { kWithShortcut, kNoShortcut };
 
 // These structs are used to store the current state of the world before & after
 // each state-change action.
@@ -193,15 +202,13 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void EnableRunOnOsLogin(Site site);
   void DisableWindowControlsOverlay(Site site);
   void EnableWindowControlsOverlay(Site site);
-  void InstallCreateShortcutTabbed(Site site);
-  void InstallCreateShortcutWindowed(Site site);
+  void CreateShortcut(Site site, WindowOptions window_options);
   void InstallMenuOption(InstallableSite site);
   void InstallLocally(Site site);
   void InstallOmniboxIcon(InstallableSite site);
-  void InstallPolicyAppTabbedNoShortcut(Site site);
-  void InstallPolicyAppTabbedShortcut(Site site);
-  void InstallPolicyAppWindowedNoShortcut(Site site);
-  void InstallPolicyAppWindowedShortcut(Site site);
+  void InstallPolicyApp(Site site,
+                        ShortcutOptions shortcut,
+                        WindowOptions window);
   // These functions install apps which are tabbed and creates shortcuts.
   void ApplyRunOnOsLoginPolicyAllowed(Site site);
   void ApplyRunOnOsLoginPolicyBlocked(Site site);
@@ -214,17 +221,14 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void LaunchFromPlatformShortcut(Site site);
   void OpenAppSettingsFromChromeApps(Site site);
   void OpenAppSettingsFromAppMenu(Site site);
-  void CreateShortcutFromChromeApps(Site site);
+  void CreateShortcutsFromList(Site site);
   void NavigateBrowser(Site site);
-  void NavigatePwaSiteAFooTo(Site site);
-  void NavigatePwaSiteATo(Site site);
+  void NavigatePwa(Site app, Site to);
   void NavigateNotfoundUrl();
   void ManifestUpdateIcon(Site site);
-  void ManifestUpdateTitle(Site site);
-  void ManifestUpdateDisplayBrowser(Site site);
-  void ManifestUpdateDisplayMinimal(Site site);
+  void ManifestUpdateTitle(Site site, Title title);
   void ManifestUpdateDisplay(Site site, Display display);
-  void ManifestUpdateScopeSiteAFooTo(Scope scope);
+  void ManifestUpdateScopeTo(Site app, Site scope);
   void OpenInChrome();
   void SetOpenInTab(Site site);
   void SetOpenInWindow(Site site);
@@ -245,8 +249,8 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void CheckAppNavigationIsStartUrl();
   void CheckBrowserNavigationIsAppSettings(Site site);
   void CheckAppNotInList(Site site);
-  void CheckAppIconSiteA(Color site);
-  void CheckAppTitleSiteA(Title site);
+  void CheckAppIcon(Site site, Color color);
+  void CheckAppTitle(Site site, Title title);
   void CheckWindowModeIsNotVisibleInAppSettings(Site site);
   void CheckInstallable();
   void CheckInstallIconShown();
@@ -261,6 +265,8 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void CheckPlatformShortcutNotExists(Site site);
   void CheckRunOnOsLoginEnabled(Site site);
   void CheckRunOnOsLoginDisabled(Site site);
+  void CheckSiteHandlesFile(Site site, std::string file_extension);
+  void CheckSiteNotHandlesFile(Site site, std::string file_extension);
   void CheckUserCannotSetRunOnOsLogin(Site site);
   void CheckUserDisplayModeInternal(UserDisplayMode user_display_mode);
   void CheckWindowClosed();
@@ -304,7 +310,6 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
                                  const std::string& app_name,
                                  const AppId& app_id);
   GURL GetURLForSiteMode(Site site);
-  void InstallCreateShortcut(bool open_in_window);
 
   void InstallPolicyAppInternal(Site site,
                                 base::Value default_launch_container,
@@ -331,6 +336,8 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   bool IsShortcutAndIconCreated(Profile* profile,
                                 const std::string& name,
                                 const AppId& id);
+
+  bool IsFileHandledBySite(Site site, std::string file_extension);
 
   void SetRunOnOsLoginMode(Site site, apps::RunOnOsLoginMode login_mode);
 
@@ -380,7 +387,9 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   raw_ptr<Browser> active_browser_ = nullptr;
   raw_ptr<Profile> active_profile_ = nullptr;
   AppId active_app_id_;
-  raw_ptr<Browser> app_browser_ = nullptr;
+  // TODO(crbug.com/1298696): browser_tests breaks with MTECheckedPtr
+  // enabled. Triage.
+  raw_ptr<Browser, DegradeToNoOpWhenMTE> app_browser_ = nullptr;
 
   std::unique_ptr<views::NamedWidgetShownWaiter> app_id_update_dialog_waiter_;
   base::ScopedObservation<web_app::WebAppInstallManager,
@@ -395,12 +404,11 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
 // Simple base browsertest class usable by all non-sync web app integration
 // tests.
-class WebAppIntegrationBrowserTest
-    : public InProcessBrowserTest,
-      public WebAppIntegrationTestDriver::TestDelegate {
+class WebAppIntegrationTest : public InProcessBrowserTest,
+                              public WebAppIntegrationTestDriver::TestDelegate {
  public:
-  WebAppIntegrationBrowserTest();
-  ~WebAppIntegrationBrowserTest() override;
+  WebAppIntegrationTest();
+  ~WebAppIntegrationTest() override;
 
   // InProcessBrowserTest:
   void SetUp() override;
@@ -411,7 +419,7 @@ class WebAppIntegrationBrowserTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override;
 
-  // WebAppIntegrationBrowserTestBase::TestDelegate:
+  // WebAppIntegrationTestDriver::TestDelegate:
   Browser* CreateBrowser(Profile* profile) override;
   void AddBlankTabAndShow(Browser* browser) override;
   const net::EmbeddedTestServer* EmbeddedTestServer() const override;

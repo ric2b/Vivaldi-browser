@@ -1,0 +1,12 @@
+# Copyright 2022 Vivaldi technologies. All rights reserved.
+
+import("//build/config/asset_catalog.gni")
+
+imageset("panel_notes") {
+  sources = {
+  	  "panel_notes.imageset/Contents.json",
+	  "panel_notes.imageset/panel_notes.png",
+	  "panel_notes.imageset/panel_notes@2x.png",
+	  "panel_notes.imageset/panel_notes@3x.png",
+  }
+}

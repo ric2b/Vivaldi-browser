@@ -40,9 +40,6 @@
 <translation id="5186185447130319458">Soukromí</translation>
 <translation id="5233638681132016545">Nový list</translation>
 <translation id="572328651809341494">Nedávno použité listy</translation>
-<translation id="5840488417521835756">Vyhledávejte informace o tématech zmíněných na stránce, aniž byste stránku museli opustit. Funkce Vyhledání klepnutím odešle slovo a okolní kontext do Vyhledávání Vivaldi, které vrátí definice, obrázky, výsledky vyhledávání a další podrobnosti.
-
-Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. Chcete-li upřesnit vyhledávací dotaz, přejeďte po panelu až nahoru a klepněte na vyhledávací pole.</translation>
 <translation id="6150320133806434356">Záložka uložena</translation>
 <translation id="6336451774241870485">Nový soukromý list</translation>
 <translation id="6585139692466700358">Navrhovat překlad stránek v jiných jazycích pomocí překladatelské služby Vivaldi</translation>
@@ -53,7 +50,6 @@ Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. C
 <translation id="732145680195464316">Záložka uložena v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O aplikaci</translation>
 <translation id="7465104139234185284">Zavřít všechny soukromé listy</translation>
-<translation id="7519434535192513364">Vyhledání klepnutím odešle vybrané slovo a aktuální stránku jako kontext do Googlu. Funkce je k dispozici pouze, je-li jako hlavní vyhledávač použit Google, vypnout ji může v <ph name="BEGIN_LINK" />Nastavení<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Smluvní podmínky Vivaldi</translation>
 <translation id="85991616550051997">Přejít na domovskou stránku</translation>
 <translation id="8820817407110198400">Záložky</translation>

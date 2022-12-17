@@ -13,6 +13,11 @@
 #include "url/gurl.h"
 
 namespace commerce {
+
+namespace switches {
+extern const char kEnableChromeCart[];
+}
+
 extern const base::Feature kCommercePriceTracking;
 
 // Price tracking variations for Android.
@@ -82,6 +87,9 @@ extern const base::Feature kDiscountConsentV2;
 
 // Feature flag for exposing commerce hint on Android.
 extern const base::Feature kCommerceHintAndroid;
+
+// Feature flag for Merchant Wide promotion.
+extern const base::Feature kMerchantWidePromotion;
 
 // Feature parameters for ChromeCart on Desktop.
 
@@ -277,6 +285,10 @@ extern const base::FeatureParam<bool> kContextualConsentShowOnSRP;
 // Feature params for enabling the cart heuristics improvement on Android.
 extern const char kCommerceHintAndroidHeuristicsImprovementParam[];
 
+// Feature params for merchant wide promotion.
+extern const char kReadyToFetchMerchantWidePromotionParam[];
+extern const base::FeatureParam<bool> kReadyToFetchMerchantWidePromotion;
+
 // Check if a URL belongs to a partner merchant of any type of discount.
 bool IsPartnerMerchant(const GURL& url);
 // Check if a URL belongs to a partner merchant of rule discount.
@@ -291,6 +303,13 @@ bool IsCouponWithCodeEnabled();
 bool IsFakeDataEnabled();
 // Check if the contextual consent for discount is enabled.
 bool isContextualConsentEnabled();
+
+#if !BUILDFLAG(IS_ANDROID)
+// Get the time delay between discount fetches.
+base::TimeDelta GetDiscountFetchDelay();
+// Check if a URL belongs to a merchant with no discounts.
+bool IsNoDiscountMerchant(const GURL& url);
+#endif
 }  // namespace commerce
 
 #endif  // COMPONENTS_COMMERCE_CORE_COMMERCE_FEATURE_LIST_H_

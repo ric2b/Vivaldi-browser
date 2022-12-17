@@ -144,7 +144,7 @@ class TCPSocketWin::Core : public base::RefCounted<Core> {
   class ReadDelegate : public base::win::ObjectWatcher::Delegate {
    public:
     explicit ReadDelegate(Core* core) : core_(core) {}
-    ~ReadDelegate() override {}
+    ~ReadDelegate() override = default;
 
     // base::ObjectWatcher::Delegate methods:
     void OnObjectSignaled(HANDLE object) override;
@@ -156,7 +156,7 @@ class TCPSocketWin::Core : public base::RefCounted<Core> {
   class WriteDelegate : public base::win::ObjectWatcher::Delegate {
    public:
     explicit WriteDelegate(Core* core) : core_(core) {}
-    ~WriteDelegate() override {}
+    ~WriteDelegate() override = default;
 
     // base::ObjectWatcher::Delegate methods:
     void OnObjectSignaled(HANDLE object) override;
@@ -307,7 +307,7 @@ int TCPSocketWin::AdoptConnectedSocket(SocketDescriptor socket,
     return result;
   }
 
-  core_ = new Core(this);
+  core_ = base::MakeRefCounted<Core>(this);
   peer_address_ = std::make_unique<IPEndPoint>(peer_address);
 
   return OK;
@@ -749,29 +749,6 @@ void TCPSocketWin::EndLoggingMultipleConnectAttempts(int net_error) {
   }
 }
 
-int TCPSocketWin::OpenAndReleaseSocketDescriptor(AddressFamily family,
-                                                 SocketDescriptor* out) {
-  THREAD_CHECKER(thread_checker);
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker);
-
-  SOCKET new_socket = CreatePlatformSocket(ConvertAddressFamily(family),
-                                           SOCK_STREAM, IPPROTO_TCP);
-  int os_error = WSAGetLastError();
-  int result = OK;
-  if (new_socket == INVALID_SOCKET) {
-    PLOG(ERROR) << "CreatePlatformSocket() returned an error";
-    result = MapSystemError(os_error);
-  }
-
-  if (!SetNonBlockingAndGetError(new_socket, &os_error)) {
-    result = MapSystemError(os_error);
-  }
-
-  *out = new_socket;
-  new_socket = INVALID_SOCKET;
-  return result;
-}
-
 SocketDescriptor TCPSocketWin::ReleaseSocketDescriptorForTesting() {
   SocketDescriptor socket_descriptor = socket_;
   socket_ = INVALID_SOCKET;
@@ -804,8 +781,8 @@ int TCPSocketWin::AcceptInternal(std::unique_ptr<TCPSocketWin>* socket,
     net_log_.EndEventWithNetErrorCode(NetLogEventType::TCP_ACCEPT, net_error);
     return net_error;
   }
-  std::unique_ptr<TCPSocketWin> tcp_socket(
-      new TCPSocketWin(nullptr, net_log_.net_log(), net_log_.source()));
+  auto tcp_socket = std::make_unique<TCPSocketWin>(nullptr, net_log_.net_log(),
+                                                   net_log_.source());
   int adopt_result = tcp_socket->AdoptConnectedSocket(new_socket, ip_end_point);
   if (adopt_result != OK) {
     net_log_.EndEventWithNetErrorCode(NetLogEventType::TCP_ACCEPT,
@@ -853,7 +830,7 @@ int TCPSocketWin::DoConnect() {
     return CreateNetLogIPEndPointParams(peer_address_.get());
   });
 
-  core_ = new Core(this);
+  core_ = base::MakeRefCounted<Core>(this);
 
   // WSAEventSelect sets the socket to non-blocking mode as a side effect.
   // Our connect() and recv() calls require that the socket be non-blocking.
@@ -1064,7 +1041,7 @@ void TCPSocketWin::ApplySocketTag(const SocketTag& tag) {
   CHECK(tag == SocketTag());
 }
 
-int TCPSocketWin::BindToNetwork(NetworkChangeNotifier::NetworkHandle network) {
+int TCPSocketWin::BindToNetwork(handles::NetworkHandle network) {
   NOTIMPLEMENTED();
   return ERR_NOT_IMPLEMENTED;
 }

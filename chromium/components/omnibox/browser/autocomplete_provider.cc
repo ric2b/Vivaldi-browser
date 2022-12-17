@@ -30,11 +30,15 @@
 
 AutocompleteProvider::AutocompleteProvider(Type type)
     : provider_max_matches_(OmniboxFieldTrial::GetProviderMaxMatches(type)),
-      done_(true),
       type_(type) {}
 
 // static
 const char* AutocompleteProvider::TypeToString(Type type) {
+  // When creating a new provider, add the provider type to this function and
+  // make sure to also add the appropriate OmniboxProvider variant to the
+  // Omnibox.ProviderTime2 histogram (defined in omnibox/histograms.xml) so that
+  // the run-time metrics associated with the relevant provider can be properly
+  // analyzed.
   switch (type) {
     case TYPE_BOOKMARK:
       return "Bookmark";
@@ -72,6 +76,8 @@ const char* AutocompleteProvider::TypeToString(Type type) {
       return "HistoryFuzzy";
     case TYPE_OPEN_TAB:
       return "OpenTab";
+    case TYPE_HISTORY_CLUSTER_PROVIDER:
+      return "HistoryCluster";
     default:
       NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type;
       return "Unknown";
@@ -84,12 +90,20 @@ void AutocompleteProvider::AddListener(AutocompleteProviderListener* listener) {
 
 void AutocompleteProvider::NotifyListeners(bool updated_matches) const {
   for (auto* listener : listeners_)
-    listener->OnProviderUpdate(updated_matches);
+    listener->OnProviderUpdate(updated_matches, this);
+}
+
+void AutocompleteProvider::StartPrefetch(const AutocompleteInput& input) {
+  DCHECK(!input.omit_asynchronous_matches());
 }
 
 void AutocompleteProvider::Stop(bool clear_cached_results,
                                 bool due_to_user_inactivity) {
   done_ = true;
+  if (clear_cached_results) {
+    matches_.clear();
+    suggestion_groups_map_.clear();
+  }
 }
 
 const char* AutocompleteProvider::GetName() const {
@@ -163,6 +177,8 @@ AutocompleteProvider::AsOmniboxEventProviderType() const {
       return metrics::OmniboxEventProto::HISTORY_FUZZY;
     case TYPE_OPEN_TAB:
       return metrics::OmniboxEventProto::OPEN_TAB;
+    case TYPE_HISTORY_CLUSTER_PROVIDER:
+      return metrics::OmniboxEventProto::HISTORY_CLUSTER;
     default:
       NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type_;
       return metrics::OmniboxEventProto::UNKNOWN_PROVIDER;
@@ -294,6 +310,12 @@ size_t AutocompleteProvider::TrimSchemePrefix(std::u16string* url,
 }
 
 // static
+bool AutocompleteProvider::InKeywordMode(const AutocompleteInput& input) {
+  return input.keyword_mode_entry_method() !=
+         metrics::OmniboxEventProto::INVALID;
+}
+
+// static
 bool AutocompleteProvider::InExplicitExperimentalKeywordMode(
     const AutocompleteInput& input,
     const std::u16string& keyword) {
@@ -301,11 +323,11 @@ bool AutocompleteProvider::InExplicitExperimentalKeywordMode(
          input.prefer_keyword() &&
          base::StartsWith(input.text(), keyword,
                           base::CompareCase::SENSITIVE) &&
-         IsExplicitlyInKeywordMode(input, keyword);
+         InExplicitKeywordMode(input, keyword);
 }
 
 // static
-bool AutocompleteProvider::IsExplicitlyInKeywordMode(
+bool AutocompleteProvider::InExplicitKeywordMode(
     const AutocompleteInput& input,
     const std::u16string& keyword) {
   // It is important to this method that we determine if the user entered

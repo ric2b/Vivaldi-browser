@@ -49,15 +49,7 @@ class DownloadBubbleUIController
   std::vector<DownloadUIModelPtr> GetPartialView();
 
   // Get all entries that should be displayed in the UI, including downloads and
-  // offline items, but allow destruction right away. Use this only if you are
-  // certain that the objects are short lived, for example used to compute
-  // progress.
-  std::vector<std::unique_ptr<DownloadUIModel>>
-  GetAllItemsToDisplayWithoutTaskRunnerDeletion();
-
-  // Get all entries that should be displayed in the UI, including downloads and
-  // offline items, with destruction through the task sequencer. This should be
-  // the default method.
+  // offline items.
   std::vector<DownloadUIModelPtr> GetAllItemsToDisplay();
 
   // The list is needed to populate GetAllItemsToDisplay.
@@ -89,9 +81,23 @@ class DownloadBubbleUIController
   // this controller belongs to should show the partial view.
   void OnNewItem(download::DownloadItem* item, bool show_details);
 
+  // Returns whether the incognito icon should be shown for the download.
+  bool ShouldShowIncognitoIcon(const DownloadUIModel* model) const;
+
+  // Schedules the ephemeral warning download to be canceled. It will only be
+  // canceled if it continues to be an ephemeral warning that hasn't been acted
+  // on when the scheduled time arrives.
+  void ScheduleCancelForEphemeralWarning(const std::string& guid);
+
+  // Force the controller to hide the download UI entirely, including the bubble
+  // and the toolbar icon. This function should only be called if the event is
+  // triggered outside of normal download events that are not listened by
+  // observers.
+  void HideDownloadUi();
+
   // Returns the DownloadDisplayController. Should always return a valid
   // controller.
-  DownloadDisplayController* display_controller_for_testing() {
+  DownloadDisplayController* GetDownloadDisplayController() {
     return display_controller_;
   }
 
@@ -150,6 +156,9 @@ class DownloadBubbleUIController
   // download to feedback service for non-mixed content downloads.
   void ProcessDownloadWarningButtonPress(DownloadUIModel* model,
                                          DownloadCommands::Command command);
+
+  // Kick off retrying an eligible interrupted download.
+  void RetryDownload(DownloadUIModel* model, DownloadCommands::Command command);
 
   raw_ptr<Browser> browser_;
   raw_ptr<Profile> profile_;

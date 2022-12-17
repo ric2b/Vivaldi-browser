@@ -26,6 +26,7 @@ from devil.android import device_errors
 from devil.android import device_temp_file
 from devil.android import flag_changer
 from devil.android.sdk import shared_prefs
+from devil.android.sdk import version_codes
 from devil.android import logcat_monitor
 from devil.android.tools import system_app
 from devil.android.tools import webview_app
@@ -97,6 +98,9 @@ EXTRA_TRACE_FILE = ('org.chromium.base.test.BaseJUnit4ClassRunner.TraceFile')
 
 _EXTRA_TEST_LIST = (
     'org.chromium.base.test.BaseChromiumAndroidJUnitRunner.TestList')
+
+_EXTRA_TEST_IS_UNIT = (
+    'org.chromium.base.test.BaseChromiumAndroidJUnitRunner.IsUnitTest')
 
 _EXTRA_PACKAGE_UNDER_TEST = ('org.chromium.chrome.test.pagecontroller.rules.'
                              'ChromeUiApplicationTestRule.PackageUnderTest')
@@ -187,14 +191,22 @@ class LocalDeviceInstrumentationTestRun(
     self._shared_prefs_to_restore = []
     self._skia_gold_session_manager = None
     self._skia_gold_work_dir = None
+    self._target_package = _GetTargetPackageName(test_instance.test_apk)
 
   #override
   def TestPackage(self):
     return self._test_instance.suite
 
+  def _GetDataStorageRootDirectory(self, device):
+    if self._test_instance.store_data_in_app_directory:
+      # TODO(rmhasan): Add check to makes sure api level > 27. Selinux
+      # policy on Oreo does not allow app to read files from app data dir
+      # that were not put there by the app.
+      return device.GetApplicationDataDirectory(self._target_package)
+    return device.GetExternalStoragePath()
+
   #override
   def SetUp(self):
-    target_package = _GetTargetPackageName(self._test_instance.test_apk)
 
     @local_device_environment.handle_shard_failures_with(
         self._env.DenylistDevice)
@@ -261,6 +273,15 @@ class LocalDeviceInstrumentationTestRun(
 
         return install_helper_internal
 
+      def install_apex_helper(apex):
+        @instrumentation_tracing.no_tracing
+        @trace_event.traced
+        def install_helper_internal(d, apk_path=None):
+          # pylint: disable=unused-argument
+          d.InstallApex(apex)
+
+        return install_helper_internal
+
       def incremental_install_helper(apk, json_path, permissions):
 
         @trace_event.traced
@@ -269,6 +290,10 @@ class LocalDeviceInstrumentationTestRun(
           installer.Install(d, json_path, apk=apk, permissions=permissions)
 
         return incremental_install_helper_internal
+
+      steps.extend(
+          install_apex_helper(apex)
+          for apex in self._test_instance.additional_apexs)
 
       permissions = self._test_instance.test_apk.GetPermissions()
       if self._test_instance.test_apk_incremental_install_json:
@@ -288,7 +313,8 @@ class LocalDeviceInstrumentationTestRun(
                            instant_app=self._test_instance.test_apk_as_instant))
 
       steps.extend(
-          install_helper(apk) for apk in self._test_instance.additional_apks)
+          install_helper(apk, instant_app=self._test_instance.IsApkInstant(apk))
+          for apk in self._test_instance.additional_apks)
 
       # We'll potentially need the package names later for setting app
       # compatibility workarounds.
@@ -365,7 +391,7 @@ class LocalDeviceInstrumentationTestRun(
         cmd = ['am', 'set-debug-app', '--persistent']
         if self._test_instance.wait_for_java_debugger:
           cmd.append('-w')
-        cmd.append(target_package)
+        cmd.append(self._target_package)
         dev.RunShellCommand(cmd, check_return=True)
 
       @trace_event.traced
@@ -382,6 +408,10 @@ class LocalDeviceInstrumentationTestRun(
               shared_pref, setting)
 
       @trace_event.traced
+      def approve_app_links(dev):
+        self._ToggleAppLinks(dev, 'STATE_APPROVED')
+
+      @trace_event.traced
       def set_vega_permissions(dev):
         # Normally, installation of VrCore automatically grants storage
         # permissions. However, since VrCore is part of the system image on
@@ -396,20 +426,32 @@ class LocalDeviceInstrumentationTestRun(
 
       @instrumentation_tracing.no_tracing
       def push_test_data(dev):
-        device_root = posixpath.join(dev.GetExternalStoragePath(),
-                                     'chromium_tests_root')
+        test_data_root_dir = posixpath.join(
+            self._GetDataStorageRootDirectory(dev), 'chromium_tests_root')
         host_device_tuples_substituted = [
-            (h, local_device_test_run.SubstituteDeviceRoot(d, device_root))
-            for h, d in host_device_tuples]
+            (h,
+             local_device_test_run.SubstituteDeviceRoot(d, test_data_root_dir))
+            for h, d in host_device_tuples
+        ]
         logging.info('Pushing data dependencies.')
         for h, d in host_device_tuples_substituted:
           logging.debug('  %r -> %r', h, d)
-        local_device_environment.place_nomedia_on_device(dev, device_root)
+
+        as_root = self._test_instance.store_data_in_app_directory
+        local_device_environment.place_nomedia_on_device(dev,
+                                                         test_data_root_dir,
+                                                         as_root=as_root)
         dev.PushChangedFiles(host_device_tuples_substituted,
-                             delete_device_stale=True)
+                             delete_device_stale=True,
+                             as_root=as_root)
+
         if not host_device_tuples_substituted:
-          dev.RunShellCommand(['rm', '-rf', device_root], check_return=True)
-          dev.RunShellCommand(['mkdir', '-p', device_root], check_return=True)
+          dev.RunShellCommand(['rm', '-rf', test_data_root_dir],
+                              check_return=True,
+                              as_root=as_root)
+          dev.RunShellCommand(['mkdir', '-p', test_data_root_dir],
+                              check_return=True,
+                              as_root=as_root)
 
       @trace_event.traced
       def create_flag_changer(dev):
@@ -423,8 +465,8 @@ class LocalDeviceInstrumentationTestRun(
             dev, self._test_instance.timeout_scale)
 
       steps += [
-          set_debug_app, edit_shared_prefs, push_test_data, create_flag_changer,
-          set_vega_permissions, DismissCrashDialogs
+          set_debug_app, edit_shared_prefs, approve_app_links, push_test_data,
+          create_flag_changer, set_vega_permissions, DismissCrashDialogs
       ]
 
       def bind_crash_handler(step, dev):
@@ -471,7 +513,7 @@ class LocalDeviceInstrumentationTestRun(
     if self._test_instance.wait_for_java_debugger:
       logging.warning('*' * 80)
       logging.warning('Waiting for debugger to attach to process: %s',
-                      target_package)
+                      self._target_package)
       logging.warning('*' * 80)
 
   #override
@@ -506,6 +548,9 @@ class LocalDeviceInstrumentationTestRun(
       for pref_to_restore in self._shared_prefs_to_restore:
         pref_to_restore.Commit(force_commit=True)
 
+      # If we've force approved app links for a package, undo that now.
+      self._ToggleAppLinks(dev, 'STATE_NO_RESPONSE')
+
       # Context manager exit handlers are applied in reverse order
       # of the enter handlers.
       for context in reversed(self._context_managers[str(dev)]):
@@ -515,6 +560,24 @@ class LocalDeviceInstrumentationTestRun(
         # pylint: enable=no-member
 
     self._env.parallel_devices.pMap(individual_device_tear_down)
+
+  def _ToggleAppLinks(self, dev, state):
+    # The set-app-links command was added in Android 12 (sdk = 31). The
+    # restrictions that require us to set the app links were also added in
+    # Android 12, so doing nothing on earlier Android versions is fine.
+    if dev.build_version_sdk < version_codes.S:
+      return
+
+    package = self._test_instance.approve_app_links_package
+    domain = self._test_instance.approve_app_links_domain
+
+    if not package or not domain:
+      return
+
+    cmd = [
+        'pm', 'set-app-links', '--package', package, state, domain
+    ]
+    dev.RunShellCommand(cmd, check_return=True)
 
   def _CreateFlagChangerIfNeeded(self, device):
     if str(device) not in self._flag_changers:
@@ -543,6 +606,14 @@ class LocalDeviceInstrumentationTestRun(
         tests, self._test_instance.external_shard_index,
         self._test_instance.total_external_shards)
     return tests
+
+  #override
+  def GetTestsForListing(self):
+    # Parent class implementation assumes _GetTests() returns strings rather
+    # than dicts.
+    test_dicts = self._GetTests()
+    test_dicts = local_device_test_run.FlattenTestList(test_dicts)
+    return sorted('{}#{}'.format(d['class'], d['method']) for d in test_dicts)
 
   #override
   def _GroupTests(self, tests):
@@ -609,6 +680,9 @@ class LocalDeviceInstrumentationTestRun(
   #override
   def _RunTest(self, device, test):
     extras = {}
+
+    if self._test_instance.is_unit_test:
+      extras[_EXTRA_TEST_IS_UNIT] = 'true'
 
     # Provide package name under test for apk_under_test.
     if self._test_instance.apk_under_test:
@@ -743,6 +817,9 @@ class LocalDeviceInstrumentationTestRun(
     if flags_to_add:
       self._CreateFlagChangerIfNeeded(device)
       self._flag_changers[str(device)].PushFlags(add=flags_to_add)
+
+    if self._test_instance.store_data_in_app_directory:
+      extras.update({'fetchTestDataFromAppDataDir': 'true'})
 
     time_ms = lambda: int(time.time() * 1e3)
     start_ms = time_ms()
@@ -1030,11 +1107,15 @@ class LocalDeviceInstrumentationTestRun(
       logging.info('Could not get tests from pickle: %s', e)
     logging.info('Getting tests by having %s list them.',
                  self._test_instance.junit4_runner_class)
+    # We need to use GetAppWritablePath instead of GetExternalStoragePath
+    # here because we will not have applied legacy storage workarounds on R+
+    # yet.
+    # TODO(rmhasan): Figure out how to create the temp file inside the test
+    # app's data directory. Currently when the temp file is created read
+    # permissions are only given to the app's user id. Therefore we can't
+    # pull the file from the device.
     def list_tests(d):
       def _run(dev):
-        # We need to use GetAppWritablePath instead of GetExternalStoragePath
-        # here because we will not have applied legacy storage workarounds on R+
-        # yet.
         with device_temp_file.DeviceTempFile(
             dev.adb, suffix='.json',
             dir=dev.GetAppWritablePath()) as dev_test_list_json:
@@ -1105,7 +1186,7 @@ class LocalDeviceInstrumentationTestRun(
       if logmon:
         logmon.Close()
       if logcat_file and logcat_file.Link():
-        logging.info('Logcat saved to %s', logcat_file.Link())
+        logging.critical('Logcat saved to %s', logcat_file.Link())
 
   def _SaveTraceData(self, trace_device_file, device, test_class):
     trace_host_file = self._env.trace_output
@@ -1208,6 +1289,24 @@ class LocalDeviceInstrumentationTestRun(
     has_batch_limit = self._test_instance.test_launcher_batch_limit is not None
     return is_tryjob and has_filter and has_batch_limit
 
+  def _IsFlakeEndorserRun(self):
+    """Checks whether this test run is part of the flake endorser.
+
+    Returns:
+      True iff this is being run on a trybot and the current step is part of the
+      flake endorser.
+    """
+    is_tryjob = self._test_instance.skia_gold_properties.IsTryjobRun()
+    # Flake endorser shards automatically pass in --gtest_repeat,
+    # --gtest_filter, and --test-launcher-retry-limit. This is similar to retry
+    # without patch steps, but does NOT include --test-launcher-batch-limit.
+    # Additionally, flake endorser shards are run with many more retries than
+    # the usual 3.
+    has_filter = bool(self._test_instance.test_filter)
+    has_batch_limit = self._test_instance.test_launcher_batch_limit is not None
+    many_retries = self._env.max_tries > 3
+    return is_tryjob and has_filter and not has_batch_limit and many_retries
+
   def _ProcessSkiaGoldRenderTestResults(self, device, results):
     gold_dir = posixpath.join(self._render_tests_device_output_dir,
                               _DEVICE_GOLD_DIR)
@@ -1285,6 +1384,16 @@ class LocalDeviceInstrumentationTestRun(
         gold_session = self._skia_gold_session_manager.GetSkiaGoldSession(
             keys_input=json_path)
 
+        # Both retry without patch steps and flake endorser runs run into an
+        # issue where they can clobber untriaged results we care about with
+        # previously triaged (usually good) results. So, run those in dryrun
+        # mode. In the case of a flake endorser run, we want to re-run the
+        # comparison without dryrun if the dryrun fails so that the image that
+        # needs triaging is uploaded.
+        should_force_dryrun = (self._IsRetryWithoutPatch()
+                               or self._IsFlakeEndorserRun())
+        should_redo_on_failed_dryrun = self._IsFlakeEndorserRun()
+
         try:
           status, error = gold_session.RunComparison(
               name=render_name,
@@ -1292,11 +1401,23 @@ class LocalDeviceInstrumentationTestRun(
               output_manager=self._env.output_manager,
               use_luci=use_luci,
               optional_keys=optional_dict,
-              force_dryrun=self._IsRetryWithoutPatch())
+              force_dryrun=should_force_dryrun)
         except Exception as e:  # pylint: disable=broad-except
+          error = e
+          if should_redo_on_failed_dryrun:
+            try:
+              status, error = gold_session.RunComparison(
+                  name=render_name,
+                  png_file=image_path,
+                  output_manager=self._env.output_manager,
+                  use_luci=use_luci,
+                  optional_keys=optional_dict,
+                  force_dryrun=False)
+            except Exception as inner_e:  # pylint: disable=broad-except
+              error = inner_e
           _FailTestIfNecessary(results, full_test_name)
           _AppendToLog(results, full_test_name,
-                       'Skia Gold comparison raised exception: %s' % e)
+                       'Skia Gold comparison raised exception: %s' % error)
           continue
 
         if not status:

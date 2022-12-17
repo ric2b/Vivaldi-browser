@@ -442,6 +442,39 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
                      u"See https://github.com/w3c/ServiceWorker/issues/1356."));
 }
 
+// Tests a service worker registration that fails due to the worker script
+// synchronously throwing a runtime error.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
+                       ServiceWorkerWithRegistrationFailure) {
+  // The error console only captures errors if the user is in dev mode.
+  profile()->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
+
+  constexpr size_t kErrorsExpected = 2u;
+  ErrorConsole* error_console = ErrorConsole::Get(profile());
+  ErrorObserver observer(kErrorsExpected, error_console);
+
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("service_worker/worker_based_background/"
+                                 "service_worker_registration_failure"),
+                                 {.wait_for_renderers = false});
+
+  ASSERT_TRUE(extension);
+  observer.WaitForErrors();
+  const ErrorList& error_list =
+      error_console->GetErrorsForExtension(extension->id());
+  ASSERT_EQ(kErrorsExpected, error_list.size());
+
+  std::vector<std::u16string> error_message_list;
+  for (std::string::size_type i = 0; i < error_list.size(); i++) {
+    error_message_list.push_back(error_list[i]->message());
+  }
+  // status code 15: kErrorScriptEvaluateFailed
+  EXPECT_THAT(error_message_list,
+              testing::UnorderedElementsAre(
+                  u"Uncaught Error: lol",
+                  u"Service worker registration failed. Status code: 15"));
+}
+
 // Tests that an error is generated if there is a syntax error in the service
 // worker script.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, SyntaxError) {
@@ -901,9 +934,10 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, EarlyEventDispatch) {
   // Build "test.onMessage" event for dispatch.
   auto event = std::make_unique<Event>(
       events::FOR_TEST, extensions::api::test::OnMessage::kEventName,
-      base::JSONReader::Read(R"([{"data": "hello", "lastMessage": true}])")
-          .value()
-          .TakeListDeprecated(),
+      std::move(
+          base::JSONReader::Read(R"([{"data": "hello", "lastMessage": true}])")
+              .value()
+              .GetList()),
       profile());
 
   EarlyWorkerMessageSender sender(profile(), kId, std::move(event));
@@ -926,6 +960,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   extensions::api::web_navigation::OnCommitted::Details details;
   details.transition_type =
       extensions::api::web_navigation::TRANSITION_TYPE_TYPED;
+  details.frame_type = api::extension_types::FRAME_TYPE_OUTERMOST_FRAME;
+  details.document_lifecycle = api::extension_types::DOCUMENT_LIFECYCLE_ACTIVE;
 
   // Build a dummy onCommited event to dispatch.
   auto on_committed_event = std::make_unique<Event>(
@@ -2853,8 +2889,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLazyBackgroundTest, ConsoleLogging) {
   class ConsoleMessageObserver : public content::ServiceWorkerContextObserver {
    public:
     ConsoleMessageObserver(content::BrowserContext* browser_context,
-                           const std::string& expected_message)
-        : expected_message_(base::UTF8ToUTF16(expected_message)) {
+                           std::u16string expected_message)
+        : expected_message_(std::move(expected_message)) {
       scoped_observation_.Observe(GetServiceWorkerContext(browser_context));
     }
 
@@ -2910,10 +2946,10 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerLazyBackgroundTest, ConsoleLogging) {
   test_dir.WriteFile(FILE_PATH_LITERAL("script.js"), kScript);
 
   // The observer for the built-in blink console.
-  ConsoleMessageObserver default_console_observer(profile(), "test message");
+  ConsoleMessageObserver default_console_observer(profile(), u"test message");
   // The observer for our custom extensions bindings console.
   ConsoleMessageObserver custom_console_observer(profile(),
-                                                 "[SUCCESS] justATest");
+                                                 u"[SUCCESS] justATest");
 
   const Extension* extension = LoadExtension(test_dir.UnpackedPath());
   ASSERT_TRUE(extension);

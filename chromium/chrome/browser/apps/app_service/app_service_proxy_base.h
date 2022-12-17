@@ -21,6 +21,7 @@
 #include "chrome/browser/apps/app_service/publishers/app_publisher.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/services/app_service/public/cpp/app_capability_access_cache.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/icon_cache.h"
@@ -29,9 +30,12 @@
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
+#include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/preferred_app.h"
 #include "components/services/app_service/public/cpp/preferred_apps_impl.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list.h"
+#include "components/services/app_service/public/mojom/app_service.mojom.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -79,7 +83,10 @@ class AppServiceProxyBase : public KeyedService,
   AppServiceProxyBase& operator=(const AppServiceProxyBase&) = delete;
   ~AppServiceProxyBase() override;
 
-  void ReInitializeForTesting(Profile* profile);
+  void ReInitializeForTesting(
+      Profile* profile,
+      base::OnceClosure read_completed_for_testing = base::OnceClosure(),
+      base::OnceClosure write_completed_for_testing = base::OnceClosure());
 
   Profile* profile() const { return profile_; }
 
@@ -89,9 +96,6 @@ class AppServiceProxyBase : public KeyedService,
 
   apps::BrowserAppLauncher* BrowserAppLauncher();
 
-  // TODO(crbug.com/1333422): Remove this PreferredAppsImpl() function when
-  // proxy()->AddPreferredApp() can be called directly to add preferred apps.
-  apps::PreferredAppsImpl* PreferredAppsImpl();
   apps::PreferredAppsListHandle& PreferredAppsList();
 
   // Registers `publisher` with the App Service as exclusively publishing apps
@@ -125,17 +129,6 @@ class AppServiceProxyBase : public KeyedService,
       bool allow_placeholder_icon,
       apps::LoadIconCallback callback) override;
 
-  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
-  // interface.
-  std::unique_ptr<IconLoader::Releaser> LoadIconFromIconKey(
-      apps::mojom::AppType app_type,
-      const std::string& app_id,
-      apps::mojom::IconKeyPtr icon_key,
-      apps::mojom::IconType icon_type,
-      int32_t size_hint_in_dip,
-      bool allow_placeholder_icon,
-      apps::mojom::Publisher::LoadIconCallback callback) override;
-
   // Launches the app for the given |app_id|. |event_flags| provides additional
   // context about the action which launches the app (e.g. a middle click
   // indicating opening a background tab). |launch_source| is the possible app
@@ -147,6 +140,12 @@ class AppServiceProxyBase : public KeyedService,
   // app_id.
   void Launch(const std::string& app_id,
               int32_t event_flags,
+              apps::LaunchSource launch_source,
+              apps::WindowInfoPtr window_info = nullptr);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
+  void Launch(const std::string& app_id,
+              int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
               apps::mojom::WindowInfoPtr window_info = nullptr);
 
@@ -154,6 +153,12 @@ class AppServiceProxyBase : public KeyedService,
   // DEPRECATED. Prefer passing the files in an Intent through
   // LaunchAppWithIntent.
   // TODO(crbug.com/1264164): Remove this method.
+  void LaunchAppWithFiles(const std::string& app_id,
+                          int32_t event_flags,
+                          LaunchSource launch_source,
+                          std::vector<base::FilePath> file_paths);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
   void LaunchAppWithFiles(const std::string& app_id,
                           int32_t event_flags,
                           apps::mojom::LaunchSource launch_source,
@@ -164,6 +169,15 @@ class AppServiceProxyBase : public KeyedService,
   // app (e.g. a middle click indicating opening a background tab).
   // |launch_source| is the possible app launch sources. |window_info| is the
   // window information to launch an app, e.g. display_id, window bounds.
+  void LaunchAppWithIntent(
+      const std::string& app_id,
+      int32_t event_flags,
+      IntentPtr intent,
+      LaunchSource launch_source,
+      WindowInfoPtr window_info = nullptr,
+      base::OnceCallback<void(bool)> callback = base::DoNothing());
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
   void LaunchAppWithIntent(
       const std::string& app_id,
       int32_t event_flags,
@@ -180,6 +194,13 @@ class AppServiceProxyBase : public KeyedService,
   void LaunchAppWithUrl(const std::string& app_id,
                         int32_t event_flags,
                         GURL url,
+                        LaunchSource launch_source,
+                        WindowInfoPtr window_info = nullptr);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
+  void LaunchAppWithUrl(const std::string& app_id,
+                        int32_t event_flags,
+                        GURL url,
                         apps::mojom::LaunchSource launch_source,
                         apps::mojom::WindowInfoPtr window_info = nullptr);
 
@@ -191,6 +212,9 @@ class AppServiceProxyBase : public KeyedService,
                            LaunchCallback callback = base::DoNothing());
 
   // Sets |permission| for the app identified by |app_id|.
+  void SetPermission(const std::string& app_id, PermissionPtr permission);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
   void SetPermission(const std::string& app_id,
                      apps::mojom::PermissionPtr permission);
 
@@ -198,11 +222,20 @@ class AppServiceProxyBase : public KeyedService,
   // the uninstall dialog will be created as a modal dialog anchored at
   // |parent_window|. Otherwise, the browser window will be used as the anchor.
   virtual void Uninstall(const std::string& app_id,
+                         UninstallSource uninstall_source,
+                         gfx::NativeWindow parent_window) = 0;
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
+  virtual void Uninstall(const std::string& app_id,
                          apps::mojom::UninstallSource uninstall_source,
                          gfx::NativeWindow parent_window) = 0;
 
   // Uninstalls an app for the given |app_id| without prompting the user to
   // confirm.
+  void UninstallSilently(const std::string& app_id,
+                         UninstallSource uninstall_source);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
   void UninstallSilently(const std::string& app_id,
                          apps::mojom::UninstallSource uninstall_source);
 
@@ -246,18 +279,21 @@ class AppServiceProxyBase : public KeyedService,
   // exclude the browser apps. If |exclude_browser_tab_apps| is true then
   // exclude apps that open in browser tabs.
   std::vector<IntentLaunchInfo> GetAppsForIntent(
-      const apps::mojom::IntentPtr& intent,
+      const apps::IntentPtr& intent,
       bool exclude_browsers = false,
       bool exclude_browser_tab_apps = true);
 
   // Returns a list of apps (represented by their ids) and activities (if
   // applied) which can handle |files|.
   std::vector<IntentLaunchInfo> GetAppsForFiles(
-      std::vector<apps::mojom::IntentFilePtr> files);
+      std::vector<apps::IntentFilePtr> files);
 
   // Adds a preferred app for |url|.
   void AddPreferredApp(const std::string& app_id, const GURL& url);
   // Adds a preferred app for |intent|.
+  void AddPreferredApp(const std::string& app_id, const IntentPtr& intent);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
   void AddPreferredApp(const std::string& app_id,
                        const apps::mojom::IntentPtr& intent);
 
@@ -350,16 +386,6 @@ class AppServiceProxyBase : public KeyedService,
         bool allow_placeholder_icon,
         apps::LoadIconCallback callback) override;
 
-    // TODO(crbug.com/1253250): Will be removed soon.
-    std::unique_ptr<IconLoader::Releaser> LoadIconFromIconKey(
-        apps::mojom::AppType app_type,
-        const std::string& app_id,
-        apps::mojom::IconKeyPtr icon_key,
-        apps::mojom::IconType icon_type,
-        int32_t size_hint_in_dip,
-        bool allow_placeholder_icon,
-        apps::mojom::Publisher::LoadIconCallback callback) override;
-
     // |host_| owns |this|, as the InnerIconLoader is an AppServiceProxyBase
     // field.
     raw_ptr<AppServiceProxyBase> host_;
@@ -395,20 +421,22 @@ class AppServiceProxyBase : public KeyedService,
   void InitializePreferredApps(
       std::vector<apps::mojom::PreferredAppPtr> mojom_preferred_apps) override;
 
-  apps::mojom::IntentFilterPtr FindBestMatchingFilter(
+  IntentFilterPtr FindBestMatchingFilter(const IntentPtr& intent);
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
+  apps::mojom::IntentFilterPtr FindBestMatchingMojomFilter(
       const apps::mojom::IntentPtr& intent);
 
-  virtual void PerformPostLaunchTasks(apps::mojom::LaunchSource launch_source);
+  virtual void PerformPostLaunchTasks(apps::LaunchSource launch_source);
 
   virtual void RecordAppPlatformMetrics(Profile* profile,
                                         const apps::AppUpdate& update,
-                                        apps::mojom::LaunchSource launch_source,
-                                        apps::mojom::LaunchContainer container);
+                                        apps::LaunchSource launch_source,
+                                        apps::LaunchContainer container);
 
-  virtual void PerformPostUninstallTasks(
-      apps::AppType app_type,
-      const std::string& app_id,
-      apps::mojom::UninstallSource uninstall_source);
+  virtual void PerformPostUninstallTasks(apps::AppType app_type,
+                                         const std::string& app_id,
+                                         UninstallSource uninstall_source);
 
   virtual void OnLaunched(LaunchCallback callback,
                           LaunchResult&& launch_result);

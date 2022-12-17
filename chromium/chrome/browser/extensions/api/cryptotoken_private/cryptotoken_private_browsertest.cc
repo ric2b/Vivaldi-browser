@@ -10,6 +10,7 @@
 #include "base/test/with_feature_override.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/component_loader.h"
+#include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -18,6 +19,8 @@
 #include "components/embedder_support/switches.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/test/permission_request_observer.h"
+#include "components/policy/core/common/policy_map.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -25,6 +28,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "device/fido/features.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension_features.h"
 #include "net/dns/mock_host_resolver.h"
@@ -55,10 +59,16 @@ class CryptotokenBrowserTest : public base::test::WithFeatureOverride,
   CryptotokenBrowserTest()
       : base::test::WithFeatureOverride(
             extensions_features::kU2FSecurityKeyAPI) {
+    // Enable the feature flag to load the cryptoken component extension at
+    // startup.
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{extensions_features::kLoadCryptoTokenExtension},
+        /*disabled_features=*/{
 #if BUILDFLAG(IS_WIN)
-    // Don't dispatch requests to the native Windows API.
-    scoped_feature_list_.InitAndDisableFeature(device::kWebAuthUseNativeWinApi);
+          // Don't dispatch requests to the native Windows API.
+          device::kWebAuthUseNativeWinApi
 #endif
+        });
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -266,9 +276,7 @@ class CryptotokenBrowserTest : public base::test::WithFeatureOverride,
     return true;
   }
 
-#if BUILDFLAG(IS_WIN)
   base::test::ScopedFeatureList scoped_feature_list_;
-#endif
   std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
 };
 
@@ -404,6 +412,61 @@ IN_PROC_BROWSER_TEST_P(CryptotokenBrowserTest, SandboxedPageDoesNotSign) {
 }
 
 INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(CryptotokenBrowserTest);
+
+// Test that the `kLoadCryptoTokenExtension` feature controls loading of the
+// component extension.
+class CryptotokenLoadFeatureBrowserTest
+    : public base::test::WithFeatureOverride,
+      public InProcessBrowserTest {
+ protected:
+  CryptotokenLoadFeatureBrowserTest()
+      : base::test::WithFeatureOverride(
+            extensions_features::kLoadCryptoTokenExtension) {}
+
+  void SetUp() override {
+    ComponentLoader::EnableBackgroundExtensionsForTesting();
+    InProcessBrowserTest::SetUp();
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(CryptotokenLoadFeatureBrowserTest, IsLoaded) {
+  EXPECT_EQ(ExtensionRegistry::Get(browser()->profile())
+                    ->GenerateInstalledExtensionsSet()
+                    ->GetByID(kCryptoTokenExtensionId) != nullptr,
+            IsParamFeatureEnabled());
+}
+
+INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(CryptotokenLoadFeatureBrowserTest);
+
+// Test that `extensions_prefs::kLoadCryptoTokenExtension` also controls loading
+// of the component extension.
+class CryptotokenLoadPolicyBrowserTest : public policy::PolicyTest {
+ protected:
+  void SetUpInProcessBrowserTestFixture() override {
+    PolicyTest::SetUpInProcessBrowserTestFixture();
+
+    policy::PolicyMap policies;
+    policies.Set(policy::key::kLoadCryptoTokenExtension,
+                 policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+                 policy::POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
+    UpdateProviderPolicy(policies);
+  }
+
+  void SetUp() override {
+    ComponentLoader::EnableBackgroundExtensionsForTesting();
+    policy::PolicyTest::SetUp();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(CryptotokenLoadPolicyBrowserTest, IsLoaded) {
+  // The policy controls the extension even if the feature is disabled.
+  EXPECT_FALSE(base::FeatureList::IsEnabled(
+      extensions_features::kLoadCryptoTokenExtension));
+  EXPECT_NE(ExtensionRegistry::Get(browser()->profile())
+                ->GenerateInstalledExtensionsSet()
+                ->GetByID(kCryptoTokenExtensionId),
+            nullptr);
+}
 
 }  // namespace
 }  // namespace extensions

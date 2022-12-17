@@ -44,6 +44,7 @@
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/trusted_vault_client_backend_factory.h"
 #include "ios/chrome/browser/sync/consent_auditor_factory.h"
 #include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_trusted_vault_client.h"
@@ -60,6 +61,8 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+#include "ios/sync/note_sync_service_factory.h"
 
 IOSChromeSyncClient::IOSChromeSyncClient(ChromeBrowserState* browser_state)
     : browser_state_(browser_state) {
@@ -83,10 +86,12 @@ IOSChromeSyncClient::IOSChromeSyncClient(ChromeBrowserState* browser_state)
           this, ::GetChannel(), web::GetUIThreadTaskRunner({}), db_thread_,
           profile_web_data_service_, account_web_data_service_, password_store_,
           /*account_password_store=*/nullptr,
-          ios::BookmarkSyncServiceFactory::GetForBrowserState(browser_state_));
+          ios::BookmarkSyncServiceFactory::GetForBrowserState(browser_state_),
+          vivaldi::NoteSyncServiceFactory::GetForBrowserState(browser_state_));
 
   trusted_vault_client_ = std::make_unique<IOSTrustedVaultClient>(
-      ChromeAccountManagerServiceFactory::GetForBrowserState(browser_state_));
+      ChromeAccountManagerServiceFactory::GetForBrowserState(browser_state_),
+      TrustedVaultClientBackendFactory::GetForBrowserState(browser_state_));
 }
 
 IOSChromeSyncClient::~IOSChromeSyncClient() {}

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 import './strings.m.js';
@@ -46,7 +46,7 @@ export class SigninReauthAppElement extends SigninReauthAppElementBase {
 
       confirmButtonHidden_: {type: Boolean, value: true},
 
-      cancelButtonHidden_: {type: Boolean, value: true}
+      cancelButtonHidden_: {type: Boolean, value: true},
     };
   }
 
@@ -67,7 +67,7 @@ export class SigninReauthAppElement extends SigninReauthAppElementBase {
   private onConfirm_(e: Event) {
     this.signinReauthBrowserProxy_.confirm(
         this.getConsentDescription_(),
-        this.getConsentConfirmation_(e.composedPath() as Array<HTMLElement>));
+        this.getConsentConfirmation_(e.composedPath() as HTMLElement[]));
   }
 
   private onCancel_() {
@@ -94,7 +94,7 @@ export class SigninReauthAppElement extends SigninReauthAppElementBase {
    *     element.
    * @return The text of the consent confirmation element.
    */
-  private getConsentConfirmation_(path: Array<HTMLElement>): string {
+  private getConsentConfirmation_(path: HTMLElement[]): string {
     for (const element of path) {
       if (element.nodeType !== Node.DOCUMENT_FRAGMENT_NODE &&
           element.hasAttribute('consent-confirmation')) {

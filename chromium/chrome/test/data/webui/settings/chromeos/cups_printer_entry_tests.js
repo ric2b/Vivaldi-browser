@@ -72,9 +72,13 @@ function verifySearchQueryResults(
   verifyFilteredPrinters(printerEntryListTestElement, searchTerm);
 
   if (expectedVisiblePrinters.length) {
-    assertTrue(printerEntryListTestElement.$$('#no-search-results').hidden);
+    assertTrue(printerEntryListTestElement.shadowRoot
+                   .querySelector('#no-search-results')
+                   .hidden);
   } else {
-    assertFalse(printerEntryListTestElement.$$('#no-search-results').hidden);
+    assertFalse(printerEntryListTestElement.shadowRoot
+                    .querySelector('#no-search-results')
+                    .hidden);
   }
 }
 
@@ -156,27 +160,34 @@ suite('CupsPrinterEntry', function() {
         createPrinterEntry(PrinterType.SAVED);
 
     // Assert that three dot menu is not shown before the dom is updated.
-    assertFalse(!!printerEntryTestElement.$$('.icon-more-vert'));
+    assertFalse(
+        !!printerEntryTestElement.shadowRoot.querySelector('.icon-more-vert'));
 
     flush();
 
     // Three dot menu should be visible when |printerType| is set to
     // PrinterType.SAVED.
-    assertTrue(!!printerEntryTestElement.$$('.icon-more-vert'));
+    assertTrue(
+        !!printerEntryTestElement.shadowRoot.querySelector('.icon-more-vert'));
   });
 
   test('disableButtonWhenSavingPrinterOrDisallowedByPolicy', function() {
     const printerTypes = [
-      PrinterType.DISCOVERED, PrinterType.AUTOMATIC, PrinterType.PRINTSERVER
+      PrinterType.DISCOVERED,
+      PrinterType.AUTOMATIC,
+      PrinterType.PRINTSERVER,
     ];
     const printerIds = [
-      '#setupPrinterButton', '#automaticPrinterButton', '#savePrinterButton'
+      '#setupPrinterButton',
+      '#automaticPrinterButton',
+      '#savePrinterButton',
     ];
     for (let i = 0; i < printerTypes.length; i++) {
       printerEntryTestElement.printerEntry =
           createPrinterEntry(printerTypes[i]);
       flush();
-      const actionButton = printerEntryTestElement.$$(printerIds[i]);
+      const actionButton =
+          printerEntryTestElement.shadowRoot.querySelector(printerIds[i]);
       printerEntryTestElement.savingPrinter = true;
       printerEntryTestElement.userPrintersAllowed = true;
       assertTrue(actionButton.disabled);

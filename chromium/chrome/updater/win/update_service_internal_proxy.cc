@@ -9,8 +9,11 @@
 #include <wrl/implements.h>
 
 #include "base/callback.h"
+#include "base/check.h"
 #include "base/check_op.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
@@ -18,9 +21,14 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/win/registry.h"
+#include "base/win/win_util.h"
 #include "chrome/updater/app/server/win/updater_internal_idl.h"
 #include "chrome/updater/updater_scope.h"
+#include "chrome/updater/util.h"
+#include "chrome/updater/win/setup/setup_util.h"
 #include "chrome/updater/win/win_constants.h"
+#include "chrome/updater/win/win_util.h"
 #include "chrome/updater/win/wrl_module_initializer.h"
 
 namespace updater {
@@ -76,13 +84,13 @@ class UpdaterInternalCallback
 
 IFACEMETHODIMP UpdaterInternalCallback::Run(LONG result) {
   DCHECK_EQ(base::PlatformThreadRef(), com_thread_ref_);
-  DVLOG(2) << __func__ << " result " << result << ".";
+  VLOG(2) << __func__ << " result " << result << ".";
   return S_OK;
 }
 
 base::OnceClosure UpdaterInternalCallback::Disconnect() {
   DCHECK_EQ(base::PlatformThreadRef(), com_thread_ref_);
-  DVLOG(2) << __func__;
+  VLOG(2) << __func__;
   updater_internal_ = nullptr;
   return std::move(callback_);
 }
@@ -110,6 +118,7 @@ void UpdateServiceInternalProxy::Uninitialize() {
 
 void UpdateServiceInternalProxy::Run(base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_main_);
+  VLOG(1) << __func__;
 
   com_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&UpdateServiceInternalProxy::RunOnSTA, this,
@@ -134,20 +143,20 @@ void UpdateServiceInternalProxy::RunOnSTA(base::OnceClosure callback) {
   HRESULT hr = ::CoCreateInstance(GetInternalClass(), nullptr,
                                   CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&server));
   if (FAILED(hr)) {
-    DVLOG(2) << "Failed to instantiate the updater internal server. "
-             << std::hex << hr;
+    VLOG(2) << "Failed to instantiate the updater internal server. " << std::hex
+            << hr;
     std::move(callback).Run();
     return;
   }
 
   Microsoft::WRL::ComPtr<IUpdaterInternal> updater_internal;
   hr = server.As(&updater_internal);
-  if (FAILED(hr)) {
-    DVLOG(2) << "Failed to query the updater_internal interface. " << std::hex
-             << hr;
-    std::move(callback).Run();
-    return;
-  }
+
+  // TODO(crbug.com/1341471) - revert the CL that introduced the check after
+  // the bug is resolved.
+  VLOG_IF(2, FAILED(hr)) << "Failed to query the updater_internal interface. "
+                         << std::hex << hr;
+  CHECK(SUCCEEDED(hr));
 
   // The COM RPC takes ownership of the `rpc_callback` and owns a reference to
   // the `updater_internal` object as well. As long as the `rpc_callback`
@@ -161,7 +170,7 @@ void UpdateServiceInternalProxy::RunOnSTA(base::OnceClosure callback) {
       updater_internal, std::move(callback));
   hr = updater_internal->Run(rpc_callback.Get());
   if (FAILED(hr)) {
-    DVLOG(2) << "Failed to call IUpdaterInternal::Run" << std::hex << hr;
+    VLOG(2) << "Failed to call IUpdaterInternal::Run" << std::hex << hr;
 
     // Since the RPC call returned an error, it can't be determined what the
     // state of the update server is. The RPC callback may or may not have run.
@@ -175,6 +184,7 @@ void UpdateServiceInternalProxy::RunOnSTA(base::OnceClosure callback) {
 void UpdateServiceInternalProxy::InitializeUpdateService(
     base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_main_);
+  VLOG(1) << __func__;
 
   com_task_runner_->PostTask(
       FROM_HERE,
@@ -182,6 +192,52 @@ void UpdateServiceInternalProxy::InitializeUpdateService(
           &UpdateServiceInternalProxy::InitializeUpdateServiceOnSTA, this,
           base::BindPostTask(main_task_runner_, std::move(callback))));
 }
+
+namespace {
+
+// TODO(crbug.com/1341471) - revert the CL that introduced the check after the
+// bug is resolved. Loads the typelib and typeinfo for `iid` from updater.exe.
+// Logs on failure. If the typelib loads successfully, logs the registry entries
+// for the typelib for `iid`.
+void LogComInterfaceTypeLib(UpdaterScope scope, REFIID iid) {
+  base::FilePath typelib_path;
+  CHECK(base::PathService::Get(base::DIR_EXE, &typelib_path));
+  typelib_path = typelib_path.Append(GetExecutableRelativePath())
+                     .Append(GetComTypeLibResourceIndex(iid));
+
+  Microsoft::WRL::ComPtr<ITypeLib> type_lib;
+  if (HRESULT hr = ::LoadTypeLib(typelib_path.value().c_str(), &type_lib);
+      FAILED(hr)) {
+    LOG(ERROR) << __func__ << " ::LoadTypeLib failed: " << typelib_path << ": "
+               << std::hex << hr;
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<ITypeInfo> type_info;
+  if (HRESULT hr = type_lib->GetTypeInfoOfGuid(iid, &type_info); FAILED(hr)) {
+    LOG(ERROR) << __func__ << " ::GetTypeInfoOfGuid failed"
+               << ": " << std::hex << hr
+               << ": IID: " << base::win::WStringFromGUID(iid);
+    return;
+  }
+
+  const HKEY root = UpdaterScopeToHKeyRoot(scope);
+  const std::wstring typelib_reg_path = GetComTypeLibRegistryPath(iid);
+
+  std::wstring val;
+  const std::wstring typelib_reg_path_win32 =
+      typelib_reg_path + L"\\1.0\\0\\win32";
+  const std::wstring typelib_reg_path_win64 =
+      typelib_reg_path + L"\\1.0\\0\\win64";
+
+  for (const auto& path : {typelib_reg_path_win32, typelib_reg_path_win64}) {
+    CHECK(base::win::RegKey(root, path.c_str(), KEY_READ).ReadValue(L"", &val));
+    VLOG(1) << __func__ << ": " << path << ": " << val << ": "
+            << base::win::WStringFromGUID(iid);
+  }
+}
+
+}  // namespace
 
 void UpdateServiceInternalProxy::InitializeUpdateServiceOnSTA(
     base::OnceClosure callback) {
@@ -192,8 +248,8 @@ void UpdateServiceInternalProxy::InitializeUpdateServiceOnSTA(
   HRESULT hr = ::CoCreateInstance(GetInternalClass(), nullptr,
                                   CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&server));
   if (FAILED(hr)) {
-    DVLOG(2) << "Failed to instantiate the updater internal server. "
-             << std::hex << hr;
+    VLOG(2) << "Failed to instantiate the updater internal server. " << std::hex
+            << hr;
     std::move(callback).Run();
     return;
   }
@@ -201,8 +257,9 @@ void UpdateServiceInternalProxy::InitializeUpdateServiceOnSTA(
   Microsoft::WRL::ComPtr<IUpdaterInternal> updater_internal;
   hr = server.As(&updater_internal);
   if (FAILED(hr)) {
-    DVLOG(2) << "Failed to query the updater_internal interface. " << std::hex
-             << hr;
+    VLOG(2) << "Failed to query the updater_internal interface. " << std::hex
+            << hr;
+    LogComInterfaceTypeLib(scope_, __uuidof(IUpdaterInternal));
     std::move(callback).Run();
     return;
   }
@@ -211,8 +268,8 @@ void UpdateServiceInternalProxy::InitializeUpdateServiceOnSTA(
       updater_internal, std::move(callback));
   hr = updater_internal->InitializeUpdateService(rpc_callback.Get());
   if (FAILED(hr)) {
-    DVLOG(2) << "Failed to call IUpdaterInternal::InitializeUpdateService"
-             << std::hex << hr;
+    VLOG(2) << "Failed to call IUpdaterInternal::InitializeUpdateService"
+            << std::hex << hr;
     rpc_callback->Disconnect().Run();
     return;
   }

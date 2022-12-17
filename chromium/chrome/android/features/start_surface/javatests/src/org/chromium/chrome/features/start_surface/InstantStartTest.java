@@ -45,6 +45,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.build.BuildConfig;
@@ -56,7 +57,6 @@ import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.feed.FeedPlaceholderLayout;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -104,6 +104,7 @@ import java.util.concurrent.CountDownLatch;
         ChromeFeatureList.START_SURFACE_ANDROID, ChromeFeatureList.INSTANT_START})
 @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE,
     UiRestriction.RESTRICTION_TYPE_PHONE})
+@DoNotBatch(reason = "InstantStartTest tests startup behaviours and thus can't be batched.")
 public class InstantStartTest {
     // clang-format on
     private static final String IMMEDIATE_RETURN_PARAMS = "force-fieldtrial-params=Study.Group:"
@@ -169,7 +170,8 @@ public class InstantStartTest {
 
         final Bitmap thumbnailBitmap =
                 StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(tabId);
-        tabContentManager.getTabThumbnailWithCallback(tabId, thumbnailFetchListener, false, false);
+        tabContentManager.getTabThumbnailWithCallback(
+                tabId, null, thumbnailFetchListener, false, false);
         CriteriaHelper.pollInstrumentationThread(
                 () -> Criteria.checkThat(mThumbnailFetchCount, greaterThan(0)));
 
@@ -191,7 +193,7 @@ public class InstantStartTest {
         StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertFalse(cta.isTablet());
-        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
         Assert.assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1));
 
         StartSurfaceTestUtils.waitForOverviewVisible(cta);
@@ -217,7 +219,7 @@ public class InstantStartTest {
         StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertFalse(cta.isTablet());
-        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
         Assert.assertEquals("single", StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue());
         Assert.assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1));
 
@@ -235,8 +237,7 @@ public class InstantStartTest {
         Assert.assertFalse(startSurfaceCoordinator.isSecondaryTaskInitPendingForTesting());
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            startSurfaceCoordinator.getController().setStartSurfaceState(
-                    StartSurfaceState.SHOWN_TABSWITCHER);
+            startSurfaceCoordinator.setStartSurfaceState(StartSurfaceState.SHOWN_TABSWITCHER);
         });
         CriteriaHelper.pollUiThread(startSurfaceCoordinator::isSecondaryTaskInitPendingForTesting);
 
@@ -254,7 +255,7 @@ public class InstantStartTest {
         StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertTrue(cta.isTablet());
-        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
 
         CriteriaHelper.pollUiThread(
                 () -> { Criteria.checkThat(cta.getLayoutManager(), notNullValue()); });
@@ -329,7 +330,7 @@ public class InstantStartTest {
 
         Assert.assertTrue(
                 TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
-        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
 
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertFalse(ReturnToChromeUtil.isStartSurfaceEnabled(cta));
@@ -358,7 +359,7 @@ public class InstantStartTest {
 
         Assert.assertFalse(
                 TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
-        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
 
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertFalse(ReturnToChromeUtil.isStartSurfaceEnabled(cta));
@@ -486,8 +487,9 @@ public class InstantStartTest {
     @CommandLineFlags.Add({START_PARAMS})
     public void testShowLastTabWhenHomepageDisabledNoImmediateReturn() throws IOException {
         // clang-format on
-        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
-        Assert.assertEquals(-1, ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
+        Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
+        Assert.assertEquals(ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getDefaultValue(),
+                ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> HomepageManager.getInstance().setPrefHomepageEnabled(false));
@@ -506,8 +508,9 @@ public class InstantStartTest {
     public void testShowLastTabWhenHomepageDisabledNoImmediateReturn_NoInstant()
           throws IOException {
         // clang-format on
-        Assert.assertFalse(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
-        Assert.assertEquals(-1, ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
+        Assert.assertFalse(ChromeFeatureList.sInstantStart.isEnabled());
+        Assert.assertEquals(ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getDefaultValue(),
+                ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> HomepageManager.getInstance().setPrefHomepageEnabled(false));
@@ -546,8 +549,8 @@ public class InstantStartTest {
         StartSurfaceCoordinator startSurfaceCoordinator =
                 StartSurfaceTestUtils.getStartSurfaceFromUIThread(cta);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(startSurfaceCoordinator.getController().getStartSurfaceState(),
-                    StartSurfaceState.NOT_SHOWN);
+            Assert.assertEquals(
+                    startSurfaceCoordinator.getStartSurfaceState(), StartSurfaceState.NOT_SHOWN);
         });
     }
 

@@ -9,6 +9,7 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Rect;
+import android.util.Size;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnLayoutChangeListener;
@@ -24,6 +25,8 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.base.Callback;
+import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -88,6 +91,8 @@ public class TabListCoordinator
     private boolean mIsInitialized;
     private ViewTreeObserver.OnGlobalLayoutListener mGlobalLayoutListener;
     private OnLayoutChangeListener mListLayoutListener;
+    private boolean mLayoutListenerRegistered;
+    private @Nullable TabStripSnapshotter mTabStripSnapshotter;
 
     /**
      * Construct a coordinator for UI that shows a list of tabs.
@@ -111,6 +116,9 @@ public class TabListCoordinator
      * @param componentName A unique string uses to identify different components for UMA recording.
      *                      Recommended to use the class name or make sure the string is unique
      *                      through actions.xml file.
+     * @param rootView The root view of the app.
+     * @param onModelTokenChange Callback to invoke whenever a model changes. Only currently
+     *                           respected in TabListMode.STRIP mode.
      */
     TabListCoordinator(@TabListMode int mode, Context context, TabModelSelector tabModelSelector,
             @Nullable TabListMediator.ThumbnailProvider thumbnailProvider,
@@ -122,7 +130,7 @@ public class TabListCoordinator
             @Nullable TabSwitcherMediator
                     .PriceWelcomeMessageController priceWelcomeMessageController,
             @NonNull ViewGroup parentView, boolean attachToParent, String componentName,
-            @NonNull ViewGroup rootView) {
+            @NonNull ViewGroup rootView, @Nullable Callback<Object> onModelTokenChange) {
         mMode = mode;
         mItemType = itemType;
         mContext = context;
@@ -215,29 +223,6 @@ public class TabListCoordinator
                     "Attempting to create a tab list UI with invalid mode");
         }
 
-        if (!attachToParent) {
-            if(ChromeApplicationImpl.isVivaldi()) {
-                mRecyclerView = (TabListRecyclerView) LayoutInflater.from(context).inflate(
-                        R.layout.vivaldi_tab_list_recycler_view_layout, parentView, false);
-            } else
-            mRecyclerView = (TabListRecyclerView) LayoutInflater.from(context).inflate(
-                    R.layout.tab_list_recycler_view_layout, parentView, false);
-        } else {
-            LayoutInflater.from(context).inflate(
-                    R.layout.tab_list_recycler_view_layout, parentView, true);
-            mRecyclerView = parentView.findViewById(R.id.tab_list_view);
-        }
-
-        if (mode == TabListMode.CAROUSEL) {
-            ViewGroup.LayoutParams layoutParams = mRecyclerView.getLayoutParams();
-            layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-            mRecyclerView.setLayoutParams(layoutParams);
-        }
-
-        mRecyclerView.setAdapter(mAdapter);
-        mRecyclerView.setHasFixedSize(true);
-        if (recyclerListener != null) mRecyclerView.setRecyclerListener(recyclerListener);
-
         // TODO (https://crbug.com/1048632): Use the current profile (i.e., regular profile or
         // incognito profile) instead of always using regular profile. It works correctly now, but
         // it is not safe.
@@ -249,24 +234,49 @@ public class TabListCoordinator
                 selectionDelegateProvider, gridCardOnClickListenerProvider, dialogHandler,
                 priceWelcomeMessageController, componentName, itemType);
 
-        if (mMode == TabListMode.GRID) {
-            // Note(david@vivaldi.com): Calculate grid span count depending on screen size.
-            int spanCount = mMediator.calculateGridSpanCount(
-                    context.getResources().getConfiguration().orientation);
-            GridLayoutManager gridLayoutManager =
-                    new GridLayoutManager(context, spanCount); // Vivaldi: consider new span count.
-            mRecyclerView.setLayoutManager(gridLayoutManager);
-            mMediator.registerOrientationListener(gridLayoutManager);
-            mMediator.updateSpanCount(gridLayoutManager,
-                    context.getResources().getConfiguration().orientation,
-                    context.getResources().getConfiguration().screenWidthDp);
-            mMediator.setupAccessibilityDelegate(mRecyclerView);
-        } else if (mMode == TabListMode.STRIP || mMode == TabListMode.CAROUSEL
-                || mMode == TabListMode.LIST) {
-            mRecyclerView.setLayoutManager(new LinearLayoutManager(context,
-                    mMode == TabListMode.LIST ? LinearLayoutManager.VERTICAL
-                                              : LinearLayoutManager.HORIZONTAL,
-                    false));
+        try (TraceEvent e = TraceEvent.scoped("TabListCoordinator.setupRecyclerView")) {
+            if (!attachToParent) {
+                if(ChromeApplicationImpl.isVivaldi()) {
+                    mRecyclerView = (TabListRecyclerView) LayoutInflater.from(context).inflate(
+                            R.layout.vivaldi_tab_list_recycler_view_layout, parentView, false);
+                } else
+                mRecyclerView = (TabListRecyclerView) LayoutInflater.from(context).inflate(
+                        R.layout.tab_list_recycler_view_layout, parentView, false);
+            } else {
+                LayoutInflater.from(context).inflate(
+                        R.layout.tab_list_recycler_view_layout, parentView, true);
+                mRecyclerView = parentView.findViewById(R.id.tab_list_view);
+            }
+
+            if (mode == TabListMode.CAROUSEL) {
+                ViewGroup.LayoutParams layoutParams = mRecyclerView.getLayoutParams();
+                layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                mRecyclerView.setLayoutParams(layoutParams);
+            }
+
+            mRecyclerView.setAdapter(mAdapter);
+            mRecyclerView.setHasFixedSize(true);
+            if (recyclerListener != null) mRecyclerView.setRecyclerListener(recyclerListener);
+
+            if (mMode == TabListMode.GRID) {
+                // Note(david@vivaldi.com): Calculate grid span count depending on screen size.
+                int spanCount = mMediator.calculateGridSpanCount(
+                        context.getResources().getConfiguration().orientation);
+                GridLayoutManager gridLayoutManager =
+                        new GridLayoutManager(context, spanCount); // Vivaldi: consider new span count.
+                mRecyclerView.setLayoutManager(gridLayoutManager);
+                mMediator.registerOrientationListener(gridLayoutManager);
+                mMediator.updateSpanCount(gridLayoutManager,
+                        context.getResources().getConfiguration().orientation,
+                        context.getResources().getConfiguration().screenWidthDp);
+                mMediator.setupAccessibilityDelegate(mRecyclerView);
+            } else if (mMode == TabListMode.STRIP || mMode == TabListMode.CAROUSEL
+                    || mMode == TabListMode.LIST) {
+                mRecyclerView.setLayoutManager(new LinearLayoutManager(context,
+                        mMode == TabListMode.LIST ? LinearLayoutManager.VERTICAL
+                                                  : LinearLayoutManager.HORIZONTAL,
+                        false));
+            }
         }
 
         if (mMode == TabListMode.GRID && selectionDelegateProvider == null) {
@@ -275,6 +285,9 @@ public class TabListCoordinator
                 mListLayoutListener = (view, left, top, right, bottom, oldLeft, oldTop, oldRight,
                         oldBottom) -> updateGridCardLayout(right - left);
             }
+        } else if (mMode == TabListMode.STRIP) {
+            mTabStripSnapshotter =
+                    new TabStripSnapshotter(onModelTokenChange, mModel, mRecyclerView);
         }
     }
 
@@ -294,25 +307,30 @@ public class TabListCoordinator
     void initWithNative(DynamicResourceLoader dynamicResourceLoader) {
         if (mIsInitialized) return;
 
-        mIsInitialized = true;
+        try (TraceEvent e = TraceEvent.scoped("TabListCoordinator.initWithNative")) {
+            mIsInitialized = true;
 
-        Profile profile = Profile.getLastUsedRegularProfile();
-        mMediator.initWithNative(profile);
-        if (dynamicResourceLoader != null) {
-            mRecyclerView.createDynamicView(dynamicResourceLoader);
-        }
+            Profile profile = Profile.getLastUsedRegularProfile();
+            mMediator.initWithNative(profile);
+            if (dynamicResourceLoader != null) {
+                mRecyclerView.createDynamicView(dynamicResourceLoader);
+            }
 
-        if ((mMode == TabListMode.GRID || mMode == TabListMode.LIST)
-                && mItemType != UiType.SELECTABLE) {
-            ItemTouchHelper touchHelper = new ItemTouchHelper(mMediator.getItemTouchHelperCallback(
-                    mContext.getResources().getDimension(R.dimen.swipe_to_dismiss_threshold),
-                    mContext.getResources().getDimension(R.dimen.tab_grid_merge_threshold),
-                    mContext.getResources().getDimension(R.dimen.bottom_sheet_peek_height),
-                    profile));
-            touchHelper.attachToRecyclerView(mRecyclerView);
+            if ((mMode == TabListMode.GRID || mMode == TabListMode.LIST)
+                    && mItemType != UiType.SELECTABLE) {
+                ItemTouchHelper touchHelper =
+                        new ItemTouchHelper(mMediator.getItemTouchHelperCallback(
+                                mContext.getResources().getDimension(
+                                        R.dimen.swipe_to_dismiss_threshold),
+                                mContext.getResources().getDimension(
+                                        R.dimen.tab_grid_merge_threshold),
+                                mContext.getResources().getDimension(
+                                        R.dimen.bottom_sheet_peek_height),
+                                profile));
+                touchHelper.attachToRecyclerView(mRecyclerView);
+            }
         }
     }
-
     /**
      * Update the location of the selected thumbnail.
      * @return Whether a valid {@link Rect} is obtained.
@@ -337,8 +355,8 @@ public class TabListCoordinator
         final int cardWidthPx = (viewWidth / layoutManager.getSpanCount());
         final int cardHeightPx = TabUtils.deriveGridCardHeight(cardWidthPx, mContext);
         for (int i = 0; i < mModel.size(); i++) {
-            mModel.get(i).model.set(TabProperties.GRID_CARD_WIDTH, cardWidthPx);
-            mModel.get(i).model.set(TabProperties.GRID_CARD_HEIGHT, cardHeightPx);
+            mModel.get(i).model.set(
+                    TabProperties.GRID_CARD_SIZE, new Size(cardWidthPx, cardHeightPx));
         }
     }
 
@@ -401,15 +419,30 @@ public class TabListCoordinator
         mMediator.softCleanup();
     }
 
+    void hardCleanup() {
+        mMediator.hardCleanup();
+    }
+
     void prepareTabSwitcherView() {
         if (mGlobalLayoutListener != null) {
             mRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(mGlobalLayoutListener);
         }
-        if (mListLayoutListener != null) {
-            mRecyclerView.addOnLayoutChangeListener(mListLayoutListener);
-        }
+        registerLayoutChangeListener();
         mRecyclerView.prepareTabSwitcherView();
         mMediator.prepareTabSwitcherView();
+        mMediator.registerOnScrolledListener(mRecyclerView);
+    }
+
+    private void registerLayoutChangeListener() {
+        if (mListLayoutListener != null) {
+            assert !mLayoutListenerRegistered;
+            mLayoutListenerRegistered = true;
+            mRecyclerView.addOnLayoutChangeListener(mListLayoutListener);
+        }
+    }
+
+    public void prepareTabGridDialogView() {
+        registerLayoutChangeListener();
     }
 
     void postHiding() {
@@ -418,6 +451,7 @@ public class TabListCoordinator
         }
         if (mListLayoutListener != null) {
             mRecyclerView.removeOnLayoutChangeListener(mListLayoutListener);
+            mLayoutListenerRegistered = false;
         }
         mRecyclerView.postHiding();
         mMediator.postHiding();
@@ -434,8 +468,12 @@ public class TabListCoordinator
         }
         if (mListLayoutListener != null) {
             mRecyclerView.removeOnLayoutChangeListener(mListLayoutListener);
+            mLayoutListenerRegistered = false;
         }
         mRecyclerView.setRecyclerListener(null);
+        if (mTabStripSnapshotter != null) {
+            mTabStripSnapshotter.destroy();
+        }
     }
 
     int getResourceId() {

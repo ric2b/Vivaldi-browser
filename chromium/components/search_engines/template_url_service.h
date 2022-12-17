@@ -684,9 +684,9 @@ class TemplateURLService : public WebDataServiceConsumer,
   // Updates |template_urls| so that the only "created by policy" entry is
   // |default_from_prefs|. |default_from_prefs| may be NULL if there is no
   // policy-defined DSE in effect.
-  void UpdateProvidersCreatedByPolicy(
-      OwnedTemplateURLVector* template_urls,
-      const TemplateURLData* default_from_prefs);
+  void UpdateProvidersCreatedByPolicy(OwnedTemplateURLVector* template_urls,
+                                      const TemplateURLData* default_from_prefs,
+                                      bool is_mandatory);
 
   // Resets the sync GUID of the specified TemplateURL and persists the change
   // to the database. This does not notify observers.
@@ -765,6 +765,11 @@ class TemplateURLService : public WebDataServiceConsumer,
   // DSE may be sourced from prefs, and we still want to consider the
   // corresponding database entry a match. https://crbug.com/1164024
   bool MatchesDefaultSearchProvider(TemplateURL* turl) const;
+
+  // Emits the UMA Histogram for the number of search engines that are active
+  // and inactive at load time.
+  void EmitTemplateURLActiveOnStartupHistogram(
+      OwnedTemplateURLVector* template_urls);
 
   // ---------- Browser state related members ---------------------------------
   raw_ptr<PrefService> prefs_ = nullptr;

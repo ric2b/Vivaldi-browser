@@ -7,6 +7,8 @@
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "components/policy/policy_constants.h"
+#import "components/signin/internal/identity_manager/account_capabilities_constants.h"
+#import "components/signin/ios/browser/features.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/metrics/metrics_app_interface.h"
@@ -18,6 +20,8 @@
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/authentication/signin_matchers.h"
 #import "ios/chrome/browser/ui/authentication/views/views_constants.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
@@ -27,6 +31,8 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/chrome/test/earl_grey/web_http_server_chrome_test_case.h"
+#import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_interaction_manager_constants.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
@@ -74,6 +80,21 @@ char const kManagedText[] = "Your browser is managed by your administrator.";
 
 NSString* const kPassphrase = @"hello";
 
+// Timeout in seconds to wait for asynchronous sync operations.
+const NSTimeInterval kSyncOperationTimeout = 5.0;
+
+// Sets parental control capability for the given identity.
+void SetParentalControlsCapabilityForIdentity(FakeChromeIdentity* identity) {
+  // The identity must exist in the test storage to be able to set capabilities
+  // through the fake identity service.
+  [SigninEarlGrey addFakeIdentity:identity];
+
+  NSDictionary* capabilities = @{
+    @(kIsSubjectToParentalControlsCapabilityName) : [NSNumber
+        numberWithInt:(int)ios::ChromeIdentityCapabilityResult::kTrue],
+  };
+  [SigninEarlGrey setCapabilities:capabilities forIdentity:identity];
+}
 // Closes the sign-in import data dialog and choose either to combine the data
 // or keep the data separate.
 void CloseImportDataDialog(id<GREYMatcher> choiceButtonMatcher) {
@@ -148,22 +169,31 @@ void ExpectSyncConsentHistogram(
 
 // Sign-in interaction tests that work both with Unified Consent enabled or
 // disabled.
-@interface SigninCoordinatorTestCase : ChromeTestCase
+@interface SigninCoordinatorTestCase : WebHttpServerChromeTestCase
 @end
 
 @implementation SigninCoordinatorTestCase
+
+- (AppLaunchConfiguration)appConfigurationForTestCase {
+  AppLaunchConfiguration config = [super appConfigurationForTestCase];
+  config.features_enabled.push_back(signin::kEnableUnicornAccountSupport);
+  return config;
+}
 
 - (void)setUp {
   [super setUp];
   // Remove closed tab history to make sure the sign-in promo is always visible
   // in recent tabs.
   [ChromeEarlGrey clearBrowsingHistory];
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
+  [ChromeEarlGrey clearBookmarks];
   GREYAssertNil([MetricsAppInterface setupHistogramTester],
                 @"Failed to set up histogram tester.");
 }
 
 - (void)tearDown {
   [super tearDown];
+  [BookmarkEarlGrey clearBookmarksPositionCache];
   GREYAssertNil([MetricsAppInterface releaseHistogramTester],
                 @"Cannot reset histogram tester.");
 }
@@ -181,14 +211,74 @@ void ExpectSyncConsentHistogram(
   ExpectSyncConsentHistogram(signin_metrics::SigninAccountType::kRegular);
 }
 
+// Tests that opening the sign-in screen from the Settings and signing in works
+// correctly when there is a supervised user identity on the device.
+- (void)testSignInSupervisedUser {
+  // Set up a fake supervised identity.
+  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
+  SetParentalControlsCapabilityForIdentity(fakeIdentity);
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
+}
+
+// Tests that signing out a supervised user account with the keep local data
+// option is honored.
+- (void)testSignOutWithKeepDataForSupervisedUser {
+  // Sign in with a fake supervised identity.
+  FakeChromeIdentity* fakeSupervisedIdentity =
+      [FakeChromeIdentity fakeIdentity1];
+  SetParentalControlsCapabilityForIdentity(fakeSupervisedIdentity);
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeSupervisedIdentity];
+
+  // Add a bookmark after sync is initialized.
+  [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
+  [BookmarkEarlGrey setupStandardBookmarks];
+
+  // Sign out from the supervised account with option to keep local data.
+  [SigninEarlGreyUI
+      signOutWithConfirmationChoice:SignOutConfirmationChoiceKeepData];
+
+  // Verify bookmarks are available.
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];
+}
+
+// Tests that signing out a supervised user account with the clear local data
+// option is honored.
+- (void)testSignOutWithClearDataForSupervisedUser {
+  // Sign in with a fake supervised identity.
+  FakeChromeIdentity* fakeSupervisedIdentity =
+      [FakeChromeIdentity fakeIdentity1];
+  SetParentalControlsCapabilityForIdentity(fakeSupervisedIdentity);
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeSupervisedIdentity];
+
+  // Add a bookmark after sync is initialized.
+  [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
+  [BookmarkEarlGrey setupStandardBookmarks];
+
+  // Sign out from the supervised account with option to clear local data.
+  [SigninEarlGreyUI
+      signOutWithConfirmationChoice:SignOutConfirmationChoiceClearData];
+
+  // Verify bookmarks are cleared.
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI verifyEmptyBackgroundAppears];
+}
+
 // Tests signing in with one account, switching sync account to a second and
 // choosing to keep the browsing data separate during the switch.
+// Flaky, crbug.com/1279995.
 - (void)DISABLED_testSignInSwitchAccountsAndKeepDataSeparate {
   ChooseImportOrKeepDataSepareteDialog(SettingsImportDataKeepSeparateButton());
 }
 
 // Tests signing in with one account, switching sync account to a second and
 // choosing to import the browsing data during the switch.
+// Flaky, crbug.com/1279995.
 - (void)DISABLED_testSignInSwitchAccountsAndImportData {
   ChooseImportOrKeepDataSepareteDialog(SettingsImportDataImportButton());
 }
@@ -327,7 +417,8 @@ void ExpectSyncConsentHistogram(
 
   // Open Bookmarks and tap on Sign In promo button.
   [ChromeEarlGreyUI openToolsMenu];
-  [ChromeEarlGreyUI tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
 
   // Assert sign-in screen was shown.
@@ -347,7 +438,8 @@ void ExpectSyncConsentHistogram(
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   [ChromeEarlGreyUI openToolsMenu];
-  [ChromeEarlGreyUI tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity.userEmail)]
@@ -509,7 +601,7 @@ void ExpectSyncConsentHistogram(
     case OpenSigninMethodFromBookmarks:
       [ChromeEarlGreyUI openToolsMenu];
       [ChromeEarlGreyUI
-          tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
+          tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
       [[EarlGrey selectElementWithMatcher:PrimarySignInButton()]
           performAction:grey_tap()];
       break;
@@ -982,6 +1074,7 @@ void ExpectSyncConsentHistogram(
 }
 
 // Tests to sign-in with one user, and then turn on syncn with a second account.
+// Flaky, crbug.com/1279995.
 - (void)DISABLED_testSignInWithOneAccountStartSyncWithAnotherAccount {
   FakeChromeIdentity* fakeIdentity1 = [FakeChromeIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity1];
@@ -1010,11 +1103,12 @@ void ExpectSyncConsentHistogram(
 // Tests that when the syncTypesListDisabled policy is enabled, the signin promo
 // description is updated and when opening the sign-in screen a policy warning
 // is displayed with a link that opens the policy management page.
-- (void)DISABLED_testSynTypesDisabledPolicy {
+// Flaky, crbug.com/1279995.
+- (void)DISABLED_testSyncTypesDisabledPolicy {
   // Set policy.
-  std::vector<base::Value> values;
-  values.push_back(base::Value("tabs"));
-  policy_test_utils::SetPolicy(base::Value(std::move(values)),
+  base::Value::List list;
+  list.Append("tabs");
+  policy_test_utils::SetPolicy(base::Value(std::move(list)),
                                policy::key::kSyncTypesListDisabled);
 
   // Check that the promo description is updated.

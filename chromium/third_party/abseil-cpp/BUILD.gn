@@ -72,6 +72,7 @@ group("absl_component_deps") {
     "//third_party/abseil-cpp/absl/debugging:failure_signal_handler",
     "//third_party/abseil-cpp/absl/debugging:stacktrace",
     "//third_party/abseil-cpp/absl/debugging:symbolize",
+    "//third_party/abseil-cpp/absl/functional:any_invocable",
     "//third_party/abseil-cpp/absl/functional:bind_front",
     "//third_party/abseil-cpp/absl/functional:function_ref",
     "//third_party/abseil-cpp/absl/hash",
@@ -97,10 +98,6 @@ group("absl_component_deps") {
   # TODO(https://crbug.com/1114625): Fix build errors and remove this section.
   if (is_nacl) {
     public_deps -= [
-      "//third_party/abseil-cpp/absl/container:flat_hash_map",
-      "//third_party/abseil-cpp/absl/container:flat_hash_set",
-      "//third_party/abseil-cpp/absl/container:node_hash_map",
-      "//third_party/abseil-cpp/absl/container:node_hash_set",
       "//third_party/abseil-cpp/absl/debugging:failure_signal_handler",
     ]
   }
@@ -191,6 +188,7 @@ if (build_with_chromium) {
         "absl/container:inlined_vector_test",
         "absl/container:node_slot_policy_test",
         "absl/container:sample_element_size_test",
+        "absl/functional:any_invocable_test",
         "absl/hash:hash_test",
         "absl/hash:low_level_hash_test",
         "absl/memory:memory_test",
@@ -199,6 +197,7 @@ if (build_with_chromium) {
         "absl/profiling:periodic_sampler_test",
         "absl/status:statusor_test",
         "absl/strings:ascii_test",
+        "absl/strings:cord_buffer_test",
         "absl/strings:cord_data_edge_test",
         "absl/strings:cord_rep_btree_navigator_test",
         "absl/strings:cord_rep_btree_reader_test",

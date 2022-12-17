@@ -4,16 +4,21 @@
 
 #include "content/services/shared_storage_worklet/shared_storage_worklet_global_scope.h"
 
+#include "base/check_op.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "components/services/storage/shared_storage/public/mojom/shared_storage.mojom.h"
+#include "content/common/aggregatable_report.mojom.h"
+#include "content/common/private_aggregation_host.mojom.h"
 #include "content/services/shared_storage_worklet/worklet_v8_helper.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
 #include "gin/function_template.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-value-serializer.h"
@@ -151,6 +156,16 @@ class TestClient
     observed_console_log_messages_.push_back(message);
   }
 
+  void RecordUseCounters(
+      const std::vector<blink::mojom::WebFeature>& features) override {
+    ASSERT_THAT(
+        features,
+        testing::UnorderedElementsAre(
+            blink::mojom::WebFeature::kPrivateAggregationApiAll,
+            blink::mojom::WebFeature::kPrivateAggregationApiSharedStorage));
+    observed_record_use_counter_call_ = true;
+  }
+
   const std::vector<SetParams>& observed_set_params() const {
     return observed_set_params_;
   }
@@ -165,6 +180,10 @@ class TestClient
 
   const std::vector<std::u16string>& observed_get_params() const {
     return observed_get_params_;
+  }
+
+  bool observed_record_use_counter_call() const {
+    return observed_record_use_counter_call_;
   }
 
   const std::vector<std::string>& observed_console_log_messages() const {
@@ -219,6 +238,20 @@ class TestClient
   std::vector<std::u16string> observed_delete_params_;
   std::vector<std::u16string> observed_get_params_;
   std::vector<std::string> observed_console_log_messages_;
+  bool observed_record_use_counter_call_ = false;
+};
+
+class MockMojomPrivateAggregationHost
+    : public content::mojom::PrivateAggregationHost {
+ public:
+  // mojom::PrivateAggregationHost:
+  MOCK_METHOD(
+      void,
+      SendHistogramReport,
+      (std::vector<content::mojom::AggregatableReportHistogramContributionPtr>,
+       content::mojom::AggregationServiceMode,
+       content::mojom::DebugModeDetailsPtr),
+      (override));
 };
 
 }  // namespace
@@ -229,6 +262,8 @@ class SharedStorageWorkletGlobalScopeTest : public testing::Test {
       : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     test_client_ = std::make_unique<TestClient>(
         task_environment_.GetMainThreadTaskRunner());
+    mock_private_aggregation_host_ =
+        std::make_unique<MockMojomPrivateAggregationHost>();
     global_scope_ = std::make_unique<SharedStorageWorkletGlobalScope>();
   }
 
@@ -358,11 +393,16 @@ class SharedStorageWorkletGlobalScopeTest : public testing::Test {
   }
 
   TestClient* test_client() { return test_client_.get(); }
+  MockMojomPrivateAggregationHost* mock_private_aggregation_host() {
+    return mock_private_aggregation_host_.get();
+  }
 
  protected:
   base::test::SingleThreadTaskEnvironment task_environment_;
 
   std::unique_ptr<TestClient> test_client_;
+  std::unique_ptr<MockMojomPrivateAggregationHost>
+      mock_private_aggregation_host_;
 
   std::unique_ptr<SharedStorageWorkletGlobalScope> global_scope_;
 };
@@ -373,7 +413,8 @@ TEST_F(SharedStorageWorkletGlobalScopeTest, IsolateNotInitializedByDefault) {
 
 TEST_F(SharedStorageWorkletGlobalScopeTest, OnModuleScriptDownloadedSuccess) {
   global_scope_->OnModuleScriptDownloaded(
-      test_client_.get(), GURL("https://example.test"), base::DoNothing(),
+      test_client_.get(), mock_private_aggregation_host_.get(),
+      GURL("https://example.test"), base::DoNothing(),
       /*response_body=*/std::make_unique<std::string>(),
       /*error_message=*/{});
 
@@ -391,6 +432,8 @@ TEST_F(SharedStorageWorkletGlobalScopeTest, OnModuleScriptDownloadedSuccess) {
   EXPECT_EQ(GetTypeOf("sharedStorage.keys"), "function");
   EXPECT_EQ(GetTypeOf("sharedStorage.entries"), "function");
   EXPECT_EQ(GetTypeOf("sharedStorage.length"), "function");
+  EXPECT_EQ(GetTypeOf("privateAggregation"), "object");
+  EXPECT_EQ(GetTypeOf("privateAggregation.sendHistogramReport"), "function");
 }
 
 TEST_F(SharedStorageWorkletGlobalScopeTest, OnModuleScriptDownloadedWithError) {
@@ -402,17 +445,31 @@ TEST_F(SharedStorageWorkletGlobalScopeTest, OnModuleScriptDownloadedWithError) {
         callback_called = true;
       });
 
-  global_scope_->OnModuleScriptDownloaded(test_client_.get(),
-                                          GURL("https://example.test"),
-                                          std::move(cb), nullptr, "error1");
+  global_scope_->OnModuleScriptDownloaded(
+      test_client_.get(), mock_private_aggregation_host_.get(),
+      GURL("https://example.test"), std::move(cb), nullptr, "error1");
 
   EXPECT_FALSE(IsolateInitialized());
   EXPECT_TRUE(callback_called);
 }
 
+TEST_F(SharedStorageWorkletGlobalScopeTest,
+       OnModuleScriptDownloadedWithoutPrivateAggregationHost) {
+  global_scope_->OnModuleScriptDownloaded(
+      test_client_.get(), /*private_aggregation_host=*/nullptr,
+      GURL("https://example.test"), base::DoNothing(),
+      /*response_body=*/std::make_unique<std::string>(),
+      /*error_message=*/{});
+
+  EXPECT_TRUE(IsolateInitialized());
+
+  EXPECT_EQ(GetTypeOf("privateAggregation"), "undefined");
+}
+
 class SharedStorageAddModuleTest : public SharedStorageWorkletGlobalScopeTest {
  public:
-  void SimulateAddModule(const std::string& script_body) {
+  void SimulateAddModule(const std::string& script_body,
+                         bool define_private_aggregation_host = true) {
     bool callback_called = false;
 
     auto cb = base::BindLambdaForTesting(
@@ -424,7 +481,10 @@ class SharedStorageAddModuleTest : public SharedStorageWorkletGlobalScopeTest {
         });
 
     global_scope_->OnModuleScriptDownloaded(
-        test_client_.get(), GURL("https://example.test"), std::move(cb),
+        test_client_.get(),
+        define_private_aggregation_host ? mock_private_aggregation_host_.get()
+                                        : nullptr,
+        GURL("https://example.test"), std::move(cb),
         std::make_unique<std::string>(script_body), /*error_message=*/{});
 
     ASSERT_TRUE(callback_called);
@@ -547,6 +607,21 @@ TEST_F(SharedStorageAddModuleTest, RegisterOperation_MissingRunFunction) {
             "function in the class.");
 }
 
+TEST_F(SharedStorageAddModuleTest,
+       RegisterOperation_ClassPrototypeNotAnObject) {
+  SimulateAddModule(R"(
+    function test() {};
+    test.prototype = 123;
+
+    register("test-operation", test);
+  )");
+
+  EXPECT_FALSE(success());
+  EXPECT_EQ(error_message(),
+            "https://example.test/:5 Uncaught TypeError: Unexpected class "
+            "prototype: not an object.");
+}
+
 TEST_F(SharedStorageAddModuleTest, RegisterOperation_Success) {
   SimulateAddModule(R"(
     class TestClass {
@@ -580,12 +655,52 @@ TEST_F(SharedStorageAddModuleTest, RegisterOperation_AlreadyRegistered) {
             "already registered.");
 }
 
+TEST_F(SharedStorageAddModuleTest,
+       RegisterOperationWithPrivateAggregationCall_CallForwarded) {
+  // The operation will not be run.
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport).Times(0);
+
+  SimulateAddModule(R"(
+    class TestClass {
+      async run() {
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+      }
+    }
+
+    register("test-operation", TestClass);
+  )");
+
+  EXPECT_TRUE(success());
+  EXPECT_TRUE(error_message().empty());
+}
+
+TEST_F(SharedStorageAddModuleTest,
+       RegisterOperationWithPrivateAggregationCall_PAHostNotDefined) {
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport).Times(0);
+
+  SimulateAddModule(R"(
+    class TestClass {
+      async run() {
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+      }
+    }
+
+    register("test-operation", TestClass);
+  )",
+                    /*define_private_aggregation_host=*/false);
+
+  EXPECT_TRUE(success());
+  EXPECT_TRUE(error_message().empty());
+  EXPECT_FALSE(test_client()->observed_record_use_counter_call());
+}
+
 class SharedStorageRunOperationTest
     : public SharedStorageWorkletGlobalScopeTest {
  public:
   // The caller should provide a valid module script. The purpose of this test
   // suite is to test RunOperation.
-  void SimulateAddModule(const std::string& script_body) {
+  void SimulateAddModule(const std::string& script_body,
+                         bool define_private_aggregation_host = true) {
     bool add_module_callback_called = false;
 
     auto add_module_callback = base::BindLambdaForTesting(
@@ -595,8 +710,10 @@ class SharedStorageRunOperationTest
         });
 
     global_scope_->OnModuleScriptDownloaded(
-        test_client_.get(), GURL("https://example.test"),
-        std::move(add_module_callback),
+        test_client_.get(),
+        define_private_aggregation_host ? mock_private_aggregation_host_.get()
+                                        : nullptr,
+        GURL("https://example.test"), std::move(add_module_callback),
         std::make_unique<std::string>(script_body), /*error_message=*/{});
 
     ASSERT_TRUE(add_module_callback_called);
@@ -1307,6 +1424,65 @@ TEST_F(
   EXPECT_EQ(url_selection_operation_index(), 0u);
 }
 
+TEST_F(SharedStorageRunOperationTest,
+       UnnamedOperationWithPrivateAggregationCall_Success) {
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport)
+      .WillOnce(testing::Invoke(
+          [](std::vector<
+                 content::mojom::AggregatableReportHistogramContributionPtr>
+                 contributions,
+             content::mojom::AggregationServiceMode aggregation_mode,
+             content::mojom::DebugModeDetailsPtr debug_mode_details) {
+            ASSERT_EQ(contributions.size(), 1u);
+            EXPECT_EQ(contributions[0]->bucket, 1);
+            EXPECT_EQ(contributions[0]->value, 2);
+            EXPECT_EQ(aggregation_mode,
+                      content::mojom::AggregationServiceMode::kDefault);
+            ASSERT_FALSE(debug_mode_details.is_null());
+            EXPECT_EQ(*debug_mode_details, content::mojom::DebugModeDetails());
+          }));
+
+  SimulateAddModule(R"(
+      class TestClass {
+        async run() {
+          privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+        }
+      }
+
+      register("test-operation", TestClass);
+    )");
+
+  SimulateRunOperation("test-operation", /*serialized_data=*/{});
+
+  EXPECT_TRUE(unnamed_operation_finished());
+  EXPECT_TRUE(unnamed_operation_success());
+  EXPECT_TRUE(unnamed_operation_error_message().empty());
+}
+
+TEST_F(SharedStorageRunOperationTest,
+       UnnamedOperationWithPrivateAggregationCall_PAHostNotDefined) {
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport).Times(0);
+
+  SimulateAddModule(R"(
+      class TestClass {
+        async run() {
+          privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+        }
+      }
+
+      register("test-operation", TestClass);
+    )",
+                    /*define_private_aggregation_host=*/false);
+
+  SimulateRunOperation("test-operation", /*serialized_data=*/{});
+
+  EXPECT_TRUE(unnamed_operation_finished());
+  EXPECT_FALSE(unnamed_operation_success());
+  EXPECT_EQ(unnamed_operation_error_message(),
+            "ReferenceError: privateAggregation is not defined");
+  EXPECT_FALSE(test_client()->observed_record_use_counter_call());
+}
+
 class SharedStorageObjectMethodTest : public SharedStorageRunOperationTest {
  public:
   SharedStorageObjectMethodTest() {
@@ -1752,7 +1928,7 @@ TEST_F(SharedStorageObjectMethodTest,
 
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{}, CreateBatchResult({}),
-      /*has_more_entries=*/false);
+      /*has_more_entries=*/false, /*total_queued_to_send=*/0);
   task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(finished());
@@ -1780,7 +1956,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/false, /*error_message=*/"Internal error 12345",
       CreateBatchResult({}),
-      /*has_more_entries=*/true);
+      /*has_more_entries=*/true, /*total_queued_to_send=*/0);
   task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(finished());
@@ -1813,7 +1989,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key0", u"value0"}}),
-      /*has_more_entries=*/true);
+      /*has_more_entries=*/true, /*total_queued_to_send=*/3);
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(finished());
@@ -1823,7 +1999,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key1", u"value1"}, {u"key2", u"value2"}}),
-      /*has_more_entries=*/false);
+      /*has_more_entries=*/false, /*total_queued_to_send=*/3);
   task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(finished());
@@ -1853,7 +2029,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key0", u"value0"}}),
-      /*has_more_entries=*/true);
+      /*has_more_entries=*/true, /*total_queued_to_send=*/3);
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(finished());
@@ -1863,7 +2039,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/false, /*error_message=*/"Internal error 12345",
       CreateBatchResult({}),
-      /*has_more_entries=*/true);
+      /*has_more_entries=*/true, /*total_queued_to_send=*/3);
   task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(finished());
@@ -1897,7 +2073,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key0", u"value0"}, {u"key1", u"value1"}}),
-      /*has_more_entries=*/false);
+      /*has_more_entries=*/false, /*total_queued_to_send=*/2);
   task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(finished());
@@ -1940,7 +2116,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key0", /*value=*/{}}}),
-      /*has_more_entries=*/true);
+      /*has_more_entries=*/true, /*total_queued_to_send=*/6);
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(finished());
@@ -1949,7 +2125,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key1", /*value=*/{}}, {u"key2", /*value=*/{}}}),
-      /*has_more_entries=*/true);
+      /*has_more_entries=*/true, /*total_queued_to_send=*/6);
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(finished());
@@ -1960,7 +2136,7 @@ TEST_F(SharedStorageObjectMethodTest,
   remote_listener->DidReadEntries(
       /*success=*/true, /*error_message=*/{},
       CreateBatchResult({{u"key3", /*value=*/{}}}),
-      /*has_more_entries=*/false);
+      /*has_more_entries=*/false, /*total_queued_to_send=*/6);
   task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(finished());
@@ -2019,6 +2195,376 @@ TEST_F(SharedStorageObjectMethodTest, ConsoleLogOperation_MultipleArguments) {
   EXPECT_EQ(test_client()->observed_console_log_messages().size(), 1u);
   EXPECT_EQ(test_client()->observed_console_log_messages()[0],
             "123 456 true undefined null [object Object]");
+}
+
+class SharedStoragePrivateAggregationTest
+    : public SharedStorageRunOperationTest {
+ public:
+  SharedStoragePrivateAggregationTest() {
+    // Run AddModule so that `privateAggregation` is exposed.
+    SimulateAddModule(R"()");
+  }
+
+  void ExecuteScriptExpectNoError(const std::string& script_body) {
+    std::string error_message;
+    ExecuteScript(script_body, &error_message);
+    EXPECT_TRUE(error_message.empty());
+  }
+
+  void ExecuteScriptAndValidateContribution(
+      const std::string& script_body,
+      absl::uint128 expected_bucket,
+      int expected_value,
+      content::mojom::DebugModeDetailsPtr expected_debug_mode_details =
+          content::mojom::DebugModeDetails::New()) {
+    EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport)
+        .WillOnce(testing::Invoke(
+            [&](std::vector<
+                    content::mojom::AggregatableReportHistogramContributionPtr>
+                    contributions,
+                content::mojom::AggregationServiceMode aggregation_mode,
+                content::mojom::DebugModeDetailsPtr debug_mode_details) {
+              ASSERT_EQ(contributions.size(), 1u);
+              EXPECT_EQ(contributions[0]->bucket, expected_bucket);
+              EXPECT_EQ(contributions[0]->value, expected_value);
+              EXPECT_EQ(aggregation_mode,
+                        content::mojom::AggregationServiceMode::kDefault);
+              EXPECT_TRUE(debug_mode_details == expected_debug_mode_details);
+            }));
+
+    ExecuteScriptExpectNoError(script_body);
+
+    EXPECT_TRUE(test_client()->observed_record_use_counter_call());
+  }
+
+  std::string ExecuteScriptReturningError(
+      const std::string& script_body,
+      bool expected_use_counter_called = true) {
+    EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport).Times(0);
+
+    std::string error_message;
+    ExecuteScript(script_body, &error_message);
+    EXPECT_FALSE(error_message.empty());
+
+    // These tests all invoke sendHistogramReport (albeit incorrectly), so the
+    // use counter is expected to be triggered.
+    EXPECT_TRUE(test_client()->observed_record_use_counter_call());
+    return error_message;
+  }
+
+ private:
+  void ExecuteScript(const std::string& script_body, std::string* out_error) {
+    WorkletV8Helper::HandleScope scope(Isolate());
+    v8::Local<v8::Context> context = LocalContext();
+    v8::Context::Scope context_scope(context);
+
+    WorkletV8Helper::CompileAndRunScript(
+        LocalContext(), script_body, GURL("https://example.test"), out_error);
+  }
+};
+
+TEST_F(SharedStoragePrivateAggregationTest, BasicTest) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 1, value: 2});",
+      /*expected_bucket=*/1, /*expected_value=*/2);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, BigIntBucket) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 1n, value: 2});",
+      /*expected_bucket=*/1, /*expected_value=*/2);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, ZeroBucket) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 0, value: 2});",
+      /*expected_bucket=*/0, /*expected_value=*/2);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, ZeroBigIntBucket) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 0n, value: 2});",
+      /*expected_bucket=*/0, /*expected_value=*/2);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, ZeroValue) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 1, value: 0});",
+      /*expected_bucket=*/1, /*expected_value=*/0);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, LargeBucket) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 18446744073709551616n, "
+      "value: 2});",
+      /*expected_bucket=*/absl::MakeUint128(/*high=*/1, /*low=*/0),
+      /*expected_value=*/2);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, MaxBucket) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: "
+      "340282366920938463463374607431768211455n, value: 2});",
+      /*expected_bucket=*/absl::Uint128Max(), /*expected_value=*/2);
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NonIntegerBucket_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.sendHistogramReport({bucket: 1.5, value: 2});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: Bucket must be either "
+            "an integer Number or BigInt.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, TooLargeBucket_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.sendHistogramReport({bucket: "
+      "340282366920938463463374607431768211456n, value: 2});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: BigInt is too large.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NegativeBucket_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.sendHistogramReport({bucket: "
+      "-1, value: 2});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: Bucket must be either "
+            "an integer Number or BigInt.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NegativeBigIntBucket_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.sendHistogramReport({bucket: "
+      "-1n, value: 2});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: BigInt must be "
+            "non-negative.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NonIntegerValue_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.sendHistogramReport({bucket: 1, value: 2.3});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: Value must be an "
+            "integer Number.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NegativeValue_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.sendHistogramReport({bucket: 1, value: -1});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: Value must be "
+            "non-negative.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NoApiUse_UseCounterNotCalled) {
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport).Times(0);
+  ExecuteScriptExpectNoError("const a = 1;");
+  EXPECT_FALSE(test_client()->observed_record_use_counter_call());
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, MultipleRequests) {
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport)
+      .WillOnce(testing::Invoke(
+          [](std::vector<
+                 content::mojom::AggregatableReportHistogramContributionPtr>
+                 contributions,
+             content::mojom::AggregationServiceMode aggregation_mode,
+             content::mojom::DebugModeDetailsPtr debug_mode_details) {
+            ASSERT_EQ(contributions.size(), 1u);
+            EXPECT_EQ(contributions[0]->bucket, 1);
+            EXPECT_EQ(contributions[0]->value, 2);
+            EXPECT_EQ(aggregation_mode,
+                      content::mojom::AggregationServiceMode::kDefault);
+            ASSERT_FALSE(debug_mode_details.is_null());
+            EXPECT_EQ(*debug_mode_details, content::mojom::DebugModeDetails());
+          }))
+      .WillOnce(testing::Invoke(
+          [](std::vector<
+                 content::mojom::AggregatableReportHistogramContributionPtr>
+                 contributions,
+             content::mojom::AggregationServiceMode aggregation_mode,
+             content::mojom::DebugModeDetailsPtr debug_mode_details) {
+            ASSERT_EQ(contributions.size(), 1u);
+            EXPECT_EQ(contributions[0]->bucket, 3);
+            EXPECT_EQ(contributions[0]->value, 4);
+            EXPECT_EQ(aggregation_mode,
+                      content::mojom::AggregationServiceMode::kDefault);
+            ASSERT_FALSE(debug_mode_details.is_null());
+            EXPECT_EQ(*debug_mode_details, content::mojom::DebugModeDetails());
+          }));
+
+  ExecuteScriptExpectNoError(
+      R"(
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+        privateAggregation.sendHistogramReport({bucket: 3, value: 4});
+      )");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, DebugModeWithNoDebugKey) {
+  ExecuteScriptAndValidateContribution(
+      R"(
+        privateAggregation.enableDebugMode();
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+      )",
+      /*expected_bucket=*/1,
+      /*expected_value=*/2,
+      /*expected_debug_mode_details=*/
+      content::mojom::DebugModeDetails::New(/*is_enabled=*/true,
+                                            /*debug_key=*/nullptr));
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, DebugModeWithDebugKey) {
+  ExecuteScriptAndValidateContribution(
+      R"(
+        privateAggregation.enableDebugMode({debug_key: 1234});
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+      )",
+      /*expected_bucket=*/1,
+      /*expected_value=*/2,
+      /*expected_debug_mode_details=*/
+      content::mojom::DebugModeDetails::New(
+          /*is_enabled=*/true,
+          /*debug_key=*/content::mojom::DebugKey::New(1234u)));
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, DebugModeWithBigIntDebugKey) {
+  ExecuteScriptAndValidateContribution(
+      R"(
+        privateAggregation.enableDebugMode({debug_key: 1234n});
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+      )",
+      /*expected_bucket=*/1,
+      /*expected_value=*/2,
+      /*expected_debug_mode_details=*/
+      content::mojom::DebugModeDetails::New(
+          /*is_enabled=*/true,
+          /*debug_key=*/content::mojom::DebugKey::New(1234u)));
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NegativeDebugKey_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.enableDebugMode({debug_key: -1});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: debug_key must be "
+            "either a non-negative integer Number or BigInt.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, NonIntegerDebugKey_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.enableDebugMode({debug_key: 1.5});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: debug_key must be "
+            "either a non-negative integer Number or BigInt.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, TooLargeDebugKey_Rejected) {
+  std::string error_str = ExecuteScriptReturningError(
+      "privateAggregation.enableDebugMode({debug_key: "
+      "18446744073709551616n});");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: BigInt is too large.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest,
+       InvalidEnableDebugModeArgument_Rejected) {
+  // The debug key is not wrapped in a dictionary.
+  std::string error_str =
+      ExecuteScriptReturningError("privateAggregation.enableDebugMode(1234);");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:1 Uncaught TypeError: Invalid argument in "
+            "enableDebugMode.");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest,
+       EnableDebugModeCalledTwice_SecondCallFails) {
+  std::string error_str = ExecuteScriptReturningError(
+      R"(
+        privateAggregation.enableDebugMode({debug_key: 1234n});
+        privateAggregation.enableDebugMode();
+      )");
+
+  EXPECT_EQ(error_str,
+            "https://example.test/:3 Uncaught TypeError: enableDebugMode may "
+            "be called at most once.");
+
+  // Note that the first call still applies to future requests.
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 1, value: 2});",
+      /*expected_bucket=*/1,
+      /*expected_value=*/2,
+      /*expected_debug_mode_details=*/
+      content::mojom::DebugModeDetails::New(
+          /*is_enabled=*/true,
+          /*debug_key=*/content::mojom::DebugKey::New(1234u)));
+}
+
+// Note that FLEDGE worklets have different behavior in this case.
+TEST_F(SharedStoragePrivateAggregationTest,
+       EnableDebugModeCalledAfterRequest_DoesntApply) {
+  ExecuteScriptAndValidateContribution(
+      "privateAggregation.sendHistogramReport({bucket: 1, value: 2});",
+      /*expected_bucket=*/1,
+      /*expected_value=*/2,
+      /*expected_debug_mode_details=*/
+      content::mojom::DebugModeDetails::New());
+
+  ExecuteScriptExpectNoError(
+      "privateAggregation.enableDebugMode({debug_key: 1234n});");
+}
+
+TEST_F(SharedStoragePrivateAggregationTest, MultipleDebugModeRequests) {
+  EXPECT_CALL(*mock_private_aggregation_host(), SendHistogramReport)
+      .WillOnce(testing::Invoke(
+          [](std::vector<
+                 content::mojom::AggregatableReportHistogramContributionPtr>
+                 contributions,
+             content::mojom::AggregationServiceMode aggregation_mode,
+             content::mojom::DebugModeDetailsPtr debug_mode_details) {
+            ASSERT_EQ(contributions.size(), 1u);
+            EXPECT_EQ(contributions[0]->bucket, 1);
+            EXPECT_EQ(contributions[0]->value, 2);
+            EXPECT_EQ(aggregation_mode,
+                      content::mojom::AggregationServiceMode::kDefault);
+            EXPECT_EQ(debug_mode_details,
+                      content::mojom::DebugModeDetails::New(
+                          /*is_enabled=*/true,
+                          /*debug_key=*/content::mojom::DebugKey::New(1234u)));
+          }))
+      .WillOnce(testing::Invoke(
+          [](std::vector<
+                 content::mojom::AggregatableReportHistogramContributionPtr>
+                 contributions,
+             content::mojom::AggregationServiceMode aggregation_mode,
+             content::mojom::DebugModeDetailsPtr debug_mode_details) {
+            ASSERT_EQ(contributions.size(), 1u);
+            EXPECT_EQ(contributions[0]->bucket, 3);
+            EXPECT_EQ(contributions[0]->value, 4);
+            EXPECT_EQ(aggregation_mode,
+                      content::mojom::AggregationServiceMode::kDefault);
+            EXPECT_EQ(debug_mode_details,
+                      content::mojom::DebugModeDetails::New(
+                          /*is_enabled=*/true,
+                          /*debug_key=*/content::mojom::DebugKey::New(1234u)));
+          }));
+
+  ExecuteScriptExpectNoError(
+      R"(
+        privateAggregation.enableDebugMode({debug_key: 1234n});
+        privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+        privateAggregation.sendHistogramReport({bucket: 3, value: 4});
+      )");
 }
 
 }  // namespace shared_storage_worklet

@@ -272,7 +272,7 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
       name: 'preProcess',
       matches: [this.getArcTosHostNameForMatchPattern_() + '/*'],
       js: {code: scriptSetParameters},
-      run_at: 'document_start'
+      run_at: 'document_start',
     }]);
 
     webview.addContentScripts([{
@@ -280,14 +280,14 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
       matches: [this.getArcTosHostNameForMatchPattern_() + '/*'],
       css: {files: ['playstore.css']},
       js: {files: ['playstore.js']},
-      run_at: 'document_end'
+      run_at: 'document_end',
     }]);
 
     this.$.arcTosOverlayWebview.addContentScripts([{
       name: 'postProcess',
       matches: ['https://support.google.com/*'],
       css: {files: ['overlay.css']},
-      run_at: 'document_end'
+      run_at: 'document_end',
     }]);
 
     webview.addEventListener('newwindow', (event) => {
@@ -374,7 +374,7 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
   }
 
   loadPrivacyPolicyWebview_(online_tos_url) {
-    const webview = this.$.privacyPolicyWebview;
+    const webview = this.$.consolidatedConsentPrivacyPolicyWebview;
 
     var loadFailureCallback = () => {
       if (this.isDemo_) {
@@ -612,27 +612,22 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
 
   onGoogleEulaLinkClick_() {
     this.setUIStep(ConsolidatedConsentScreenState.GOOGLE_EULA);
-    this.$.googleEulaOkButton.focus();
   }
 
   onCrosEulaLinkClick_() {
     this.setUIStep(ConsolidatedConsentScreenState.CROS_EULA);
-    this.$.crosEulaOkButton.focus();
   }
 
   onArcTosLinkClick_() {
     this.setUIStep(ConsolidatedConsentScreenState.ARC);
-    this.$.ArcTosOkButton.focus();
   }
 
   onPrivacyPolicyLinkClick_() {
     this.setUIStep(ConsolidatedConsentScreenState.PRIVACY);
-    this.$.privacyOkButton.focus();
   }
 
   onTermsStepOkClick_() {
     this.setUIStep(ConsolidatedConsentScreenState.LOADED);
-    this.$.acceptButton.focus();
   }
 
   onUsageLearnMoreClick_() {
@@ -653,8 +648,10 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
 
   onAcceptClick_() {
     chrome.send('ToSAccept', [
-      this.usageChecked, this.backupChecked, this.locationChecked,
-      this.arcTosContent_
+      this.usageChecked,
+      this.backupChecked,
+      this.locationChecked,
+      this.arcTosContent_,
     ]);
   }
 
@@ -695,7 +692,7 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
       matches: [this.getArcTosHostNameForMatchPattern_() + '/*'],
       css: {files: ['playstore.css']},
       js: {files: ['playstore.js']},
-      run_at: 'document_end'
+      run_at: 'document_end',
     }]);
   }
 }

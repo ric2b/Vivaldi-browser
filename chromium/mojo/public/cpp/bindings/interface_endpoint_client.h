@@ -60,7 +60,7 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
                           scoped_refptr<base::SequencedTaskRunner> task_runner,
                           uint32_t interface_version,
                           const char* interface_name,
-                          MessageToStableIPCHashCallback ipc_hash_callback,
+                          MessageToMethodInfoCallback method_info_callback,
                           MessageToMethodNameCallback method_name_callback);
 
   InterfaceEndpointClient(const InterfaceEndpointClient&) = delete;
@@ -193,8 +193,8 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
   void MaybeSendNotifyIdle();
 
   const char* interface_name() const { return interface_name_; }
-  MessageToStableIPCHashCallback ipc_hash_callback() const {
-    return ipc_hash_callback_;
+  MessageToMethodInfoCallback method_info_callback() const {
+    return method_info_callback_;
   }
   MessageToMethodNameCallback method_name_callback() const {
     return method_name_callback_;
@@ -221,20 +221,32 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
   void ForgetAsyncRequest(uint64_t request_id);
 
  private:
-  // Maps from the id of a response to the MessageReceiver that handles the
-  // response.
-  using AsyncResponderMap =
-      std::map<uint64_t, std::unique_ptr<MessageReceiver>>;
+  struct PendingAsyncResponse {
+   public:
+    PendingAsyncResponse(uint32_t request_message_name,
+                         std::unique_ptr<MessageReceiver> responder);
+    PendingAsyncResponse(PendingAsyncResponse&&);
+    PendingAsyncResponse(const PendingAsyncResponse&) = delete;
+    PendingAsyncResponse& operator=(PendingAsyncResponse&&);
+    PendingAsyncResponse& operator=(const PendingAsyncResponse&) = delete;
+    ~PendingAsyncResponse();
+
+    uint32_t request_message_name;
+    std::unique_ptr<MessageReceiver> responder;
+  };
+
+  using AsyncResponderMap = std::map<uint64_t, PendingAsyncResponse>;
 
   struct SyncResponseInfo {
    public:
-    explicit SyncResponseInfo(bool* in_response_received);
+    SyncResponseInfo(uint32_t request_message_name, bool* in_response_received);
 
     SyncResponseInfo(const SyncResponseInfo&) = delete;
     SyncResponseInfo& operator=(const SyncResponseInfo&) = delete;
 
     ~SyncResponseInfo();
 
+    uint32_t request_message_name;
     Message response;
 
     // Points to a stack-allocated variable.
@@ -327,7 +339,7 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
   internal::ControlMessageProxy control_message_proxy_{this};
   internal::ControlMessageHandler control_message_handler_;
   const char* interface_name_;
-  const MessageToStableIPCHashCallback ipc_hash_callback_;
+  const MessageToMethodInfoCallback method_info_callback_;
   const MessageToMethodNameCallback method_name_callback_;
 
 #if DCHECK_IS_ON()

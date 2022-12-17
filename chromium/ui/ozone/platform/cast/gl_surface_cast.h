@@ -12,7 +12,6 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/overlay_transform.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/gl/gl_image.h"
 #include "ui/gl/gl_surface_egl.h"
 
 namespace ui {
@@ -21,7 +20,9 @@ class GLOzoneEglCast;
 
 class GLSurfaceCast : public gl::NativeViewGLSurfaceEGL {
  public:
-  GLSurfaceCast(gfx::AcceleratedWidget widget, GLOzoneEglCast* parent);
+  GLSurfaceCast(gl::GLDisplayEGL* display,
+                gfx::AcceleratedWidget widget,
+                GLOzoneEglCast* parent);
 
   GLSurfaceCast(const GLSurfaceCast&) = delete;
   GLSurfaceCast& operator=(const GLSurfaceCast&) = delete;

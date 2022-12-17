@@ -311,18 +311,19 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
 
   const vivaldi::NoteNode* new_node = nullptr;
   if (node->is_folder()) {
-    new_node =
-        model->AddFolder(node->parent(), node->parent()->GetIndexOf(node),
-                         node->GetTitle(), node->GetCreationTime(), guid);
-  } else if (node->is_separator()) {
-    new_node =
-        model->AddSeparator(node->parent(), node->parent()->GetIndexOf(node),
-                            node->GetTitle(), node->GetCreationTime(), guid);
+    new_node = model->AddFolder(
+        node->parent(), node->parent()->GetIndexOf(node).value(),
+        node->GetTitle(), node->GetCreationTime(), guid);
     MoveAllChildren(model, node, new_node);
+  } else if (node->is_separator()) {
+    new_node = model->AddSeparator(
+        node->parent(), node->parent()->GetIndexOf(node).value(),
+        node->GetTitle(), node->GetCreationTime(), guid);
   } else {
-    new_node = model->AddNote(
-        node->parent(), node->parent()->GetIndexOf(node), node->GetTitle(),
-        node->GetURL(), node->GetContent(), node->GetCreationTime(), guid);
+    new_node =
+        model->AddNote(node->parent(), node->parent()->GetIndexOf(node).value(),
+                       node->GetTitle(), node->GetURL(), node->GetContent(),
+                       node->GetCreationTime(), guid);
     model->SwapAttachments(new_node, node);
   }
   model->Remove(node);

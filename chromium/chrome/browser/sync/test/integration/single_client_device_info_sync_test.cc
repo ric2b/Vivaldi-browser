@@ -18,37 +18,32 @@
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
-#include "components/sync/driver/glue/sync_transport_data_prefs.h"
-#include "components/sync/engine/loopback_server/persistent_tombstone_entity.h"
-#include "components/sync/nigori/nigori_test_utils.h"
 #include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
-#include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/protocol/sync_entity.pb.h"
 #include "components/sync/protocol/sync_enums.pb.h"
-#include "components/sync/test/fake_server/fake_server.h"
+#include "components/sync/test/fake_server.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_device_info/device_info_tracker.h"
 #include "components/sync_device_info/device_info_util.h"
 #include "content/public/test/browser_test.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace {
 
+using device_info_helper::HasCacheGuid;
+using device_info_helper::HasSharingFields;
 using syncer::ModelType;
 using syncer::ModelTypeSet;
+using testing::AllOf;
 using testing::Contains;
 using testing::ElementsAre;
 using testing::IsSupersetOf;
+using testing::Not;
 using testing::UnorderedElementsAre;
-
-MATCHER_P(HasCacheGuid, expected_cache_guid, "") {
-  return arg.specifics().device_info().cache_guid() == expected_cache_guid;
-}
 
 MATCHER(HasFullHardwareClass, "") {
   return !arg.specifics().device_info().full_hardware_class().empty();
@@ -60,6 +55,19 @@ MATCHER(IsFullHardwareClassEmpty, "") {
 
 MATCHER_P(ModelEntryHasCacheGuid, expected_cache_guid, "") {
   return arg->guid() == expected_cache_guid;
+}
+
+MATCHER_P(HasInterestedDataType, expected_data_type, "") {
+  for (int32_t interested_data_type_id : arg.specifics()
+                                             .device_info()
+                                             .invalidation_fields()
+                                             .interested_data_type_ids()) {
+    if (interested_data_type_id ==
+        syncer::GetSpecificsFieldNumberFromModelType(expected_data_type)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::string CacheGuidForSuffix(int suffix) {
@@ -88,6 +96,7 @@ ModelTypeSet DefaultInterestedDataTypes() {
 
 sync_pb::DeviceInfoSpecifics CreateSpecifics(
     int suffix,
+    const std::string& fcm_registration_token,
     const ModelTypeSet& interested_data_types) {
   sync_pb::DeviceInfoSpecifics specifics;
   specifics.set_cache_guid(CacheGuidForSuffix(suffix));
@@ -105,12 +114,49 @@ sync_pb::DeviceInfoSpecifics CreateSpecifics(
     mutable_interested_data_type_ids.Add(
         syncer::GetSpecificsFieldNumberFromModelType(type));
   }
+  if (!fcm_registration_token.empty()) {
+    specifics.mutable_invalidation_fields()->set_instance_id_token(
+        fcm_registration_token);
+  }
   return specifics;
 }
 
+// Creates specifics for a client without sync standalone invalidations.
 sync_pb::DeviceInfoSpecifics CreateSpecifics(int suffix) {
-  return CreateSpecifics(suffix, DefaultInterestedDataTypes());
+  return CreateSpecifics(suffix, /*fcm_registration_token=*/"",
+                         DefaultInterestedDataTypes());
 }
+
+// Waits for a DeviceInfo entity to be committed to the fake server (regardless
+// whether the commit succeeds or not). Note that it doesn't handle disabled
+// network case.
+class DeviceInfoCommitChecker : public SingleClientStatusChangeChecker {
+  // SingleClientStatusChangeChecker is used instead of
+  // FakeServerMatchStatusChecker because current checker is used when there is
+  // an HTTP error on the fake server.
+ public:
+  DeviceInfoCommitChecker(syncer::SyncServiceImpl* service,
+                          fake_server::FakeServer* fake_server)
+      : SingleClientStatusChangeChecker(service), fake_server_(fake_server) {}
+
+  // StatusChangeChecker overrides.
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    *os << "Waiting for DeviceInfo to be committed.";
+
+    sync_pb::ClientToServerMessage message;
+    fake_server_->GetLastCommitMessage(&message);
+    for (const sync_pb::SyncEntity& entity : message.commit().entries()) {
+      if (entity.specifics().has_device_info()) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+ private:
+  const raw_ptr<fake_server::FakeServer> fake_server_;
+};
 
 class SingleClientDeviceInfoSyncTest : public SyncTest {
  public:
@@ -126,9 +172,8 @@ class SingleClientDeviceInfoSyncTest : public SyncTest {
 
   ~SingleClientDeviceInfoSyncTest() override = default;
 
-  std::string GetLocalCacheGuid() {
-    syncer::SyncTransportDataPrefs prefs(GetProfile(0)->GetPrefs());
-    return prefs.GetCacheGuid();
+  std::string GetLocalCacheGuid() const {
+    return GetCacheGuid(/*profile_index=*/0);
   }
 
   syncer::DeviceInfoTracker* GetDeviceInfoTracker() {
@@ -136,7 +181,8 @@ class SingleClientDeviceInfoSyncTest : public SyncTest {
         ->GetDeviceInfoTracker();
   }
 
-  // Injects a test DeviceInfo entity to the fake server, given |suffix|.
+  // Injects a test DeviceInfo entity to the fake server with disabled sync
+  // standalone invalidations, given |suffix|.
   void InjectDeviceInfoEntityToServer(int suffix) {
     InjectDeviceInfoSpecificsToServer(CreateSpecifics(suffix));
   }
@@ -154,6 +200,9 @@ class SingleClientDeviceInfoSyncTest : public SyncTest {
             specifics,
             /*creation_time=*/0, /*last_modified_time=*/0));
   }
+
+  // SyncTest overrides.
+  bool UseConfigurationRefresher() override { return false; }
 
  private:
   base::test::ScopedFeatureList override_features_;
@@ -321,14 +370,73 @@ IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
 IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
                        ShouldSetTheOnlyClientFlag) {
   ASSERT_TRUE(SetupSync());
-  ASSERT_TRUE(ServerDeviceInfoMatchChecker(
-                  ElementsAre(HasCacheGuid(GetLocalCacheGuid())))
+
+  const std::vector<sync_pb::SyncEntity> entities_before =
+      fake_server_->GetSyncEntitiesByModelType(syncer::DEVICE_INFO);
+
+  // Single client flag could be dropped due to a DeviceInfo update in the last
+  // GetUpdates request. The next sync cycle may download the latest committed
+  // DeviceInfo reflection and drop optimization flags. Hence, make it sure that
+  // there are at least 2 sync cycles and check the second one only.
+  bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
+  ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
+                  /*profile=*/0, GetSyncService(0), GetFakeServer())
                   .Wait());
+
+  // Perform the second sync cycle.
+  bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
+  ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
+                  /*profile=*/0, GetSyncService(0), GetFakeServer())
+                  .Wait());
+
+  // Double check that DeviceInfo hasn't been committed during the test. It may
+  // happen if there are any DeviceInfo fields are initialized asynchronously.
+  const std::vector<sync_pb::SyncEntity> entities_after =
+      fake_server_->GetSyncEntitiesByModelType(syncer::DEVICE_INFO);
+  ASSERT_EQ(1U, entities_before.size());
+  ASSERT_EQ(1U, entities_after.size());
+  ASSERT_EQ(entities_before.front().mtime(), entities_after.front().mtime());
 
   sync_pb::ClientToServerMessage message;
   GetFakeServer()->GetLastCommitMessage(&message);
 
   EXPECT_TRUE(message.commit().config_params().single_client());
+  EXPECT_TRUE(message.commit()
+                  .config_params()
+                  .single_client_with_standalone_invalidations());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SingleClientDeviceInfoSyncTest,
+    ShouldSetTheOnlyClientFlagForStandaloneInvalidationsOnly) {
+  // A client without standalone invalidations shouldn't affect |single_client|
+  // flag.
+  InjectDeviceInfoEntityToServer(/*suffix=*/1);
+
+  ASSERT_TRUE(SetupSync());
+
+  // Single client flag could be dropped due to a DeviceInfo update in the last
+  // GetUpdates request. The next sync cycle may download the latest committed
+  // DeviceInfo reflection and drop optimization flags. Hence, make it sure that
+  // there are at least 2 sync cycles and check the second one only.
+  bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
+  ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
+                  /*profile=*/0, GetSyncService(0), GetFakeServer())
+                  .Wait());
+
+  // Perform the second sync cycle.
+  bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
+  ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
+                  /*profile=*/0, GetSyncService(0), GetFakeServer())
+                  .Wait());
+
+  sync_pb::ClientToServerMessage message;
+  GetFakeServer()->GetLastCommitMessage(&message);
+
+  EXPECT_FALSE(message.commit().config_params().single_client());
+  EXPECT_TRUE(message.commit()
+                  .config_params()
+                  .single_client_with_standalone_invalidations());
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
@@ -336,11 +444,21 @@ IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
   // There is a remote client which is not interested in BOOKMARKS.
   const ModelTypeSet remote_interested_data_types =
       Difference(DefaultInterestedDataTypes(), {syncer::BOOKMARKS});
-  InjectDeviceInfoSpecificsToServer(
-      CreateSpecifics(/*suffix=*/1, remote_interested_data_types));
+  InjectDeviceInfoSpecificsToServer(CreateSpecifics(
+      /*suffix=*/1, "fcm_token_1", remote_interested_data_types));
 
   ASSERT_TRUE(SetupSync());
 
+  // Single client flag could be dropped due to a DeviceInfo update in the last
+  // GetUpdates request. The next sync cycle may download the latest committed
+  // DeviceInfo reflection and drop optimization flags. Hence, make it sure that
+  // there are at least 2 sync cycles and check the second one only.
+  bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
+  ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
+                  /*profile=*/0, GetSyncService(0), GetFakeServer())
+                  .Wait());
+
+  // Perform the second sync cycle.
   bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
   ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
                   /*profile=*/0, GetSyncService(0), GetFakeServer())
@@ -353,22 +471,42 @@ IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
   // in the just-committed bookmark, so for the purpose of this commit, the
   // committing client is the "single" one.
   EXPECT_TRUE(message.commit().config_params().single_client());
+  EXPECT_TRUE(message.commit()
+                  .config_params()
+                  .single_client_with_standalone_invalidations());
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
                        ShouldNotProvideTheOnlyClientFlag) {
-  InjectDeviceInfoEntityToServer(/*suffix=*/1);
+  InjectDeviceInfoSpecificsToServer(CreateSpecifics(
+      /*suffix=*/1, "fcm_token_1", DefaultInterestedDataTypes()));
 
   ASSERT_TRUE(SetupSync());
-  ASSERT_TRUE(ServerDeviceInfoMatchChecker(
-                  UnorderedElementsAre(HasCacheGuid(GetLocalCacheGuid()),
-                                       HasCacheGuid(CacheGuidForSuffix(1))))
+
+  // Verify that both DeviceInfos are present on the server.
+  ASSERT_THAT(GetFakeServer()->GetSyncEntitiesByModelType(syncer::DEVICE_INFO),
+              UnorderedElementsAre(HasCacheGuid(GetLocalCacheGuid()),
+                                   HasCacheGuid(CacheGuidForSuffix(1))));
+
+  // Download all the updates from the server to prevent DeviceInfo update while
+  // committing.
+  GetSyncService(0)->TriggerRefresh({syncer::DEVICE_INFO});
+
+  // Everything's ready to verify that the next commit request contains
+  // single_client which is false. Commit a bookmark to trigger a commit
+  // request.
+  bookmarks_helper::AddURL(/*profile=*/0, "Title", GURL("http://foo.com"));
+  ASSERT_TRUE(bookmarks_helper::BookmarkModelMatchesFakeServerChecker(
+                  /*profile=*/0, GetSyncService(0), GetFakeServer())
                   .Wait());
 
   sync_pb::ClientToServerMessage message;
   GetFakeServer()->GetLastCommitMessage(&message);
 
   EXPECT_FALSE(message.commit().config_params().single_client());
+  EXPECT_FALSE(message.commit()
+                   .config_params()
+                   .single_client_with_standalone_invalidations());
 }
 
 // This test verifies that single_client optimization flag is not set after
@@ -401,6 +539,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
   GetFakeServer()->GetLastCommitMessage(&message);
 
   EXPECT_FALSE(message.commit().config_params().single_client());
+  EXPECT_FALSE(message.commit()
+                   .config_params()
+                   .single_client_with_standalone_invalidations());
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
@@ -421,14 +562,33 @@ IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
                   .Wait());
 }
 
+IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
+                       ShouldRetryDeviceInfoCommitOnAuthError) {
+  ASSERT_TRUE(SetupSync());
+
+  GetFakeServer()->SetHttpError(net::HTTP_UNAUTHORIZED);
+
+  // Disable another data type to trigger a commit of a new DeviceInfo entity.
+  // Create a checker to catch a commit request before disabling the data type.
+  DeviceInfoCommitChecker device_info_committer_checker(GetSyncService(0),
+                                                        GetFakeServer());
+  ASSERT_TRUE(
+      GetClient(0)->DisableSyncForType(syncer::UserSelectableType::kBookmarks));
+  ASSERT_TRUE(device_info_committer_checker.Wait());
+
+  GetFakeServer()->ClearHttpError();
+
+  // Wait for the DeviceInfo to be committed to the fake server again.
+  EXPECT_TRUE(ServerDeviceInfoMatchChecker(
+                  ElementsAre(Not(HasInterestedDataType(syncer::BOOKMARKS))))
+                  .Wait());
+}
+
 // PRE_* tests aren't supported on Android browser tests.
 #if !BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
                        PRE_ShouldNotSendDeviceInfoAfterBrowserRestart) {
   ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(ServerDeviceInfoMatchChecker(
-                  ElementsAre(HasCacheGuid(GetLocalCacheGuid())))
-                  .Wait());
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,

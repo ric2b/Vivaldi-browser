@@ -16,10 +16,10 @@
 #include "components/autofill_assistant/browser/client.h"
 #include "components/autofill_assistant/browser/controller.h"
 #include "components/autofill_assistant/browser/device_context.h"
+#include "components/autofill_assistant/browser/public/password_change/website_login_manager.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/service/access_token_fetcher.h"
 #include "components/autofill_assistant/browser/service/service.h"
-#include "components/autofill_assistant/browser/website_login_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -149,6 +149,12 @@ class ClientAndroid : public Client,
   void GetAnnotateDomModelVersion(
       base::OnceCallback<void(absl::optional<int64_t>)> callback)
       const override;
+  bool IsXmlSigned(const std::string& xml_string) const override;
+  const std::vector<std::string> ExtractValuesFromSingleTagXml(
+      const std::string& xml_string,
+      const std::vector<std::string>& keys) const override;
+  bool GetMakeSearchesAndBrowsingBetterEnabled() const override;
+  bool GetMetricsReportingEnabled() const override;
 
   // Overrides AccessTokenFetcher
   void FetchAccessToken(

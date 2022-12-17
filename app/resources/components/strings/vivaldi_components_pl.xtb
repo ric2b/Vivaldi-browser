@@ -29,6 +29,7 @@
         i odznacz „<ph name="NO_PREFETCH_DESCRIPTION" />”.
         Jeśli nie rozwiąże to problemu, zalecamy ponowne wybranie tej opcji,
         by poprawić wydajność.</translation>
+<translation id="7496505986576158197">Przeglądarka Vivaldi została stworzona na bazie projektu open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> i innym <ph name="BEGIN_LINK_OSS" />oprogramowaniu o otwartych źródłach<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Wybierz
           Aplikacje &gt; Ustawienia systemowe &gt; Sieć &gt; Zaawansowane &gt; Serwery proxy
           i usuń zaznaczenie wszelkich wybranych serwerów proxy.</translation>

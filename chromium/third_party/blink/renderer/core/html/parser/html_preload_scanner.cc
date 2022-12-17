@@ -30,6 +30,7 @@
 #include <memory>
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -52,6 +53,8 @@
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
 #include "third_party/blink/renderer/core/html/link_rel_attribute.h"
 #include "third_party/blink/renderer/core/html/loading_attribute.h"
+#include "third_party/blink/renderer/core/html/parser/background_html_scanner.h"
+#include "third_party/blink/renderer/core/html/parser/html_document_parser.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/parser/html_srcset_parser.h"
 #include "third_party/blink/renderer/core/html/parser/html_tokenizer.h"
@@ -66,18 +69,20 @@
 #include "third_party/blink/renderer/core/script/script_loader.h"
 #include "third_party/blink/renderer/core/script_type_names.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
 #include "third_party/blink/renderer/platform/loader/fetch/integrity_metadata.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_std.h"
 
 namespace blink {
 
 namespace {
 
 bool Match(const AtomicString& name, const QualifiedName& q_name) {
-  DCHECK(IsMainThread());
   return q_name.LocalName() == name;
 }
 
@@ -190,7 +195,6 @@ class TokenPreloadScanner::StartTagScanner {
   bool GetMatched() const { return matched_; }
 
   void ProcessAttributes(const HTMLToken::AttributeList& attributes) {
-    DCHECK(IsMainThread());
     if (!tag_impl_)
       return;
     for (const HTMLToken::Attribute& html_token_attribute : attributes) {
@@ -223,7 +227,6 @@ class TokenPreloadScanner::StartTagScanner {
   std::unique_ptr<PreloadRequest> CreatePreloadRequest(
       const KURL& predicted_base_url,
       const SegmentedString& source,
-      const ClientHintsPreferences& client_hints_preferences,
       const PictureData& picture_data,
       const CachedDocumentParameters& document_parameters,
       const PreloadRequest::ExclusionInfo* exclusion_info,
@@ -279,12 +282,13 @@ class TokenPreloadScanner::StartTagScanner {
     auto request = PreloadRequest::CreateIfNeeded(
         InitiatorFor(tag_impl_), position, url_to_load_, predicted_base_url,
         type.value(), referrer_policy, is_image_set, exclusion_info,
-        resource_width, client_hints_preferences, request_type);
+        resource_width, request_type);
     if (!request)
       return nullptr;
 
     bool is_module = (type_attribute_value_ == script_type_names::kModule);
     bool is_script = Match(tag_impl_, html_names::kScriptTag);
+    bool is_img = Match(tag_impl_, html_names::kImgTag);
     if ((is_script && is_module) || IsLinkRelModulePreload()) {
       is_module = true;
       request->SetScriptType(mojom::blink::ScriptType::kModule);
@@ -317,7 +321,7 @@ class TokenPreloadScanner::StartTagScanner {
     }
     request->SetRenderBlockingBehavior(render_blocking_behavior);
 
-    if (type == ResourceType::kImage && Match(tag_impl_, html_names::kImgTag) &&
+    if (type == ResourceType::kImage && is_img &&
         IsLazyLoadImageDeferable(document_parameters)) {
       return nullptr;
     }
@@ -335,6 +339,11 @@ class TokenPreloadScanner::StartTagScanner {
 
     if (scanner_type_ == ScannerType::kInsertion)
       request->SetFromInsertionScanner(true);
+
+    if (attributionsrc_attr_set_) {
+      DCHECK(is_script || is_img);
+      request->SetAttributionReportingEligibleImgOrScript(true);
+    }
 
     return request;
   }
@@ -377,6 +386,8 @@ class TokenPreloadScanner::StartTagScanner {
     } else if (RuntimeEnabledFeatures::BlockingAttributeEnabled() &&
                Match(attribute_name, html_names::kBlockingAttr)) {
       blocking_attribute_value_ = attribute_value;
+    } else if (Match(attribute_name, html_names::kAttributionsrcAttr)) {
+      attributionsrc_attr_set_ = true;
     }
   }
 
@@ -416,17 +427,8 @@ class TokenPreloadScanner::StartTagScanner {
                RuntimeEnabledFeatures::LazyImageLoadingEnabled()) {
       height_attr_dimension_type_ =
           HTMLImageElement::GetAttributeLazyLoadDimensionType(attribute_value);
-    } else if (inline_style_dimensions_type_ ==
-                   HTMLImageElement::LazyLoadDimensionType::kNotAbsolute &&
-               Match(attribute_name, html_names::kStyleAttr) &&
-               RuntimeEnabledFeatures::LazyImageLoadingEnabled()) {
-      CSSParserMode mode =
-          media_values_->StrictMode() ? kHTMLStandardMode : kHTMLQuirksMode;
-      const ImmutableCSSPropertyValueSet* property_set =
-          CSSParser::ParseInlineStyleDeclaration(
-              attribute_value, mode, SecureContextMode::kInsecureContext);
-      inline_style_dimensions_type_ =
-          HTMLImageElement::GetInlineStyleDimensionsType(property_set);
+    } else if (Match(attribute_name, html_names::kAttributionsrcAttr)) {
+      attributionsrc_attr_set_ = true;
     }
   }
 
@@ -768,12 +770,11 @@ class TokenPreloadScanner::StartTagScanner {
       HTMLImageElement::LazyLoadDimensionType::kNotAbsolute;
   HTMLImageElement::LazyLoadDimensionType height_attr_dimension_type_ =
       HTMLImageElement::LazyLoadDimensionType::kNotAbsolute;
-  HTMLImageElement::LazyLoadDimensionType inline_style_dimensions_type_ =
-      HTMLImageElement::LazyLoadDimensionType::kNotAbsolute;
   TokenPreloadScanner::ScannerType scanner_type_;
   // For explanation, see TokenPreloadScanner's declaration.
   bool priority_hints_origin_trial_enabled_;
   const HashSet<String>* disabled_image_types_;
+  bool attributionsrc_attr_set_ = false;
 };
 
 TokenPreloadScanner::TokenPreloadScanner(
@@ -807,9 +808,11 @@ TokenPreloadScanner::~TokenPreloadScanner() = default;
 void TokenPreloadScanner::Scan(const HTMLToken& token,
                                const SegmentedString& source,
                                PreloadRequestStream& requests,
+                               MetaCHValues& meta_ch_values,
                                absl::optional<ViewportDescription>* viewport,
                                bool* is_csp_meta_tag) {
-  ScanCommon(token, source, requests, viewport, is_csp_meta_tag);
+  ScanCommon(token, source, requests, meta_ch_values, viewport,
+             is_csp_meta_tag);
 }
 
 static void HandleMetaViewport(
@@ -849,6 +852,7 @@ static void HandleMetaReferrer(const String& attribute_value,
 
 void TokenPreloadScanner::HandleMetaNameAttribute(
     const HTMLToken& token,
+    MetaCHValues& meta_ch_values,
     absl::optional<ViewportDescription>* viewport) {
   const HTMLToken::Attribute* name_attribute =
       token.GetAttributeItem(html_names::kNameAttr);
@@ -872,21 +876,13 @@ void TokenPreloadScanner::HandleMetaNameAttribute(
     HandleMetaReferrer(content_attribute_value, document_parameters_.get(),
                        &css_scanner_);
   }
-
-  if (EqualIgnoringASCIICase(name_attribute_value, http_names::kAcceptCH) &&
-      RuntimeEnabledFeatures::ClientHintsMetaNameAcceptCHEnabled()) {
-    UpdateWindowPermissionsPolicyWithDelegationSupportForClientHints(
-        client_hints_preferences_, document_parameters_->local_dom_window,
-        content_attribute->Value(), document_url_, nullptr,
-        /*is_http_equiv*/ false,
-        /*is_preload_or_parser*/ scanner_type_ == ScannerType::kMainDocument);
-  }
 }
 
 void TokenPreloadScanner::ScanCommon(
     const HTMLToken& token,
     const SegmentedString& source,
     PreloadRequestStream& requests,
+    MetaCHValues& meta_ch_values,
     absl::optional<ViewportDescription>* viewport,
     bool* is_csp_meta_tag) {
   if (!document_parameters_->do_html_preload_scanning)
@@ -980,19 +976,30 @@ void TokenPreloadScanner::ScanCommon(
             const HTMLToken::Attribute* content_attribute =
                 token.GetAttributeItem(html_names::kContentAttr);
             if (content_attribute) {
-              UpdateWindowPermissionsPolicyWithDelegationSupportForClientHints(
-                  client_hints_preferences_,
-                  document_parameters_->local_dom_window,
-                  content_attribute->Value(), document_url_, nullptr,
-                  /*is_http_equiv*/ true,
-                  /*is_preload_or_parser*/ scanner_type_ ==
-                      ScannerType::kMainDocument);
+              meta_ch_values.push_back(
+                  MetaCHValue{.value = content_attribute->GetValue(),
+                              .type = network::MetaCHType::HttpEquivAcceptCH,
+                              .is_doc_preloader =
+                                  scanner_type_ == ScannerType::kMainDocument});
+            }
+          } else if (EqualIgnoringASCIICase(equiv_attribute_value,
+                                            http_names::kDelegateCH) &&
+                     RuntimeEnabledFeatures::
+                         ClientHintsMetaEquivDelegateCHEnabled()) {
+            const HTMLToken::Attribute* content_attribute =
+                token.GetAttributeItem(html_names::kContentAttr);
+            if (content_attribute) {
+              meta_ch_values.push_back(
+                  MetaCHValue{.value = content_attribute->GetValue(),
+                              .type = network::MetaCHType::HttpEquivDelegateCH,
+                              .is_doc_preloader =
+                                  scanner_type_ == ScannerType::kMainDocument});
             }
           }
           return;
         }
 
-        HandleMetaNameAttribute(token, viewport);
+        HandleMetaNameAttribute(token, meta_ch_values, viewport);
       }
 
       if (Match(tag_impl, html_names::kBodyTag)) {
@@ -1022,8 +1029,8 @@ void TokenPreloadScanner::ScanCommon(
       if (in_style_)
         css_scanner_.SetMediaMatches(scanner.GetMatched());
       std::unique_ptr<PreloadRequest> request = scanner.CreatePreloadRequest(
-          predicted_base_element_url_, source, client_hints_preferences_,
-          picture_data_, *document_parameters_, exclusion_info_.get(),
+          predicted_base_element_url_, source, picture_data_,
+          *document_parameters_, exclusion_info_.get(),
           seen_img_ || seen_body_);
       if (request) {
         requests.push_back(std::move(request));
@@ -1048,18 +1055,50 @@ void TokenPreloadScanner::UpdatePredictedBaseURL(const HTMLToken& token) {
   }
 }
 
+// static
+std::unique_ptr<HTMLPreloadScanner> HTMLPreloadScanner::Create(
+    Document& document,
+    HTMLParserOptions options,
+    TokenPreloadScanner::ScannerType scanner_type) {
+  return std::make_unique<HTMLPreloadScanner>(
+      std::make_unique<HTMLTokenizer>(options),
+      options.priority_hints_origin_trial_enabled, document.Url(),
+      std::make_unique<CachedDocumentParameters>(&document),
+      MediaValuesCached::MediaValuesCachedData(document), scanner_type,
+      nullptr);
+}
+
+// static
+WTF::SequenceBound<HTMLPreloadScanner> HTMLPreloadScanner::CreateBackground(
+    HTMLDocumentParser* parser,
+    HTMLParserOptions options,
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  auto* document = parser->GetDocument();
+  return WTF::SequenceBound<HTMLPreloadScanner>(
+      std::move(task_runner), std::make_unique<HTMLTokenizer>(options),
+      options.priority_hints_origin_trial_enabled, document->Url(),
+      std::make_unique<CachedDocumentParameters>(document),
+      MediaValuesCached::MediaValuesCachedData(*document),
+      TokenPreloadScanner::ScannerType::kMainDocument,
+      BackgroundHTMLScanner::ScriptTokenScanner::Create(parser));
+}
+
 HTMLPreloadScanner::HTMLPreloadScanner(
-    const HTMLParserOptions& options,
+    std::unique_ptr<HTMLTokenizer> tokenizer,
+    bool priority_hints_origin_trial_enabled,
     const KURL& document_url,
     std::unique_ptr<CachedDocumentParameters> document_parameters,
     const MediaValuesCached::MediaValuesCachedData& media_values_cached_data,
-    const TokenPreloadScanner::ScannerType scanner_type)
+    const TokenPreloadScanner::ScannerType scanner_type,
+    std::unique_ptr<BackgroundHTMLScanner::ScriptTokenScanner>
+        script_token_scanner)
     : scanner_(document_url,
                std::move(document_parameters),
                media_values_cached_data,
                scanner_type,
-               options.priority_hints_origin_trial_enabled),
-      tokenizer_(std::make_unique<HTMLTokenizer>(options)) {}
+               priority_hints_origin_trial_enabled),
+      tokenizer_(std::move(tokenizer)),
+      script_token_scanner_(std::move(script_token_scanner)) {}
 
 HTMLPreloadScanner::~HTMLPreloadScanner() = default;
 
@@ -1067,12 +1106,10 @@ void HTMLPreloadScanner::AppendToEnd(const SegmentedString& source) {
   source_.Append(source);
 }
 
-PreloadRequestStream HTMLPreloadScanner::Scan(
+std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(
     const KURL& starting_base_element_url,
-    absl::optional<ViewportDescription>* viewport,
-    bool& has_csp_meta_tag) {
-  // HTMLTokenizer::updateStateFor only works on the main thread.
-  DCHECK(IsMainThread());
+    const TakePreloadFn& take_preload) {
+  auto pending_data = std::make_unique<PendingPreloadData>();
 
   TRACE_EVENT1("blink", "HTMLPreloadScanner::scan", "source_length",
                source_.length());
@@ -1082,15 +1119,22 @@ PreloadRequestStream HTMLPreloadScanner::Scan(
   if (!starting_base_element_url.IsEmpty())
     scanner_.SetPredictedBaseElementURL(starting_base_element_url);
 
-  PreloadRequestStream requests;
+  // The script scanner needs to know whether this is the first script in the
+  // chunk being scanned, since it may have different script compile behavior
+  // depending on this.
+  if (script_token_scanner_)
+    script_token_scanner_->set_first_script_in_scan(true);
 
   while (tokenizer_->NextToken(source_, token_)) {
     if (token_.GetType() == HTMLToken::kStartTag)
-      tokenizer_->UpdateStateFor(
-          AttemptStaticStringCreation(token_.GetName(), kLikely8Bit));
+      tokenizer_->UpdateStateFor(token_);
     bool seen_csp_meta_tag = false;
-    scanner_.Scan(token_, source_, requests, viewport, &seen_csp_meta_tag);
-    has_csp_meta_tag |= seen_csp_meta_tag;
+    scanner_.Scan(token_, source_, pending_data->requests,
+                  pending_data->meta_ch_values, &pending_data->viewport,
+                  &seen_csp_meta_tag);
+    if (script_token_scanner_)
+      script_token_scanner_->ScanToken(token_);
+    pending_data->has_csp_meta_tag |= seen_csp_meta_tag;
     token_.Clear();
     // Don't preload anything if a CSP meta tag is found. We should rarely find
     // them here because the HTMLPreloadScanner is only used for the synchronous
@@ -1100,11 +1144,22 @@ PreloadRequestStream HTMLPreloadScanner::Scan(
       // start parsing.
       source_.Clear();
       tokenizer_->Reset();
-      return requests;
+      return pending_data;
+    }
+    // Incrementally add preloads when scanning in the background.
+    if (take_preload && !pending_data->requests.IsEmpty()) {
+      take_preload.Run(std::move(pending_data));
+      pending_data = std::make_unique<PendingPreloadData>();
     }
   }
+  return pending_data;
+}
 
-  return requests;
+void HTMLPreloadScanner::ScanInBackground(const String& source,
+                                          const KURL& document_base_element_url,
+                                          const TakePreloadFn& take_preload) {
+  source_.Append(source);
+  take_preload.Run(Scan(document_base_element_url, take_preload));
 }
 
 CachedDocumentParameters::CachedDocumentParameters(Document* document) {
@@ -1131,7 +1186,6 @@ CachedDocumentParameters::CachedDocumentParameters(Document* document) {
   }
   probe::GetDisabledImageTypes(document->GetExecutionContext(),
                                &disabled_image_types);
-  local_dom_window = document->domWindow();
 }
 
 }  // namespace blink

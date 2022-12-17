@@ -19,28 +19,13 @@ class GUID;
 
 namespace content {
 
+struct AttributionRateLimitConfig;
 class CommonSourceInfo;
 
 // Storage delegate that can supplied to extend basic attribution storage
 // functionality like annotating reports.
 class AttributionStorageDelegate {
  public:
-  struct RateLimitConfig {
-    base::TimeDelta time_window;
-
-    // Maximum number of distinct reporting origins that can register sources
-    // for a given <source site, destination site> in `time_window`.
-    int64_t max_source_registration_reporting_origins;
-
-    // Maximum number of distinct reporting origins that can create attributions
-    // for a given <source site, destination site> in `time_window`.
-    int64_t max_attribution_reporting_origins;
-
-    // Maximum number of attributions for a given <source site, destination
-    // site, reporting origin> in `time_window`.
-    int64_t max_attributions;
-  };
-
   // Both bounds are inclusive.
   struct OfflineReportDelayConfig {
     base::TimeDelta min;
@@ -88,11 +73,11 @@ class AttributionStorageDelegate {
   virtual int GetMaxSourcesPerOrigin() const = 0;
 
   // Returns the maximum number of reports of the given type that can be in
-  // storage at any time for an attribution top-level origin. Note that since
+  // storage at any time for a destination site. Note that since
   // reporting origins are the actual entities that invoke attribution
   // registration, we could consider changing this limit to be keyed by an
   // <attribution origin, reporting origin> tuple.
-  virtual int GetMaxAttributionsPerOrigin(
+  virtual int GetMaxReportsPerDestination(
       AttributionReport::ReportType) const = 0;
 
   // Returns the maximum number of distinct attribution destinations that can
@@ -101,7 +86,7 @@ class AttributionStorageDelegate {
   virtual int GetMaxDestinationsPerSourceSiteReportingOrigin() const = 0;
 
   // Returns the rate limits for capping contributions per window.
-  virtual RateLimitConfig GetRateLimits() const = 0;
+  virtual AttributionRateLimitConfig GetRateLimits() const = 0;
 
   // Returns the maximum frequency at which to delete expired sources.
   // Must be positive.

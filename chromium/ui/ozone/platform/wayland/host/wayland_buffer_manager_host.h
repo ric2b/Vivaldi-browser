@@ -13,6 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -99,7 +100,7 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
   // ui/ozone/platform/wayland/mojom/wayland_buffer_manager.mojom. The
   // availability of this depends on existence of surface-augmenter protocol.
   void CreateSolidColorBuffer(const gfx::Size& size,
-                              SkColor color,
+                              const SkColor4f& color,
                               uint32_t buffer_id) override;
 
   // Called by the GPU to destroy the imported wl_buffer with a |buffer_id|.
@@ -120,6 +121,10 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
   // Gets the WaylandBufferHandle of |buffer_id| used for |requestor|.
   WaylandBufferHandle* GetBufferHandle(WaylandSurface* requestor,
                                        uint32_t buffer_id);
+
+  // Gets the buffer format of |buffer_id| used for |requestor| if it is a
+  // DMA based buffer.
+  uint32_t GetBufferFormat(WaylandSurface* requestor, uint32_t buffer_id);
 
   // Tells the |buffer_manager_gpu_ptr_| the result of a swap call and provides
   // it with the presentation feedback.
@@ -158,7 +163,7 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
   std::string error_message_;
 
   // Non-owned pointer to the main connection.
-  WaylandConnection* const connection_;
+  const raw_ptr<WaylandConnection> connection_;
 
   mojo::AssociatedRemote<ozone::mojom::WaylandBufferManagerGpu>
       buffer_manager_gpu_associated_;

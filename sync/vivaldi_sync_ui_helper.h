@@ -6,12 +6,14 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/time/time.h"
-#include "chrome/browser/profiles/profile.h"
 #include "components/sync/driver/sync_service_observer.h"
+
+class Profile;
 
 namespace vivaldi {
 
 class VivaldiSyncServiceImpl;
+class VivaldiAccountManager;
 
 class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
  public:
@@ -37,7 +39,8 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
     base::Time next_retry_time;
   };
 
-  VivaldiSyncUIHelper(Profile* profile, VivaldiSyncServiceImpl* sync_manager);
+  VivaldiSyncUIHelper(VivaldiSyncServiceImpl* sync_service,
+                      VivaldiAccountManager* account_manager);
   ~VivaldiSyncUIHelper() override;
 
   void RegisterObserver();
@@ -54,8 +57,8 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
   void OnSyncShutdown(syncer::SyncService* sync) override;
 
  private:
-  Profile* profile_;
   VivaldiSyncServiceImpl* sync_service_;
+  VivaldiAccountManager* account_manager_;
 
   bool tried_decrypt_ = false;
 };

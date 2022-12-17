@@ -1,8 +1,11 @@
 // Copyright (c) 2016 Vivaldi Technologies
 
+#include "components/sessions/core/live_tab.h"
 #include "components/sessions/core/live_tab_context.h"
-#include "components/page_actions/page_actions_tab_helper.h"
+
+#if !BUILDFLAG(IS_IOS)
 #include "components/sessions/content/content_live_tab.h"
+#endif
 
 namespace sessions {
 
@@ -87,8 +90,10 @@ LiveTab* LiveTabContext::ReplaceRestoredTab(
                             user_agent_override, extra_data);
 }
 
+#if !BUILDFLAG(IS_IOS)
 const std::string& ContentLiveTab::GetVivExtData() const {
   return web_contents()->GetVivExtData();
 }
+#endif
 
 }  // namespace sessions

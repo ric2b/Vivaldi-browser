@@ -13,7 +13,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -23,7 +23,7 @@
 
 namespace {
 
-using chromeos::assistant::AssistantAllowedState;
+using ::ash::assistant::AssistantAllowedState;
 
 bool g_override_is_google_device = false;
 
@@ -111,7 +111,7 @@ bool IsAssistantAllowedForLocale(const Profile* profile) {
 
 bool IsAssistantDisabledByPolicy(const Profile* profile) {
   return profile->GetPrefs()->GetBoolean(
-      chromeos::assistant::prefs::kAssistantDisabledByPolicy);
+      ash::assistant::prefs::kAssistantDisabledByPolicy);
 }
 
 bool IsEmailDomainSupported(const Profile* profile) {

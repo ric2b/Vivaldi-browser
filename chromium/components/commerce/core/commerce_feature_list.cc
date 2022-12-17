@@ -11,6 +11,7 @@
 #if !BUILDFLAG(IS_ANDROID)
 #include "components/commerce/core/commerce_heuristics_data.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
+#include "components/commerce/core/commerce_heuristics_data_metrics_helper.h"
 #include "third_party/re2/src/re2/re2.h"
 
 namespace commerce {
@@ -34,6 +35,8 @@ const re2::RE2& GetRulePartnerMerchantPattern() {
           .GetRuleDiscountPartnerMerchantPattern();
   if (pattern_from_component && kRulePartnerMerchantPattern.Get() ==
                                     kRulePartnerMerchantPattern.default_value) {
+    CommerceHeuristicsDataMetricsHelper::RecordPartnerMerchantPatternSource(
+        CommerceHeuristicsDataMetricsHelper::HeuristicsSource::FROM_COMPONENT);
     return *pattern_from_component;
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -41,6 +44,9 @@ const re2::RE2& GetRulePartnerMerchantPattern() {
   options.set_case_sensitive(false);
   static base::NoDestructor<re2::RE2> instance(
       kRulePartnerMerchantPattern.Get(), options);
+  CommerceHeuristicsDataMetricsHelper::RecordPartnerMerchantPatternSource(
+      CommerceHeuristicsDataMetricsHelper::HeuristicsSource::
+          FROM_FEATURE_PARAMETER);
   return *instance;
 }
 
@@ -63,6 +69,11 @@ const re2::RE2& GetCouponPartnerMerchantPattern() {
 }
 
 }  // namespace
+
+namespace switches {
+// Specifies whether ChromeCart is enabled.
+const char kEnableChromeCart[] = "enable-chrome-cart";
+}  // namespace switches
 
 const base::Feature kCommerceAllowLocalImages{
     "CommerceAllowLocalImages", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -102,6 +113,9 @@ const base::Feature kDiscountConsentV2{"DiscountConsentV2",
 
 const base::Feature kCommerceHintAndroid{"CommerceHintAndroid",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kMerchantWidePromotion{"MerchantWidePromotion",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Params for Discount Consent V2 in the NTP Cart module.
 const char kNtpChromeCartModuleDiscountConsentNtpVariationParam[] =
@@ -207,6 +221,11 @@ const base::FeatureParam<bool> kContextualConsentShowOnSRP{
 const char kCommerceHintAndroidHeuristicsImprovementParam[] =
     "CommerceHintAndroidHeuristicsImprovementParam";
 
+const char kReadyToFetchMerchantWidePromotionParam[] = "ready-to-fetch";
+const base::FeatureParam<bool> kReadyToFetchMerchantWidePromotion{
+    &commerce::kMerchantWidePromotion, kReadyToFetchMerchantWidePromotionParam,
+    false};
+
 bool IsPartnerMerchant(const GURL& url) {
   return commerce::IsCouponDiscountPartnerMerchant(url) ||
          IsRuleDiscountPartnerMerchant(url);
@@ -229,7 +248,7 @@ bool IsCouponDiscountPartnerMerchant(const GURL& url) {
 bool IsCartDiscountFeatureEnabled() {
   return base::GetFieldTrialParamByFeatureAsBool(
       ntp_features::kNtpChromeCartModule,
-      ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam, false);
+      ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam, true);
 }
 
 bool IsCouponWithCodeEnabled() {
@@ -248,4 +267,31 @@ bool isContextualConsentEnabled() {
          kContextualConsentShowOnSRP.Get();
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+base::TimeDelta GetDiscountFetchDelay() {
+  auto delay_from_component =
+      commerce_heuristics::CommerceHeuristicsData::GetInstance()
+          .GetDiscountFetchDelay();
+  if (delay_from_component.has_value() &&
+      kDiscountFetchDelayParam.Get() ==
+          kDiscountFetchDelayParam.default_value) {
+    return *delay_from_component;
+  }
+  return kDiscountFetchDelayParam.Get();
+}
+
+bool IsNoDiscountMerchant(const GURL& url) {
+  const auto host_string = url.host_piece();
+  auto* pattern_from_component =
+      commerce_heuristics::CommerceHeuristicsData::GetInstance()
+          .GetNoDiscountMerchantPattern();
+  // If pattern from component updater is not available, merchants are
+  // considered to have no discounts by default.
+  if (!pattern_from_component)
+    return true;
+  return RE2::PartialMatch(
+      re2::StringPiece(host_string.data(), host_string.size()),
+      *pattern_from_component);
+}
+#endif
 }  // namespace commerce

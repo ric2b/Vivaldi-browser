@@ -49,8 +49,6 @@ static_library("ui") {
       "devtools/devtools_connector.h",
       "lights/razer_chroma_handler.cc",
       "lights/razer_chroma_handler.h",
-      "views/vivaldi_pin_shortcut.cpp",
-      "views/vivaldi_pin_shortcut.h",
       "vivaldi_document_loader.cc",
       "vivaldi_document_loader.h",
       "vivaldi_rootdocument_handler.cc",

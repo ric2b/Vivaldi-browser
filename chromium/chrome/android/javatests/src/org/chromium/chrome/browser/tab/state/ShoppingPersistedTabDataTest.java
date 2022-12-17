@@ -104,6 +104,7 @@ public class ShoppingPersistedTabDataTest {
     @UiThreadTest
     @SmallTest
     @Test
+    @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:check_if_price_drop_is_seen/true"})
     public void testShoppingProto() {
         Tab tab = new MockTab(ShoppingPersistedTabDataTestUtils.TAB_ID,
                 ShoppingPersistedTabDataTestUtils.IS_INCOGNITO);
@@ -116,7 +117,8 @@ public class ShoppingPersistedTabDataTest {
         shoppingPersistedTabData.setCurrencyCode(
                 ShoppingPersistedTabDataTestUtils.GREAT_BRITAIN_CURRENCY_CODE);
         shoppingPersistedTabData.setPriceDropGurl(new GURL("https://www.google.com"));
-        ByteBuffer serialized = shoppingPersistedTabData.getSerializeSupplier().get();
+        shoppingPersistedTabData.setIsCurrentPriceDropSeen(true);
+        ByteBuffer serialized = shoppingPersistedTabData.getSerializer().get();
         ShoppingPersistedTabData deserialized = new ShoppingPersistedTabData(tab);
         deserialized.deserialize(serialized);
         Assert.assertEquals(
@@ -125,6 +127,7 @@ public class ShoppingPersistedTabDataTest {
                 ShoppingPersistedTabData.NO_PRICE_KNOWN, deserialized.getPreviousPriceMicros());
         Assert.assertEquals(ShoppingPersistedTabDataTestUtils.GREAT_BRITAIN_CURRENCY_CODE,
                 deserialized.getCurrencyCode());
+        Assert.assertTrue(deserialized.getIsCurrentPriceDropSeen());
         Assert.assertEquals(
                 new GURL("https://www.google.com"), deserialized.getPriceDropDataForTesting().gurl);
         MetricsResult metricsResult =
@@ -155,7 +158,7 @@ public class ShoppingPersistedTabDataTest {
                     shoppingPersistedTabData.setPreviousPriceMicros(containsPriceDrop
                                     ? 30_000_000L
                                     : ShoppingPersistedTabData.NO_PRICE_KNOWN);
-                    ByteBuffer serialized = shoppingPersistedTabData.getSerializeSupplier().get();
+                    ByteBuffer serialized = shoppingPersistedTabData.getSerializer().get();
                     ShoppingPersistedTabData deserialized = new ShoppingPersistedTabData(tab);
                     deserialized.deserialize(serialized);
                     MetricsResult metricsResult = deserialized.getPriceDropMetricsLoggerForTesting()
@@ -495,25 +498,21 @@ public class ShoppingPersistedTabDataTest {
                 HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR.getNumber(),
                 OptimizationGuideDecision.TRUE, null);
         NavigationHandle navigationHandle = mock(NavigationHandle.class);
-        for (boolean isInPrimaryMainFrame : new boolean[] {false, true}) {
-            for (boolean isSameDocument : new boolean[] {false, true}) {
-                ShoppingPersistedTabData shoppingPersistedTabData =
-                        new ShoppingPersistedTabData(tab);
-                shoppingPersistedTabData.setPriceMicros(42_000_000L);
-                shoppingPersistedTabData.setPreviousPriceMicros(60_000_000L);
-                shoppingPersistedTabData.setCurrencyCode("USD");
-                shoppingPersistedTabData.setPriceDropGurl(
-                        ShoppingPersistedTabDataTestUtils.DEFAULT_GURL);
+        for (boolean isSameDocument : new boolean[] {false, true}) {
+            ShoppingPersistedTabData shoppingPersistedTabData = new ShoppingPersistedTabData(tab);
+            shoppingPersistedTabData.setPriceMicros(42_000_000L);
+            shoppingPersistedTabData.setPreviousPriceMicros(60_000_000L);
+            shoppingPersistedTabData.setCurrencyCode("USD");
+            shoppingPersistedTabData.setPriceDropGurl(
+                    ShoppingPersistedTabDataTestUtils.DEFAULT_GURL);
+            Assert.assertNotNull(shoppingPersistedTabData.getPriceDrop());
+            doReturn(isSameDocument).when(navigationHandle).isSameDocument();
+            shoppingPersistedTabData.getUrlUpdatedObserverForTesting()
+                    .onDidStartNavigationInPrimaryMainFrame(tab, navigationHandle);
+            if (!isSameDocument) {
+                Assert.assertNull(shoppingPersistedTabData.getPriceDrop());
+            } else {
                 Assert.assertNotNull(shoppingPersistedTabData.getPriceDrop());
-                doReturn(isInPrimaryMainFrame).when(navigationHandle).isInPrimaryMainFrame();
-                doReturn(isSameDocument).when(navigationHandle).isSameDocument();
-                shoppingPersistedTabData.getUrlUpdatedObserverForTesting().onDidStartNavigation(
-                        tab, navigationHandle);
-                if (isInPrimaryMainFrame && !isSameDocument) {
-                    Assert.assertNull(shoppingPersistedTabData.getPriceDrop());
-                } else {
-                    Assert.assertNotNull(shoppingPersistedTabData.getPriceDrop());
-                }
             }
         }
     }
@@ -548,12 +547,12 @@ public class ShoppingPersistedTabDataTest {
         shoppingPersistedTabData.setCurrencyCode("USD");
         shoppingPersistedTabData.setPriceDropGurl(gurl1);
         Assert.assertNotNull(shoppingPersistedTabData.getPriceDrop());
-        shoppingPersistedTabData.getUrlUpdatedObserverForTesting().onDidStartNavigation(
-                tab, navigationHandle);
+        shoppingPersistedTabData.getUrlUpdatedObserverForTesting()
+                .onDidStartNavigationInPrimaryMainFrame(tab, navigationHandle);
         Assert.assertNotNull(shoppingPersistedTabData.getPriceDrop());
         doReturn(gurl2).when(navigationHandle).getUrl();
-        shoppingPersistedTabData.getUrlUpdatedObserverForTesting().onDidStartNavigation(
-                tab, navigationHandle);
+        shoppingPersistedTabData.getUrlUpdatedObserverForTesting()
+                .onDidStartNavigationInPrimaryMainFrame(tab, navigationHandle);
         Assert.assertNull(shoppingPersistedTabData.getPriceDrop());
     }
 
@@ -689,7 +688,7 @@ public class ShoppingPersistedTabDataTest {
                 ShoppingPersistedTabDataTestUtils.IS_INCOGNITO);
         ShoppingPersistedTabData shoppingPersistedTabData = new ShoppingPersistedTabData(tab);
         shoppingPersistedTabData.setPriceMicros(42_000_000L, null);
-        ByteBuffer serialized = shoppingPersistedTabData.getSerializeSupplier().get();
+        ByteBuffer serialized = shoppingPersistedTabData.getSerializer().get();
         PersistedTabDataConfiguration config = PersistedTabDataConfiguration.get(
                 ShoppingPersistedTabData.class, tab.isIncognito());
         ShoppingPersistedTabData deserialized =
@@ -709,7 +708,7 @@ public class ShoppingPersistedTabDataTest {
         supplier.set(true);
         shoppingPersistedTabData.registerIsTabSaveEnabledSupplier(supplier);
         shoppingPersistedTabData.setMainOfferId(ShoppingPersistedTabDataTestUtils.FAKE_OFFER_ID);
-        ByteBuffer serialized = shoppingPersistedTabData.getSerializeSupplier().get();
+        ByteBuffer serialized = shoppingPersistedTabData.getSerializer().get();
         ShoppingPersistedTabData deserialized = new ShoppingPersistedTabData(tab);
         deserialized.deserialize(serialized);
         Assert.assertEquals(
@@ -1175,6 +1174,121 @@ public class ShoppingPersistedTabDataTest {
         protected boolean needsUpdate() {
             return false;
         }
+    }
+
+    @SmallTest
+    @Test
+    @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:check_if_price_drop_is_seen/true"
+            + "/price_tracking_with_optimization_guide/true"})
+    public void
+    testIsCurrentPriceDropSeen_PriceChange() throws TimeoutException {
+        ShoppingPersistedTabDataTestUtils.mockOptimizationGuideResponse(
+                mOptimizationGuideBridgeJniMock,
+                HintsProto.OptimizationType.PRICE_TRACKING.getNumber(),
+                ShoppingPersistedTabDataTestUtils.MockPriceTrackingResponse
+                        .BUYABLE_PRODUCT_AND_PRODUCT_UPDATE);
+        ShoppingPersistedTabDataTestUtils.mockOptimizationGuideResponse(
+                mOptimizationGuideBridgeJniMock,
+                HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR.getNumber(),
+                OptimizationGuideDecision.TRUE, null);
+
+        Tab tab = ShoppingPersistedTabDataTestUtils.createTabOnUiThread(
+                ShoppingPersistedTabDataTestUtils.TAB_ID,
+                ShoppingPersistedTabDataTestUtils.IS_INCOGNITO);
+        ShoppingPersistedTabData shoppingPersistedTabData =
+                ShoppingPersistedTabDataTestUtils
+                        .createShoppingPersistedTabDataWithPriceDropOnUiThread(tab);
+
+        CallbackHelper callbackHelper = new CallbackHelper();
+        int count = callbackHelper.getCallCount();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            shoppingPersistedTabData.setIsCurrentPriceDropSeen(true);
+            shoppingPersistedTabData.setPriceMicros(
+                    ShoppingPersistedTabDataTestUtils.LOW_PRICE_MICROS);
+            tab.getUserDataHost().setUserData(
+                    ShoppingPersistedTabData.class, shoppingPersistedTabData);
+            ShoppingPersistedTabData.from(tab, (sptd) -> {
+                Assert.assertFalse(sptd.getIsCurrentPriceDropSeen());
+                callbackHelper.notifyCalled();
+            });
+        });
+        callbackHelper.waitForCallback(count);
+    }
+
+    @SmallTest
+    @Test
+    @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:check_if_price_drop_is_seen/true"
+            + "/price_tracking_with_optimization_guide/true"})
+    public void
+    testIsCurrentPriceDropSeen_CurrencyChange() throws TimeoutException {
+        ShoppingPersistedTabDataTestUtils.mockOptimizationGuideResponse(
+                mOptimizationGuideBridgeJniMock,
+                HintsProto.OptimizationType.PRICE_TRACKING.getNumber(),
+                ShoppingPersistedTabDataTestUtils.MockPriceTrackingResponse
+                        .BUYABLE_PRODUCT_AND_PRODUCT_UPDATE);
+        ShoppingPersistedTabDataTestUtils.mockOptimizationGuideResponse(
+                mOptimizationGuideBridgeJniMock,
+                HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR.getNumber(),
+                OptimizationGuideDecision.TRUE, null);
+
+        Tab tab = ShoppingPersistedTabDataTestUtils.createTabOnUiThread(
+                ShoppingPersistedTabDataTestUtils.TAB_ID,
+                ShoppingPersistedTabDataTestUtils.IS_INCOGNITO);
+        ShoppingPersistedTabData shoppingPersistedTabData =
+                ShoppingPersistedTabDataTestUtils
+                        .createShoppingPersistedTabDataWithPriceDropOnUiThread(tab);
+
+        CallbackHelper callbackHelper = new CallbackHelper();
+        int count = callbackHelper.getCallCount();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            shoppingPersistedTabData.setIsCurrentPriceDropSeen(true);
+            shoppingPersistedTabData.setCurrencyCode(
+                    ShoppingPersistedTabDataTestUtils.JAPAN_CURRENCY_CODE);
+            tab.getUserDataHost().setUserData(
+                    ShoppingPersistedTabData.class, shoppingPersistedTabData);
+            ShoppingPersistedTabData.from(tab, (sptd) -> {
+                Assert.assertFalse(sptd.getIsCurrentPriceDropSeen());
+                callbackHelper.notifyCalled();
+            });
+        });
+        callbackHelper.waitForCallback(count);
+    }
+
+    @SmallTest
+    @Test
+    @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:check_if_price_drop_is_seen/true"
+            + "/price_tracking_with_optimization_guide/true"})
+    public void
+    testIsCurrentPriceDropSeen_NoPriceChange() throws TimeoutException {
+        ShoppingPersistedTabDataTestUtils.mockOptimizationGuideResponse(
+                mOptimizationGuideBridgeJniMock,
+                HintsProto.OptimizationType.PRICE_TRACKING.getNumber(),
+                ShoppingPersistedTabDataTestUtils.MockPriceTrackingResponse
+                        .BUYABLE_PRODUCT_AND_PRODUCT_UPDATE);
+        ShoppingPersistedTabDataTestUtils.mockOptimizationGuideResponse(
+                mOptimizationGuideBridgeJniMock,
+                HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR.getNumber(),
+                OptimizationGuideDecision.TRUE, null);
+
+        Tab tab = ShoppingPersistedTabDataTestUtils.createTabOnUiThread(
+                ShoppingPersistedTabDataTestUtils.TAB_ID,
+                ShoppingPersistedTabDataTestUtils.IS_INCOGNITO);
+        ShoppingPersistedTabData shoppingPersistedTabData =
+                ShoppingPersistedTabDataTestUtils
+                        .createShoppingPersistedTabDataWithPriceDropOnUiThread(tab);
+
+        CallbackHelper callbackHelper = new CallbackHelper();
+        int count = callbackHelper.getCallCount();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            shoppingPersistedTabData.setIsCurrentPriceDropSeen(true);
+            tab.getUserDataHost().setUserData(
+                    ShoppingPersistedTabData.class, shoppingPersistedTabData);
+            ShoppingPersistedTabData.from(tab, (sptd) -> {
+                Assert.assertTrue(sptd.getIsCurrentPriceDropSeen());
+                callbackHelper.notifyCalled();
+            });
+        });
+        callbackHelper.waitForCallback(count);
     }
 
     private static void registerObserverSupplier(

@@ -6,6 +6,7 @@
 #define CONTENT_PUBLIC_TEST_MOCK_PERMISSION_CONTROLLER_H_
 
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace blink {
@@ -38,10 +39,17 @@ class MockPermissionController : public PermissionController {
       GetPermissionStatusForCurrentDocument,
       blink::mojom::PermissionStatus(blink::PermissionType permission,
                                      RenderFrameHost* render_frame_host));
-  MOCK_METHOD2(
+  MOCK_METHOD2(GetPermissionResultForCurrentDocument,
+               content::PermissionResult(blink::PermissionType permission,
+                                         RenderFrameHost* render_frame_host));
+  MOCK_METHOD2(GetPermissionResultForOriginWithoutContext,
+               content::PermissionResult(blink::PermissionType permission,
+                                         const url::Origin& requesting_origin));
+  MOCK_METHOD3(
       GetPermissionStatusForOriginWithoutContext,
       blink::mojom::PermissionStatus(blink::PermissionType permission,
-                                     const url::Origin& requesting_origin));
+                                     const url::Origin& requesting_origin,
+                                     const url::Origin& embedding_origin));
   void RequestPermissionFromCurrentDocument(
       blink::PermissionType permission,
       RenderFrameHost* render_frame_host,
@@ -55,6 +63,8 @@ class MockPermissionController : public PermissionController {
       base::OnceCallback<
           void(const std::vector<blink::mojom::PermissionStatus>&)> callback)
       override;
+  void ResetPermission(blink::PermissionType permission,
+                       const url::Origin& origin) override;
 };
 
 }  // namespace content

@@ -8,14 +8,12 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_state.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/test/quick_answers_test_base.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
 #include "chromeos/components/quick_answers/utils/spell_checker.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/machine_learning/public/cpp/fake_service_connection.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/text_classifier.mojom.h"
@@ -40,6 +38,12 @@ TextLanguagePtr DefaultLanguage() {
   return TextLanguage::New("en", /* confidence */ 1);
 }
 
+std::vector<TextLanguagePtr> DefaultLanguages() {
+  std::vector<TextLanguagePtr> languages;
+  languages.push_back(DefaultLanguage());
+  return languages;
+}
+
 class FakeSpellChecker : public SpellChecker {
  public:
   FakeSpellChecker(
@@ -50,13 +54,17 @@ class FakeSpellChecker : public SpellChecker {
   // SpellChecker:
   void CheckSpelling(const std::string& word,
                      CheckSpellingCallback callback) override {
-    std::move(callback).Run(dictionary_.find(word) != dictionary_.end());
+    std::move(callback).Run(dictionary_.find(word) != dictionary_.end(),
+                            dictionary_[word]);
   }
 
-  void AddWordToDictionary(std::string word) { dictionary_.insert(word); }
+  void AddWordToDictionary(const std::string& word,
+                           const std::string& language = "en") {
+    dictionary_.insert({word, language});
+  }
 
  private:
-  std::set<std::string> dictionary_;
+  std::map<std::string, std::string> dictionary_;
 };
 
 }  // namespace
@@ -81,7 +89,9 @@ class IntentGeneratorTest : public QuickAnswersTestBase {
         base::BindOnce(&IntentGeneratorTest::IntentGeneratorTestCallback,
                        base::Unretained(this)));
 
-    QuickAnswersState::Get()->set_use_text_annotator_for_testing();
+    fake_quick_answers_state()->set_use_text_annotator_for_testing();
+    fake_quick_answers_state()->set_application_locale("en");
+    fake_quick_answers_state()->set_preferred_languages("en");
   }
 
   void TearDown() override {
@@ -104,8 +114,7 @@ class IntentGeneratorTest : public QuickAnswersTestBase {
   void UseFakeServiceConnection(
       const std::vector<TextAnnotationPtr>& annotations =
           std::vector<TextAnnotationPtr>(),
-      const std::vector<TextLanguagePtr>& languages =
-          std::vector<TextLanguagePtr>()) {
+      const std::vector<TextLanguagePtr>& languages = DefaultLanguages()) {
     chromeos::machine_learning::ServiceConnection::
         UseFakeServiceConnectionForTesting(&fake_service_connection_);
     chromeos::machine_learning::ServiceConnection::GetInstance()->Initialize();
@@ -251,9 +260,7 @@ TEST_F(IntentGeneratorTest, TranslationIntentTextLengthAboveThreshold) {
 
 TEST_F(IntentGeneratorTest, TranslationIntentWithAnnotation) {
   QuickAnswersRequest request;
-  request.selected_text = "unfathomable";
-  fake_quick_answers_state()->set_application_locale("es");
-  fake_quick_answers_state()->set_preferred_languages("es");
+  request.selected_text = "prueba";
 
   // Create the test annotations.
   std::vector<TextEntityPtr> entities;
@@ -262,14 +269,14 @@ TEST_F(IntentGeneratorTest, TranslationIntentWithAnnotation) {
       1.0,                                     // Confidence score.
       TextEntityData::NewNumericValue(0.0)));  // Data extracted.
 
-  auto dictionary_annotation = TextAnnotation::New(0,   // Start offset.
-                                                   12,  // End offset.
+  auto dictionary_annotation = TextAnnotation::New(0,  // Start offset.
+                                                   6,  // End offset.
                                                    std::move(entities));
 
   std::vector<TextAnnotationPtr> annotations;
   annotations.push_back(dictionary_annotation->Clone());
   std::vector<TextLanguagePtr> languages;
-  languages.push_back(DefaultLanguage());
+  languages.push_back(TextLanguage::New("es", /* confidence */ 1));
   UseFakeServiceConnection(annotations, languages);
 
   intent_generator_->GenerateIntent(request);
@@ -279,7 +286,7 @@ TEST_F(IntentGeneratorTest, TranslationIntentWithAnnotation) {
   // Should generate dictionary intent which is prioritized against
   // translation.
   EXPECT_EQ(IntentType::kDictionary, intent_info_.intent_type);
-  EXPECT_EQ("unfathomable", intent_info_.intent_text);
+  EXPECT_EQ("prueba", intent_info_.intent_text);
 }
 
 TEST_F(IntentGeneratorTest, TranslationIntentDeviceLanguageNotSet) {
@@ -484,6 +491,41 @@ TEST_F(IntentGeneratorTest, TextAnnotationUnitIntentExtraCharsAboveThreshold) {
   EXPECT_EQ("23 cm", intent_info_.intent_text);
 }
 
+TEST_F(IntentGeneratorTest, TextAnnotationNonEnglishLanguage) {
+  fake_quick_answers_state()->set_application_locale("es");
+  fake_quick_answers_state()->set_preferred_languages("es");
+
+  std::unique_ptr<QuickAnswersRequest> quick_answers_request =
+      std::make_unique<QuickAnswersRequest>();
+  quick_answers_request->selected_text = "unfathomable";
+
+  // Create the test annotations.
+  std::vector<TextEntityPtr> entities;
+  entities.emplace_back(TextEntity::New(
+      "dictionary",                            // Entity name.
+      1.0,                                     // Confidence score.
+      TextEntityData::NewNumericValue(0.0)));  // Data extracted.
+
+  auto dictionary_annotation = TextAnnotation::New(0,   // Start offset.
+                                                   12,  // End offset.
+                                                   std::move(entities));
+
+  std::vector<TextAnnotationPtr> annotations;
+  annotations.push_back(dictionary_annotation->Clone());
+  std::vector<TextLanguagePtr> languages;
+  languages.push_back(TextLanguage::New("en", /* confidence */ 1));
+  UseFakeServiceConnection(annotations, languages);
+
+  intent_generator_->GenerateIntent(*quick_answers_request);
+
+  FlushForTesting();
+
+  // Should not generate dictionary intent since English is not device language
+  // or preferred language. Should fallback to translation intent.
+  EXPECT_EQ(IntentType::kTranslation, intent_info_.intent_type);
+  EXPECT_EQ("unfathomable", intent_info_.intent_text);
+}
+
 TEST_F(IntentGeneratorTest, TextAnnotationIntentNoAnnotation) {
   std::unique_ptr<QuickAnswersRequest> quick_answers_request =
       std::make_unique<QuickAnswersRequest>();
@@ -551,10 +593,6 @@ TEST_F(IntentGeneratorTest, TextAnnotationIntentUnSupportedEntity) {
 }
 
 TEST_F(IntentGeneratorTest, ShouldTriggerForSingleWordInDictionary) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   const std::string kWord = "single";
 
   // No Annotation provided.
@@ -577,12 +615,33 @@ TEST_F(IntentGeneratorTest, ShouldTriggerForSingleWordInDictionary) {
   EXPECT_EQ(kWord, intent_info_.intent_text);
 }
 
+TEST_F(IntentGeneratorTest, ShouldTriggerForNonEnglishWordInDictionary) {
+  const std::string kWord = "palabra";
+  const std::string kLanguage = "es";
+
+  // No Annotation provided.
+  std::vector<TextAnnotationPtr> annotations;
+  UseFakeServiceConnection(annotations);
+
+  // Add word to the dictionary.
+  spell_checker()->AddWordToDictionary(kWord, kLanguage);
+
+  // Word selected.
+  std::unique_ptr<QuickAnswersRequest> quick_answers_request =
+      std::make_unique<QuickAnswersRequest>();
+  quick_answers_request->selected_text = kWord;
+
+  intent_generator_->GenerateIntent(*quick_answers_request);
+  task_environment_.RunUntilIdle();
+
+  // Should generate dictionary intent.
+  EXPECT_EQ(IntentType::kDictionary, intent_info_.intent_type);
+  EXPECT_EQ(kWord, intent_info_.intent_text);
+  EXPECT_EQ(kLanguage, intent_info_.source_language);
+}
+
 TEST_F(IntentGeneratorTest,
        ShouldNotTriggerForSingleWordInDictionaryWithDigits) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   const std::string kWord = "1st";
 
   // No Annotation provided.
@@ -607,10 +666,6 @@ TEST_F(IntentGeneratorTest,
 }
 
 TEST_F(IntentGeneratorTest, ShouldNotTriggerForProperNounInDictionary) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   const std::string kWord = "Amy";
 
   // No Annotation provided.
@@ -636,10 +691,6 @@ TEST_F(IntentGeneratorTest, ShouldNotTriggerForProperNounInDictionary) {
 
 TEST_F(IntentGeneratorTest,
        ShouldFallbackToAnnotationsForWordNotInDictionaryNoAnnotation) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   const std::string kWord = "single";
 
   // No Annotation provided, and not add the word to the dictionary.
@@ -663,10 +714,6 @@ TEST_F(IntentGeneratorTest,
 TEST_F(
     IntentGeneratorTest,
     ShouldFallbackToAnnotationsForWordNotInDictionaryWithDictionaryAnnotation) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   const std::string kWord = "unfathomable";
 
   // Annotation provided, and not add the word to the dictionary.
@@ -699,10 +746,6 @@ TEST_F(
 TEST_F(
     IntentGeneratorTest,
     ShouldFallbackToAnnotationsForWordNotInDictionaryWithUnitConversionAnnotation) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   const std::string kText = "50kg";
 
   // Annotation provided, and not add the text to the dictionary.
@@ -733,10 +776,6 @@ TEST_F(
 }
 
 TEST_F(IntentGeneratorTest, ShouldNotTriggerForMultipleWords) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      chromeos::features::kQuickAnswersAlwaysTriggerForSingleWord);
-
   // No Annotation provided.
   std::vector<TextAnnotationPtr> annotations;
   UseFakeServiceConnection(annotations);

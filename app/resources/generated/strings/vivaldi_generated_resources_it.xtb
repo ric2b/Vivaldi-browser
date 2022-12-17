@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Riattivazioni</translation>
 <translation id="119944043368869598">Cancella tutto</translation>
 <translation id="1221825588892235038">Solo selezione</translation>
+<translation id="1234736487471201993">Crea codice QR per questa immagine</translation>
 <translation id="1244303850296295656">Errore delle estensioni</translation>
 <translation id="125220115284141797">Predefinito</translation>
 <translation id="1297175357211070620">Destinazione</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Trasmetti scheda</translation>
 <translation id="2150139952286079145">Cerca destinazioni</translation>
 <translation id="215753907730220065">Esci da schermo intero</translation>
+<translation id="2158475082070321257">Copia link da evidenziare</translation>
 <translation id="2177950615300672361">Scheda di navigazione in incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modulo Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Incolla come testo semplice</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">I siti potrebbero anche dover riconoscere il tuo dispositivo tramite un identificatore</translation>
 <translation id="2445081178310039857">La directory principale dell'estensione è obbligatoria.</translation>
 <translation id="2470702053775288986">Estensioni non supportate disattivate</translation>
-<translation id="2476578072172137802">Impostazioni sito</translation>
+<translation id="2485422356828889247">Disinstalla</translation>
 <translation id="2498539833203011245">Minimizza</translation>
 <translation id="2509495747794740764">Il valore Scala deve essere un numero compreso tra 10 e 200.</translation>
 <translation id="253557089021624350">Numero attività keep-alive</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Segnala abuso</translation>
 <translation id="2941112035454246133">Bassa</translation>
 <translation id="2972581237482394796">&amp;Ripeti</translation>
+<translation id="2993517869960930405">Informazioni applicazione</translation>
 <translation id="3003623123441819449">Cache CSS</translation>
 <translation id="3008272652534848354">Reimposta le autorizzazioni</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Apri link come</translation>
 <translation id="3222066309010235055">Prerenderizza: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Seleziona la directory principale dell'estensione di cui creare il pacchetto. Per aggiornare un'estensione, seleziona anche il file delle chiave privata da riutilizzare.</translation>
+<translation id="3275778913554317645">Apri come finestra</translation>
 <translation id="3280237271814976245">Salv&amp;a come...</translation>
 <translation id="3285322247471302225">Nuova &amp;Scheda</translation>
 <translation id="3288047731229977326">Le estensioni in esecuzione in modalità sviluppatore potrebbero danneggiare il computer. Se non sei uno sviluppatore, dovresti disattivare queste estensioni per la tua sicurezza.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Apri PDF in anteprima</translation>
 <translation id="3308134619352333507">Nascondi pulsante</translation>
 <translation id="3317459757438853210">Fronte retro</translation>
+<translation id="3331974543021145906">Informazioni applicazione</translation>
 <translation id="3341703758641437857">Consentire l'accesso agli URL del file</translation>
 <translation id="3347086966102161372">C&amp;opia l'indirizzo dell'immagine</translation>
 <translation id="3360297538363969800">Errore di stampa. Controlla la stampante e riprova.</translation>
 <translation id="3378572629723696641">Questa estensione potrebbe essere stata danneggiata.</translation>
 <translation id="3387614642886316601">Usa il controllo ortografico avanzato</translation>
+<translation id="3390013585654699824">Dettagli applicazione</translation>
 <translation id="3393582007140394275">Impossibile trasmettere schermo.</translation>
 <translation id="3432227430032737297">Rimuovi tutti i cookie visualizzati</translation>
 <translation id="345693547134384690">Apri &amp;immagine in una nuova scheda</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Cerca immagine con <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Consenti ai siti di riprodurre contenuti protetti (opzione consigliata)</translation>
 <translation id="3979395879372752341">Nuova estensione aggiunta (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Copia link da evidenziare</translation>
 <translation id="4021279097213088397">-</translation>
 <translation id="4022426551683927403">&amp;Aggiungi al dizionario</translation>
 <translation id="407520071244661467">Scala</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Chiudi il browser prima di importare</translation>
 <translation id="4130207949184424187">Questa estensione ha cambiato la pagina mostrata quando esegui ricerche dalla omnibox.</translation>
 <translation id="4131410914670010031">In bianco e nero</translation>
+<translation id="4165986682804962316">Impostazioni sito</translation>
 <translation id="4176463684765177261">Disabilitato</translation>
 <translation id="4200983522494130825">Nuova &amp;scheda</translation>
 <translation id="4225397296022057997">Su tutti i siti</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Ripristina impostazioni</translation>
 <translation id="4726710629007580002">Ci sono messaggi di avviso quando si tenta di installare questa estensione:</translation>
 <translation id="479536056609751218">Pagina web, solo HTML</translation>
+<translation id="4827904420700932487">Crea codice QR per questa immagine</translation>
 <translation id="4839303808932127586">Sal&amp;va video come...</translation>
 <translation id="4840096453115567876">Uscire comunque dalla modalità di navigazione in incognito?</translation>
 <translation id="488785315393301722">Mostra dettagli</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Chiedi prima di accedere (opzione consigliata)</translation>
 <translation id="5677928146339483299">Bloccati</translation>
 <translation id="5707185214361380026">Impossibile caricare l'estensione da:</translation>
+<translation id="5713171467967533494">Apri nel browser Vivaldi</translation>
 <translation id="5715711091495208045">Plug-in Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Salva come PDF</translation>
 <translation id="5747809636523347288">I&amp;ncolla e vai all'indirizzo <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Opzioni</translation>
 <translation id="6579369886355986318">Mostra tutti i &amp;controlli</translation>
 <translation id="6639554308659482635">Memoria SQLite</translation>
+<translation id="666731172850799929">Apri in <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Salva la password</translation>
 <translation id="6691936601825168937">&amp;Avanti</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="9003647077635673607">Consentire in tutti i siti web</translation>
 <translation id="9027459031423301635">Apri Link in una Nuova &amp;Scheda</translation>
 <translation id="9056810968620647706">Nessuna corrispondenza trovata.</translation>
+<translation id="9084064520949870008">Apri come finestra</translation>
 <translation id="9137916601698928395">Apri link come <ph name="USER" /></translation>
 <translation id="91568222606626347">Crea scorciatoia...</translation>
 <translation id="916607977885256133">Picture in Picture</translation>

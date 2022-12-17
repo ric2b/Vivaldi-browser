@@ -27,7 +27,7 @@ class VivaldiWebSource : public content::URLDataSource {
       const GURL& path,
       const content::WebContents::Getter& wc_getter,
       content::URLDataSource::GotDataCallback callback) override;
-  std::string GetMimeType(const std::string& path) override;
+  std::string GetMimeType(const GURL& url) override;
   bool AllowCaching() override;
 
  private:

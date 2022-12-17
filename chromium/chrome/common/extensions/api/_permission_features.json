@@ -143,9 +143,6 @@
       // TODO(ntang): Remove these 2 hashes when the app is no longer active.
       "B620CF4203315F9F2E046EDED22C7571A935958D",  // http://crbug.com/510270
       "B206D8716769728278D2D300349C6CB7D7DE2EF9",  // http://crbug.com/510270
-      "A3E3DE9E9F16B41D4A2FAD106BD6CA76B94A0C94",  // http://crbug.com/590259
-      "C2ABD68C33A5B485971C9638B80D6A2E9CBA78C4",  // http://crbug.com/590259
-      "B41E7F08E1179CC03CBD1F49E57CF353A40ADE07",  // http://crbug.com/1019094
       "8EBDF73405D0B84CEABB8C7513C9B9FA9F1DC2CE",  // http://crbug.com/644446
       "72445193EB86716465275D4E2E84DACF47558FCF",  // http://crbug.com/644446
       "51E46A03961884A4BA74CE7CA30A75CC6F360D74",  // http://crbug.com/644446
@@ -305,6 +302,10 @@
     "extension_types": ["platform_app"],
     "allowlist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
   }],
+  "downloads.ui": {
+    "channel": "stable",
+    "extension_types": ["extension"]
+  },
   "enterprise.deviceAttributes": [{
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
@@ -607,7 +608,7 @@
   }, {
     "channel": "stable",
     "extension_types": ["platform_app"],
-    "platforms": ["chromeos"],
+    "platforms": ["chromeos", "lacros"],
     "allowlist": [
       "EC3DE21E048B67319893889529354DFBFA96FD23"  // Smart Card Connector
     ]
@@ -762,7 +763,7 @@
   },
   "printingMetrics": {
     "channel": "stable",
-    "platforms": ["chromeos"],
+    "platforms": ["chromeos", "lacros"],
     "extension_types": ["extension"],
     "location": "policy"
   },
@@ -896,6 +897,11 @@
       "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // https://crbug.com/839189
     ]
   }],
+  "sidePanel": {
+    "channel": "canary",
+    "extension_types": ["extension"],
+    "min_manifest_version": 3
+  },
   "speechRecognitionPrivate": {
     "channel": "stable",
     "extension_types": ["extension"],
@@ -977,12 +983,6 @@
     "channel": "stable",
     "extension_types": ["platform_app", "extension"],
     "platforms": ["chromeos", "lacros"]
-  },
-  "wallpaperPrivate": {
-    "channel": "stable",
-    "extension_types": ["platform_app"],
-    "location": "component",
-    "platforms": ["chromeos"]
   },
   "webAuthenticationProxy": [{
     "channel": "trunk",

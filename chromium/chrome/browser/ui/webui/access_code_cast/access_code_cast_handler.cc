@@ -60,6 +60,8 @@ const char* AddSinkResultCodeToStringHelper(AddSinkResultCode value) {
       return "CHANNEL_OPEN_ERROR";
     case AddSinkResultCode::PROFILE_SYNC_ERROR:
       return "PROFILE_SYNC_ERROR";
+    case AddSinkResultCode::INTERNAL_MEDIA_ROUTER_ERROR:
+      return "INTERNAL_MEDIA_ROUTER_ERROR";
     default:
       return nullptr;
   }
@@ -120,9 +122,13 @@ AccessCodeCastHandler::AccessCodeCastHandler(
       cast_mode_set_(cast_mode_set),
       media_route_starter_(std::move(media_route_starter)) {
   if (media_route_starter_) {
+    DCHECK(media_route_starter_->GetProfile())
+        << "The MediaRouteStarter does not have a valid profile!";
     // Ensure we don't use an off-the-record profile.
     access_code_sink_service_ = AccessCodeCastSinkServiceFactory::GetForProfile(
         media_route_starter_->GetProfile()->GetOriginalProfile());
+    DCHECK(access_code_sink_service_)
+        << "AccessCodeSinkService was not properly created!";
     Init();
   }
 }
@@ -147,8 +153,6 @@ AccessCodeCastHandler::~AccessCodeCastHandler() {
 }
 
 void AccessCodeCastHandler::Init() {
-  DCHECK(access_code_sink_service_)
-      << "AccessCodeSinkService was not properly created!";
   DCHECK(media_route_starter_) << "Must have MediaRouterService!";
   media_route_starter_->SetLoggerComponent(kLoggerComponent);
   media_route_starter_->AddMediaSinkWithCastModesObserver(this);
@@ -165,10 +169,10 @@ void AccessCodeCastHandler::AddSink(
     return;
   }
   AddSinkCallback callback_with_default_invoker =
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback),
-          AddSinkResultCode::UNKNOWN_ERROR);
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          std::move(callback), AddSinkResultCode::UNKNOWN_ERROR);
   add_sink_callback_ = std::move(base::BindOnce(&AddSinkMetricsCallback))
-          .Then(std::move(callback_with_default_invoker));
+                           .Then(std::move(callback_with_default_invoker));
   access_code_sink_service_->DiscoverSink(
       access_code, base::BindOnce(&AccessCodeCastHandler::OnSinkAddedResult,
                                   weak_ptr_factory_.GetWeakPtr()));
@@ -195,11 +199,6 @@ void AccessCodeCastHandler::CheckForDiscoveryCompletion() {
                    }) == cast_mode_set_.end()) {
     // sink hasn't been added to QRM yet.
     return;
-  }
-
-  // Sink has been completely added so caller can be alerted.
-  if (base::FeatureList::IsEnabled(features::kAccessCodeCastRememberDevices)) {
-    access_code_sink_service_->StoreSinkAndSetExpirationTimer(sink_id_.value());
   }
 
   std::move(add_sink_callback_).Run(AddSinkResultCode::OK);
@@ -287,6 +286,18 @@ void AccessCodeCastHandler::CastToSink(CastToSinkCallback callback) {
 
   current_route_request_ = absl::make_optional(*params->request);
 
+  if (HasActiveRoute(sink_id_.value())) {
+    GetMediaRouter()->GetLogger()->LogInfo(
+        mojom::LogCategory::kUi, kLoggerComponent,
+        "There already exists a route for the given sink id. No new route can "
+        "be created. Checking to see if this is a saved device -- otherwise we "
+        "wil remove it from the media router.",
+        sink_id_.value(), "", "");
+    access_code_sink_service_->CheckMediaSinkForExpiration(sink_id_.value());
+    std::move(callback).Run(RouteRequestResultCode::ROUTE_ALREADY_EXISTS);
+    return;
+  }
+
   params->route_result_callbacks.push_back(base::BindOnce(
       &AccessCodeCastHandler::OnRouteResponse, weak_ptr_factory_.GetWeakPtr(),
       cast_mode, params->request->id, *sink_id_, std::move(callback)));
@@ -315,22 +326,32 @@ void AccessCodeCastHandler::OnRouteResponse(MediaCastMode cast_mode,
 
   const MediaRoute* route = result.route();
   if (!route) {
-    DCHECK(result.result_code() != RouteRequestResult::OK)
+    DCHECK(result.result_code() != mojom::RouteRequestResultCode::OK)
         << "No route but OK response";
     // The provider will handle sending an issue for a failed route request.
     GetMediaRouter()->GetLogger()->LogError(
         mojom::LogCategory::kUi, kLoggerComponent,
         "MediaRouteResponse returned error: " + result.error(), sink_id, "",
         "");
-    std::move(dialog_callback)
-        .Run(mojo::EnumTraits<
-             RouteRequestResultCode,
-             RouteRequestResult::ResultCode>::ToMojom(result.result_code()));
+    std::move(dialog_callback).Run(result.result_code());
     return;
   }
 
   base::UmaHistogramSparse("MediaRouter.Source.CastingSource", cast_mode);
   std::move(dialog_callback).Run(RouteRequestResultCode::OK);
+}
+
+bool AccessCodeCastHandler::HasActiveRoute(const MediaSink::Id& sink_id) {
+  if (!GetMediaRouter())
+    return false;
+  auto routes = GetMediaRouter()->GetCurrentRoutes();
+  auto route_it = std::find_if(routes.begin(), routes.end(),
+                               [&sink_id](const MediaRoute& route) {
+                                 return route.media_sink_id() == sink_id;
+                               });
+  if (route_it == routes.end())
+    return false;
+  return true;
 }
 
 }  // namespace media_router

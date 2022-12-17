@@ -29,6 +29,7 @@
           の順に移動して、[<ph name="NO_PREFETCH_DESCRIPTION" />] をオフにしてな。
           それでも問題が解決せんかったら、パフォーマンス向上のために
           このオプションもっかいオンにしてみて。</translation>
+<translation id="7496505986576158197">Vivaldiは<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />オープンソースプロジェクトと他の<ph name="BEGIN_LINK_OSS" />オープンソースソフトウェア<ph name="END_LINK_OSS" />のおかげで成り立ってるねん。</translation>
 <translation id="8187289872471304532">このオプション無効にするやったら:
           [アプリケーション] &gt; [システム環境設定] &gt; [ネットワーク] &gt; [詳細] &gt; [プロキシー] の順に移動して、
           選択されているプロキシーの選択を解除してな。</translation>

@@ -7,11 +7,8 @@
 
 #include <set>
 
+#include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
-
-namespace base {
-struct Feature;
-}
 
 namespace feature_engagement {
 class Tracker;
@@ -44,7 +41,7 @@ namespace user_education {
 //
 //   // In OnMenuWillShow(menu):
 //   menu->SetIsNewFeatureAt(
-//       menu->GetIndexOfCommandId(IDC_MY_FEATURE),
+//       menu->GetIndexOfCommandId(IDC_MY_FEATURE).value(),
 //       new_badge_tracker_.TryShowNewBadge(
 //           feature_engagement::kIPHMyFeatureNewBadge,
 //           &ui_features::kMyFeature));

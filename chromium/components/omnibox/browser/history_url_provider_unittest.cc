@@ -41,6 +41,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+#include "ui/base/page_transition_types.h"
 
 using base::ASCIIToUTF16;
 using base::Time;
@@ -206,7 +207,8 @@ class HistoryURLProviderTest : public testing::Test,
   HistoryURLProviderTest& operator=(const HistoryURLProviderTest&) = delete;
 
   // AutocompleteProviderListener:
-  void OnProviderUpdate(bool updated_matches) override;
+  void OnProviderUpdate(bool updated_matches,
+                        const AutocompleteProvider* provider) override;
 
  protected:
   // testing::Test
@@ -275,7 +277,9 @@ class HistoryURLProviderTestNoSearchProvider : public HistoryURLProviderTest {
   }
 };
 
-void HistoryURLProviderTest::OnProviderUpdate(bool updated_matches) {
+void HistoryURLProviderTest::OnProviderUpdate(
+    bool updated_matches,
+    const AutocompleteProvider* provider) {
   if (autocomplete_->done())
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
@@ -567,7 +571,7 @@ TEST_F(HistoryURLProviderTest, CullRedirects) {
   redirects_to_a.push_back(GURL(test_cases[0].url));
   client_->GetHistoryService()->AddPage(
       GURL(test_cases[0].url), Time::Now(), nullptr, 0, GURL(), redirects_to_a,
-      ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED, true, false);
+      ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED, true);
 
   // Because all the results are part of a redirect chain with other results,
   // all but the first one (A) should be culled. We should get the default
@@ -1359,7 +1363,7 @@ std::unique_ptr<HistoryURLProviderParams> BuildHistoryURLProviderParams(
   history_match.url_info.set_url(GURL(url_text));
   history_match.match_in_scheme = match_in_scheme;
   auto params = std::make_unique<HistoryURLProviderParams>(
-      input, input, true, AutocompleteMatch(), nullptr, nullptr, true);
+      input, input, true, AutocompleteMatch(), nullptr, nullptr, true, nullptr);
   params->matches.push_back(history_match);
 
   return params;
@@ -1436,7 +1440,7 @@ TEST_F(HistoryURLProviderTest, KeywordModeExtractUserInput) {
   EXPECT_EQ(GURL("http://www.google.com/"), matches_[0].destination_url);
 
   // Test result for "@history" and "@history google" while NOT in keyword mode,
-  // we should get a result for history.com and not for google since the we're
+  // we should get a result for history.com and not for google since we're
   // searching for the whole input text including "@history".
   AutocompleteInput input2(u"@history", metrics::OmniboxEventProto::OTHER,
                            TestSchemeClassifier());
@@ -1461,6 +1465,8 @@ TEST_F(HistoryURLProviderTest, KeywordModeExtractUserInput) {
   // Turn on keyword mode, test result again, we should get back the result for
   // google.com since we're searching only for the user text after the keyword.
   input3.set_prefer_keyword(true);
+  input3.set_keyword_mode_entry_method(
+      metrics::OmniboxEventProto_KeywordModeEntryMethod_TAB);
   autocomplete_->Start(input3, false);
   if (!autocomplete_->done())
     base::RunLoop().Run();
@@ -1468,4 +1474,35 @@ TEST_F(HistoryURLProviderTest, KeywordModeExtractUserInput) {
   matches_ = autocomplete_->matches();
   ASSERT_GT(matches_.size(), 0u);
   EXPECT_EQ(GURL("http://www.google.com/"), matches_[0].destination_url);
+  EXPECT_TRUE(matches_[0].from_keyword);
+
+  // Ensure keyword and transition are set properly to keep user in keyword
+  // mode.
+  EXPECT_EQ(matches_[0].keyword, u"@history");
+  EXPECT_TRUE(PageTransitionCoreTypeIs(matches_[0].transition,
+                                       ui::PAGE_TRANSITION_KEYWORD));
+}
+
+TEST_F(HistoryURLProviderTest, MaxMatches) {
+  // Keyword mode is off. We should only get provider_max_matches_ matches.
+  AutocompleteInput input(u"star", metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  autocomplete_->Start(input, false);
+  if (!autocomplete_->done())
+    base::RunLoop().Run();
+
+  matches_ = autocomplete_->matches();
+  EXPECT_EQ(matches_.size(), autocomplete_->provider_max_matches());
+
+  // Turn keyword mode on. we should be able to get more matches now.
+  input.set_keyword_mode_entry_method(
+      metrics::OmniboxEventProto_KeywordModeEntryMethod_TAB);
+  input.set_prefer_keyword(true);
+  autocomplete_->Start(input, false);
+  if (!autocomplete_->done())
+    base::RunLoop().Run();
+
+  matches_ = autocomplete_->matches();
+  EXPECT_EQ(matches_.size(),
+            autocomplete_->provider_max_matches_in_keyword_mode());
 }

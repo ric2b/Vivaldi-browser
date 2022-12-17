@@ -131,7 +131,6 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
       "reporting_origin": "https://b.r.test",
       "source_origin": "https://b.s.test",
       "Attribution-Reporting-Register-Source": {
-        "source_event_id": "456",
         "destination": "https://b.d.test"
       }
     },
@@ -192,7 +191,7 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                        url::Origin::Create(GURL("https://b.r.test")))
                    .SetImpressionOrigin(
                        url::Origin::Create(GURL("https://b.s.test")))
-                   .SetSourceEventId(456)
+                   .SetSourceEventId(0)  // default
                    .SetConversionOrigin(
                        url::Origin::Create(GURL("https://b.d.test")))
                    .SetExpiry(base::Days(30))   // default
@@ -309,6 +308,9 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
         "filters": {
           "a": ["b", "c"],
           "d": []
+        },
+        "not_filters": {
+          "e": ["f"]
         }
       }
     },
@@ -346,9 +348,14 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
                       url::Origin::Create(GURL("https://a.d1.test")),
                       /*reporting_origin=*/
                       url::Origin::Create(GURL("https://a.r.test")),
+                      /*filters=*/
                       *AttributionFilterData::FromTriggerFilterValues({
                           {"a", {"b", "c"}},
                           {"d", {}},
+                      }),
+                      /*not_filters=*/
+                      *AttributionFilterData::FromTriggerFilterValues({
+                          {"e", {"f"}},
                       }),
                       /*debug_key=*/14,
                       {
@@ -383,7 +390,8 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
                       url::Origin::Create(GURL("https://a.d2.test")),
                       /*reporting_origin=*/
                       url::Origin::Create(GURL("https://b.r.test")),
-                      AttributionFilterData(),
+                      /*filters=*/AttributionFilterData(),
+                      /*not_filters=*/AttributionFilterData(),
                       /*debug_key=*/absl::nullopt,
                       /*event_triggers=*/{},
                       /*aggregatable_trigger_data=*/{},
@@ -398,7 +406,8 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
                       url::Origin::Create(GURL("https://a.d2.test")),
                       /*reporting_origin=*/
                       url::Origin::Create(GURL("https://b.r.test")),
-                      AttributionFilterData(),
+                      /*filters=*/AttributionFilterData(),
+                      /*not_filters=*/AttributionFilterData(),
                       /*debug_key=*/absl::nullopt,
                       /*event_triggers=*/{},
                       {AttributionAggregatableTriggerData::CreateForTesting(
@@ -703,18 +712,6 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["source_event_id"]: must be a uint64 formatted)",
-        R"json({"sources": [{
-          "timestamp": "1643235574000",
-          "source_type": "navigation",
-          "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "Attribution-Reporting-Register-Source": {
-            "destination": "https://a.d.test"
-          }
-        }]})json",
-    },
-    {
         R"(["sources"][0]["Attribution-Reporting-Register-Source"]["destination"]: must be a valid, secure origin)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
@@ -848,6 +845,22 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
             "destination": "https://a.d.test",
             "aggregation_keys": {
               "a": "0xG"
+            }
+          }
+        }]})json",
+    },
+    {
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["aggregation_keys"]["a"]: must be a uint128 formatted as a base-16 string)",
+        R"json({"sources": [{
+          "timestamp": "1643235574000",
+          "source_type": "event",
+          "reporting_origin": "https://a.r.test",
+          "source_origin": "https://a.s.test",
+          "Attribution-Reporting-Register-Source": {
+            "source_event_id": "123",
+            "destination": "https://a.d.test",
+            "aggregation_keys": {
+              "a": "123"
             }
           }
         }]})json",
@@ -1016,6 +1029,12 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
     {
         R"(["cookies"][0]["timestamp"]: must be an integer number of milliseconds)",
         R"json({"cookies": [{}]})json",
+    },
+    {
+        R"(["cookies"][0]["timestamp"]: must be an integer number of milliseconds)",
+        R"json({"cookies": [{
+          "timestamp": "9223372036854775"
+        }]})json",
     },
     {
         R"(["cookies"][0]["url"]: must be a valid URL)",

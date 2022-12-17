@@ -802,9 +802,25 @@ TEST_F(HintsManagerTest, ProcessHintsWithInvalidPref) {
   }
 }
 
+TEST_F(HintsManagerTest,
+       OnNavigationStartOrRedirectNoTypesRegisteredShouldNotLoadHint) {
+  base::HistogramTester histogram_tester;
+  InitializeWithDefaultConfig("3.0.0.0");
+
+  auto navigation_data = CreateTestNavigationData(url_with_hints(), {});
+
+  base::RunLoop run_loop;
+  CallOnNavigationStartOrRedirect(navigation_data.get(),
+                                  run_loop.QuitClosure());
+  run_loop.Run();
+
+  histogram_tester.ExpectTotalCount("OptimizationGuide.LoadedHint.Result", 0);
+}
+
 TEST_F(HintsManagerTest, OnNavigationStartOrRedirectWithHint) {
   base::HistogramTester histogram_tester;
   InitializeWithDefaultConfig("3.0.0.0");
+  hints_manager()->RegisterOptimizationTypes({proto::LITE_PAGE_REDIRECT});
 
   auto navigation_data = CreateTestNavigationData(url_with_hints(), {});
 
@@ -820,6 +836,7 @@ TEST_F(HintsManagerTest, OnNavigationStartOrRedirectWithHint) {
 TEST_F(HintsManagerTest, OnNavigationStartOrRedirectNoHint) {
   base::HistogramTester histogram_tester;
   InitializeWithDefaultConfig("3.0.0.0");
+  hints_manager()->RegisterOptimizationTypes({proto::LITE_PAGE_REDIRECT});
 
   auto navigation_data =
       CreateTestNavigationData(GURL("https://notinhints.com"), {});
@@ -836,6 +853,7 @@ TEST_F(HintsManagerTest, OnNavigationStartOrRedirectNoHint) {
 TEST_F(HintsManagerTest, OnNavigationStartOrRedirectNoHost) {
   base::HistogramTester histogram_tester;
   InitializeWithDefaultConfig("3.0.0.0");
+  hints_manager()->RegisterOptimizationTypes({proto::LITE_PAGE_REDIRECT});
 
   auto navigation_data = CreateTestNavigationData(GURL("blargh"), {});
 
@@ -1380,6 +1398,8 @@ TEST_F(HintsManagerTest, CanApplyOptimizationAndPopulatesAnyMetadata) {
 TEST_F(HintsManagerTest, CanApplyOptimizationNoMatchingPageHint) {
   InitializeWithDefaultConfig("1.0.0.0");
 
+  hints_manager()->RegisterOptimizationTypes({proto::NOSCRIPT});
+
   auto navigation_data =
       CreateTestNavigationData(GURL("https://somedomain.org/nomatch"), {});
   base::RunLoop run_loop;
@@ -1387,7 +1407,6 @@ TEST_F(HintsManagerTest, CanApplyOptimizationNoMatchingPageHint) {
                                   run_loop.QuitClosure());
   run_loop.Run();
 
-  hints_manager()->RegisterOptimizationTypes({proto::NOSCRIPT});
   OptimizationTypeDecision optimization_type_decision =
       hints_manager()->CanApplyOptimization(navigation_data->navigation_url(),
                                             proto::NOSCRIPT,
@@ -1674,43 +1693,6 @@ TEST_F(HintsManagerTest, RemoveFetchedEntriesByHintKeys_URL) {
 
   // Both the host and url entries should have been removed to support upgrading
   // hint keys from HOST to FULL_URL.
-  EXPECT_FALSE(hints_manager()->hint_cache()->HasHint(url.host()));
-  EXPECT_FALSE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
-}
-
-TEST_F(HintsManagerTest, PurgeFetchedEntries) {
-  int cache_duration_in_secs = 60;
-  GURL url("https://host.com/r/cats");
-
-  std::unique_ptr<proto::GetHintsResponse> get_hints_response =
-      std::make_unique<proto::GetHintsResponse>();
-
-  proto::Hint* hint = get_hints_response->add_hints();
-  hint->set_key(url.spec());
-  hint->set_key_representation(proto::FULL_URL);
-  hint->mutable_max_cache_duration()->set_seconds(cache_duration_in_secs);
-  proto::PageHint* page_hint = hint->add_page_hints();
-  page_hint->add_allowlisted_optimizations()->set_optimization_type(
-      proto::PERFORMANCE_HINTS);
-  page_hint->set_page_pattern("whatever/*");
-
-  hint = get_hints_response->add_hints();
-  hint->set_key_representation(proto::HOST);
-  hint->set_key(url.host());
-  page_hint = hint->add_page_hints();
-  page_hint->set_page_pattern("anything/*");
-
-  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
-  hints_manager()->hint_cache()->UpdateFetchedHints(
-      std::move(get_hints_response), base::Time().Now(), {url.host()}, {url},
-      run_loop->QuitClosure());
-  EXPECT_TRUE(hints_manager()->hint_cache()->HasHint(url.host()));
-  EXPECT_TRUE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
-
-  run_loop = std::make_unique<base::RunLoop>();
-  hints_manager()->PurgeFetchedEntries(run_loop->QuitClosure());
-  run_loop->Run();
-
   EXPECT_FALSE(hints_manager()->hint_cache()->HasHint(url.host()));
   EXPECT_FALSE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
 }

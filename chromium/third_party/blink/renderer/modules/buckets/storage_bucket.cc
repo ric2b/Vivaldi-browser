@@ -10,13 +10,17 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_usage_details.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/dom_time_stamp.h"
+#include "third_party/blink/renderer/core/frame/navigator.h"
+#include "third_party/blink/renderer/modules/indexeddb/idb_factory.h"
+#include "third_party/blink/renderer/modules/locks/lock_manager.h"
 
 namespace blink {
 
 StorageBucket::StorageBucket(
-    ExecutionContext* context,
+    NavigatorBase* navigator,
     mojo::PendingRemote<mojom::blink::BucketHost> remote)
-    : ExecutionContextLifecycleObserver(context) {
+    : ExecutionContextLifecycleObserver(navigator->GetExecutionContext()),
+      navigator_base_(navigator) {
   remote_.Bind(std::move(remote), GetExecutionContext()->GetTaskRunner(
                                       TaskType::kInternalDefault));
 }
@@ -127,11 +131,34 @@ ScriptPromise StorageBucket::expires(ScriptState* script_state) {
   return promise;
 }
 
+IDBFactory* StorageBucket::indexedDB() {
+  if (!idb_factory_) {
+    idb_factory_ = MakeGarbageCollected<IDBFactory>();
+    mojo::PendingRemote<mojom::blink::IDBFactory> factory;
+    remote_->GetIdbFactory(factory.InitWithNewPipeAndPassReceiver());
+    idb_factory_->SetFactory(std::move(factory), GetExecutionContext());
+  }
+  return idb_factory_;
+}
+
+LockManager* StorageBucket::locks() {
+  if (!lock_manager_) {
+    mojo::PendingRemote<mojom::blink::LockManager> lock_manager;
+    remote_->GetLockManager(lock_manager.InitWithNewPipeAndPassReceiver());
+    lock_manager_ = MakeGarbageCollected<LockManager>(*navigator_base_);
+    lock_manager_->SetManager(std::move(lock_manager), GetExecutionContext());
+  }
+  return lock_manager_;
+}
+
 bool StorageBucket::HasPendingActivity() const {
   return GetExecutionContext();
 }
 
 void StorageBucket::Trace(Visitor* visitor) const {
+  visitor->Trace(idb_factory_);
+  visitor->Trace(lock_manager_);
+  visitor->Trace(navigator_base_);
   ScriptWrappable::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }

@@ -12,6 +12,7 @@
 #include "base/containers/flat_set.h"
 #include "chrome/common/privacy_budget/field_trial_param_conversions.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 
 // Common container and map types. In order to verify successful encoding and
 // decoding, each of these must be tested in

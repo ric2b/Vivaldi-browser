@@ -28,7 +28,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/app_types.h"
-#include "chrome/browser/ui/views/touch_selection_menu_runner_chromeos.h"
+#include "chrome/browser/ui/ash/touch_selection_menu_runner_chromeos.h"
 #include "chromeos/ui/frame/frame_utils.h"
 #include "ui/aura/client/aura_constants.h"
 #endif
@@ -117,19 +117,17 @@ bool ChromeViewsDelegate::GetSavedWindowPlacement(
     return false;
 
   DCHECK(prefs->FindPreference(window_name));
-  const base::Value* dictionary = prefs->GetDictionary(window_name);
-  if (!dictionary)
-    return false;
-  absl::optional<int> left = dictionary->FindIntKey("left");
-  absl::optional<int> top = dictionary->FindIntKey("top");
-  absl::optional<int> right = dictionary->FindIntKey("right");
-  absl::optional<int> bottom = dictionary->FindIntKey("bottom");
+  const base::Value::Dict& dictionary = prefs->GetValueDict(window_name);
+  absl::optional<int> left = dictionary.FindInt("left");
+  absl::optional<int> top = dictionary.FindInt("top");
+  absl::optional<int> right = dictionary.FindInt("right");
+  absl::optional<int> bottom = dictionary.FindInt("bottom");
   if (!left || !top || !right || !bottom)
     return false;
 
   bounds->SetRect(*left, *top, *right - *left, *bottom - *top);
 
-  const bool maximized = dictionary->FindBoolKey("maximized").value_or(false);
+  const bool maximized = dictionary.FindBool("maximized").value_or(false);
   *show_state = maximized ? ui::SHOW_STATE_MAXIMIZED : ui::SHOW_STATE_NORMAL;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

@@ -13,14 +13,14 @@
 #include "base/values.h"
 #include "build/util/chromium_git_revision.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/cpp/switches.h"
 #include "chromeos/assistant/internal/internal_constants.h"
 #include "chromeos/assistant/internal/internal_util.h"
 #include "chromeos/assistant/internal/util_headers.h"
-#include "chromeos/dbus/util/version_loader.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/cpp/switches.h"
 #include "chromeos/services/libassistant/constants.h"
 #include "chromeos/services/libassistant/public/cpp/android_app_info.h"
+#include "chromeos/version/version_loader.h"
 
 using ::assistant::api::Interaction;
 using chromeos::assistant::shared::ClientInteraction;
@@ -48,7 +48,7 @@ void CreateUserAgent(std::string* user_agent) {
                       base::SysInfo::OperatingSystemVersion().c_str(),
                       base::SysInfo::GetLsbReleaseBoard().c_str());
 
-  std::string arc_version = chromeos::version_loader::GetARCVersion();
+  std::string arc_version = chromeos::version_loader::GetArcVersion();
   if (!arc_version.empty())
     base::StringAppendF(user_agent, " ARC/%s", arc_version.c_str());
 }

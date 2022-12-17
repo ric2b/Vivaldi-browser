@@ -7,7 +7,7 @@ import os
 import posixpath
 import sys
 import time
-import typing
+from typing import Any, List
 import unittest
 
 from gpu_tests import common_typing as ct
@@ -70,14 +70,16 @@ class PixelIntegrationTest(
 
   @classmethod
   def GenerateGpuTests(cls, options: ct.ParsedCmdArgs) -> ct.TestGenerator:
-    cls.SetParsedCommandLineOptions(options)
     namespace = pixel_test_pages.PixelTestPages
     pages = namespace.DefaultPages(cls.test_base_name)
     pages += namespace.GpuRasterizationPages(cls.test_base_name)
     pages += namespace.ExperimentalCanvasFeaturesPages(cls.test_base_name)
     pages += namespace.LowLatencyPages(cls.test_base_name)
     pages += namespace.WebGPUPages(cls.test_base_name)
+    pages += namespace.WebGPUCanvasCapturePages(cls.test_base_name)
     pages += namespace.PaintWorkletPages(cls.test_base_name)
+    pages += namespace.VideoFromCanvasPages(cls.test_base_name)
+    pages += namespace.MediaRecorderFromCanvasPages(cls.test_base_name)
     # pages += namespace.NoGpuProcessPages(cls.test_base_name)
     # The following pages should run only on platforms where SwiftShader is
     # enabled. They are skipped on other platforms through test expectations.
@@ -108,7 +110,7 @@ class PixelIntegrationTest(
 
     try:
       tab.action_runner.WaitForJavaScriptCondition(
-          'domAutomationController._proceed', timeout=300)
+          'domAutomationController._proceed', timeout=page.timeout)
     except:
       # Only log messages during exceptions here, they'll otherwise be logged
       # below if the test progresses to the first domAutomationController.send.
@@ -224,6 +226,17 @@ class PixelIntegrationTest(
     # process was chosen.
     del page  # Unused in this particular action.
     tab.EvaluateJavaScript('chrome.gpuBenchmarking.crashGpuProcess()')
+
+  def _CrashGpuProcessTwiceWaitForContextRestored(
+      self, tab: ct.Tab, page: pixel_test_pages.PixelTestPage) -> None:
+    # Crash the GPU process twice.
+    del page  # Unused in this particular action.
+    tab.EvaluateJavaScript('chrome.gpuBenchmarking.crashGpuProcess()')
+    # This is defined in the specific test's page.
+    tab.action_runner.WaitForJavaScriptCondition('window.contextRestored',
+                                                 timeout=30)
+    tab.EvaluateJavaScript('chrome.gpuBenchmarking.crashGpuProcess()')
+
   # pylint: enable=no-self-use
 
   def _SwitchTabs(self, tab: ct.Tab,
@@ -322,8 +335,14 @@ class PixelIntegrationTest(
     self._AssertHighPerformanceGPU()
     tab.EvaluateJavaScript('render()')
 
+  # pylint: disable=R0201
+  def _ScrollOutAndBack(self, tab: ct.Tab,
+                        page: pixel_test_pages.PixelTestPage) -> None:
+    del page  # Unused in this particular action.
+    tab.EvaluateJavaScript('scrollOutAndBack()')
+
   @classmethod
-  def ExpectationsFiles(cls) -> typing.List[str]:
+  def ExpectationsFiles(cls) -> List[str]:
     return [
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 'test_expectations',
@@ -335,7 +354,7 @@ def _TestHarnessMessages(tab: ct.Tab) -> str:
   return tab.EvaluateJavaScript('domAutomationController._messages')
 
 
-def load_tests(loader: unittest.TestLoader, tests: typing.Any,
-               pattern: typing.Any) -> unittest.TestSuite:
+def load_tests(loader: unittest.TestLoader, tests: Any,
+               pattern: Any) -> unittest.TestSuite:
   del loader, tests, pattern  # Unused.
   return gpu_integration_test.LoadAllTestsInModule(sys.modules[__name__])

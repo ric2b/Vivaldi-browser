@@ -5,8 +5,10 @@
 /**
  * @fileoverview Keeps track of the current braille translators.
  */
-import {ExpandingBrailleTranslator} from '/chromevox/background/braille/expanding_braille_translator.js';
-import {BrailleTable} from '/chromevox/common/braille/braille_table.js';
+import {BrailleTable} from '../../common/braille/braille_table.js';
+
+import {ExpandingBrailleTranslator} from './expanding_braille_translator.js';
+import {LibLouis} from './liblouis.js';
 
 export class BrailleTranslatorManager {
   /**
@@ -58,12 +60,15 @@ export class BrailleTranslatorManager {
    * @param {function()=} opt_finishCallback Called when the refresh finishes.
    */
   async refresh(brailleTable, opt_brailleTable8, opt_finishCallback) {
+    const finishCallback = opt_finishCallback || (() => {});
     if (brailleTable && brailleTable === this.defaultTableId_) {
+      finishCallback();
       return;
     }
 
     const tables = this.tables_;
     if (tables.length === 0) {
+      finishCallback();
       return;
     }
 
@@ -74,15 +79,13 @@ export class BrailleTranslatorManager {
       const currentLocale = chrome.i18n.getMessage('@@ui_locale').split(/[_-]/);
       const major = currentLocale[0];
       const minor = currentLocale[1];
-      const firstPass = tables.filter(function(table) {
-        return table.locale.split(/[_-]/)[0] === major;
-      });
+      const firstPass =
+          tables.filter(table => table.locale.split(/[_-]/)[0] === major);
       if (firstPass.length > 0) {
         table = firstPass[0];
         if (minor) {
-          const secondPass = firstPass.filter(function(table) {
-            return table.locale.split(/[_-]/)[1] === minor;
-          });
+          const secondPass = firstPass.filter(
+              table => table.locale.split(/[_-]/)[1] === minor);
           if (secondPass.length > 0) {
             table = secondPass[0];
           }
@@ -106,6 +109,7 @@ export class BrailleTranslatorManager {
         table.id === uncontractedTable.id ? null : uncontractedTable.id;
     if (newDefaultTableId === this.defaultTableId_ &&
         newUncontractedTableId === this.uncontractedTableId_) {
+      finishCallback();
       return;
     }
 
@@ -117,6 +121,7 @@ export class BrailleTranslatorManager {
       this.defaultTranslator_ = defaultTranslator;
       this.uncontractedTranslator_ = uncontractedTranslator;
       this.changeListeners_.forEach(listener => listener());
+      finishCallback();
     };
 
     const translator = await new Promise(
@@ -128,9 +133,6 @@ export class BrailleTranslatorManager {
           resolve => this.liblouis_.getTranslator(
               uncontractedTable.fileNames, resolve));
       finishRefresh(translator, uncontractedTranslator);
-      if (opt_finishCallback) {
-        opt_finishCallback();
-      }
     }
   }
 

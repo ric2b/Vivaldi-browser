@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//components/safe_browsing/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
 
@@ -26,6 +27,7 @@ static_library("safe_browsing") {
     "//chrome/common",
     "//chrome/common:constants",
     "//components/browser_sync",
+    "//components/enterprise:enterprise",
     "//components/enterprise/common:strings",
     "//components/keyed_service/content",
     "//components/language/core/browser",
@@ -136,8 +138,6 @@ static_library("safe_browsing") {
       "services_delegate.h",
       "tailored_security/chrome_tailored_security_service.cc",
       "tailored_security/chrome_tailored_security_service.h",
-      "tailored_security/tailored_security_notification_result.h",
-      "tailored_security/tailored_security_outcome.h",
       "tailored_security/tailored_security_service_factory.cc",
       "tailored_security/tailored_security_service_factory.h",
       "tailored_security/tailored_security_url_observer.cc",
@@ -212,10 +212,10 @@ static_library("safe_browsing") {
         "cloud_content_scanning/binary_fcm_service.h",
         "cloud_content_scanning/binary_upload_service.cc",
         "cloud_content_scanning/binary_upload_service.h",
-        "cloud_content_scanning/binary_upload_service_factory.cc",
-        "cloud_content_scanning/binary_upload_service_factory.h",
         "cloud_content_scanning/cloud_binary_upload_service.cc",
         "cloud_content_scanning/cloud_binary_upload_service.h",
+        "cloud_content_scanning/cloud_binary_upload_service_factory.cc",
+        "cloud_content_scanning/cloud_binary_upload_service_factory.h",
         "cloud_content_scanning/deep_scanning_utils.cc",
         "cloud_content_scanning/deep_scanning_utils.h",
         "cloud_content_scanning/file_analysis_request.cc",
@@ -387,6 +387,9 @@ static_library("safe_browsing") {
           "//chrome/common/safe_browsing:document_analyzer_results",
           "//chrome/services/file_util/public/mojom",
         ]
+      }
+      if (is_chromeos_ash) {
+        deps += [ "//ash/constants:constants" ]
       }
     } else if (safe_browsing_mode == 2) {
       if (is_android) {

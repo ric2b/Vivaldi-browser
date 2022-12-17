@@ -12,6 +12,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/common/pref_names.h"
 #include "components/media_router/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -39,6 +40,8 @@ const base::Feature kDialMediaRouteProvider{"DialMediaRouteProvider",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kDialEnforceUrlIPAddress{"DialEnforceUrlIPAddress",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMediaRemotingWithoutFullscreen{
+    "MediaRemotingWithoutFullscreen", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(IS_CHROMEOS)
 const base::Feature kGlobalMediaControlsCastStartStop{
@@ -74,6 +77,10 @@ bool MediaRouterEnabled(content::BrowserContext* context) {
   if (!base::FeatureList::IsEnabled(kMediaRouter))
     return false;
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  // The MediaRouter service is shared across the original and the incognito
+  // profiles, so we must use the original context for consistency between them.
+  context = chrome::GetBrowserContextRedirectedInIncognito(context);
 
   // If the Media Router was already enabled or disabled for |context|, then it
   // must remain so.  The Media Router does not support dynamic

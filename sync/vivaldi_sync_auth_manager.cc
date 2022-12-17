@@ -7,8 +7,20 @@
 
 #include <string>
 
-#include "content/public/browser/browser_task_traits.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
+
+#if !BUILDFLAG(IS_IOS)
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
+using content::GetUIThreadTaskRunner;
+#endif
+
+#if BUILDFLAG(IS_IOS)
+#include "ios/web/public/thread/web_task_traits.h"
+#include "ios/web/public/thread/web_thread.h"
+
+using web::GetUIThreadTaskRunner;
+#endif
 
 namespace vivaldi {
 
@@ -89,7 +101,7 @@ void VivaldiSyncAuthManager::ConnectionOpened() {
   connection_open_ = true;
   if (account_manager_->has_refresh_token()) {
     access_token_ = account_manager_->access_token();
-    content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
+    GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
                                                  credentials_changed_callback_);
   }
 }

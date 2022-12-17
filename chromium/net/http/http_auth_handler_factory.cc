@@ -38,16 +38,16 @@ base::Value NetLogParamsForCreateAuth(
     const url::SchemeHostPort& scheme_host_port,
     const absl::optional<bool>& allows_default_credentials,
     net::NetLogCaptureMode capture_mode) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetKey("scheme", net::NetLogStringValue(scheme));
+  base::Value::Dict dict;
+  dict.Set("scheme", net::NetLogStringValue(scheme));
   if (net::NetLogCaptureIncludesSensitive(capture_mode))
-    dict.SetKey("challenge", net::NetLogStringValue(challenge));
-  dict.SetStringKey("origin", scheme_host_port.Serialize());
+    dict.Set("challenge", net::NetLogStringValue(challenge));
+  dict.Set("origin", scheme_host_port.Serialize());
   if (allows_default_credentials)
-    dict.SetBoolKey("allows_default_credentials", *allows_default_credentials);
+    dict.Set("allows_default_credentials", *allows_default_credentials);
   if (net_error < 0)
-    dict.SetIntKey("net_error", net_error);
-  return dict;
+    dict.Set("net_error", net_error);
+  return base::Value(std::move(dict));
 }
 
 }  // namespace
@@ -102,11 +102,11 @@ void HttpAuthHandlerRegistryFactory::SetHttpAuthPreferences(
 
 void HttpAuthHandlerRegistryFactory::RegisterSchemeFactory(
     const std::string& scheme,
-    HttpAuthHandlerFactory* factory) {
+    std::unique_ptr<HttpAuthHandlerFactory> factory) {
   std::string lower_scheme = base::ToLowerASCII(scheme);
   if (factory) {
     factory->set_http_auth_preferences(http_auth_preferences());
-    factory_map_[lower_scheme] = base::WrapUnique(factory);
+    factory_map_[lower_scheme] = std::move(factory);
   } else {
     factory_map_.erase(lower_scheme);
   }
@@ -150,26 +150,26 @@ HttpAuthHandlerRegistryFactory::Create(
     HttpAuthMechanismFactory negotiate_auth_system_factory
 #endif
 ) {
-  std::unique_ptr<HttpAuthHandlerRegistryFactory> registry_factory(
-      new HttpAuthHandlerRegistryFactory(prefs));
+  auto registry_factory =
+      std::make_unique<HttpAuthHandlerRegistryFactory>(prefs);
 
-  registry_factory->RegisterSchemeFactory(kBasicAuthScheme,
-                                          new HttpAuthHandlerBasic::Factory());
+  registry_factory->RegisterSchemeFactory(
+      kBasicAuthScheme, std::make_unique<HttpAuthHandlerBasic::Factory>());
 
-  registry_factory->RegisterSchemeFactory(kDigestAuthScheme,
-                                          new HttpAuthHandlerDigest::Factory());
+  registry_factory->RegisterSchemeFactory(
+      kDigestAuthScheme, std::make_unique<HttpAuthHandlerDigest::Factory>());
 
-  HttpAuthHandlerNTLM::Factory* ntlm_factory =
-      new HttpAuthHandlerNTLM::Factory();
+  auto ntlm_factory = std::make_unique<HttpAuthHandlerNTLM::Factory>();
 #if BUILDFLAG(IS_WIN)
   ntlm_factory->set_sspi_library(
       std::make_unique<SSPILibraryDefault>(NTLMSP_NAME));
 #endif  // BUILDFLAG(IS_WIN)
-  registry_factory->RegisterSchemeFactory(kNtlmAuthScheme, ntlm_factory);
+  registry_factory->RegisterSchemeFactory(kNtlmAuthScheme,
+                                          std::move(ntlm_factory));
 
 #if BUILDFLAG(USE_KERBEROS)
-  HttpAuthHandlerNegotiate::Factory* negotiate_factory =
-      new HttpAuthHandlerNegotiate::Factory(negotiate_auth_system_factory);
+  auto negotiate_factory = std::make_unique<HttpAuthHandlerNegotiate::Factory>(
+      negotiate_auth_system_factory);
 #if BUILDFLAG(IS_WIN)
   negotiate_factory->set_library(
       std::make_unique<SSPILibraryDefault>(NEGOSSP_NAME));
@@ -178,7 +178,7 @@ HttpAuthHandlerRegistryFactory::Create(
       std::make_unique<GSSAPISharedLibrary>(gssapi_library_name));
 #endif
   registry_factory->RegisterSchemeFactory(kNegotiateAuthScheme,
-                                          negotiate_factory);
+                                          std::move(negotiate_factory));
 #endif  // BUILDFLAG(USE_KERBEROS)
 
   if (prefs) {

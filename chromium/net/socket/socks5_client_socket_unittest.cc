@@ -92,7 +92,9 @@ std::unique_ptr<SOCKS5ClientSocket> SOCKS5ClientSocketTest::BuildMockSocket(
     NetLog* net_log) {
   TestCompletionCallback callback;
   data_ = std::make_unique<StaticSocketDataProvider>(reads, writes);
-  tcp_sock_ = new MockTCPClientSocket(address_list_, net_log, data_.get());
+  auto tcp_sock = std::make_unique<MockTCPClientSocket>(address_list_, net_log,
+                                                        data_.get());
+  tcp_sock_ = tcp_sock.get();
 
   int rv = tcp_sock_->Connect(callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -102,7 +104,7 @@ std::unique_ptr<SOCKS5ClientSocket> SOCKS5ClientSocketTest::BuildMockSocket(
 
   // The SOCKS5ClientSocket takes ownership of |tcp_sock_|, but keep a
   // non-owning pointer to it.
-  return std::make_unique<SOCKS5ClientSocket>(base::WrapUnique(tcp_sock_.get()),
+  return std::make_unique<SOCKS5ClientSocket>(std::move(tcp_sock),
                                               HostPortPair(hostname, port),
                                               TRAFFIC_ANNOTATION_FOR_TESTS);
 }
@@ -361,21 +363,22 @@ TEST_F(SOCKS5ClientSocketTest, PartialReadWrites) {
 
 TEST_F(SOCKS5ClientSocketTest, Tag) {
   StaticSocketDataProvider data;
-  MockTaggingStreamSocket* tagging_sock =
-      new MockTaggingStreamSocket(std::unique_ptr<StreamSocket>(
-          new MockTCPClientSocket(address_list_, NetLog::Get(), &data)));
+  auto tagging_sock = std::make_unique<MockTaggingStreamSocket>(
+      std::make_unique<MockTCPClientSocket>(address_list_, NetLog::Get(),
+                                            &data));
+  auto* tagging_sock_ptr = tagging_sock.get();
 
   // |socket| takes ownership of |tagging_sock|, but keep a non-owning pointer
   // to it.
-  SOCKS5ClientSocket socket(std::unique_ptr<StreamSocket>(tagging_sock),
+  SOCKS5ClientSocket socket(std::move(tagging_sock),
                             HostPortPair("localhost", 80),
                             TRAFFIC_ANNOTATION_FOR_TESTS);
 
-  EXPECT_EQ(tagging_sock->tag(), SocketTag());
+  EXPECT_EQ(tagging_sock_ptr->tag(), SocketTag());
 #if BUILDFLAG(IS_ANDROID)
   SocketTag tag(0x12345678, 0x87654321);
   socket.ApplySocketTag(tag);
-  EXPECT_EQ(tagging_sock->tag(), tag);
+  EXPECT_EQ(tagging_sock_ptr->tag(), tag);
 #endif  // BUILDFLAG(IS_ANDROID)
 }
 

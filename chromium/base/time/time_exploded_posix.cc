@@ -158,7 +158,7 @@ void Time::Explode(bool is_local, Exploded* exploded) const {
   exploded->hour = timestruct.tm_hour;
   exploded->minute = timestruct.tm_min;
   exploded->second = timestruct.tm_sec;
-  exploded->millisecond = millisecond;
+  exploded->millisecond = static_cast<int>(millisecond);
 }
 
 // static
@@ -187,7 +187,7 @@ bool Time::FromExploded(bool is_local, const Exploded& exploded, Time* time) {
   timestruct.tm_zone = nullptr;  // not a POSIX field, so mktime/timegm ignore
 #endif
 
-  SysTime seconds;
+  int64_t seconds;
 
   // Certain exploded dates do not really exist due to daylight saving times,
   // and this causes mktime() to return implementation-defined values when

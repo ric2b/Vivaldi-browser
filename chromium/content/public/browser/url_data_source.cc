@@ -58,7 +58,7 @@ bool URLDataSource::ShouldReplaceExistingSource() {
   return true;
 }
 
-bool URLDataSource::AllowCaching(const std::string& path) {
+bool URLDataSource::AllowCaching(const GURL& url) {
   return AllowCaching();
 }
 

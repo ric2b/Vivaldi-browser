@@ -80,8 +80,8 @@ public class VariationsSeedFetcher {
     }
 
     // Vivaldi - fake URL that will not return anything.
-    private static final String VARIATIONS_SERVER_URL =
-            "https://bifrost.vivaldi.com/chrome-variations/seed?osname=";
+    private static final String DEFAULT_VARIATIONS_SERVER_URL =
+            "https://bifrost.vivaldi.com/chrome-variations/seed";
 
     private static final int READ_TIMEOUT = 3000; // time in ms
     private static final int REQUEST_TIMEOUT = 1000; // time in ms
@@ -206,7 +206,10 @@ public class VariationsSeedFetcher {
     @VisibleForTesting
     protected String getConnectionString(@VariationsPlatform int platform, String restrictMode,
             String milestone, String channel) {
-        String urlString = VARIATIONS_SERVER_URL;
+        // TODO(crbug/1302862): Consider reusing native VariationsService::GetVariationsServerURL().
+        String urlString = CommandLine.getInstance().getSwitchValue(
+                VariationsSwitches.VARIATIONS_SERVER_URL, DEFAULT_VARIATIONS_SERVER_URL);
+        urlString += "?osname=";
         switch (platform) {
             case VariationsPlatform.ANDROID:
                 urlString += "android";

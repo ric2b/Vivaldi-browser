@@ -4,6 +4,7 @@
 
 #include "ash/public/cpp/test/test_app_list_color_provider.h"
 
+#include "ui/color/color_id.h"
 #include "ui/gfx/color_palette.h"
 
 namespace ash {
@@ -39,6 +40,11 @@ SkColor TestAppListColorProvider::GetSearchBoxTextColor(
 SkColor TestAppListColorProvider::GetSearchBoxSecondaryTextColor(
     SkColor default_color) const {
   return gfx::kGoogleGrey500;
+}
+
+SkColor TestAppListColorProvider::GetSearchBoxSuggestionTextColor(
+    SkColor default_color) const {
+  return gfx::kGoogleGrey600;
 }
 
 SkColor TestAppListColorProvider::GetSuggestionChipBackgroundColor() const {
@@ -91,6 +97,10 @@ SkColor TestAppListColorProvider::GetFolderNameSelectionColor() const {
   return SkColorSetA(SK_ColorBLACK, 0x0F);
 }
 
+SkColor TestAppListColorProvider::GetFolderNotificationBadgeColor() const {
+  return SK_ColorWHITE;
+}
+
 SkColor TestAppListColorProvider::GetContentsBackgroundColor() const {
   return gfx::kGoogleGrey200;
 }
@@ -103,8 +113,8 @@ SkColor TestAppListColorProvider::GetGridBackgroundCardInactiveColor() const {
   return SkColorSetA(SK_ColorWHITE, 41 /* 16% */);
 }
 
-SkColor TestAppListColorProvider::GetSeparatorColor() const {
-  return SkColorSetA(SK_ColorWHITE, 0x24);
+ui::ColorId TestAppListColorProvider::GetSeparatorColorId() const {
+  return ui::kColorAshSystemUIMenuSeparator;
 }
 
 SkColor TestAppListColorProvider::GetFocusRingColor() const {
@@ -117,16 +127,6 @@ SkColor TestAppListColorProvider::GetInkDropBaseColor(SkColor bg_color) const {
 
 float TestAppListColorProvider::GetInkDropOpacity(SkColor bg_color) const {
   return 0.08f;
-}
-
-SkColor TestAppListColorProvider::GetInvertedInkDropBaseColor(
-    SkColor bg_color) const {
-  return SK_ColorBLACK;
-}
-
-float TestAppListColorProvider::GetInvertedInkDropOpacity(
-    SkColor bg_color) const {
-  return 0.06f;
 }
 
 SkColor TestAppListColorProvider::GetSearchResultViewHighlightColor() const {

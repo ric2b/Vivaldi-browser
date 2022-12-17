@@ -579,8 +579,8 @@ class TestConnectJobFactory : public ConnectJobFactory {
 namespace {
 
 void MockClientSocketFactory::SignalJobs() {
-  for (auto it = waiting_jobs_.begin(); it != waiting_jobs_.end(); ++it) {
-    (*it)->Signal();
+  for (auto* waiting_job : waiting_jobs_) {
+    waiting_job->Signal();
   }
   waiting_jobs_.clear();
 }
@@ -875,7 +875,7 @@ TEST_F(ClientSocketPoolBaseTest, GroupSeparation) {
       for (const auto& privacy_mode : kPrivacyModes) {
         SCOPED_TRACE(privacy_mode);
         for (const auto& network_isolation_key : kNetworkIsolationKeys) {
-          SCOPED_TRACE(network_isolation_key.ToString());
+          SCOPED_TRACE(network_isolation_key.ToDebugString());
           for (const auto& secure_dns_policy : kSecureDnsPolicys) {
             SCOPED_TRACE(static_cast<int>(secure_dns_policy));
 
@@ -1257,30 +1257,30 @@ TEST_F(ClientSocketPoolBaseTest, StallAndThenCancelAndTriggerAvailableSocket) {
   CreatePool(kDefaultMaxSockets, kDefaultMaxSockets);
   connect_job_factory_->set_job_type(TestConnectJob::kMockPendingJob);
 
-  ClientSocketHandle handle;
   TestCompletionCallback callback;
-  EXPECT_EQ(
-      ERR_IO_PENDING,
-      handle.Init(TestGroupId("a"), params_, absl::nullopt, DEFAULT_PRIORITY,
-                  SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                  callback.callback(), ClientSocketPool::ProxyAuthCallback(),
-                  pool_.get(), NetLogWithSource()));
+  ClientSocketHandle stalled_handle;
+  EXPECT_EQ(ERR_IO_PENDING,
+            stalled_handle.Init(
+                TestGroupId("a"), params_, absl::nullopt, DEFAULT_PRIORITY,
+                SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                pool_.get(), NetLogWithSource()));
 
   ClientSocketHandle handles[4];
-  for (size_t i = 0; i < std::size(handles); ++i) {
-    EXPECT_EQ(ERR_IO_PENDING,
-              handles[i].Init(
-                  TestGroupId("b"), params_, absl::nullopt, DEFAULT_PRIORITY,
-                  SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                  callback.callback(), ClientSocketPool::ProxyAuthCallback(),
-                  pool_.get(), NetLogWithSource()));
+  for (auto& handle : handles) {
+    EXPECT_EQ(
+        ERR_IO_PENDING,
+        handle.Init(TestGroupId("b"), params_, absl::nullopt, DEFAULT_PRIORITY,
+                    SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                    callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                    pool_.get(), NetLogWithSource()));
   }
 
   // One will be stalled, cancel all the handles now.
   // This should hit the OnAvailableSocketSlot() code where we previously had
   // stalled groups, but no longer have any.
-  for (size_t i = 0; i < std::size(handles); ++i)
-    handles[i].Reset();
+  for (auto& handle : handles)
+    handle.Reset();
 }
 
 TEST_F(ClientSocketPoolBaseTest, CancelStalledSocketAtSocketLimit) {

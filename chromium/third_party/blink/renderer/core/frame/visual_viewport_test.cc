@@ -1836,12 +1836,39 @@ TEST_P(VisualViewportTest, FractionalMaxScrollOffset) {
             scrollable_area->MaximumScrollOffset());
 }
 
+// Tests that the scroll offset is consistent when scale specified.
+TEST_P(VisualViewportTest, MaxScrollOffsetAtScale) {
+  InitializeWithDesktopSettings();
+  WebView()->MainFrameViewWidget()->Resize(gfx::Size(101, 201));
+  NavigateTo("about:blank");
+
+  VisualViewport& visual_viewport = GetFrame()->GetPage()->GetVisualViewport();
+
+  WebView()->SetPageScaleFactor(0.1);
+  EXPECT_EQ(ScrollOffset(), visual_viewport.MaximumScrollOffsetAtScale(1.0));
+
+  WebView()->SetPageScaleFactor(2);
+  EXPECT_EQ(ScrollOffset(), visual_viewport.MaximumScrollOffsetAtScale(1.0));
+
+  WebView()->SetPageScaleFactor(5);
+  EXPECT_EQ(ScrollOffset(), visual_viewport.MaximumScrollOffsetAtScale(1.0));
+
+  WebView()->SetPageScaleFactor(10);
+  EXPECT_EQ(ScrollOffset(101. / 2., 201. / 2.),
+            visual_viewport.MaximumScrollOffsetAtScale(2.0));
+}
+
 // Tests that the slow scrolling after an impl scroll on the visual viewport is
 // continuous. crbug.com/453460 was caused by the impl-path not updating the
 // ScrollAnimatorBase class.
 TEST_P(VisualViewportTest, SlowScrollAfterImplScroll) {
-  // TODO(crbug.com/1322078): Enable this test for scroll unification.
-  if (RuntimeEnabledFeatures::ScrollUnificationEnabled())
+  // This test is not relevant after scroll unification, because it is not
+  // possible to apply a scroll delta to the visual viewport from the main
+  // thread. The test case in crbug.com/453460 will use the composited scrolling
+  // codepath which is extensively tested (including pinch interactions) in
+  // cc/trees/layer_tree_host_unittest.cc and
+  // cc/trees/layer_tree_host_unittest_scroll.cc.
+  if (base::FeatureList::IsEnabled(::features::kScrollUnification))
     return;
 
   InitializeWithDesktopSettings();

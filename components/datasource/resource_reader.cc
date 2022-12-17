@@ -15,12 +15,19 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/common/chrome_paths.h"
 
 #include "app/vivaldi_apptools.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
+#endif
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#include "chrome/common/chrome_paths.h"
+#endif
+
+#if BUILDFLAG(IS_IOS)
+#include "ios/chrome/browser/chrome_paths.h"
 #endif
 
 namespace {
@@ -48,7 +55,7 @@ bool ResourceReader::IsResourceURL(base::StringPiece url,
 namespace {
 
 base::FilePath GetResourceDirectoryImpl() {
-#if !defined(OFFICIAL_BUILD)
+#if !defined(OFFICIAL_BUILD) && !BUILDFLAG(IS_IOS)
   // Allow to edit resources without recompiling the browser.
   if (vivaldi::IsVivaldiRunning()) {
     // Duplicate the definition from apps/switches.h to avoid dependency on
@@ -67,8 +74,13 @@ base::FilePath GetResourceDirectoryImpl() {
   }
 #endif
   base::FilePath dir;
+#if BUILDFLAG(IS_IOS)
+  base::PathService::Get(base::DIR_MODULE, &dir);
+  return dir;
+#else
   base::PathService::Get(chrome::DIR_RESOURCES, &dir);
   return dir.Append(FILE_PATH_LITERAL("vivaldi"));
+#endif
 }
 
 }  // namespace
@@ -180,12 +192,11 @@ absl::optional<base::Value> ResourceReader::ParseJSON() {
   if (!IsValid())
     return absl::nullopt;
   DCHECK(mapped_file_.IsValid());
-  base::JSONReader::ValueWithError v =
-      base::JSONReader::ReadAndReturnValueWithError(as_string_view());
-  if (!v.value) {
+  auto v = base::JSONReader::ReadAndReturnValueWithError(as_string_view());
+  if (!v.has_value()) {
     error_ = base::StringPrintf("%s:%d:%d: JSON error - %s",
-                                resource_path_.c_str(), v.error_line,
-                                v.error_column, v.error_message.c_str());
+                                resource_path_.c_str(), v.error().line,
+                                v.error().column, v.error().message.c_str());
   }
-  return std::move(v.value);
+  return std::move(v.value());
 }

@@ -8,12 +8,12 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "chromeos/ash/components/network/metrics/network_metrics_helper.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
-namespace chromeos {
+namespace ash {
 namespace {
 
 // The buckets of the histogram that captures the metrics of the configuration
@@ -66,9 +66,9 @@ void VpnNetworkMetricsHelper::Init(
 void VpnNetworkMetricsHelper::OnConfigurationCreated(
     const std::string& service_path,
     const std::string& guid) {
-  const NetworkState* network_state = chromeos::NetworkHandler::Get()
-                                          ->network_state_handler()
-                                          ->GetNetworkStateFromGuid(guid);
+  const NetworkState* network_state =
+      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
+          guid);
 
   if (!network_state || network_state->GetNetworkTechnologyType() !=
                             NetworkState::NetworkTechnologyType::kVPN) {
@@ -87,4 +87,4 @@ void VpnNetworkMetricsHelper::OnConfigurationCreated(
           : VPNConfigurationSource::kConfiguredManually);
 }
 
-}  // namespace chromeos
+}  // namespace ash

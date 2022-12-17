@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Брой събуждания</translation>
 <translation id="119944043368869598">Изчисти всичко</translation>
 <translation id="1221825588892235038">Само избраното</translation>
+<translation id="1234736487471201993">Създай код QR код на картината</translation>
 <translation id="1244303850296295656">Грешка в разширението</translation>
 <translation id="125220115284141797">фабрични</translation>
 <translation id="1297175357211070620">Назначение</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Прехвърляне на раздела</translation>
 <translation id="2150139952286079145">Търсене на назначение</translation>
 <translation id="215753907730220065">Изход от цял екран</translation>
+<translation id="2158475082070321257">Копирай препратката от осветения текст</translation>
 <translation id="2177950615300672361">Частен раздел: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модул в Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Постави като текст</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Сайтовете може да се наложи да разпознаят вашето устройство с помощта на идентификатор</translation>
 <translation id="2445081178310039857">Задължително въведете главна директория на разширението.</translation>
 <translation id="2470702053775288986">Забранени неподдържани разширения</translation>
-<translation id="2476578072172137802">Настройки на сайта</translation>
+<translation id="2485422356828889247">Премахни</translation>
 <translation id="2498539833203011245">Намали</translation>
 <translation id="2509495747794740764">Мащабът е число между 10 и 200.</translation>
 <translation id="253557089021624350">Брой пакети Keepalive</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Докладвай злоупотреба</translation>
 <translation id="2941112035454246133">Нисък</translation>
 <translation id="2972581237482394796">По&amp;втори</translation>
+<translation id="2993517869960930405">За приложението</translation>
 <translation id="3003623123441819449">Кеш на CSS</translation>
 <translation id="3008272652534848354">Занули разрешенията</translation>
 <translation id="3012631534724231212">(в iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Отвори препратката като</translation>
 <translation id="3222066309010235055">Предрендиран: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Изберете главната директория на разширението за пакетиране. Ако обновявате, изберете и файл с частен ключ.</translation>
+<translation id="3275778913554317645">Отваряй в прозорец</translation>
 <translation id="3280237271814976245">Запиши &amp;като…</translation>
 <translation id="3285322247471302225">Създай &amp;раздел</translation>
 <translation id="3288047731229977326">Разширения, изпълнявани в развоен режим могат да затормозят компютъра. Ако не сте разработчик, трябва да забраните разширенията, изпълнявани в развоен режим за по-голяма безопасност.</translation>
@@ -132,12 +136,14 @@
 <translation id="3303818374450886607">Копия</translation>
 <translation id="3305661444342691068">Отвори PDF в Preview</translation>
 <translation id="3308134619352333507">Скрий бутона</translation>
-<translation id="3317459757438853210">двустранно</translation>
+<translation id="3317459757438853210">Отпечатай двустранно</translation>
+<translation id="3331974543021145906">За приложението</translation>
 <translation id="3341703758641437857">Позволи достъп до локалните файлове</translation>
 <translation id="3347086966102161372">Коп&amp;ирай адреса на картината</translation>
 <translation id="3360297538363969800">Отпечатването се провали. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="3378572629723696641">Вероятно разширението е повредено.</translation>
 <translation id="3387614642886316601">Ползвай подобрена проверка</translation>
+<translation id="3390013585654699824">Подробно за приложението</translation>
 <translation id="3393582007140394275">Прехвърляне на екрана е невъзможно.</translation>
 <translation id="3432227430032737297">Премахни показаните</translation>
 <translation id="345693547134384690">Отвори &amp;картината в нов раздел</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">Потърси &amp;картината чрез <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Позволи пускане на защитено съдържание от сайтовете (препоръчително)</translation>
 <translation id="3979395879372752341">Добавено ново разширение (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Копирай препратката от осветения текст</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">Добави в речник&amp;а</translation>
 <translation id="407520071244661467">Мащаб</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Затворете браузъра преди внасяне</translation>
 <translation id="4130207949184424187">Разширение промени страницата, показвана при търсене от омнибокса.</translation>
 <translation id="4131410914670010031">черно-бяло</translation>
+<translation id="4165986682804962316">Настройки на сайта</translation>
 <translation id="4176463684765177261">Забранен</translation>
 <translation id="4200983522494130825">Създай &amp;раздел</translation>
 <translation id="4225397296022057997">Във всички</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Възстанови настройките</translation>
 <translation id="4726710629007580002">Опитът за инсталиране на разширението е с предизвестие:</translation>
 <translation id="479536056609751218">Страницата само в HTML</translation>
+<translation id="4827904420700932487">Създай код QR код на картината</translation>
 <translation id="4839303808932127586">Запи&amp;ши клипа като…</translation>
 <translation id="4840096453115567876">Изход от режим на частно сърфиране?</translation>
 <translation id="488785315393301722">Покажи подробности</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Питай преди достъп (препоръчително)</translation>
 <translation id="5677928146339483299">Блокирай</translation>
 <translation id="5707185214361380026">Провалено зареждане на разширение от:</translation>
+<translation id="5713171467967533494">Отвори в браузър Vivaldi</translation>
 <translation id="5715711091495208045">Приставков брокер: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Запиши като PDF</translation>
 <translation id="5747809636523347288">Пост&amp;ави и премини към <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Настройки</translation>
 <translation id="6579369886355986318">Покажи &amp;контролите</translation>
 <translation id="6639554308659482635">Памет на SQLite</translation>
+<translation id="666731172850799929">Отвори в <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Записване на паролата</translation>
 <translation id="6691936601825168937">Н&amp;апред</translation>
 <translation id="6798954102094737107">Приставка: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@
 <translation id="9003647077635673607">Позволи за всички сайтове</translation>
 <translation id="9027459031423301635">Отвори препратката в нов &amp;раздел</translation>
 <translation id="9056810968620647706">Няма намерени съвпадения.</translation>
+<translation id="9084064520949870008">Отваряй в прозорец</translation>
 <translation id="9137916601698928395">Отвори препратката като <ph name="USER" /></translation>
 <translation id="91568222606626347">Създай пряк път…</translation>
 <translation id="916607977885256133">Покажи картина в картината</translation>

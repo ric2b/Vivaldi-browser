@@ -20,6 +20,7 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.features.start_surface.StartSurface;
@@ -53,20 +54,23 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * Creates an instance of a {@link LayoutManagerChromePhone}.
      * @param host         A {@link LayoutManagerHost} instance.
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
-     * @param startSurfaceSupplier Supplier for an interface to talk to the Grid Tab Switcher. Used
-     *         to create overviewLayout if it has value, otherwise will use the accessibility
-     *         overview layout.
+     * @param startSurfaceSupplier Supplier for an interface to talk to the Grid Tab Switcher when
+     *         Start surface refactor is disabled. Used to create overviewLayout if it has value,
+     *         otherwise will use the accessibility overview layout.
+     * @param tabSwitcherSupplier Supplier for an interface to talk to the Grid Tab Switcher when
+     *         Start surface refactor is enabled. Used to create overviewLayout if it has value,
+     *         otherwise will use the accessibility overview layout.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      * @param jankTracker tracker for surface jank.
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
-            Supplier<StartSurface> startSurfaceSupplier,
+            Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker,
             ActivityLifecycleDispatcher lifecycleDispatcher) { // Vivaldi
-        super(host, contentContainer, startSurfaceSupplier, tabContentManagerSupplier,
-                topUiThemeColorProvider, jankTracker, null, null);
+        super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
+                tabContentManagerSupplier, topUiThemeColorProvider, jankTracker, null, null);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -138,8 +142,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     protected LayoutManagerTabModelObserver createTabModelObserver() {
         return new LayoutManagerTabModelObserver() {
             @Override
-            public void willCloseTab(Tab tab, boolean animate) {
-                super.willCloseTab(tab, animate);
+            public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
+                super.willCloseTab(tab, animate, didCloseAlone);
                 if (animate) tabClosing(tab.getId());
             }
         };

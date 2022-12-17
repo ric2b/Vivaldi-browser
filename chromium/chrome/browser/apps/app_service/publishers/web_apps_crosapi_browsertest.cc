@@ -13,17 +13,14 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/ash/crosapi/crosapi_ash.h"
-#include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/test_controller_ash.h"
+#include "chrome/browser/ash/crosapi/ash_requires_lacros_browsertestbase.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/apps/app_dialog/app_uninstall_dialog_view.h"
 #include "chrome/browser/web_applications/test/app_registration_waiter.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/test/base/chromeos/ash_browser_test_starter.h"
-#include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom-test-utils.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "content/public/test/browser_test.h"
 #include "ui/base/models/simple_menu_model.h"
 
@@ -80,7 +77,7 @@ std::vector<std::string> GetContextMenuForApp(const std::string& app_id) {
       base::BindLambdaForTesting(
           [&](std::unique_ptr<ui::SimpleMenuModel> model) {
             items.reserve(model->GetItemCount());
-            for (int i = 0; i < model->GetItemCount(); ++i) {
+            for (size_t i = 0; i < model->GetItemCount(); ++i) {
               items.push_back(base::UTF16ToUTF8(model->GetLabelAt(i)));
             }
 
@@ -90,7 +87,7 @@ std::vector<std::string> GetContextMenuForApp(const std::string& app_id) {
   return items;
 }
 
-void SelectContextMenuForApp(const std::string& app_id, int index) {
+void SelectContextMenuForApp(const std::string& app_id, size_t index) {
   base::RunLoop run_loop;
   ash::ShelfItemDelegate* delegate =
       ash::ShelfModel::Get()->GetShelfItemDelegate(ash::ShelfID(app_id));
@@ -106,7 +103,8 @@ void SelectContextMenuForApp(const std::string& app_id, int index) {
 
 }  // namespace
 
-class WebAppsCrosapiBrowserTest : public InProcessBrowserTest {
+class WebAppsCrosapiBrowserTest
+    : public crosapi::AshRequiresLacrosBrowserTestBase {
  public:
   WebAppsCrosapiBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
@@ -115,29 +113,20 @@ class WebAppsCrosapiBrowserTest : public InProcessBrowserTest {
   ~WebAppsCrosapiBrowserTest() override = default;
 
  protected:
-  void SetUpInProcessBrowserTestFixture() override {
-    if (!ash_starter_.HasLacrosArgument()) {
-      return;
-    }
-    ASSERT_TRUE(ash_starter_.PrepareEnvironmentForLacros());
-  }
-
   void SetUpOnMainThread() override {
-    if (!ash_starter_.HasLacrosArgument()) {
+    crosapi::AshRequiresLacrosBrowserTestBase::SetUpOnMainThread();
+    if (!HasLacrosArgument()) {
       return;
     }
-    auto* manager = crosapi::CrosapiManager::Get();
-    test_controller_ash_ = std::make_unique<crosapi::TestControllerAsh>();
-    manager->crosapi_ash()->SetTestControllerForTesting(
-        test_controller_ash_.get());
 
-    ash_starter_.StartLacros(this);
+    web_app::AppTypeInitializationWaiter(profile(), apps::AppType::kWeb)
+        .Await();
   }
 
   std::string InstallWebApp(const std::string& start_url,
                             apps::WindowMode mode) {
     crosapi::mojom::StandaloneBrowserTestControllerAsyncWaiter waiter(
-        test_controller_ash_->GetStandaloneBrowserTestController().get());
+        GetStandaloneBrowserTestController());
     std::string app_id;
     waiter.InstallWebApp(start_url, mode, &app_id);
     web_app::AppRegistrationWaiter(browser()->profile(), app_id).Await();
@@ -150,29 +139,25 @@ class WebAppsCrosapiBrowserTest : public InProcessBrowserTest {
     return apps::AppServiceProxyFactory::GetForProfile(profile());
   }
 
-  const test::AshBrowserTestStarter& ash_starter() { return ash_starter_; }
-
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  test::AshBrowserTestStarter ash_starter_;
-  std::unique_ptr<crosapi::TestControllerAsh> test_controller_ash_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppsCrosapiBrowserTest, PinUsingContextMenu) {
-  if (!ash_starter().HasLacrosArgument()) {
+  if (!HasLacrosArgument()) {
     return;
   }
 
-  const int kNewWindowIndex = 0;
-  const int kPinIndex = 1;
-  const int kUnpinIndex = 1;
-  const int kCloseIndex = 2;
+  const size_t kNewWindowIndex = 0;
+  const size_t kPinIndex = 1;
+  const size_t kUnpinIndex = 1;
+  const size_t kCloseIndex = 2;
 
   const web_app::AppId app_id =
       InstallWebApp("https://example.org/", apps::WindowMode::kBrowser);
   EXPECT_EQ(ash::ShelfModel::Get()->ItemIndexByAppID(app_id), -1);
   AppServiceProxy()->Launch(app_id, /*event_flags=*/0,
-                            apps::mojom::LaunchSource::kFromAppListGrid);
+                            apps::LaunchSource::kFromAppListGrid);
   AppInstanceWaiter(AppServiceProxy()->InstanceRegistry(), app_id)
       .AwaitRunning();
   EXPECT_NE(ash::ShelfModel::Get()->ItemIndexByAppID(app_id), -1);
@@ -223,5 +208,36 @@ IN_PROC_BROWSER_TEST_F(WebAppsCrosapiBrowserTest, PinUsingContextMenu) {
   SelectContextMenuForApp(app_id, kCloseIndex);
   AppInstanceWaiter(AppServiceProxy()->InstanceRegistry(), app_id)
       .AwaitStopped();
+  EXPECT_EQ(ash::ShelfModel::Get()->ItemIndexByAppID(app_id), -1);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppsCrosapiBrowserTest, Uninstall) {
+  if (!HasLacrosArgument()) {
+    return;
+  }
+
+  const size_t kPinIndex = 1;
+  const size_t kUninstallIndex = 3;
+
+  const web_app::AppId app_id =
+      InstallWebApp("https://example.org/", apps::WindowMode::kBrowser);
+  AppServiceProxy()->Launch(app_id, /*event_flags=*/0,
+                            apps::LaunchSource::kFromAppListGrid);
+  AppInstanceWaiter(AppServiceProxy()->InstanceRegistry(), app_id)
+      .AwaitRunning();
+  EXPECT_NE(ash::ShelfModel::Get()->ItemIndexByAppID(app_id), -1);
+
+  SelectContextMenuForApp(app_id, kUninstallIndex);
+  AppUninstallDialogView::GetActiveViewForTesting()->CancelDialog();
+  EXPECT_NE(ash::ShelfModel::Get()->ItemIndexByAppID(app_id), -1);
+
+  SelectContextMenuForApp(app_id, kPinIndex);
+  SelectContextMenuForApp(app_id, kUninstallIndex);
+  AppUninstallDialogView::GetActiveViewForTesting()->AcceptDialog();
+  AppInstanceWaiter(AppServiceProxy()->InstanceRegistry(), app_id)
+      .AwaitStopped();
+  web_app::AppRegistrationWaiter(profile(), app_id,
+                                 apps::Readiness::kUninstalledByUser)
+      .Await();
   EXPECT_EQ(ash::ShelfModel::Get()->ItemIndexByAppID(app_id), -1);
 }

@@ -42,57 +42,6 @@ const std::string kTestUuidChromeAndProgressive =
     "7f4b7ff0-970a-41bb-aa91-f6c3e2724207";
 const std::string kBrowserTemplateName = "BrowserTest";
 const std::string kChromePwaTemplateName = "ChromeAppTest";
-const std::string kValidTemplateBrowser =
-    "{\"version\":1,\"uuid\":\"" + kTestUuidBrowser + "\",\"name\":\"" +
-    kBrowserTemplateName +
-    "\",\"created_time_usec\":\"1633535632\",\"updated_time_usec\": "
-    "\"1633535632\",\"desk_type\":\"TEMPLATE\",\"desk\":{\"apps\":[{\"window_"
-    "bound\":{\"left\":0,\"top\":1,\"height\":121,\"width\":120},\"window_"
-    "state\":\"NORMAL\",\"z_index\":1,\"app_type\":\"BROWSER\",\"tabs\":[{"
-    "\"url\":\"" +
-    kBrowserUrl1 +
-    "\"},{\"url\":\"https://"
-    "example.com/"
-    "2\"}],\"tab_groups\":[{\"first_"
-    "index\":1,\"last_index\":2,\"title\":\"sample_tab_"
-    "group\",\"color\":\"GREY\",\"is_collapsed\":false}],\"active_tab_index\":"
-    "1,\"window_id\":0,"
-    "\"display_id\":\"100\",\"event_flag\":0,\"pre_minimized_window_state\":"
-    "\"NORMAL\"}]}}";
-const std::string kValidTemplateChromeAndProgressive =
-    "{\"version\":1,\"uuid\":\"" + kTestUuidChromeAndProgressive +
-    "\",\"name\":\"" + kChromePwaTemplateName +
-    "\",\"created_time_usec\":\"1633535632000\",\"updated_time_usec\": "
-    "\"1633535632\",\"desk_type\":\"SAVE_AND_RECALL\",\"desk\":{\"apps\":[{"
-    "\"window_"
-    "bound\":{"
-    "\"left\":200,\"top\":200,\"height\":1000,\"width\":1000},\"window_state\":"
-    "\"PRIMARY_SNAPPED\",\"z_index\":2,\"app_type\":\"CHROME_APP\",\"app_id\":"
-    "\"" +
-    desk_test_util::kTestChromeAppId1 +
-    "\",\"window_id\":0,\"display_id\":\"100\",\"event_flag\":0,\"pre_"
-    "minimized_window_state\":\"NORMAL\", \"snap_percent\":75},{\"window_"
-    "bound\":{\"left\":0,\"top\":0,\"height\":120,\"width\":120},\"window_"
-    "state\":\"NORMAL\",\"z_index\":1,\"app_type\":\"CHROME_APP\",\"app_id\":"
-    "\"" +
-    desk_test_util::kTestPwaAppId1 +
-    "\",\"window_id\":1,\"display_id\":"
-    "\"100\",\"event_flag\":0,\"pre_minimized_window_state\":\"NORMAL\"}]}}";
-const std::string kTemplateWithoutType =
-    "{\"version\":1,\"uuid\":\"" + kTestUuidBrowser + "\",\"name\":\"" +
-    kBrowserTemplateName +
-    "\",\"created_time_usec\":\"1633535632\",\"updated_time_usec\": "
-    "\"1633535632\",\"desk\":{\"apps\":[{\"window_"
-    "bound\":{\"left\":0,\"top\":1,\"height\":121,\"width\":120},\"window_"
-    "state\":\"NORMAL\",\"z_index\":1,\"app_type\":\"BROWSER\",\"tabs\":[{"
-    "\"url\":\"" +
-    kBrowserUrl1 + "\"},{\"url\":\"" + kBrowserUrl1 +
-    "\"}],\"tab_groups\":[{\"first_"
-    "index\":1,\"last_index\":2,\"title\":\"sample_tab_"
-    "group\",\"color\":\"GREY\",\"is_collapsed\":false}],\"active_tab_index\":"
-    "1,\"window_id\":0,"
-    "\"display_id\":\"100\",\"event_flag\":0,\"pre_minimized_window_state\":"
-    "\"NORMAL\"}]}}";
 const constexpr char16_t kSampleTabGroupTitle[] = u"sample_tab_group";
 
 app_restore::TabGroupInfo MakeSampleTabGroup() {
@@ -125,16 +74,16 @@ class DeskTemplateConversionTest : public testing::Test {
 };
 
 TEST_F(DeskTemplateConversionTest, ParseBrowserTemplate) {
-  base::StringPiece raw_json = base::StringPiece(kValidTemplateBrowser);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  base::StringPiece raw_json =
+      base::StringPiece(desk_test_util::kValidPolicyTemplateBrowser);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> dt =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kPolicy);
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
 
   EXPECT_TRUE(dt != nullptr);
   EXPECT_EQ(dt->uuid(), base::GUID::ParseCaseInsensitive(kTestUuidBrowser));
@@ -163,9 +112,10 @@ TEST_F(DeskTemplateConversionTest, ParseBrowserTemplate) {
   EXPECT_EQ(ali->window_id.value(), 0);
   EXPECT_TRUE(ali->display_id.has_value());
   EXPECT_EQ(ali->display_id.value(), 100L);
-  // Can't test active_tab_index since GetAppLaunchInfo returns an entry without
-  // it
-  // https://osscs.corp.google.com/chromium/chromium/src/+/main:components/app_restore/app_restore_data.cc
+  EXPECT_TRUE(ali->active_tab_index.has_value());
+  EXPECT_EQ(ali->active_tab_index.value(), 1);
+  EXPECT_TRUE(ali->first_non_pinned_tab_index.has_value());
+  EXPECT_EQ(ali->first_non_pinned_tab_index.value(), 1);
   EXPECT_TRUE(ali->urls.has_value());
   EXPECT_EQ(ali->urls.value()[0].spec(), kBrowserUrl1);
   EXPECT_EQ(ali->urls.value()[1].spec(), kBrowserUrl2);
@@ -173,6 +123,64 @@ TEST_F(DeskTemplateConversionTest, ParseBrowserTemplate) {
   EXPECT_EQ(ali->tab_group_infos.value()[0], MakeSampleTabGroup());
   EXPECT_TRUE(wi->window_state_type.has_value());
   EXPECT_EQ(wi->window_state_type.value(), chromeos::WindowStateType::kNormal);
+  EXPECT_TRUE(wi->current_bounds.has_value());
+  EXPECT_EQ(wi->current_bounds.value().x(), 0);
+  EXPECT_EQ(wi->current_bounds.value().y(), 1);
+  EXPECT_EQ(wi->current_bounds.value().height(), 121);
+  EXPECT_EQ(wi->current_bounds.value().width(), 120);
+}
+
+TEST_F(DeskTemplateConversionTest, ParseBrowserTemplateMinimized) {
+  base::StringPiece raw_json =
+      base::StringPiece(desk_test_util::kValidPolicyTemplateBrowserMinimized);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
+
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
+
+  std::unique_ptr<ash::DeskTemplate> dt =
+      desk_template_conversion::ParseDeskTemplateFromSource(
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
+
+  EXPECT_TRUE(dt != nullptr);
+  EXPECT_EQ(dt->uuid(), base::GUID::ParseCaseInsensitive(kTestUuidBrowser));
+  EXPECT_EQ(dt->created_time(),
+            desk_template_conversion::ProtoTimeToTime(1633535632));
+  EXPECT_EQ(dt->template_name(), base::UTF8ToUTF16(kBrowserTemplateName));
+
+  const app_restore::RestoreData* rd = dt->desk_restore_data();
+
+  EXPECT_TRUE(rd != nullptr);
+  EXPECT_EQ(rd->app_id_to_launch_list().size(), 1UL);
+  EXPECT_NE(rd->app_id_to_launch_list().find(app_constants::kChromeAppId),
+            rd->app_id_to_launch_list().end());
+
+  const app_restore::AppRestoreData* ard =
+      rd->GetAppRestoreData(app_constants::kChromeAppId, 0);
+  EXPECT_TRUE(ard != nullptr);
+  EXPECT_TRUE(ard->display_id.has_value());
+  EXPECT_EQ(ard->display_id.value(), 100L);
+  std::unique_ptr<app_restore::AppLaunchInfo> ali =
+      ard->GetAppLaunchInfo(app_constants::kChromeAppId, 0);
+  std::unique_ptr<app_restore::WindowInfo> wi = ard->GetWindowInfo();
+  EXPECT_TRUE(ali != nullptr);
+  EXPECT_TRUE(wi != nullptr);
+  EXPECT_TRUE(ali->window_id.has_value());
+  EXPECT_EQ(ali->window_id.value(), 0);
+  EXPECT_TRUE(ali->display_id.has_value());
+  EXPECT_EQ(ali->display_id.value(), 100L);
+  EXPECT_TRUE(ali->active_tab_index.has_value());
+  EXPECT_EQ(ali->active_tab_index.value(), 1);
+  EXPECT_TRUE(ali->first_non_pinned_tab_index.has_value());
+  EXPECT_EQ(ali->first_non_pinned_tab_index.value(), 1);
+  EXPECT_TRUE(ali->urls.has_value());
+  EXPECT_EQ(ali->urls.value()[0].spec(), kBrowserUrl1);
+  EXPECT_EQ(ali->urls.value()[1].spec(), kBrowserUrl2);
+  EXPECT_TRUE(ali->tab_group_infos.has_value());
+  EXPECT_EQ(ali->tab_group_infos.value()[0], MakeSampleTabGroup());
+  EXPECT_TRUE(wi->window_state_type.has_value());
+  EXPECT_EQ(wi->window_state_type.value(),
+            chromeos::WindowStateType::kMinimized);
   EXPECT_TRUE(wi->pre_minimized_show_state_type.has_value());
   EXPECT_EQ(wi->pre_minimized_show_state_type.value(),
             ui::WindowShowState::SHOW_STATE_NORMAL);
@@ -184,17 +192,16 @@ TEST_F(DeskTemplateConversionTest, ParseBrowserTemplate) {
 }
 
 TEST_F(DeskTemplateConversionTest, ParseChromePwaTemplate) {
-  base::StringPiece raw_json =
-      base::StringPiece(kValidTemplateChromeAndProgressive);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  base::StringPiece raw_json = base::StringPiece(
+      desk_test_util::kValidPolicyTemplateChromeAndProgressive);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> dt =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kPolicy);
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
 
   EXPECT_TRUE(dt != nullptr);
   EXPECT_EQ(dt->uuid(),
@@ -248,9 +255,6 @@ TEST_F(DeskTemplateConversionTest, ParseChromePwaTemplate) {
   EXPECT_TRUE(wi_chrome->window_state_type.has_value());
   EXPECT_EQ(wi_chrome->window_state_type.value(),
             chromeos::WindowStateType::kPrimarySnapped);
-  EXPECT_TRUE(wi_chrome->pre_minimized_show_state_type.has_value());
-  EXPECT_EQ(wi_chrome->pre_minimized_show_state_type.value(),
-            ui::WindowShowState::SHOW_STATE_NORMAL);
   EXPECT_TRUE(wi_chrome->current_bounds.has_value());
   EXPECT_EQ(wi_chrome->current_bounds.value().x(), 200);
   EXPECT_EQ(wi_chrome->current_bounds.value().y(), 200);
@@ -261,9 +265,6 @@ TEST_F(DeskTemplateConversionTest, ParseChromePwaTemplate) {
   EXPECT_TRUE(wi_pwa->window_state_type.has_value());
   EXPECT_EQ(wi_pwa->window_state_type.value(),
             chromeos::WindowStateType::kNormal);
-  EXPECT_TRUE(wi_pwa->pre_minimized_show_state_type.has_value());
-  EXPECT_EQ(wi_pwa->pre_minimized_show_state_type.value(),
-            ui::WindowShowState::SHOW_STATE_NORMAL);
   EXPECT_TRUE(wi_pwa->current_bounds.has_value());
   EXPECT_EQ(wi_pwa->current_bounds.value().x(), 0);
   EXPECT_EQ(wi_pwa->current_bounds.value().y(), 0);
@@ -273,44 +274,43 @@ TEST_F(DeskTemplateConversionTest, ParseChromePwaTemplate) {
 
 TEST_F(DeskTemplateConversionTest, EmptyJsonTest) {
   base::StringPiece raw_json = base::StringPiece(kEmptyJson);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> dt =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kPolicy);
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
   EXPECT_TRUE(dt == nullptr);
 }
 
 TEST_F(DeskTemplateConversionTest, ParsesWithDefaultValueSetToTemplates) {
-  base::StringPiece raw_json = base::StringPiece(kTemplateWithoutType);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  base::StringPiece raw_json =
+      base::StringPiece(desk_test_util::kPolicyTemplateWithoutType);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> dt =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kPolicy);
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
   EXPECT_TRUE(dt);
   EXPECT_EQ(ash::DeskTemplateType::kTemplate, dt->type());
 }
 
 TEST_F(DeskTemplateConversionTest, DeskTemplateFromJsonBrowserTest) {
-  base::StringPiece raw_json = base::StringPiece(kValidTemplateBrowser);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  base::StringPiece raw_json =
+      base::StringPiece(desk_test_util::kValidPolicyTemplateBrowser);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> desk_template =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kPolicy);
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
 
   apps::AppRegistryCache* app_cache =
       apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id_);
@@ -319,20 +319,20 @@ TEST_F(DeskTemplateConversionTest, DeskTemplateFromJsonBrowserTest) {
       desk_template_conversion::SerializeDeskTemplateAsPolicy(
           desk_template.get(), app_cache);
 
-  EXPECT_EQ(parsed_json.value, desk_template_value);
+  EXPECT_EQ(*parsed_json, desk_template_value);
 }
 
 TEST_F(DeskTemplateConversionTest, ToJsonIgnoreUnsupportedApp) {
-  base::StringPiece raw_json = base::StringPiece(kValidTemplateBrowser);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  base::StringPiece raw_json =
+      base::StringPiece(desk_test_util::kValidPolicyTemplateBrowser);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> desk_template =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kUser);
+          *parsed_json, ash::DeskTemplateSource::kUser);
 
   // Adding this unsupported app should not change the serialized JSON content.
   saved_desk_test_util::AddGenericAppWindow(
@@ -346,21 +346,20 @@ TEST_F(DeskTemplateConversionTest, ToJsonIgnoreUnsupportedApp) {
       desk_template_conversion::SerializeDeskTemplateAsPolicy(
           desk_template.get(), app_cache);
 
-  EXPECT_EQ(parsed_json.value, desk_template_value);
+  EXPECT_EQ(*parsed_json, desk_template_value);
 }
 
 TEST_F(DeskTemplateConversionTest, DeskTemplateFromJsonAppTest) {
-  base::StringPiece raw_json =
-      base::StringPiece(kValidTemplateChromeAndProgressive);
-  base::JSONReader::ValueWithError parsed_json =
-      base::JSONReader::ReadAndReturnValueWithError(raw_json);
+  base::StringPiece raw_json = base::StringPiece(
+      desk_test_util::kValidPolicyTemplateChromeAndProgressive);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(raw_json);
 
-  EXPECT_TRUE(parsed_json.value.has_value());
-  EXPECT_TRUE(parsed_json.value->is_dict());
+  EXPECT_TRUE(parsed_json.has_value());
+  EXPECT_TRUE(parsed_json->is_dict());
 
   std::unique_ptr<ash::DeskTemplate> desk_template =
       desk_template_conversion::ParseDeskTemplateFromSource(
-          parsed_json.value.value(), ash::DeskTemplateSource::kPolicy);
+          *parsed_json, ash::DeskTemplateSource::kPolicy);
 
   apps::AppRegistryCache* app_cache =
       apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id_);
@@ -369,7 +368,7 @@ TEST_F(DeskTemplateConversionTest, DeskTemplateFromJsonAppTest) {
       desk_template_conversion::SerializeDeskTemplateAsPolicy(
           desk_template.get(), app_cache);
 
-  EXPECT_EQ(parsed_json.value, desk_template_value);
+  EXPECT_EQ(*parsed_json, desk_template_value);
 }
 
 TEST_F(DeskTemplateConversionTest, EnsureLacrosBrowserWindowsSavedProperly) {

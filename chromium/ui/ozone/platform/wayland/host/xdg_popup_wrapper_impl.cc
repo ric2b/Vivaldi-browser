@@ -172,6 +172,8 @@ bool XDGPopupWrapperImpl::Initialize(const ShellPopupParams& params) {
                                          positioner.get()));
   if (!xdg_popup_)
     return false;
+  connection_->wayland_window_manager()->NotifyWindowRoleAssigned(
+      wayland_window_);
 
   if (connection_->zaura_shell()) {
     uint32_t version =
@@ -183,6 +185,10 @@ bool XDGPopupWrapperImpl::Initialize(const ShellPopupParams& params) {
           version >=
               ZAURA_POPUP_SURFACE_SUBMISSION_IN_PIXEL_COORDINATES_SINCE_VERSION) {
         zaura_popup_surface_submission_in_pixel_coordinates(aura_popup_.get());
+      }
+      if (version >= ZAURA_POPUP_SET_MENU_SINCE_VERSION &&
+          wayland_window_->type() == PlatformWindowType::kMenu) {
+        zaura_popup_set_menu(aura_popup_.get());
       }
     }
   }
@@ -236,6 +242,18 @@ void XDGPopupWrapperImpl::SetWindowGeometry(const gfx::Rect& bounds) {
 
 void XDGPopupWrapperImpl::Grab(uint32_t serial) {
   xdg_popup_grab(xdg_popup_.get(), connection_->seat()->wl_object(), serial);
+}
+
+bool XDGPopupWrapperImpl::SupportsDecoration() {
+  if (!aura_popup_)
+    return false;
+  uint32_t version = zaura_popup_get_version(aura_popup_.get());
+  return version >= ZAURA_POPUP_SET_DECORATION_SINCE_VERSION;
+}
+
+void XDGPopupWrapperImpl::Decorate() {
+  zaura_popup_set_decoration(aura_popup_.get(),
+                             ZAURA_POPUP_DECORATION_TYPE_SHADOW);
 }
 
 wl::Object<xdg_positioner> XDGPopupWrapperImpl::CreatePositioner() {

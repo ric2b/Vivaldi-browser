@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/layout/layout_video.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_box_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
@@ -73,28 +74,6 @@ PhysicalRect PaintLayerPainter::ContentsVisualRect(const FragmentData& fragment,
   return contents_visual_rect;
 }
 
-PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
-                                     PaintFlags paint_flags) {
-  const LayoutObject& layout_object = paint_layer_.GetLayoutObject();
-  if (UNLIKELY(layout_object.NeedsLayout() &&
-               !layout_object.ChildLayoutBlockedByDisplayLock())) {
-    // Skip if we need layout. This should never happen. See crbug.com/1244130
-    NOTREACHED();
-    return kFullyPainted;
-  }
-
-  if (layout_object.GetFrameView()->ShouldThrottleRendering())
-    return kFullyPainted;
-
-  // Non self-painting layers without self-painting descendants don't need to be
-  // painted as their layoutObject() should properly paint itself.
-  if (!paint_layer_.IsSelfPaintingLayer() &&
-      !paint_layer_.HasSelfPaintingLayerDescendant())
-    return kFullyPainted;
-
-  return PaintLayerContents(context, paint_flags);
-}
-
 static bool ShouldCreateSubsequence(const PaintLayer& paint_layer,
                                     const GraphicsContext& context,
                                     PaintFlags paint_flags) {
@@ -125,15 +104,24 @@ static gfx::Rect FirstFragmentVisualRect(const LayoutBoxModelObject& object) {
   return ToEnclosingRect(overflow_rect);
 }
 
-PaintResult PaintLayerPainter::PaintLayerContents(GraphicsContext& context,
-                                                  PaintFlags paint_flags) {
-  DCHECK(paint_layer_.IsSelfPaintingLayer() ||
-         paint_layer_.HasSelfPaintingLayerDescendant());
-
+PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
+                                     PaintFlags paint_flags) {
   const auto& object = paint_layer_.GetLayoutObject();
-  PaintResult result = kFullyPainted;
+  if (UNLIKELY(object.NeedsLayout() &&
+               !object.ChildLayoutBlockedByDisplayLock())) {
+    // Skip if we need layout. This should never happen. See crbug.com/1244130
+    NOTREACHED();
+    return kFullyPainted;
+  }
+
   if (object.GetFrameView()->ShouldThrottleRendering())
-    return result;
+    return kFullyPainted;
+
+  // Non self-painting layers without self-painting descendants don't need to be
+  // painted as their layoutObject() should properly paint itself.
+  if (!paint_layer_.IsSelfPaintingLayer() &&
+      !paint_layer_.HasSelfPaintingLayerDescendant())
+    return kFullyPainted;
 
   // A paint layer should always have LocalBorderBoxProperties when it's ready
   // for paint.
@@ -147,7 +135,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(GraphicsContext& context,
   bool selection_drag_image_only =
       paint_flags & PaintFlag::kSelectionDragImageOnly;
   if (selection_drag_image_only && !object.IsSelected())
-    return result;
+    return kFullyPainted;
 
   IgnorePaintTimingScope ignore_paint_timing;
   if (object.StyleRef().Opacity() == 0.0f) {
@@ -173,6 +161,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(GraphicsContext& context,
       // is primary, not auxiliary.
       !paint_layer_.IsUnderSVGHiddenContainer() && is_self_painting_layer;
 
+  PaintResult result = kFullyPainted;
   if (object.FirstFragment().NextFragment() ||
       // When printing, the LayoutView's background should extend infinitely
       // regardless of LayoutView's visual rect, so don't check intersection
@@ -373,7 +362,9 @@ void PaintLayerPainter::PaintFragmentWithPhase(
     const auto* properties = fragment_data.PaintProperties();
     DCHECK(properties);
     DCHECK(properties->Mask());
+    DCHECK(properties->Mask()->OutputClip());
     chunk_properties.SetEffect(*properties->Mask());
+    chunk_properties.SetClip(*properties->Mask()->OutputClip());
   }
   ScopedPaintChunkProperties fragment_paint_chunk_properties(
       context.GetPaintController(), chunk_properties, paint_layer_,
@@ -397,6 +388,14 @@ void PaintLayerPainter::PaintWithPhase(PaintPhase phase,
   const auto* layout_box_with_fragments =
       paint_layer_.GetLayoutBoxWithBlockFragments();
   wtf_size_t fragment_idx = 0u;
+
+  // The NG paint code guards against painting multiple fragments for content
+  // that doesn't support it, but the legacy paint code has no such guards.
+  // TODO(crbug.com/1229581): Remove this when everything is handled by NG.
+  bool multiple_fragments_allowed =
+      layout_box_with_fragments ||
+      CanPaintMultipleFragments(paint_layer_.GetLayoutObject());
+
   for (const auto* fragment = &paint_layer_.GetLayoutObject().FirstFragment();
        fragment; fragment = fragment->NextFragment(), ++fragment_idx) {
     const NGPhysicalBoxFragment* physical_fragment = nullptr;
@@ -412,6 +411,9 @@ void PaintLayerPainter::PaintWithPhase(PaintPhase phase,
 
     PaintFragmentWithPhase(phase, *fragment, physical_fragment, context,
                            paint_flags);
+
+    if (!multiple_fragments_allowed)
+      break;
   }
 }
 

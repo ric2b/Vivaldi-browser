@@ -28,14 +28,12 @@
 #include "content/common/input/synthetic_pinch_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/range/range.h"
 
 namespace content {
@@ -704,29 +702,41 @@ void InputHandler::ImeSetComposition(
     Maybe<int> replacement_end,
     std::unique_ptr<ImeSetCompositionCallback> callback) {
   std::u16string text16 = base::UTF8ToUTF16(text);
-  if (!host_ || !host_->GetRenderWidgetHost()) {
+  if (!host_ || !host_->GetRenderWidgetHost() || !web_contents_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
+  // Currently no DevTools target for Prerender.
+  if (host_->GetLifecycleState() ==
+      RenderFrameHost::LifecycleState::kPrerendering) {
+    NOTREACHED();
+  }
+  // Portal cannot be focused.
+  if (web_contents_->IsPortal()) {
+    callback->sendFailure(
+        Response::InvalidRequest("A Portal cannot be focused."));
+    return;
+  }
 
+  // |RenderFrameHostImpl::GetRenderWidgetHost| returns the RWHImpl of the
+  // nearest local root of |host_|.
   RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
-  if (!host_->GetParent() && widget_host->delegate()) {
+  if (widget_host->delegate()) {
     RenderWidgetHostImpl* target_host =
         widget_host->delegate()->GetFocusedRenderWidgetHost(widget_host);
     if (target_host)
       widget_host = target_host;
   }
 
-  // If replacement start and end are not specified, then they are -1,
+  // If replacement start and end are not specified, then the range is invalid,
   // so no replacing will be done.
-  int replacement_start_out = -1;
-  int replacement_end_out = -1;
+  gfx::Range replacement_range = gfx::Range::InvalidRange();
 
   // Check if replacement_start and end parameters were passed in
   if (replacement_start.isJust()) {
-    replacement_start_out = replacement_start.fromJust();
+    replacement_range.set_start(replacement_start.fromJust());
     if (replacement_end.isJust()) {
-      replacement_end_out = replacement_end.fromJust();
+      replacement_range.set_end(replacement_end.fromJust());
     } else {
       callback->sendFailure(Response::InvalidParams(
           "Either both replacement start/end are specified or neither."));
@@ -740,9 +750,8 @@ void InputHandler::ImeSetComposition(
   widget_host->Focus();
 
   widget_host->GetWidgetInputHandler()->ImeSetComposition(
-      text16, std::vector<ui::ImeTextSpan>(),
-      gfx::Range(replacement_start_out, replacement_end_out), selection_start,
-      selection_end, std::move(closure));
+      text16, std::vector<ui::ImeTextSpan>(), replacement_range,
+      selection_start, selection_end, std::move(closure));
 }
 
 void InputHandler::DispatchMouseEvent(

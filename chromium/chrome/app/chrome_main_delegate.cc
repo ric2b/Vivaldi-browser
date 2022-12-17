@@ -25,7 +25,6 @@
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
-#include "base/scoped_add_feature_flags.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequence_manager/sequence_manager_impl.h"
@@ -54,6 +53,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/logging_chrome.h"
+#include "chrome/common/profiler/process_type.h"
+#include "chrome/common/profiler/unwind_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/gpu/chrome_content_gpu_client.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
@@ -83,6 +84,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
@@ -92,14 +94,12 @@
 
 #include <algorithm>
 
-#include "base/debug/handle_hooks_win.h"
 #include "base/files/important_file_writer_cleaner.h"
 #include "base/threading/platform_thread_win.h"
 #include "base/win/atl.h"
 #include "chrome/child/v8_crashpad_support_win.h"
 #include "chrome/chrome_elf/chrome_elf_main.h"
 #include "chrome/common/child_process_logging.h"
-#include "chrome/common/protobuf_init.h"
 #include "chrome/common/win/delay_load_failure_hook.h"
 #include "chrome/install_static/install_util.h"
 #include "components/browser_watcher/extended_crash_reporting.h"
@@ -109,6 +109,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/foundation_util.h"
+#include "base/message_loop/message_pump_mac.h"
 #include "chrome/app/chrome_main_mac.h"
 #include "chrome/browser/chrome_browser_application_mac.h"
 #include "chrome/browser/mac/relauncher.h"
@@ -172,6 +173,10 @@
 #include "base/environment.h"
 #endif
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
+#include "base/message_loop/message_pump_libevent.h"
+#endif
+
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
     BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/policy/policy_path_parser.h"
@@ -179,6 +184,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/startup_helper.h"
 #include "extensions/common/constants.h"
 #endif
 
@@ -198,14 +204,13 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/common/chrome_paths_lacros.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"  // nogncheck
-#include "chromeos/crosapi/mojom/crosapi.mojom.h"  // nogncheck
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"    // nogncheck
 #include "chromeos/lacros/dbus/lacros_dbus_helper.h"
 #include "chromeos/lacros/lacros_paths.h"
 #include "chromeos/lacros/lacros_service.h"
-#include "chromeos/startup/browser_init_params.h"  // nogncheck
+#include "chromeos/startup/browser_params_proxy.h"  // nogncheck
 #include "media/base/media_switches.h"
 #include "ui/base/resource/data_pack_with_resource_sharing_lacros.h"
-#include "ui/base/ui_base_switches.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -232,6 +237,11 @@ const size_t ChromeMainDelegate::kNonWildcardDomainNonPortSchemesSize =
 
 namespace {
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+const base::FilePath::CharType kUserHomeDirPrefix[] =
+    FILE_PATH_LITERAL("/home/user");
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 #if BUILDFLAG(IS_WIN)
 // Early versions of Chrome incorrectly registered a chromehtml: URL handler,
 // which gives us nothing but trouble. Avoid launching chrome this way since
@@ -246,8 +256,7 @@ bool HasDeprecatedArguments(const std::wstring& command_line) {
 // If we try to access a path that is not currently available, we want the call
 // to fail rather than show an error dialog.
 void SuppressWindowsErrorDialogs() {
-  UINT new_flags = SEM_FAILCRITICALERRORS |
-                   SEM_NOOPENFILEERRORBOX;
+  UINT new_flags = SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX;
 
   // Preserve existing error mode.
   UINT existing_flags = SetErrorMode(new_flags);
@@ -453,6 +462,33 @@ void SetUpProfilingShutdownHandler() {
 
 #endif  // BUILDFLAG(IS_POSIX)
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+absl::optional<int> HandlePackExtensionSwitches(
+    const base::CommandLine& command_line) {
+  // If the command line specifies --pack-extension, attempt the pack extension
+  // startup action and exit.
+  if (!command_line.HasSwitch(switches::kPackExtension))
+    return absl::nullopt;
+
+  const std::string locale =
+      command_line.GetSwitchValueASCII(::switches::kLang);
+  ui::ResourceBundle::InitSharedInstanceWithLocale(
+      locale, /*delegate=*/nullptr,
+      ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+
+  extensions::StartupHelper extension_startup_helper;
+  std::string error_message;
+  if (!extension_startup_helper.PackExtension(command_line, &error_message)) {
+    if (!error_message.empty()) {
+      LOG(ERROR) << error_message.c_str();
+    }
+    return chrome::RESULT_CODE_PACK_EXTENSION_ERROR;
+  }
+
+  return chrome::RESULT_CODE_NORMAL_EXIT_PACK_EXTENSION_SUCCESS;
+}
+#endif  // !BUILDFLAG(ENABLE_EXTENSIONS)
+
 struct MainFunction {
   const char* name;
   int (*function)(content::MainFunctionParams);
@@ -552,8 +588,7 @@ void InitializeUserDataDir(base::CommandLine* command_line) {
 
 #if !BUILDFLAG(IS_ANDROID)
 void InitLogging(const std::string& process_type) {
-  logging::OldFileDeletionState file_state =
-      logging::APPEND_TO_OLD_LOG_FILE;
+  logging::OldFileDeletionState file_state = logging::APPEND_TO_OLD_LOG_FILE;
   if (process_type.empty()) {
     file_state = logging::DELETE_OLD_LOG_FILE;
   }
@@ -605,14 +640,16 @@ ChromeMainDelegate::ChromeMainDelegate(base::TimeTicks exe_entry_point_ticks) {
   RecordMainStartupMetrics(exe_entry_point_ticks);
 }
 
-ChromeMainDelegate::~ChromeMainDelegate() {
-}
+ChromeMainDelegate::~ChromeMainDelegate() = default;
 
-void ChromeMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
+absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
+    InvokedIn invoked_in) {
   DCHECK(base::ThreadPoolInstance::Get());
-  if (invoked_in == InvokedIn::kChildProcess) {
+  const auto* invoked_in_browser =
+      absl::get_if<InvokedInBrowserProcess>(&invoked_in);
+  if (!invoked_in_browser) {
     CommonEarlyInitialization();
-    return;
+    return absl::nullopt;
   }
 
 #if BUILDFLAG(IS_WIN)
@@ -622,7 +659,7 @@ void ChromeMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
 
   // For now, do not enable delay load failure hooks for browser process except
   // in tests, where failures really shouldn't happen.
-  if (invoked_in != InvokedIn::kBrowserProcessUnderTest)
+  if (invoked_in_browser->is_running_test)
     chrome::DisableDelayLoadFailureHooksForCurrentModule();
 #endif
 
@@ -650,13 +687,13 @@ void ChromeMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
   // sequences later.
   lacros_service_ = std::make_unique<chromeos::LacrosService>();
   {
-    const crosapi::mojom::BrowserInitParams* init_params =
-        chromeos::BrowserInitParams::Get();
+    const chromeos::BrowserParamsProxy* init_params =
+        chromeos::BrowserParamsProxy::Get();
     // This lives here rather than in ChromeBrowserMainExtraPartsLacros due to
     // timing constraints. If we relocate it, then the flags aren't propagated
     // to the GPU process.
-    if (init_params->build_flags.has_value()) {
-      for (auto flag : init_params->build_flags.value()) {
+    if (init_params->BuildFlags().has_value()) {
+      for (auto flag : init_params->BuildFlags().value()) {
         switch (flag) {
           case crosapi::mojom::BuildFlag::kUnknown:
             break;
@@ -688,9 +725,8 @@ void ChromeMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
   CommonEarlyInitialization();
 
   // Initializes the resource bundle and determines the locale.
-  std::string actual_locale =
-      LoadLocalState(chrome_feature_list_creator,
-                     invoked_in == InvokedIn::kBrowserProcessUnderTest);
+  std::string actual_locale = LoadLocalState(
+      chrome_feature_list_creator, invoked_in_browser->is_running_test);
   chrome_feature_list_creator->SetApplicationLocale(actual_locale);
   chrome_feature_list_creator->OverrideCachedUIStrings();
 
@@ -726,15 +762,13 @@ void ChromeMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
   chrome::CacheChannelInfo();
 #endif
 
-#if BUILDFLAG(IS_WIN)
-  chrome::InitializeProtobuf();
-#endif
+  return absl::nullopt;
 }
 
 bool ChromeMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
   // In the browser process Chrome creates the FeatureList, so content should
   // not.
-  return invoked_in == InvokedIn::kChildProcess;
+  return absl::holds_alternative<InvokedInChildProcess>(invoked_in);
 }
 
 void ChromeMainDelegate::CommonEarlyInitialization() {
@@ -778,11 +812,12 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
 
   // Start heap profiling as early as possible so it can start recording
   // memory allocations.
-  if (is_browser_process) {
-    heap_profiler_controller_ =
-        std::make_unique<HeapProfilerController>(channel);
-    heap_profiler_controller_->Start();
+  heap_profiler_controller_ = std::make_unique<HeapProfilerController>(
+      channel,
+      GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()));
+  heap_profiler_controller_->StartIfEnabled();
 
+  if (is_browser_process) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     ash::ConfigureSwap();
     ash::InitializeKstaled();
@@ -819,8 +854,11 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
   base::internal::TimerBase::InitializeFeatures();
   base::InitializeCpuReductionExperiment();
   base::sequence_manager::internal::SequenceManagerImpl::InitializeFeatures();
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
+  base::MessagePumpLibevent::InitializeFeatures();
+#elif BUILDFLAG(IS_MAC)
   base::PlatformThread::InitializeOptimizedRealtimeThreadingFeature();
+  base::MessagePumpCFRunLoopBase::InitializeFeatures();
 #endif
 }
 
@@ -832,7 +870,7 @@ bool ChromeMainDelegate::ShouldHandleConsoleControlEvents() {
 }
 #endif
 
-bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
+absl::optional<int> ChromeMainDelegate::BasicStartupComplete() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::BootTimesRecorder::Get()->SaveChromeMainStats();
 #endif
@@ -866,10 +904,8 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 #if BUILDFLAG(IS_WIN)
   // Browser should not be sandboxed.
   const bool is_browser = !command_line.HasSwitch(switches::kProcessType);
-  if (is_browser && IsSandboxedProcess()) {
-    *exit_code = chrome::RESULT_CODE_INVALID_SANDBOX_STATE;
-    return true;
-  }
+  if (is_browser && IsSandboxedProcess())
+    return chrome::RESULT_CODE_INVALID_SANDBOX_STATE;
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -882,8 +918,11 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
   content::Profiling::ProcessStarted();
 
   // Setup tracing sampler profiler as early as possible at startup if needed.
+  // We pass in CreateCoreUnwindersFactory here since it lives in the chrome/
+  // layer while TracingSamplerProfiler is outside of chrome/.
   tracing_sampler_profiler_ =
-      tracing::TracingSamplerProfiler::CreateOnMainThread();
+      tracing::TracingSamplerProfiler::CreateOnMainThread(
+          base::BindRepeating(&CreateCoreUnwindersFactory));
 
 #if BUILDFLAG(IS_WIN)
   v8_crashpad_support::SetUp();
@@ -897,13 +936,12 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 
 #if BUILDFLAG(IS_POSIX)
   if (HandleVersionSwitches(command_line)) {
-    *exit_code = 0;
-    return true;  // Got a --version switch; exit with a success error code.
+    return 0;  // Got a --version switch; exit with a success error code.
   }
   if (HandleCreditsSwitch(command_line)) {
-    *exit_code = 0;
-    return true;  // Got a --credits switch; exit with a success error code.
+    return 0;  // Got a --credits switch; exit with a success error code.
   }
+
   // TODO(crbug.com/1052397): Revisit the macro expression once build flag
   // switch of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -915,44 +953,16 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 #if BUILDFLAG(IS_WIN)
   // Must do this before any other usage of command line!
   if (HasDeprecatedArguments(command_line.GetCommandLineString())) {
-    *exit_code = 1;
-    return true;
+    return 1;
   }
 
   // HandleVerifier detects and reports incorrect handle manipulations. It
   // tracks handle operations on builds that support DCHECK only.
-#if DCHECK_IS_ON()
-  // This portion of the hook setup is just for child processes. Browser part is
-  // in ChromeBrowserMainPartsWin::PostProfileInit.
-  if (!is_browser) {
-    // Performing EAT interception first is safer in the presence of other
-    // threads attempting to call CloseHandle.
-#if defined(ARCH_CPU_32_BITS)
-    // Patching EAT of kernel32.dll is only supported on 32-bit because RVA can
-    // only hold 32-bit values.
-    base::debug::HandleHooks::AddEATPatch();
-#endif
-    // Patch once. Cannot monitor for further modules in a child process as
-    // monitoring needs ModuleWatcher, but likely no more should really load in
-    // a child process from this point on. If we miss any then we will lose some
-    // detection but still generate no false positive crashes.
-    base::debug::HandleHooks::PatchLoadedModules();
-  }
-#else
+#if !DCHECK_IS_ON()
   base::win::DisableHandleVerifier();
 #endif
 
 #endif  // BUILDFLAG(IS_WIN)
-
-  {
-    base::ScopedAddFeatureFlags features(
-        base::CommandLine::ForCurrentProcess());
-
-    // Disable Event.path on Canary and Dev to help the deprecation and removal.
-    // See crbug.com/1277431 for more details.
-    if (chrome::GetChannel() < version_info::Channel::BETA)
-      features.DisableIfNotSet(::blink::features::kEventPath);
-  }
 
   chrome::RegisterPathProvider();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -995,10 +1005,10 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
     }
 
     diagnostics::DiagnosticsWriter writer(format);
-    *exit_code = diagnostics::DiagnosticsController::GetInstance()->Run(
+    int exit_code = diagnostics::DiagnosticsController::GetInstance()->Run(
         command_line, &writer);
     diagnostics::DiagnosticsController::GetInstance()->ClearResults();
-    return true;
+    return exit_code;
   }
 #endif
 
@@ -1021,7 +1031,9 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
        command_line.HasSwitch(ash::switches::kLoginUser)) ||
       command_line.HasSwitch(switches::kDiagnosticsRecovery)) {
     base::CommandLine interim_command_line(command_line.GetProgram());
-    const char* const kSwitchNames[] = {switches::kUserDataDir, };
+    const char* const kSwitchNames[] = {
+        switches::kUserDataDir,
+    };
     interim_command_line.CopySwitchesFrom(command_line, kSwitchNames,
                                           std::size(kSwitchNames));
     interim_command_line.AppendSwitch(switches::kDiagnostics);
@@ -1047,8 +1059,7 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
                                                                &writer);
     if (diagnostics_exit_code) {
       // Diagnostics has failed somehow, so we exit.
-      *exit_code = diagnostics_exit_code;
-      return true;
+      return diagnostics_exit_code;
     }
 
     // Now we run the actual recovery tasks.
@@ -1058,8 +1069,7 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 
     if (recovery_exit_code) {
       // Recovery has failed somehow, so we exit.
-      *exit_code = recovery_exit_code;
-      return true;
+      return recovery_exit_code;
     }
   } else {  // Not running diagnostics or recovery.
     diagnostics::DiagnosticsController::GetInstance()->RecordRegularStartup();
@@ -1074,7 +1084,7 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
   // partially-initialized, which the TLS object is supposed to protect again.
   heap_profiling::InitTLSSlot();
 
-  return false;
+  return absl::nullopt;
 }
 
 #if BUILDFLAG(IS_MAC)
@@ -1173,9 +1183,20 @@ void ChromeMainDelegate::PreSandboxStartup() {
     // Initialize BrowserInitParams before generating and loading shared
     // resource file since the path required for the feature is set by
     // BrowserInitParams initialization.
-    const crosapi::mojom::BrowserInitParams* init_params =
-        chromeos::BrowserInitParams::Get();
-    chrome::SetLacrosDefaultPathsFromInitParams(init_params);
+    const chromeos::BrowserParamsProxy* init_params =
+        chromeos::BrowserParamsProxy::Get();
+    chrome::SetLacrosDefaultPathsFromInitParams(
+        init_params->DefaultPaths().get());
+
+    // Override the login user DIR_HOME path for the Lacros browser process. The
+    // primary user id hash is expected to be already set, because Lacros should
+    // only run inside the user session.
+    if (init_params->CrosUserIdHash().has_value()) {
+      base::FilePath homedir(kUserHomeDirPrefix);
+      homedir = homedir.Append(init_params->CrosUserIdHash().value());
+      base::PathService::OverrideAndCreateIfNeeded(
+          base::DIR_HOME, homedir, /*is_absolute=*/true, /*create=*/false);
+    }
   }
 
   // Generate shared resource file only on browser process. This is to avoid
@@ -1210,7 +1231,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
           ui::k200Percent);
     }
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // Register component_updater PathProvider after DIR_USER_DATA overridden by
   // command line flags. Maybe move the chrome PathProvider down here also?
@@ -1286,16 +1307,16 @@ void ChromeMainDelegate::PreSandboxStartup() {
     // Load secondary locale .pak file if it exists.
     pak_fd = global_descriptors->MaybeGet(kAndroidSecondaryLocalePakDescriptor);
     if (pak_fd != -1) {
-      pak_region = global_descriptors->GetRegion(
-          kAndroidSecondaryLocalePakDescriptor);
+      pak_region =
+          global_descriptors->GetRegion(kAndroidSecondaryLocalePakDescriptor);
       ui::ResourceBundle::GetSharedInstance()
           .LoadSecondaryLocaleDataWithPakFileRegion(base::File(pak_fd),
                                                     pak_region);
     }
 
     int extra_pak_keys[] = {
-      kAndroidChrome100PercentPakDescriptor,
-      kAndroidUIResourcesPakDescriptor,
+        kAndroidChrome100PercentPakDescriptor,
+        kAndroidUIResourcesPakDescriptor,
     };
     for (int extra_pak_key : extra_pak_keys) {
       pak_fd = global_descriptors->Get(extra_pak_key);
@@ -1340,8 +1361,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
         resources_pack_path, ui::kScaleFactorNone);
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 #endif  // BUILDFLAG(IS_ANDROID)
-    CHECK(!loaded_locale.empty()) << "Locale could not be found for " <<
-        locale;
+    CHECK(!loaded_locale.empty()) << "Locale could not be found for " << locale;
   }
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
@@ -1401,10 +1421,9 @@ void ChromeMainDelegate::SandboxInitialized(const std::string& process_type) {
 #endif
 
 #if BUILDFLAG(ENABLE_NACL)
-  ChromeContentClient::SetNaClEntryFunctions(
-      nacl_plugin::PPP_GetInterface,
-      nacl_plugin::PPP_InitializeModule,
-      nacl_plugin::PPP_ShutdownModule);
+  ChromeContentClient::SetNaClEntryFunctions(nacl_plugin::PPP_GetInterface,
+                                             nacl_plugin::PPP_InitializeModule,
+                                             nacl_plugin::PPP_ShutdownModule);
 #endif
 }
 
@@ -1419,8 +1438,8 @@ absl::variant<int, content::MainFunctionParams> ChromeMainDelegate::RunProcess(
     {switches::kRelauncherProcess, mac_relauncher::internal::RelauncherMain},
 #endif
 
-    // This entry is not needed on Linux, where the NaCl loader
-    // process is launched via nacl_helper instead.
+  // This entry is not needed on Linux, where the NaCl loader
+  // process is launched via nacl_helper instead.
 #if BUILDFLAG(ENABLE_NACL) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
     {switches::kNaClLoaderProcess, NaClMain},
 #else
@@ -1457,7 +1476,7 @@ void ChromeMainDelegate::ZygoteStarting(
 #endif
 
 #if BUILDFLAG(ENABLE_NACL)
-    nacl::AddNaClZygoteForkDelegates(delegates);
+  nacl::AddNaClZygoteForkDelegates(delegates);
 #endif
 }
 
@@ -1515,7 +1534,21 @@ ChromeMainDelegate::CreateContentUtilityClient() {
   return chrome_content_utility_client_.get();
 }
 
-void ChromeMainDelegate::PreBrowserMain() {
+absl::optional<int> ChromeMainDelegate::PreBrowserMain() {
+  absl::optional<int> exit_code =
+      content::ContentMainDelegate::PreBrowserMain();
+  if (exit_code.has_value())
+    return exit_code;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  absl::optional<int> pack_extension_exit_code =
+      HandlePackExtensionSwitches(command_line);
+  if (pack_extension_exit_code.has_value())
+    return pack_extension_exit_code;  // Got a --pack-extension switch; exit.
+#endif
+
 #if BUILDFLAG(IS_MAC)
   // Tell Cocoa to finish its initialization, which we want to do manually
   // instead of calling NSApplicationMain(). The primary reason is that NSAM()
@@ -1538,4 +1571,7 @@ void ChromeMainDelegate::PreBrowserMain() {
     l10n_util::OverrideLocaleWithCocoaLocale();
   }
 #endif
+
+  // Do not interrupt startup.
+  return absl::nullopt;
 }

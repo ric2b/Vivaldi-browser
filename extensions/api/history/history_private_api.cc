@@ -201,16 +201,15 @@ void HistoryPrivateEventRouter::OnURLsModified(
     urls->push_back(row.url().spec());
   }
   modified.urls.reset(urls);
-  std::vector<base::Value> args = OnVisitModified::Create(modified);
+  base::Value::List args = OnVisitModified::Create(modified);
 
   DispatchEvent(profile_, OnVisitModified::kEventName, std::move(args));
 }
 
 // Helper to actually dispatch an event to extension listeners.
-void HistoryPrivateEventRouter::DispatchEvent(
-    Profile* profile,
-    const std::string& event_name,
-    std::vector<base::Value> event_args) {
+void HistoryPrivateEventRouter::DispatchEvent(Profile* profile,
+                                              const std::string& event_name,
+                                              base::Value::List event_args) {
   if (profile && EventRouter::Get(profile)) {
     EventRouter::Get(profile)->BroadcastEvent(base::WrapUnique(
         new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
@@ -234,7 +233,14 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
       "AND urls.url LIKE ? OR urls.title LIKE ? "
       "ORDER BY urls.last_visit_time DESC LIMIT ?";
   const std::string search_text = "%" + params->query.text + "%";
-  GetFunctionCallerHistoryService(*this)->QueryHistoryWStatement(
+
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->QueryHistoryWStatement(
       sql_statement, search_text, max_hits,
       base::BindOnce(&HistoryPrivateDbSearchFunction::SearchComplete, this),
       &task_tracker_);
@@ -286,7 +292,13 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
     }
   }
 
-  GetFunctionCallerHistoryService(*this)->QueryHistory(
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->QueryHistory(
       search_text, options,
       base::BindOnce(&HistoryPrivateSearchFunction::SearchComplete, this),
       &task_tracker_);
@@ -345,7 +357,13 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   std::set<GURL> restrict_urls;
   restrict_urls.insert(url);
 
-  GetFunctionCallerHistoryService(*this)->ExpireHistoryBetween(
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->ExpireHistoryBetween(
       restrict_urls, start_time, end_time, true,
       base::BindOnce(&HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete,
                      this),
@@ -367,7 +385,13 @@ HistoryPrivateGetTopUrlsPerDayFunction::Run() {
   if (params->max_top_url_results)
     number_of_days = params->max_top_url_results;
 
-  GetFunctionCallerHistoryService(*this)->TopUrlsPerDay(
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->TopUrlsPerDay(
       number_of_days,
       base::BindOnce(&HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete,
                      this),
@@ -437,7 +461,13 @@ ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
   if (params->query.end_time.get())
     options.end_time = GetTime(*params->query.end_time);
 
-  GetFunctionCallerHistoryService(*this)->VisitSearch(
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->VisitSearch(
       options,
       base::BindOnce(&HistoryPrivateVisitSearchFunction::VisitsComplete, this),
       &task_tracker_);
@@ -467,10 +497,19 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   history::URLDatabase::TypedUrlResults results;
   history::KeywordID prefix_keyword_id;
   base::StringToInt64(params->prefix_keyword_id, &prefix_keyword_id);
-  GetFunctionCallerHistoryService(*this)
-      ->InMemoryDatabase()
-      ->GetVivaldiTypedHistory(params->query, prefix_keyword_id,
-                               params->max_results, &results);
+
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+  if (!hs->InMemoryDatabase()) {
+    LOG(ERROR) << "Unable to open database.";
+    return RespondNow(NoArguments());
+  }
+  hs->InMemoryDatabase()
+    ->GetVivaldiTypedHistory(params->query, prefix_keyword_id,
+                             params->max_results, &results);
 
   std::vector<vivaldi::history_private::TypedHistoryItem> response;
   for (const auto& result : results) {
@@ -492,12 +531,18 @@ HistoryPrivateMigrateOldTypedUrlFunction::Run() {
       vivaldi::history_private::MigrateOldTypedUrl::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  GetFunctionCallerHistoryService(*this)->AddPage(
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->AddPage(
       GURL(params->url), base::Time::FromJsTime(params->time), nullptr, 0,
       GURL(), history::RedirectList(),
       HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
           params->transition_type),
-      history::SOURCE_BROWSED, false, /*publicly_routable=*/false);
+      history::SOURCE_BROWSED, false);
 
   return RespondNow(NoArguments());
 }

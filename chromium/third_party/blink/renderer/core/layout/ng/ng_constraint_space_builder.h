@@ -38,8 +38,9 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
                                  adjust_inline_size_if_needed) {
     if (parent_space.ShouldPropagateChildBreakValues())
       SetShouldPropagateChildBreakValues();
-    if (parent_space.IsRepeatable())
-      SetIsRepeatable();
+    if (parent_space.ShouldRepeat())
+      SetShouldRepeat(true);
+    SetIsInsideRepeatableContent(parent_space.IsInsideRepeatableContent());
   }
 
   // The setters on this builder are in the writing mode of parent_writing_mode.
@@ -149,7 +150,13 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     space_.EnsureRareData()->is_at_fragmentainer_start = true;
   }
 
-  void SetIsRepeatable() { space_.EnsureRareData()->is_repeatable = true; }
+  void SetShouldRepeat(bool b) { space_.EnsureRareData()->should_repeat = b; }
+
+  void SetIsInsideRepeatableContent(bool b) {
+    if (!b && !space_.rare_data_)
+      return;
+    space_.EnsureRareData()->is_inside_repeatable_content = b;
+  }
 
   void SetIsFixedInlineSize(bool b) {
     if (LIKELY(is_in_parallel_flow_))
@@ -188,6 +195,11 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
       space_.bitfields_.inline_auto_behavior =
           static_cast<unsigned>(auto_behavior);
     }
+  }
+
+  void SetOverrideMinMaxBlockSizes(const MinMaxSizes& min_max_sizes) {
+    if (!min_max_sizes.IsEmpty() || space_.HasRareData())
+      space_.EnsureRareData()->SetOverrideMinMaxBlockSizes(min_max_sizes);
   }
 
   void SetIsPaintedAtomically(bool b) {
@@ -342,13 +354,18 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
       space_.EnsureRareData()->SetClearanceOffset(clearance_offset);
   }
 
-  void SetTableCellBorders(const NGBoxStrut& table_cell_borders) {
+  void SetTableCellBorders(const NGBoxStrut& table_cell_borders,
+                           WritingDirectionMode cell_writing_direction,
+                           WritingDirectionMode table_writing_direction) {
 #if DCHECK_IS_ON()
     DCHECK(!is_table_cell_borders_set_);
     is_table_cell_borders_set_ = true;
 #endif
-    if (table_cell_borders != NGBoxStrut())
-      space_.EnsureRareData()->SetTableCellBorders(table_cell_borders);
+    if (table_cell_borders != NGBoxStrut()) {
+      space_.EnsureRareData()->SetTableCellBorders(
+          table_cell_borders.ConvertToPhysical(table_writing_direction)
+              .ConvertToLogical(cell_writing_direction));
+    }
   }
 
   void SetTableCellAlignmentBaseline(

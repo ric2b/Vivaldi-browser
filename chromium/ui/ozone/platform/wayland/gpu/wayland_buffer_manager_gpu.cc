@@ -16,6 +16,7 @@
 #include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/linux/drm_util_linux.h"
 #include "ui/gfx/overlay_priority_hint.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/ozone/platform/wayland/common/wayland_overlay_config.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_surface_gpu.h"
@@ -104,7 +105,6 @@ void WaylandBufferManagerGpu::OnSubmission(gfx::AcceleratedWidget widget,
                                            gfx::GpuFenceHandle release_fence) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
 
-  base::AutoLock scoped_lock(lock_);
   DCHECK_LE(commit_thread_runners_.count(widget), 1u);
   // Return back to the same thread where the commit request came from.
   auto it = commit_thread_runners_.find(widget);
@@ -123,7 +123,6 @@ void WaylandBufferManagerGpu::OnPresentation(
     const gfx::PresentationFeedback& feedback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
 
-  base::AutoLock scoped_lock(lock_);
   DCHECK_LE(commit_thread_runners_.count(widget), 1u);
   // Return back to the same thread where the commit request came from.
   auto it = commit_thread_runners_.find(widget);
@@ -220,7 +219,7 @@ void WaylandBufferManagerGpu::CreateShmBasedBuffer(base::ScopedFD shm_fd,
   RunOrQueueTask(std::move(task));
 }
 
-void WaylandBufferManagerGpu::CreateSolidColorBuffer(SkColor color,
+void WaylandBufferManagerGpu::CreateSolidColorBuffer(SkColor4f color,
                                                      const gfx::Size& size,
                                                      uint32_t buf_id) {
   DCHECK(gpu_thread_runner_);
@@ -243,6 +242,7 @@ void WaylandBufferManagerGpu::CommitBuffer(gfx::AcceleratedWidget widget,
                                            uint32_t frame_id,
                                            uint32_t buffer_id,
                                            const gfx::Rect& bounds_rect,
+                                           const gfx::RoundedCornersF& corners,
                                            float surface_scale_factor,
                                            const gfx::Rect& damage_region) {
   // This surface only commits one buffer per frame, use INT32_MIN to attach
@@ -253,7 +253,8 @@ void WaylandBufferManagerGpu::CommitBuffer(gfx::AcceleratedWidget widget,
           INT32_MIN, gfx::OverlayTransform::OVERLAY_TRANSFORM_NONE,
           gfx::RectF(bounds_rect), gfx::RectF(1.f, 1.f) /* no crop */, false,
           damage_region, 1.0f /*opacity*/, gfx::OverlayPriorityHint::kNone,
-          gfx::RRectF(), gfx::ColorSpace(), absl::nullopt),
+          gfx::RRectF(gfx::RectF(bounds_rect), corners), gfx::ColorSpace(),
+          absl::nullopt),
       nullptr, buffer_id, surface_scale_factor);
   CommitOverlays(widget, frame_id, std::move(overlay_configs));
 }
@@ -297,10 +298,9 @@ void WaylandBufferManagerGpu::DestroyBuffer(uint32_t buffer_id) {
 #if defined(WAYLAND_GBM)
 GbmDevice* WaylandBufferManagerGpu::GetGbmDevice() {
   // Wayland won't support wl_drm or zwp_linux_dmabuf without this extension.
-  if (!supports_dmabuf_ ||
-      (!gl::GLSurfaceEGL::GetGLDisplayEGL()->HasEGLExtension(
-           "EGL_EXT_image_dma_buf_import") &&
-       !use_fake_gbm_device_for_test_)) {
+  if (!supports_dmabuf_ || (!gl::GLSurfaceEGL::GetGLDisplayEGL()
+                                 ->ext->b_EGL_EXT_image_dma_buf_import &&
+                            !use_fake_gbm_device_for_test_)) {
     supports_dmabuf_ = false;
     return nullptr;
   }
@@ -480,7 +480,7 @@ void WaylandBufferManagerGpu::CreateShmBasedBufferTask(base::ScopedFD shm_fd,
                                      length, size, buffer_id);
 }
 
-void WaylandBufferManagerGpu::CreateSolidColorBufferTask(SkColor color,
+void WaylandBufferManagerGpu::CreateSolidColorBufferTask(SkColor4f color,
                                                          const gfx::Size& size,
                                                          uint32_t buf_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);

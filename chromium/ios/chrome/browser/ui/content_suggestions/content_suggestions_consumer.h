@@ -9,24 +9,25 @@
 @class ContentSuggestionsMostVisitedItem;
 @class ContentSuggestionsReturnToRecentTabItem;
 @class ContentSuggestionsWhatsNewItem;
+@class QuerySuggestionConfig;
 
 // Supports adding/removing/updating UI elements to the ContentSuggestions
 // UIViewController.
 @protocol ContentSuggestionsConsumer
 
-// Indicates to the consumer to present the WhatsNew tile with |config|.
+// Indicates to the consumer to present the WhatsNew tile with `config`.
 - (void)showWhatsNewViewWithConfig:(ContentSuggestionsWhatsNewItem*)config;
 
 // Indicates to the consumer to hide the WhatsNew tile.
 - (void)hideWhatsNewView;
 
 // Indicates to the consumer to present the Return to Recent Tab tile with
-// |config|.
+// `config`.
 - (void)showReturnToRecentTabTileWithConfig:
     (ContentSuggestionsReturnToRecentTabItem*)config;
 
 // Indicates to the consumer to update the Return to Recent Tab tile with
-// |config|.
+// `config`.
 - (void)updateReturnToRecentTabTileWithConfig:
     (ContentSuggestionsReturnToRecentTabItem*)config;
 
@@ -34,20 +35,24 @@
 - (void)hideReturnToRecentTabTile;
 
 // Indicates to the consumer the current Most Visited tiles to show with
-// |configs|.
+// `configs`.
 - (void)setMostVisitedTilesWithConfigs:
     (NSArray<ContentSuggestionsMostVisitedItem*>*)configs;
 
-// Indicates to the consumer the current Shortcuts tiles to show with |configs|.
+// Indicates to the consumer the current Shortcuts tiles to show with `configs`.
 - (void)setShortcutTilesWithConfigs:
     (NSArray<ContentSuggestionsMostVisitedActionItem*>*)configs;
 
+// Indicates to the consumer the current Trending Queries to show with
+// `configs`.
+- (void)setTrendingQueriesWithConfigs:(NSArray<QuerySuggestionConfig*>*)configs;
+
 // Indicates to the consumer to update the Reading List count badge with
-// |count|.
+// `count`.
 - (void)updateReadingListCount:(NSInteger)count;
 
 // Indicates to the consumer update the Most Visited tile associated with
-// |config|.
+// `config`.
 - (void)updateMostVisitedTileConfig:(ContentSuggestionsMostVisitedItem*)config;
 
 @end

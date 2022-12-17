@@ -23,8 +23,6 @@
 #include "chrome/common/extensions/api/developer_private.h"
 #include "chrome/common/extensions/webstore_install_result.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -42,8 +40,6 @@
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
-
-#include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 
 class Profile;
 
@@ -70,12 +66,10 @@ class DeveloperPrivateEventRouter : public ExtensionRegistryObserver,
                                     public ProcessManagerObserver,
                                     public AppWindowRegistry::Observer,
                                     public CommandService::Observer,
-                                    public ExtensionActionAPI::Observer,
                                     public ExtensionPrefsObserver,
                                     public ExtensionAllowlist::Observer,
                                     public ExtensionManagement::Observer,
                                     public WarningService::Observer,
-                                    public content::NotificationObserver,
                                     public PermissionsManager::Observer {
  public:
   explicit DeveloperPrivateEventRouter(Profile* profile);
@@ -145,14 +139,13 @@ class DeveloperPrivateEventRouter : public ExtensionRegistryObserver,
   void ExtensionWarningsChanged(
       const ExtensionIdSet& affected_extensions) override;
 
-  // content::NotificationObserver:
-  void Observe(int notification_type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // PermissionsManager::Observer:
-  void UserPermissionsSettingsChanged(
+  void OnUserPermissionsSettingsChanged(
       const PermissionsManager::UserPermissionsSettings& settings) override;
+  void OnExtensionPermissionsUpdated(
+      const Extension& extension,
+      const PermissionSet& permissions,
+      PermissionsManager::UpdateReason reason) override;
 
   // Handles a profile preference change.
   void OnProfilePrefChanged();
@@ -187,9 +180,6 @@ class DeveloperPrivateEventRouter : public ExtensionRegistryObserver,
   base::ScopedObservation<PermissionsManager, PermissionsManager::Observer>
       permissions_manager_observation_{this};
 
-  base::ScopedObservation<ExtensionActionAPI, ExtensionActionAPI::Observer>
-      extension_action_api_observer_{this};
-
   raw_ptr<Profile> profile_;
 
   raw_ptr<EventRouter> event_router_;
@@ -204,8 +194,6 @@ class DeveloperPrivateEventRouter : public ExtensionRegistryObserver,
 
   PrefChangeRegistrar pref_change_registrar_;
 
-  content::NotificationRegistrar notification_registrar_;
-
   base::WeakPtrFactory<DeveloperPrivateEventRouter> weak_factory_{this};
 };
 
@@ -216,7 +204,7 @@ class DeveloperPrivateAPI : public BrowserContextKeyedAPI,
   using UnpackedRetryId = std::string;
 
   static BrowserContextKeyedAPIFactory<DeveloperPrivateAPI>*
-      GetFactoryInstance();
+  GetFactoryInstance();
 
   static std::unique_ptr<api::developer_private::ProfileInfo> CreateProfileInfo(
       Profile* profile);
@@ -647,7 +635,6 @@ class DeveloperPrivateChoosePathFunction
 class DeveloperPrivatePackDirectoryFunction
     : public DeveloperPrivateAPIFunction,
       public PackExtensionJob::Client {
-
  public:
   DECLARE_EXTENSION_FUNCTION("developerPrivate.packDirectory",
                              DEVELOPERPRIVATE_PACKDIRECTORY)
@@ -928,6 +915,42 @@ class DeveloperPrivateRemoveUserSpecifiedSitesFunction
 
  private:
   ~DeveloperPrivateRemoveUserSpecifiedSitesFunction() override;
+
+  ResponseAction Run() override;
+};
+
+class DeveloperPrivateGetUserAndExtensionSitesByEtldFunction
+    : public DeveloperPrivateAPIFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("developerPrivate.getUserAndExtensionSitesByEtld",
+                             DEVELOPERPRIVATE_GETUSERANDEXTENSIONSITESBYETLD)
+  DeveloperPrivateGetUserAndExtensionSitesByEtldFunction();
+
+  DeveloperPrivateGetUserAndExtensionSitesByEtldFunction(
+      const DeveloperPrivateGetUserAndExtensionSitesByEtldFunction&) = delete;
+  DeveloperPrivateGetUserAndExtensionSitesByEtldFunction& operator=(
+      const DeveloperPrivateGetUserAndExtensionSitesByEtldFunction&) = delete;
+
+ private:
+  ~DeveloperPrivateGetUserAndExtensionSitesByEtldFunction() override;
+
+  ResponseAction Run() override;
+};
+
+class DeveloperPrivateGetMatchingExtensionsForSiteFunction
+    : public DeveloperPrivateAPIFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("developerPrivate.getMatchingExtensionsForSite",
+                             DEVELOPERPRIVATE_GETMATCHINGEXTENSIONSFORSITE)
+  DeveloperPrivateGetMatchingExtensionsForSiteFunction();
+
+  DeveloperPrivateGetMatchingExtensionsForSiteFunction(
+      const DeveloperPrivateGetMatchingExtensionsForSiteFunction&) = delete;
+  DeveloperPrivateGetMatchingExtensionsForSiteFunction& operator=(
+      const DeveloperPrivateGetMatchingExtensionsForSiteFunction&) = delete;
+
+ private:
+  ~DeveloperPrivateGetMatchingExtensionsForSiteFunction() override;
 
   ResponseAction Run() override;
 };

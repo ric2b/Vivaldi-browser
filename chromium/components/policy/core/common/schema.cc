@@ -13,6 +13,7 @@
 #include <memory>
 #include <ostream>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "base/check_op.h"
@@ -23,6 +24,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "components/policy/core/common/json_schema_constants.h"
 #include "components/policy/core/common/schema_internal.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -1212,8 +1214,12 @@ bool Schema::Validate(const base::Value& value,
       return true;
     }
 
-    SchemaErrorFound(out_error_path, out_error,
-                     "The value type doesn't match the schema type.");
+    SchemaErrorFound(
+        out_error_path, out_error,
+        base::StringPrintf(
+            "Policy type mismatch: expected: \"%s\", actual: \"%s\".",
+            base::Value::GetTypeName(type()),
+            base::Value::GetTypeName(value.type())));
     return false;
   }
 
@@ -1305,8 +1311,12 @@ bool Schema::Normalize(base::Value* value,
       return true;
     }
 
-    SchemaErrorFound(out_error_path, out_error,
-                     "The value type doesn't match the schema type.");
+    SchemaErrorFound(
+        out_error_path, out_error,
+        base::StringPrintf(
+            "Policy type mismatch: expected: \"%s\", actual: \"%s\".",
+            base::Value::GetTypeName(type()),
+            base::Value::GetTypeName(value->type())));
     return false;
   }
 
@@ -1362,7 +1372,8 @@ bool Schema::Normalize(base::Value* value,
       value->RemoveKey(drop_key);
     return true;
   } else if (value->is_list()) {
-    base::Value::ListStorage list = std::move(*value).TakeListDeprecated();
+    base::Value::List& list = value->GetList();
+
     // Instead of removing invalid list items afterwards, we push valid items
     // forward in the list by overriding invalid items. The next free position
     // is indicated by |write_index|, which gets increased for every valid item.
@@ -1390,8 +1401,9 @@ bool Schema::Normalize(base::Value* value,
     }
     if (out_changed && write_index < list.size())
       *out_changed = true;
-    list.resize(write_index);
-    *value = base::Value(std::move(list));
+    while (write_index < list.size()) {
+      list.erase(list.end() - 1);
+    }
     return true;
   }
 
@@ -1443,15 +1455,15 @@ absl::optional<base::Value> Schema::ParseToDictAndValidate(
     const std::string& schema,
     int validator_options,
     std::string* error) {
-  base::JSONReader::ValueWithError value_with_error =
-      base::JSONReader::ReadAndReturnValueWithError(
-          schema, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS |
-                      base::JSONParserOptions::JSON_PARSE_CHROMIUM_EXTENSIONS);
-  *error = value_with_error.error_message;
+  auto value_with_error = base::JSONReader::ReadAndReturnValueWithError(
+      schema, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS |
+                  base::JSONParserOptions::JSON_PARSE_CHROMIUM_EXTENSIONS);
 
-  if (!value_with_error.value)
+  if (!value_with_error.has_value()) {
+    *error = value_with_error.error().message;
     return absl::nullopt;
-  base::Value json = std::move(value_with_error.value.value());
+  }
+  base::Value json = std::move(*value_with_error);
   if (!json.is_dict()) {
     *error = "Schema must be a JSON object";
     return absl::nullopt;

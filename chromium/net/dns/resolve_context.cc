@@ -142,10 +142,9 @@ std::unique_ptr<DnsServerIterator> ResolveContext::GetDohIterator(
   // Make the iterator even if the session differs. The first call to the member
   // functions will catch the out of date session.
 
-  std::unique_ptr<DnsServerIterator> itr(new DohDnsServerIterator(
+  return std::make_unique<DohDnsServerIterator>(
       doh_server_stats_.size(), FirstServerIndex(true, session),
-      config.doh_attempts, config.attempts, mode, this, session));
-  return itr;
+      config.doh_attempts, config.attempts, mode, this, session);
 }
 
 std::unique_ptr<DnsServerIterator> ResolveContext::GetClassicDnsIterator(
@@ -154,10 +153,9 @@ std::unique_ptr<DnsServerIterator> ResolveContext::GetClassicDnsIterator(
   // Make the iterator even if the session differs. The first call to the member
   // functions will catch the out of date session.
 
-  std::unique_ptr<DnsServerIterator> itr(new ClassicDnsServerIterator(
+  return std::make_unique<ClassicDnsServerIterator>(
       config.nameservers.size(), FirstServerIndex(false, session),
-      config.attempts, config.attempts, this, session));
-  return itr;
+      config.attempts, config.attempts, this, session);
 }
 
 bool ResolveContext::GetDohServerAvailability(size_t doh_server_index,
@@ -335,7 +333,7 @@ void ResolveContext::InvalidateCachesAndPerSessionData(
     bool network_change) {
   // Network-bound ResolveContexts should never receive a cache invalidation due
   // to a network change.
-  DCHECK(GetTargetNetwork() == NetworkChangeNotifier::kInvalidNetworkHandle ||
+  DCHECK(GetTargetNetwork() == handles::kInvalidNetworkHandle ||
          !network_change);
   if (host_cache_)
     host_cache_->Invalidate();
@@ -382,9 +380,9 @@ void ResolveContext::InvalidateCachesAndPerSessionData(
     NotifyDohStatusObserversOfUnavailable(network_change);
 }
 
-NetworkChangeNotifier::NetworkHandle ResolveContext::GetTargetNetwork() const {
+handles::NetworkHandle ResolveContext::GetTargetNetwork() const {
   if (!url_request_context())
-    return NetworkChangeNotifier::kInvalidNetworkHandle;
+    return handles::kInvalidNetworkHandle;
 
   return url_request_context()->bound_network();
 }

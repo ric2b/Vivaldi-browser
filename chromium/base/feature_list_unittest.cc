@@ -13,6 +13,7 @@
 #include "base/format_macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
@@ -20,7 +21,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/scoped_field_trial_list_resetter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -99,6 +99,16 @@ TEST_F(FeatureListTest, InitializeFromCommandLine) {
     EXPECT_EQ(test_case.expected_feature_off_state,
               FeatureList::IsEnabled(kFeatureOffByDefault))
         << i;
+
+    // Reading the state of each feature again will pull it from their
+    // respective caches instead of performing the full lookup, which should
+    // yield the same result.
+    EXPECT_EQ(test_case.expected_feature_on_state,
+              FeatureList::IsEnabled(kFeatureOnByDefault))
+        << i;
+    EXPECT_EQ(test_case.expected_feature_off_state,
+              FeatureList::IsEnabled(kFeatureOffByDefault))
+        << i;
   }
 }
 
@@ -115,6 +125,11 @@ TEST_F(FeatureListTest, InitializeFromCommandLineWithFeatureParams) {
        {{"x", "test"}, {"y", "uma"}, {"z", "ukm"}}},
   };
 
+  // Clear global state so that repeated runs of this test don't flake.
+  // When https://crrev.com/c/3694674 is submitted, we should be able to remove
+  // this.
+  base::FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
+
   const Feature kFeature = {"Feature", FEATURE_DISABLED_BY_DEFAULT};
   for (const auto& test_case : test_cases) {
     SCOPED_TRACE(test_case.enable_features);
@@ -127,9 +142,9 @@ TEST_F(FeatureListTest, InitializeFromCommandLineWithFeatureParams) {
     EXPECT_TRUE(FeatureList::IsEnabled(kFeature));
     EXPECT_TRUE(
         FieldTrialList::IsTrialActive(test_case.expected_field_trial_created));
-    std::map<std::string, std::string> actualParams;
-    EXPECT_TRUE(GetFieldTrialParamsByFeature(kFeature, &actualParams));
-    EXPECT_EQ(test_case.expected_feature_params, actualParams);
+    std::map<std::string, std::string> actual_params;
+    EXPECT_TRUE(GetFieldTrialParamsByFeature(kFeature, &actual_params));
+    EXPECT_EQ(test_case.expected_feature_params, actual_params);
   }
 }
 
@@ -176,8 +191,9 @@ TEST_F(FeatureListTest, FieldTrialOverrides) {
     const auto& test_case = test_cases[i];
     SCOPED_TRACE(base::StringPrintf("Test[%" PRIuS "]", i));
 
-    test::ScopedFieldTrialListResetter resetter;
-    FieldTrialList field_trial_list(nullptr);
+    test::ScopedFeatureList outer_scope;
+    outer_scope.InitWithEmptyFeatureAndFieldTrialLists();
+
     auto feature_list = std::make_unique<FeatureList>();
 
     FieldTrial* trial1 = FieldTrialList::CreateFieldTrial("TrialExample1", "A");
@@ -396,8 +412,9 @@ TEST_F(FeatureListTest, AssociateReportingFieldTrial) {
                                     test_case.enable_features,
                                     test_case.disable_features));
 
-    test::ScopedFieldTrialListResetter resetter;
-    FieldTrialList field_trial_list(nullptr);
+    test::ScopedFeatureList outer_scope;
+    outer_scope.InitWithEmptyFeatureAndFieldTrialLists();
+
     auto feature_list = std::make_unique<FeatureList>();
     feature_list->InitializeFromCommandLine(test_case.enable_features,
                                             test_case.disable_features);
@@ -748,6 +765,42 @@ TEST(FeatureListAccessorTest, InitializeFromCommandLine) {
               feature_list_accessor->GetOverrideStateByFeatureName(
                   kFeatureOffByDefault.name))
         << i;
+  }
+}
+
+TEST(FeatureListAccessorTest, InitializeFromCommandLineWithFeatureParams) {
+  struct {
+    const std::string enable_features;
+    const std::map<std::string, std::string> expected_feature_params;
+  } test_cases[] = {
+      {"Feature:x/100/y/test", {{"x", "100"}, {"y", "test"}}},
+      {"Feature<Trial:asdf/ghjkl/y/123", {{"asdf", "ghjkl"}, {"y", "123"}}},
+  };
+
+  // Clear global state so that repeated runs of this test don't flake.
+  // When https://crrev.com/c/3694674 is submitted, we should be able to remove
+  // this.
+  base::FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
+
+  for (size_t i = 0; i < std::size(test_cases); ++i) {
+    const auto& test_case = test_cases[i];
+    SCOPED_TRACE(test_case.enable_features);
+
+    auto feature_list = std::make_unique<FeatureList>();
+    auto feature_list_accessor = feature_list->ConstructAccessor();
+
+    feature_list->InitializeFromCommandLine(test_case.enable_features, "");
+    test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
+
+    EXPECT_EQ(FeatureList::OVERRIDE_ENABLE_FEATURE,
+              feature_list_accessor->GetOverrideStateByFeatureName("Feature"))
+        << i;
+    std::map<std::string, std::string> actual_params;
+    EXPECT_TRUE(feature_list_accessor->GetParamsByFeatureName("Feature",
+                                                              &actual_params))
+        << i;
+    EXPECT_EQ(test_case.expected_feature_params, actual_params) << i;
   }
 }
 

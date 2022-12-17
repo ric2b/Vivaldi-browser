@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
+
 #import "base/message_loop/message_pump_mac.h"
 
 #import <Foundation/Foundation.h>
 
+#include <atomic>
 #include <limits>
 #include <memory>
 
@@ -33,6 +36,18 @@ const CFStringRef kMessageLoopExclusiveRunLoopMode =
     CFSTR("kMessageLoopExclusiveRunLoopMode");
 
 namespace {
+
+// Enables two optimizations in MessagePumpCFRunLoop:
+// - Skip calling CFRunLoopTimerSetNextFireDate if the next delayed wake up
+//  time hasn't changed.
+// - Cancel an already scheduled timer wake up if there is no delayed work.
+const base::Feature kMessagePumpMacDelayedWorkOptimizations{
+    "MessagePumpMacDelayedWorkOptimizations",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Caches the state of the "MessagePumpMacDelayedWorkOptimizations"
+// feature for efficiency.
+std::atomic_bool g_enable_optimizations = false;
 
 // Mask that determines which modes to use.
 enum { kCommonModeMask = 0x1, kAllModesMask = 0xf };
@@ -138,7 +153,7 @@ class MessagePumpCFRunLoopBase::ScopedModeEnabler {
   }
 
  private:
-  MessagePumpCFRunLoopBase* const owner_;  // Weak. Owns this.
+  const raw_ptr<MessagePumpCFRunLoopBase> owner_;  // Weak. Owns this.
   const int mode_index_;
 };
 
@@ -180,20 +195,38 @@ void MessagePumpCFRunLoopBase::ScheduleWork() {
 void MessagePumpCFRunLoopBase::ScheduleDelayedWork(
     const Delegate::NextWorkInfo& next_work_info) {
   DCHECK(!next_work_info.is_immediate());
-  if (!next_work_info.delayed_run_time.is_max())
-    ScheduleDelayedWorkImpl(next_work_info.remaining_delay());
-}
 
-void MessagePumpCFRunLoopBase::ScheduleDelayedWorkImpl(TimeDelta delta) {
-  // The tolerance needs to be set before the fire date or it may be ignored.
-
-  if (timer_slack_ == TIMER_SLACK_MAXIMUM) {
-    CFRunLoopTimerSetTolerance(delayed_work_timer_, delta.InSecondsF() * 0.5);
+  if (g_enable_optimizations.load(std::memory_order_relaxed)) {
+    // No-op if the delayed run time hasn't changed.
+    if (next_work_info.delayed_run_time == delayed_work_scheduled_at_)
+      return;
   } else {
-    CFRunLoopTimerSetTolerance(delayed_work_timer_, 0);
+    // Preserve the old behavior of not adjusting the timer when
+    // `delayed_run_time.is_max()`.
+    //
+    // TODO(crbug.com/1335524): Remove this once the
+    // "MessagePumpMacDelayedWorkOptimizations" feature is shipped.
+    if (next_work_info.delayed_run_time.is_max())
+      return;
   }
-  CFRunLoopTimerSetNextFireDate(
-      delayed_work_timer_, CFAbsoluteTimeGetCurrent() + delta.InSecondsF());
+
+  if (next_work_info.delayed_run_time.is_max()) {
+    CFRunLoopTimerSetNextFireDate(delayed_work_timer_, kCFTimeIntervalMax);
+  } else {
+    const double delay_seconds = next_work_info.remaining_delay().InSecondsF();
+
+    // The tolerance needs to be set before the fire date or it may be ignored.
+    if (timer_slack_ == TIMER_SLACK_MAXIMUM) {
+      CFRunLoopTimerSetTolerance(delayed_work_timer_, delay_seconds * 0.5);
+    } else {
+      CFRunLoopTimerSetTolerance(delayed_work_timer_, 0);
+    }
+
+    CFRunLoopTimerSetNextFireDate(delayed_work_timer_,
+                                  CFAbsoluteTimeGetCurrent() + delay_seconds);
+  }
+
+  delayed_work_scheduled_at_ = next_work_info.delayed_run_time;
 }
 
 void MessagePumpCFRunLoopBase::SetTimerSlack(TimerSlack timer_slack) {
@@ -208,7 +241,7 @@ void MessagePumpCFRunLoopBase::Detach() {}
 
 // Must be called on the run loop thread.
 MessagePumpCFRunLoopBase::MessagePumpCFRunLoopBase(int initial_mode_mask)
-    : delegate_(NULL),
+    : delegate_(nullptr),
       timer_slack_(base::TIMER_SLACK_NONE),
       nesting_level_(0),
       run_nesting_level_(0),
@@ -293,6 +326,13 @@ MessagePumpCFRunLoopBase::~MessagePumpCFRunLoopBase() {
   CFRelease(run_loop_);
 }
 
+// static
+void MessagePumpCFRunLoopBase::InitializeFeatures() {
+  g_enable_optimizations.store(
+      base::FeatureList::IsEnabled(kMessagePumpMacDelayedWorkOptimizations),
+      std::memory_order_relaxed);
+}
+
 #if BUILDFLAG(IS_IOS)
 void MessagePumpCFRunLoopBase::OnAttach() {
   CHECK_EQ(nesting_level_, 0);
@@ -306,15 +346,14 @@ void MessagePumpCFRunLoopBase::OnAttach() {
 
 void MessagePumpCFRunLoopBase::OnDetach() {
   // This function is called on shutdown. This can happen at either
-  // `nesting_level` 1 or 0:
+  // `nesting_level` >=1 or 0:
   //   `nesting_level_ == 0`: When this is detached as part of tear down outside
-  //   of a run loop (e.g. ~TaskEnvironment). `nesting_level_ == 1`: When this
+  //   of a run loop (e.g. ~TaskEnvironment). `nesting_level_ >= 1`: When this
   //   is detached as part of a native shutdown notification ran from the
-  //   message pump itself.
-  // Additional nesting would be surprising as it would imply that unwinding the
-  // nested loop has to go through the detached MessagePump again...
+  //   message pump itself. Nesting levels higher than 1 can happen in
+  //   legitimate nesting situations like the browser being dismissed while
+  //   displaying a long press context menu (CRWContextMenuController).
   CHECK_GE(nesting_level_, 0);
-  CHECK_LE(nesting_level_, 1);
 }
 #endif  // BUILDFLAG(IS_IOS)
 
@@ -390,6 +429,13 @@ void MessagePumpCFRunLoopBase::RunDelayedWorkTimer(CFRunLoopTimerRef timer,
   // The timer fired, assume we have work and let RunWork() figure out what to
   // do and what to schedule after.
   base::mac::CallWithEHFrame(^{
+    // It would be incorrect to expect that `self->delayed_work_scheduled_at_`
+    // is smaller than or equal to `TimeTicks::Now()` because the fire date of a
+    // CFRunLoopTimer can be adjusted slightly.
+    // https://developer.apple.com/documentation/corefoundation/1543570-cfrunlooptimercreate?language=objc
+    DCHECK(!self->delayed_work_scheduled_at_.is_max());
+
+    self->delayed_work_scheduled_at_ = base::TimeTicks::Max();
     self->RunWork();
   });
 }
@@ -434,11 +480,12 @@ bool MessagePumpCFRunLoopBase::RunWork() {
   if (next_work_info.is_immediate()) {
     CFRunLoopSourceSignal(work_source_);
     return true;
+  } else {
+    // This adjusts the next delayed wake up time (potentially cancels an
+    // already scheduled wake up if there is no delayed work).
+    ScheduleDelayedWork(next_work_info);
+    return false;
   }
-
-  if (!next_work_info.delayed_run_time.is_max())
-    ScheduleDelayedWorkImpl(next_work_info.remaining_delay());
-  return false;
 }
 
 // Called from the run loop.
@@ -467,9 +514,13 @@ void MessagePumpCFRunLoopBase::RunIdleWork() {
   // objects if the app is not currently handling a UI event to ensure they're
   // released promptly even in the absence of UI events.
   MessagePumpScopedAutoreleasePool autorelease_pool(this);
-  // Call DoIdleWork once, and if something was done, arrange to come back here
-  // again as long as the loop is still running.
+  // Pop the current work item scope as it captures any native work happening
+  // *between* the last DoWork() and this DoIdleWork()
+  PopWorkItemScope();
   bool did_work = delegate_->DoIdleWork();
+  // As in DoWork(), push a new scope to cover any native work that could
+  // possibly happen between now and BeforeWait().
+  PushWorkItemScope();
   if (did_work)
     CFRunLoopSourceSignal(idle_work_source_);
 }
@@ -504,6 +555,8 @@ void MessagePumpCFRunLoopBase::RunNestingDeferredWork() {
 
 void MessagePumpCFRunLoopBase::BeforeWait() {
   // Current work item tracking needs to go away since execution will stop.
+  // Matches the PushWorkItemScope() in AfterWaitObserver() (with an arbitrary
+  // amount of matching Pop/Push in between when running work items).
   PopWorkItemScope();
 
   if (!delegate_) {
@@ -557,7 +610,8 @@ void MessagePumpCFRunLoopBase::AfterWaitObserver(CFRunLoopObserverRef observer,
   MessagePumpCFRunLoopBase* self = static_cast<MessagePumpCFRunLoopBase*>(info);
   base::mac::CallWithEHFrame(^{
     // Emerging from sleep, any work happening after this (outside of a
-    // RunWork()) should be considered native work.
+    // RunWork()) should be considered native work. Matching PopWorkItemScope()
+    // is in BeforeWait().
     self->PushWorkItemScope();
   });
 }

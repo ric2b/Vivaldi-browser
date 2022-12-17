@@ -17,12 +17,13 @@ ChromeVoxBackgroundKeyboardHandlerTest = class extends ChromeVoxNextE2ETest {
         '/chromevox/background/keyboard_handler.js');
     await importModule(
         'ChromeVoxState', '/chromevox/background/chromevox_state.js');
+    await importModule('KeyCode', '/common/key_code.js');
     window.keyboardHandler = new BackgroundKeyboardHandler();
   }
 };
 
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxBackgroundKeyboardHandlerTest', 'SearchGetsPassedThrough',
     async function() {
       await this.runWithLoadedTree('<p>test</p>');
@@ -44,7 +45,7 @@ TEST_F(
       assertEquals(1, keyboardHandler.eatenKeyDowns_.size);
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxBackgroundKeyboardHandlerTest', 'PassThroughMode',
     async function() {
       await this.runWithLoadedTree('<p>test</p>');
@@ -148,7 +149,7 @@ TEST_F(
       assertFalse(ChromeVox.passThroughMode);
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxBackgroundKeyboardHandlerTest', 'PassThroughModeOff',
     async function() {
       await this.runWithLoadedTree('<p>test</p>');
@@ -196,7 +197,7 @@ TEST_F(
       assertNoPassThrough();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxBackgroundKeyboardHandlerTest', 'UnexpectedKeyDownUpPairs',
     async function() {
       await this.runWithLoadedTree('<p>test</p>');
@@ -228,7 +229,7 @@ TEST_F(
       assertEquals(1, keyboardHandler.eatenKeyDowns_.size);
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxBackgroundKeyboardHandlerTest',
     'UnexpectedKeyDownUpPairsPassThrough', async function() {
       await this.runWithLoadedTree('<p>test</p>');

@@ -11,15 +11,15 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
 
+using assistant::AssistantInteractionResolution;
+using assistant::AssistantInteractionSubscriber;
 using chromeos::assistant::AssistantInteractionMetadata;
-using chromeos::assistant::AssistantInteractionResolution;
-using chromeos::assistant::AssistantInteractionSubscriber;
 using chromeos::assistant::AssistantInteractionType;
 using chromeos::assistant::AssistantSuggestion;
 
@@ -131,8 +131,7 @@ class InteractionResponse::Response {
   Response() = default;
   virtual ~Response() = default;
 
-  virtual void SendTo(
-      chromeos::assistant::AssistantInteractionSubscriber* receiver) = 0;
+  virtual void SendTo(AssistantInteractionSubscriber* receiver) = 0;
 };
 
 class TextResponse : public InteractionResponse::Response {
@@ -144,8 +143,7 @@ class TextResponse : public InteractionResponse::Response {
 
   ~TextResponse() override = default;
 
-  void SendTo(
-      chromeos::assistant::AssistantInteractionSubscriber* receiver) override {
+  void SendTo(AssistantInteractionSubscriber* receiver) override {
     receiver->OnTextResponse(text_);
   }
 
@@ -160,8 +158,7 @@ class SuggestionsResponse : public InteractionResponse::Response {
   SuggestionsResponse& operator=(const SuggestionsResponse&) = delete;
   ~SuggestionsResponse() override = default;
 
-  void SendTo(
-      chromeos::assistant::AssistantInteractionSubscriber* receiver) override {
+  void SendTo(AssistantInteractionSubscriber* receiver) override {
     std::vector<AssistantSuggestion> suggestions;
     suggestions.emplace_back();
     auto& suggestion = suggestions.back();
@@ -186,8 +183,7 @@ class ResolutionResponse : public InteractionResponse::Response {
 
   ~ResolutionResponse() override = default;
 
-  void SendTo(
-      chromeos::assistant::AssistantInteractionSubscriber* receiver) override {
+  void SendTo(AssistantInteractionSubscriber* receiver) override {
     receiver->OnInteractionFinished(resolution_);
   }
 
@@ -350,8 +346,7 @@ void InteractionResponse::AddResponse(std::unique_ptr<Response> response) {
   responses_.push_back(std::move(response));
 }
 
-void InteractionResponse::SendTo(
-    chromeos::assistant::AssistantInteractionSubscriber* receiver) {
+void InteractionResponse::SendTo(AssistantInteractionSubscriber* receiver) {
   for (auto& response : responses_)
     response->SendTo(receiver);
 }

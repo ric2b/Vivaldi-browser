@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/profiles/signin_view_controller_delegate_views.h"
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -64,12 +66,20 @@ int GetSyncConfirmationDialogPreferredHeight(Profile* profile) {
              : kSigninErrorDialogHeight;
 }
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-void CloseModalSigninInBrowser(base::WeakPtr<Browser> browser) {
-  if (browser)
-    browser->signin_view_controller()->CloseModalSignin();
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+void CloseModalSigninInBrowser(
+    base::WeakPtr<Browser> browser,
+    bool show_profile_switch_iph,
+    ProfileCustomizationHandler::CustomizationResult result) {
+  if (!browser)
+    return;
+
+  browser->signin_view_controller()->CloseModalSignin();
+  if (show_profile_switch_iph) {
+    browser->window()->MaybeShowProfileSwitchIPH();
+  }
 }
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // This layout auto-resizes the host view widget to always adapt to changes in
 // the size of the child views.
@@ -92,9 +102,15 @@ class WidgetAutoResizingLayout : public views::FillLayout {
 // static
 std::unique_ptr<views::WebView>
 SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(
-    Browser* browser) {
+    Browser* browser,
+    bool is_signin_intercept) {
+  GURL url = GURL(chrome::kChromeUISyncConfirmationURL);
+  if (is_signin_intercept) {
+    url = AppendSyncConfirmationQueryParams(
+        url, SyncConfirmationStyle::kSigninInterceptModal);
+  }
   return CreateDialogWebView(
-      browser, GURL(chrome::kChromeUISyncConfirmationURL),
+      browser, url,
       GetSyncConfirmationDialogPreferredHeight(browser->profile()),
       kSyncConfirmationDialogWidth, InitializeSigninWebDialogUI(true));
 }
@@ -117,11 +133,14 @@ SigninViewControllerDelegateViews::CreateReauthConfirmationWebView(
                              kReauthDialogHeight, kReauthDialogWidth,
                              InitializeSigninWebDialogUI(false));
 }
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // static
 std::unique_ptr<views::WebView>
 SigninViewControllerDelegateViews::CreateProfileCustomizationWebView(
-    Browser* browser) {
+    Browser* browser,
+    bool show_profile_switch_iph) {
   std::unique_ptr<views::WebView> web_view = CreateDialogWebView(
       browser, GURL(chrome::kChromeUIProfileCustomizationURL),
       ProfileCustomizationUI::kPreferredHeight,
@@ -133,11 +152,12 @@ SigninViewControllerDelegateViews::CreateProfileCustomizationWebView(
                                        ->GetController()
                                        ->GetAs<ProfileCustomizationUI>();
   DCHECK(web_ui);
-  web_ui->Initialize(
-      base::BindOnce(&CloseModalSigninInBrowser, browser->AsWeakPtr()));
+  web_ui->Initialize(base::BindOnce(&CloseModalSigninInBrowser,
+                                    browser->AsWeakPtr(),
+                                    show_profile_switch_iph));
   return web_view;
 }
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -380,9 +400,12 @@ END_METADATA
 
 // static
 SigninViewControllerDelegate*
-SigninViewControllerDelegate::CreateSyncConfirmationDelegate(Browser* browser) {
+SigninViewControllerDelegate::CreateSyncConfirmationDelegate(
+    Browser* browser,
+    bool is_signin_intercept) {
   return new SigninViewControllerDelegateViews(
-      SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(browser),
+      SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(
+          browser, is_signin_intercept),
       browser, ui::MODAL_TYPE_WINDOW, true, false);
 }
 
@@ -406,17 +429,20 @@ SigninViewControllerDelegate::CreateReauthConfirmationDelegate(
           browser, access_point),
       browser, ui::MODAL_TYPE_CHILD, false, true);
 }
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // static
 SigninViewControllerDelegate*
 SigninViewControllerDelegate::CreateProfileCustomizationDelegate(
-    Browser* browser) {
+    Browser* browser,
+    bool show_profile_switch_iph) {
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::CreateProfileCustomizationWebView(
-          browser),
+          browser, show_profile_switch_iph),
       browser, ui::MODAL_TYPE_WINDOW, false, false);
 }
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS_LACROS)

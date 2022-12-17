@@ -19,6 +19,7 @@
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_ui_delegate.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -276,13 +277,6 @@ TEST_F(SigninUiUtilTest, EnableSyncWithExistingAccount) {
     ExpectOneSigninStartedHistograms(histogram_tester, expected_promo_action);
     EXPECT_EQ(1, user_action_tester.GetActionCount(
                      "Signin_Signin_FromBookmarkBubble"));
-    if (is_default_promo_account) {
-      EXPECT_EQ(1, user_action_tester.GetActionCount(
-                       "Signin_SigninWithDefault_FromBookmarkBubble"));
-    } else {
-      EXPECT_EQ(1, user_action_tester.GetActionCount(
-                       "Signin_SigninNotDefault_FromBookmarkBubble"));
-    }
   }
 }
 
@@ -319,14 +313,6 @@ TEST_F(SigninUiUtilTest, EnableSyncWithAccountThatNeedsReauth) {
     EXPECT_EQ(1, user_action_tester.GetActionCount(
                      "Signin_Signin_FromBookmarkBubble"));
 
-    if (is_default_promo_account) {
-      EXPECT_EQ(1, user_action_tester.GetActionCount(
-                       "Signin_SigninWithDefault_FromBookmarkBubble"));
-    } else {
-      EXPECT_EQ(1, user_action_tester.GetActionCount(
-                       "Signin_SigninNotDefault_FromBookmarkBubble"));
-    }
-
     // Verify that the active tab has the correct DICE sign-in URL.
     TabStripModel* tab_strip = browser()->tab_strip_model();
     content::WebContents* active_contents = tab_strip->GetActiveWebContents();
@@ -336,7 +322,7 @@ TEST_F(SigninUiUtilTest, EnableSyncWithAccountThatNeedsReauth) {
               active_contents->GetVisibleURL());
     tab_strip->CloseWebContentsAt(
         tab_strip->GetIndexOfWebContents(active_contents),
-        TabStripModel::CLOSE_USER_GESTURE);
+        TabCloseTypes::CLOSE_USER_GESTURE);
   }
 }
 
@@ -355,9 +341,6 @@ TEST_F(SigninUiUtilTest, EnableSyncForNewAccountWithNoTab) {
                             PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT);
   EXPECT_EQ(
       1, user_action_tester.GetActionCount("Signin_Signin_FromBookmarkBubble"));
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(
-                "Signin_SigninNewAccountNoExistingAccount_FromBookmarkBubble"));
 
   // Verify that the active tab has the correct DICE sign-in URL.
   content::WebContents* active_contents =
@@ -387,9 +370,6 @@ TEST_F(SigninUiUtilTest, EnableSyncForNewAccountWithNoTabWithExisting) {
       signin_metrics::PromoAction::PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT);
   EXPECT_EQ(
       1, user_action_tester.GetActionCount("Signin_Signin_FromBookmarkBubble"));
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(
-                "Signin_SigninNewAccountExistingAccount_FromBookmarkBubble"));
 }
 
 TEST_F(SigninUiUtilTest, EnableSyncForNewAccountWithOneTab) {
@@ -408,9 +388,6 @@ TEST_F(SigninUiUtilTest, EnableSyncForNewAccountWithOneTab) {
                             PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT);
   EXPECT_EQ(
       1, user_action_tester.GetActionCount("Signin_Signin_FromBookmarkBubble"));
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(
-                "Signin_SigninNewAccountNoExistingAccount_FromBookmarkBubble"));
 
   // Verify that the active tab has the correct DICE sign-in URL.
   content::WebContents* active_contents =
@@ -446,7 +423,9 @@ TEST_F(SigninUiUtilTest, MergeDiceSigninTab) {
   ASSERT_EQ(0, tab_strip->active_index());
   GURL other_url = GURL("http://example.com");
   AddTab(browser(), other_url);
-  tab_strip->ActivateTabAt(0, {TabStripModel::GestureType::kOther});
+  tab_strip->ActivateTabAt(
+      0, TabStripUserGestureDetails(
+             TabStripUserGestureDetails::GestureType::kOther));
   ASSERT_EQ(other_url, tab_strip->GetActiveWebContents()->GetVisibleURL());
   ASSERT_EQ(0, tab_strip->active_index());
 

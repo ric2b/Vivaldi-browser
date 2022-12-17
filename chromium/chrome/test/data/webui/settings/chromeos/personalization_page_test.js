@@ -52,7 +52,7 @@ suite('PersonalizationHandler', function() {
 
   setup(function() {
     WallpaperBrowserProxy = new TestWallpaperBrowserProxy();
-    WallpaperBrowserProxyImpl.setInstance(WallpaperBrowserProxy);
+    WallpaperBrowserProxyImpl.setInstanceForTesting(WallpaperBrowserProxy);
     createPersonalizationPage();
   });
 
@@ -116,19 +116,6 @@ suite('PersonalizationHandler', function() {
     assertTrue(!!row);
     row.click();
     assertEquals(routes.CHANGE_PICTURE, Router.getInstance().getCurrentRoute());
-  });
-
-  test('ambientMode', function() {
-    const isGuest = loadTimeData.getBoolean('isGuest');
-    const isAmbientModeEnabled = loadTimeData.getBoolean('isAmbientModeEnabled');
-
-    if(!isGuest && isAmbientModeEnabled){
-      const row =
-          personalizationPage.shadowRoot.querySelector('#ambientModeRow');
-      assertTrue(!!row);
-      row.click();
-      assertEquals(routes.AMBIENT_MODE, Router.getInstance().getCurrentRoute());
-    }
   });
 
   test('Deep link to change account picture', async () => {

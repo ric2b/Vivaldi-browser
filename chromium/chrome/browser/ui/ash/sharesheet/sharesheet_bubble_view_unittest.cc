@@ -11,7 +11,6 @@
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sharesheet/sharesheet_metrics.h"
 #include "chrome/browser/sharesheet/sharesheet_service.h"
 #include "chrome/browser/sharesheet/sharesheet_service_factory.h"
@@ -20,11 +19,11 @@
 #include "chrome/browser/ui/ash/sharesheet/sharesheet_bubble_view_delegate.h"
 #include "chrome/browser/ui/ash/sharesheet/sharesheet_header_view.h"
 #include "chrome/browser/ui/ash/sharesheet/sharesheet_util.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/components/sharesheet/constants.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -75,9 +74,6 @@ class SharesheetBubbleViewTest : public ChromeAshTestBase {
   void SetUp() override {
     ChromeAshTestBase::SetUp();
 
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kSharesheetCopyToClipboard);
-
     profile_ = std::make_unique<TestingProfile>();
 
     // Set up parent window for sharesheet to anchor to.
@@ -101,15 +97,16 @@ class SharesheetBubbleViewTest : public ChromeAshTestBase {
         &lottie::ParseLottieAsThemedStillImage);
   }
 
-  void ShowAndVerifyBubble(apps::mojom::IntentPtr intent,
-                           ::sharesheet::LaunchSource source) {
+  void ShowAndVerifyBubble(apps::IntentPtr intent,
+                           ::sharesheet::LaunchSource source,
+                           int num_actions_to_add = 0) {
     ::sharesheet::SharesheetService* const sharesheet_service =
         ::sharesheet::SharesheetServiceFactory::GetForProfile(profile_.get());
     sharesheet_service->ShowBubbleForTesting(
         parent_window_, std::move(intent),
         /*contains_hosted_document=*/false, source,
         /*delivered_callback=*/base::DoNothing(),
-        /*close_callback=*/base::DoNothing());
+        /*close_callback=*/base::DoNothing(), num_actions_to_add);
     bubble_delegate_ = static_cast<SharesheetBubbleViewDelegate*>(
         sharesheet_service->GetUiDelegateForTesting(parent_window_));
     EXPECT_NE(bubble_delegate_, nullptr);
@@ -162,7 +159,6 @@ class SharesheetBubbleViewTest : public ChromeAshTestBase {
   Profile* profile() { return profile_.get(); }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   gfx::NativeWindow parent_window_;
   std::unique_ptr<TestingProfile> profile_;
   SharesheetBubbleViewDelegate* bubble_delegate_;
@@ -297,7 +293,7 @@ TEST_F(SharesheetBubbleViewTest, TextPreview) {
 
 TEST_F(SharesheetBubbleViewTest, TextPreviewNoTitle) {
   auto* text = "text";
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromText(text, ""),
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(text, ""),
                       ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -317,9 +313,9 @@ TEST_F(SharesheetBubbleViewTest, TextPreviewNoTitle) {
 TEST_F(SharesheetBubbleViewTest, TextPreviewOneFile) {
   storage::FileSystemURL url = ::sharesheet::FileInDownloads(
       profile(), base::FilePath(::sharesheet::kTestTextFile));
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromFiles(
-                          {url.ToGURL()}, {::sharesheet::kMimeTypeText}),
-                      ::sharesheet::LaunchSource::kUnknown);
+  ShowAndVerifyBubble(
+      apps_util::MakeShareIntent({url.ToGURL()}, {::sharesheet::kMimeTypeText}),
+      ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
   // There should be 2 children, the 'Share' title, and the text.
@@ -336,11 +332,10 @@ TEST_F(SharesheetBubbleViewTest, TextPreviewMultipleFiles) {
       profile(), base::FilePath(::sharesheet::kTestPdfFile));
   storage::FileSystemURL url2 = ::sharesheet::FileInDownloads(
       profile(), base::FilePath(::sharesheet::kTestTextFile));
-  ShowAndVerifyBubble(
-      apps_util::CreateShareIntentFromFiles(
-          {url1.ToGURL(), url2.ToGURL()},
-          {::sharesheet::kMimeTypePdf, ::sharesheet::kMimeTypeText}),
-      ::sharesheet::LaunchSource::kUnknown);
+  ShowAndVerifyBubble(apps_util::MakeShareIntent({url1.ToGURL(), url2.ToGURL()},
+                                                 {::sharesheet::kMimeTypePdf,
+                                                  ::sharesheet::kMimeTypeText}),
+                      ::sharesheet::LaunchSource::kUnknown);
 
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -356,9 +351,8 @@ TEST_F(SharesheetBubbleViewTest, TextPreviewMultipleFiles) {
 TEST_F(SharesheetBubbleViewTest, URLPreviewAverage) {
   auto* kTitleText = "URLTitle";
   auto* kURLText = "https://fake-url.com/fake";
-  ShowAndVerifyBubble(
-      apps_util::CreateShareIntentFromText(kURLText, kTitleText),
-      ::sharesheet::LaunchSource::kUnknown);
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(kURLText, kTitleText),
+                      ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
   // There should be 3 children, the 'Share' title, the URL title, and the URL.
@@ -374,7 +368,7 @@ TEST_F(SharesheetBubbleViewTest, URLPreviewAverage) {
 TEST_F(SharesheetBubbleViewTest, URLPreviewLongSubDomain) {
   auto* kURLText =
       "https://very-very-very-very-very-very-very-very-long-fake-url.com/fake";
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromText(kURLText, ""),
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(kURLText, ""),
                       ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -391,7 +385,7 @@ TEST_F(SharesheetBubbleViewTest, URLPreviewLongSubDomain) {
 TEST_F(SharesheetBubbleViewTest, URLPreviewLongSubDirectory) {
   auto* kURLText =
       "https://fake-url.com/very-very-very-very-very-very-very-very-long-fake";
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromText(kURLText, ""),
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(kURLText, ""),
                       ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -410,7 +404,7 @@ TEST_F(SharesheetBubbleViewTest,
   auto* kURLText =
       "https://very-very-very-very-very-very-very-very-long.fake-url.com/"
       "very-very-very-very-very-very-very-very-long-fake";
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromText(kURLText, ""),
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(kURLText, ""),
                       ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -426,7 +420,7 @@ TEST_F(SharesheetBubbleViewTest,
 
 TEST_F(SharesheetBubbleViewTest, URLPreviewInternationalCharacters) {
   auto* kURLText = "https://xn--p8j9a0d9c9a.xn--q9jyb4c/";
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromText(kURLText, ""),
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(kURLText, ""),
                       ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -442,7 +436,7 @@ TEST_F(SharesheetBubbleViewTest, URLPreviewInternationalCharacters) {
 TEST_F(SharesheetBubbleViewTest, URLPreviewEmojis) {
   // Text is encoded in IDN.
   auto* kURLText = "https://hello.com/\xF0\x9F\x98\x81/";
-  ShowAndVerifyBubble(apps_util::CreateShareIntentFromText(kURLText, ""),
+  ShowAndVerifyBubble(apps_util::MakeShareIntent(kURLText, ""),
                       ::sharesheet::LaunchSource::kUnknown);
   views::View* text_views = sharesheet_bubble_view()->GetViewByID(
       SharesheetViewID::HEADER_VIEW_TEXT_PREVIEW_ID);
@@ -474,6 +468,28 @@ TEST_F(SharesheetBubbleViewTest, HoldEscapeKey) {
                       ::sharesheet::LaunchSource::kUnknown);
   GetEventGenerator()->ReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   CloseBubbleWithEscKey();
+}
+
+TEST_F(SharesheetBubbleViewTest, ShareActionShowsUpAsExpected) {
+  ShowAndVerifyBubble(::sharesheet::CreateValidTextIntent(),
+                      ::sharesheet::LaunchSource::kUnknown,
+                      /*num_actions_to_add=*/1);
+  views::View* share_action_view = sharesheet_bubble_view()->GetViewByID(
+      SharesheetViewID::SHARE_ACTION_VIEW_ID);
+  ASSERT_FALSE(share_action_view->GetVisible());
+
+  // |targets_view| should only contain the copy to clipboard target & our
+  // example action target.
+  views::View* targets_view = sharesheet_bubble_view()->GetViewByID(
+      SharesheetViewID::TARGETS_DEFAULT_VIEW_ID);
+  ASSERT_EQ(targets_view->children().size(), 2u);
+
+  // Click on example target.
+  Click(targets_view->children()[1]);
+  ASSERT_TRUE(share_action_view->GetVisible());
+
+  CloseBubble();
+  ASSERT_FALSE(IsSharesheetVisible());
 }
 
 }  // namespace sharesheet

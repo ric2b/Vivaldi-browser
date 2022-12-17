@@ -27,6 +27,7 @@
 #include "base/time/time.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animator.h"
@@ -145,8 +146,7 @@ void AppListAssistantMainStage::OnThemeChanged() {
   if (!use_dark_light_mode_colors_)
     return;
 
-  horizontal_separator_->SetColor(ColorProvider::Get()->GetContentLayerColor(
-      ColorProvider::ContentLayerType::kSeparatorColor));
+  horizontal_separator_->SetColorId(ui::kColorAshSystemUIMenuSeparator);
 }
 
 void AppListAssistantMainStage::OnViewPreferredSizeChanged(views::View* view) {
@@ -259,10 +259,8 @@ AppListAssistantMainStage::CreateDividerLayoutContainer() {
   horizontal_separator_->SetBorder(
       views::CreateEmptyBorder(gfx::Insets::VH(vertical_inset, 0)));
   // We use default color of views::Separator if dark light mode flag is off.
-  if (use_dark_light_mode_colors_) {
-    horizontal_separator_->SetColor(ColorProvider::Get()->GetContentLayerColor(
-        ColorProvider::ContentLayerType::kSeparatorColor));
-  }
+  if (use_dark_light_mode_colors_)
+    horizontal_separator_->SetColorId(ui::kColorAshSystemUIMenuSeparator);
   horizontal_separator_->SetPreferredSize(gfx::Size(
       kSeparatorWidthDip, progress_indicator_->GetPreferredSize().height()));
   horizontal_separator_->SetPaintToLayer();
@@ -425,19 +423,9 @@ void AppListAssistantMainStage::OnUiVisibilityChanged(
     absl::optional<AssistantEntryPoint> entry_point,
     absl::optional<AssistantExitPoint> exit_point) {
   if (assistant::util::IsStartingSession(new_visibility, old_visibility)) {
-    // When Assistant is starting a new session, we animate in the appearance of
-    // the zero state view and footer.
     const bool from_search =
         entry_point == AssistantEntryPoint::kLauncherSearchResult;
-    progress_indicator_->layer()->SetOpacity(0.f);
-    horizontal_separator_->layer()->SetOpacity(from_search ? 1.f : 0.f);
-
-    if (!from_search)
-      AnimateInZeroState();
-    else
-      zero_state_view_->SetVisible(false);
-
-    AnimateInFooter();
+    InitializeUIForStartingSession(from_search);
     return;
   }
 
@@ -448,12 +436,32 @@ void AppListAssistantMainStage::OnUiVisibilityChanged(
   footer_->SetCanProcessEventsWithinSubtree(true);
 }
 
+void AppListAssistantMainStage::InitializeUIForBubbleView() {
+  InitializeUIForStartingSession(/*from_search=*/false);
+}
+
 void AppListAssistantMainStage::MaybeHideZeroState() {
   if (!IsShown(zero_state_view_))
     return;
 
   assistant::util::FadeOutAndHide(zero_state_view_,
                                   kZeroStateAnimationFadeOutDuration);
+}
+
+void AppListAssistantMainStage::InitializeUIForStartingSession(
+    bool from_search) {
+  // When Assistant is starting a new session, we animate in the appearance of
+  // the zero state view and footer.
+  progress_indicator_->layer()->SetOpacity(0.f);
+  horizontal_separator_->layer()->SetOpacity(from_search ? 1.f : 0.f);
+
+  if (!from_search)
+    AnimateInZeroState();
+  else
+    zero_state_view_->SetVisible(false);
+
+  footer_->InitializeUIForBubbleView();
+  AnimateInFooter();
 }
 
 BEGIN_METADATA(AppListAssistantMainStage, views::View)

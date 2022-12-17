@@ -34,7 +34,7 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.browserservices.verification.OriginVerifier;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
-import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
+import org.chromium.chrome.browser.customtabs.CustomTabsIntentTestUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.translate.TranslateIntentHandler;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
@@ -357,7 +357,7 @@ public class IntentHandlerUnitTest {
         // Check that non-whitelisted headers from extras are passed
         // when origin is verified.
         Context context = InstrumentationRegistry.getTargetContext();
-        Intent headersIntent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+        Intent headersIntent = CustomTabsIntentTestUtils.createMinimalCustomTabIntent(
                 context, "https://www.google.com/");
 
         Bundle headers = new Bundle();
@@ -389,7 +389,7 @@ public class IntentHandlerUnitTest {
         // Check that non-whitelisted headers from extras are passed
         // when origin is verified.
         Context context = InstrumentationRegistry.getTargetContext();
-        Intent headersIntent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+        Intent headersIntent = CustomTabsIntentTestUtils.createMinimalCustomTabIntent(
                 context, "https://www.google.com/");
 
         Bundle headers = new Bundle();
@@ -420,7 +420,7 @@ public class IntentHandlerUnitTest {
     @Feature({"Android-AppBase"})
     public void testReferrerUrl_customTabIntentWithSession() {
         Context context = InstrumentationRegistry.getTargetContext();
-        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+        Intent intent = CustomTabsIntentTestUtils.createMinimalCustomTabIntent(
                 context, "https://www.google.com/");
         Assert.assertTrue(CustomTabsConnection.getInstance().newSession(
                 CustomTabsSessionToken.getSessionTokenFromIntent(intent)));
@@ -576,6 +576,45 @@ public class IntentHandlerUnitTest {
         Intent intent = new Intent(TranslateIntentHandler.ACTION_TRANSLATE_TAB);
         assertFalse(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/false));
         assertTrue(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
+    }
+
+    /**
+     * Test that IntentHandler#shouldIgnoreIntent() returns true for Incognito non-Custom Tab
+     * Intents.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testShouldIgnoreIncognitoIntent() {
+        Intent intent = new Intent(GOOGLE_URL);
+        intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
+        assertTrue(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
+    }
+
+    /**
+     * Test that IntentHandler#shouldIgnoreIntent() returns false for Incognito non-Custom Tab
+     * Intents if they come from Chrome.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testShouldIgnoreIncognitoIntent_trusted() {
+        Context context = InstrumentationRegistry.getTargetContext();
+        Intent intent = IntentHandler.createTrustedOpenNewTabIntent(context, true);
+        assertFalse(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
+    }
+
+    /**
+     * Test that IntentHandler#shouldIgnoreIntent() returns false for Incognito Custom Tab Intents.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testShouldIgnoreIncognitoIntent_customTab() {
+        Intent intent = new Intent(GOOGLE_URL);
+        intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
+        assertFalse(mIntentHandler.shouldIgnoreIntent(
+                intent, /*startedActivity=*/true, /*isCustomTab=*/true));
     }
 
     @Test

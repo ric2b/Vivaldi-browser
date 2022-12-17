@@ -30,6 +30,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_property_source_data.h"
+#include "third_party/blink/renderer/core/css/css_scope_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/inspector/protocol/css.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -76,6 +77,8 @@ class InspectorStyle final : public GarbageCollected<InspectorStyle> {
   void PopulateAllProperties(Vector<CSSPropertySourceData>& result);
   std::unique_ptr<protocol::CSS::CSSStyle> StyleWithProperties();
   String ShorthandValue(const String& shorthand_property);
+  std::unique_ptr<protocol::Array<protocol::CSS::CSSProperty>>
+  LonghandProperties(const CSSPropertySourceData& property_entry);
 
   Member<CSSStyleDeclaration> style_;
   Member<CSSRuleSourceData> source_data_;
@@ -170,6 +173,11 @@ class InspectorStyleSheet : public InspectorStyleSheetBase {
                                          SourceRange* new_range,
                                          String* old_selector,
                                          ExceptionState&);
+  CSSScopeRule* SetScopeRuleText(const SourceRange&,
+                                 const String& selector,
+                                 SourceRange* new_range,
+                                 String* old_selector,
+                                 ExceptionState&);
   CSSSupportsRule* SetSupportsRuleText(const SourceRange&,
                                        const String& selector,
                                        SourceRange* new_range,

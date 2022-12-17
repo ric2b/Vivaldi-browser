@@ -65,7 +65,6 @@
 #include "gpu/command_buffer/service/gpu_state_tracer.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -76,8 +75,8 @@
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/shader_translator.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
-#include "gpu/command_buffer/service/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transform_feedback_manager.h"
 #include "gpu/command_buffer/service/validating_abstract_texture_impl.h"
@@ -739,9 +738,6 @@ class GLES2DecoderImpl : public GLES2Decoder,
   VertexArrayManager* GetVertexArrayManager() override {
     return vertex_array_manager_.get();
   }
-  ImageManager* GetImageManagerForTest() override {
-    return group_->image_manager();
-  }
 
   bool HasPendingQueries() const override;
   void ProcessPendingQueries(bool did_finish) override;
@@ -965,8 +961,6 @@ class GLES2DecoderImpl : public GLES2Decoder,
   MailboxManager* mailbox_manager() {
     return group_->mailbox_manager();
   }
-
-  ImageManager* image_manager() { return group_->image_manager(); }
 
   VertexArrayManager* vertex_array_manager() {
     return vertex_array_manager_.get();
@@ -1226,9 +1220,6 @@ class GLES2DecoderImpl : public GLES2Decoder,
       const volatile GLbyte* mailbox);
   void DoBeginSharedImageAccessDirectCHROMIUM(GLuint client_id, GLenum mode);
   void DoEndSharedImageAccessDirectCHROMIUM(GLuint client_id);
-
-  void DoBeginBatchReadAccessSharedImageCHROMIUM();
-  void DoEndBatchReadAccessSharedImageCHROMIUM();
 
   void BindImage(uint32_t client_texture_id,
                  uint32_t texture_target,
@@ -3624,11 +3615,11 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
     }
   }
 
-  // Support for CHROMIUM_texture_storage_image depends on the underlying
+  // Support for texture_storage_image depends on the underlying
   // ImageFactory's ability to create anonymous images.
   gpu::ImageFactory* image_factory = group_->image_factory();
   if (image_factory && image_factory->SupportsCreateAnonymousImage())
-    feature_info_->EnableCHROMIUMTextureStorageImage();
+    feature_info_->EnableTextureStorageImage();
 
   // In theory |needs_emulation| needs to be true on Desktop GL 4.1 or lower.
   // However, we set it to true everywhere, not to trust drivers to handle
@@ -4137,6 +4128,11 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   DoGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &caps.max_renderbuffer_size, 1);
   DoGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &caps.max_texture_image_units, 1);
   DoGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.max_texture_size, 1);
+  if (workarounds().webgl_or_caps_max_texture_size) {
+    caps.max_texture_size =
+        std::min(caps.max_texture_size,
+                 feature_info_->workarounds().webgl_or_caps_max_texture_size);
+  }
   DoGetIntegerv(GL_MAX_VARYING_VECTORS, &caps.max_varying_vectors, 1);
   DoGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &caps.max_vertex_attribs, 1);
   DoGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
@@ -4269,7 +4265,10 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   bool is_offscreen = !!offscreen_target_frame_buffer_.get();
   caps.surface_origin =
       !is_offscreen ? surface_->GetOrigin() : gfx::SurfaceOrigin::kBottomLeft;
-  caps.msaa_is_slow = workarounds().msaa_is_slow;
+  caps.msaa_is_slow =
+      base::FeatureList::IsEnabled(features::kEnableMSAAOnNewIntelGPUs)
+          ? workarounds().msaa_is_slow_2
+          : workarounds().msaa_is_slow;
   caps.avoid_stencil_buffers = workarounds().avoid_stencil_buffers;
   caps.multisample_compatibility =
       feature_info_->feature_flags().ext_multisample_compatibility;
@@ -4316,7 +4315,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   }
   caps.texture_npot = feature_info_->feature_flags().npot_ok;
   caps.texture_storage_image =
-      feature_info_->feature_flags().chromium_texture_storage_image;
+      feature_info_->feature_flags().texture_storage_image;
   caps.supports_oop_raster = false;
   caps.chromium_gpu_fence = feature_info_->feature_flags().chromium_gpu_fence;
   caps.separate_stencil_ref_mask_writemask =
@@ -4533,39 +4532,39 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
     resources.HashFunction = nullptr;
   }
 
-  ShCompileOptions driver_bug_workarounds = 0;
+  ShCompileOptions driver_bug_workarounds{};
   if (workarounds().init_gl_position_in_vertex_shader)
-    driver_bug_workarounds |= SH_INIT_GL_POSITION;
+    driver_bug_workarounds.initGLPosition = true;
   if (workarounds().unfold_short_circuit_as_ternary_operation)
-    driver_bug_workarounds |= SH_UNFOLD_SHORT_CIRCUIT;
+    driver_bug_workarounds.unfoldShortCircuit = true;
   if (workarounds().scalarize_vec_and_mat_constructor_args)
-    driver_bug_workarounds |= SH_SCALARIZE_VEC_AND_MAT_CONSTRUCTOR_ARGS;
+    driver_bug_workarounds.scalarizeVecAndMatConstructorArgs = true;
   if (workarounds().regenerate_struct_names)
-    driver_bug_workarounds |= SH_REGENERATE_STRUCT_NAMES;
+    driver_bug_workarounds.regenerateStructNames = true;
   if (workarounds().emulate_abs_int_function)
-    driver_bug_workarounds |= SH_EMULATE_ABS_INT_FUNCTION;
+    driver_bug_workarounds.emulateAbsIntFunction = true;
   if (workarounds().rewrite_texelfetchoffset_to_texelfetch)
-    driver_bug_workarounds |= SH_REWRITE_TEXELFETCHOFFSET_TO_TEXELFETCH;
+    driver_bug_workarounds.rewriteTexelFetchOffsetToTexelFetch = true;
   if (workarounds().add_and_true_to_loop_condition)
-    driver_bug_workarounds |= SH_ADD_AND_TRUE_TO_LOOP_CONDITION;
+    driver_bug_workarounds.addAndTrueToLoopCondition = true;
   if (workarounds().rewrite_do_while_loops)
-    driver_bug_workarounds |= SH_REWRITE_DO_WHILE_LOOPS;
+    driver_bug_workarounds.rewriteDoWhileLoops = true;
   if (workarounds().emulate_isnan_on_float)
-    driver_bug_workarounds |= SH_EMULATE_ISNAN_FLOAT_FUNCTION;
+    driver_bug_workarounds.emulateIsnanFloatFunction = true;
   if (workarounds().use_unused_standard_shared_blocks)
-    driver_bug_workarounds |= SH_USE_UNUSED_STANDARD_SHARED_BLOCKS;
+    driver_bug_workarounds.useUnusedStandardSharedBlocks = true;
   if (workarounds().remove_invariant_and_centroid_for_essl3)
-    driver_bug_workarounds |= SH_REMOVE_INVARIANT_AND_CENTROID_FOR_ESSL3;
+    driver_bug_workarounds.removeInvariantAndCentroidForESSL3 = true;
   if (workarounds().rewrite_float_unary_minus_operator)
-    driver_bug_workarounds |= SH_REWRITE_FLOAT_UNARY_MINUS_OPERATOR;
+    driver_bug_workarounds.rewriteFloatUnaryMinusOperator = true;
   if (workarounds().dont_use_loops_to_initialize_variables)
-    driver_bug_workarounds |= SH_DONT_USE_LOOPS_TO_INITIALIZE_VARIABLES;
+    driver_bug_workarounds.dontUseLoopsToInitializeVariables = true;
   if (workarounds().remove_dynamic_indexing_of_swizzled_vector)
-    driver_bug_workarounds |= SH_REMOVE_DYNAMIC_INDEXING_OF_SWIZZLED_VECTOR;
+    driver_bug_workarounds.removeDynamicIndexingOfSwizzledVector = true;
 
   // Initialize uninitialized locals by default
   if (!workarounds().dont_initialize_uninitialized_locals)
-    driver_bug_workarounds |= SH_INITIALIZE_UNINITIALIZED_LOCALS;
+    driver_bug_workarounds.initializeUninitializedLocals = true;
 
   ShShaderOutput shader_output_language =
       ShaderTranslator::GetShaderOutputLanguageForContext(gl_version_info());
@@ -9785,7 +9784,6 @@ void GLES2DecoderImpl::DoLineWidth(GLfloat width) {
 
 void GLES2DecoderImpl::DoLinkProgram(GLuint program_id) {
   TRACE_EVENT0("gpu", "GLES2DecoderImpl::DoLinkProgram");
-  SCOPED_UMA_HISTOGRAM_TIMER("GPU.DoLinkProgramTime");
   Program* program = GetProgramInfoNotShader(
       program_id, "glLinkProgram");
   if (!program) {
@@ -13541,39 +13539,6 @@ error::Error GLES2DecoderImpl::HandlePixelStorei(
       NOTREACHED();
       break;
   }
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleSetColorSpaceMetadataCHROMIUM(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::SetColorSpaceMetadataCHROMIUM& c =
-      *static_cast<const volatile gles2::cmds::SetColorSpaceMetadataCHROMIUM*>(
-          cmd_data);
-
-  GLuint texture_id = c.texture_id;
-  gfx::ColorSpace color_space;
-  if (!ReadColorSpace(c.shm_id, c.shm_offset, c.color_space_size,
-                      &color_space)) {
-    return error::kOutOfBounds;
-  }
-
-  TextureRef* ref = texture_manager()->GetTexture(texture_id);
-  if (!ref) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSetColorSpaceMetadataCHROMIUM",
-                       "unknown texture");
-    return error::kNoError;
-  }
-
-  scoped_refptr<gl::GLImage> image =
-      ref->texture()->GetLevelImage(ref->texture()->target(), 0);
-  if (!image) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSetColorSpaceMetadataCHROMIUM",
-                       "no image associated with texture");
-    return error::kNoError;
-  }
-
-  image->SetColorSpace(color_space);
   return error::kNoError;
 }
 
@@ -18428,85 +18393,6 @@ void GLES2DecoderImpl::DoTexStorage3D(GLenum target,
                  ContextState::k3D, "glTexStorage3D");
 }
 
-void GLES2DecoderImpl::DoTexStorage2DImageCHROMIUM(GLenum target,
-                                                   GLenum internal_format,
-                                                   GLenum buffer_usage,
-                                                   GLsizei width,
-                                                   GLsizei height) {
-  TRACE_EVENT2("gpu", "GLES2DecoderImpl::DoTexStorage2DImageCHROMIUM", "width",
-               width, "height", height);
-
-  ScopedGLErrorSuppressor suppressor(
-      "GLES2CmdDecoder::DoTexStorage2DImageCHROMIUM", error_state_.get());
-
-  if (!texture_manager()->ValidForTarget(target, 0, width, height, 1)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage2DImageCHROMIUM",
-                       "dimensions out of range");
-    return;
-  }
-
-  TextureRef* texture_ref =
-      texture_manager()->GetTextureInfoForTarget(&state_, target);
-  if (!texture_ref) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glTexStorage2DImageCHROMIUM",
-                       "unknown texture for target");
-    return;
-  }
-
-  Texture* texture = texture_ref->texture();
-  if (texture->IsImmutable()) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glTexStorage2DImageCHROMIUM",
-                       "texture is immutable");
-    return;
-  }
-
-  gfx::BufferFormat buffer_format;
-  if (!GetGFXBufferFormat(internal_format, &buffer_format)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_ENUM, "glTexStorage2DImageCHROMIUM",
-                       "Invalid buffer format");
-    return;
-  }
-
-  gfx::BufferUsage gfx_buffer_usage;
-  if (!GetGFXBufferUsage(buffer_usage, &gfx_buffer_usage)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_ENUM, "glTexStorage2DImageCHROMIUM",
-                       "Invalid buffer usage");
-    return;
-  }
-
-  if (!GetContextGroup()->image_factory()) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glTexStorage2DImageCHROMIUM",
-                       "Cannot create GL image");
-    return;
-  }
-
-  bool is_cleared = false;
-  scoped_refptr<gl::GLImage> image =
-      GetContextGroup()->image_factory()->CreateAnonymousImage(
-          gfx::Size(width, height), buffer_format, gfx_buffer_usage,
-          gpu::kNullSurfaceHandle, &is_cleared);
-  if (!image || !image->BindTexImage(target)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glTexStorage2DImageCHROMIUM",
-                       "Failed to create or bind GL Image");
-    return;
-  }
-
-  gfx::Rect cleared_rect;
-  if (is_cleared)
-    cleared_rect = gfx::Rect(width, height);
-
-  texture_manager()->SetLevelInfo(
-      texture_ref, target, 0, image->GetInternalFormat(), width, height, 1, 0,
-      image->GetDataFormat(), image->GetDataType(), cleared_rect);
-  texture_manager()->SetLevelImage(texture_ref, target, 0, image.get(),
-                                   Texture::BOUND);
-
-  if (texture->IsAttachedToFramebuffer())
-    framebuffer_state_.clear_state_dirty = true;
-
-  texture->SetImmutable(true, false);
-}
-
 void GLES2DecoderImpl::DoProduceTextureDirectCHROMIUM(
     GLuint client_id,
     const volatile GLbyte* data) {
@@ -18598,7 +18484,7 @@ void GLES2DecoderImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
     return;
   }
 
-  std::unique_ptr<SharedImageRepresentationGLTexture> shared_image;
+  std::unique_ptr<GLTextureImageRepresentation> shared_image;
   if (internal_format == GL_RGB) {
     shared_image = group_->shared_image_representation_factory()
                        ->ProduceRGBEmulationGLTexture(mailbox);
@@ -18636,8 +18522,7 @@ void GLES2DecoderImpl::DoBeginSharedImageAccessDirectCHROMIUM(GLuint client_id,
     return;
   }
 
-  SharedImageRepresentationGLTexture* shared_image =
-      texture_ref->shared_image();
+  GLTextureImageRepresentation* shared_image = texture_ref->shared_image();
   if (!shared_image) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "DoBeginSharedImageAccessCHROMIUM",
                        "bound texture is not a shared image");
@@ -18665,8 +18550,7 @@ void GLES2DecoderImpl::DoEndSharedImageAccessDirectCHROMIUM(GLuint client_id) {
     return;
   }
 
-  SharedImageRepresentationGLTexture* shared_image =
-      texture_ref->shared_image();
+  GLTextureImageRepresentation* shared_image = texture_ref->shared_image();
   if (!shared_image) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "DoEndSharedImageAccessCHROMIUM",
                        "bound texture is not a shared image");
@@ -18680,28 +18564,6 @@ void GLES2DecoderImpl::DoEndSharedImageAccessDirectCHROMIUM(GLuint client_id) {
   }
 
   texture_ref->EndAccessSharedImage();
-}
-
-void GLES2DecoderImpl::DoBeginBatchReadAccessSharedImageCHROMIUM() {
-  DCHECK(group_->shared_image_manager());
-
-  if (!group_->shared_image_manager()->BeginBatchReadAccess()) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION,
-                       "DoBeginBatchReadAccessSharedImageCHROMIUM",
-                       "shared image begin batch read access failed ");
-    return;
-  }
-}
-
-void GLES2DecoderImpl::DoEndBatchReadAccessSharedImageCHROMIUM() {
-  DCHECK(group_->shared_image_manager());
-
-  if (!group_->shared_image_manager()->EndBatchReadAccess()) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION,
-                       "DoEndBatchReadAccessSharedImageCHROMIUM",
-                       "shared image end batch read access failed ");
-    return;
-  }
 }
 
 void GLES2DecoderImpl::DoInsertEventMarkerEXT(

@@ -79,7 +79,7 @@ const firstCapabilities = {
     createScannerSource(
         SourceType.FLATBED, PLATEN, secondPageSizes, firstColorModes,
         firstResolutions),
-  ]
+  ],
 };
 
 const secondCapabilities = {
@@ -90,7 +90,7 @@ const secondCapabilities = {
     createScannerSource(
         SourceType.ADF_SIMPLEX, ADF_SIMPLEX, secondPageSizes, secondColorModes,
         secondResolutions),
-  ]
+  ],
 };
 
 /** @implements {ash.scanning.mojom.ScanServiceInterface} */
@@ -291,7 +291,7 @@ class FakeScanService {
       this.scanJobObserverRemote_ = remote;
       this.methodCalled('startMultiPageScan');
       resolve({
-        controller: this.failStartScan_ ? null : this.multiPageScanController_
+        controller: this.failStartScan_ ? null : this.multiPageScanController_,
       });
     });
   }
@@ -469,7 +469,7 @@ export function scanningAppTest() {
   /** @type {!ScannerArr} */
   const expectedScanners = [
     createScanner(firstScannerId, firstScannerName),
-    createScanner(secondScannerId, secondScannerName)
+    createScanner(secondScannerId, secondScannerName),
   ];
 
   suiteSetup(() => {
@@ -850,7 +850,8 @@ export function scanningAppTest() {
 
           // Simulate the ESC key by sending the `cancel` event to the native
           // dialog.
-          scanFailedDialog.$$('dialog').dispatchEvent(new Event('cancel'));
+          scanFailedDialog.shadowRoot.querySelector('#dialog').dispatchEvent(
+              new Event('cancel'));
           assertFalse(scanningApp.$$('#scanFailedDialog').open);
           assertFalse(scanButton.disabled);
           assertTrue(isVisible(/** @type {!CrButtonElement} */ (scanButton)));

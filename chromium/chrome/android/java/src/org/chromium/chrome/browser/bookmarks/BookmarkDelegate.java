@@ -14,9 +14,7 @@ import org.chromium.components.favicon.LargeIconBridge;
  * Interface used by UI components in the main bookmarks UI to broadcast UI change notifications
  * and get bookmark data model.
  */
-// Vivaldi: public for access outside package
 public interface BookmarkDelegate {
-
     /**
      * Delegate used to open urls for main fragment on tablet.
      */

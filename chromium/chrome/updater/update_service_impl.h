@@ -5,6 +5,7 @@
 #ifndef CHROME_UPDATER_UPDATE_SERVICE_IMPL_H_
 #define CHROME_UPDATER_UPDATE_SERVICE_IMPL_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -55,6 +56,12 @@ class UpdateServiceImpl : public UpdateService {
               PolicySameVersionUpdate policy_same_version_update,
               StateChangeCallback state_update,
               Callback callback) override;
+  void Install(const RegistrationRequest& registration,
+               const std::string& install_data_index,
+               Priority priority,
+               StateChangeCallback state_update,
+               Callback callback) override;
+  void CancelInstalls(const std::string& app_id) override;
   void RunInstaller(const std::string& app_id,
                     const base::FilePath& installer_path,
                     const std::string& install_args,
@@ -74,17 +81,18 @@ class UpdateServiceImpl : public UpdateService {
   // Pops `tasks_`, and calls TaskStart.
   void TaskDone();
 
-  bool IsUpdateDisabledByPolicy(
-      const std::string& app_id,
-      Priority priority,
-      PolicySameVersionUpdate policy_same_version_update,
-      int& policy);
-  void HandleUpdateDisabledByPolicy(
-      const std::string& app_id,
-      int policy,
-      PolicySameVersionUpdate policy_same_version_update,
-      StateChangeCallback state_update,
-      Callback callback);
+  // Installs applications in the wake task based on the ForceInstalls policy.
+  void ForceInstall(StateChangeCallback state_update, Callback callback);
+
+  bool IsUpdateDisabledByPolicy(const std::string& app_id,
+                                Priority priority,
+                                bool is_install,
+                                int& policy);
+  void HandleUpdateDisabledByPolicy(const std::string& app_id,
+                                    int policy,
+                                    bool is_install,
+                                    StateChangeCallback state_update,
+                                    Callback callback);
 
   void OnShouldBlockUpdateForMeteredNetwork(
       StateChangeCallback state_update,
@@ -103,6 +111,9 @@ class UpdateServiceImpl : public UpdateService {
 
   // The queue serializes periodic task execution.
   base::queue<base::OnceClosure> tasks_;
+
+  // Cancellation callbacks, keyed by appid.
+  std::multimap<std::string, base::RepeatingClosure> cancellation_callbacks_;
 };
 
 }  // namespace updater

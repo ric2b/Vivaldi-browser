@@ -10,8 +10,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "fuchsia/base/test/frame_test_util.h"
-#include "fuchsia/base/test/test_navigation_listener.h"
+#include "fuchsia_web/common/test/frame_test_util.h"
+#include "fuchsia_web/common/test/test_navigation_listener.h"
 #include "fuchsia_web/webengine/browser/context_impl.h"
 #include "fuchsia_web/webengine/browser/frame_impl.h"
 #include "fuchsia_web/webengine/browser/frame_impl_browser_test_base.h"
@@ -41,17 +41,19 @@ void ExpectStringIsNonNegativeNumber(std::string& str) {
 
 }  // namespace
 
-class ClientHintsTest : public FrameImplTestBaseWithServer {
+// TODO(crbug.com/1356277): Client Hints temporarily disabled as it is causing
+// several apps to fail. Re-enable Client Hints tests after breakage is fixed.
+class DISABLED_ClientHintsTest : public FrameImplTestBaseWithServer {
  public:
-  ClientHintsTest() = default;
-  ~ClientHintsTest() override = default;
-  ClientHintsTest(const ClientHintsTest&) = delete;
-  ClientHintsTest& operator=(const ClientHintsTest&) = delete;
+  DISABLED_ClientHintsTest() = default;
+  ~DISABLED_ClientHintsTest() override = default;
+  DISABLED_ClientHintsTest(const DISABLED_ClientHintsTest&) = delete;
+  DISABLED_ClientHintsTest& operator=(const DISABLED_ClientHintsTest&) = delete;
 
   void SetUpOnMainThread() override {
     FrameImplTestBaseWithServer::SetUpOnMainThread();
-    frame_for_test_ = cr_fuchsia::FrameForTest::Create(
-        context(), fuchsia::web::CreateFrameParams());
+    frame_for_test_ =
+        FrameForTest::Create(context(), fuchsia::web::CreateFrameParams());
   }
 
  protected:
@@ -61,8 +63,8 @@ class ClientHintsTest : public FrameImplTestBaseWithServer {
   void SetClientHintsForTestServerToRequest(const std::string& hint_types) {
     GURL url = embedded_test_server()->GetURL(
         std::string("/set-header?Accept-CH: ") + hint_types);
-    cr_fuchsia::LoadUrlAndExpectResponse(
-        frame_for_test_.GetNavigationController(), {}, url.spec());
+    LoadUrlAndExpectResponse(frame_for_test_.GetNavigationController(), {},
+                             url.spec());
     frame_for_test_.navigation_listener().RunUntilUrlEquals(url);
   }
 
@@ -74,12 +76,12 @@ class ClientHintsTest : public FrameImplTestBaseWithServer {
   std::string GetNavRequestHeaderValue(const std::string& header) {
     GURL url =
         embedded_test_server()->GetURL(std::string("/echoheader?") + header);
-    cr_fuchsia::LoadUrlAndExpectResponse(
-        frame_for_test_.GetNavigationController(), {}, url.spec());
+    LoadUrlAndExpectResponse(frame_for_test_.GetNavigationController(), {},
+                             url.spec());
     frame_for_test_.navigation_listener().RunUntilUrlEquals(url);
 
-    absl::optional<base::Value> value = cr_fuchsia::ExecuteJavaScript(
-        frame_for_test_.get(), "document.body.innerText;");
+    absl::optional<base::Value> value =
+        ExecuteJavaScript(frame_for_test_.get(), "document.body.innerText;");
     return value->GetString();
   }
 
@@ -119,10 +121,10 @@ class ClientHintsTest : public FrameImplTestBaseWithServer {
     verify_callback.Run(result);
   }
 
-  cr_fuchsia::FrameForTest frame_for_test_;
+  FrameForTest frame_for_test_;
 };
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, NumericalClientHints) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest, NumericalClientHints) {
   SetClientHintsForTestServerToRequest(std::string(kRoundTripTimeCH) + "," +
                                        std::string(kDeviceMemoryCH));
   GetAndVerifyClientHint(kRoundTripTimeCH,
@@ -131,7 +133,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest, NumericalClientHints) {
                          base::BindRepeating(&ExpectStringIsNonNegativeNumber));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, InvalidClientHint) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest, InvalidClientHint) {
   // Check browser handles requests for an invalid Client Hint.
   SetClientHintsForTestServerToRequest("not-a-client-hint");
   GetAndVerifyClientHint("not-a-client-hint",
@@ -143,7 +145,8 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest, InvalidClientHint) {
 // Low-entropy User Agent Client Hints are sent by default without the origin
 // needing to request them. For a list of low-entropy Client Hints, see
 // https://wicg.github.io/client-hints-infrastructure/#low-entropy-hint-table/
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, LowEntropyClientHintsAreSentByDefault) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest,
+                       LowEntropyClientHintsAreSentByDefault) {
   GetAndVerifyClientHint(
       kUserAgentCH, base::BindRepeating([](std::string& str) {
         EXPECT_TRUE(str.find("Chromium") != std::string::npos);
@@ -152,7 +155,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest, LowEntropyClientHintsAreSentByDefault) {
       }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest,
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest,
                        LowEntropyClientHintsAreSentWhenRequested) {
   SetClientHintsForTestServerToRequest(kUserAgentCH);
   GetAndVerifyClientHint(
@@ -163,7 +166,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest,
       }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest,
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest,
                        HighEntropyClientHintsAreNotSentByDefault) {
   GetAndVerifyClientHint(kFullVersionListCH,
                          base::BindRepeating([](std::string& str) {
@@ -171,7 +174,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest,
                          }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest,
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest,
                        HighEntropyClientHintsAreSentWhenRequested) {
   SetClientHintsForTestServerToRequest(kFullVersionListCH);
   GetAndVerifyClientHint(
@@ -182,7 +185,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest,
       }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, ArchitectureIsArmOrX86) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest, ArchitectureIsArmOrX86) {
   SetClientHintsForTestServerToRequest(kArchCH);
   GetAndVerifyClientHint(kArchCH, base::BindRepeating([](std::string& str) {
 #if defined(ARCH_CPU_X86_64)
@@ -195,14 +198,14 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest, ArchitectureIsArmOrX86) {
                          }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, BitnessIs64) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest, BitnessIs64) {
   SetClientHintsForTestServerToRequest(kBitnessCH);
   GetAndVerifyClientHint(kBitnessCH, base::BindRepeating([](std::string& str) {
                            EXPECT_EQ(str, "\"64\"");
                          }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, PlatformIsFuchsia) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest, PlatformIsFuchsia) {
   // Platform is a low-entropy Client Hint, so no need for test server to
   // request it.
   GetAndVerifyClientHint(kPlatformCH, base::BindRepeating([](std::string& str) {
@@ -210,7 +213,7 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest, PlatformIsFuchsia) {
                          }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, RemoveClientHint) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest, RemoveClientHint) {
   SetClientHintsForTestServerToRequest(std::string(kRoundTripTimeCH) + "," +
                                        std::string(kDeviceMemoryCH));
   GetAndVerifyClientHint(kDeviceMemoryCH,
@@ -225,7 +228,8 @@ IN_PROC_BROWSER_TEST_F(ClientHintsTest, RemoveClientHint) {
                          }));
 }
 
-IN_PROC_BROWSER_TEST_F(ClientHintsTest, AdditionalClientHintsAreAlwaysSent) {
+IN_PROC_BROWSER_TEST_F(DISABLED_ClientHintsTest,
+                       AdditionalClientHintsAreAlwaysSent) {
   SetClientHintsForTestServerToRequest(kRoundTripTimeCH);
 
   // Enable device memory as an additional Client Hint.

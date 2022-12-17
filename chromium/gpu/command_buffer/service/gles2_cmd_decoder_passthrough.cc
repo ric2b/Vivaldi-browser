@@ -23,14 +23,14 @@
 #include "gpu/command_buffer/service/multi_draw_manager.h"
 #include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/program_cache.h"
-#include "gpu/command_buffer/service/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/gpu_switching_manager.h"
 #include "ui/gl/progress_reporter.h"
 
 #if BUILDFLAG(IS_WIN)
-#include "gpu/command_buffer/service/shared_image_backing_factory_d3d.h"
+#include "gpu/command_buffer/service/shared_image/d3d_image_backing_factory.h"
 #endif  // BUILDFLAG(IS_WIN)
 
 namespace gpu {
@@ -134,18 +134,35 @@ class ScopedClearColorReset {
   GLfloat clear_color_[4];
 };
 
-class ScopedColorMaskReset {
+// Reset the color mask for buffer zero only.
+class ScopedColorMaskZeroReset {
  public:
-  explicit ScopedColorMaskReset(gl::GLApi* api) : api_(api) {
-    api_->glGetBooleanvFn(GL_COLOR_WRITEMASK, color_mask_);
+  explicit ScopedColorMaskZeroReset(gl::GLApi* api,
+                                    bool oes_draw_buffers_indexed)
+      : api_(api), oes_draw_buffers_indexed_(oes_draw_buffers_indexed) {
+    if (oes_draw_buffers_indexed_) {
+      GLsizei length = 0;
+      api_->glGetBooleani_vRobustANGLEFn(
+          GL_COLOR_WRITEMASK, 0, sizeof(color_mask_), &length, color_mask_);
+    } else {
+      api_->glGetBooleanvFn(GL_COLOR_WRITEMASK, color_mask_);
+    }
   }
-  ~ScopedColorMaskReset() {
-    api_->glColorMaskFn(color_mask_[0], color_mask_[1], color_mask_[2],
-                        color_mask_[3]);
+  ~ScopedColorMaskZeroReset() {
+    if (oes_draw_buffers_indexed_) {
+      api_->glColorMaskiOESFn(0, color_mask_[0], color_mask_[1], color_mask_[2],
+                              color_mask_[3]);
+    } else {
+      api_->glColorMaskFn(color_mask_[0], color_mask_[1], color_mask_[2],
+                          color_mask_[3]);
+    }
   }
 
  private:
   raw_ptr<gl::GLApi> api_;
+  const bool oes_draw_buffers_indexed_;
+  // The color mask, or the color mask of buffer zero, if
+  // OES_draw_buffers_indexed is enabled.
   GLboolean color_mask_[4];
 };
 
@@ -398,15 +415,15 @@ void PassthroughResources::Destroy(gl::GLApi* api,
 
 PassthroughResources::SharedImageData::SharedImageData() = default;
 PassthroughResources::SharedImageData::SharedImageData(
-    std::unique_ptr<SharedImageRepresentationGLTexturePassthrough>
-        representation,
-    gl::GLApi* api)
+    std::unique_ptr<GLTexturePassthroughImageRepresentation> representation,
+    gl::GLApi* api,
+    const FeatureInfo* feature_info)
     : representation_(std::move(representation)) {
   DCHECK(representation_);
 
   // Note, that ideally we could defer clear till BeginAccess, but there is no
   // enforcement that will require clients to call Begin/End access.
-  EnsureClear(api);
+  EnsureClear(api, feature_info);
 }
 PassthroughResources::SharedImageData::SharedImageData(
     SharedImageData&& other) = default;
@@ -419,7 +436,9 @@ PassthroughResources::SharedImageData::operator=(SharedImageData&& other) {
   return *this;
 }
 
-void PassthroughResources::SharedImageData::EnsureClear(gl::GLApi* api) {
+void PassthroughResources::SharedImageData::EnsureClear(
+    gl::GLApi* api,
+    const FeatureInfo* feature_info) {
   // To avoid unnessary overhead we don't enable robust initialization on shared
   // gl context where all shared images are created, so we clear image here if
   // necessary.
@@ -433,13 +452,16 @@ void PassthroughResources::SharedImageData::EnsureClear(gl::GLApi* api) {
       return;
 
     auto texture = representation_->GetTexturePassthrough();
+    const bool use_oes_draw_buffers_indexed =
+        feature_info->feature_flags().oes_draw_buffers_indexed;
 
     // Back up all state we are about to change.
     ScopedFramebufferBindingReset fbo_reset(
         api, false /* supports_seperate_fbo_bindings */);
     ScopedTextureBindingReset texture_reset(api, texture->target());
     ScopedClearColorReset clear_color_reset(api);
-    ScopedColorMaskReset color_mask_reset(api);
+    ScopedColorMaskZeroReset color_mask_reset(api,
+                                              use_oes_draw_buffers_indexed);
     ScopedScissorTestReset scissor_test_reset(api);
 
     // Generate a new framebuffer and bind the shared image's uncleared texture
@@ -453,7 +475,10 @@ void PassthroughResources::SharedImageData::EnsureClear(gl::GLApi* api) {
                                      0);
     // Clear the bound framebuffer.
     api->glClearColorFn(0, 0, 0, 0);
-    api->glColorMaskFn(true, true, true, true);
+    if (use_oes_draw_buffers_indexed)
+      api->glColorMaskiOESFn(0, true, true, true, true);
+    else
+      api->glColorMaskFn(true, true, true, true);
     api->glDisableFn(GL_SCISSOR_TEST);
     api->glClearFn(GL_COLOR_BUFFER_BIT);
 
@@ -1049,11 +1074,11 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
   InitializeFeatureInfo(attrib_helper.context_type, DisallowedFeatures(),
                         false);
 
-  // Support for CHROMIUM_texture_storage_image depends on the underlying
+  // Support for texture_storage_image depends on the underlying
   // ImageFactory's ability to create anonymous images.
   gpu::ImageFactory* image_factory = group_->image_factory();
   if (image_factory && image_factory->SupportsCreateAnonymousImage()) {
-    feature_info_->EnableCHROMIUMTextureStorageImage();
+    feature_info_->EnableTextureStorageImage();
   }
 
   // Check for required extensions
@@ -1398,6 +1423,9 @@ void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
   surface_ = nullptr;
 
   if (group_) {
+    // `resources_` depends on `group_`. It must be cleared before we set
+    // `group_` to nullptr.
+    resources_ = nullptr;
     group_->Destroy(this, have_context);
     group_ = nullptr;
   }
@@ -1408,6 +1436,9 @@ void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
 
   if (context_.get()) {
     context_->ReleaseCurrent(nullptr);
+    //`api_` might depend on `context_`. It must be cleared before we set
+    //`context_` to nullptr.
+    api_ = nullptr;
     context_ = nullptr;
   }
 }
@@ -1662,10 +1693,10 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.image_ab30 = feature_info_->feature_flags().chromium_image_ab30;
   caps.image_ycbcr_p010 =
       feature_info_->feature_flags().chromium_image_ycbcr_p010;
-  if (feature_info_->workarounds().client_max_texture_size) {
+  if (feature_info_->workarounds().webgl_or_caps_max_texture_size) {
     caps.max_texture_size =
         std::min(caps.max_texture_size,
-                 feature_info_->workarounds().client_max_texture_size);
+                 feature_info_->workarounds().webgl_or_caps_max_texture_size);
   }
   caps.max_copy_texture_chromium_size =
       feature_info_->workarounds().max_copy_texture_chromium_size;
@@ -1683,7 +1714,10 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.surfaceless = !offscreen_ && surface_->IsSurfaceless();
   caps.surface_origin =
       !offscreen_ ? surface_->GetOrigin() : gfx::SurfaceOrigin::kBottomLeft;
-  caps.msaa_is_slow = feature_info_->workarounds().msaa_is_slow;
+  caps.msaa_is_slow =
+      base::FeatureList::IsEnabled(features::kEnableMSAAOnNewIntelGPUs)
+          ? feature_info_->workarounds().msaa_is_slow_2
+          : feature_info_->workarounds().msaa_is_slow;
   caps.avoid_stencil_buffers =
       feature_info_->workarounds().avoid_stencil_buffers;
   caps.multisample_compatibility =
@@ -1694,16 +1728,14 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.protected_video_swap_chain = surface_->SupportsProtectedVideo();
   caps.gpu_vsync = surface_->SupportsGpuVSync();
 #if BUILDFLAG(IS_WIN)
-  caps.shared_image_d3d =
-      SharedImageBackingFactoryD3D::IsD3DSharedImageSupported(
-          group_->gpu_preferences());
+  caps.shared_image_d3d = D3DImageBackingFactory::IsD3DSharedImageSupported(
+      group_->gpu_preferences());
   caps.shared_image_swap_chain =
-      caps.shared_image_d3d &&
-      SharedImageBackingFactoryD3D::IsSwapChainSupported();
+      caps.shared_image_d3d && D3DImageBackingFactory::IsSwapChainSupported();
 #endif  // BUILDFLAG(IS_WIN)
   caps.texture_npot = feature_info_->feature_flags().npot_ok;
   caps.texture_storage_image =
-      feature_info_->feature_flags().chromium_texture_storage_image;
+      feature_info_->feature_flags().texture_storage_image;
   caps.chromium_gpu_fence = feature_info_->feature_flags().chromium_gpu_fence;
   caps.chromium_nonblocking_readback = true;
   caps.num_surface_buffers = surface_->GetBufferCount();
@@ -1808,11 +1840,6 @@ GLES2DecoderPassthroughImpl::GetTransformFeedbackManager() {
 gpu::gles2::VertexArrayManager*
 GLES2DecoderPassthroughImpl::GetVertexArrayManager() {
   return nullptr;
-}
-
-gpu::gles2::ImageManager*
-GLES2DecoderPassthroughImpl::GetImageManagerForTest() {
-  return group_->image_manager();
 }
 
 bool GLES2DecoderPassthroughImpl::HasPendingQueries() const {
@@ -2154,7 +2181,7 @@ void GLES2DecoderPassthroughImpl::InitializeFeatureInfo(
 
   gpu::ImageFactory* image_factory = group_->image_factory();
   if (image_factory && image_factory->SupportsCreateAnonymousImage()) {
-    feature_info_->EnableCHROMIUMTextureStorageImage();
+    feature_info_->EnableTextureStorageImage();
   }
 }
 
@@ -2257,16 +2284,6 @@ error::Error GLES2DecoderPassthroughImpl::PatchGetNumericResults(GLenum pname,
         return error::kInvalidArguments;
       }
       std::copy(std::begin(scissor_), std::end(scissor_), params);
-      break;
-
-    case GL_MAX_TEXTURE_SIZE:
-    case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
-    case GL_MAX_3D_TEXTURE_SIZE:
-      if (feature_info_->workarounds().client_max_texture_size) {
-        *params = std::min(
-            *params, static_cast<T>(
-                         feature_info_->workarounds().client_max_texture_size));
-      }
       break;
 
     default:
@@ -2835,8 +2852,7 @@ void GLES2DecoderPassthroughImpl::ProcessDescheduleUntilFinished() {
   TRACE_EVENT_NESTABLE_ASYNC_END0(
       "cc", "GLES2DecoderPassthroughImpl::DescheduleUntilFinished",
       TRACE_ID_LOCAL(this));
-  deschedule_until_finished_fences_.erase(
-      deschedule_until_finished_fences_.begin());
+  deschedule_until_finished_fences_.pop_front();
   client()->OnRescheduleAfterFinished();
 }
 

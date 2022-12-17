@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/streams/stream_algorithms.h"
 #include "third_party/blink/renderer/core/streams/stream_promise_resolver.h"
 #include "third_party/blink/renderer/core/streams/transferable_streams.h"
+#include "third_party/blink/renderer/core/streams/underlying_byte_source_base.h"
 #include "third_party/blink/renderer/core/streams/underlying_source_base.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream_default_controller.h"
@@ -46,6 +47,89 @@
 #include "third_party/blink/renderer/platform/wtf/deque.h"
 
 namespace blink {
+
+// Implements a pull algorithm that delegates to an UnderlyingByteSourceBase.
+// This is used when creating a ReadableByteStream from C++.
+class ReadableStream::PullAlgorithm final : public StreamAlgorithm {
+ public:
+  explicit PullAlgorithm(UnderlyingByteSourceBase* underlying_byte_source)
+      : underlying_byte_source_(underlying_byte_source) {}
+
+  v8::Local<v8::Promise> Run(ScriptState* script_state,
+                             int argc,
+                             v8::Local<v8::Value> argv[]) override {
+    DCHECK_EQ(argc, 0);
+    DCHECK(controller_);
+    ExceptionState exception_state(script_state->GetIsolate(),
+                                   ExceptionState::kUnknownContext, "", "");
+    ScriptPromise promise;
+    {
+      // This is needed because the realm of the underlying source can be
+      // different from the realm of the readable stream.
+      ScriptState::Scope scope(underlying_byte_source_->GetScriptState());
+      promise = underlying_byte_source_->Pull(controller_, exception_state);
+    }
+    if (exception_state.HadException()) {
+      auto exception = exception_state.GetException();
+      exception_state.ClearException();
+      return PromiseReject(script_state, exception);
+    }
+
+    return promise.V8Promise();
+  }
+
+  // SetController() must be called before Run() is.
+  void SetController(ReadableByteStreamController* controller) {
+    controller_ = controller;
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(underlying_byte_source_);
+    visitor->Trace(controller_);
+    StreamAlgorithm::Trace(visitor);
+  }
+
+ private:
+  Member<UnderlyingByteSourceBase> underlying_byte_source_;
+  Member<ReadableByteStreamController> controller_;
+};
+
+// Implements a cancel algorithm that delegates to an UnderlyingByteSourceBase.
+class ReadableStream::CancelAlgorithm final : public StreamAlgorithm {
+ public:
+  explicit CancelAlgorithm(UnderlyingByteSourceBase* underlying_byte_source)
+      : underlying_byte_source_(underlying_byte_source) {}
+
+  v8::Local<v8::Promise> Run(ScriptState* script_state,
+                             int argc,
+                             v8::Local<v8::Value> argv[]) override {
+    DCHECK_EQ(argc, 1);
+    ExceptionState exception_state(script_state->GetIsolate(),
+                                   ExceptionState::kUnknownContext, "", "");
+    ScriptPromise promise;
+    {
+      // This is needed because the realm of the underlying source can be
+      // different from the realm of the readable stream.
+      ScriptState::Scope scope(underlying_byte_source_->GetScriptState());
+      promise = underlying_byte_source_->Cancel(argv[0], exception_state);
+    }
+    if (exception_state.HadException()) {
+      auto exception = exception_state.GetException();
+      exception_state.ClearException();
+      return PromiseReject(script_state, exception);
+    }
+
+    return promise.V8Promise();
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(underlying_byte_source_);
+    StreamAlgorithm::Trace(visitor);
+  }
+
+ private:
+  Member<UnderlyingByteSourceBase> underlying_byte_source_;
+};
 
 ReadableStream::PipeOptions::PipeOptions()
     : prevent_close_(false), prevent_abort_(false), prevent_cancel_(false) {}
@@ -617,18 +701,31 @@ class ReadableStream::PipeToEngine final
     // a. Perform ! WritableStreamDefaultWriterRelease(writer).
     WritableStreamDefaultWriter::Release(script_state_, writer_);
 
-    // b. Perform ! ReadableStreamReaderGenericRelease(reader).
-    ReadableStreamGenericReader::GenericRelease(script_state_, reader_);
+    // b. If reader implements ReadableStreamBYOBReader, perform !
+    // ReadableStreamBYOBReaderRelease(reader).
+    if (reader_->IsBYOBReader()) {
+      ReadableStreamGenericReader* reader = reader_;
+      ReadableStreamBYOBReader* byob_reader =
+          To<ReadableStreamBYOBReader>(reader);
+      ReadableStreamBYOBReader::Release(script_state_, byob_reader);
+    } else {
+      // c. Otherwise, perform ! ReadableStreamDefaultReaderRelease(reader).
+      DCHECK(reader_->IsDefaultReader());
+      ReadableStreamGenericReader* reader = reader_;
+      ReadableStreamDefaultReader* default_reader =
+          To<ReadableStreamDefaultReader>(reader);
+      ReadableStreamDefaultReader::Release(script_state_, default_reader);
+    }
 
     // TODO(ricea): Implement signal.
-    // c. If signal is not undefined, remove abortAlgorithm from signal.
+    // d. If signal is not undefined, remove abortAlgorithm from signal.
 
     v8::Local<v8::Value> error;
     if (error_maybe.ToLocal(&error)) {
-      // d. If error was given, reject promise with error.
+      // e. If error was given, reject promise with error.
       promise_->Reject(script_state_, error);
     } else {
-      // e. Otherwise, resolve promise with undefined.
+      // f. Otherwise, resolve promise with undefined.
       promise_->ResolveWithUndefined(script_state_);
     }
   }
@@ -1201,15 +1298,13 @@ ReadableStream* ReadableStream::Create(ScriptState* script_state,
   // 3. Assert: ! IsNonNegativeNumber(highWaterMark) is true.
   DCHECK_GE(high_water_mark, 0);
 
-  // 4. Let stream be ObjectCreate(the original value of ReadableStream's
-  //    prototype property).
+  // 4. Let stream be a new ReadableStream.
   auto* stream = MakeGarbageCollected<ReadableStream>();
 
   // 5. Perform ! InitializeReadableStream(stream).
   Initialize(stream);
 
-  // 6. Let controller be ObjectCreate(the original value of
-  //    ReadableStreamDefaultController's prototype property).
+  // 6. Let controller be a new ReadableStreamDefaultController.
   auto* controller = MakeGarbageCollected<ReadableStreamDefaultController>();
 
   // 7. Perform ? SetUpReadableStreamDefaultController(stream, controller,
@@ -1224,6 +1319,68 @@ ReadableStream* ReadableStream::Create(ScriptState* script_state,
 
   // 8. Return stream.
   return stream;
+}
+
+// static
+ReadableStream* ReadableStream::CreateByteStream(
+    ScriptState* script_state,
+    UnderlyingByteSourceBase* underlying_byte_source) {
+  // https://streams.spec.whatwg.org/#abstract-opdef-createreadablebytestream
+  // 1. Let stream be a new ReadableStream.
+  auto* stream = MakeGarbageCollected<ReadableStream>();
+
+  // Construction of the byte stream cannot fail because the trivial start
+  // algorithm will not throw.
+  NonThrowableExceptionState exception_state;
+  InitByteStream(script_state, stream, underlying_byte_source, exception_state);
+
+  // 5. Return stream.
+  return stream;
+}
+
+void ReadableStream::InitByteStream(
+    ScriptState* script_state,
+    ReadableStream* stream,
+    UnderlyingByteSourceBase* underlying_byte_source,
+    ExceptionState& exception_state) {
+  auto* pull_algorithm =
+      MakeGarbageCollected<PullAlgorithm>(underlying_byte_source);
+  auto* cancel_algorithm =
+      MakeGarbageCollected<CancelAlgorithm>(underlying_byte_source);
+
+  // Step 3 of
+  // https://streams.spec.whatwg.org/#abstract-opdef-createreadablebytestream
+  // 3. Let controller be a new ReadableByteStreamController.
+  auto* controller = MakeGarbageCollected<ReadableByteStreamController>();
+
+  InitByteStream(script_state, stream, controller,
+                 CreateTrivialStartAlgorithm(), pull_algorithm,
+                 cancel_algorithm, exception_state);
+  DCHECK(!exception_state.HadException());
+
+  pull_algorithm->SetController(controller);
+}
+
+void ReadableStream::InitByteStream(ScriptState* script_state,
+                                    ReadableStream* stream,
+                                    ReadableByteStreamController* controller,
+                                    StreamStartAlgorithm* start_algorithm,
+                                    StreamAlgorithm* pull_algorithm,
+                                    StreamAlgorithm* cancel_algorithm,
+                                    ExceptionState& exception_state) {
+  // Step 2 and 4 of
+  // https://streams.spec.whatwg.org/#abstract-opdef-createreadablebytestream
+  // 2. Perform ! InitializeReadableStream(stream).
+  Initialize(stream);
+
+  // 4. Perform ? SetUpReadableByteStreamController(stream, controller,
+  // startAlgorithm, pullAlgorithm, cancelAlgorithm, 0, undefined).
+  ReadableByteStreamController::SetUp(script_state, stream, controller,
+                                      start_algorithm, pull_algorithm,
+                                      cancel_algorithm, 0, 0, exception_state);
+  if (exception_state.HadException()) {
+    return;
+  }
 }
 
 ReadableStream::ReadableStream() = default;
@@ -1301,6 +1458,17 @@ ReadableStreamDefaultReader* ReadableStream::GetDefaultReaderForTesting(
   if (!result)
     return nullptr;
   return result->GetAsReadableStreamDefaultReader();
+}
+
+ReadableStreamBYOBReader* ReadableStream::GetBYOBReaderForTesting(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  auto* options = ReadableStreamGetReaderOptions::Create();
+  options->setMode("byob");
+  auto* result = getReader(script_state, options, exception_state);
+  if (!result)
+    return nullptr;
+  return result->GetAsReadableStreamBYOBReader();
 }
 
 ReadableStream* ReadableStream::pipeThrough(ScriptState* script_state,
@@ -1766,20 +1934,26 @@ v8::Local<v8::Promise> ReadableStream::Cancel(ScriptState* script_state,
   // 6. If reader is not undefined and reader implements
   // ReadableStreamBYOBReader,
   if (reader && reader->IsBYOBReader()) {
-    //   a. For each readIntoRequest of reader.[[readIntoRequests]],
+    //   a. Let readIntoRequests be reader.[[readIntoRequests]].
     ReadableStreamBYOBReader* byob_reader =
         To<ReadableStreamBYOBReader>(reader);
+    HeapDeque<Member<ReadableStreamBYOBReader::ReadIntoRequest>>
+        read_into_requests;
+    read_into_requests.Swap(byob_reader->read_into_requests_);
+
+    //   b. Set reader.[[readIntoRequests]] to an empty list.
+    //      This is not required since we've already called Swap().
+
+    //   c. For each readIntoRequest of readIntoRequests,
     for (ReadableStreamBYOBReader::ReadIntoRequest* request :
-         byob_reader->read_into_requests_) {
+         read_into_requests) {
       //     i. Perform readIntoRequest's close steps, given undefined.
       request->CloseSteps(script_state, nullptr);
     }
-    //   b. Set reader.[[readIntoRequests]] to an empty list.
-    byob_reader->read_into_requests_.clear();
   }
 
-  // 7. Let sourceCancelPromise be ! stream.[[readableStreamController]].
-  //    [[CancelSteps]](reason).
+  // 7. Let sourceCancelPromise be !
+  // stream.[[controller]].[[CancelSteps]](reason).
   v8::Local<v8::Promise> source_cancel_promise =
       stream->readable_stream_controller_->CancelSteps(script_state, reason);
 
@@ -1793,8 +1967,8 @@ v8::Local<v8::Promise> ReadableStream::Cancel(ScriptState* script_state,
                        v8::Local<v8::Value>) override {}
   };
 
-  // 8. Return the result of transforming sourceCancelPromise with a
-  //    fulfillment handler that returns undefined.
+  // 8. Return the result of reacting to sourceCancelPromise with a
+  //    fulfillment step that returns undefined.
   return StreamThenPromise(
       script_state->GetContext(), source_cancel_promise,
       MakeGarbageCollected<ScriptFunction>(
@@ -1821,16 +1995,23 @@ void ReadableStream::Close(ScriptState* script_state, ReadableStream* stream) {
   if (ExecutionContext::From(script_state)->IsContextDestroyed())
     return;
 
-  // 5. If ! IsReadableStreamDefaultReader(reader) is true,
+  // 5. Resolve reader.[[closedPromise]] with undefined.
+  reader->closed_promise_->ResolveWithUndefined(script_state);
+
+  // 6. If reader implements ReadableStreamDefaultReader,
   if (reader->IsDefaultReader()) {
-    //   a. Repeat for each readRequest that is an element of reader.
-    //      [[readRequests]],
+    //   a. Let readRequests be reader.[[readRequests]].
     HeapDeque<Member<StreamPromiseResolver>> requests;
     requests.Swap(To<ReadableStreamDefaultReader>(reader)->read_requests_);
     bool for_author_code =
         To<ReadableStreamDefaultReader>(reader)->for_author_code_;
+    //   b. Set reader.[[readRequests]] to an empty list.`
+    //      This is not required since we've already called Swap()
+
+    //   c. Repeat for each readRequest that is an element of reader.
+    //      [[readRequests]],
     for (StreamPromiseResolver* promise : requests) {
-      //   i. Resolve readRequest.[[promise]] with !
+      //      i. Resolve readRequest.[[promise]] with !
       //      ReadableStreamCreateReadResult(undefined, true, reader.
       //      [[forAuthorCode]]).
       promise->Resolve(
@@ -1839,12 +2020,7 @@ void ReadableStream::Close(ScriptState* script_state, ReadableStream* stream) {
                            v8::Undefined(script_state->GetIsolate()), true,
                            for_author_code));
     }
-
-    //   b. Set reader.[[readRequests]] to an empty List.
-    //      This is not required since we've already called Swap().
   }
-  // 6. Resolve reader.[[closedPromise]] with undefined.
-  reader->closed_promise_->ResolveWithUndefined(script_state);
 }
 
 v8::Local<v8::Value> ReadableStream::CreateReadResult(
@@ -1915,42 +2091,29 @@ void ReadableStream::Error(ScriptState* script_state,
     return;
   }
 
-  // 6. If ! IsReadableStreamDefaultReader(reader) is true,
-  //   a. Repeat for each readRequest that is an element of reader.
-  //      [[readRequests]],
-  if (reader->IsDefaultReader()) {
-    ReadableStreamDefaultReader* default_reader =
-        To<ReadableStreamDefaultReader>(reader);
-    for (StreamPromiseResolver* promise : default_reader->read_requests_) {
-      //   i. Reject readRequest.[[promise]] with e.
-      promise->Reject(script_state, e);
-    }
-
-    //   b. Set reader.[[readRequests]] to a new empty List.
-    default_reader->read_requests_.clear();
-  }
-
-  // 7. Otherwise,
-  else {
-    // a. Assert: reader implements ReadableStreamBYOBReader.
-    DCHECK(reader->IsBYOBReader());
-    // b. For each readIntoRequest of reader.[[readIntoRequests]],
-    ReadableStreamBYOBReader* byob_reader =
-        To<ReadableStreamBYOBReader>(reader);
-    for (ReadableStreamBYOBReader::ReadIntoRequest* request :
-         byob_reader->read_into_requests_) {
-      // i. Perform readIntoRequests' error steps, given e.
-      request->ErrorSteps(script_state, e);
-    }
-    // c. Set reader.[[readIntoRequests]] to a new empty list.
-    byob_reader->read_into_requests_.clear();
-  }
-
-  // 8. Reject reader.[[closedPromise]] with e.
+  // 6. Reject reader.[[closedPromise]] with e.
   reader->closed_promise_->Reject(script_state, e);
 
-  // 9. Set reader.[[closedPromise]].[[PromiseIsHandled]] to true.
+  // 7. Set reader.[[closedPromise]].[[PromiseIsHandled]] to true.
   reader->closed_promise_->MarkAsHandled(isolate);
+
+  // 8. If reader implements ReadableStreamDefaultReader,
+  if (reader->IsDefaultReader()) {
+    //   a. Perform ! ReadableStreamDefaultReaderErrorReadRequests(reader, e).
+    ReadableStreamDefaultReader* default_reader =
+        To<ReadableStreamDefaultReader>(reader);
+    ReadableStreamDefaultReader::ErrorReadRequests(script_state, default_reader,
+                                                   e);
+  } else {
+    // 9. Otherwise,
+    // a. Assert: reader implements ReadableStreamBYOBReader.
+    DCHECK(reader->IsBYOBReader());
+    // b. Perform ! ReadableStreamBYOBReaderErrorReadIntoRequests(reader, e).
+    ReadableStreamBYOBReader* byob_reader =
+        To<ReadableStreamBYOBReader>(reader);
+    ReadableStreamBYOBReader::ErrorReadIntoRequests(script_state, byob_reader,
+                                                    e);
+  }
 }
 
 void ReadableStream::FulfillReadIntoRequest(ScriptState* script_state,

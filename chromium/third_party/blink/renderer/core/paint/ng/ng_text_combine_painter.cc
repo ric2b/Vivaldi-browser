@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/paint/paint_auto_dark_mode.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/platform/fonts/ng_text_fragment_paint_info.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 
@@ -17,12 +18,12 @@ namespace blink {
 NGTextCombinePainter::NGTextCombinePainter(GraphicsContext& context,
                                            const ComputedStyle& style,
                                            const PhysicalRect& text_frame_rect)
-    : TextPainterBase(context,
-                      style.GetFont(),
-                      text_frame_rect.offset,
-                      text_frame_rect,
-                      /* inline_context */ nullptr,
-                      /* horizontal */ false),
+    : NGTextPainterBase(context,
+                        style.GetFont(),
+                        text_frame_rect.offset,
+                        text_frame_rect,
+                        /* inline_context */ nullptr,
+                        /* horizontal */ false),
       style_(style) {}
 
 NGTextCombinePainter::~NGTextCombinePainter() = default;
@@ -87,7 +88,8 @@ bool NGTextCombinePainter::ShouldPaint(
          style.GetTextEmphasisMark() != TextEmphasisMark::kNone;
 }
 
-void NGTextCombinePainter::ClipDecorationsStripe(float upper,
+void NGTextCombinePainter::ClipDecorationsStripe(const NGTextFragmentPaintInfo&,
+                                                 float upper,
                                                  float stripe_width,
                                                  float dilation) {
   // Nothing to do.
@@ -105,14 +107,12 @@ void NGTextCombinePainter::PaintDecorations(const PaintInfo& paint_info,
   const auto& applied_text_decorations = style_.AppliedTextDecorations();
 
   // Paint text decorations except line through
-  bool has_line_through_decoration = false;
-  PaintDecorationsExceptLineThrough(decoration_offset, decoration_info,
-                                    paint_info, applied_text_decorations,
-                                    text_style, &has_line_through_decoration);
-  if (!has_line_through_decoration)
-    return;
+  PaintDecorationsExceptLineThrough(NGTextFragmentPaintInfo{},
+                                    decoration_offset, decoration_info,
+                                    ~TextDecorationLine::kNone, paint_info,
+                                    applied_text_decorations, text_style);
 
-  // Paint line through
+  // Paint line through if needed
   PaintDecorationsOnlyLineThrough(decoration_info, paint_info,
                                   applied_text_decorations, text_style);
 }

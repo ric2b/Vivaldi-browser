@@ -19,6 +19,7 @@
 #include "components/sync/driver/trusted_vault_histograms.h"
 #include "components/sync/protocol/local_trusted_vault.pb.h"
 #include "components/sync/trusted_vault/trusted_vault_connection.h"
+#include "components/sync/trusted_vault/trusted_vault_degraded_recoverability_handler.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
@@ -36,7 +37,8 @@ namespace syncer {
 // dedicated sequence (using thread pool). Can be constructed on any thread/
 // sequence.
 class StandaloneTrustedVaultBackend
-    : public base::RefCountedThreadSafe<StandaloneTrustedVaultBackend> {
+    : public base::RefCountedThreadSafe<StandaloneTrustedVaultBackend>,
+      public TrustedVaultDegradedRecoverabilityHandler::Delegate {
  public:
   using FetchKeysCallback = base::OnceCallback<void(
       const std::vector<std::vector<uint8_t>>& vault_keys)>;
@@ -63,6 +65,12 @@ class StandaloneTrustedVaultBackend
       delete;
   StandaloneTrustedVaultBackend& operator=(
       const StandaloneTrustedVaultBackend& other) = delete;
+
+  // TrustedVaultDegradedRecoverabilityHandler::Delegate implementation.
+  void WriteDegradedRecoverabilityState(
+      const sync_pb::LocalTrustedVaultDegradedRecoverabilityState&
+          degraded_recoverability_state) override;
+  void OnDegradedRecoverabilityChanged(bool value) override;
 
   // Restores state saved in |file_path_|, should be called before using the
   // object.
@@ -123,28 +131,6 @@ class StandaloneTrustedVaultBackend
 
   void SetClockForTesting(base::Clock* clock);
 
-  // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused. Exposed publicly for testing.
-  enum class TrustedVaultDownloadKeysStatusForUMA {
-    kSuccess = 0,
-    // Deprecated in favor of the more fine-grained buckets.
-    kDeprecatedMembershipNotFoundOrCorrupted = 1,
-    kNoNewKeys = 2,
-    kKeyProofsVerificationFailed = 3,
-    kAccessTokenFetchingFailure = 4,
-    kOtherError = 5,
-    kMemberNotFound = 6,
-    kMembershipNotFound = 7,
-    kMembershipCorrupted = 8,
-    kMembershipEmpty = 9,
-    kNoPrimaryAccount = 10,
-    kDeviceNotRegistered = 11,
-    kThrottledClientSide = 12,
-    kCorruptedLocalDeviceRegistration = 13,
-    kAborted = 14,
-    kMaxValue = kAborted
-  };
-
  private:
   friend class base::RefCountedThreadSafe<StandaloneTrustedVaultBackend>;
 
@@ -152,7 +138,7 @@ class StandaloneTrustedVaultBackend
   GetDownloadKeysStatusForUMAFromResponse(
       TrustedVaultDownloadKeysStatus response_status);
 
-  ~StandaloneTrustedVaultBackend();
+  ~StandaloneTrustedVaultBackend() override;
 
   // Finds the per-user vault in |data_| for |gaia_id|. Returns null if not
   // found.

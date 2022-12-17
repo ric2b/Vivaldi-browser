@@ -148,9 +148,8 @@ bool TryCreateAliasedSpdySession(SpdySessionPool* pool,
   EXPECT_TRUE(is_blocking_request_for_session);
 
   AddressList address_list;
-  EXPECT_THAT(
-      ParseAddressList(ip_address_list, /* dns_aliases = */ {}, &address_list),
-      IsOk());
+  EXPECT_THAT(ParseAddressList(ip_address_list, &address_list.endpoints()),
+              IsOk());
   address_list = AddressList::CopyWithPort(address_list, 443);
 
   // Simulate a host resolution completing.
@@ -536,12 +535,12 @@ void SpdySessionPoolTest::RunIPPoolingTest(
        "192.168.0.4,192.168.0.3"},
   };
 
-  for (size_t i = 0; i < std::size(test_hosts); i++) {
+  for (auto& test_host : test_hosts) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
-        test_hosts[i].name, test_hosts[i].iplist, std::string());
+        test_host.name, test_host.iplist, std::string());
 
-    test_hosts[i].key = SpdySessionKey(
-        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+    test_host.key = SpdySessionKey(
+        HostPortPair(test_host.name, kTestPort), ProxyServer::Direct(),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
         SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   }
@@ -719,13 +718,13 @@ void SpdySessionPoolTest::RunIPPoolingDisabledTest(SSLSocketDataProvider* ssl) {
   };
 
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < std::size(test_hosts); i++) {
+  for (auto& test_host : test_hosts) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
-        test_hosts[i].name, test_hosts[i].iplist, std::string());
+        test_host.name, test_host.iplist, std::string());
 
     // Setup a SpdySessionKey
-    test_hosts[i].key = SpdySessionKey(
-        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+    test_host.key = SpdySessionKey(
+        HostPortPair(test_host.name, kTestPort), ProxyServer::Direct(),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
         SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   }
@@ -776,12 +775,12 @@ TEST_F(SpdySessionPoolTest, IPPoolingNetLog) {
 
   // Populate the HostResolver cache.
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < std::size(test_hosts); i++) {
+  for (auto& test_host : test_hosts) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
-        test_hosts[i].name, test_hosts[i].iplist, std::string());
+        test_host.name, test_host.iplist, std::string());
 
-    test_hosts[i].key = SpdySessionKey(
-        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+    test_host.key = SpdySessionKey(
+        HostPortPair(test_host.name, kTestPort), ProxyServer::Direct(),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
         SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   }
@@ -843,12 +842,12 @@ TEST_F(SpdySessionPoolTest, IPPoolingDisabled) {
 
   // Populate the HostResolver cache.
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < std::size(test_hosts); i++) {
+  for (auto& test_host : test_hosts) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
-        test_hosts[i].name, test_hosts[i].iplist, std::string());
+        test_host.name, test_host.iplist, std::string());
 
-    test_hosts[i].key = SpdySessionKey(
-        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+    test_host.key = SpdySessionKey(
+        HostPortPair(test_host.name, kTestPort), ProxyServer::Direct(),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
         SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   }
@@ -1264,12 +1263,12 @@ TEST_F(SpdySessionPoolTest, IPConnectionPoolingWithWebSockets) {
 
   // Populate the HostResolver cache.
   session_deps_.host_resolver->set_synchronous_mode(true);
-  for (size_t i = 0; i < std::size(test_hosts); i++) {
+  for (auto& test_host : test_hosts) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
-        test_hosts[i].name, test_hosts[i].iplist, std::string());
+        test_host.name, test_host.iplist, std::string());
 
-    test_hosts[i].key = SpdySessionKey(
-        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+    test_host.key = SpdySessionKey(
+        HostPortPair(test_host.name, kTestPort), ProxyServer::Direct(),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
         SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   }

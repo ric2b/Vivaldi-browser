@@ -40,6 +40,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/event_page_show_persisted.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_disposition.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -137,6 +138,7 @@
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/scheduler/public/dummy_schedulers.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/storage/blink_storage_key.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -179,9 +181,7 @@ class LocalDOMWindow::NetworkStateObserver final
       online_observer_handle_;
 };
 
-LocalDOMWindow::LocalDOMWindow(LocalFrame& frame,
-                               WindowAgent* agent,
-                               bool anonymous)
+LocalDOMWindow::LocalDOMWindow(LocalFrame& frame, WindowAgent* agent)
     : DOMWindow(frame),
       ExecutionContext(V8PerIsolateData::MainThreadIsolate(), agent),
       script_controller_(MakeGarbageCollected<ScriptController>(
@@ -201,7 +201,6 @@ LocalDOMWindow::LocalDOMWindow(LocalFrame& frame,
       token_(frame.GetLocalFrameToken()),
       post_message_counter_(PostMessagePartition::kSameProcess),
       network_state_observer_(MakeGarbageCollected<NetworkStateObserver>(this)),
-      isAnonymouslyFramed_(anonymous),
       closewatcher_stack_(
           MakeGarbageCollected<CloseWatcher::WatcherStack>(this)) {}
 
@@ -352,6 +351,10 @@ void LocalDOMWindow::DisableEval(const String& error_message) {
   GetScriptController().DisableEval(error_message);
 }
 
+void LocalDOMWindow::SetWasmEvalErrorMessage(const String& error_message) {
+  GetScriptController().SetWasmEvalErrorMessage(error_message);
+}
+
 String LocalDOMWindow::UserAgent() const {
   if (!GetFrame())
     return String();
@@ -477,7 +480,7 @@ scoped_refptr<base::SingleThreadTaskRunner> LocalDOMWindow::GetTaskRunner(
   // some cases, though, there isn't a good candidate (most commonly when either
   // the passed-in document or the ExecutionContext used to be attached to a
   // Frame but has since been detached).
-  return Thread::Current()->GetTaskRunner();
+  return Thread::Current()->GetDeprecatedTaskRunner();
 }
 
 void LocalDOMWindow::ReportPermissionsPolicyViolation(
@@ -640,6 +643,12 @@ void LocalDOMWindow::AddConsoleMessageImpl(ConsoleMessage* console_message,
   GetFrame()->Console().AddMessage(console_message, discard_duplicates);
 }
 
+scoped_refptr<base::SingleThreadTaskRunner>
+LocalDOMWindow::GetAgentGroupSchedulerCompositorTaskRunner() {
+  auto* frame_scheduler = GetFrame()->GetFrameScheduler();
+  return frame_scheduler->GetAgentGroupScheduler()->CompositorTaskRunner();
+}
+
 void LocalDOMWindow::AddInspectorIssue(
     mojom::blink::InspectorIssueInfoPtr info) {
   if (GetFrame()) {
@@ -727,8 +736,8 @@ Document* LocalDOMWindow::InstallNewDocument(const DocumentInit& init) {
 
   auto* frame_scheduler = GetFrame()->GetFrameScheduler();
   frame_scheduler->TraceUrlChange(document_->Url().GetString());
-  frame_scheduler->SetCrossOriginToMainFrame(
-      GetFrame()->IsCrossOriginToMainFrame());
+  frame_scheduler->SetCrossOriginToNearestMainFrame(
+      GetFrame()->IsCrossOriginToNearestMainFrame());
 
   GetFrame()->GetPage()->GetChromeClient().InstallSupplements(*GetFrame());
 
@@ -774,9 +783,6 @@ void LocalDOMWindow::DocumentWasClosed() {
   // 4.6.4. Fire an event named pageshow at the Document object's relevant
   // global object, ...
   EnqueueNonPersistedPageshowEvent();
-
-  if (pending_state_object_)
-    EnqueuePopstateEvent(std::move(pending_state_object_));
 }
 
 void LocalDOMWindow::EnqueueNonPersistedPageshowEvent() {
@@ -841,27 +847,10 @@ void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
                      TaskType::kDOMManipulation);
 }
 
-void LocalDOMWindow::EnqueuePopstateEvent(
+void LocalDOMWindow::DispatchPopstateEvent(
     scoped_refptr<SerializedScriptValue> state_object) {
-  // FIXME: https://bugs.webkit.org/show_bug.cgi?id=36202 Popstate event needs
-  // to fire asynchronously
+  DCHECK(GetFrame());
   DispatchEvent(*PopStateEvent::Create(std::move(state_object), history()));
-}
-
-void LocalDOMWindow::StatePopped(
-    scoped_refptr<SerializedScriptValue> state_object) {
-  if (!GetFrame())
-    return;
-
-  // TODO(crbug.com/1254926): Remove pending_state_object_ and the capacity to
-  // delay popstate until after the load event once the behavior is proven
-  // compatible in M103.
-  if (document()->IsLoadCompleted() ||
-      base::FeatureList::IsEnabled(features::kDispatchPopstateSync)) {
-    EnqueuePopstateEvent(std::move(state_object));
-  } else {
-    pending_state_object_ = std::move(state_object);
-  }
 }
 
 LocalDOMWindow::~LocalDOMWindow() = default;
@@ -1829,17 +1818,14 @@ void LocalDOMWindow::cancelAnimationFrame(int id) {
 }
 
 void LocalDOMWindow::queueMicrotask(V8VoidFunction* callback) {
+  ScriptState* script_state = callback->CallbackRelevantScriptState();
+  auto* tracker = ThreadScheduler::Current()->GetTaskAttributionTracker();
+  if (tracker && script_state->World().IsMainWorld()) {
+    callback->SetParentTaskId(tracker->RunningTaskAttributionId(script_state));
+  }
   Microtask::EnqueueMicrotask(
       WTF::Bind(&V8VoidFunction::InvokeAndReportException,
                 WrapPersistent(callback), nullptr));
-}
-
-const Vector<String>& LocalDOMWindow::originPolicyIds() const {
-  return origin_policy_ids_;
-}
-
-void LocalDOMWindow::SetOriginPolicyIds(const Vector<String>& ids) {
-  origin_policy_ids_ = ids;
 }
 
 bool LocalDOMWindow::originAgentCluster() const {
@@ -1964,22 +1950,23 @@ void LocalDOMWindow::DispatchLoadEvent() {
     DispatchEvent(load_event, document());
   }
 
-  if (GetFrame()) {
+  if (LocalFrame* frame = GetFrame()) {
     WindowPerformance* performance = DOMWindowPerformance::performance(*this);
     DCHECK(performance);
     performance->NotifyNavigationTimingToObservers();
+
+    // For load events, send a separate load event to the enclosing frame only.
+    // This is a DOM extension and is independent of bubbling/capturing rules of
+    // the DOM.
+    if (FrameOwner* owner = frame->Owner())
+      owner->DispatchLoad();
+
+    if (frame->IsAttached()) {
+      DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
+          "MarkLoad", inspector_mark_load_event::Data, frame);
+      probe::LoadEventFired(frame);
+    }
   }
-
-  // For load events, send a separate load event to the enclosing frame only.
-  // This is a DOM extension and is independent of bubbling/capturing rules of
-  // the DOM.
-  FrameOwner* owner = GetFrame() ? GetFrame()->Owner() : nullptr;
-  if (owner)
-    owner->DispatchLoad();
-
-  DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
-      "MarkLoad", inspector_mark_load_event::Data, GetFrame());
-  probe::LoadEventFired(GetFrame());
 }
 
 DispatchEventResult LocalDOMWindow::DispatchEvent(Event& event,
@@ -1991,7 +1978,7 @@ DispatchEventResult LocalDOMWindow::DispatchEvent(Event& event,
   event.SetTrusted(true);
   event.SetTarget(target ? target : this);
   event.SetCurrentTarget(this);
-  event.SetEventPhase(Event::kAtTarget);
+  event.SetEventPhase(Event::PhaseType::kAtTarget);
 
   DEVTOOLS_TIMELINE_TRACE_EVENT("EventDispatch",
                                 inspector_event_dispatch_event::Data, event);
@@ -2102,7 +2089,7 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   }
 
   WebWindowFeatures window_features =
-      GetWindowFeaturesFromString(features, entered_window);
+      GetWindowFeaturesFromString(features, entered_window, completed_url);
 
   // In fenced frames, we should always use `noopener`.
   if (GetFrame()->IsInFencedFrameTree()) {
@@ -2263,8 +2250,8 @@ bool LocalDOMWindow::CrossOriginIsolatedCapability() const {
              mojom::blink::PermissionsPolicyFeature::kCrossOriginIsolated);
 }
 
-bool LocalDOMWindow::DirectSocketCapability() const {
-  return Agent::IsDirectSocketEnabled();
+bool LocalDOMWindow::IsolatedApplicationCapability() const {
+  return Agent::IsIsolatedApplication();
 }
 
 ukm::UkmRecorder* LocalDOMWindow::UkmRecorder() {
@@ -2310,6 +2297,17 @@ void LocalDOMWindow::SetIsInBackForwardCache(bool is_in_back_forward_cache) {
 void LocalDOMWindow::DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {
   total_bytes_buffered_while_in_back_forward_cache_ += num_bytes;
   BackForwardCacheBufferLimitTracker::Get().DidBufferBytes(num_bytes);
+}
+
+bool LocalDOMWindow::anonymouslyFramed() const {
+  return GetExecutionContext()
+      ->GetPolicyContainer()
+      ->GetPolicies()
+      .is_anonymous;
+}
+
+bool LocalDOMWindow::IsInFencedFrame() const {
+  return GetFrame() && GetFrame()->IsInFencedFrameTree();
 }
 
 Fence* LocalDOMWindow::fence() {

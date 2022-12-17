@@ -27,6 +27,8 @@ extern const base::Feature kAccountIdMigration;
 extern const base::Feature kAllowSyncOffForChildAccounts;
 #endif
 
+extern const base::Feature kNewSigninRequestHeaderCheckOrder;
+
 extern const char kClearTokenService[];
 
 extern const char kDisableSigninScopedDeviceId[];
@@ -39,10 +41,6 @@ extern const base::Feature kForceDisableExtendedSyncPromos;
 extern const base::Feature kEnableCbdSignOut;
 extern const base::Feature kForceStartupSigninPromo;
 extern const base::Feature kTangibleSync;
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-extern const base::Feature kLacrosNonSyncingProfiles;
 #endif
 
 }  // namespace switches

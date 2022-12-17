@@ -12,7 +12,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
@@ -26,8 +25,6 @@
 #include "chrome/browser/ash/child_accounts/time_limits/app_time_test_utils.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_types.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
-#include "chrome/browser/supervised_user/supervised_user_metrics_service.h"
-#include "chrome/browser/supervised_user/supervised_user_metrics_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -106,22 +103,6 @@ class AppTimeControllerTest : public testing::Test {
       std::move(callback).Run(std::move(iv));
       return nullptr;
     }
-
-    std::unique_ptr<apps::IconLoader::Releaser> LoadIconFromIconKey(
-        apps::mojom::AppType app_type,
-        const std::string& app_id,
-        apps::mojom::IconKeyPtr mojom_icon_key,
-        apps::mojom::IconType icon_type,
-        int32_t size_hint_in_dip,
-        bool allow_placeholder_icon,
-        apps::mojom::Publisher::LoadIconCallback callback) override {
-      auto icon_key = apps::ConvertMojomIconKeyToIconKey(mojom_icon_key);
-      return LoadIconFromIconKey(
-          apps::ConvertMojomAppTypToAppType(app_type), app_id, *icon_key,
-          apps::ConvertMojomIconTypeToIconType(icon_type), size_hint_in_dip,
-          allow_placeholder_icon,
-          apps::IconValueToMojomIconValueCallback(std::move(callback)));
-    }
   };
 
   AppTimeControllerTest() = default;
@@ -131,8 +112,6 @@ class AppTimeControllerTest : public testing::Test {
 
   void SetUp() override;
   void TearDown() override;
-
-  void DisableWebTimeLimit();
 
   void CreateActivityForApp(const AppId& app_id,
                             base::TimeDelta active_time,
@@ -177,17 +156,12 @@ class AppTimeControllerTest : public testing::Test {
 
   std::unique_ptr<AppTimeController> controller_;
   std::unique_ptr<AppTimeController::TestApi> test_api_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 void AppTimeControllerTest::SetUp() {
   SystemClockClient::InitializeFake();
   testing::Test::SetUp();
 
-  // Disable supervised user metrics reporting, otherwise the mock timer
-  // will never return.
-  SupervisedUserMetricsServiceFactory::GetForBrowserContext(&profile())
-      ->Shutdown();
   // The tests are going to start at local midnight on January 1.
   base::Time time;
   ASSERT_TRUE(base::Time::FromString(kStartTime, &time));
@@ -215,16 +189,6 @@ void AppTimeControllerTest::TearDown() {
   arc_test_.TearDown();
   SystemClockClient::Shutdown();
   testing::Test::TearDown();
-}
-
-void AppTimeControllerTest::DisableWebTimeLimit() {
-  scoped_feature_list_.InitWithFeatures(
-      /* enabled_features */ {},
-      /* disabled_features */ {{features::kWebTimeLimits}});
-
-  // Recreate app time controller.
-  DeleteController();
-  InstantiateController();
 }
 
 void AppTimeControllerTest::CreateActivityForApp(const AppId& app_id,

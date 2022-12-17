@@ -8,10 +8,10 @@
  * known networks for a type (currently always WiFi).
  */
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/icons.m.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import './internet_shared_css.js';
 
 import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/cr_components/chromeos/network/cr_policy_network_behavior_mojo.m.js';
@@ -22,6 +22,7 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {recordSettingChange} from '../metrics_recorder.js';
@@ -39,8 +40,11 @@ import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_ob
  */
 const SettingsInternetKnownNetworksPageElementBase = mixinBehaviors(
     [
-      DeepLinkingBehavior, NetworkListenerBehavior, CrPolicyNetworkBehaviorMojo,
-      RouteObserverBehavior, I18nBehavior
+      DeepLinkingBehavior,
+      NetworkListenerBehavior,
+      CrPolicyNetworkBehaviorMojo,
+      RouteObserverBehavior,
+      I18nBehavior,
     ],
     PolymerElement);
 
@@ -74,7 +78,7 @@ class SettingsInternetKnownNetworksPageElement extends
         type: Array,
         value() {
           return [];
-        }
+        },
       },
 
       /** @private */
@@ -94,7 +98,7 @@ class SettingsInternetKnownNetworksPageElement extends
       /**
        * Contains the settingId of any deep link that wasn't able to be shown,
        * null otherwise.
-       * @private {?chromeos.settings.mojom.Setting}
+       * @private {?Setting}
        */
       pendingSettingId_: {
         type: Number,
@@ -103,13 +107,13 @@ class SettingsInternetKnownNetworksPageElement extends
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
         value: () => new Set([
-          chromeos.settings.mojom.Setting.kPreferWifiNetwork,
-          chromeos.settings.mojom.Setting.kForgetWifiNetwork,
+          Setting.kPreferWifiNetwork,
+          Setting.kForgetWifiNetwork,
         ]),
       },
     };
@@ -329,12 +333,13 @@ class SettingsInternetKnownNetworksPageElement extends
   onForgetTap_() {
     this.networkConfig_.forgetNetwork(this.selectedGuid_).then(response => {
       if (!response.success) {
-        console.warn('Froget network failed for: ' + this.selectedGuid_);
+        console.warn('Forget network failed for: ' + this.selectedGuid_);
       }
+      this.refreshNetworks_();
     });
 
     if (this.networkType === chromeos.networkConfig.mojom.NetworkType.kWiFi) {
-      recordSettingChange(chromeos.settings.mojom.Setting.kForgetWifiNetwork);
+      recordSettingChange(Setting.kForgetWifiNetwork);
     } else {
       recordSettingChange();
     }

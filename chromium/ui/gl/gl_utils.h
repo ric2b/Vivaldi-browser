@@ -8,6 +8,7 @@
 #define UI_GL_GL_UTILS_H_
 
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gpu_preference.h"
@@ -28,6 +29,7 @@ class GLDisplayEGL;
 #if defined(USE_GLX)
 class GLDisplayX11;
 #endif  // USE_GLX
+class GLDisplay;
 
 GL_EXPORT void Crash();
 GL_EXPORT void Hang();
@@ -42,12 +44,8 @@ GL_EXPORT bool UsePassthroughCommandDecoder(
 GL_EXPORT bool PassthroughCommandDecoderSupported();
 
 #if BUILDFLAG(IS_WIN)
-GL_EXPORT bool AreOverlaysSupportedWin();
-
 // Calculates present during in 100 ns from number of frames per second.
 GL_EXPORT unsigned int FrameRateToPresentDuration(float frame_rate);
-
-GL_EXPORT UINT GetOverlaySupportFlags(DXGI_FORMAT format);
 
 // BufferCount for the root surface swap chain.
 GL_EXPORT unsigned int DirectCompositionRootSurfaceBufferCount();
@@ -76,8 +74,19 @@ void LabelSwapChainBuffers(IDXGISwapChain* swap_chain, const char* name_prefix);
 GL_EXPORT void SetGpuPreferenceEGL(GpuPreference preference,
                                    uint64_t system_device_id);
 
+// Query the default GLDisplay. May return either a GLDisplayEGL or
+// GLDisplayX11.
+GL_EXPORT GLDisplay* GetDefaultDisplay();
+
+// Query the GLDisplay by |gpu_preference|. May return either a GLDisplayEGL or
+// GLDisplayX11.
+GL_EXPORT GLDisplay* GetDisplay(GpuPreference gpu_preference);
+
 // Query the default GLDisplayEGL.
 GL_EXPORT GLDisplayEGL* GetDefaultDisplayEGL();
+
+// Query the GLDisplayEGL by |system_device_id|.
+GL_EXPORT GLDisplayEGL* GetDisplayEGL(uint64_t system_device_id);
 #endif  // USE_EGL
 
 #if defined(USE_GLX)
@@ -106,7 +115,7 @@ class GL_EXPORT ScopedEnableTextureRectangleInShaderCompiler {
   ~ScopedEnableTextureRectangleInShaderCompiler();
 
  private:
-  gl::GLApi* gl_api_;
+  raw_ptr<gl::GLApi> gl_api_;
 #endif
 };
 

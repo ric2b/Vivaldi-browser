@@ -9,6 +9,8 @@
 
 #include <memory>
 
+#include "chrome/browser/lacros/sync/sync_crosapi_manager_lacros.h"
+
 class ArcIconCache;
 class AutomationManagerLacros;
 class BrowserServiceLacros;
@@ -17,16 +19,18 @@ class DeskTemplateClientLacros;
 class DriveFsCache;
 class DownloadControllerClientLacros;
 class ForceInstalledTrackerLacros;
+class FullscreenControllerClientLacros;
 class LacrosButterBar;
 class LacrosExtensionAppsController;
 class LacrosExtensionAppsPublisher;
 class LacrosFileSystemProvider;
 class KioskSessionServiceLacros;
 class FieldTrialObserver;
+class NetworkChangeManagerBridge;
 class QuickAnswersController;
 class StandaloneBrowserTestController;
-class SyncExplicitPassphraseClientLacros;
 class TabletModePageBehavior;
+class UiThroughputRecorderLacros;
 class VpnExtensionTrackerLacros;
 class WebAuthnRequestRegistrarLacros;
 
@@ -72,6 +76,10 @@ class ChromeBrowserMainExtraPartsLacros : public ChromeBrowserMainExtraParts {
   // Handles requests for desk template data from ash-chrome.
   std::unique_ptr<DeskTemplateClientLacros> desk_template_client_;
 
+  // Handles queries regarding full screen control from ash-chrome.
+  std::unique_ptr<FullscreenControllerClientLacros>
+      fullscreen_controller_client_;
+
   // Handles search queries from ash-chrome.
   std::unique_ptr<crosapi::SearchControllerLacros> search_controller_;
 
@@ -86,6 +94,9 @@ class ChromeBrowserMainExtraPartsLacros : public ChromeBrowserMainExtraParts {
 
   // Sends lacros installation status of force-installed extensions to ash.
   std::unique_ptr<ForceInstalledTrackerLacros> force_installed_tracker_;
+
+  // Receives and handles network change status.
+  std::unique_ptr<NetworkChangeManagerBridge> network_change_manager_bridge_;
 
   // Sends lacros load/unload events of Vpn extensions to ash.
   std::unique_ptr<VpnExtensionTrackerLacros> vpn_extension_tracker_;
@@ -137,10 +148,6 @@ class ChromeBrowserMainExtraPartsLacros : public ChromeBrowserMainExtraParts {
   std::unique_ptr<content::ScreenOrientationDelegate>
       screen_orientation_delegate_;
 
-  // Responsible for sharing sync explicit passphrase between Ash and Lacros.
-  std::unique_ptr<SyncExplicitPassphraseClientLacros>
-      sync_explicit_passphrase_client_;
-
   // Handles WebAuthn request id generation.
   std::unique_ptr<WebAuthnRequestRegistrarLacros>
       webauthn_request_registrar_lacros_;
@@ -153,6 +160,12 @@ class ChromeBrowserMainExtraPartsLacros : public ChromeBrowserMainExtraParts {
 
   // Forwards file system provider events to extensions.
   std::unique_ptr<LacrosFileSystemProvider> file_system_provider_;
+
+  // Records UI metrics such as dropped frame percentage.
+  std::unique_ptr<UiThroughputRecorderLacros> ui_throughput_recorder_;
+
+  // Controls sync-related Crosapi clients.
+  SyncCrosapiManagerLacros sync_crosapi_manager_;
 };
 
 #endif  // CHROME_BROWSER_LACROS_CHROME_BROWSER_MAIN_EXTRA_PARTS_LACROS_H_

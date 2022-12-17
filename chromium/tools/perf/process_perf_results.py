@@ -502,7 +502,7 @@ def _GetCpuCount(log=True):
     return cpu_count
   except NotImplementedError:
     if log:
-      logging.warn(
+      logging.warning(
           'Failed to get a CPU count for this bot. See crbug.com/947035.')
     # TODO(crbug.com/948281): This is currently set to 4 since the mac masters
     # only have 4 cores. Once we move to all-linux, this can be increased or
@@ -578,9 +578,9 @@ def _should_add_device_id_in_perf_result(builder_name):
   # We should always add device id in calibration builders.
   # For testing purpose, adding fyi as well for faster turnaround, because
   # calibration builders run every 24 hours.
-  return any([
-      builder_name == p.name for p in bot_platforms.CALIBRATION_PLATFORMS
-  ]) or (builder_name == 'android-pixel2-perf-fyi')
+  return any(builder_name == p.name
+             for p in bot_platforms.CALIBRATION_PLATFORMS) or (
+                 builder_name == 'android-pixel2-perf-fyi')
 
 
 def _update_perf_results_for_calibration(benchmarks_shard_map_file,

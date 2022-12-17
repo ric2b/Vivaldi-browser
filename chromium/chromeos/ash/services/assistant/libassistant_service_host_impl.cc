@@ -10,14 +10,13 @@
 #include "chromeos/ash/components/assistant/buildflags.h"
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
-#include "chromeos/services/assistant/public/cpp/assistant_browser_delegate.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_browser_delegate.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/services/libassistant/libassistant_service.h"
 #include "chromeos/services/libassistant/public/mojom/service.mojom-forward.h"
 #endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 
-namespace chromeos {
-namespace assistant {
+namespace ash::assistant {
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 
@@ -60,5 +59,4 @@ void LibassistantServiceHostImpl::Stop() {}
 
 #endif
 
-}  // namespace assistant
-}  // namespace chromeos
+}  // namespace ash::assistant

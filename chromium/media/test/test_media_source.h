@@ -15,7 +15,7 @@
 #include "media/filters/chunk_demuxer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 #include "base/files/file_path.h"
 #endif
 
@@ -38,7 +38,7 @@ class TestMediaSource {
                   const std::string& mimetype,
                   size_t initial_append_size,
                   bool initial_sequence_mode = false
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
                   , const base::FilePath& full_filename = {}
 #endif
   );
@@ -111,7 +111,7 @@ class TestMediaSource {
     expected_append_result_ = expectation;
   }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   const base::FilePath file_path() { return file_path_; }
 #endif
 
@@ -128,7 +128,7 @@ class TestMediaSource {
   size_t current_position_;
   size_t initial_append_size_;
   bool initial_sequence_mode_;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   base::FilePath file_path_;
 #endif
   std::string mimetype_;

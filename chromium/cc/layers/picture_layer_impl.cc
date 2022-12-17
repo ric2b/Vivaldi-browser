@@ -230,10 +230,9 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
     Occlusion occlusion = draw_properties().occlusion_in_content_space;
 
     EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
-    // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
     SolidColorLayerImpl::AppendSolidQuads(
         render_pass, occlusion, shared_quad_state, scaled_visible_layer_rect,
-        SkColor4f::FromColor(raster_source_->GetSolidColor()),
+        raster_source_->GetSolidColor(),
         !layer_tree_impl()->settings().enable_edge_anti_aliasing,
         effect_node->blend_mode, append_quads_data);
     return;
@@ -400,24 +399,20 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
       gfx::Rect geometry_rect = iter.geometry_rect();
       geometry_rect.Offset(quad_offset);
       gfx::Rect visible_geometry_rect = geometry_rect;
-      // TODO(crbug/1308932): Remove  toSkColor  and make all SkColor4f.
       debug_border_quad->SetNew(shared_quad_state, geometry_rect,
-                                visible_geometry_rect, color.toSkColor(),
-                                width);
+                                visible_geometry_rect, color, width);
     }
   }
 
   if (layer_tree_impl()->debug_state().highlight_non_lcd_text_layers) {
-    // TODO(crbug/1308932): Remove all instances of toSkColor below and make all
-    // SkColor4f.
     SkColor4f color =
         DebugColors::NonLCDTextHighlightColor(lcd_text_disallowed_reason());
     if (color != SkColors::kTransparent &&
         GetRasterSource()->GetDisplayItemList()->AreaOfDrawText(
             gfx::Rect(bounds()))) {
       render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>()->SetNew(
-          shared_quad_state, debug_border_rect, debug_border_rect,
-          color.toSkColor(), append_quads_data);
+          shared_quad_state, debug_border_rect, debug_border_rect, color,
+          append_quads_data);
     }
   }
 
@@ -493,9 +488,7 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
           break;
         }
         case TileDrawInfo::SOLID_COLOR_MODE: {
-          float alpha =
-              (SkColorGetA(draw_info.solid_color()) * (1.0f / 255.0f)) *
-              shared_quad_state->opacity;
+          float alpha = draw_info.solid_color().fA * shared_quad_state->opacity;
           if (alpha >= std::numeric_limits<float>::epsilon()) {
             auto* quad =
                 render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
@@ -522,9 +515,8 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
       }
       auto* quad =
           render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
-      // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
       quad->SetNew(shared_quad_state, offset_geometry_rect,
-                   offset_visible_geometry_rect, color.toSkColor(), false);
+                   offset_visible_geometry_rect, color, false);
       ValidateQuadResources(quad);
 
       if (geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
@@ -546,6 +538,14 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
           checkerboarded_has_recording_area;
       append_quads_data->checkerboarded_no_recording_content_area +=
           visible_geometry_area - checkerboarded_has_recording_area;
+
+      // Report data on any missing images that might be the largest
+      // contentful image.
+      if (*iter) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Compositing.DecodeLCPCandidateImage.MissedDeadline",
+            iter->HasMissingLCPCandidateImages());
+      }
 
       continue;
     }
@@ -1249,6 +1249,10 @@ bool PictureLayerImpl::CanRecreateHighResTilingForLCDTextAndRasterTransform(
   // will be deleted.
   if (layer_tree_impl()->IsSyncTree() && layer_tree_impl()->IsReadyToActivate())
     return false;
+  // To reduce memory usage, don't recreate highres tiling during scroll
+  if (ScrollInteractionInProgress())
+    return false;
+
   return true;
 }
 

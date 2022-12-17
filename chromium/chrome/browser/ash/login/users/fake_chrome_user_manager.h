@@ -132,6 +132,7 @@ class FakeChromeUserManager : public ChromeUserManager {
   bool IsGuestSessionAllowed() const override;
   bool IsGaiaUserAllowed(const user_manager::User& user) const override;
   bool IsUserAllowed(const user_manager::User& user) const override;
+  bool AreEphemeralUsersEnabled() const override;
   PrefService* GetLocalState() const override;
   const AccountId& GetGuestAccountId() const override;
   bool IsFirstExecAfterBoot() const override;
@@ -147,7 +148,6 @@ class FakeChromeUserManager : public ChromeUserManager {
                              base::OnceClosure on_resolved_callback,
                              std::string* out_resolved_locale) const override;
   bool IsValidDefaultUserImageId(int image_index) const override;
-  bool AreEphemeralUsersEnabled() const override;
   void SetIsCurrentUserNew(bool is_new) override;
   void Initialize() override;
 
@@ -178,8 +178,6 @@ class FakeChromeUserManager : public ChromeUserManager {
       const AccountId& account_id,
       const AffiliationIDSet& user_affiliation_ids) override;
   bool ShouldReportUser(const std::string& user_id) const override;
-  bool IsManagedSessionEnabledForUser(
-      const user_manager::User& active_user) const override;
   bool IsFullManagementDisclosureNeeded(
       policy::DeviceLocalAccountPolicyBroker* broker) const override;
   void CacheRemovedUser(const std::string& user_email,

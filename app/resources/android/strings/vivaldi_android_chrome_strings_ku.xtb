@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ku">
 <translation id="1397811292916898096">Bi <ph name="PRODUCT_NAME" />-ê lêbigere</translation>
+<translation id="1456207338570705181">Touch to Search taybetmendiyeke ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest be peyda dibe. ew peyvê hilbijartî û rûpela heyî wekî naverok dişîne bo lêgerîna Google. Tu dikarî wê vemrînî di <ph name="BEGIN_LINK" /> sazkariyên <ph name="END_LINK" /> de.</translation>
 <translation id="1598449788754183301">Rûgerên berdest/taybet biguherîne</translation>
 <translation id="1644574205037202324">Dîrok</translation>
 <translation id="17513872634828108">Rûgeran veke</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Rûgera nû ya taybet</translation>
 <translation id="4243710787042215766">Di rûgerekê taybet de veke</translation>
 <translation id="4526803704855831732">Rûgerên taybet</translation>
+<translation id="4719086422742491124">Bêyî ku ji rûpelê derkevî li ser mijarên li ser malperan fêr bibe. Li ser rûpelê yek an bêhtir peyvan hilbijêre ku li wan bigerî.
+
+Touch to Search taybetmendiyeke ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest be peyda dibe.</translation>
 <translation id="4759238208242260848">Daxistin</translation>
 <translation id="4883379392681899581">Dev ji moda taybet berde</translation>
 <translation id="4943872375798546930">Encam tune ye</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> bîrdank</translation>
 <translation id="5186185447130319458">Taybet</translation>
 <translation id="5233638681132016545">Rûgera nû</translation>
-<translation id="572328651809341494">Rûgerên dawî</translation>
-<translation id="5840488417521835756">Bêyî ji rûpelê derkeve mijarên malperên din fêr bibe. "Bo lêgerînê bitepîne" taybetiyek e ku tenê dema ku Google motora lêgerînê ya berdest a Vivaldiyê be, tê bikaranîn. Ew peyvekê û dorhêla wê ji Lêgerîna Google-ê re dişîne, danasînan, wêneyan, encamên lêgerînê, û hûrguliyên din dibîne.
+<translation id="5375131951310889874">Bêyî ku ji rûpelê derkevî li ser mijarên li ser malperan fêr bibe. Li ser rûpelê yek an bêhtir peyvan hilbijêre ku li wan bigerî. Touch to Search taybetmendiyeke ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest be peyda dibe. Ew peyvekê û çarçoveya ku li derdora wê ji lêgerîna Google re dişîne, pênase, wêne, encamên lêgerînê û hûrguliyên din vedigerîne.
 
-Ji bo ku têgiha xwe ya lêgerînê sererast bikî an jî hilbijêrî bi dirêjî bitikîne. Ji bo safîkirina lêgerîna xwe, destgehê tev de hilkişîne jor û li qutîka lêgerînê bitikîne.</translation>
+Ji bo sazkirina peyva lêgerîna xwe, dirêj bitikîne bo hilbijêrî. Ji bo ku lêgerîna xwe zelaltir bikî, destgehê bo jor kaş bike û kodika lêgerînê bitikîne.</translation>
+<translation id="572328651809341494">Rûgerên dawî</translation>
 <translation id="6150320133806434356">Şûnpel hate tomarkirin</translation>
 <translation id="6336451774241870485">Rûgera nû ya taybet</translation>
 <translation id="6585139692466700358">Pêşniyaz bike ku rûpel bi riya karûbarê wergerê ya Vivaldiyê re werin wergerandin</translation>
@@ -53,7 +57,6 @@ Ji bo ku têgiha xwe ya lêgerînê sererast bikî an jî hilbijêrî bi dirêj�
 <translation id="732145680195464316">Şûnpel li <ph name="PRODUCT_NAME" />ê hate tomarkirin</translation>
 <translation id="7427132068601343474">Di derbarê Vivaldiyê de</translation>
 <translation id="7465104139234185284">Hemû rûgerên taybet bigire</translation>
-<translation id="7519434535192513364">"Bo lêgerînê bitepîne" taybetiyek e ku tenê gava Google motora lêgerînê ya berdest a Vivaldiyê be, tê bikaranîn. Ew peyvekê û dorhêla wê ji Lêgerîna Google-ê re dişîne. Tu dikarî wê di <ph name="BEGIN_LINK" />Sazkarî <ph name="END_LINK" />yê de neçalak bike.</translation>
 <translation id="804786196054284061">Peymana lîsansa bikaranîna dawîn</translation>
 <translation id="85991616550051997">Vegere serrûpelê</translation>
 <translation id="8820817407110198400">Şûnpel</translation>

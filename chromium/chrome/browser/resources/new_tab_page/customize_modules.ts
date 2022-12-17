@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
-import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.m.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
-import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
+import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_indicator.m.js';
 
-import {CrRadioButtonElement} from 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
+import {CrRadioButtonElement} from 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import {DomRepeat, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './customize_modules.html.js';
@@ -24,17 +24,18 @@ declare global {
   }
 }
 
-type ModuleSetting = {
-  name: string,
-  id: string,
-  checked: boolean,
-  initiallyChecked: boolean,
-  disabled: boolean,
-};
+interface ModuleSetting {
+  name: string;
+  id: string;
+  checked: boolean;
+  initiallyChecked: boolean;
+  disabled: boolean;
+}
 
 
 export interface CustomizeModulesElement {
   $: {
+    container: HTMLElement,
     customizeButton: CrRadioButtonElement,
     hideButton: CrRadioButtonElement,
     toggleRepeat: DomRepeat,
@@ -84,7 +85,7 @@ export class CustomizeModulesElement extends I18nMixin
       discountToggleEligible_: {
         type: Boolean,
         value: false,
-      }
+      },
     };
   }
 
@@ -102,6 +103,7 @@ export class CustomizeModulesElement extends I18nMixin
         NewTabPageProxy.getInstance()
             .callbackRouter.setDisabledModules.addListener(
                 (all: boolean, ids: string[]) => {
+                  this.$.container.hidden = false;
                   this.show_ = !all;
                   this.modules_.forEach(({id}, i) => {
                     const checked = !all && !ids.includes(id);
@@ -155,8 +157,9 @@ export class CustomizeModulesElement extends I18nMixin
             handler.setModuleDisabled(id, !checked);
           }
           const base = `NewTabPage.Modules.${checked ? 'Enabled' : 'Disabled'}`;
-          chrome.metricsPrivate.recordSparseHashable(base, id);
-          chrome.metricsPrivate.recordSparseHashable(`${base}.Customize`, id);
+          chrome.metricsPrivate.recordSparseValueWithPersistentHash(base, id);
+          chrome.metricsPrivate.recordSparseValueWithPersistentHash(
+              `${base}.Customize`, id);
         });
     // Discount toggle is a workaround for crbug.com/1199465 and will be
     // removed after module customization is better defined. Please avoid

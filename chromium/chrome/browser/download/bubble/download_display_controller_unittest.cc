@@ -52,6 +52,13 @@ class FakeDownloadDisplay : public DownloadDisplay {
     controller_ = controller;
   }
 
+  void ResetState() {
+    shown_ = false;
+    detail_shown_ = false;
+    icon_state_ = DownloadIconState::kComplete;
+    is_active_ = false;
+  }
+
   void Show() override { shown_ = true; }
 
   void Hide() override {
@@ -73,9 +80,11 @@ class FakeDownloadDisplay : public DownloadDisplay {
   void ShowDetails() override { detail_shown_ = true; }
   void HideDetails() override { detail_shown_ = false; }
   bool IsShowingDetails() override { return detail_shown_; }
+  bool IsFullscreenWithParentViewHidden() override { return is_fullscreen_; }
 
   DownloadIconState GetDownloadIconState() { return icon_state_; }
   bool IsActive() { return is_active_; }
+  void SetIsFullscreen(bool is_fullscreen) { is_fullscreen_ = is_fullscreen; }
 
  private:
   bool shown_ = false;
@@ -83,6 +92,7 @@ class FakeDownloadDisplay : public DownloadDisplay {
   DownloadIconState icon_state_ = DownloadIconState::kComplete;
   bool is_active_ = false;
   bool detail_shown_ = false;
+  bool is_fullscreen_ = false;
   DownloadDisplayController* controller_ = nullptr;
 };
 
@@ -140,7 +150,7 @@ class DownloadDisplayControllerTest : public testing::Test {
         std::make_unique<FakeDownloadBubbleUIController>(browser_.get());
     bubble_controller_->set_manager_for_testing(manager_.get());
     controller_ = std::make_unique<DownloadDisplayController>(
-        display_.get(), profile_, bubble_controller_.get());
+        display_.get(), browser_.get(), bubble_controller_.get());
     controller_->set_manager_for_testing(manager_.get());
     display_->SetController(controller_.get());
   }
@@ -153,6 +163,8 @@ class DownloadDisplayControllerTest : public testing::Test {
     // download_notifier_ will unregister itself from the manager.
     controller_.reset();
   }
+
+  Browser* browser() { return browser_.get(); }
 
  protected:
   NiceMock<content::MockDownloadManager>& manager() { return *manager_.get(); }
@@ -604,7 +616,7 @@ TEST_F(DownloadDisplayControllerTest, InitialState_OldLastDownload) {
   DownloadPrefs::FromDownloadManager(&manager())
       ->SetLastCompleteTime(current_time - base::Hours(25));
 
-  DownloadDisplayController controller(&display(), profile(),
+  DownloadDisplayController controller(&display(), browser(),
                                        &bubble_controller());
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
                                  /*icon_state=*/DownloadIconState::kComplete,
@@ -619,7 +631,7 @@ TEST_F(DownloadDisplayControllerTest, InitialState_NewLastDownload) {
   DownloadPrefs::FromDownloadManager(&manager())
       ->SetLastCompleteTime(current_time - base::Hours(23));
 
-  DownloadDisplayController controller(&display(), profile(),
+  DownloadDisplayController controller(&display(), browser(),
                                        &bubble_controller());
   // The initial state should not display details.
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
@@ -634,6 +646,19 @@ TEST_F(DownloadDisplayControllerTest, InitialState_NewLastDownload) {
                                  /*is_active=*/false));
 }
 
+TEST_F(DownloadDisplayControllerTest, InitialState_InProgressDownload) {
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+
+  // Simulate a new window opened.
+  display().ResetState();
+  DownloadDisplayController controller(&display(), browser(),
+                                       &bubble_controller());
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+}
+
 TEST_F(DownloadDisplayControllerTest,
        InitialState_NewLastDownloadWithEmptyItem) {
   base::Time current_time = base::Time::Now();
@@ -641,7 +666,7 @@ TEST_F(DownloadDisplayControllerTest,
   DownloadPrefs::FromDownloadManager(&manager())
       ->SetLastCompleteTime(current_time - base::Hours(23));
 
-  DownloadDisplayController controller(&display(), profile(),
+  DownloadDisplayController controller(&display(), browser(),
                                        &bubble_controller());
   // Although the last complete time is set, the download display is not shown
   // because the download item list is empty. This can happen if the download
@@ -652,7 +677,7 @@ TEST_F(DownloadDisplayControllerTest,
 }
 
 TEST_F(DownloadDisplayControllerTest, InitialState_NoLastDownload) {
-  DownloadDisplayController controller(&display(), profile(),
+  DownloadDisplayController controller(&display(), browser(),
                                        &bubble_controller());
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
                                  /*icon_state=*/DownloadIconState::kComplete,
@@ -687,4 +712,61 @@ TEST_F(DownloadDisplayControllerTest, OnButtonPressed_IconStateInProgress) {
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
                                  /*icon_state=*/DownloadIconState::kProgress,
                                  /*is_active=*/true));
+}
+
+TEST_F(DownloadDisplayControllerTest,
+       Fullscreen_ShowsDetailsForInProgressOnExitFullscreen) {
+  display().SetIsFullscreen(true);
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  // Do not show bubble for in-progress download in full screen mode.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+
+  display().SetIsFullscreen(false);
+  controller().OnFullscreenStateChanged();
+  // Show bubble for in-progress download when exiting full screen mode.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+}
+
+TEST_F(DownloadDisplayControllerTest,
+       Fullscreen_ShowsIconForCompletedOnExitFullscreen) {
+  display().SetIsFullscreen(true);
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+
+  UpdateDownloadItem(/*item_index=*/0, DownloadState::COMPLETE,
+                     download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+                     /*show_details_if_done=*/true);
+  // While the bubble does not pop up, and the toolbar not shown, the icon
+  // state is still updated. So |is_active| should be true for one minute
+  // after completed download.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/true));
+
+  task_environment_.FastForwardBy(base::Minutes(1));
+  // The display is still showing but the state has changed to inactive.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
+
+  display().SetIsFullscreen(false);
+  controller().OnFullscreenStateChanged();
+  // On exiting full screen, show download icon as active for 1 minute.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/true));
+
+  task_environment_.FastForwardBy(base::Minutes(1));
+  // The display is still showing but the state has changed to inactive.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
 }

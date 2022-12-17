@@ -46,6 +46,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   PrefService* GetPrefs() const override;
   PrefService* GetLocalState() override;
+  std::string GetApplicationLocale() const override;
   const AutocompleteSchemeClassifier& GetSchemeClassifier() const override;
   AutocompleteClassifier* GetAutocompleteClassifier() override;
   history::HistoryService* GetHistoryService() override;
@@ -106,6 +107,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   void OpenIncognitoClearBrowsingDataDialog() override;
   void CloseIncognitoWindows() override;
   void PromptPageTranslation() override;
+  bool OpenJourneys() override;
 
   // For testing.
   void set_storage_partition(content::StoragePartition* storage_partition) {

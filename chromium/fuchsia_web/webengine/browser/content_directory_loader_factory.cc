@@ -23,7 +23,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "fuchsia/base/fuchsia_dir_scheme.h"
+#include "fuchsia_web/common/fuchsia_dir_scheme.h"
 #include "fuchsia_web/webengine/common/web_engine_content_client.h"
 #include "fuchsia_web/webengine/switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -193,11 +193,14 @@ class ContentDirectoryURLLoader final : public network::mojom::URLLoader {
                             metadata_mmap.length()));
 
       if (metadata_parsed && metadata_parsed->is_dict()) {
-        if (metadata_parsed->FindStringKey("charset"))
-          charset = *metadata_parsed->FindStringKey("charset");
+        const auto& dict = metadata_parsed->GetDict();
+        const std::string* parsed_charset = dict.FindString("charset");
+        if (parsed_charset)
+          charset = *parsed_charset;
 
-        if (metadata_parsed->FindStringKey("mime"))
-          mime_type = *metadata_parsed->FindStringKey("mime");
+        const std::string* parsed_mime = dict.FindString("mime");
+        if (parsed_mime)
+          mime_type = *parsed_mime;
       }
     }
 
@@ -357,8 +360,7 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
     const network::ResourceRequest& request,
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-  if (!request.url.SchemeIs(cr_fuchsia::kFuchsiaDirScheme) ||
-      !request.url.is_valid()) {
+  if (!request.url.SchemeIs(kFuchsiaDirScheme) || !request.url.is_valid()) {
     mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
         ->OnComplete(network::URLLoaderCompletionStatus(net::ERR_INVALID_URL));
     return;

@@ -8,7 +8,7 @@
 #include "chrome/browser/media/router/chrome_media_router_factory.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_cast_feature.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_cast_sink_service.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/media_router/browser/media_router_factory.h"
 
 namespace media_router {
 
@@ -16,9 +16,13 @@ namespace media_router {
 AccessCodeCastSinkService* AccessCodeCastSinkServiceFactory::GetForProfile(
     Profile* profile) {
   DCHECK(profile);
-  if (!GetAccessCodeCastEnabledPref(profile->GetPrefs())) {
+  if (!GetAccessCodeCastEnabledPref(profile)) {
     return nullptr;
   }
+  DCHECK(MediaRouterFactory::GetApiForBrowserContext(profile))
+      << "The Media Router has not been properly intialized before the "
+         "AccessCodeCastSinkService is created!";
+
   // GetServiceForBrowserContext returns a KeyedService hence the static_cast<>
   // to return a pointer to AccessCodeCastSinkService.
   AccessCodeCastSinkService* service = static_cast<AccessCodeCastSinkService*>(
@@ -45,29 +49,25 @@ AccessCodeCastSinkServiceFactory::GetInstance() {
 }
 
 AccessCodeCastSinkServiceFactory::AccessCodeCastSinkServiceFactory()
-    : BrowserContextKeyedServiceFactory(
-          "AccessCodeSinkService",
-          BrowserContextDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactory("AccessCodeSinkService") {
+  // TODO(b/238212430): Add a browsertest case to ensure that all media router
+  // objects are created before the ACCSS.
   DependsOn(media_router::ChromeMediaRouterFactory::GetInstance());
 }
 
 AccessCodeCastSinkServiceFactory::~AccessCodeCastSinkServiceFactory() = default;
 
 KeyedService* AccessCodeCastSinkServiceFactory::BuildServiceInstanceFor(
-    content::BrowserContext* profile) const {
-  if (!GetAccessCodeCastEnabledPref(
-          Profile::FromBrowserContext(profile)->GetPrefs())) {
+    content::BrowserContext* context) const {
+  // TODO(b/243973085): Remove profile init duplication.
+  if (!GetAccessCodeCastEnabledPref(Profile::FromBrowserContext(context))) {
     return nullptr;
   }
-  return new AccessCodeCastSinkService(static_cast<Profile*>(profile));
+  return new AccessCodeCastSinkService(static_cast<Profile*>(context));
 }
 
 bool AccessCodeCastSinkServiceFactory::ServiceIsCreatedWithBrowserContext()
     const {
-  return true;
-}
-
-bool AccessCodeCastSinkServiceFactory::ServiceIsNULLWhileTesting() const {
   return true;
 }
 

@@ -44,9 +44,7 @@
 
 // TODO(ukai): factor out common part with spdy_http_stream_unittest.cc
 //
-namespace net {
-
-namespace test {
+namespace net::test {
 
 namespace {
 
@@ -122,17 +120,13 @@ class SpdyStreamTest : public ::testing::Test, public WithTaskEnvironment {
     reads_.push_back(std::move(read));
   }
 
-  void AddReadEOF() {
-    reads_.push_back(MockRead(ASYNC, 0, offset_++));
-  }
+  void AddReadEOF() { reads_.emplace_back(ASYNC, 0, offset_++); }
 
   void AddWritePause() {
-    writes_.push_back(MockWrite(ASYNC, ERR_IO_PENDING, offset_++));
+    writes_.emplace_back(ASYNC, ERR_IO_PENDING, offset_++);
   }
 
-  void AddReadPause() {
-    reads_.push_back(MockRead(ASYNC, ERR_IO_PENDING, offset_++));
-  }
+  void AddReadPause() { reads_.emplace_back(ASYNC, ERR_IO_PENDING, offset_++); }
 
   base::span<const MockRead> GetReads() { return reads_; }
   base::span<const MockWrite> GetWrites() { return writes_; }
@@ -177,6 +171,24 @@ class SpdyStreamTest : public ::testing::Test, public WithTaskEnvironment {
   std::vector<MockRead> reads_;
   int offset_ = 0;
   SSLSocketDataProvider ssl_;
+};
+
+class SpdyStreamPushTest : public SpdyStreamTest {
+ protected:
+  // A function that takes a SpdyStream and the number of bytes which
+  // will unstall the next frame completely.
+  typedef base::OnceCallback<void(const base::WeakPtr<SpdyStream>&, int32_t)>
+      UnstallFunction;
+
+  explicit SpdyStreamPushTest(
+      base::test::TaskEnvironment::TimeSource time_source =
+          base::test::TaskEnvironment::TimeSource::DEFAULT)
+      : SpdyStreamTest(time_source) {
+    session_deps_.http2_settings[spdy::SETTINGS_ENABLE_PUSH] = 1;
+    session_ = SpdySessionDependencies::SpdyCreateSession(&session_deps_);
+  }
+
+  ~SpdyStreamPushTest() override = default;
 };
 
 TEST_F(SpdyStreamTest, SendDataAfterOpen) {
@@ -356,7 +368,7 @@ TEST_F(SpdyStreamTest, Trailers) {
   EXPECT_TRUE(data.AllWriteDataConsumed());
 }
 
-TEST_F(SpdyStreamTest, PushedStream) {
+TEST_F(SpdyStreamPushTest, PushedStream) {
   spdy::SpdySerializedFrame req(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST));
   AddWrite(req);
@@ -688,7 +700,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeaders) {
 
 // Receiving a header with uppercase ASCII should result in a protocol error
 // even for a push stream.
-TEST_F(SpdyStreamTest, UpperCaseHeadersOnPush) {
+TEST_F(SpdyStreamPushTest, UpperCaseHeadersOnPush) {
   spdy::SpdySerializedFrame req(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST));
   AddWrite(req);
@@ -801,7 +813,7 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatus) {
   EXPECT_TRUE(data.AllReadDataConsumed());
 }
 
-TEST_F(SpdyStreamTest, HeadersMustHaveStatusOnPushedStream) {
+TEST_F(SpdyStreamPushTest, HeadersMustHaveStatusOnPushedStream) {
   spdy::SpdySerializedFrame req(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST));
   AddWrite(req);
@@ -873,7 +885,7 @@ TEST_F(SpdyStreamTest, HeadersMustHaveStatusOnPushedStream) {
   EXPECT_TRUE(data.AllReadDataConsumed());
 }
 
-TEST_F(SpdyStreamTest, HeadersMustPreceedData) {
+TEST_F(SpdyStreamPushTest, HeadersMustPreceedData) {
   spdy::SpdySerializedFrame req(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST));
   AddWrite(req);
@@ -914,7 +926,7 @@ TEST_F(SpdyStreamTest, HeadersMustPreceedData) {
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_HTTP2_PROTOCOL_ERROR));
 }
 
-TEST_F(SpdyStreamTest, HeadersMustPreceedDataOnPushedStream) {
+TEST_F(SpdyStreamPushTest, HeadersMustPreceedDataOnPushedStream) {
   spdy::SpdySerializedFrame req(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST));
   AddWrite(req);
@@ -2076,6 +2088,4 @@ TEST_F(SpdyStreamTestWithMockClock, FlowControlSlowReads) {
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
 }
 
-}  // namespace test
-
-}  // namespace net
+}  // namespace net::test

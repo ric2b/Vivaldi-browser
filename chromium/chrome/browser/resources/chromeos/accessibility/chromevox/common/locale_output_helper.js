@@ -10,9 +10,9 @@
  * https://en.wikipedia.org/wiki/Locale_(computer_software)
  */
 
-goog.provide('LocaleOutputHelper');
+import {Msgs} from './msgs.js';
 
-LocaleOutputHelper = class {
+export class LocaleOutputHelper {
   /** @private */
   constructor() {
     /**
@@ -48,7 +48,8 @@ LocaleOutputHelper = class {
   /**
    * Computes |this.currentLocale_| and |outputString|, and returns them.
    * @param {string} text
-   * @param {AutomationNode} contextNode The AutomationNode that owns |text|.
+   * @param {chrome.automation.AutomationNode} contextNode The AutomationNode
+   *     that owns |text|.
    * @return {!{text: string, locale: string}}
    */
   computeTextAndLocale(text, contextNode) {
@@ -183,7 +184,7 @@ LocaleOutputHelper = class {
     return chrome.accessibilityPrivate.getDisplayNameForLocale(
                locale, locale) !== '';
   }
-};
+}
 
 /** @type {LocaleOutputHelper} */
 LocaleOutputHelper.instance;

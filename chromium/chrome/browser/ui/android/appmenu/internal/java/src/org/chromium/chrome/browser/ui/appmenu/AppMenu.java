@@ -56,6 +56,9 @@ import org.chromium.ui.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Shows a popup of menuitems anchored to a host view. When a item is selected we call
  * AppMenuHandlerImpl.AppMenuDelegate.onOptionsItemSelected with the appropriate MenuItem.
@@ -299,6 +302,8 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
                 popupHeight, anchorView.getRootView().getLayoutDirection());
         mPopup.setContentView(contentView);
 
+        // Vivaldi - Adjust the app menu height especially for bottom address bar
+        if (!BuildConfig.IS_VIVALDI)
         if (popupHeight + popupPosition[1] > visibleDisplayFrame.bottom) {
             mPopup.setHeight(visibleDisplayFrame.height());
         }
@@ -543,6 +548,10 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         if (anchorViewY > screenHeight) {
             anchorViewY = appDimensions.height();
         }
+
+        // Vivaldi - Adjust the app menu height especially for bottom address bar
+        if (BuildConfig.IS_VIVALDI) anchorViewY = appDimensions.height();
+
         int availableScreenSpace = Math.max(
                 anchorViewY, appDimensions.height() - anchorViewY - anchorViewImpactHeight);
 

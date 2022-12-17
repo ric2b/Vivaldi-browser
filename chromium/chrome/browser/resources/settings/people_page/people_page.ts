@@ -6,8 +6,8 @@
  * @fileoverview
  * 'settings-people-page' is the settings page containing sign-in settings.
  */
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/cr_elements/icons.m.js';
@@ -20,10 +20,10 @@ import './sync_account_control.js';
 import '../icons.html.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 
 // <if expr="chromeos_ash">
-import {convertImageSequenceToPng} from 'chrome://resources/cr_elements/chromeos/cr_picture/png.js';
+import {convertImageSequenceToPng} from 'chrome://resources/ash/common/cr_picture/png.js';
 // </if>
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {isChromeOS} from 'chrome://resources/js/cr.m.js';
@@ -33,6 +33,7 @@ import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resource
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
+import {FocusConfig} from '../focus_config.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {OpenWindowProxyImpl} from '../open_window_proxy.js';
 import {PageVisibility} from '../page_visibility.js';
@@ -46,8 +47,6 @@ import {AccountManagerBrowserProxyImpl} from './account_manager_browser_proxy.js
 import {getTemplate} from './people_page.html.js';
 import {ProfileInfo, ProfileInfoBrowserProxyImpl} from './profile_info_browser_proxy.js';
 import {StoredAccount, SyncBrowserProxy, SyncBrowserProxyImpl, SyncStatus} from './sync_browser_proxy.js';
-
-type FocusConfig = Map<string, (string|(() => void))>;
 
 export interface SettingsPeoplePageElement {
   $: {
@@ -194,10 +193,10 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
   private authToken_: string;
   private profileIconUrl_: string;
   private isProfileActionable_: boolean;
-  private profileName_: String;
+  private profileName_: string;
 
   // <if expr="not chromeos_ash">
-  storedAccounts: Array<StoredAccount>|null;
+  storedAccounts: StoredAccount[]|null;
   private shouldShowGoogleAccount_: boolean;
   private showImportDataDialog_: boolean;
   // </if>
@@ -235,7 +234,7 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
         'sync-status-changed', this.handleSyncStatus_.bind(this));
 
     // <if expr="not chromeos_ash">
-    const handleStoredAccounts = (accounts: Array<StoredAccount>) => {
+    const handleStoredAccounts = (accounts: StoredAccount[]) => {
       this.storedAccounts = accounts;
     };
     this.syncBrowserProxy_.getStoredAccounts().then(handleStoredAccounts);
@@ -368,7 +367,7 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
     Router.getInstance().navigateTo(routes.SYNC);
   }
 
-  // <if expr="not chromeos_ash and not chromeos_lacros">
+  // <if expr="not is_chromeos">
   private onImportDataTap_() {
     Router.getInstance().navigateTo(routes.IMPORT_DATA);
   }

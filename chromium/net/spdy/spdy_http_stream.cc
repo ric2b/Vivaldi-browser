@@ -27,7 +27,7 @@
 #include "net/spdy/spdy_http_utils.h"
 #include "net/spdy/spdy_log_util.h"
 #include "net/spdy/spdy_session.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/quiche/spdy/core/http2_header_block.h"
 #include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
 #include "url/scheme_host_port.h"
 
@@ -435,8 +435,6 @@ void SpdyHttpStream::OnHeadersReceived(
   response_info_->connection_info = HttpResponseInfo::CONNECTION_INFO_HTTP2;
   response_info_->alpn_negotiated_protocol =
       HttpResponseInfo::ConnectionInfoToString(response_info_->connection_info);
-  response_info_->vary_data
-      .Init(*request_info_, *response_info_->headers.get());
 
   // Invalidate HttpRequestInfo pointer. This is to allow |this| to be
   // shared across multiple consumers at the cache layer which might require

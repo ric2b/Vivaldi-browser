@@ -72,6 +72,7 @@
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkMallocPixelRef.h"
 #include "ui/android/window_android.h"
 #include "ui/display/display.h"
@@ -240,10 +241,7 @@ class CompositorImpl::HostBeginFrameObserver
       return;
     }
 
-    static const bool kCoalesce = base::FeatureList::IsEnabled(
-        ::features::kCoalesceIndependentBeginFrame);
-    if (kCoalesce &&
-        (base::TimeTicks::Now() - args.frame_time) > args.interval) {
+    if ((base::TimeTicks::Now() - args.frame_time) > args.interval) {
       begin_frame_args_ = args;
       pending_coalesce_callback_ = true;
       task_runner_->PostDelayedTask(
@@ -468,7 +466,7 @@ void CompositorImpl::SetSurface(const base::android::JavaRef<jobject>& surface,
 
 void CompositorImpl::SetBackgroundColor(int color) {
   DCHECK(host_);
-  host_->set_background_color(color);
+  host_->set_background_color(SkColor4f::FromColor(color));
 }
 
 void CompositorImpl::CreateLayerTreeHost() {
@@ -556,6 +554,8 @@ void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
   // before it can be reset.
   display_private_.reset();
   GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
+  if (display_client_)
+    display_client_->SetPreferredRefreshRate(0);
   display_client_.reset();
   host_begin_frame_observer_.reset();
 }

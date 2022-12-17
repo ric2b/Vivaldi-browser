@@ -148,15 +148,6 @@ declare_args() {
   # The gold linker by default has text section splitting enabled.
   use_text_section_splitting = false
 
-  # Token limits may not be accurate for build configs not covered by the CQ,
-  # so only enable them by default for mainstream build configs.
-  enable_wmax_tokens =
-      !is_official_build && !(is_component_build && !is_debug) &&
-      ((is_mac && target_cpu == "x64" && !use_system_xcode) ||
-       (is_linux && target_cpu == "x64") || (is_win && target_cpu == "x86") ||
-       (is_win && target_cpu == "x64") || (is_android && target_cpu == "arm") ||
-       (is_android && target_cpu == "arm64"))
-
   # Turn off the --call-graph-profile-sort flag for lld by default. Enable
   # selectively for targets where it's beneficial.
   enable_call_graph_profile_sort = chrome_pgo_phase == 2
@@ -267,9 +258,6 @@ config("compiler") {
     configs += [ "//build/config/android:compiler" ]
   } else if (is_linux || is_chromeos) {
     configs += [ "//build/config/linux:compiler" ]
-    if (is_chromeos) {
-      configs += [ "//build/config/chromeos:compiler" ]
-    }
   } else if (is_nacl) {
     configs += [ "//build/config/nacl:compiler" ]
   } else if (is_mac) {
@@ -320,7 +308,7 @@ config("compiler") {
     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
 
     # Stack protection.
-    if (is_mac) {
+    if (is_apple) {
       # The strong variant of the stack protector significantly increases
       # binary size, so only enable it in debug mode.
       if (is_debug) {
@@ -372,7 +360,7 @@ config("compiler") {
     ]
   }
 
-  # Non-Mac Posix and Fuchsia compiler flags setup.
+  # Non-Apple Posix and Fuchsia compiler flags setup.
   # -----------------------------------
   if ((is_posix && !is_apple) || is_fuchsia) {
     if (enable_profiling) {
@@ -421,6 +409,23 @@ config("compiler") {
       } else {
         cflags += [ "-funwind-tables" ]
       }
+    }
+  }
+
+  # Apple compiler flags setup.
+  # ---------------------------------
+  if (is_apple) {
+    # On Intel, clang emits both Apple's "compact unwind" information and
+    # DWARF eh_frame unwind information by default, for compatibility reasons.
+    # This flag limits emission of eh_frame information to functions
+    # whose unwind information can't be expressed in the compact unwind format
+    # (which in practice means almost everything gets only compact unwind
+    # entries). This reduces object file size a bit and makes linking a bit
+    # faster.
+    # On arm64, this is already the default behavior.
+    if (current_cpu == "x64") {
+      asmflags += [ "-femit-dwarf-unwind=no-compact-unwind" ]
+      cflags += [ "-femit-dwarf-unwind=no-compact-unwind" ]
     }
   }
 
@@ -594,10 +599,11 @@ config("compiler") {
     cflags_c += [ "/std:c11" ]
     cflags_cc += [ "/std:c++17" ]
   } else if (!is_nacl) {
-    # TODO(mcgrathr) - the NaCl GCC toolchain doesn't support either gnu11/gnu++11
-    # or c11/c++11; we technically don't need this toolchain any more, but there
-    # are still a few buildbots using it, so until those are turned off
-    # we need the !is_nacl clause and the (is_nacl && is_clang) clause, above.
+    # TODO(mcgrathr) - the NaCl GCC toolchain doesn't support either
+    # gnu11/gnu++11 or c11/c++11; we technically don't need this toolchain any
+    # more, but there are still a few buildbots using it, so until those are
+    # turned off we need the !is_nacl clause and the (is_nacl && is_clang)
+    # clause, above.
     cflags_c += [ "-std=c11" ]
     cflags_cc += [ "-std=c++17" ]
   }
@@ -606,33 +612,6 @@ config("compiler") {
     # C++17 removes trigraph support, but clang still warns that it ignores
     # them when seeing them.  Don't.
     cflags_cc += [ "-Wno-trigraphs" ]
-  }
-
-  # Before C++17, an `alignas(N)` type would be N-aligned on the stack,
-  # but heap allocation would just return something aligned to whatever the
-  # default allocator happens to return. Starting with C++17, operator new
-  # called on aligned types with N > __STDCPP_DEFAULT_NEW_ALIGNMENT__ will
-  # call a special overload that hands in the desired alignment, and that will
-  # honor the alignas even for memory on the heap.
-  # However, that requires that operator new overload to exist. At least on
-  # macOS and iOS, they are in libc++abi, and system libc++abi has them as of
-  # "macOS 10.12, iOS 10.0" (https://reviews.llvm.org/D112921#3128089).
-  # However, we do statically link libc++abi, so maybe just explicitly passing
-  # -faligned-allocation is enough to make things work.
-  # For now, explicitly disable this feature though to keep the C++14 aligned
-  # allocation behavior (and do that on all platforms so that we have
-  # consistent behavior across platforms), to make the change more incremental.
-  if (!is_nacl || is_nacl_saigo) {
-    if (is_win) {
-      cflags_cc += [ "/Zc:alignedNew-" ]
-    } else {
-      cflags_cc += [ "-fno-aligned-new" ]
-    }
-  }
-
-  if (is_mac) {
-    # The system libc++ on Mac doesn't have aligned allocation in C++17.
-    defines += [ "_LIBCPP_HAS_NO_ALIGNED_ALLOCATION" ]
   }
 
   # Add flags for link-time optimization. These flags enable
@@ -755,9 +734,7 @@ config("compiler") {
   if (use_lld && !enable_call_graph_profile_sort) {
     if (is_win) {
       ldflags += [ "/call-graph-profile-sort:no" ]
-    } else if (!is_apple) {
-      # TODO(thakis): Once LLD's Mach-O port basically works, implement call
-      # graph profile sorting for it, add an opt-out flag, and pass it here.
+    } else {
       ldflags += [ "-Wl,--no-call-graph-profile-sort" ]
     }
   }
@@ -890,6 +867,11 @@ config("compiler_cpu_abi") {
   ldflags = []
   defines = []
 
+  configs = []
+  if (is_chromeos) {
+    configs += [ "//build/config/chromeos:compiler_cpu_abi" ]
+  }
+
   if ((is_posix && !is_apple) || is_fuchsia) {
     # CPU architecture. We may or may not be doing a cross compile now, so for
     # simplicity we always explicitly set the architecture.
@@ -909,7 +891,8 @@ config("compiler_cpu_abi") {
         ]
       }
     } else if (current_cpu == "arm") {
-      if (is_clang && !is_android && !is_nacl) {
+      if (is_clang && !is_android && !is_nacl &&
+          !(is_chromeos_lacros && is_chromeos_device)) {
         cflags += [ "--target=arm-linux-gnueabihf" ]
         ldflags += [ "--target=arm-linux-gnueabihf" ]
       }
@@ -923,7 +906,8 @@ config("compiler_cpu_abi") {
         cflags += [ "-mtune=$arm_tune" ]
       }
     } else if (current_cpu == "arm64") {
-      if (is_clang && !is_android && !is_nacl && !is_fuchsia) {
+      if (is_clang && !is_android && !is_nacl && !is_fuchsia &&
+          !(is_chromeos_lacros && is_chromeos_device)) {
         cflags += [ "--target=aarch64-linux-gnu" ]
         ldflags += [ "--target=aarch64-linux-gnu" ]
       }
@@ -1171,6 +1155,12 @@ config("compiler_cpu_abi") {
         cflags += [ "-m64" ]
         ldflags += [ "-m64" ]
       }
+    } else if (current_cpu == "riscv64") {
+      if (is_clang) {
+        cflags += [ "--target=riscv64-linux-gnu" ]
+        ldflags += [ "--target=riscv64-linux-gnu" ]
+      }
+      cflags += [ "-mabi=lp64d" ]
     } else if (current_cpu == "s390x") {
       cflags += [ "-m64" ]
       ldflags += [ "-m64" ]
@@ -1535,27 +1525,18 @@ config("default_warnings") {
         "-Wno-ignored-pragma-optimize",
       ]
 
-      if (!is_nacl) {
-        # TODO(https://crbug.com/1300731) Clean up and enable.
-        cflags += [ "-Wno-unqualified-std-cast-call" ]
-      }
-
-      if (!is_nacl && !(is_chromeos ||
-                        default_toolchain == "//build/toolchain/cros:target")) {
-        # TODO(https://crbug.com/1322823): Remove flags once potential miscompile is investigated.
+      if (llvm_force_head_revision && !is_nacl) {
         cflags += [
-          "-Xclang",
-          "-no-opaque-pointers",
+          # TODO(crbug.com/1352183) Evaluate and possibly enable.
+          "-Wno-bitfield-constant-conversion",
         ]
       }
 
-      if (is_fuchsia) {
-        # TODO(https://bugs.chromium.org/p/fuchsia/issues/detail?id=77383)
-        cflags += [ "-Wno-deprecated-copy" ]
-      }
-
-      if (enable_wmax_tokens) {
-        cflags += [ "-Wmax-tokens" ]
+      if (!is_nacl) {
+        cflags += [
+          # TODO(crbug.com/1343975) Evaluate and possibly enable.
+          "-Wno-deprecated-builtins",
+        ]
       }
     }
   }
@@ -1639,7 +1620,8 @@ config("chromium_code") {
 
     if (!is_debug && !using_sanitizer && current_cpu != "s390x" &&
         current_cpu != "s390" && current_cpu != "ppc64" &&
-        current_cpu != "mips" && current_cpu != "mips64") {
+        current_cpu != "mips" && current_cpu != "mips64" &&
+        current_cpu != "riscv64") {
       # Non-chromium code is not guaranteed to compile cleanly with
       # _FORTIFY_SOURCE. Also, fortified build may fail when optimizations are
       # disabled, so only do that for Release build.
@@ -1660,8 +1642,7 @@ config("chromium_code") {
   if (is_clang) {
     cflags += [
       # Warn on missing break statements at the end of switch cases.
-      # For intentional fallthrough, use FALLTHROUGH; from
-      # base/compiler_specific.h
+      # For intentional fallthrough, use [[fallthrough]].
       "-Wimplicit-fallthrough",
     ]
 
@@ -2210,9 +2191,9 @@ if (is_clang && is_a_target_toolchain) {
   } else if (clang_use_default_sample_profile) {
     assert(build_with_chromium,
            "Our default profiles currently only apply to Chromium")
-    assert(is_android || is_chromeos || is_chromecast,
+    assert(is_android || is_chromeos || is_castos,
            "The current platform has no default profile")
-    if (is_android || is_chromecast) {
+    if (is_android || is_castos) {
       _clang_sample_profile = "//chrome/android/profiles/afdo.prof"
     } else {
       assert(chromeos_afdo_platform == "atom" ||
@@ -2341,8 +2322,7 @@ config("symbols") {
       cflags += [ "-g2" ]
     }
 
-    if (!is_nacl && is_clang && !is_tsan && !is_asan &&
-        !(is_ios && enable_ios_bitcode)) {
+    if (!is_nacl && is_clang && !is_tsan && !is_asan) {
       # gcc generates dwarf-aranges by default on -g1 and -g2. On clang it has
       # to be manually enabled.
       #
@@ -2466,8 +2446,7 @@ config("minimal_symbols") {
       cflags += [ "-g1" ]
     }
 
-    if (!is_nacl && is_clang && !is_tsan && !is_asan &&
-        !(is_ios && enable_ios_bitcode)) {
+    if (!is_nacl && is_clang && !is_tsan && !is_asan) {
       # See comment for -gdwarf-aranges in config("symbols").
       cflags += [ "-gdwarf-aranges" ]
     }

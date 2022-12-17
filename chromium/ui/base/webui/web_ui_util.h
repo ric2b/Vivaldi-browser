@@ -37,8 +37,8 @@ std::string GetPngDataUrl(const unsigned char* data, size_t size);
 // an integer button and booleans alt key, ctrl key, meta key, and shift key
 // (in that order), starting at |start_index|.
 COMPONENT_EXPORT(UI_BASE)
-WindowOpenDisposition GetDispositionFromClick(const base::ListValue* args,
-                                              int start_index);
+WindowOpenDisposition GetDispositionFromClick(const base::Value::List& args,
+                                              size_t start_index);
 
 // Parse a formatted scale factor string into float and sets to |scale_factor|.
 COMPONENT_EXPORT(UI_BASE)

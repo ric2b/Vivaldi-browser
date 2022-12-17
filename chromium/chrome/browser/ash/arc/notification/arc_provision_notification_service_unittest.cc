@@ -27,7 +27,6 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -56,9 +55,6 @@ class ArcProvisionNotificationServiceTest : public BrowserWithTestWindowTest {
   }
 
   void SetUpInternal(bool should_create_session_manager) {
-    // Need to initialize DBusThreadManager before ArcSessionManager's
-    // constructor calls DBusThreadManager::Get().
-    chromeos::DBusThreadManager::Initialize();
     ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
 
     SetArcAvailableCommandLineForTesting(
@@ -107,7 +103,6 @@ class ArcProvisionNotificationServiceTest : public BrowserWithTestWindowTest {
     arc_service_manager_.reset();
 
     ash::ConciergeClient::Shutdown();
-    chromeos::DBusThreadManager::Shutdown();
   }
 
   ash::FakeChromeUserManager* GetFakeUserManager() {
@@ -152,7 +147,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
   session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
   EXPECT_TRUE(
       display_service_->GetNotification(kArcManagedProvisionNotificationId));
-  EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_REQUIREMENTS,
             arc_session_manager_->state());
   arc_session_manager_->StartArcForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager_->state());
@@ -233,7 +228,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
   session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
   EXPECT_TRUE(
       display_service_->GetNotification(kArcManagedProvisionNotificationId));
-  EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_REQUIREMENTS,
             arc_session_manager_->state());
   arc_session_manager_->StartArcForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager_->state());
@@ -274,7 +269,7 @@ TEST_F(ArcProvisionNotificationServiceTest,
   session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
   EXPECT_TRUE(
       display_service_->GetNotification(kArcManagedProvisionNotificationId));
-  EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_REQUIREMENTS,
             arc_session_manager_->state());
   arc_session_manager_->StartArcForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager_->state());
@@ -311,12 +306,11 @@ TEST_F(ArcProvisionNotificationServiceTest,
   session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
   EXPECT_FALSE(
       display_service_->GetNotification(kArcManagedProvisionNotificationId));
-  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_REQUIREMENTS,
             arc_session_manager_->state());
 
   // Emulate accepting the terms of service.
-  arc_session_manager_->OnTermsOfServiceNegotiatedForTesting(true);
-  arc_session_manager_->StartArcForTesting();
+  arc_session_manager_->EmulateRequirementCheckCompletionForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager_->state());
 
   // Emulate successful provisioning.
@@ -383,12 +377,11 @@ TEST_F(ArcProvisionNotificationServiceOobeTest,
   arc_session_manager_->RequestEnable();
   EXPECT_FALSE(
       display_service_->GetNotification(kArcManagedProvisionNotificationId));
-  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
+  EXPECT_EQ(ArcSessionManager::State::CHECKING_REQUIREMENTS,
             arc_session_manager_->state());
 
   // Emulate accepting the terms of service.
-  arc_session_manager_->OnTermsOfServiceNegotiatedForTesting(true);
-  arc_session_manager_->StartArcForTesting();
+  arc_session_manager_->EmulateRequirementCheckCompletionForTesting();
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager_->state());
 
   // Emulate successful provisioning.

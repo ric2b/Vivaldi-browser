@@ -133,6 +133,8 @@ std::string GetDisplayName(Feature::Context context) {
       return "webui untrusted";
     case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
       return "lock screen app";
+    case Feature::OFFSCREEN_EXTENSION_CONTEXT:
+      return "offscreen document";
   }
   NOTREACHED();
   return "";

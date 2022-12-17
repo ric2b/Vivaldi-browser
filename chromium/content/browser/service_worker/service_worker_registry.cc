@@ -184,6 +184,7 @@ ServiceWorkerRegistry::~ServiceWorkerRegistry() = default;
 void ServiceWorkerRegistry::CreateNewRegistration(
     blink::mojom::ServiceWorkerRegistrationOptions options,
     const blink::StorageKey& key,
+    blink::mojom::AncestorFrameType ancestor_frame_type,
     NewRegistrationCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -195,19 +196,20 @@ void ServiceWorkerRegistry::CreateNewRegistration(
         base::BindOnce(
             &ServiceWorkerRegistry::CreateNewRegistrationWithBucketInfo,
             weak_factory_.GetWeakPtr(), std::move(options), key,
-            std::move(callback)));
+            ancestor_frame_type, std::move(callback)));
   } else {
     CreateInvokerAndStartRemoteCall(
         &storage::mojom::ServiceWorkerStorageControl::GetNewRegistrationId,
         base::BindOnce(&ServiceWorkerRegistry::DidGetNewRegistrationId,
                        weak_factory_.GetWeakPtr(), std::move(options), key,
-                       std::move(callback)));
+                       ancestor_frame_type, std::move(callback)));
   }
 }
 
 void ServiceWorkerRegistry::CreateNewRegistrationWithBucketInfo(
     blink::mojom::ServiceWorkerRegistrationOptions options,
     const blink::StorageKey& key,
+    blink::mojom::AncestorFrameType ancestor_frame_type,
     NewRegistrationCallback callback,
     storage::QuotaErrorOr<storage::BucketInfo> result) {
   // Return nullptr if `UpdateOrCreateBucket` fails.
@@ -219,7 +221,7 @@ void ServiceWorkerRegistry::CreateNewRegistrationWithBucketInfo(
       &storage::mojom::ServiceWorkerStorageControl::GetNewRegistrationId,
       base::BindOnce(&ServiceWorkerRegistry::DidGetNewRegistrationId,
                      weak_factory_.GetWeakPtr(), std::move(options), key,
-                     std::move(callback)));
+                     ancestor_frame_type, std::move(callback)));
 }
 
 void ServiceWorkerRegistry::CreateNewVersion(
@@ -391,8 +393,7 @@ void ServiceWorkerRegistry::StoreRegistration(
   data->script = version->script_url();
   data->script_type = version->script_type();
   data->update_via_cache = registration->update_via_cache();
-  data->has_fetch_handler = version->fetch_handler_existence() ==
-                            ServiceWorkerVersion::FetchHandlerExistence::EXISTS;
+  data->fetch_handler_type = version->fetch_handler_type();
   data->version_id = version->version_id();
   data->last_update_check = registration->last_update_check();
   data->is_active = (version == registration->active_version());
@@ -406,6 +407,7 @@ void ServiceWorkerRegistry::StoreRegistration(
   data->script_response_time = version->GetInfo().script_response_time;
   for (const blink::mojom::WebFeature feature : version->used_features())
     data->used_features.push_back(feature);
+  data->ancestor_frame_type = registration->ancestor_frame_type();
 
   // The ServiceWorkerVersion's COEP might be null if it is stored before
   // loading the main script. This happens in many unittests.
@@ -868,7 +870,8 @@ ServiceWorkerRegistry::GetOrCreateRegistration(
   blink::mojom::ServiceWorkerRegistrationOptions options(
       data.scope, data.script_type, data.update_via_cache);
   registration = base::MakeRefCounted<ServiceWorkerRegistration>(
-      options, data.key, data.registration_id, context_->AsWeakPtr());
+      options, data.key, data.registration_id, context_->AsWeakPtr(),
+      data.ancestor_frame_type);
   registration->SetStored();
   registration->set_resources_total_size_bytes(data.resources_total_size_bytes);
   registration->set_last_update_check(data.last_update_check);
@@ -880,10 +883,7 @@ ServiceWorkerRegistry::GetOrCreateRegistration(
     version = base::MakeRefCounted<ServiceWorkerVersion>(
         registration.get(), data.script, data.script_type, data.version_id,
         std::move(version_reference), context_->AsWeakPtr());
-    version->set_fetch_handler_existence(
-        data.has_fetch_handler
-            ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
-            : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST);
+    version->set_fetch_handler_type(data.fetch_handler_type);
     version->SetStatus(data.is_active ? ServiceWorkerVersion::ACTIVATED
                                       : ServiceWorkerVersion::INSTALLED);
     version->script_cache_map()->SetResources(resources);
@@ -1191,9 +1191,10 @@ void ServiceWorkerRegistry::DidGetAllRegistrations(
       info.active_version.script_response_time =
           registration_data->script_response_time;
       info.active_version.fetch_handler_existence =
-          registration_data->has_fetch_handler
-              ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
-              : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST;
+          (registration_data->fetch_handler_type ==
+           blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler)
+              ? ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST
+              : ServiceWorkerVersion::FetchHandlerExistence::EXISTS;
       info.active_version.navigation_preload_state.enabled =
           registration_data->navigation_preload_state->enabled;
       info.active_version.navigation_preload_state.header =
@@ -1206,9 +1207,10 @@ void ServiceWorkerRegistry::DidGetAllRegistrations(
       info.waiting_version.script_response_time =
           registration_data->script_response_time;
       info.waiting_version.fetch_handler_existence =
-          registration_data->has_fetch_handler
-              ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
-              : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST;
+          (registration_data->fetch_handler_type ==
+           blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler)
+              ? ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST
+              : ServiceWorkerVersion::FetchHandlerExistence::EXISTS;
       info.waiting_version.navigation_preload_state.enabled =
           registration_data->navigation_preload_state->enabled;
       info.waiting_version.navigation_preload_state.header =
@@ -1426,6 +1428,7 @@ void ServiceWorkerRegistry::DidGetUserDataForAllRegistrations(
 void ServiceWorkerRegistry::DidGetNewRegistrationId(
     blink::mojom::ServiceWorkerRegistrationOptions options,
     const blink::StorageKey& key,
+    blink::mojom::AncestorFrameType ancestor_frame_type,
     NewRegistrationCallback callback,
     int64_t registration_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -1434,7 +1437,8 @@ void ServiceWorkerRegistry::DidGetNewRegistrationId(
     return;
   }
   std::move(callback).Run(base::MakeRefCounted<ServiceWorkerRegistration>(
-      std::move(options), key, registration_id, context_->AsWeakPtr()));
+      std::move(options), key, registration_id, context_->AsWeakPtr(),
+      ancestor_frame_type));
 }
 
 void ServiceWorkerRegistry::DidGetNewVersionId(

@@ -15,5 +15,6 @@
 <translation id="4932161901409251843">Выберите меню Vivaldi &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> &gt; <ph name="PROXIES_TITLE" /> и убедитесь, что в конфигурации отключено использование прокси-сервера или выбрано непосредственное подключение.</translation>
 <translation id="5248344925342018662">Вы просматриваете безопасную страницу Vivaldi</translation>
 <translation id="7023871570427738255">Откройте меню Vivaldi, нажмите "<ph name="SETTINGS_TITLE" />" &gt; "<ph name="ADVANCED_TITLE" />" и снимите флажок "<ph name="NO_PREFETCH_DESCRIPTION" />". Если устранить проблему не удалось, снова установите флажок, чтобы страницы загружались быстрее.</translation>
+<translation id="7496505986576158197">Vivaldi создан на базе открытого проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и другого <ph name="BEGIN_LINK_OSS" />открытого ПО<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Выберите Программы &gt; Системные настройки &gt; Сеть &gt; Дополнительно &gt; Прокси и снимите флажки напротив всех прокси-серверов.</translation>
 </translationbundle>

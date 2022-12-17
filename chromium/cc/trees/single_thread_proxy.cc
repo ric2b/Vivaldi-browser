@@ -366,7 +366,7 @@ bool SingleThreadProxy::StartDeferringCommits(base::TimeDelta timeout,
   commits_restart_time_ = base::TimeTicks::Now() + timeout;
 
   // Notify dependent systems that the deferral status has changed.
-  layer_tree_host_->OnDeferCommitsChanged(true, reason);
+  layer_tree_host_->OnDeferCommitsChanged(true, reason, absl::nullopt);
   return true;
 }
 
@@ -383,7 +383,7 @@ void SingleThreadProxy::StopDeferringCommits(
                                   TRACE_ID_LOCAL(this));
 
   // Notify dependent systems that the deferral status has changed.
-  layer_tree_host_->OnDeferCommitsChanged(false, reason);
+  layer_tree_host_->OnDeferCommitsChanged(false, reason, trigger);
 }
 
 bool SingleThreadProxy::IsDeferringCommits() const {
@@ -909,9 +909,10 @@ void SingleThreadProxy::SetRenderFrameObserver(
   host_impl_->SetRenderFrameObserver(std::move(observer));
 }
 
-uint32_t SingleThreadProxy::GetAverageThroughput() const {
+double SingleThreadProxy::GetPercentDroppedFrames() const {
   DebugScopedSetImplThread impl(task_runner_provider_);
-  return host_impl_->dropped_frame_counter()->GetAverageThroughput();
+  return host_impl_->dropped_frame_counter()
+      ->sliding_window_current_percent_dropped();
 }
 
 void SingleThreadProxy::UpdateBrowserControlsState(
@@ -1063,7 +1064,7 @@ void SingleThreadProxy::DoBeginMainFrame(
   layer_tree_host_->BeginMainFrame(begin_frame_args);
   layer_tree_host_->AnimateLayers(begin_frame_args.frame_time);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   const bool record_metrics =
       layer_tree_host_->GetSettings().is_layer_tree_for_ui;
 #else

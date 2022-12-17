@@ -37,7 +37,7 @@ class DriveFsEventRouter : public drivefs::DriveFsHostObserver {
  public:
   explicit DriveFsEventRouter(SystemNotificationManager* notification_manager);
   DriveFsEventRouter(const DriveFsEventRouter&) = delete;
-  virtual ~DriveFsEventRouter();
+  ~DriveFsEventRouter() override;
 
   DriveFsEventRouter& operator=(const DriveFsEventRouter&) = delete;
 
@@ -96,7 +96,7 @@ class DriveFsEventRouter : public drivefs::DriveFsHostObserver {
   virtual void BroadcastEvent(
       extensions::events::HistogramValue histogram_value,
       const std::string& event_name,
-      std::vector<base::Value> event_args) = 0;
+      base::Value::List event_args) = 0;
 
   static extensions::api::file_manager_private::FileTransferStatus
   CreateFileTransferStatus(

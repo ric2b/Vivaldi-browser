@@ -17,7 +17,6 @@
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/mock_user_manager.h"
-#include "chrome/browser/web_applications/system_web_apps/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_install_finalizer.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/fake_web_app_registry_controller.h"
@@ -29,7 +28,6 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -144,19 +142,10 @@ class AppInfoGeneratorTest : public ::testing::Test {
  protected:
   void PushApp(apps::AppPtr app) {
     apps::AppType app_type = app->app_type;
-    if (base::FeatureList::IsEnabled(
-            apps::kAppServiceOnAppUpdateWithoutMojom)) {
-      std::vector<apps::AppPtr> deltas;
-      deltas.push_back(std::move(app));
-      GetCache().OnApps(std::move(deltas), app_type,
-                        /*should_notify_initialized=*/false);
-    } else {
-      std::vector<apps::mojom::AppPtr> mojom_deltas;
-      mojom_deltas.push_back(apps::ConvertAppToMojomApp(app));
-      GetCache().OnApps(std::move(mojom_deltas),
-                        apps::ConvertAppTypeToMojomAppType(app_type),
-                        /*should_notify_initialized=*/true);
-    }
+    std::vector<apps::AppPtr> deltas;
+    deltas.push_back(std::move(app));
+    GetCache().OnApps(std::move(deltas), app_type,
+                      /*should_notify_initialized=*/false);
   }
 
   void PushApp(const std::string& app_id,
@@ -210,24 +199,11 @@ class AppInfoGeneratorTest : public ::testing::Test {
     profile_ = CreateProfile(account_id_);
     test_clock().SetNow(MakeLocalTime("25-MAR-2020 1:30am"));
 
-    web_app::WebAppProviderFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile_.get(),
-        base::BindLambdaForTesting([this](content::BrowserContext* context)
-                                       -> std::unique_ptr<KeyedService> {
-          Profile* profile = Profile::FromBrowserContext(context);
-          auto provider =
-              std::make_unique<web_app::FakeWebAppProvider>(profile);
-          auto app_registrar =
-              std::make_unique<web_app::WebAppRegistrarMutable>(profile);
-          auto system_web_app_manager =
-              std::make_unique<web_app::TestSystemWebAppManager>(profile);
+    auto* provider = web_app::FakeWebAppProvider::Get(profile_.get());
+    provider->SetRunSubsystemStartupTasks(true);
+    provider->Start();
 
-          app_registrar_ = app_registrar.get();
-          provider->SetRegistrar(std::move(app_registrar));
-          provider->SetSystemWebAppManager(std::move(system_web_app_manager));
-          provider->Start();
-          return provider;
-        }));
+    app_registrar_ = &provider->GetRegistrarMutable();
   }
 
   apps::AppRegistryCache& GetCache() {

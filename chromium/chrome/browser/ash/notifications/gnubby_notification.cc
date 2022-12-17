@@ -11,7 +11,7 @@
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/gnubby/gnubby_client.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
@@ -25,12 +25,13 @@ namespace ash {
 GnubbyNotification::GnubbyNotification()
     : update_dismiss_notification_timer_(new base::OneShotTimer()),
       weak_ptr_factory_(this) {
-  DCHECK(DBusThreadManager::Get()->GetGnubbyClient());
-  DBusThreadManager::Get()->GetGnubbyClient()->AddObserver(this);
+  DCHECK(GnubbyClient::Get());
+  GnubbyClient::Get()->AddObserver(this);
 }
+
 GnubbyNotification::~GnubbyNotification() {
-  DCHECK(DBusThreadManager::Get()->GetGnubbyClient());
-  DBusThreadManager::Get()->GetGnubbyClient()->RemoveObserver(this);
+  DCHECK(GnubbyClient::Get());
+  GnubbyClient::Get()->RemoveObserver(this);
 }
 
 void GnubbyNotification::PromptUserAuth() {

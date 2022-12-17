@@ -63,6 +63,11 @@ void ToTranslateLanguageSynonym(std::string* language) {
   if (main_part.empty())
     return;
 
+  // Vivaldi: Serbian (Latin) is a special case, ref. VAB-3887.
+  if (*language == "sr-Latn") {
+    return;
+  }
+
   // Chinese is a special case: we do not return the main_part only.
   // There is not a single base language, but two: traditional and simplified.
   // The kLanguageCodeChineseCompatiblePairs list contains the relation between

@@ -148,13 +148,13 @@
 
 // This is called before finishing the presentation of a screen.
 // Stops the child coordinator and prepares the next screen to present.
-- (void)willFinishPresenting {
+- (void)screenWillFinishPresenting {
   [self.childCoordinator stop];
   self.childCoordinator = nil;
   [self presentScreen:[self.screenProvider nextScreenType]];
 }
 
-- (void)skipAll {
+- (void)skipAllScreens {
   [self finishPresentingScreens];
 }
 
@@ -199,6 +199,16 @@
                      dismissViewControllerAnimated:animated
                                         completion:finishCompletion];
                }];
+}
+
+#pragma mark - NSObject
+
+- (NSString*)description {
+  return [NSString
+      stringWithFormat:@"<%@: %p, screenProvider: %p, childCoordinator: %p, "
+                       @"navigationController %p>",
+                       self.class.description, self, self.screenProvider,
+                       self.childCoordinator, self.navigationController];
 }
 
 @end

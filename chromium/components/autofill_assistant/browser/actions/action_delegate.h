@@ -13,10 +13,11 @@
 #include "base/callback_helpers.h"
 #include "components/autofill_assistant/browser/js_flow_devtools_wrapper.h"
 #include "components/autofill_assistant/browser/public/external_action_delegate.h"
-#include "components/autofill_assistant/browser/public/external_script_controller.h"
+#include "components/autofill_assistant/browser/public/headless_script_controller.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/tts_button_state.h"
 #include "components/autofill_assistant/browser/viewport_mode.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 
@@ -59,6 +60,7 @@ class GenericUserInterfaceProto;
 class FormProto;
 class FormProto_Result;
 class InfoBox;
+class PromptQrCodeScanProto;
 class UserAction;
 class UserData;
 class UserModel;
@@ -236,11 +238,13 @@ class ActionDelegate {
   virtual void GetFullCard(const autofill::CreditCard* credit_card,
                            GetFullCardCallback callback) = 0;
 
-  // Return |FormData| and |FormFieldData| for the element identified with
-  // |selector|. The result is returned asynchronously through |callback|.
+  // Return |FormData| and |FormFieldData| from |RenderFrameHost| for the
+  // element identified with |selector|. The result is returned asynchronously
+  // through |callback|.
   virtual void RetrieveElementFormAndFieldData(
       const Selector& selector,
       base::OnceCallback<void(const ClientStatus&,
+                              content::RenderFrameHost* rfh,
                               const autofill::FormData&,
                               const autofill::FormFieldData&)> callback) = 0;
 
@@ -410,6 +414,16 @@ class ActionDelegate {
       base::RepeatingCallback<void(const FormProto_Result*)> changed_callback,
       base::OnceCallback<void(const ClientStatus&)> cancel_callback) = 0;
 
+  // Show QR Code Scan UI to the user. |callback| should be invoked with the
+  // scanned result or absl::nullopt and an appropriate client status.
+  virtual void ShowQrCodeScanUi(
+      std::unique_ptr<PromptQrCodeScanProto> qr_code_scan,
+      base::OnceCallback<void(const ClientStatus&,
+                              const absl::optional<ValueProto>&)> callback) = 0;
+
+  // Clears the QR Code Scan Ui.
+  virtual void ClearQrCodeScanUi() = 0;
+
   // Force showing the UI if no UI is shown. This is useful when executing a
   // direct action which realizes it needs to interact with the user. Once
   // shown, the UI stays up until the end of the flow.
@@ -417,6 +431,9 @@ class ActionDelegate {
 
   // Gets the user data.
   virtual const UserData* GetUserData() const = 0;
+
+  // Gets the user data (mutable).
+  virtual UserData* GetMutableUserData() const = 0;
 
   // Access to the user model.
   virtual UserModel* GetUserModel() const = 0;
@@ -496,7 +513,27 @@ class ActionDelegate {
   virtual void MaybeSetPreviousAction(
       const ProcessedActionProto& processed_action) = 0;
 
+  // Returns the Autofill Assistant intent for the current flow.
+  virtual absl::optional<std::string> GetIntent() const = 0;
+
+  // Returns the client's locale.
+  virtual const std::string GetLocale() const = 0;
+
+  // Checks if given XML is signed or not.
+  virtual bool IsXmlSigned(const std::string& xml_string) const = 0;
+
+  // Extracts attribute values from the |xml_string| corresponding to the
+  // |keys|. In case if |xml_string| is not successfully parsed or data for all
+  // the |keys| is not found, it returns an empty vector.
+  virtual const std::vector<std::string> ExtractValuesFromSingleTagXml(
+      const std::string& xml_string,
+      const std::vector<std::string>& keys) const = 0;
+
   virtual base::WeakPtr<ActionDelegate> GetWeakPtr() const = 0;
+
+  // Make a fire-and-forget call to report progress.
+  virtual void ReportProgress(const std::string& payload,
+                              base::OnceCallback<void(bool)> callback) = 0;
 
  protected:
   ActionDelegate() = default;

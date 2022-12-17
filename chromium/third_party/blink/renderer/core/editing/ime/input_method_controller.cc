@@ -93,7 +93,7 @@ AtomicString GetInputModeAttribute(Element* element) {
     query_attribute = true;
   } else {
     element->GetDocument().UpdateStyleAndLayoutTree();
-    if (HasEditableStyle(*element))
+    if (IsEditable(*element))
       query_attribute = true;
   }
 
@@ -116,7 +116,7 @@ AtomicString GetEnterKeyHintAttribute(Element* element) {
     query_attribute = true;
   } else {
     element->GetDocument().UpdateStyleAndLayoutTree();
-    if (HasEditableStyle(*element))
+    if (IsEditable(*element))
       query_attribute = true;
   }
 
@@ -276,13 +276,19 @@ int ComputeAutocapitalizeFlags(const Element* element) {
     flags |= kWebTextInputFlagAutocapitalizeCharacters;
   } else if (autocapitalize == words) {
     flags |= kWebTextInputFlagAutocapitalizeWords;
-  } else if (autocapitalize == sentences || autocapitalize == "") {
-    // Note: we tell the IME to enable autocapitalization for both the default
-    // state ("") and the sentences states. We could potentially treat these
-    // differently if we had a platform that supported autocapitalization but
-    // didn't want to enable it unless explicitly requested by a web page, but
-    // this so far has not been necessary.
+  } else if (autocapitalize == sentences) {
     flags |= kWebTextInputFlagAutocapitalizeSentences;
+  } else if (autocapitalize == g_empty_atom) {
+    // https://html.spec.whatwg.org/multipage/interaction.html#autocapitalization
+    // If autocapitalize is empty, the UA can decide on an appropriate behavior
+    // depending on context. We use the presence of the autocomplete attribute
+    // with an email/url/password type as a hint to disable autocapitalization.
+    if (auto* form_control = DynamicTo<HTMLFormControlElement>(html_element);
+        form_control && form_control->IsAutocompleteEmailUrlOrPassword()) {
+      flags |= kWebTextInputFlagAutocapitalizeNone;
+    } else {
+      flags |= kWebTextInputFlagAutocapitalizeSentences;
+    }
   } else {
     NOTREACHED();
   }
@@ -730,9 +736,9 @@ void InputMethodController::AddImeTextSpans(
     ContainerNode* base_element,
     unsigned offset_in_plain_chars) {
   for (const auto& ime_text_span : ime_text_spans) {
-    unsigned ime_text_span_start =
+    wtf_size_t ime_text_span_start =
         offset_in_plain_chars + ime_text_span.StartOffset();
-    unsigned ime_text_span_end =
+    wtf_size_t ime_text_span_end =
         offset_in_plain_chars + ime_text_span.EndOffset();
 
     EphemeralRange ephemeral_line_range =
@@ -1680,9 +1686,6 @@ int InputMethodController::ComputeWebTextInputNextPreviousFlags() const {
 }
 
 ui::TextInputAction InputMethodController::InputActionOfFocusedElement() const {
-  if (!RuntimeEnabledFeatures::EnterKeyHintAttributeEnabled())
-    return ui::TextInputAction::kDefault;
-
   AtomicString action =
       GetEnterKeyHintAttribute(GetDocument().FocusedElement());
 
@@ -1814,7 +1817,7 @@ WebTextInputType InputMethodController::TextInputType() const {
   }
 
   GetDocument().UpdateStyleAndLayoutTree();
-  if (HasEditableStyle(*element))
+  if (IsEditable(*element))
     return kWebTextInputTypeContentEditable;
 
   return kWebTextInputTypeNone;

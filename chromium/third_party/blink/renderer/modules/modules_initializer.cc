@@ -71,8 +71,6 @@
 #include "third_party/blink/renderer/modules/media_capabilities_names.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
 #include "third_party/blink/renderer/modules/mediasource/media_source_registry_impl.h"
-#include "third_party/blink/renderer/modules/mediastream/user_media_client.h"
-#include "third_party/blink/renderer/modules/mediastream/user_media_controller.h"
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_tracker.h"
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_controller_impl.h"
 #include "third_party/blink/renderer/modules/presentation/presentation.h"
@@ -104,6 +102,7 @@
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "third_party/blink/renderer/platform/widget/compositing/categorized_worker_pool.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -143,8 +142,11 @@ class SuspendCaptureObserver : public GarbageCollected<SuspendCaptureObserver>,
         frame->Client()->MediaStreamDeviceObserver();
     if (!media_stream_device_observer)
       return;
-
-    bool suspend = !GetPage()->IsPageVisible();
+    // Don't suspend media capture devices if page visibility is
+    // PageVisibilityState::kHiddenButPainting (e.g. Picture-in-Picture).
+    // TODO(crbug.com/1339252): Add tests.
+    bool suspend = (GetPage()->GetVisibilityState() ==
+                    mojom::blink::PageVisibilityState::kHidden);
     MediaStreamDevices video_devices =
         media_stream_device_observer->GetNonScreenCaptureDevices();
     Platform::Current()->GetVideoCaptureImplManager()->SuspendDevices(
@@ -329,7 +331,8 @@ std::unique_ptr<WebMediaPlayer> ModulesInitializer::CreateWebMediaPlayer(
   return base::WrapUnique(web_frame_client->CreateMediaPlayer(
       source, media_player_client, context_impl, &encrypted_media,
       encrypted_media.ContentDecryptionModule(), sink_id,
-      frame_widget->GetLayerTreeSettings()));
+      frame_widget->GetLayerTreeSettings(),
+      CategorizedWorkerPool::GetOrCreate()));
 }
 
 WebRemotePlaybackClient* ModulesInitializer::CreateWebRemotePlaybackClient(
@@ -422,9 +425,10 @@ mojom::blink::FileSystemManager& ModulesInitializer::GetFileSystemManager(
 
 void ModulesInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
   DCHECK(Platform::Current());
-  binders.Add(ConvertToBaseRepeatingCallback(
-                  CrossThreadBindRepeating(&WebDatabaseImpl::Bind)),
-              Platform::Current()->GetIOTaskRunner());
+  binders.Add<mojom::blink::WebDatabase>(
+      ConvertToBaseRepeatingCallback(
+          CrossThreadBindRepeating(&WebDatabaseImpl::Bind)),
+      Platform::Current()->GetIOTaskRunner());
 }
 
 }  // namespace blink

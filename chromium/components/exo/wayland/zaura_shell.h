@@ -26,7 +26,7 @@ class ShellSurfaceBase;
 namespace wayland {
 class SerialTracker;
 
-constexpr uint32_t kZAuraShellVersion = 34;
+constexpr uint32_t kZAuraShellVersion = 40;
 
 // Adds bindings to the Aura Shell. Normally this implies Ash on ChromeOS
 // builds. On non-ChromeOS builds the protocol provides access to Aura windowing
@@ -124,12 +124,16 @@ class AuraToplevel {
       int32_t restore_session_id,
       const std::string& restore_window_id_source);
   void SetSystemModal(bool modal);
+  void SetFloat();
+  void UnsetFloat();
 
   void OnConfigure(const gfx::Rect& bounds,
                    chromeos::WindowStateType state_type,
                    bool resizing,
                    bool activated);
   virtual void OnOriginChange(const gfx::Point& origin);
+  void SetDecoration(SurfaceFrameType type);
+  void SetZOrder(ui::ZOrderLevel z_order);
 
   ShellSurface* shell_surface_;
   SerialTracker* const serial_tracker_;
@@ -148,6 +152,8 @@ class AuraPopup {
   ~AuraPopup();
 
   void SetClientSubmitsSurfacesInPixelCoordinates(bool enable);
+  void SetDecoration(SurfaceFrameType type);
+  void SetMenu();
 
  private:
   ShellSurfaceBase* shell_surface_;
@@ -155,7 +161,7 @@ class AuraPopup {
 
 class AuraOutput : public WaylandDisplayObserver {
  public:
-  explicit AuraOutput(wl_resource* resource);
+  AuraOutput(wl_resource* resource, WaylandDisplayHandler* display_handler);
 
   AuraOutput(const AuraOutput&) = delete;
   AuraOutput& operator=(const AuraOutput&) = delete;
@@ -165,6 +171,9 @@ class AuraOutput : public WaylandDisplayObserver {
   // Overridden from WaylandDisplayObserver:
   bool SendDisplayMetrics(const display::Display& display,
                           uint32_t changed_metrics) override;
+  void OnOutputDestroyed() override;
+
+  bool HasDisplayHandlerForTesting() const;
 
  protected:
   virtual void SendInsets(const gfx::Insets& insets);
@@ -172,6 +181,7 @@ class AuraOutput : public WaylandDisplayObserver {
 
  private:
   wl_resource* const resource_;
+  WaylandDisplayHandler* display_handler_;
 };
 
 }  // namespace wayland

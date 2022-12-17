@@ -20,8 +20,7 @@
 #include "net/third_party/quiche/src/quiche/quic/test_tools/mock_random.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/quic_test_utils.h"
 
-namespace net {
-namespace test {
+namespace net::test {
 namespace {
 
 quic::QuicFrames CloneFrames(const quic::QuicFrames& frames) {
@@ -791,8 +790,8 @@ QuicTestPacketMaker::MakeRequestHeadersAndMultipleDataFramesPacket(
 
     std::string data = QpackEncodeHeaders(stream_id, std::move(headers),
                                           spdy_headers_frame_length);
-    for (size_t i = 0; i < data_writes.size(); ++i) {
-      data += data_writes[i];
+    for (const auto& data_write : data_writes) {
+      data += data_write;
     }
     AddQuicStreamFrame(stream_id, fin, data);
 
@@ -1272,10 +1271,8 @@ std::string QuicTestPacketMaker::QpackEncodeHeaders(
       qpack_encoder_.EncodeHeaderList(stream_id, headers, nullptr);
 
   // Generate HEADERS frame header.
-  std::unique_ptr<char[]> headers_frame_header;
-  const size_t headers_frame_header_length =
-      quic::HttpEncoder::SerializeHeadersFrameHeader(encoded_headers.size(),
-                                                     &headers_frame_header);
+  const std::string headers_frame_header =
+      quic::HttpEncoder::SerializeHeadersFrameHeader(encoded_headers.size());
 
   // Possible add a PUSH stream type.
   if (!quic::QuicUtils::IsBidirectionalStreamId(stream_id, version_) &&
@@ -1285,7 +1282,7 @@ std::string QuicTestPacketMaker::QpackEncodeHeaders(
   }
 
   // Add the HEADERS frame header.
-  data += std::string(headers_frame_header.get(), headers_frame_header_length);
+  data += headers_frame_header;
   // Add the HEADERS frame payload.
   data += encoded_headers;
 
@@ -1315,9 +1312,9 @@ void QuicTestPacketMaker::InitializeHeader(uint64_t packet_number,
       header_.version_flag) {
     if (long_header_type_ == quic::INITIAL) {
       header_.retry_token_length_length =
-          quic::VARIABLE_LENGTH_INTEGER_LENGTH_1;
+          quiche::VARIABLE_LENGTH_INTEGER_LENGTH_1;
     }
-    header_.length_length = quic::VARIABLE_LENGTH_INTEGER_LENGTH_2;
+    header_.length_length = quiche::VARIABLE_LENGTH_INTEGER_LENGTH_2;
   }
 }
 
@@ -1664,10 +1661,7 @@ std::string QuicTestPacketMaker::GenerateHttp3SettingsData() {
       quic::kDefaultMaximumBlockedStreams;
   // Greased setting.
   settings.values[0x40] = 20;
-  std::unique_ptr<char[]> buffer;
-  quic::QuicByteCount frame_length =
-      quic::HttpEncoder::SerializeSettingsFrame(settings, &buffer);
-  return std::string(buffer.get(), frame_length);
+  return quic::HttpEncoder::SerializeSettingsFrame(settings);
 }
 
 std::string QuicTestPacketMaker::GenerateHttp3PriorityData(
@@ -1678,17 +1672,11 @@ std::string QuicTestPacketMaker::GenerateHttp3PriorityData(
   priority_update.prioritized_element_id = stream_id;
   priority_update.priority_field_value =
       base::StrCat({"u=", base::NumberToString(priority)});
-  std::unique_ptr<char[]> buffer;
-  quic::QuicByteCount frame_length =
-      quic::HttpEncoder::SerializePriorityUpdateFrame(priority_update, &buffer);
-  return std::string(buffer.get(), frame_length);
+  return quic::HttpEncoder::SerializePriorityUpdateFrame(priority_update);
 }
 
 std::string QuicTestPacketMaker::GenerateHttp3GreaseData() {
-  std::unique_ptr<char[]> buffer;
-  quic::QuicByteCount frame_length =
-      quic::HttpEncoder::SerializeGreasingFrame(&buffer);
-  return std::string(buffer.get(), frame_length);
+  return quic::HttpEncoder::SerializeGreasingFrame();
 }
 
 void QuicTestPacketMaker::MaybeAddHttp3SettingsFrames() {
@@ -1714,5 +1702,4 @@ void QuicTestPacketMaker::MaybeAddHttp3SettingsFrames() {
   AddQuicStreamFrame(stream_id, false, data);
 }
 
-}  // namespace test
-}  // namespace net
+}  // namespace net::test

@@ -912,9 +912,13 @@ void AddInstallWorkItems(const InstallParams& install_params,
       installer_state.root_key(),
       GetNotificationHelperPath(target_path, new_version), install_list);
 
+  if (!kVivaldi) {
+    // clang-format off
   if (installer_state.system_install()) {
     AddElevationServiceWorkItems(
         GetElevationServicePath(target_path, new_version), install_list);
+  }
+    // clang-format on
   }
 
   if (!vivaldi::IsInstallStandalone()) {
@@ -1000,6 +1004,22 @@ void AddNativeNotificationWorkItems(
   list->AddSetRegValueWorkItem(root, toast_activator_server_path,
                                WorkItem::kWow64Default, L"ServerExecutable",
                                notification_helper_path.value(), true);
+}
+
+void AddWerHelperRegistration(HKEY root,
+                              const base::FilePath& wer_helper_path,
+                              WorkItemList* list) {
+  DCHECK(!wer_helper_path.empty());
+
+  std::wstring wer_registry_path = GetWerHelperRegistryPath();
+
+  list->AddCreateRegKeyWorkItem(root, wer_registry_path,
+                                WorkItem::kWow64Default);
+
+  // The DWORD value is not important.
+  list->AddSetRegValueWorkItem(root, wer_registry_path, WorkItem::kWow64Default,
+                               wer_helper_path.value().c_str(), DWORD{0},
+                               /*overwrite=*/true);
 }
 
 void AddSetMsiMarkerWorkItem(const InstallerState& installer_state,
@@ -1159,6 +1179,10 @@ void AddFinalizeUpdateWorkItems(const base::Version& new_version,
   // Cleanup for breaking downgrade first in the post install to avoid
   // overwriting any of the following post-install tasks.
   AddDowngradeCleanupItems(new_version, list);
+
+  AddWerHelperRegistration(
+      installer_state.root_key(),
+      GetWerHelperPath(installer_state.target_path(), new_version), list);
 
   const std::wstring client_state_key = install_static::GetClientStateKeyPath();
 

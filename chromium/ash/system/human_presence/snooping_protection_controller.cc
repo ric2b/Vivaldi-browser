@@ -10,6 +10,7 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/system/human_presence/human_presence_metrics.h"
 #include "ash/system/human_presence/snooping_protection_notification_blocker.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -17,8 +18,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/components/dbus/hps/hps_service.pb.h"
 #include "chromeos/ash/components/human_presence/human_presence_configuration.h"
-#include "chromeos/dbus/hps/hps_service.pb.h"
 #include "components/account_id/account_id.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -29,19 +30,8 @@
 #include "ui/message_center/message_center.h"
 
 namespace ash {
-namespace {
-// Number of buckets to log SnoopingProtection present result.
-constexpr int kSnoopingProtectionDurationNumBucket = 100;
-// Minimum value for the SnoopingProtection.Positive.Duration and
-// SnoopingProtection.Negative.Duration.
-constexpr base::TimeDelta kSnoopingProtectionDurationMin = base::Seconds(1);
-// Maximum value for SnoopingProtection.Positive.Duration; Longer than 1 hour is
-// considered as 1 hour.
-constexpr base::TimeDelta kSnoopingProtectionPositiveMax = base::Hours(1);
-// Maximum value for SnoopingProtection.Negative.Duration; Longer than 1 day is
-// considered as 1 day.
-constexpr base::TimeDelta kSnoopingProtectionNegativeMax = base::Hours(24);
-}  // namespace
+
+namespace metrics = ash::snooping_protection_metrics;
 
 SnoopingProtectionController::SnoopingProtectionController()
     : notification_blocker_(
@@ -66,8 +56,8 @@ SnoopingProtectionController::SnoopingProtectionController()
   // error.
   //
   // Might not exist in unit tests.
-  if (chromeos::HumanPresenceDBusClient::Get()) {
-    chromeos::HumanPresenceDBusClient::Get()->WaitForServiceToBeAvailable(
+  if (HumanPresenceDBusClient::Get()) {
+    HumanPresenceDBusClient::Get()->WaitForServiceToBeAvailable(
         base::BindOnce(&SnoopingProtectionController::StartServiceObservation,
                        weak_ptr_factory_.GetWeakPtr()));
   }
@@ -84,15 +74,15 @@ SnoopingProtectionController::~SnoopingProtectionController() {
   // TODO(crbug.com/1241704): only disable if the service is enabled.
   //
   // Might not exist in unit tests.
-  if (chromeos::HumanPresenceDBusClient::Get())
-    chromeos::HumanPresenceDBusClient::Get()->DisableHpsNotify();
+  if (HumanPresenceDBusClient::Get())
+    HumanPresenceDBusClient::Get()->DisableHpsNotify();
 
   for (auto& observer : observers_)
     observer.OnSnoopingProtectionControllerDestroyed();
 
   // We want to log current presence/absence duration since we'll not get
   // another event anymore.
-  LogPresenceWindow(!state_.present);
+  LogPresenceWindow(state_.present);
 }
 
 // static
@@ -157,8 +147,6 @@ void SnoopingProtectionController::OnHpsNotifyChanged(
     const hps::HpsResultProto& result) {
   const bool present = result.value() == hps::HpsResult::POSITIVE;
 
-  LogPresenceWindow(present);
-
   State new_state = state_;
   new_state.present = present;
 
@@ -189,7 +177,7 @@ void SnoopingProtectionController::OnShutdown() {
   // present/absent duration will not be logged, because the duration will be
   // incorrect.
   // This has to be done before UpdateSnooperStatus below.
-  LogPresenceWindow(!state_.present);
+  LogPresenceWindow(state_.present);
   last_presence_report_time_ = base::TimeTicks();
 
   State new_state = state_;
@@ -228,6 +216,12 @@ void SnoopingProtectionController::UpdateSnooperStatus(const State& new_state) {
   clean_state.within_pos_window =
       new_state.within_pos_window && detection_active;
 
+  // If the present state changes to false while within_pos_window, we would
+  // have got a flakey disappearing of the eyecon without pos_window.
+  if (clean_state.within_pos_window && !clean_state.present) {
+    base::UmaHistogramBoolean("ChromeOS.HPS.SnoopingProtection.FlakeyDetection",
+                              false);
+  }
   const bool was_present = SnooperPresent();
   state_ = clean_state;
   const bool is_present = SnooperPresent();
@@ -235,6 +229,7 @@ void SnoopingProtectionController::UpdateSnooperStatus(const State& new_state) {
   if (was_present == is_present)
     return;
 
+  LogPresenceWindow(was_present);
   for (auto& observer : observers_)
     observer.OnSnoopingStatusChanged(is_present);
 }
@@ -262,14 +257,17 @@ void SnoopingProtectionController::ReconfigureService(State* new_state) {
     const absl::optional<hps::FeatureConfig> config =
         hps::GetEnableSnoopingProtectionConfig();
     if (!config.has_value()) {
-      LOG(ERROR) << "Couldn't parse notify configuration";
+      LOG(ERROR) << "SnoopingProtectionController: couldn't parse HpsNotify "
+                    "configuration.";
       return;
     }
+    LOG(ERROR)
+        << "SnoopingProtectionController: enabling HpsNotify from chrome.";
 
-    chromeos::HumanPresenceDBusClient::Get()->EnableHpsNotify(*config);
+    HumanPresenceDBusClient::Get()->EnableHpsNotify(*config);
 
     // Populate our initial HPS state for consistency with the service.
-    chromeos::HumanPresenceDBusClient::Get()->GetResultHpsNotify(
+    HumanPresenceDBusClient::Get()->GetResultHpsNotify(
         base::BindOnce(&SnoopingProtectionController::UpdateServiceState,
                        weak_ptr_factory_.GetWeakPtr()));
     new_state->service_configured = true;
@@ -278,7 +276,7 @@ void SnoopingProtectionController::ReconfigureService(State* new_state) {
   }
 
   // No longer need signals to be emitted.
-  chromeos::HumanPresenceDBusClient::Get()->DisableHpsNotify();
+  HumanPresenceDBusClient::Get()->DisableHpsNotify();
   new_state->service_configured = false;
 }
 
@@ -295,11 +293,10 @@ void SnoopingProtectionController::StartServiceObservation(
   // Special case: at this point, the service could have been left in an enabled
   // state by a previous session that crashed (and hence didn't clean up
   // properly). Disable it here, which is a no-op if it is already disabled.
-  chromeos::HumanPresenceDBusClient::Get()->DisableHpsNotify();
+  HumanPresenceDBusClient::Get()->DisableHpsNotify();
 
   // Start listening for state updates and restarts/shutdowns.
-  human_presence_dbus_observation_.Observe(
-      chromeos::HumanPresenceDBusClient::Get());
+  human_presence_dbus_observation_.Observe(HumanPresenceDBusClient::Get());
 
   // Configure the service and poll its initial value if necessary.
   ReconfigureService(&state_);
@@ -344,8 +341,7 @@ void SnoopingProtectionController::UpdatePrefState() {
 
   ReconfigureService(&new_state);
   UpdateSnooperStatus(new_state);
-  base::UmaHistogramBoolean("ChromeOS.HPS.SnoopingProtection.Enabled",
-                            pref_enabled);
+  base::UmaHistogramBoolean(metrics::kEnabledHistogramName, pref_enabled);
 }
 
 void SnoopingProtectionController::OnMinWindowExpired() {
@@ -354,7 +350,7 @@ void SnoopingProtectionController::OnMinWindowExpired() {
   UpdateSnooperStatus(new_state);
 }
 
-void SnoopingProtectionController::LogPresenceWindow(bool is_present) {
+void SnoopingProtectionController::LogPresenceWindow(bool was_present) {
   const auto now = base::TimeTicks::Now();
 
   // Set last_presence_report_time_ and return if it is the first time reported.
@@ -363,23 +359,19 @@ void SnoopingProtectionController::LogPresenceWindow(bool is_present) {
     return;
   }
 
-  // No log if present state is not changed.
-  if (state_.present == is_present)
-    return;
-
   const auto time_since_last_report = now - last_presence_report_time_;
   last_presence_report_time_ = now;
 
-  if (state_.present) {
-    base::UmaHistogramCustomTimes(
-        "ChromeOS.HPS.SnoopingProtection.Positive.Duration",
-        time_since_last_report, kSnoopingProtectionDurationMin,
-        kSnoopingProtectionPositiveMax, kSnoopingProtectionDurationNumBucket);
+  if (was_present) {
+    base::UmaHistogramCustomTimes(metrics::kPositiveDurationHistogramName,
+                                  time_since_last_report, metrics::kDurationMin,
+                                  metrics::kPositiveDurationMax,
+                                  metrics::kDurationNumBuckets);
   } else {
-    base::UmaHistogramCustomTimes(
-        "ChromeOS.HPS.SnoopingProtection.Negative.Duration",
-        time_since_last_report, kSnoopingProtectionDurationMin,
-        kSnoopingProtectionNegativeMax, kSnoopingProtectionDurationNumBucket);
+    base::UmaHistogramCustomTimes(metrics::kNegativeDurationHistogramName,
+                                  time_since_last_report, metrics::kDurationMin,
+                                  metrics::kNegativeDurationMax,
+                                  metrics::kDurationNumBuckets);
   }
 }
 

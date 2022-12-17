@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {DeletePrevSentMacro} from '/accessibility_common/dictation/macros/delete_prev_sent_macro.js';
-import {MacroName} from '/accessibility_common/dictation/macros/macro_names.js';
-import {DeletePrevWordMacro, NavNextWordMacro, NavPrevWordMacro} from '/accessibility_common/dictation/macros/repeatable_key_press_macro.js';
-import {SmartDeletePhraseMacro} from '/accessibility_common/dictation/macros/smart_delete_phrase_macro.js';
-import {SmartReplacePhraseMacro} from '/accessibility_common/dictation/macros/smart_replace_phrase_macro.js';
-import {StopListeningMacro} from '/accessibility_common/dictation/macros/stop_listening_macro.js';
+import {InputController} from '../input_controller.js';
+
+import {DeletePrevSentMacro} from './delete_prev_sent_macro.js';
+import {MacroName} from './macro_names.js';
+import {NavNextSentMacro, NavPrevSentMacro} from './nav_sent_macro.js';
+import {DeletePrevWordMacro, NavNextWordMacro, NavPrevWordMacro} from './repeatable_key_press_macro.js';
+import {SmartDeletePhraseMacro} from './smart_delete_phrase_macro.js';
+import {SmartInsertBeforeMacro} from './smart_insert_before_macro.js';
+import {SmartReplacePhraseMacro} from './smart_replace_phrase_macro.js';
+import {SmartSelectBetweenMacro} from './smart_select_between_macro.js';
+import {StopListeningMacro} from './stop_listening_macro.js';
 
 /**
  * Class that manages "hidden" macros e.g. macros that have been fully
@@ -36,10 +41,16 @@ export class HiddenMacroManager {
         new DeletePrevSentMacro(this.inputController_).runMacro();
         break;
       case MacroName.NAV_NEXT_WORD:
-        new NavNextWordMacro(/*isRtlLocale=*/ false).runMacro();
+        new NavNextWordMacro().runMacro();
         break;
       case MacroName.NAV_PREV_WORD:
-        new NavPrevWordMacro(/*isRtlLocale=*/ false).runMacro();
+        new NavPrevWordMacro().runMacro();
+        break;
+      case MacroName.NAV_NEXT_SENT:
+        new NavNextSentMacro(this.inputController_).runMacro();
+        break;
+      case MacroName.NAV_PREV_SENT:
+        new NavPrevSentMacro(this.inputController_).runMacro();
         break;
       default:
         throw new Error(`Cannot run macro: ${name} for testing`);
@@ -80,6 +91,14 @@ export class HiddenMacroManager {
         new SmartReplacePhraseMacro(this.inputController_, arg1, arg2)
             .runMacro();
         break;
+      case MacroName.SMART_INSERT_BEFORE:
+        new SmartInsertBeforeMacro(this.inputController_, arg1, arg2)
+            .runMacro();
+        break;
+      case MacroName.SMART_SELECT_BTWN_INCL:
+        new SmartSelectBetweenMacro(this.inputController_, arg1, arg2)
+            .runMacro();
+        break;
       default:
         throw new Error(`Cannot run macro: ${name} with string arg1: ${
             arg1} and arg2: ${arg2} for testing`);
@@ -100,12 +119,4 @@ export class HiddenMacroManager {
  * @const {!Array<!MacroName>}
  * @private
  */
-HiddenMacroManager.HIDDEN_MACROS_ = [
-  MacroName.STOP_LISTENING,
-  MacroName.DELETE_PREV_WORD,
-  MacroName.DELETE_PREV_SENT,
-  MacroName.NAV_NEXT_WORD,
-  MacroName.NAV_PREV_WORD,
-  MacroName.SMART_DELETE_PHRASE,
-  MacroName.SMART_REPLACE_PHRASE,
-];
+HiddenMacroManager.HIDDEN_MACROS_ = [];

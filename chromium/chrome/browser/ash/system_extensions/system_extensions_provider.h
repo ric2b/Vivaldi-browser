@@ -8,23 +8,23 @@
 #include <memory>
 
 #include "chrome/browser/ash/system_extensions/system_extensions_install_manager.h"
+#include "chrome/browser/ash/system_extensions/system_extensions_registry_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class Profile;
-class SystemExtensionsInstallManager;
-
-namespace content {
-class RenderProcessHost;
-}
 
 namespace ash {
+
+class SystemExtensionsPersistenceManager;
+class SystemExtensionsServiceWorkerManager;
 
 // Manages the installation, storage, and execution of System Extensions.
 class SystemExtensionsProvider : public KeyedService {
  public:
-  // May return nullptr if there is no provider associated with this profile.
-  static SystemExtensionsProvider* Get(Profile* profile);
-  static bool IsEnabled();
+  // Returns the provider associated with `profile`. Should only be called if
+  // System Extensions is enabled for the profile i.e. if
+  // IsSystemExtensionsEnabled() returns true.
+  static SystemExtensionsProvider& Get(Profile* profile);
 
   // TODO(crbug.com/1272371): Remove when APIs can be accessed in a less hacky
   // way.
@@ -40,16 +40,36 @@ class SystemExtensionsProvider : public KeyedService {
   SystemExtensionsProvider& operator=(const SystemExtensionsProvider&) = delete;
   ~SystemExtensionsProvider() override;
 
+  SystemExtensionsRegistry& registry() { return registry_manager_->registry(); }
+
+  SystemExtensionsRegistryManager& registry_manager() {
+    return *registry_manager_;
+  }
+
+  SystemExtensionsServiceWorkerManager& service_worker_manager() {
+    return *service_worker_manager_;
+  }
+
+  SystemExtensionsPersistenceManager& persistence_manager() {
+    return *persistence_manager_;
+  }
+
   SystemExtensionsInstallManager& install_manager() {
     return *install_manager_;
   }
 
-  // Called when a service worker will be started to enable blink runtime
-  // features based on system extension type.
-  void WillStartServiceWorker(const GURL& script_url,
-                              content::RenderProcessHost* render_process_host);
+  // Called when a service worker will be started to enable Blink runtime
+  // features based on system extension type. Currently System Extensions run on
+  // chrome-untrusted:// which is process isolated, so this method should be
+  // called.
+  void UpdateEnabledBlinkRuntimeFeaturesInIsolatedWorker(
+      const GURL& script_url,
+      std::vector<std::string>& out_forced_enabled_runtime_features);
 
  private:
+  std::unique_ptr<SystemExtensionsRegistryManager> registry_manager_;
+  std::unique_ptr<SystemExtensionsServiceWorkerManager> service_worker_manager_;
+  std::unique_ptr<SystemExtensionsPersistenceManager> persistence_manager_;
   std::unique_ptr<SystemExtensionsInstallManager> install_manager_;
 };
 

@@ -21,6 +21,7 @@ import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -37,7 +38,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxPedalDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownEmbedder;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
-import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.ExploreIconProvider;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -46,6 +46,7 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -69,9 +70,9 @@ import org.chromium.build.BuildConfig;
  * <p>The coordinator creates and owns elements within this component.
  */
 
-public final class LocationBarCoordinator implements LocationBar, NativeInitObserver,
-                                                     OmniboxSuggestionsDropdownEmbedder,
-                                                     AutocompleteDelegate {
+public class LocationBarCoordinator implements LocationBar, NativeInitObserver,
+                                               OmniboxSuggestionsDropdownEmbedder,
+                                               AutocompleteDelegate {
     /** Identifies coordinators with methods specific to a device type. */
     public interface SubCoordinator {
         /** Destroys SubCoordinator. */
@@ -130,7 +131,6 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
      * @param searchEngineLogoUtils Utils to query the state of the search engine logos feature.
      * @param launchAssistanceSettingsAction Runnable launching settings for voice assistance.
      * @param pageInfoAction Displays page info popup.
-     * @param spareRendererCallback Callback to warm up a spare renderer.
      * @param bringTabToFrontCallback Callback to bring the browser foreground and switch to a tab.
      * @param saveOfflineButtonState Whether the 'save offline' button should be enabled.
      * @param omniboxUma Interface for logging UMA histogram.
@@ -138,11 +138,11 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
      * @param bookmarkState State of a URL bookmark state.
      * @param isToolbarMicEnabledSupplier Whether toolbar mic is enabled or not.
      * @param jankTracker Tracks UI jank.
-     * @param exploreIconProvider The provider to get explore sites icon.
      * @param merchantTrustSignalsCoordinatorSupplier Supplier of {@link
      *         MerchantTrustSignalsCoordinator}. Can be null if a store icon shouldn't be shown,
      *         such as when called from a search activity.
      * @param reportExceptionCallback A {@link Callback} to report exceptions.
+     * @param backPressManager The {@link BackPressManager} for intercepting back press.
      */
     public LocationBarCoordinator(View locationBarLayout, View autocompleteAnchorView,
             ObservableSupplier<Profile> profileObservableSupplier,
@@ -162,12 +162,12 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
             @NonNull Supplier<TabWindowManager> tabWindowManagerSupplier,
             @NonNull BookmarkState bookmarkState,
             @NonNull BooleanSupplier isToolbarMicEnabledSupplier, JankTracker jankTracker,
-            @NonNull ExploreIconProvider exploreIconProvider,
             @Nullable Supplier<MerchantTrustSignalsCoordinator>
                     merchantTrustSignalsCoordinatorSupplier,
             @NonNull OmniboxPedalDelegate omniboxPedalDelegate,
             BrowserStateBrowserControlsVisibilityDelegate browserControlsVisibilityDelegate,
-            Callback<Throwable> reportExceptionCallback) {
+            Callback<Throwable> reportExceptionCallback,
+            @Nullable BackPressManager backPressManager) {
         mLocationBarLayout = (LocationBarLayout) locationBarLayout;
         mWindowDelegate = windowDelegate;
         mWindowAndroid = windowAndroid;
@@ -185,6 +185,9 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
                 isTablet() && isTabletLayout(), searchEngineLogoUtils, LensController.getInstance(),
                 launchAssistanceSettingsAction, saveOfflineButtonState, omniboxUma,
                 isToolbarMicEnabledSupplier);
+        if (backPressManager != null && BackPressManager.isEnabled()) {
+            backPressManager.addHandler(mLocationBarMediator, BackPressHandler.Type.LOCATION_BAR);
+        }
         final boolean isIncognito =
                 incognitoStateProvider != null && incognitoStateProvider.isIncognitoSelected();
         mUrlCoordinator =
@@ -192,15 +195,15 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
                         mCallbackController.makeCancelable(mLocationBarMediator::onUrlFocusChange),
                         mLocationBarMediator, windowAndroid.getKeyboardDelegate(), isIncognito,
                         reportExceptionCallback);
-        mAutocompleteCoordinator = new AutocompleteCoordinator(mLocationBarLayout, this, this,
-                mUrlCoordinator, modalDialogManagerSupplier, activityTabSupplier,
-                shareDelegateSupplier, locationBarDataProvider, profileObservableSupplier,
-                bringTabToFrontCallback, tabWindowManagerSupplier, bookmarkState, jankTracker,
-                exploreIconProvider, omniboxPedalDelegate);
+        mAutocompleteCoordinator =
+                new AutocompleteCoordinator(mLocationBarLayout, this, this, mUrlCoordinator,
+                        modalDialogManagerSupplier, activityTabSupplier, shareDelegateSupplier,
+                        locationBarDataProvider, profileObservableSupplier, bringTabToFrontCallback,
+                        tabWindowManagerSupplier, bookmarkState, jankTracker, omniboxPedalDelegate);
         StatusView statusView = mLocationBarLayout.findViewById(R.id.location_bar_status);
         mStatusCoordinator = new StatusCoordinator(isTablet(), statusView, mUrlCoordinator,
-                modalDialogManagerSupplier, locationBarDataProvider, mTemplateUrlServiceSupplier,
-                searchEngineLogoUtils, profileObservableSupplier, windowAndroid, pageInfoAction,
+                locationBarDataProvider, mTemplateUrlServiceSupplier, searchEngineLogoUtils,
+                profileObservableSupplier, windowAndroid, pageInfoAction,
                 merchantTrustSignalsCoordinatorSupplier, browserControlsVisibilityDelegate);
         mLocationBarMediator.setCoordinators(
                 mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);

@@ -43,6 +43,8 @@
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile_key.h"
+#include "chrome/browser/profiles/profile_metrics.h"
+#include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/transition_manager/full_browser_transition_manager.h"
@@ -95,6 +97,10 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/preferences.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/startup/browser_params_proxy.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -248,6 +254,11 @@ OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
 
   FullBrowserTransitionManager::Get()->OnProfileDestroyed(this);
 
+  // Records the number of active KeyedServices for SystemProfile right before
+  // shutting them down.
+  if (IsSystemProfile())
+    ProfileMetrics::LogSystemProfileKeyedServicesCount(this);
+
   // The SimpleDependencyManager should always be passed after the
   // BrowserContextDependencyManager. This is because the KeyedService instances
   // in the BrowserContextDependencyManager's dependency graph can depend on the
@@ -350,7 +361,9 @@ bool OffTheRecordProfileImpl::IsOffTheRecord() const {
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 bool OffTheRecordProfileImpl::IsMainProfile() const {
-  return false;
+  return chromeos::BrowserParamsProxy::Get()->SessionType() ==
+             crosapi::mojom::SessionType::kGuestSession &&
+         profile_->IsMainProfile();
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
@@ -397,7 +410,7 @@ const Profile* OffTheRecordProfileImpl::GetOriginalProfile() const {
 }
 
 ExtensionSpecialStoragePolicy*
-    OffTheRecordProfileImpl::GetExtensionSpecialStoragePolicy() {
+OffTheRecordProfileImpl::GetExtensionSpecialStoragePolicy() {
   return GetOriginalProfile()->GetExtensionSpecialStoragePolicy();
 }
 
@@ -518,6 +531,11 @@ OffTheRecordProfileImpl::GetBrowsingDataRemoverDelegate() {
   return ChromeBrowsingDataRemoverDelegateFactory::GetForProfile(this);
 }
 
+content::ReduceAcceptLanguageControllerDelegate*
+OffTheRecordProfileImpl::GetReduceAcceptLanguageControllerDelegate() {
+  return ReduceAcceptLanguageFactory::GetForProfile(this);
+}
+
 std::unique_ptr<media::VideoDecodePerfHistory>
 OffTheRecordProfileImpl::CreateVideoDecodePerfHistory() {
   // Use the original profile's DB to seed the OTR VideoDecodePerfHisotry. The
@@ -586,11 +604,9 @@ bool OffTheRecordProfileImpl::WasCreatedByVersionOrLater(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void OffTheRecordProfileImpl::ChangeAppLocale(const std::string& locale,
-                                              AppLocaleChangedVia) {
-}
+                                              AppLocaleChangedVia) {}
 
-void OffTheRecordProfileImpl::OnLogin() {
-}
+void OffTheRecordProfileImpl::OnLogin() {}
 
 void OffTheRecordProfileImpl::InitChromeOSPreferences() {
   // The incognito profile shouldn't have Chrome OS's preferences.
@@ -663,9 +679,8 @@ void OffTheRecordProfileImpl::OnParentZoomLevelChanged(
       host_zoom_map->SetZoomLevelForHost(change.host, change.zoom_level);
       return;
     case HostZoomMap::ZOOM_CHANGED_FOR_SCHEME_AND_HOST:
-      host_zoom_map->SetZoomLevelForHostAndScheme(change.scheme,
-          change.host,
-          change.zoom_level);
+      host_zoom_map->SetZoomLevelForHostAndScheme(change.scheme, change.host,
+                                                  change.zoom_level);
       return;
   }
 }

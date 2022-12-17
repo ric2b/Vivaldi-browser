@@ -9,8 +9,8 @@
 #include "base/task/thread_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/cart/cart_discount_fetcher.h"
-#include "chrome/browser/commerce/coupons/coupon_db_content.pb.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/proto/coupon_db_content.pb.h"
 #include "components/search/ntp_features.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/variations/variations.mojom.h"
@@ -144,26 +144,33 @@ void FetchDiscountWorker::ReadyToFetch(
                      weak_ptr_factory_.GetWeakPtr());
 
   cart_service_delegate_->RecordFetchTimestamp();
-  // If there is no partner merchant cart, don't fetch immediately; instead,
+  // If there is no eligible merchant cart, don't fetch immediately; instead,
   // post another delayed fetch.
   bool has_partner_merchant = false;
+  bool has_potential_merchant = false;
   for (auto pair : proto_pairs) {
-    if (commerce::IsPartnerMerchant(GURL(pair.second.merchant_cart_url()))) {
-      has_partner_merchant = true;
-      break;
-    }
+    auto cart_url = pair.second.merchant_cart_url();
+    bool is_partner_merchant = commerce::IsPartnerMerchant(GURL(cart_url));
+    bool is_potential_merchant =
+        base::FeatureList::IsEnabled(commerce::kMerchantWidePromotion) &&
+        !commerce::IsNoDiscountMerchant(GURL(cart_url));
+    has_partner_merchant |= is_partner_merchant;
+    has_potential_merchant |= is_potential_merchant;
   }
-  if (!has_partner_merchant) {
-    Start(commerce::kDiscountFetchDelayParam.Get());
-    return;
+  bool allow_to_fetch = base::GetFieldTrialParamByFeatureAsBool(
+      commerce::kMerchantWidePromotion,
+      commerce::kReadyToFetchMerchantWidePromotionParam, true);
+  if (has_partner_merchant || (has_potential_merchant && allow_to_fetch)) {
+    backend_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &FetchInBackground, std::move(pending_factory), std::move(fetcher),
+            std::move(done_fetching_callback), std::move(proto_pairs),
+            is_oauth_fetch, std::move(access_token_str),
+            g_browser_process->GetApplicationLocale(), GetVariationsHeaders()));
+  } else {
+    Start(commerce::GetDiscountFetchDelay());
   }
-  backend_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &FetchInBackground, std::move(pending_factory), std::move(fetcher),
-          std::move(done_fetching_callback), std::move(proto_pairs),
-          is_oauth_fetch, std::move(access_token_str),
-          g_browser_process->GetApplicationLocale(), GetVariationsHeaders()));
 }
 
 std::string FetchDiscountWorker::GetVariationsHeaders() {
@@ -305,11 +312,8 @@ void FetchDiscountWorker::OnUpdatingDiscounts(
     cart_service_delegate_->UpdateFreeListingCoupons(coupon_map);
   }
 
-  if (base::GetFieldTrialParamByFeatureAsBool(
-          ntp_features::kNtpChromeCartModule,
-          ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam,
-          false)) {
+  if (commerce::IsCartDiscountFeatureEnabled()) {
     // Continue to work.
-    Start(commerce::kDiscountFetchDelayParam.Get());
+    Start(commerce::GetDiscountFetchDelay());
   }
 }

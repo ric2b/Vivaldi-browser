@@ -5,6 +5,7 @@
 // TODO(crbug.com/1181765): More tests should be added to cover all possible
 // scenarios. E.g. a test closing the visible tab in a window should be added.
 
+#include "base/test/bind.h"
 #include "chrome/browser/metrics/usage_scenario/tab_usage_scenario_tracker.h"
 
 #include <memory>
@@ -20,6 +21,7 @@
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/visibility.h"
@@ -198,7 +200,7 @@ IN_PROC_BROWSER_TEST_F(TabUsageScenarioTrackerBrowserTest, BasicNavigations) {
                                 ->GetPrimaryMainFrame()
                                 ->GetPageUkmSourceId();
   EXPECT_TRUE(browser()->tab_strip_model()->CloseWebContentsAt(
-      0, TabStripModel::CLOSE_USER_GESTURE));
+      0, TabCloseTypes::CLOSE_USER_GESTURE));
   tick_clock_.Advance(kInterval);
   interval_data = data_store_.ResetIntervalData();
   EXPECT_EQ(2U, interval_data.max_tab_count);
@@ -451,7 +453,7 @@ IN_PROC_BROWSER_TEST_F(TabUsageScenarioTrackerBrowserTest,
   auto expected_source_id =
       contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
   EXPECT_TRUE(browser()->tab_strip_model()->CloseWebContentsAt(
-      1, TabStripModel::CLOSE_USER_GESTURE));
+      1, TabCloseTypes::CLOSE_USER_GESTURE));
 
   auto interval_data = data_store_.ResetIntervalData();
   EXPECT_EQ(2U, interval_data.max_tab_count);
@@ -508,7 +510,6 @@ IN_PROC_BROWSER_TEST_F(TabUsageScenarioTrackerBrowserTest,
   auto expected_source_id =
       contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
   content::CrashTab(contents);
-  tick_clock_.Advance(kInterval);
 
   auto interval_data = data_store_.ResetIntervalData();
   EXPECT_EQ(1U, interval_data.max_tab_count);
@@ -554,7 +555,7 @@ IN_PROC_BROWSER_TEST_F(TabUsageScenarioTrackerBrowserTest,
   Browser* browser2 = BrowserList::GetInstance()->get(1);
 
   EXPECT_TRUE(browser2->tab_strip_model()->CloseWebContentsAt(
-      0, TabStripModel::CLOSE_USER_GESTURE));
+      0, TabCloseTypes::CLOSE_USER_GESTURE));
 
   tick_clock_.Advance(kInterval);
   auto interval_data = data_store_.ResetIntervalData();

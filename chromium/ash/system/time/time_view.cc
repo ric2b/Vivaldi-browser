@@ -6,7 +6,9 @@
 
 #include <memory>
 
+#include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -77,6 +79,19 @@ std::u16string FormatDate(const base::Time& time) {
   return base::TimeFormatWithPattern(time, "LLLd");
 }
 
+// Returns the time to show by the time view.
+base::Time GetTimeToShow() {
+  if (!switches::IsStabilizeTimeDependentViewForTestsEnabled())
+    return base::Time::Now();
+
+  // The code below only runs in tests.
+  static base::Time fixed_time;
+  if (fixed_time.is_null())
+    CHECK(base::Time::FromString(kFakeNowTimeStringInPixelTest, &fixed_time));
+
+  return fixed_time;
+}
+
 }  // namespace
 
 VerticalDateView::VerticalDateView()
@@ -107,12 +122,13 @@ void VerticalDateView::OnThemeChanged() {
 }
 
 void VerticalDateView::UpdateText() {
+  const base::Time time_to_show = GetTimeToShow();
   const std::u16string new_text = calendar_utils::GetDayIntOfMonth(
-      base::Time::Now() + calendar_utils::GetTimeDifference(base::Time::Now()));
+      time_to_show + calendar_utils::GetTimeDifference(time_to_show));
   if (text_label_->GetText() == new_text)
     return;
   text_label_->SetText(new_text);
-  text_label_->SetTooltipText(base::TimeFormatFriendlyDate(base::Time::Now()));
+  text_label_->SetTooltipText(base::TimeFormatFriendlyDate(time_to_show));
   text_label_->NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
 }
 
@@ -120,7 +136,7 @@ TimeView::TimeView(ClockLayout clock_layout, ClockModel* model, Type type)
     : ActionableView(TrayPopupInkDropStyle::INSET_BOUNDS),
       model_(model),
       type_(type) {
-  SetTimer(base::Time::Now());
+  SetTimer(GetTimeToShow());
   SetFocusBehavior(FocusBehavior::NEVER);
   model_->AddObserver(this);
   switch (type_) {
@@ -131,7 +147,7 @@ TimeView::TimeView(ClockLayout clock_layout, ClockModel* model, Type type)
       SetupDateviews(clock_layout);
       break;
   }
-  UpdateTextInternal(base::Time::Now());
+  UpdateTextInternal(GetTimeToShow());
 }
 
 TimeView::~TimeView() {
@@ -262,7 +278,7 @@ void TimeView::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void TimeView::UpdateText() {
-  base::Time now = base::Time::Now();
+  const base::Time now = GetTimeToShow();
   UpdateTextInternal(now);
   SchedulePaint();
   SetTimer(now);
@@ -382,15 +398,15 @@ void TimeView::SetupSubviews(ClockLayout clock_layout) {
       vertical_view_->AddChildView(std::make_unique<views::Label>());
   SetupLabel(vertical_label_hours_);
   vertical_label_hours_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets::TLBR(0, 0, 0, kVerticalDateClockHorizontalPadding)));
+      gfx::Insets::VH(0, kVerticalDateClockHorizontalPadding)));
 
   vertical_label_minutes_ =
       vertical_view_->AddChildView(std::make_unique<views::Label>());
   SetupLabel(vertical_label_minutes_);
   // Pull the minutes up closer to the hours by using a negative top border.
-  vertical_label_minutes_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets::TLBR(kVerticalClockMinutesTopOffset, 0, 0,
-                        kVerticalDateClockHorizontalPadding)));
+  vertical_label_minutes_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
+      kVerticalClockMinutesTopOffset, kVerticalDateClockHorizontalPadding, 0,
+      kVerticalDateClockHorizontalPadding)));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   AddChildView(clock_layout == ClockLayout::HORIZONTAL_CLOCK

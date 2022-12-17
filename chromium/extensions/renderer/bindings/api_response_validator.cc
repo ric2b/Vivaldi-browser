@@ -119,7 +119,11 @@ void APIResponseValidator::ValidateEvent(
   static constexpr char const* kBrokenSignaturesToIgnore[] = {
       "automationInternal.onAccessibilityEvent",
       "chromeWebViewInternal.onClicked",
+      "inputMethodPrivate.onFocus",
       "test.onMessage",
+      // https://crbug.com/1343611.
+      "runtime.onMessage",
+      "contextMenus.onClicked",
   };
 
   if (base::ranges::find(kBrokenSignaturesToIgnore, event_name) !=
@@ -137,13 +141,8 @@ void APIResponseValidator::ValidateEvent(
   if (g_handler_for_testing) {
     g_handler_for_testing->HandleFailure(event_name, error);
   } else {
-    // TODO(https://crbug.com/1329587): There are a few more lingering events
-    // that violate their signature, but they only show up on certain builds
-    // that aren't part of our normal CQ. Avoid a hard crash for now in order
-    // to land the bulk of this implementation before enabling the hard crash
-    // to make reverts less painful.
-    // NOTREACHED() << "Error validating event arguments to `" << event_name
-    //              << "`: " << error;
+    NOTREACHED() << "Error validating event arguments to `" << event_name
+                 << "`: " << error;
   }
 }
 

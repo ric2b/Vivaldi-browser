@@ -120,30 +120,6 @@ class WebAppInstallTask : content::WebContentsObserver {
       bool overwrite_existing_manifest_fields,
       OnceInstallCallback callback);
 
-  // Starts a background web app installation process for a given
-  // |web_contents|. This method infers WebApp info from the blink renderer
-  // process and then retrieves a manifest in a way similar to
-  // |InstallWebAppFromManifestWithFallback|.
-  void InstallWebAppWithParams(content::WebContents* web_contents,
-                               const WebAppInstallParams& install_params,
-                               OnceInstallCallback callback);
-
-  // Perform installation after manifest is retrieved and validated, starts the
-  // installation flow from `OnDidPerformInstallableCheck`.
-  //
-  // When |dialog_callback| is null (aka |base::NullCallback|) the command
-  // doesn't show installation prompt in UI and installs the application in
-  // background.
-  void InstallWebAppOnManifestValidated(
-      content::WebContents* contents,
-      WebAppInstallDialogCallback dialog_callback,
-      OnceInstallCallback install_callback,
-      std::unique_ptr<WebAppInstallInfo> web_app_info,
-      blink::mojom::ManifestPtr opt_manifest,
-      const GURL& manifest_url,
-      WebAppInstallFlow flow,
-      absl::optional<WebAppInstallParams> install_params);
-
   // Obtains WebAppInstallInfo about web app located at |start_url|, fallbacks
   // to title/favicon if manifest is not present.
   void LoadAndRetrieveWebAppInstallInfoWithIcons(
@@ -222,14 +198,14 @@ class WebAppInstallTask : content::WebContentsObserver {
   void CheckForPlayStoreIntentOrGetIcons(
       blink::mojom::ManifestPtr opt_manifest,
       std::unique_ptr<WebAppInstallInfo> web_app_info,
-      std::vector<GURL> icon_urls,
+      base::flat_set<GURL> icon_urls,
       bool skip_page_favicons);
 
   // Called when the asynchronous check for whether an intent to the Play Store
   // should be made returns.
   void OnDidCheckForIntentToPlayStore(
       std::unique_ptr<WebAppInstallInfo> web_app_info,
-      std::vector<GURL> icon_urls,
+      base::flat_set<GURL> icon_urls,
       bool skip_page_favicons,
       const std::string& intent,
       bool should_intent_to_store);
@@ -240,18 +216,12 @@ class WebAppInstallTask : content::WebContentsObserver {
   // |OnDidCheckForIntentToPlayStore| based on |result|).
   void OnDidCheckForIntentToPlayStoreLacros(
       std::unique_ptr<WebAppInstallInfo> web_app_info,
-      std::vector<GURL> icon_urls,
+      base::flat_set<GURL> icon_urls,
       bool skip_page_favicons,
       const std::string& intent,
       crosapi::mojom::IsInstallableResult result);
 #endif
 
-  void OnIconsRetrieved(
-      std::unique_ptr<WebAppInstallInfo> web_app_info,
-      WebAppInstallFinalizer::FinalizeOptions finalize_options,
-      IconsDownloadedResult result,
-      IconsMap icons_map,
-      DownloadedIconsHttpResults icons_http_results);
   void OnIconsRetrievedShowDialog(
       std::unique_ptr<WebAppInstallInfo> web_app_info,
       IconsDownloadedResult result,

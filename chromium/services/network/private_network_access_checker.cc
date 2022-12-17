@@ -98,7 +98,7 @@ PrivateNetworkAccessCheckResult PrivateNetworkAccessChecker::Check(
   return result;
 }
 
-void PrivateNetworkAccessChecker::ResetForRedirect() {
+void PrivateNetworkAccessChecker::Reset() {
   // The target IP address space is no longer relevant, it only applied to the
   // URL before the first redirect. Consider the following scenario:
   //
@@ -198,8 +198,14 @@ Result PrivateNetworkAccessChecker::CheckInternal(
     // for this request. Further checks should not be run, otherwise we might
     // return `kBlockedByPolicyPreflightWarn` and trigger a new preflight to be
     // sent, thus causing https://crbug.com/1279376 all over again.
+    //
+    // Redirection blocked by PNA check in https://crbug.com/1334689.
+    // A request with HTTPS is under PNA warning mode other than allow mode.
+    // Private network access checker should not be applied to these requests.
     if (policy == mojom::PrivateNetworkRequestPolicy::kPreflightWarn) {
       return Result::kAllowedByPolicyPreflightWarn;
+    } else if (policy == mojom::PrivateNetworkRequestPolicy::kWarn) {
+      return Result::kAllowedByPolicyWarn;
     }
 
     return Result::kBlockedByInconsistentIpAddressSpace;

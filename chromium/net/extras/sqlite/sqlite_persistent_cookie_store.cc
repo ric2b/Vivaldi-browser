@@ -864,8 +864,7 @@ bool SQLitePersistentCookieStore::Backend::DoInitializeDatabase() {
     host_keys.push_back(smt.ColumnString(0));
 
   // Build a map of domain keys (always eTLD+1) to domains.
-  for (size_t idx = 0; idx < host_keys.size(); ++idx) {
-    const std::string& domain = host_keys[idx];
+  for (const auto& domain : host_keys) {
     std::string key = CookieMonster::GetKey(domain);
     keys_to_load_[key].insert(domain);
   }
@@ -1050,10 +1049,10 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
         statement.ColumnInt(16));                         // source_port
     if (cc) {
       DLOG_IF(WARNING, cc->CreationDate() > Time::Now())
-          << L"CreationDate too recent";
+          << "CreationDate too recent";
       if (!cc->LastUpdateDate().is_null()) {
         DLOG_IF(WARNING, cc->LastUpdateDate() > Time::Now())
-            << L"LastUpdateDate too recent";
+            << "LastUpdateDate too recent";
         // In order to anticipate the potential effects of the expiry limit in
         // rfc6265bis, we need to check how long it's been since the cookie was
         // refreshed (if LastUpdateDate is populated). We use 100 buckets for
@@ -1446,7 +1445,7 @@ void SQLitePersistentCookieStore::Backend::BatchOperation(
   DCHECK(!background_task_runner()->RunsTasksInCurrentSequence());
 
   // We do a full copy of the cookie here, and hopefully just here.
-  std::unique_ptr<PendingOperation> po(new PendingOperation(op, cc));
+  auto po = std::make_unique<PendingOperation>(op, cc);
 
   PendingOperationsMap::size_type num_pending;
   {
@@ -1720,12 +1719,11 @@ SQLitePersistentCookieStore::SQLitePersistentCookieStore(
     const scoped_refptr<base::SequencedTaskRunner>& background_task_runner,
     bool restore_old_session_cookies,
     CookieCryptoDelegate* crypto_delegate)
-    : backend_(new Backend(path,
-                           client_task_runner,
-                           background_task_runner,
-                           restore_old_session_cookies,
-                           crypto_delegate)) {
-}
+    : backend_(base::MakeRefCounted<Backend>(path,
+                                             client_task_runner,
+                                             background_task_runner,
+                                             restore_old_session_cookies,
+                                             crypto_delegate)) {}
 
 void SQLitePersistentCookieStore::DeleteAllInList(
     const std::list<CookieOrigin>& cookies) {

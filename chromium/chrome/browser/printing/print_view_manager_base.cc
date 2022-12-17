@@ -64,7 +64,6 @@
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_view_manager.h"
-#include "components/prefs/pref_service.h"
 #endif
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
@@ -237,25 +236,6 @@ bool PrintViewManagerBase::PrintNow(content::RenderFrameHost* rfh) {
 #endif
 
   SetPrintingRFH(rfh);
-
-#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-  enterprise_connectors::ContentAnalysisDelegate::Data scanning_data;
-  if (base::FeatureList::IsEnabled(features::kEnablePrintContentAnalysis) &&
-      enterprise_connectors::ContentAnalysisDelegate::IsEnabled(
-          Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-          web_contents()->GetLastCommittedURL(), &scanning_data,
-          enterprise_connectors::AnalysisConnector::PRINT)) {
-    auto scanning_done_cb = base::BindOnce(
-        &PrintViewManagerBase::CompletePrintNowAfterContentAnalysis,
-        weak_ptr_factory_.GetWeakPtr());
-    GetPrintRenderFrame(rfh)->SnapshotForContentAnalysis(base::BindOnce(
-        &PrintViewManagerBase::OnGotSnapshotCallback,
-        weak_ptr_factory_.GetWeakPtr(), std::move(scanning_done_cb),
-        std::move(scanning_data), rfh_id));
-    return true;
-  }
-#endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-
   CompletePrintNow(rfh);
   return true;
 }
@@ -280,6 +260,16 @@ void PrintViewManagerBase::PrintForPrintPreview(
       base::BindOnce(std::move(settings_callback), std::move(printer_query)));
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+
+void PrintViewManagerBase::PrintToPdf(
+    content::RenderFrameHost* rfh,
+    const std::string& page_ranges,
+    mojom::PrintPagesParamsPtr print_pages_params,
+    print_to_pdf::PdfPrintJob::PrintToPdfCallback callback) {
+  print_to_pdf::PdfPrintJob::StartJob(
+      web_contents(), rfh, GetPrintRenderFrame(rfh), page_ranges,
+      std::move(print_pages_params), std::move(callback));
+}
 
 void PrintViewManagerBase::PrintDocument(
     scoped_refptr<base::RefCountedMemory> print_data,

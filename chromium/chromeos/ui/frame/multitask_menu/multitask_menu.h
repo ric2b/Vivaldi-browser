@@ -5,6 +5,9 @@
 #ifndef CHROMEOS_UI_FRAME_MULTITASK_MENU_MULTITASK_MENU_H_
 #define CHROMEOS_UI_FRAME_MULTITASK_MENU_MULTITASK_MENU_H_
 
+#include "base/memory/raw_ptr.h"
+#include "chromeos/ui/frame/caption_buttons/snap_controller.h"
+#include "chromeos/ui/frame/multitask_menu/multitask_menu_view.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
 namespace views {
@@ -16,8 +19,9 @@ namespace chromeos {
 
 // MultitaskMenu is the window operation menu attached to frame
 // size button.
-class MultitaskMenu : public views::BubbleDialogDelegateView,
-                      public views::WidgetObserver {
+class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenu
+    : public views::BubbleDialogDelegateView,
+      public views::WidgetObserver {
  public:
   MultitaskMenu(views::View* anchor, aura::Window* parent_window);
 
@@ -26,18 +30,27 @@ class MultitaskMenu : public views::BubbleDialogDelegateView,
 
   ~MultitaskMenu() override;
 
+  views::Widget* bubble_widget_for_testing() { return bubble_widget_.get(); }
+
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
   // Displays the MultitaskMenu.
   void ShowBubble();
+
   // Hides the currently-showing MultitaskMenu.
   void HideBubble();
 
+  MultitaskMenuView* multitask_menu_view_for_testing() {
+    return multitask_menu_view_.get();
+  }
+
  private:
-  views::Widget* bubble_widget_;
+  raw_ptr<views::Widget> bubble_widget_ = nullptr;
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       bubble_widget_observer_{this};
+
+  raw_ptr<MultitaskMenuView> multitask_menu_view_;
 };
 
 }  // namespace chromeos

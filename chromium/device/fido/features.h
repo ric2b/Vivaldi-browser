@@ -28,10 +28,6 @@ extern const base::Feature kWebAuthUseNativeWinApi;
 COMPONENT_EXPORT(DEVICE_FIDO)
 extern const base::Feature kWebAuthCableExtensionAnywhere;
 
-// Enable discoverable credentials on caBLE authenticators.
-COMPONENT_EXPORT(DEVICE_FIDO)
-extern const base::Feature kWebAuthCableDisco;
-
 #if BUILDFLAG(IS_CHROMEOS)
 // Enable a ChromeOS platform authenticator
 COMPONENT_EXPORT(DEVICE_FIDO)
@@ -49,6 +45,11 @@ extern const base::Feature kWebAuthnGoogleCorpRemoteDesktopClientPrivilege;
 // Enable some experimental UI changes
 COMPONENT_EXPORT(DEVICE_FIDO)
 extern const base::Feature kWebAuthPasskeysUI;
+
+// Reshuffle WebAuthn request UI to put account selection for discoverable
+// credentials on platform authenticators first, where applicable.
+COMPONENT_EXPORT(DEVICE_FIDO)
+extern const base::Feature kWebAuthnNewDiscoverableCredentialsUi;
 
 }  // namespace device
 

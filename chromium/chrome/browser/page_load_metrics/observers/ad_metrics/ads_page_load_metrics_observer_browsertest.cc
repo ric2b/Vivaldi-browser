@@ -327,8 +327,14 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
 // a page's lifecycling by creating a large ad frame, destroying it, and
 // creating a smaller iframe. The ad density recorded is the density with
 // the first larger frame.
+// Flaky on Lacros bots. crbug.com/1338035
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_PageAdDensityRecordsPageMax DISABLED_PageAdDensityRecordsPageMax
+#else
+#define MAYBE_PageAdDensityRecordsPageMax PageAdDensityRecordsPageMax
+#endif
 IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
-                       PageAdDensityRecordsPageMax) {
+                       MAYBE_PageAdDensityRecordsPageMax) {
   base::HistogramTester histogram_tester;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   auto waiter = CreatePageLoadMetricsTestWaiter();
@@ -424,9 +430,15 @@ IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
       expected_page_density_height);
 }
 
+// TODO(crbug.com/1352329): Flaky on Lacros bots.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_PageAdDensityMultipleFrames DISABLED_PageAdDensityMultipleFrames
+#else
+#define MAYBE_PageAdDensityMultipleFrames PageAdDensityMultipleFrames
+#endif
 // Creates multiple overlapping frames and verifies the page ad density.
 IN_PROC_BROWSER_TEST_F(AdsPageLoadMetricsObserverBrowserTest,
-                       PageAdDensityMultipleFrames) {
+                       MAYBE_PageAdDensityMultipleFrames) {
   base::HistogramTester histogram_tester;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   auto waiter = CreatePageLoadMetricsTestWaiter();

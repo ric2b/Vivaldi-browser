@@ -75,7 +75,7 @@ bool Manifest::RelatedApplication::operator==(
 }
 
 bool Manifest::LaunchHandler::operator==(const LaunchHandler& other) const {
-  return route_to == other.route_to;
+  return client_mode == other.client_mode;
 }
 
 bool Manifest::LaunchHandler::operator!=(const LaunchHandler& other) const {
@@ -89,6 +89,34 @@ Manifest::TranslationItem::~TranslationItem() = default;
 bool Manifest::TranslationItem::operator==(const TranslationItem& other) const {
   auto AsTuple = [](const auto& item) {
     return std::tie(item.name, item.short_name, item.description);
+  };
+  return AsTuple(*this) == AsTuple(other);
+}
+
+Manifest::HomeTabParams::HomeTabParams() = default;
+
+Manifest::HomeTabParams::~HomeTabParams() = default;
+
+bool Manifest::HomeTabParams::operator==(const HomeTabParams& other) const {
+  return icons == other.icons;
+}
+
+Manifest::NewTabButtonParams::NewTabButtonParams() = default;
+
+Manifest::NewTabButtonParams::~NewTabButtonParams() = default;
+
+bool Manifest::NewTabButtonParams::operator==(
+    const NewTabButtonParams& other) const {
+  return url == other.url;
+}
+
+Manifest::TabStrip::TabStrip() = default;
+
+Manifest::TabStrip::~TabStrip() = default;
+
+bool Manifest::TabStrip::operator==(const TabStrip& other) const {
+  auto AsTuple = [](const auto& item) {
+    return std::tie(item.home_tab, item.new_tab_button);
   };
   return AsTuple(*this) == AsTuple(other);
 }

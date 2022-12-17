@@ -6,7 +6,9 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "components/url_param_filter/core/cross_otr_observer.h"
 #include "components/url_param_filter/core/features.h"
+#include "components/url_param_filter/core/url_param_filterer.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/navigation/navigation_context.h"
 #include "ios/web/public/web_state.h"
@@ -19,11 +21,6 @@ namespace url_param_filter {
 
 namespace {
 
-constexpr char kCrossOtrRefreshCountMetricName[] =
-    "Navigation.CrossOtr.ContextMenu.RefreshCountExperimental";
-constexpr char kCrossOtrResponseCodeMetricName[] =
-    "Navigation.CrossOtr.ContextMenu.ResponseCodeExperimental";
-
 // Returns true if the web_state corresponds to one where a user enters
 // incognito by long-pressing on an embedded link and selecting "Open In
 // Incognito".
@@ -35,6 +32,7 @@ bool IsOpenInIncognito(web::WebState* web_state,
          ui::PageTransitionCoreTypeIs(navigation_context->GetPageTransition(),
                                       ui::PAGE_TRANSITION_TYPED);
 }
+
 }  // namespace
 
 // static
@@ -43,7 +41,8 @@ void CrossOtrTabHelper::CreateForWebState(web::WebState* web_state) {
   WebStateUserData<CrossOtrTabHelper>::CreateForWebState(web_state);
 }
 
-CrossOtrTabHelper::CrossOtrTabHelper(web::WebState* web_state) {
+CrossOtrTabHelper::CrossOtrTabHelper(web::WebState* web_state)
+    : CrossOtrObserver(ObserverType::kIos) {
   DCHECK(web_state);
   web_state->AddObserver(this);
 }
@@ -53,52 +52,27 @@ CrossOtrTabHelper::~CrossOtrTabHelper() = default;
 void CrossOtrTabHelper::DidStartNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
-  if (!observed_response_) {
-    protecting_navigations_ = IsOpenInIncognito(web_state, navigation_context);
-    return;
-  }
-
-  if (!(navigation_context->GetPageTransition() &
-        ui::PAGE_TRANSITION_CLIENT_REDIRECT) ||
-      navigation_context->HasUserGesture()) {
-    // If a navigation that isn't a client redirect occurs, or a user-activated
-    // navigation occurs we stop protecting navigations.
-    protecting_navigations_ = false;
-  }
+  OnNavigationStart(/*is_primary_frame=*/absl::nullopt,
+                    /*user_activated=*/navigation_context->HasUserGesture(),
+                    /*is_client_redirect=*/
+                    (navigation_context->GetPageTransition() &
+                     ui::PAGE_TRANSITION_CLIENT_REDIRECT),
+                    /*init_cross_otr_on_ios=*/
+                    IsOpenInIncognito(web_state, navigation_context));
 }
 
 void CrossOtrTabHelper::DidFinishNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
-  // web::NavigationContext doesn't expose whether or not it's a main frame
-  // navigation.
-  if (navigation_context->IsSameDocument()) {
-    // We only are concerned with non-same doc navigations.
-    return;
-  }
-  // We only want the first navigation, including client redirects occurring
-  // without having observed user activation, to be counted; after that, no
-  // response codes should be tracked. The observer is left in place to track
-  // refreshes on the first page.
-  if (protecting_navigations_) {
-    observed_response_ = true;
-    const net::HttpResponseHeaders* headers =
-        navigation_context->GetResponseHeaders();
-    // TODO(https://crbug.com/1324194) See comment two about restricting metric
-    // collection here.
-    if (headers) {
-      base::UmaHistogramSparse(
-          kCrossOtrResponseCodeMetricName,
-          net::HttpUtil::MapStatusCodeForHistogram(headers->response_code()));
-    }
-    return;
-  }
-  if (ui::PageTransitionCoreTypeIs(navigation_context->GetPageTransition(),
-                                   ui::PAGE_TRANSITION_RELOAD)) {
-    refresh_count_++;
-    return;
-  }
-  if (navigation_context->HasCommitted() && !protecting_navigations_) {
+  bool should_detach = OnNavigationFinish(
+      /*is_primary_frame=*/absl::nullopt,
+      /*is_same_document=*/navigation_context->IsSameDocument(),
+      /*headers=*/navigation_context->GetResponseHeaders(),
+      /*is_reload=*/
+      ui::PageTransitionCoreTypeIs(navigation_context->GetPageTransition(),
+                                   ui::PAGE_TRANSITION_RELOAD),
+      /*has_committed=*/navigation_context->HasCommitted());
+  if (should_detach) {
     Detach(web_state);
     // DO NOT add code past this point. `this` is destroyed.
   }
@@ -109,14 +83,15 @@ void CrossOtrTabHelper::WebStateDestroyed(web::WebState* web_state) {
   // DO NOT add code past this point. `this` is destroyed.
 }
 
-bool CrossOtrTabHelper::GetCrossOtrStateForTesting() const {
-  return protecting_navigations_;
+void CrossOtrTabHelper::SetExperimentalStatus(
+    ClassificationExperimentStatus status) {
+  // Since this TabHelper is only created when params are filtered, always set
+  // did_filter_params_ = true.
+  SetDidFilterParams(true, status);
 }
 
 void CrossOtrTabHelper::Detach(web::WebState* web_state) {
-  // TODO(https://crbug.com/1324194) See comment two about restricting metric
-  // collection here.
-  base::UmaHistogramCounts100(kCrossOtrRefreshCountMetricName, refresh_count_);
+  WriteRefreshMetric();
   web_state->RemoveObserver(this);
   web_state->RemoveUserData(CrossOtrTabHelper::UserDataKey());
 }

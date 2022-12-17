@@ -4,11 +4,11 @@
 
 #include "third_party/blink/renderer/core/workers/parent_execution_context_task_runners.h"
 
+#include "base/synchronization/lock.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
-#include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 
 namespace blink {
 
@@ -33,14 +33,14 @@ ParentExecutionContextTaskRunners::ParentExecutionContextTaskRunners(
                     TaskType::kInternalLoading, TaskType::kInternalTest,
                     TaskType::kInternalMedia, TaskType::kInternalInspector}) {
     auto task_runner = context ? context->GetTaskRunner(type)
-                               : Thread::Current()->GetTaskRunner();
+                               : Thread::Current()->GetDeprecatedTaskRunner();
     task_runners_.insert(type, std::move(task_runner));
   }
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
 ParentExecutionContextTaskRunners::Get(TaskType type) {
-  MutexLocker lock(mutex_);
+  base::AutoLock locker(lock_);
   return task_runners_.at(type);
 }
 
@@ -49,9 +49,9 @@ void ParentExecutionContextTaskRunners::Trace(Visitor* visitor) const {
 }
 
 void ParentExecutionContextTaskRunners::ContextDestroyed() {
-  MutexLocker lock(mutex_);
+  base::AutoLock locker(lock_);
   for (auto& entry : task_runners_)
-    entry.value = Thread::Current()->GetTaskRunner();
+    entry.value = Thread::Current()->GetDeprecatedTaskRunner();
 }
 
 }  // namespace blink

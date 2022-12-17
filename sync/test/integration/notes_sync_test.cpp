@@ -5,7 +5,7 @@
 #include "app/vivaldi_apptools.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
-#include "components/sync/test/fake_server/fake_server_verifier.h"
+#include "components/sync/test/fake_server_verifier.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_observer.h"

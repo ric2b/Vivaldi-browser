@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/files/file_error_or.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -71,9 +72,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
  public:
   using OpenFileSystemCallback = FileSystemBackend::OpenFileSystemCallback;
   using ResolveURLCallback = FileSystemBackend::ResolveURLCallback;
-
-  // The FileSystem directory name.
-  static const base::FilePath::CharType kFileSystemDirectory[];
 
   // StorageKey enumerator interface.
   // An instance of this interface is assumed to be called on the file thread.
@@ -136,6 +134,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
 
   // FileSystemBackend helpers.
   void OpenFileSystem(const blink::StorageKey& storage_key,
+                      const absl::optional<BucketLocator>& bucket_locator,
                       FileSystemType type,
                       OpenFileSystemMode mode,
                       ResolveURLCallback callback,
@@ -161,6 +160,11 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
       QuotaManagerProxy* proxy,
       const blink::StorageKey& storage_key,
       FileSystemType type) override;
+  base::File::Error DeleteBucketDataOnFileTaskRunner(
+      FileSystemContext* context,
+      QuotaManagerProxy* proxy,
+      const BucketLocator& bucket_locator,
+      FileSystemType type) override;
   void PerformStorageCleanupOnFileTaskRunner(FileSystemContext* context,
                                              QuotaManagerProxy* proxy,
                                              FileSystemType type) override;
@@ -172,7 +176,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
       FileSystemType type) override;
   int64_t GetBucketUsageOnFileTaskRunner(FileSystemContext* context,
                                          const BucketLocator& bucket_locator,
-                                         FileSystemType type);
+                                         FileSystemType type) override;
   scoped_refptr<QuotaReservation> CreateQuotaReservationOnFileTaskRunner(
       const blink::StorageKey& storage_key,
       FileSystemType type) override;
@@ -246,29 +250,27 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) SandboxFileSystemBackendDelegate
   bool IsAllowedScheme(const GURL& url) const;
 
   // Returns a path to the usage cache file.
-  base::FilePath GetUsageCachePathForStorageKeyAndType(
+  base::FileErrorOr<base::FilePath> GetUsageCachePathForStorageKeyAndType(
       const blink::StorageKey& storage_key,
       FileSystemType type);
 
   // Returns a path to the usage cache file (static version).
-  static base::FilePath GetUsageCachePathForStorageKeyAndType(
-      ObfuscatedFileUtil* sandbox_file_util,
-      const blink::StorageKey& storage_key,
-      FileSystemType type,
-      base::File::Error* error_out);
+  static base::FileErrorOr<base::FilePath>
+  GetUsageCachePathForStorageKeyAndType(ObfuscatedFileUtil* sandbox_file_util,
+                                        const blink::StorageKey& storage_key,
+                                        FileSystemType type);
 
   // Returns a path to the usage cache file for a given bucket and type.
-  base::FilePath GetUsageCachePathForBucketAndType(
+  base::FileErrorOr<base::FilePath> GetUsageCachePathForBucketAndType(
       const BucketLocator& bucket_locator,
       FileSystemType type);
 
   // Returns a path to the usage cache file for a given bucket and type(static
   // version).
-  static base::FilePath GetUsageCachePathForBucketAndType(
+  static base::FileErrorOr<base::FilePath> GetUsageCachePathForBucketAndType(
       ObfuscatedFileUtil* sandbox_file_util,
       const BucketLocator& bucket_locator,
-      FileSystemType type,
-      base::File::Error* error_out);
+      FileSystemType type);
 
   // Helper function to obtain usage for a StorageKey value and optionally a
   // BucketLocator value. `storage_key` and `bucket_locator->storage_key` should

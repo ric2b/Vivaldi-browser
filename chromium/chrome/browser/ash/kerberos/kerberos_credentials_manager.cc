@@ -55,7 +55,8 @@ constexpr char kDefaultKerberosConfig[] = R"([libdefaults]
   default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
   default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
   permitted_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
-  forwardable = true)";
+  forwardable = true
+)";
 
 // Backoff policy used to control managed accounts addition retries.
 const net::BackoffEntry::Policy kBackoffPolicyForManagedAccounts = {
@@ -383,6 +384,9 @@ void KerberosCredentialsManager::RegisterLocalStatePrefs(
   registry->RegisterBooleanPref(prefs::kKerberosRememberPasswordEnabled, true);
   registry->RegisterBooleanPref(prefs::kKerberosAddAccountsAllowed, true);
   registry->RegisterListPref(prefs::kKerberosAccounts);
+  registry->RegisterStringPref(prefs::kKerberosDomainAutocomplete, "");
+  registry->RegisterStringPref(prefs::kKerberosDefaultConfiguration,
+                               kDefaultKerberosConfig);
 }
 
 void KerberosCredentialsManager::RegisterProfilePrefs(
@@ -397,11 +401,6 @@ KerberosCredentialsManager::EmptyResultCallback() {
   return base::BindOnce([](kerberos::ErrorType error) {
     // Do nothing.
   });
-}
-
-// static
-const char* KerberosCredentialsManager::GetDefaultKerberosConfig() {
-  return kDefaultKerberosConfig;
 }
 
 bool KerberosCredentialsManager::IsKerberosEnabled() const {
@@ -724,11 +723,11 @@ void KerberosCredentialsManager::NotifyEnabledStateChanged() {
 }
 
 const std::string& KerberosCredentialsManager::GetActivePrincipalName() const {
-  // Using Get()->GetString() instead of GetString() directly to prevent a
+  // Using GetValue().GetString() instead of GetString() directly to prevent a
   // string copy.
   return primary_profile_->GetPrefs()
-      ->Get(prefs::kKerberosActivePrincipalName)
-      ->GetString();
+      ->GetValue(prefs::kKerberosActivePrincipalName)
+      .GetString();
 }
 
 void KerberosCredentialsManager::SetActivePrincipalName(
@@ -818,9 +817,10 @@ void KerberosCredentialsManager::UpdateAccountsFromPref(bool is_retry) {
     return;
   }
 
-  const base::Value* accounts = local_state_->GetList(prefs::kKerberosAccounts);
-  if (!accounts || accounts->GetListDeprecated().empty()) {
-    VLOG(1) << "No or empty KerberosAccounts policy";
+  const base::Value::List& accounts =
+      local_state_->GetValueList(prefs::kKerberosAccounts);
+  if (accounts.empty()) {
+    VLOG(1) << "Empty KerberosAccounts policy";
     NotifyRequiresLoginPassword(false);
 
     // The active principal is empty if there are no accounts, so no need to
@@ -830,11 +830,10 @@ void KerberosCredentialsManager::UpdateAccountsFromPref(bool is_retry) {
     return;
   }
 
-  VLOG(1) << accounts->GetListDeprecated().size()
-          << " accounts in KerberosAccounts";
+  VLOG(1) << accounts.size() << " accounts in KerberosAccounts";
   bool requires_login_password = false;
   std::vector<std::string> managed_accounts_added;
-  for (const auto& account : accounts->GetListDeprecated()) {
+  for (const auto& account : accounts) {
     // Get the principal. Should always be set.
     const base::Value* principal_value = account.FindPath(kPrincipal);
     DCHECK(principal_value);
@@ -940,6 +939,11 @@ void KerberosCredentialsManager::SetKerberosFilesHandlerForTesting(
 void KerberosCredentialsManager::SetAddManagedAccountCallbackForTesting(
     base::RepeatingCallback<void(kerberos::ErrorType)> callback) {
   add_managed_account_callback_for_testing_ = std::move(callback);
+}
+
+// static
+const char* KerberosCredentialsManager::GetDefaultKerberosConfigForTesting() {
+  return kDefaultKerberosConfig;
 }
 
 }  // namespace ash

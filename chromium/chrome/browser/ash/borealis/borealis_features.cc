@@ -8,7 +8,6 @@
 #include <string>
 
 #include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/tpm/install_attributes.h"
 #include "ash/constants/ash_features.h"
 #include "base/callback.h"
 #include "base/location.h"
@@ -26,6 +25,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/channel.h"
 
@@ -35,7 +35,7 @@ namespace borealis {
 
 namespace {
 
-constexpr int64_t kGibi = 1024 * 1024 * 1024;
+constexpr uint64_t kGibi = 1024ull * 1024 * 1024;
 
 // Used to make it difficult to tell what someone's token is based on their
 // prefs.
@@ -113,7 +113,9 @@ class FullChecker : public TokenHardwareChecker {
         LOG(WARNING) << "Vendor token provided, bypassing hardware checks.";
         return AllowStatus::kAllowed;
       }
-      return AllowStatus::kIncorrectToken;
+      return CpuRegexMatches("Ryzen [57]") && HasMemory(7 * kGibi)
+                 ? AllowStatus::kAllowed
+                 : AllowStatus::kHardwareChecksFailed;
     } else if (IsBoard("draco")) {
       return AllowStatus::kAllowed;
     }

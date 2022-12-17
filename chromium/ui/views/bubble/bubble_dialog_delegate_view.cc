@@ -629,6 +629,17 @@ View* BubbleDialogDelegate::GetAnchorView() const {
   return anchor_view_observer_->anchor_view();
 }
 
+void BubbleDialogDelegate::SetMainImage(ui::ImageModel main_image) {
+  // Adding a main image while the bubble is showing is not supported (but
+  // changing it is). Adding an image while it's showing would require a jarring
+  // re-layout.
+  if (main_image_.IsEmpty())
+    DCHECK(!GetBubbleFrameView());
+  main_image_ = std::move(main_image);
+  if (GetBubbleFrameView())
+    GetBubbleFrameView()->UpdateMainImage();
+}
+
 bool BubbleDialogDelegate::ShouldCloseOnDeactivate() const {
   return close_on_deactivate_ && !close_on_deactivate_pins_->is_pinned();
 }
@@ -687,10 +698,13 @@ gfx::Rect BubbleDialogDelegate::GetAnchorRect() const {
   // TODO(sammiequon): Investigate if we can remove |anchor_widget_| and just
   // replace its calls with GetAnchorView()->GetWidget().
   DCHECK_EQ(anchor_widget_, GetAnchorView()->GetWidget());
-  gfx::Transform transform =
-      anchor_widget_->GetNativeWindow()->layer()->GetTargetTransform();
-  if (!transform.IsIdentity())
-    anchor_rect_->Offset(-gfx::ToRoundedVector2d(transform.To2dTranslation()));
+  if (anchor_widget_) {
+    gfx::Transform transform =
+        anchor_widget_->GetNativeWindow()->layer()->GetTargetTransform();
+    if (!transform.IsIdentity())
+      anchor_rect_->Offset(
+          -gfx::ToRoundedVector2d(transform.To2dTranslation()));
+  }
 #endif
 
   return anchor_rect_.value();

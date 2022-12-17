@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
 <translation id="1397811292916898096">Cerca amb <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">La funcionalitat de prémer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi. Envia una paraula i el seu context al cercador de Google. El pot deshabilitar als <ph name="BEGIN_LINK" />Ajustos<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Commuta pestanyes normals/privades</translation>
 <translation id="1644574205037202324">Historial</translation>
 <translation id="17513872634828108">Pestanyes obertes</translation>
@@ -31,18 +32,21 @@
 <translation id="4167670741834902166">Nova pestanya privada</translation>
 <translation id="4243710787042215766">Obre un una pestanya discreta</translation>
 <translation id="4526803704855831732">Pestanyes privades</translation>
+<translation id="4719086422742491124">Aprengui sobre coses a les pàgines webs sense sortir-ne. Seleccioni una o més paraules a la pàgina per cercar-les.
+
+La funcionalitat de prèmer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi.</translation>
 <translation id="4759238208242260848">Baixades</translation>
 <translation id="4883379392681899581">Surt del mode privat</translation>
 <translation id="4943872375798546930">Sense resultats</translation>
 <translation id="49576331685473090">Bloquejador de continguts</translation>
 <translation id="5079259810715830221">Quan un lloc de Google pregunta per precarregar privadament enllaços a la seva pàgina, Vivaldi encripta i precarrega les pàgines a través dels servidors de Google sense galetes. Això amaga la vostra identitat al lloc precarregat.</translation>
 <translation id="5118676864324397542">Emmagatzematge de Vivaldi <ph name="APP_NAME" /></translation>
-<translation id="5186185447130319458">Discret</translation>
+<translation id="5186185447130319458">Privada</translation>
 <translation id="5233638681132016545">Pestanya nova</translation>
-<translation id="572328651809341494">Pestanyes recents</translation>
-<translation id="5840488417521835756">Apreneu sobre algun tema a un lloc web sense sortir de la pàgina. Prémer per cercar és una funció només disponible quan Google és el cercador predeterminat a Vivaldi. Envia una paraula i el context que l'envolta al buscador de Google, tornant definicions, resultats de la cerca i altres detalls.
+<translation id="5375131951310889874">Aprengui sobre coses a les pàgines web sense sortir-ne. La funcionalitat de prémer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi. Envia una paraula i el seu context al cercador de Google, retornant definicions, imatges, resultats de cerca i altres detalls.
 
-Per ajustar els termes de la cerca, mantingueu premut per seleccionar. Per refinar la vostra cerca, feu lliscar el tauler amunt i premeu el camp de cerca.</translation>
+Per ajustar el seu terme de cerca, premi llarg per seleccionar. Per refinar la seva cerca, llisqui el tauler cap amunt i premi el camp de cerca.</translation>
+<translation id="572328651809341494">Pestanyes recents</translation>
 <translation id="6150320133806434356">Marcador desat</translation>
 <translation id="6336451774241870485">Nova pestanya discreta</translation>
 <translation id="6585139692466700358">Ofereix traduir pàgines a altres idiomes amb el servei de traducció de Vivaldi</translation>
@@ -53,7 +57,6 @@ Per ajustar els termes de la cerca, mantingueu premut per seleccionar. Per refin
 <translation id="732145680195464316">Marcador desat a <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Sobre Vivaldi</translation>
 <translation id="7465104139234185284">Tanqueu totes les pestanyes discretes</translation>
-<translation id="7519434535192513364">La funció "Toca per a Cercar" només està disponible quan Google és el cercador per defecte a Vivaldi. Envia la paraula seleccionada i la pàgina actual com a context al cercador de Google. La pots desactivar a <ph name="BEGIN_LINK" />Ajustaments<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Condicions de servei de Vivaldi</translation>
 <translation id="85991616550051997">Vés a la pàgina inicial</translation>
 <translation id="8820817407110198400">Marcadors</translation>

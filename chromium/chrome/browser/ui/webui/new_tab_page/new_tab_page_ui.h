@@ -9,8 +9,9 @@
 #include "base/time/time.h"
 #include "chrome/browser/cart/chrome_cart.mojom.h"
 #include "chrome/browser/new_tab_page/modules/drive/drive.mojom.h"
+#include "chrome/browser/new_tab_page/modules/feed/feed.mojom.h"
 #include "chrome/browser/new_tab_page/modules/photos/photos.mojom.h"
-#include "chrome/browser/new_tab_page/modules/task_module/task_module.mojom.h"
+#include "chrome/browser/new_tab_page/modules/recipes/recipes.mojom.h"
 #include "ui/webui/resources/js/browser_command/browser_command.mojom.h"
 #if !defined(OFFICIAL_BUILD)
 #include "chrome/browser/ui/webui/new_tab_page/foo/foo.mojom.h"  // nogncheck crbug.com/1125897
@@ -57,11 +58,13 @@ class PrefService;
 class Profile;
 class BrowserCommandHandler;
 class RealboxHandler;
-class TaskModuleHandler;
+class RecipesHandler;
 class CartHandler;
 class DriveHandler;
 class PhotosHandler;
-
+namespace ntp {
+class FeedHandler;
+}
 class NewTabPageUI
     : public ui::MojoWebUIController,
       public new_tab_page::mojom::PageHandlerFactory,
@@ -121,8 +124,7 @@ class NewTabPageUI
   // recipe_tasks::mojom::RecipeTasksHandler mojo interface passing the
   // pending receiver that will be internally bound.
   void BindInterface(
-      mojo::PendingReceiver<task_module::mojom::TaskModuleHandler>
-          pending_receiver);
+      mojo::PendingReceiver<recipes::mojom::RecipesHandler> pending_receiver);
 
   // Instantiates the implementor of drive::mojom::DriveHandler mojo interface
   // passing the pending receiver that will be internally bound.
@@ -133,6 +135,11 @@ class NewTabPageUI
   // passing the pending receiver that will be internally bound.
   void BindInterface(
       mojo::PendingReceiver<photos::mojom::PhotosHandler> pending_receiver);
+
+  // Instantiates the implementor of ntp::feed::mojom::FeedHandler mojo
+  // interface passing the pending receiver that will be internally bound.
+  void BindInterface(
+      mojo::PendingReceiver<ntp::feed::mojom::FeedHandler> pending_receiver);
 
 #if !defined(OFFICIAL_BUILD)
   // Instantiates the implementor of the foo::mojom::FooHandler mojo interface
@@ -232,9 +239,10 @@ class NewTabPageUI
   base::Time navigation_start_time_;
 
   // Mojo implementations for modules:
-  std::unique_ptr<TaskModuleHandler> task_module_handler_;
+  std::unique_ptr<RecipesHandler> recipes_handler_;
   std::unique_ptr<DriveHandler> drive_handler_;
   std::unique_ptr<PhotosHandler> photos_handler_;
+  std::unique_ptr<ntp::FeedHandler> feed_handler_;
 
   PrefChangeRegistrar pref_change_registrar_;
 

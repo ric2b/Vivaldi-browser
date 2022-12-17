@@ -15,27 +15,27 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/dbus/shill/fake_shill_device_client.h"
+#include "chromeos/ash/components/network/cellular_inhibitor.h"
+#include "chromeos/ash/components/network/cellular_metrics_logger.h"
+#include "chromeos/ash/components/network/fake_stub_cellular_networks_provider.h"
+#include "chromeos/ash/components/network/managed_network_configuration_handler.h"
+#include "chromeos/ash/components/network/network_cert_loader.h"
+#include "chromeos/ash/components/network/network_certificate_handler.h"
+#include "chromeos/ash/components/network/network_configuration_handler.h"
+#include "chromeos/ash/components/network/network_connection_handler.h"
+#include "chromeos/ash/components/network/network_device_handler.h"
+#include "chromeos/ash/components/network/network_handler_test_helper.h"
+#include "chromeos/ash/components/network/network_metadata_store.h"
+#include "chromeos/ash/components/network/network_profile_handler.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_type_pattern.h"
+#include "chromeos/ash/components/network/policy_util.h"
+#include "chromeos/ash/components/network/prohibited_technologies_handler.h"
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
+#include "chromeos/ash/components/network/system_token_cert_db_storage.h"
 #include "chromeos/components/onc/onc_utils.h"
-#include "chromeos/dbus/shill/fake_shill_device_client.h"
 #include "chromeos/login/login_state/login_state.h"
-#include "chromeos/network/cellular_inhibitor.h"
-#include "chromeos/network/cellular_metrics_logger.h"
-#include "chromeos/network/fake_stub_cellular_networks_provider.h"
-#include "chromeos/network/managed_network_configuration_handler.h"
-#include "chromeos/network/network_cert_loader.h"
-#include "chromeos/network/network_certificate_handler.h"
-#include "chromeos/network/network_configuration_handler.h"
-#include "chromeos/network/network_connection_handler.h"
-#include "chromeos/network/network_device_handler.h"
-#include "chromeos/network/network_handler_test_helper.h"
-#include "chromeos/network/network_metadata_store.h"
-#include "chromeos/network/network_profile_handler.h"
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_type_pattern.h"
-#include "chromeos/network/policy_util.h"
-#include "chromeos/network/prohibited_technologies_handler.h"
-#include "chromeos/network/system_token_cert_db_storage.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_observer.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom-shared.h"
 #include "components/onc/onc_constants.h"
@@ -230,16 +230,15 @@ class CrosNetworkConfigTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void AddSimSlotInfoToList(
-      base::Value::ListStorage& ordered_sim_slot_info_list,
-      const std::string& eid,
-      const std::string& iccid,
-      bool primary = false) {
-    base::Value item(base::Value::Type::DICTIONARY);
-    item.SetStringKey(shill::kSIMSlotInfoEID, eid);
-    item.SetStringKey(shill::kSIMSlotInfoICCID, iccid);
-    item.SetBoolKey(shill::kSIMSlotInfoPrimary, primary);
-    ordered_sim_slot_info_list.push_back(std::move(item));
+  void AddSimSlotInfoToList(base::Value::List& ordered_sim_slot_info_list,
+                            const std::string& eid,
+                            const std::string& iccid,
+                            bool primary = false) {
+    base::Value::Dict item;
+    item.Set(shill::kSIMSlotInfoEID, eid);
+    item.Set(shill::kSIMSlotInfoICCID, iccid);
+    item.Set(shill::kSIMSlotInfoPrimary, primary);
+    ordered_sim_slot_info_list.Append(std::move(item));
   }
 
   void SetupNetworks() {
@@ -268,13 +267,13 @@ class CrosNetworkConfigTest : public testing::Test {
         /*notify_changed=*/false);
 
     // Setup SimSlotInfo
-    base::Value::ListStorage ordered_sim_slot_info_list;
+    base::Value::List ordered_sim_slot_info_list;
     AddSimSlotInfoToList(ordered_sim_slot_info_list, /*eid=*/"",
                          kCellularTestIccid,
                          /*primary=*/true);
     helper()->device_test()->SetDeviceProperty(
         kCellularDevicePath, shill::kSIMSlotInfoProperty,
-        base::Value(ordered_sim_slot_info_list),
+        base::Value(std::move(ordered_sim_slot_info_list)),
         /*notify_changed=*/false);
 
     // Note: These are Shill dictionaries, not ONC.
@@ -364,7 +363,8 @@ class CrosNetworkConfigTest : public testing::Test {
   void SetupTestESimProfile(const std::string& eid,
                             const std::string& iccid,
                             const std::string& service_path,
-                            const std::string& profile_name) {
+                            const std::string& profile_name,
+                            const std::string& profile_nickname) {
     const char kTestEuiccPath[] = "euicc_path";
     const char kTestESimProfilePath[] = "profile_path";
 
@@ -373,7 +373,7 @@ class CrosNetworkConfigTest : public testing::Test {
                                               /*physical_slot=*/0);
     helper()->hermes_euicc_test()->AddCarrierProfile(
         dbus::ObjectPath(kTestESimProfilePath),
-        dbus::ObjectPath(kTestEuiccPath), iccid, profile_name,
+        dbus::ObjectPath(kTestEuiccPath), iccid, profile_name, profile_nickname,
         "service_provider", "activation_code", service_path,
         hermes::profile::State::kInactive,
         hermes::profile::ProfileClass::kOperational,
@@ -843,6 +843,7 @@ TEST_F(CrosNetworkConfigTest, GetNetworkState) {
   EXPECT_EQ(mojom::OncSource::kDevice, network->source);
   EXPECT_TRUE(cellular->sim_locked);
   EXPECT_TRUE(cellular->sim_lock_enabled);
+  EXPECT_EQ(shill::kSIMLockPin, cellular->sim_lock_type);
 
   network = GetNetworkState("vpn_l2tp_guid");
   ASSERT_TRUE(network);
@@ -866,6 +867,46 @@ TEST_F(CrosNetworkConfigTest, GetNetworkState) {
   EXPECT_EQ(mojom::OncSource::kNone, network->source);
 
   // TODO(919691): Test ProxyMode once UIProxyConfigService logic is improved.
+}
+
+TEST_F(CrosNetworkConfigTest, PortalState) {
+  mojom::NetworkStatePropertiesPtr network = GetNetworkState("eth_guid");
+  ASSERT_TRUE(network);
+  EXPECT_EQ(mojom::ConnectionStateType::kOnline, network->connection_state);
+  EXPECT_EQ(mojom::PortalState::kOnline, network->portal_state);
+
+  helper()->ConfigureService(
+      R"({"GUID": "wifi1_guid", "Type": "wifi", "State": "portal-suspected",
+          "Strength": 90, "AutoConnect": true})");
+  network = GetNetworkState("wifi1_guid");
+  ASSERT_TRUE(network);
+  EXPECT_EQ(mojom::ConnectionStateType::kPortal, network->connection_state);
+  EXPECT_EQ(mojom::PortalState::kPortalSuspected, network->portal_state);
+
+  helper()->ConfigureService(
+      R"({"GUID": "wifi1_guid", "Type": "wifi", "State": "redirect-found",
+          "Strength": 90, "AutoConnect": true})");
+  network = GetNetworkState("wifi1_guid");
+  ASSERT_TRUE(network);
+  EXPECT_EQ(mojom::ConnectionStateType::kPortal, network->connection_state);
+  EXPECT_EQ(mojom::PortalState::kPortal, network->portal_state);
+
+  helper()->ConfigureService(
+      R"({"GUID": "wifi1_guid", "Type": "wifi", "State": "no-connectivity",
+          "Strength": 90, "AutoConnect": true})");
+  network = GetNetworkState("wifi1_guid");
+  ASSERT_TRUE(network);
+  EXPECT_EQ(mojom::ConnectionStateType::kPortal, network->connection_state);
+  EXPECT_EQ(mojom::PortalState::kNoInternet, network->portal_state);
+
+  helper()->ConfigureService(
+      R"({"GUID": "wifi1_guid", "Type": "wifi", "State": "portal-suspected",
+          "Strength": 90, "AutoConnect": true,
+          "PortalDetectionFailedStatusCode": 407})");
+  network = GetNetworkState("wifi1_guid");
+  ASSERT_TRUE(network);
+  EXPECT_EQ(mojom::ConnectionStateType::kPortal, network->connection_state);
+  EXPECT_EQ(mojom::PortalState::kProxyAuthRequired, network->portal_state);
 }
 
 TEST_F(CrosNetworkConfigTest, GetNetworkStateList) {
@@ -944,7 +985,7 @@ TEST_F(CrosNetworkConfigTest, ESimAndPSimSlotInfo) {
       /*esim_1_physical_slot=*/esim_2_physical_slot);
 
   // Add pSIM and eSIM slot info to Shill.
-  base::Value::ListStorage ordered_sim_slot_info_list;
+  base::Value::List ordered_sim_slot_info_list;
   // Add pSIM first to correspond to |psim_physical_slot| index. Note that
   // pSIMs do not have EIDs.
   AddSimSlotInfoToList(ordered_sim_slot_info_list, /*eid=*/"", kTestPSimIccid,
@@ -958,7 +999,7 @@ TEST_F(CrosNetworkConfigTest, ESimAndPSimSlotInfo) {
   AddSimSlotInfoToList(ordered_sim_slot_info_list, /*eid=*/"", /*iccid=*/"");
   helper()->device_test()->SetDeviceProperty(
       kCellularDevicePath, shill::kSIMSlotInfoProperty,
-      base::Value(ordered_sim_slot_info_list),
+      base::Value(std::move(ordered_sim_slot_info_list)),
       /*notify_changed=*/true);
   base::RunLoop().RunUntilIdle();
 
@@ -991,6 +1032,7 @@ TEST_F(CrosNetworkConfigTest, ESimNetworkNameComesFromHermes) {
   const char kTestIccid[] = "iccid";
 
   const char kTestProfileName[] = "test_profile_name";
+  const char kTestProfileNickname[] = "test_profile_nickname";
   const char kTestNameFromShill[] = "shill_network_name";
 
   // Add a fake eSIM with name kTestProfileName.
@@ -1000,8 +1042,8 @@ TEST_F(CrosNetworkConfigTest, ESimNetworkNameComesFromHermes) {
   helper()->hermes_euicc_test()->AddCarrierProfile(
       dbus::ObjectPath(kTestProfileServicePath),
       dbus::ObjectPath(kTestEuiccPath), kTestIccid, kTestProfileName,
-      "service_provider", "activation_code", kTestProfileServicePath,
-      hermes::profile::State::kInactive,
+      kTestProfileNickname, "service_provider", "activation_code",
+      kTestProfileServicePath, hermes::profile::State::kInactive,
       hermes::profile::ProfileClass::kOperational,
       HermesEuiccClient::TestInterface::AddCarrierProfileBehavior::
           kAddProfileWithService);
@@ -1019,7 +1061,7 @@ TEST_F(CrosNetworkConfigTest, ESimNetworkNameComesFromHermes) {
 
   // The network's name should be the profile name (from Hermes), not the name
   // from Shill.
-  EXPECT_EQ(kTestProfileName, network->name);
+  EXPECT_EQ(kTestProfileNickname, network->name);
 }
 
 TEST_F(CrosNetworkConfigTest, GetDeviceStateList) {
@@ -2097,7 +2139,7 @@ TEST_F(CrosNetworkConfigTest, NetworkStateHasIccidAndEid) {
 
   // Add a fake eSIM network.
   SetupTestESimProfile(kTestEid, kTestIccid, "esim_service_path",
-                       "test_profile_name");
+                       "test_profile_name", "test_profile_nickname");
 
   // Fetch the Cellular network's managed properties for the eSIM profile.
   std::string esim_guid = std::string("esim_guid") + kTestIccid;
@@ -2114,10 +2156,11 @@ TEST_F(CrosNetworkConfigTest, ESimManagedPropertiesNameComesFromHermes) {
   const char kTestEid[] = "eid";
   const char kTestNameFromShill[] = "shill_network_name";
   const char kTestProfileName[] = "test_profile_name";
+  const char kTestProfileNickname[] = "test_profile_nickname";
 
   // Add a fake eSIM with name kTestProfileName.
   SetupTestESimProfile(kTestEid, kTestIccid, kTestProfileServicePath,
-                       kTestProfileName);
+                       kTestProfileName, kTestProfileNickname);
 
   // Change the network's name in Shill. Now, Hermes and Shill have different
   // names associated with the profile.
@@ -2128,7 +2171,7 @@ TEST_F(CrosNetworkConfigTest, ESimManagedPropertiesNameComesFromHermes) {
   // Fetch the Cellular network's managed properties for the eSIM profile.
   std::string esim_guid = std::string("esim_guid") + kTestIccid;
   mojom::ManagedPropertiesPtr properties = GetManagedProperties(esim_guid);
-  EXPECT_EQ(kTestProfileName, properties->name->active_value);
+  EXPECT_EQ(kTestProfileNickname, properties->name->active_value);
 }
 
 TEST_F(CrosNetworkConfigTest, GetAlwaysOnVpn) {

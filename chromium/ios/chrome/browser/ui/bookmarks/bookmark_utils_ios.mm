@@ -31,6 +31,9 @@
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/models/tree_node_iterator.h"
 
+// Vivaldi
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -160,14 +163,20 @@ MDCSnackbarMessage* CreateOrUpdateBookmarkWithUndoToast(
     const BookmarkNode* node,
     NSString* title,
     const GURL& url,
+    NSString* description, /* Vivaldi */
     const BookmarkNode* folder,
     bookmarks::BookmarkModel* bookmark_model,
     ChromeBrowserState* browser_state) {
   DCHECK(!node || node->is_url());
   std::u16string titleString = base::SysNSStringToUTF16(title);
 
+  // Vivaldi
+  const std::u16string descriptionString16 = base::SysNSStringToUTF16(description);
+  const std::string descriptionString = base::SysNSStringToUTF8(description);
+
   // If the bookmark has no changes supporting Undo, just bail out.
   if (node && node->GetTitle() == titleString && node->url() == url &&
+      /* Vivaldi */ node->GetTitledUrlNodeDescription() == descriptionString16 &&
       node->parent() == folder) {
     return nil;
   }
@@ -185,9 +194,14 @@ MDCSnackbarMessage* CreateOrUpdateBookmarkWithUndoToast(
         base::UserMetricsAction("BookmarkAdded"));
     node = bookmark_model->AddURL(folder, folder->children().size(),
                                   titleString, url);
+
+    vivaldi_bookmark_kit::SetNodeDescription(bookmark_model, node, descriptionString);
   } else {  // Update the information.
     bookmark_model->SetTitle(node, titleString);
     bookmark_model->SetURL(node, url);
+
+    // Vivaldi
+    vivaldi_bookmark_kit::SetNodeDescription(bookmark_model, node, descriptionString);
 
     DCHECK(folder);
     DCHECK(!folder->HasAncestor(node));
@@ -236,7 +250,7 @@ MDCSnackbarMessage* CreateBookmarkAtPositionWithUndoToast(
 MDCSnackbarMessage* UpdateBookmarkPositionWithUndoToast(
     const bookmarks::BookmarkNode* node,
     const bookmarks::BookmarkNode* folder,
-    int position,
+    size_t position,
     bookmarks::BookmarkModel* bookmark_model,
     ChromeBrowserState* browser_state) {
   DCHECK(node);
@@ -247,7 +261,7 @@ MDCSnackbarMessage* UpdateBookmarkPositionWithUndoToast(
     return nil;
   }
 
-  int old_index = node->parent()->GetIndexOf(node);
+  size_t old_index = node->parent()->GetIndexOf(node).value();
   // Early return if no change in position.
   if (node->parent() == folder && old_index == position) {
     return nil;
@@ -454,9 +468,7 @@ bool IsObstructed(const BookmarkNode* node, const NodeSet& obstructions);
 
 namespace {
 // Comparator used to sort bookmarks. No folders are allowed.
-class FolderNodeComparator : public std::binary_function<const BookmarkNode*,
-                                                         const BookmarkNode*,
-                                                         bool> {
+class FolderNodeComparator {
  public:
   explicit FolderNodeComparator(icu::Collator* collator)
       : collator_(collator) {}

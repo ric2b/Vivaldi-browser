@@ -22,8 +22,6 @@
 #include "url/origin.h"
 #include "url/scheme_host_port.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace gaia {
 
 namespace {
@@ -35,8 +33,6 @@ const char kGooglemailDomain[] = "googlemail.com";
 std::string CanonicalizeEmailImpl(const std::string& email_address,
                                   bool change_googlemail_to_gmail) {
   std::string lower_case_email = base::ToLowerASCII(email_address);
-  if(vivaldi::IsVivaldiRunning())
-    return lower_case_email;
   std::vector<std::string> parts = base::SplitString(
       lower_case_email, "@", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (parts.size() != 2U)

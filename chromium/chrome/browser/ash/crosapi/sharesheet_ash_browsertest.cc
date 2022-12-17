@@ -7,10 +7,12 @@
 #include <algorithm>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -21,16 +23,19 @@
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/window_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
-#include "chrome/browser/ash/web_applications/system_web_app_integration_test.h"
+#include "chrome/browser/ash/system_web_apps/test_support/system_web_app_integration_test.h"
 #include "chrome/browser/sharesheet/sharesheet_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/web_applications/test/app_registration_waiter.h"
 #include "chrome/browser/web_applications/test/profile_test_helper.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/components/sharesheet/constants.h"
 #include "chromeos/crosapi/mojom/app_service_types.mojom.h"
 #include "components/exo/window_properties.h"
+#include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -49,7 +54,7 @@ bool IsIntentAcceptedByApp(const crosapi::mojom::IntentPtr& intent,
                            const std::string& app_id) {
   std::vector<apps::IntentLaunchInfo> intent_launch_info =
       apps::AppServiceProxyFactory::GetForProfile(profile)->GetAppsForIntent(
-          apps_util::ConvertCrosapiToAppServiceIntent(intent, profile));
+          apps_util::CreateAppServiceIntentFromCrosapi(intent, profile));
   return std::any_of(intent_launch_info.begin(), intent_launch_info.end(),
                      [&app_id](const apps::IntentLaunchInfo& launch_entry) {
                        return launch_entry.app_id == app_id;
@@ -110,15 +115,23 @@ sharesheet::SharesheetResult ShowBubble(const std::string& window_id,
 
 }  // namespace
 
-class SharesheetAshBrowserTest : public SystemWebAppIntegrationTest {
+class SharesheetAshBrowserTest : public ash::SystemWebAppIntegrationTest {
  public:
-  SharesheetAshBrowserTest() = default;
+  SharesheetAshBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {chromeos::features::kLacrosSupport, features::kWebAppsCrosapi}, {});
+  }
   ~SharesheetAshBrowserTest() override = default;
 
   // SystemWebAppIntegrationTest:
   void SetUpOnMainThread() override {
     SystemWebAppIntegrationTest::SetUpOnMainThread();
     WaitForTestSystemAppInstall();
+
+    // When Lacros web apps are enabled, SWAs use kSystemWeb app type.
+    web_app::AppTypeInitializationWaiter(browser()->profile(),
+                                         apps::AppType::kSystemWeb)
+        .Await();
 
     // The Sample System Web App will be automatically selected from the
     // Sharesheet bubble.
@@ -128,6 +141,9 @@ class SharesheetAshBrowserTest : public SystemWebAppIntegrationTest {
   void TearDownOnMainThread() override {
     sharesheet::SharesheetService::SetSelectedAppForTesting(std::u16string());
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_P(SharesheetAshBrowserTest, Success) {

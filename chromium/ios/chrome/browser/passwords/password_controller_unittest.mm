@@ -229,11 +229,13 @@ ACTION_P(InvokeEmptyConsumerWithForms, store) {
 @property(nonatomic, assign) BOOL isPasswordGenerated;
 
 - (void)injectGeneratedPasswordForFormId:(FormRendererId)formIdentifier
+                                 inFrame:(web::WebFrame*)frame
                        generatedPassword:(NSString*)generatedPassword
                        completionHandler:(void (^)())completionHandler;
 
 - (void)didFinishPasswordFormExtraction:(const std::vector<FormData>&)forms
-                        withMaxUniqueID:(uint32_t)maxID;
+                        withMaxUniqueID:(uint32_t)maxID
+                  triggeredByFormChange:(BOOL)triggeredByFormChange;
 
 @end
 
@@ -430,6 +432,7 @@ class PasswordControllerTest : public PlatformTest {
     __block BOOL block_was_called = NO;
     [passwordController_.sharedPasswordController
         injectGeneratedPasswordForFormId:FormRendererId(1)
+                                 inFrame:web::GetMainFrame(web_state())
                        generatedPassword:password
                        completionHandler:^() {
                          block_was_called = YES;
@@ -1334,28 +1337,6 @@ TEST_F(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
       static_cast<PasswordFormManager*>(form_manager_to_save.get());
   EXPECT_TRUE(form_manager->is_submitted());
   EXPECT_FALSE(form_manager->IsPasswordUpdate());
-}
-
-// Check that if the PasswordController is told (by the PasswordManagerClient)
-// that this is Incognito, it won't enable password generation.
-TEST_F(PasswordControllerTestSimple, IncognitoPasswordGenerationDisabled) {
-  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
-
-  auto client =
-      std::make_unique<NiceMock<MockPasswordManagerClient>>(store_.get());
-  weak_client_ = client.get();
-
-  EXPECT_CALL(*weak_client_->GetPasswordFeatureManager(), IsGenerationEnabled)
-      .WillRepeatedly(Return(true));
-  EXPECT_CALL(*weak_client_, IsIncognito).WillRepeatedly(Return(true));
-
-  UniqueIDDataTabHelper::CreateForWebState(&web_state_);
-  passwordController_ =
-      [[PasswordController alloc] initWithWebState:&web_state_
-                                            client:std::move(client)];
-
-  EXPECT_FALSE(
-      passwordController_.passwordManagerDriver->GetPasswordGenerationHelper());
 }
 
 // Checks that when the user set a focus on a field of a password form which was
@@ -2615,7 +2596,8 @@ TEST_F(PasswordControllerTest,
   FormData form = test_helpers::MakeSimpleFormData();
   [passwordController_.sharedPasswordController
       didFinishPasswordFormExtraction:{form}
-                      withMaxUniqueID:5];
+                      withMaxUniqueID:5
+                triggeredByFormChange:false];
 
   // Simulate user focusing the field in a form before the password store
   // response is received.
@@ -2664,7 +2646,8 @@ TEST_F(PasswordControllerTest,
   FormData form = test_helpers::MakeSimpleFormData();
   [passwordController_.sharedPasswordController
       didFinishPasswordFormExtraction:{form}
-                      withMaxUniqueID:5];
+                      withMaxUniqueID:5
+                triggeredByFormChange:false];
 
   // Simulate user focusing the field in a form before the password store
   // response is received.

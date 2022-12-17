@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/login/lock/screen_locker_tester.h"
 #include "chrome/browser/ash/login/login_manager_test.h"
 #include "chrome/browser/ash/login/screens/user_selection_screen.h"
@@ -33,9 +36,10 @@
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/debug_daemon/fake_debug_daemon_client.h"
-#include "chromeos/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/debug_daemon/fake_debug_daemon_client.h"
+#include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "content/public/test/browser_test.h"
@@ -43,6 +47,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/test/event_generator.h"
 
 namespace ash {
 
@@ -514,18 +519,22 @@ class SshWarningTest : public OobeBaseTest,
   };
 
   void SetUpOnMainThread() override {
-    auto scoped_test_client = std::make_unique<TestDebugDaemonClient>();
-    test_client_ = scoped_test_client.get();
+    test_client_ = std::make_unique<TestDebugDaemonClient>();
     test_client_->set_flags(
         GetParam() ? debugd::DevFeatureFlag::DEV_FEATURE_SSH_SERVER_CONFIGURED
                    : debugd::DevFeatureFlag::DEV_FEATURES_DISABLED);
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetDebugDaemonClient(
-        std::move(scoped_test_client));
+    DebugDaemonClient::SetInstanceForTest(test_client_.get());
     OobeBaseTest::SetUpOnMainThread();
   }
 
+  void TearDownOnMainThread() override {
+    test_client_.reset();
+    DebugDaemonClient::SetInstanceForTest(nullptr);
+    OobeBaseTest::TearDownOnMainThread();
+  }
+
  protected:
-  TestDebugDaemonClient* test_client_ = nullptr;
+  std::unique_ptr<TestDebugDaemonClient> test_client_;
 };
 
 IN_PROC_BROWSER_TEST_P(SshWarningTest, VisibilityOnGaia) {
@@ -561,9 +570,9 @@ INSTANTIATE_TEST_SUITE_P(All, SshWarningTest, ::testing::Bool());
 
 namespace {
 
-// This is the constant that exists on the server side. It corresponds to
-// the type of enrollment license.
-constexpr char kKioskSkuName[] = "GOOGLE.CHROME_KIOSK_ANNUAL";
+// Names of policies.
+constexpr char kManagedGuestModeName[] = "MANAGED_GUEST_MODE";
+constexpr char kAllowNewUsersName[] = "ALLOW_NEW_USERS";
 
 }  // namespace
 
@@ -618,11 +627,11 @@ IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, WithoutKioskSku) {
 IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, WithoutApps) {
   Shell::Get()->login_screen_controller()->ShowLoginScreen();
   policy_helper()->device_policy()->policy_data().set_license_sku(
-      kKioskSkuName);
+      policy::kKioskSkuName);
   policy_helper()->RefreshPolicyAndWaitUntilDeviceCloudPolicyUpdated();
 
   EXPECT_TRUE(LoginScreenTestApi::IsLoginShelfShown());
-  EXPECT_FALSE(LoginScreenTestApi::IsGuestButtonShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsGuestButtonShown());
   EXPECT_FALSE(LoginScreenTestApi::IsAddUserButtonShown());
   EXPECT_FALSE(LoginScreenTestApi::IsAppsButtonShown());
   EXPECT_FALSE(LoginScreenTestApi::IsKioskInstructionBubbleShown());
@@ -635,13 +644,13 @@ IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, WithoutApps) {
 IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, WithApps) {
   Shell::Get()->login_screen_controller()->ShowLoginScreen();
   policy_helper()->device_policy()->policy_data().set_license_sku(
-      kKioskSkuName);
+      policy::kKioskSkuName);
   KioskAppsMixin::AppendKioskAccount(
       &policy_helper()->device_policy()->payload());
   policy_helper()->RefreshPolicyAndWaitUntilDeviceCloudPolicyUpdated();
 
   EXPECT_TRUE(LoginScreenTestApi::IsLoginShelfShown());
-  EXPECT_FALSE(LoginScreenTestApi::IsGuestButtonShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsGuestButtonShown());
   EXPECT_FALSE(LoginScreenTestApi::IsAddUserButtonShown());
   EXPECT_TRUE(LoginScreenTestApi::IsAppsButtonShown());
   EXPECT_TRUE(LoginScreenTestApi::IsKioskInstructionBubbleShown());
@@ -653,13 +662,13 @@ IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, WithApps) {
 IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, OpenKioskMenu) {
   Shell::Get()->login_screen_controller()->ShowLoginScreen();
   policy_helper()->device_policy()->policy_data().set_license_sku(
-      kKioskSkuName);
+      policy::kKioskSkuName);
   KioskAppsMixin::AppendKioskAccount(
       &policy_helper()->device_policy()->payload());
   policy_helper()->RefreshPolicyAndWaitUntilDeviceCloudPolicyUpdated();
 
   EXPECT_TRUE(LoginScreenTestApi::IsLoginShelfShown());
-  EXPECT_FALSE(LoginScreenTestApi::IsGuestButtonShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsGuestButtonShown());
   EXPECT_FALSE(LoginScreenTestApi::IsAddUserButtonShown());
   EXPECT_TRUE(LoginScreenTestApi::IsAppsButtonShown());
   EXPECT_TRUE(LoginScreenTestApi::IsKioskInstructionBubbleShown());
@@ -673,5 +682,70 @@ IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest, OpenKioskMenu) {
   EXPECT_FALSE(LoginScreenTestApi::IsKioskInstructionBubbleShown());
   EXPECT_FALSE(LoginScreenTestApi::IsKioskDefaultMessageShown());
 }
+
+// Verifies that kiosk default message is show even after ESC key is pressed.
+IN_PROC_BROWSER_TEST_F(KioskSkuLoginScreenVisibilityTest,
+                       TryDismissDefaultMessage) {
+  Shell::Get()->login_screen_controller()->ShowLoginScreen();
+  policy_helper()->device_policy()->policy_data().set_license_sku(
+      policy::kKioskSkuName);
+  policy_helper()->RefreshPolicyAndWaitUntilDeviceCloudPolicyUpdated();
+
+  EXPECT_TRUE(LoginScreenTestApi::IsLoginShelfShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsGuestButtonShown());
+  EXPECT_FALSE(LoginScreenTestApi::IsAddUserButtonShown());
+  EXPECT_FALSE(LoginScreenTestApi::IsKioskInstructionBubbleShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsKioskDefaultMessageShown());
+
+  // Focus the Kiosk default message
+  EXPECT_TRUE(LoginScreenTestApi::FocusKioskDefaultMessage());
+
+  // Press ESC key.
+  ui::test::EventGenerator generator(Shell::Get()->GetPrimaryRootWindow());
+  generator.PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+
+  EXPECT_TRUE(LoginScreenTestApi::IsKioskDefaultMessageShown());
+}
+
+class KioskSkuLoginScreenPolicyTest
+    : public KioskSkuLoginScreenVisibilityTest,
+      public ::testing::WithParamInterface<std::string> {
+ protected:
+  void EnablePolicy() {
+    std::string policy_name = GetParam();
+    if (policy_name == kManagedGuestModeName) {
+      policy_helper()
+          ->device_policy()
+          ->payload()
+          .mutable_device_restricted_managed_guest_session_enabled()
+          ->set_enabled(true);
+    } else if (policy_name == kAllowNewUsersName) {
+      policy_helper()
+          ->device_policy()
+          ->payload()
+          .mutable_allow_new_users()
+          ->set_allow_new_users(true);
+    }
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(KioskSkuLoginScreenPolicyTest, EnabledPolicies) {
+  Shell::Get()->login_screen_controller()->ShowLoginScreen();
+  policy_helper()->device_policy()->policy_data().set_license_sku(
+      policy::kKioskSkuName);
+  EnablePolicy();
+  policy_helper()->RefreshPolicyAndWaitUntilDeviceCloudPolicyUpdated();
+
+  EXPECT_TRUE(LoginScreenTestApi::IsLoginShelfShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsGuestButtonShown());
+  EXPECT_FALSE(LoginScreenTestApi::IsAddUserButtonShown());
+  EXPECT_FALSE(LoginScreenTestApi::IsKioskInstructionBubbleShown());
+  EXPECT_TRUE(LoginScreenTestApi::IsKioskDefaultMessageShown());
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         KioskSkuLoginScreenPolicyTest,
+                         testing::Values(kManagedGuestModeName,
+                                         kAllowNewUsersName));
 
 }  // namespace ash

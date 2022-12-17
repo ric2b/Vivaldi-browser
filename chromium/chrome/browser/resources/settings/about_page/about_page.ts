@@ -14,9 +14,9 @@ import '../relaunch_confirmation_dialog.js';
 // </if>
 import '../settings_page/settings_section.js';
 import '../settings_page_styles.css.js';
-import '../settings_shared_css.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import '../settings_shared.css.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
@@ -59,7 +59,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
           message: '',
           progress: 0,
           rollback: false,
-          status: UpdateStatus.DISABLED
+          status: UpdateStatus.DISABLED,
         },
       },
 
@@ -312,16 +312,6 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   private onManagementPageTap_() {
     window.location.href = 'chrome://management';
   }
-
-  // <if expr="chromeos_ash">
-  private getUpdateOsSettingsLink_(): string {
-    // Note: This string contains raw HTML and thus requires i18nAdvanced().
-    // Since the i18n template syntax (e.g., $i18n{}) does not include an
-    // "advanced" version, it's not possible to inline this link directly in the
-    // HTML.
-    return this.i18nAdvanced('aboutUpdateOsSettingsLink');
-  }
-  // </if>
 
   private onProductLogoTap_() {
     this.$['product-logo'].animate(

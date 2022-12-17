@@ -16,6 +16,7 @@
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "chrome/browser/ash/guest_os/guest_id.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path_factory.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager.h"
@@ -130,27 +131,27 @@ class ErrorCapture {
   std::string first_failure_reason_;
 };  // class
 
-void RemovePersistedPathFromPrefs(base::Value* shared_paths,
+void RemovePersistedPathFromPrefs(base::Value::Dict& shared_paths,
                                   const std::string& vm_name,
                                   const base::FilePath& path) {
   // |shared_paths| format is {'path': ['vm1', vm2']}.
   // If |path| exists, remove |vm_name| from list of VMs.
-  base::Value* found = shared_paths->FindKey(path.value());
+  base::Value::List* found = shared_paths.FindList(path.value());
   if (!found) {
     LOG(WARNING) << "Path not in prefs to unshare path " << path.value()
                  << " for VM " << vm_name;
     return;
   }
-  auto it = std::find(found->GetListDeprecated().begin(),
-                      found->GetListDeprecated().end(), base::Value(vm_name));
-  if (!found->EraseListIter(it)) {
+  auto it = std::find(found->begin(), found->end(), base::Value(vm_name));
+  if (it == found->end()) {
     LOG(WARNING) << "VM not in prefs to unshare path " << path.value()
                  << " for VM " << vm_name;
     return;
   }
+  found->erase(it);
   // If VM list is now empty, remove |path| from |shared_paths|.
-  if (found->GetListDeprecated().empty()) {
-    shared_paths->RemoveKey(path.value());
+  if (found->empty()) {
+    shared_paths.Remove(path.value());
   }
 }
 
@@ -398,8 +399,8 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
       // kCrostiniDefaultContainerName is not used in the following function
       // since we are only starting the VM.
       crostini_manager->RestartCrostiniWithOptions(
-          crostini::ContainerId(vm_name,
-                                crostini::kCrostiniDefaultContainerName),
+          GuestId(crostini::kCrostiniDefaultVmType, vm_name,
+                  crostini::kCrostiniDefaultContainerName),
           std::move(options),
           base::BindOnce(&OnVmRestartedForSeneschal, profile_, vm_name,
                          std::move(callback), std::move(request)));
@@ -518,8 +519,7 @@ void GuestOsSharePath::UnsharePath(const std::string& vm_name,
   if (unpersist) {
     PrefService* pref_service = profile_->GetPrefs();
     DictionaryPrefUpdate update(pref_service, prefs::kGuestOSPathsSharedToVms);
-    base::Value* shared_paths = update.Get();
-    RemovePersistedPathFromPrefs(shared_paths, vm_name, path);
+    RemovePersistedPathFromPrefs(update->GetDict(), vm_name, path);
   }
 
   CallSeneschalUnsharePath(vm_name, path, std::move(callback));
@@ -541,10 +541,9 @@ std::vector<base::FilePath> GuestOsSharePath::GetPersistedSharedPaths(
   CHECK(profile_);
   CHECK(profile_->GetPrefs());
   // |shared_paths| format is {'path': ['vm1', vm2']}.
-  const base::Value* shared_paths =
-      profile_->GetPrefs()->GetDictionary(prefs::kGuestOSPathsSharedToVms);
-  CHECK(shared_paths);
-  for (const auto it : shared_paths->DictItems()) {
+  const base::Value::Dict& shared_paths =
+      profile_->GetPrefs()->GetValueDict(prefs::kGuestOSPathsSharedToVms);
+  for (const auto it : shared_paths) {
     base::FilePath path(it.first);
     for (const auto& vm : it.second.GetListDeprecated()) {
       // Register all shared paths for all VMs since we want FilePathWatchers
@@ -569,22 +568,21 @@ void GuestOsSharePath::RegisterPersistedPath(const std::string& vm_name,
                                              const base::FilePath& path) {
   PrefService* pref_service = profile_->GetPrefs();
   DictionaryPrefUpdate update(pref_service, prefs::kGuestOSPathsSharedToVms);
-  base::Value* shared_paths = update.Get();
+  base::Value::Dict& shared_paths = update->GetDict();
   // Check if path is already shared so we know whether we need to add it.
   bool already_shared = false;
   // Remove any paths that are children of this path.
   // E.g. if path /foo/bar is already shared, and then we share /foo, we
   // remove /foo/bar from the list since it will be shared as part of /foo.
   std::vector<base::FilePath> children;
-  for (const auto it : shared_paths->DictItems()) {
+  for (const auto it : shared_paths) {
     base::FilePath shared(it.first);
     auto& vms = it.second;
-    auto vm_matches =
-        base::Contains(vms.GetListDeprecated(), base::Value(vm_name));
+    auto vm_matches = base::Contains(vms.GetList(), base::Value(vm_name));
     if (path == shared) {
       already_shared = true;
       if (!vm_matches) {
-        vms.Append(vm_name);
+        vms.GetList().Append(vm_name);
       }
     } else if (path.IsParent(shared) && vm_matches) {
       children.emplace_back(shared);
@@ -594,9 +592,9 @@ void GuestOsSharePath::RegisterPersistedPath(const std::string& vm_name,
     RemovePersistedPathFromPrefs(shared_paths, vm_name, child);
   }
   if (!already_shared) {
-    base::Value vms(base::Value::Type::LIST);
-    vms.Append(base::Value(vm_name));
-    shared_paths->SetKey(path.value(), std::move(vms));
+    base::Value::List vms;
+    vms.Append(vm_name);
+    shared_paths.Set(path.value(), std::move(vms));
   }
 }
 
@@ -626,17 +624,17 @@ void GuestOsSharePath::OnVmShutdown(const std::string& vm_name) {
   }
 }
 
-void GuestOsSharePath::OnVolumeMounted(chromeos::MountError error_code,
+void GuestOsSharePath::OnVolumeMounted(ash::MountError error_code,
                                        const file_manager::Volume& volume) {
-  if (error_code != chromeos::MountError::MOUNT_ERROR_NONE) {
+  if (error_code != ash::MountError::kNone) {
     return;
   }
 
   // Check if any persisted paths match volume.mount_path() or are children
   // of it then share them with any running VMs.
-  const base::Value* shared_paths =
-      profile_->GetPrefs()->GetDictionary(prefs::kGuestOSPathsSharedToVms);
-  for (const auto it : shared_paths->DictItems()) {
+  const base::Value::Dict& shared_paths =
+      profile_->GetPrefs()->GetValueDict(prefs::kGuestOSPathsSharedToVms);
+  for (const auto it : shared_paths) {
     base::FilePath path(it.first);
     if (path != volume.mount_path() && !volume.mount_path().IsParent(path)) {
       continue;
@@ -654,10 +652,10 @@ void GuestOsSharePath::OnVolumeMounted(chromeos::MountError error_code,
   }
 }
 
-void GuestOsSharePath::OnVolumeUnmounted(chromeos::MountError error_code,
+void GuestOsSharePath::OnVolumeUnmounted(ash::MountError error_code,
                                          const file_manager::Volume& volume) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (error_code != chromeos::MountError::MOUNT_ERROR_NONE) {
+  if (error_code != ash::MountError::kNone) {
     return;
   }
   for (auto it = shared_paths_.begin(); it != shared_paths_.end();) {

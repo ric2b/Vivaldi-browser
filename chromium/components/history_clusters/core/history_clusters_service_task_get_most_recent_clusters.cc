@@ -28,6 +28,7 @@ HistoryClustersServiceTaskGetMostRecentClusters::
         ClusteringRequestSource clustering_request_source,
         base::Time begin_time,
         QueryClustersContinuationParams continuation_params,
+        bool recluster,
         QueryClustersCallback callback)
     : weak_history_clusters_service_(std::move(weak_history_clusters_service)),
       incomplete_visit_context_annotations_(
@@ -37,6 +38,7 @@ HistoryClustersServiceTaskGetMostRecentClusters::
       clustering_request_source_(clustering_request_source),
       begin_time_(begin_time),
       continuation_params_(continuation_params),
+      recluster_(recluster),
       callback_(std::move(callback)) {
   DCHECK(weak_history_clusters_service_);
   DCHECK(history_service_);
@@ -48,24 +50,41 @@ HistoryClustersServiceTaskGetMostRecentClusters::
 
 void HistoryClustersServiceTaskGetMostRecentClusters::Start() {
   // Shouldn't request more clusters if history has been exhausted.
-  DCHECK(!continuation_params_.is_done);
+  DCHECK(!continuation_params_.exhausted_all_visits);
 
-  if (!backend_) {
-    // Early exit if we won't be able to cluster visits.
-    weak_history_clusters_service_->NotifyDebugMessage(
-        "HistoryClustersService::QueryClusters Error: ClusteringBackend is "
-        "nullptr. Returning empty cluster vector.");
-    done_ = true;
-    std::move(callback_).Run({}, QueryClustersContinuationParams::DoneParams());
+  if (!backend_ || continuation_params_.exhausted_unclustered_visits) {
+    // If visits can't be clustered, either because `backend_` is null, or all
+    // unclustered visits have already been clustered and returned, then return
+    // persisted clusters.
+    if (!backend_) {
+      weak_history_clusters_service_->NotifyDebugMessage(
+          "HistoryClustersServiceTaskGetMostRecentClusters::Start() Error: "
+          "ClusteringBackend is nullptr. Returning most recent clusters.");
+    } else {
+      weak_history_clusters_service_->NotifyDebugMessage(
+          "HistoryClustersServiceTaskGetMostRecentClusters::Start() exhausted "
+          "unclustered visits. Returning most recent clusters.");
+    }
+    ReturnMostRecentPersistedClusters(continuation_params_.continuation_time);
 
   } else {
+    // TODO(manukh): It's not clear how to blend unclustered and clustered
+    //  visits when iterating recent first. E.g., if we have 4 days of
+    //  unclustered visits, should the most recent 3 be clustered in isolation,
+    //  while the 4th is clustered with older clustered visits? For now, we do
+    //  the simplest approach: cluster each day in isolation. If updating
+    //  clusters occurs frequently enough, this issue will be mitigated.
+    //  However, since the top, most prominent clusters will be the most recent
+    //  clusters, and current-day visits will never be pre-clustered, we
+    //  probably want to make sure they're optimal. So we should probably not
+    //  cluster at least the current day in isolation.
     history_service_get_annotated_visits_to_cluster_start_time_ =
         base::TimeTicks::Now();
     history_service_->ScheduleDBTask(
         FROM_HERE,
         std::make_unique<GetAnnotatedVisitsToCluster>(
             incomplete_visit_context_annotations_, begin_time_,
-            continuation_params_, true,
+            continuation_params_, true, 0, recluster_,
             base::BindOnce(&HistoryClustersServiceTaskGetMostRecentClusters::
                                OnGotAnnotatedVisitsToCluster,
                            weak_ptr_factory_.GetWeakPtr())),
@@ -75,6 +94,8 @@ void HistoryClustersServiceTaskGetMostRecentClusters::Start() {
 
 void HistoryClustersServiceTaskGetMostRecentClusters::
     OnGotAnnotatedVisitsToCluster(
+        // Unused because clusters aren't persisted in this flow.
+        std::vector<int64_t> old_clusters_unused,
         std::vector<history::AnnotatedVisit> annotated_visits,
         QueryClustersContinuationParams continuation_params) {
   DCHECK(backend_);
@@ -93,14 +114,14 @@ void HistoryClustersServiceTaskGetMostRecentClusters::
   }
 
   base::UmaHistogramTimes(
-      "Histogram.Clusters.Backend.QueryAnnotatedVisitsLatency",
+      "History.Clusters.Backend.QueryAnnotatedVisitsLatency",
       base::TimeTicks::Now() -
           history_service_get_annotated_visits_to_cluster_start_time_);
 
   if (annotated_visits.empty()) {
-    // Early exit without calling backend if there's no annotated visits.
-    done_ = true;
-    std::move(callback_).Run({}, QueryClustersContinuationParams::DoneParams());
+    // If there're no unclustered visits to cluster, then return persisted
+    // clusters.
+    ReturnMostRecentPersistedClusters(continuation_params.continuation_time);
 
   } else {
     if (weak_history_clusters_service_->ShouldNotifyDebugMessage()) {
@@ -141,6 +162,33 @@ void HistoryClustersServiceTaskGetMostRecentClusters::OnGotModelClusters(
         GetDebugJSONForClusters(clusters));
   }
 
+  done_ = true;
+  std::move(callback_).Run(clusters, continuation_params);
+}
+
+void HistoryClustersServiceTaskGetMostRecentClusters::
+    ReturnMostRecentPersistedClusters(base::Time exclusive_max_time) {
+  if (GetConfig().persist_clusters_in_history_db && !recluster_) {
+    history_service_->GetMostRecentClusters(
+        begin_time_, exclusive_max_time, 1,
+        base::BindOnce(&HistoryClustersServiceTaskGetMostRecentClusters::
+                           OnGotMostRecentPersistedClusters,
+                       weak_ptr_factory_.GetWeakPtr()),
+        &task_tracker_);
+  } else {
+    OnGotMostRecentPersistedClusters({});
+  }
+}
+
+void HistoryClustersServiceTaskGetMostRecentClusters::
+    OnGotMostRecentPersistedClusters(std::vector<history::Cluster> clusters) {
+  auto continuation_params =
+      clusters.empty() ? QueryClustersContinuationParams::DoneParams()
+                       : QueryClustersContinuationParams{
+                             clusters[0]
+                                 .GetMostRecentVisit()
+                                 .annotated_visit.visit_row.visit_time,
+                             true, false, true, false};
   done_ = true;
   std::move(callback_).Run(clusters, continuation_params);
 }

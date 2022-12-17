@@ -26,11 +26,13 @@
 #include "ash/constants/ash_features.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/screen_orientation_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
@@ -44,7 +46,6 @@
 #include "cc/paint/paint_flags.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
-#include "ui/aura/cursor/cursor_util.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -75,6 +76,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/cursor_util.h"
 
 namespace ash {
 
@@ -256,7 +258,7 @@ ui::Cursor GetCursorForFullscreenOrWindowCapture(bool capture_image) {
           capture_image ? IDR_CAPTURE_IMAGE_CURSOR : IDR_CAPTURE_VIDEO_CURSOR);
   SkBitmap bitmap = *icon->bitmap();
   gfx::Point hotspot(bitmap.width() / 2, bitmap.height() / 2);
-  aura::ScaleAndRotateCursorBitmapAndHotpoint(
+  wm::ScaleAndRotateCursorBitmapAndHotpoint(
       device_scale_factor, display.panel_rotation(), &bitmap, &hotspot);
   auto* cursor_factory = ui::CursorFactory::GetInstance();
   cursor.SetPlatformCursor(
@@ -328,9 +330,9 @@ void UpdateFloatingPanelBoundsIfNeeded() {
 }
 
 views::Widget* GetCameraPreviewWidget() {
-  auto* camera_controller = CaptureModeController::Get()->camera_controller();
-  return camera_controller ? camera_controller->camera_preview_widget()
-                           : nullptr;
+  return CaptureModeController::Get()
+      ->camera_controller()
+      ->camera_preview_widget();
 }
 
 bool ShouldPassEventToCameraPreview(ui::LocatedEvent* event) {
@@ -346,8 +348,7 @@ bool ShouldPassEventToCameraPreview(ui::LocatedEvent* event) {
   if (!camera_preview_widget || !camera_preview_widget->IsVisible())
     return false;
 
-  auto* camera_controller = controller->camera_controller();
-  if (camera_controller && camera_controller->is_drag_in_progress())
+  if (controller->camera_controller()->is_drag_in_progress())
     return true;
 
   // If the event is targeted on the camera preview, even it's not located
@@ -662,7 +663,6 @@ void CaptureModeSession::Initialize() {
   UpdateRootWindowDimmers();
 
   TabletModeController::Get()->AddObserver(this);
-  current_root_->AddObserver(this);
   display_observer_.emplace(this);
   // Our event handling code assumes the capture bar widget has been initialized
   // already. So we start handling events after everything has been setup.
@@ -683,9 +683,10 @@ void CaptureModeSession::Initialize() {
       controller_->type());
   MaybeCreateUserNudge();
 
-  auto* camera_controller = controller_->camera_controller();
-  if (is_in_projector_mode_ && camera_controller)
-    camera_controller->MaybeSelectFirstCamera();
+  if (is_in_projector_mode_)
+    controller_->camera_controller()->MaybeSelectFirstCamera();
+
+  Shell::Get()->AddShellObserver(this);
 }
 
 void CaptureModeSession::Shutdown() {
@@ -694,7 +695,6 @@ void CaptureModeSession::Shutdown() {
   aura::Env::GetInstance()->RemovePreTargetHandler(this);
   display_observer_.reset();
   user_nudge_controller_.reset();
-  current_root_->RemoveObserver(this);
   TabletModeController::Get()->RemoveObserver(this);
   if (input_capture_window_) {
     input_capture_window_->RemoveObserver(this);
@@ -725,11 +725,11 @@ void CaptureModeSession::Shutdown() {
 
     // Kill the camera preview when the capture mode session ends without
     // starting any recording.
-    if (controller_->camera_controller() &&
-        !controller_->is_recording_in_progress()) {
+    if (!controller_->is_recording_in_progress())
       controller_->camera_controller()->SetShouldShowPreview(false);
-    }
   }
+
+  Shell::Get()->RemoveShellObserver(this);
 }
 
 aura::Window* CaptureModeSession::GetSelectedWindow() const {
@@ -1058,8 +1058,7 @@ void CaptureModeSession::OnPaintLayer(const ui::PaintContext& context) {
   // UIs (capture bar, capture label), but we should still paint the layer to
   // indicate the capture surface where user can drag camera preview on.
   if (!is_all_uis_visible_ &&
-      !(controller_->camera_controller() &&
-        controller_->camera_controller()->is_drag_in_progress())) {
+      !controller_->camera_controller()->is_drag_in_progress()) {
     return;
   }
 
@@ -1084,9 +1083,8 @@ void CaptureModeSession::OnKeyEvent(ui::KeyEvent* event) {
   if (event->type() != ui::ET_KEY_PRESSED)
     return;
 
-  auto* camera_controller = controller_->camera_controller();
   auto* camera_preview_view =
-      camera_controller ? camera_controller->camera_preview_view() : nullptr;
+      controller_->camera_controller()->camera_preview_view();
   if (camera_preview_view && camera_preview_view->MaybeHandleKeyEvent(event)) {
     event->StopPropagation();
     return;
@@ -1214,13 +1212,17 @@ void CaptureModeSession::OnTabletModeEnded() {
 }
 
 void CaptureModeSession::OnWindowDestroying(aura::Window* window) {
-  if (window == input_capture_window_) {
-    input_capture_window_->RemoveObserver(this);
-    input_capture_window_ = nullptr;
-    return;
+  DCHECK_EQ(window, input_capture_window_);
+  input_capture_window_->RemoveObserver(this);
+  input_capture_window_ = nullptr;
+}
+
+void CaptureModeSession::OnRootWindowWillShutdown(aura::Window* root_window) {
+  if (root_window == current_root_) {
+    // There should always be a primary root window.
+    DCHECK_NE(Shell::GetPrimaryRootWindow(), current_root_);
+    MaybeChangeRoot(Shell::GetPrimaryRootWindow());
   }
-  DCHECK_EQ(current_root_, window);
-  MaybeChangeRoot(Shell::GetPrimaryRootWindow());
 }
 
 void CaptureModeSession::OnDisplayMetricsChanged(
@@ -1256,8 +1258,7 @@ void CaptureModeSession::OnDisplayMetricsChanged(
   // it if the source is `kRegion`.
   // `CaptureWindowObserver::OnWindowBoundsChanged` will take care of it if the
   // source is `kWindow`.
-  if (controller_->camera_controller() &&
-      controller_->source() == CaptureModeSource::kFullscreen &&
+  if (controller_->source() == CaptureModeSource::kFullscreen &&
       !controller_->is_recording_in_progress()) {
     controller_->camera_controller()->MaybeUpdatePreviewWidget();
   }
@@ -2613,9 +2614,6 @@ void CaptureModeSession::MaybeChangeRoot(aura::Window* new_root) {
   if (new_root == current_root_)
     return;
 
-  current_root_->RemoveObserver(this);
-  new_root->AddObserver(this);
-
   auto* new_parent = GetParentContainer(new_root);
   parent_container_observer_ =
       std::make_unique<ParentContainerObserver>(new_parent, this);
@@ -2790,15 +2788,15 @@ void CaptureModeSession::UpdateRegionVertically(bool up, int event_flags) {
 }
 
 void CaptureModeSession::MaybeReparentCameraPreviewWidget() {
-  auto* camera_controller = controller_->camera_controller();
-  if (camera_controller && !controller_->is_recording_in_progress())
-    camera_controller->MaybeReparentPreviewWidget();
+  if (!controller_->is_recording_in_progress())
+    controller_->camera_controller()->MaybeReparentPreviewWidget();
 }
 
 void CaptureModeSession::MaybeUpdateCameraPreviewBounds() {
-  auto* camera_controller = controller_->camera_controller();
-  if (camera_controller && !controller_->is_recording_in_progress())
-    camera_controller->MaybeUpdatePreviewWidget(/*animate=*/false);
+  if (!controller_->is_recording_in_progress()) {
+    controller_->camera_controller()->MaybeUpdatePreviewWidget(
+        /*animate=*/false);
+  }
 }
 
 bool CaptureModeSession::IsEventTargetedOnCaptureBar(

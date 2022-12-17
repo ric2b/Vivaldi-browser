@@ -7,17 +7,17 @@
  * 'kerberos-add-account-dialog' is an element to add Kerberos accounts.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_indicator.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/js/action_link.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../../controls/settings_textarea.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
@@ -35,6 +35,13 @@ import {KerberosAccount, KerberosAccountsBrowserProxy, KerberosAccountsBrowserPr
  */
 const KerberosAddAccountDialogElementBase =
     mixinBehaviors([I18nBehavior], PolymerElement);
+
+/**
+ * The default placeholder that is shown in the username field
+ * of authentication dialog.
+ * @type {string}
+ */
+const DEFAULT_USERNAME_PLACEHOLDER = 'user@example.com';
 
 /** @polymer */
 class KerberosAddAccountDialogElement extends
@@ -147,6 +154,16 @@ class KerberosAddAccountDialogElement extends
       },
 
       /**
+       * Prefilled domain for the new tickets if kerberosDomainAutocomplete
+       * policy is enabled. Empty by default. Starts with '@' if it is
+       * not empty.
+       */
+      prefillDomain_: {
+        type: String,
+        value: '',
+      },
+
+      /**
        * Whether the user is in guest mode.
        * @private {boolean}
        */
@@ -217,6 +234,13 @@ class KerberosAddAccountDialogElement extends
       this.title_ = this.i18n('addKerberosAccount');
       this.actionButtonLabel_ = this.i18n('add');
 
+      // Get the prefill domain and add '@' to it if it's not empty.
+      // Also the domain is considered invalid if it already has '@' in it.
+      const domain = loadTimeData.getString('kerberosDomainAutocomplete');
+      if (domain && domain.indexOf('@') === -1) {
+        this.prefillDomain_ = '@' + domain;
+      }
+
       // Set a default configuration.
       this.config_ = loadTimeData.getString('defaultKerberosConfig');
     }
@@ -245,8 +269,9 @@ class KerberosAddAccountDialogElement extends
 
     this.browserProxy_
         .addAccount(
-            this.username_, passwordToSubmit, this.rememberPassword_,
-            this.config_, allowExisting)
+            this.computeUsername_(this.username_, this.prefillDomain_),
+            passwordToSubmit, this.rememberPassword_, this.config_,
+            allowExisting)
         .then(error => {
           this.inProgress_ = false;
 
@@ -272,6 +297,17 @@ class KerberosAddAccountDialogElement extends
 
   /** @private */
   onAdvancedConfigClick_() {
+    this.browserProxy_.validateConfig(this.config_).then(result => {
+      // Success case.
+      if (result.error === KerberosErrorType.kNone) {
+        this.configErrorText_ = '';
+        return;
+      }
+
+      // Triggers the UI to update error messages.
+      this.updateConfigErrorMessage_(result);
+    });
+
     // Keep a copy of the config in case the user cancels.
     this.editableConfig_ = this.config_;
     this.showAdvancedConfig_ = true;
@@ -475,6 +511,48 @@ class KerberosAddAccountDialogElement extends
    */
   showError_(errorText) {
     return !!errorText;
+  }
+
+  /**
+   * Prefilled domain is not shown if the username contains '@',
+   * giving the user an opportunity to use some other domain.
+   * @param {string} username The username typed by the user.
+   * @param {string} domain Prefilled domain, prefixed with '@'.
+   * @return {string}
+   */
+  computeDomain_(username, domain) {
+    if (username && username.indexOf('@') !== -1) {
+      return '';
+    }
+    return domain;
+  }
+
+  /**
+   * Return username if it contains '@', otherwise append prefilled
+   * domain (which could be empty) to the current username.
+   * @param {string} username The username typed by the user.
+   * @param {string} domain Prefilled domain, prefixed with '@'.
+   * @return {string}
+   * @private
+   */
+  computeUsername_(username, domain) {
+    if (username && username.indexOf('@') === -1) {
+      return username + domain;
+    }
+    return username;
+  }
+
+  /**
+   * If prefilled domain is present return an empty string,
+   * otherwise show the default placeholder.
+   * @param {string} prefillDomain Prefilled domain, prefixed with '@'.
+   * @return {string}
+   */
+  computePlaceholder_(prefillDomain) {
+    if (prefillDomain) {
+      return '';
+    }
+    return DEFAULT_USERNAME_PLACEHOLDER;
   }
 }
 

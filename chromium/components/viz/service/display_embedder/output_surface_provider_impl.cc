@@ -26,9 +26,9 @@
 #include "components/viz/service/display_embedder/software_output_surface.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
+#include "gpu/command_buffer/service/scheduler_sequence.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/surface_handle.h"
-#include "gpu/ipc/scheduler_sequence.h"
 #include "ui/base/ui_base_switches.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -95,15 +95,14 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
     return std::make_unique<OutputSurfaceUnified>();
 #endif
 
-  // TODO(penghuang): Merge two output surfaces into one when GLRenderer and
-  // software compositor is removed.
-  std::unique_ptr<OutputSurface> output_surface;
-
   if (!gpu_compositing) {
-    output_surface = std::make_unique<SoftwareOutputSurface>(
+    return std::make_unique<SoftwareOutputSurface>(
         CreateSoftwareOutputDeviceForPlatform(surface_handle, display_client));
   } else {
     DCHECK(gpu_dependency);
+
+    std::unique_ptr<OutputSurface> output_surface;
+
     {
       gpu::ScopedAllowScheduleGpuTask allow_schedule_gpu_task;
       output_surface = SkiaOutputSurfaceImpl::Create(
@@ -120,19 +119,19 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
 #endif  // BUILDFLAG(IS_ANDROID)
 
     if (!output_surface) {
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMECAST)
-      // GPU compositing is expected to always work on Chrome OS so we should
-      // never encounter fatal context error. This could be an unrecoverable
-      // hardware error or a bug.
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CASTOS) || \
+    BUILDFLAG(IS_CAST_ANDROID)
+      // GPU compositing is expected to always work on Chrome OS and Cast
+      // devices, so we should never encounter fatal context error. This could
+      // be an unrecoverable hardware error or a bug.
       LOG(FATAL) << "Unexpected fatal context error";
 #elif !BUILDFLAG(IS_ANDROID)
       gpu_service_impl_->DisableGpuCompositing();
 #endif
-      return nullptr;
     }
-  }
 
-  return output_surface;
+    return output_surface;
+  }
 }
 
 std::unique_ptr<SoftwareOutputDevice>

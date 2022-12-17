@@ -12,7 +12,14 @@ import("//build/toolchain/goma.gni")
 import("//build/toolchain/rbe.gni")
 
 declare_overrides() {
-  branding_path_component = "vivaldi"
+  if(!is_ios) {
+    branding_path_component = "vivaldi"
+  } else {
+    # We use google_chrome strings
+    # IOS do not have other ways to select the string
+    # However, the variable is only used to select the variant strings
+    branding_path_component = "google_chrome"
+  }
   branding_file_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
 
   if (is_linux || is_mac || is_win) {
@@ -23,10 +30,13 @@ declare_overrides() {
     ffmpeg_branding = "Chrome"
   }
   proprietary_codecs = true
-  enable_widevine = true
   dcheck_always_on = is_debug # || is_component_build
 
-  enable_media_remoting = true
+  if(!is_ios) {
+    enable_widevine = true
+
+    enable_media_remoting = true
+  }
 
   if (is_linux) {
     if (!is_component_build) {
@@ -56,7 +66,9 @@ declare_overrides() {
     }
   }
 
-  enable_hangout_services_extension = true
+  if(!is_ios) {
+    enable_hangout_services_extension = true
+  }
 
   enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma && !use_remoteexec
 
@@ -77,14 +89,26 @@ declare_overrides() {
     use_ghash = false
   }
 
-  if (target_cpu == "arm" || target_cpu == "arm64") {
-    enable_openscreen = false
+  if ((target_cpu == "arm" || target_cpu == "arm64") && !is_ios) {
+    enable_openscreen_protocol = false
   }
 
   if (is_win && defined(use_hermetic_toolchain) && use_hermetic_toolchain) {
     toolchain_json_spec_file = "//vivaldi/build/toolchain.json"
   }
 
-  enable_cdm_host_verification = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
-  enable_cdm_storage_id = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
+  if(!is_ios) {
+    enable_cdm_host_verification = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
+    enable_cdm_storage_id = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
+  }
+  if(is_ios) {
+    ios_app_bundle_id_prefix = "com.vivaldi"
+    ios_enable_code_signing = vivaldi_signing_id != ""
+    ios_code_signing_identity = vivaldi_signing_id
+    ios_code_signing_identity_description = ""
+    is_component_build = false
+
+    ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_icons"
+    ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
+  }
 }

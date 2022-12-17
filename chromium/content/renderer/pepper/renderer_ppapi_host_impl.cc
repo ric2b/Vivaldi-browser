@@ -21,7 +21,6 @@
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/plugin_module.h"
 #include "content/renderer/render_frame_impl.h"
-#include "content/renderer/render_view_impl.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_platform_file.h"
 #include "ppapi/host/ppapi_host.h"
@@ -150,17 +149,6 @@ RenderFrame* RendererPpapiHostImpl::GetRenderFrameForInstance(
   return instance_object->render_frame();
 }
 
-RenderView* RendererPpapiHostImpl::GetRenderViewForInstance(
-    PP_Instance instance) {
-  PepperPluginInstanceImpl* instance_object = GetAndValidateInstance(instance);
-  if (!instance_object)
-    return nullptr;
-
-  // Since we're the embedder, we can make assumptions about the helper on
-  // the instance and get back to our RenderView.
-  return instance_object->render_frame()->render_view();
-}
-
 bool RendererPpapiHostImpl::IsValidInstance(PP_Instance instance) {
   return !!GetAndValidateInstance(instance);
 }
@@ -189,11 +177,11 @@ bool RendererPpapiHostImpl::HasUserGesture(PP_Instance instance) {
   return instance_object->HasTransientUserActivation();
 }
 
-int RendererPpapiHostImpl::GetRoutingIDForWidget(PP_Instance instance) {
+int RendererPpapiHostImpl::GetRoutingIDForFrame(PP_Instance instance) {
   PepperPluginInstanceImpl* plugin_instance = GetAndValidateInstance(instance);
   if (!plugin_instance)
     return 0;
-  return GetRenderViewForInstance(instance)->GetRoutingID();
+  return GetRenderFrameForInstance(instance)->GetRoutingID();
 }
 
 gfx::Point RendererPpapiHostImpl::PluginPointToRenderFrame(

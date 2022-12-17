@@ -204,6 +204,7 @@ source_set("wayland") {
 
     if (enable_color_manager) {
       deps += [
+        "//ash:ash",
         "//components/exo/wayland/protocol:chrome_color_management_protocol",
         "//ui/base/wayland:color_manager_util",
       ]
@@ -604,8 +605,8 @@ test("wayland_client_tests") {
   use_xvfb = use_xvfb_in_this_config
 
   sources = [
-    "clients/capability_binding_test.cc",
     "clients/interface_binding_test.cc",
+    "clients/security_delegate_binding_test.cc",
     "clients/test/run_all_client_tests.cc",
   ]
 
@@ -616,6 +617,7 @@ test("wayland_client_tests") {
     "//components/exo",
     "//components/exo/wayland",
     "//ui/base",
+    "//ui/color:color",
     "//ui/gl:test_support",
   ]
 
@@ -662,6 +664,7 @@ test("wayland_client_perftests") {
     "//testing/perf",
     "//ui/aura:test_support",
     "//ui/base",
+    "//ui/color:color",
     "//ui/compositor:test_support",
     "//ui/gl:test_support",
   ]
@@ -707,6 +710,7 @@ test("wayland_client_compatibility_tests") {
     "//components/exo/wayland/compatibility_test:generated_client_helper_headers",
     "//components/viz/test:test_support",
     "//mojo/core/embedder:embedder",
+    "//ui/color:color",
     "//ui/gl:test_support",
   ]
 

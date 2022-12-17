@@ -206,7 +206,7 @@ class ToolTip {
     tr = this.div_.selectAll('tr');
     tr.select('td').attr('colspan', function(_d: any) {
       return ((d3.select((this as HTMLElement).parentElement!).datum() as
-               Array<any>)[1] === null) ?
+               any[])[1] === null) ?
           2 :
           null;
     });
@@ -407,7 +407,8 @@ class FrameNode extends GraphNode {
   override get linkTargets() {
     // Only link to the page if there isn't a parent frame.
     return [
-      this.frame.parentFrameId || this.frame.pageId, this.frame.processId
+      this.frame.parentFrameId || this.frame.pageId,
+      this.frame.processId,
     ];
   }
 }
@@ -470,7 +471,8 @@ class WorkerNode extends GraphNode {
 
   override allowedYRange(graphHeight: number): [number, number] {
     return [
-      graphHeight - kWorkerNodesYRange, graphHeight - kProcessNodesYRange
+      graphHeight - kWorkerNodesYRange,
+      graphHeight - kProcessNodesYRange,
     ];
   }
 
@@ -481,8 +483,10 @@ class WorkerNode extends GraphNode {
   override get linkTargets() {
     // Link the process, in addition to all the client and child workers.
     return [
-      this.worker.processId, ...this.worker.clientFrameIds,
-      ...this.worker.clientWorkerIds, ...this.worker.childWorkerIds
+      this.worker.processId,
+      ...this.worker.clientFrameIds,
+      ...this.worker.clientWorkerIds,
+      ...this.worker.childWorkerIds,
     ];
   }
 }
@@ -564,8 +568,8 @@ class Graph implements GraphChangeStreamInterface {
       SVGGElement, d3.SimulationLinkDatum<GraphNode>, null, undefined>|null =
       null;
   private nodes_: Map<bigint, GraphNode> = new Map();
-  private links_: d3.SimulationLinkDatum<GraphNode>[] = [];
-  private dashedLinks_: d3.SimulationLinkDatum<GraphNode>[] = [];
+  private links_: Array<d3.SimulationLinkDatum<GraphNode>> = [];
+  private dashedLinks_: Array<d3.SimulationLinkDatum<GraphNode>> = [];
   private hostWindow_: Window|null = null;
   /** The interval timer used to poll for node descriptions. */
   private pollDescriptionsInterval_: number = 0;

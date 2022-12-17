@@ -77,7 +77,7 @@ BrowserAccessibilityManager::ToBrowserAccessibilityManagerWin() {
 BrowserAccessibilityManagerWin::BrowserAccessibilityManagerWin(
     const ui::AXTreeUpdate& initial_tree,
     BrowserAccessibilityDelegate* delegate)
-    : BrowserAccessibilityManager(delegate), load_complete_pending_(false) {
+    : BrowserAccessibilityManager(delegate) {
   ui::win::CreateATLModuleIfNeeded();
   Initialize(initial_tree);
 }
@@ -124,8 +124,11 @@ void BrowserAccessibilityManagerWin::FireFocusEvent(
 void BrowserAccessibilityManagerWin::FireBlinkEvent(ax::mojom::Event event_type,
                                                     BrowserAccessibility* node,
                                                     int action_request_id) {
+  DCHECK(CanFireEvents());
+
   BrowserAccessibilityManager::FireBlinkEvent(event_type, node,
                                               action_request_id);
+
   switch (event_type) {
     case ax::mojom::Event::kClicked:
       if (node->GetData().IsInvocable())
@@ -135,6 +138,10 @@ void BrowserAccessibilityManagerWin::FireBlinkEvent(ax::mojom::Event event_type,
       // Event tests use kEndOfTest as a sentinel to mark the end of the test.
       FireUiaAccessibilityEvent(
           ui::UiaRegistrarWin::GetInstance().GetTestCompleteEventId(), node);
+      break;
+    case ax::mojom::Event::kLoadComplete:
+      FireWinAccessibilityEvent(IA2_EVENT_DOCUMENT_LOAD_COMPLETE, node);
+      FireUiaAccessibilityEvent(UIA_AsyncContentLoadedEventId, node);
       break;
     case ax::mojom::Event::kLocationChanged:
       FireWinAccessibilityEvent(IA2_EVENT_VISIBLE_DATA_CHANGED, node);
@@ -159,24 +166,6 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
     ui::AXEventGenerator::Event event_type,
     BrowserAccessibility* node) {
   BrowserAccessibilityManager::FireGeneratedEvent(event_type, node);
-  bool can_fire_events = CanFireEvents();
-
-  if (event_type == ui::AXEventGenerator::Event::LOAD_COMPLETE &&
-      can_fire_events)
-    load_complete_pending_ = false;
-
-  if (load_complete_pending_ && can_fire_events && GetRoot()) {
-    load_complete_pending_ = false;
-    FireWinAccessibilityEvent(IA2_EVENT_DOCUMENT_LOAD_COMPLETE, GetRoot());
-    FireUiaAccessibilityEvent(UIA_AsyncContentLoadedEventId, GetRoot());
-  }
-
-  if (!can_fire_events && !load_complete_pending_ &&
-      event_type == ui::AXEventGenerator::Event::LOAD_COMPLETE && GetRoot() &&
-      !GetRoot()->IsOffscreen() && GetRoot()->IsPlatformDocumentWithContent()) {
-    load_complete_pending_ = true;
-  }
-
   switch (event_type) {
     case ui::AXEventGenerator::Event::ACCESS_KEY_CHANGED:
       FireUiaPropertyChangedEvent(UIA_AccessKeyPropertyId, node);
@@ -186,7 +175,10 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       break;
     case ui::AXEventGenerator::Event::ALERT:
       FireWinAccessibilityEvent(EVENT_SYSTEM_ALERT, node);
-      FireUiaAccessibilityEvent(UIA_SystemAlertEventId, node);
+      // Generated 'ALERT' events come from role=alert nodes in the tree.
+      // These should just be treated as normal live region changed events,
+      // since we don't want web pages to be performing system-wide alerts.
+      FireUiaAccessibilityEvent(UIA_LiveRegionChangedEventId, node);
       break;
     case ui::AXEventGenerator::Event::ATOMIC_CHANGED:
       HandleAriaPropertiesChangedEvent(*node);
@@ -356,10 +348,6 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       FireUiaPropertyChangedEvent(UIA_LiveSettingPropertyId, node);
       HandleAriaPropertiesChangedEvent(*node);
       break;
-    case ui::AXEventGenerator::Event::LOAD_COMPLETE:
-      FireWinAccessibilityEvent(IA2_EVENT_DOCUMENT_LOAD_COMPLETE, node);
-      FireUiaAccessibilityEvent(UIA_AsyncContentLoadedEventId, node);
-      break;
     case ui::AXEventGenerator::Event::LAYOUT_INVALIDATED:
       FireUiaAccessibilityEvent(UIA_LayoutInvalidatedEventId, node);
       break;
@@ -479,7 +467,6 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       break;
     case ui::AXEventGenerator::Event::TEXT_ATTRIBUTE_CHANGED:
       FireWinAccessibilityEvent(IA2_EVENT_TEXT_ATTRIBUTE_CHANGED, node);
-      EnqueueTextChangedEvent(*node);
       break;
     case ui::AXEventGenerator::Event::VALUE_IN_TEXT_FIELD_CHANGED:
       DCHECK(node->IsTextField());
@@ -500,15 +487,14 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
     case ui::AXEventGenerator::Event::LIVE_REGION_NODE_CHANGED:
-    case ui::AXEventGenerator::Event::LOAD_START:
     case ui::AXEventGenerator::Event::MENU_ITEM_SELECTED:
     case ui::AXEventGenerator::Event::OTHER_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::PARENT_CHANGED:
     case ui::AXEventGenerator::Event::PORTAL_ACTIVATED:
     case ui::AXEventGenerator::Event::RELATED_NODE_CHANGED:
     case ui::AXEventGenerator::Event::ROW_COUNT_CHANGED:
-    case ui::AXEventGenerator::Event::SELECTION_IN_TEXT_FIELD_CHANGED:
     case ui::AXEventGenerator::Event::STATE_CHANGED:
+    case ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED:
       break;
   }
 }
@@ -563,13 +549,24 @@ void BrowserAccessibilityManagerWin::FireUiaAccessibilityEvent(
     return;
   if (!ShouldFireEventForNode(node))
     return;
-  // Suppress events when |IGNORED_CHANGED| except for MenuClosed / MenuOpen
-  // since a change in the ignored state may show / hide a popup by exposing
-  // it to the tree or not.
+
+  // Suppress most events when the node just became ignored/unignored.
   if (IsIgnoredChangedNode(node)) {
     switch (uia_event) {
+      case UIA_LiveRegionChangedEventId:
+        // Don't suppress live region changed events on nodes that just became
+        // unignored, but suppress them on nodes that just became ignored. This
+        // ensures that ATs can announce LiveRegionChanged events on nodes that
+        // just appeared in the tree and not announce the ones that just got
+        // removed.
+        if (node->IsIgnored())
+          return;
+        break;
       case UIA_MenuClosedEventId:
       case UIA_MenuOpenedEventId:
+        // Don't suppress MenuClosed/MenuOpened events since a change in the
+        // ignored state may hide/show a popup by exposing it to the tree or
+        // not.
         break;
       default:
         return;

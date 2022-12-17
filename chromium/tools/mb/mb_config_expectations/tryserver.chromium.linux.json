@@ -12,8 +12,9 @@
   "cast_shell_audio_linux": {
     "gn_args": {
       "dcheck_always_on": true,
+      "enable_cast_receiver": true,
       "is_cast_audio_only": true,
-      "is_chromecast": true,
+      "is_castos": true,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 0,
@@ -23,7 +24,8 @@
   "cast_shell_linux": {
     "gn_args": {
       "dcheck_always_on": true,
-      "is_chromecast": true,
+      "enable_cast_receiver": true,
+      "is_castos": true,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 0,
@@ -33,7 +35,8 @@
   "cast_shell_linux_arm64": {
     "gn_args": {
       "dcheck_always_on": false,
-      "is_chromecast": true,
+      "enable_cast_receiver": true,
+      "is_castos": true,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
@@ -43,7 +46,8 @@
   },
   "cast_shell_linux_dbg": {
     "gn_args": {
-      "is_chromecast": true,
+      "enable_cast_receiver": true,
+      "is_castos": true,
       "is_component_build": true,
       "is_debug": true,
       "symbol_level": 1,
@@ -313,7 +317,7 @@
       "use_goma": true
     }
   },
-  "linux-fieldtrial-fyi-rel": {
+  "linux-fieldtrial-rel": {
     "gn_args": {
       "dcheck_always_on": false,
       "is_component_build": false,
@@ -473,7 +477,6 @@
   },
   "linux-rel-ml": {
     "gn_args": {
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "dcheck_always_on": true,
       "devtools_skip_typecheck": false,
       "ffmpeg_branding": "Chrome",
@@ -481,7 +484,6 @@
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 0,
-      "use_clang_coverage": true,
       "use_dummy_lastchange": true,
       "use_goma": true
     }
@@ -525,6 +527,24 @@
       "use_bundled_weston": true,
       "use_dummy_lastchange": true,
       "use_goma": true
+    }
+  },
+  "linux-wayland-rel-reclient": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "ffmpeg_branding": "Chrome",
+      "is_component_build": false,
+      "is_debug": false,
+      "ozone_auto_platforms": false,
+      "ozone_platform": "wayland",
+      "ozone_platform_headless": true,
+      "ozone_platform_wayland": true,
+      "proprietary_codecs": true,
+      "remoting_use_wayland": true,
+      "symbol_level": 0,
+      "use_bundled_weston": true,
+      "use_dummy_lastchange": true,
+      "use_remoteexec": true
     }
   },
   "linux-webkit-msan-rel": {

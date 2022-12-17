@@ -9,6 +9,7 @@ import {
 } from '../../assert.js';
 import * as dom from '../../dom.js';
 import {reportError} from '../../error.js';
+import * as expert from '../../expert.js';
 import * as h264 from '../../h264.js';
 import {I18nString} from '../../i18n_string.js';
 import {Filenamer} from '../../models/file_namer.js';
@@ -46,6 +47,7 @@ import {GifRecordTime, RecordTime} from './record_time.js';
  * Maps from board name to its default encoding profile and bitrate multiplier.
  */
 const encoderPreference = new Map([
+  ['corsola', {profile: h264.Profile.HIGH, multiplier: 6}],
   ['strongbad', {profile: h264.Profile.HIGH, multiplier: 6}],
   ['trogdor', {profile: h264.Profile.HIGH, multiplier: 6}],
   ['dedede', {profile: h264.Profile.HIGH, multiplier: 8}],
@@ -634,7 +636,7 @@ export class VideoFactory extends ModeFactory {
 
   produce(): ModeBase {
     let captureConstraints = null;
-    if (state.get(state.State.ENABLE_MULTISTREAM_RECORDING)) {
+    if (expert.isEnabled(expert.ExpertOption.ENABLE_MULTISTREAM_RECORDING)) {
       const {width, height} = assertExists(this.captureResolution);
       captureConstraints = {
         deviceId: this.constraints.deviceId,

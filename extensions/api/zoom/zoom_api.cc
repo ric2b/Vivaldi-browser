@@ -27,9 +27,13 @@ namespace {
 void SetUIZoomByWebContent(double zoom_level,
                            WebContents* web_contents,
                            const Extension* extension) {
+  DCHECK(web_contents);
   zoom::ZoomController* zoom_controller =
-      zoom::ZoomController::FromWebContents(web_contents);
+      web_contents ? zoom::ZoomController::FromWebContents(web_contents)
+                   : nullptr;
   DCHECK(zoom_controller);
+  if (!zoom_controller)
+    return;
   scoped_refptr<ExtensionZoomRequestClient> client(
       new ExtensionZoomRequestClient(extension));
   zoom_controller->SetZoomLevelByClient(zoom_level, client);

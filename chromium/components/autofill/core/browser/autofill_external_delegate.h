@@ -40,7 +40,7 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
   AutofillExternalDelegate(const AutofillExternalDelegate&) = delete;
   AutofillExternalDelegate& operator=(const AutofillExternalDelegate&) = delete;
 
-  virtual ~AutofillExternalDelegate();
+  ~AutofillExternalDelegate() override;
 
   // AutofillPopupDelegate implementation.
   void OnPopupShown() override;
@@ -117,7 +117,7 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AutofillExternalDelegateUnitTest,
-                           FillCreditCardForm);
+                           FillCreditCardFormImpl);
 
   // Called when a credit card is scanned using device camera.
   void OnCreditCardScanned(const CreditCard& card);

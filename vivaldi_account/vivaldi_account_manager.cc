@@ -11,16 +11,14 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chromium/net/http/http_request_headers.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -124,7 +122,6 @@ std::string ParseFailureResponse(std::unique_ptr<std::string> response_body) {
   }
   return std::string();
 }
-
 }  // anonymous namespace
 
 VivaldiAccountManager::FetchError::FetchError()
@@ -135,18 +132,23 @@ VivaldiAccountManager::FetchError::FetchError(FetchErrorType type,
                                               int error_code)
     : type(type), server_message(server_message), error_code(error_code) {}
 
-VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
-    : profile_(profile), password_handler_(profile, this) {
+VivaldiAccountManager::VivaldiAccountManager(
+    PrefService* prefs,
+    PrefService* local_state,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    scoped_refptr<password_manager::PasswordStoreInterface> password_store)
+    : prefs_(prefs),
+      local_state_(local_state),
+      url_loader_factory_(std::move(url_loader_factory)),
+      password_handler_(std::move(password_store), this) {
 #if BUILDFLAG(IS_ANDROID)
   VivaldiAccountManagerAndroid::CreateNow();
 #endif
 
   account_info_.username =
-      profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountUsername);
-  account_info_.account_id =
-      profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountId);
-  device_id_ =
-      profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountDeviceId);
+      prefs_->GetString(vivaldiprefs::kVivaldiAccountUsername);
+  account_info_.account_id = prefs_->GetString(vivaldiprefs::kVivaldiAccountId);
+  device_id_ = prefs_->GetString(vivaldiprefs::kVivaldiAccountDeviceId);
   if (account_info_.account_id.empty()) {
     if (account_info_.username.empty()) {
       MigrateOldCredentialsIfNeeded();
@@ -156,16 +158,16 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
 
   std::string encrypted_refresh_token;
   if (!device_id_.empty() &&
-      base::Base64Decode(profile_->GetPrefs()->GetString(
-                             vivaldiprefs::kVivaldiAccountRefreshToken),
-                         &encrypted_refresh_token) &&
+      base::Base64Decode(
+          prefs_->GetString(vivaldiprefs::kVivaldiAccountRefreshToken),
+          &encrypted_refresh_token) &&
       !encrypted_refresh_token.empty()) {
     std::string refresh_token;
     if (OSCrypt::DecryptString(encrypted_refresh_token, &refresh_token)) {
       refresh_token_ = refresh_token;
-      content::GetUIThreadTaskRunner({})->PostTask(
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&VivaldiAccountManager::RequestNewToken,
-                                    base::Unretained(this)));
+                                    weak_factory_.GetWeakPtr()));
       return;
     } else {
       has_encrypted_refresh_token_ = true;
@@ -178,16 +180,14 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
 VivaldiAccountManager::~VivaldiAccountManager() {}
 
 void VivaldiAccountManager::MigrateOldCredentialsIfNeeded() {
-  PrefService* prefs = profile_->GetPrefs();
-
-  if (!prefs->GetBoolean(vivaldiprefs::kSyncActive))
+  if (!prefs_->GetBoolean(vivaldiprefs::kSyncActive))
     return;
-  prefs->ClearPref(vivaldiprefs::kSyncActive);
+  prefs_->ClearPref(vivaldiprefs::kSyncActive);
 
-  std::string username = prefs->GetString(vivaldiprefs::kDotNetUsername);
-  std::string account_id = prefs->GetString(vivaldiprefs::kSyncUsername);
-  prefs->ClearPref(vivaldiprefs::kDotNetUsername);
-  prefs->ClearPref(vivaldiprefs::kSyncUsername);
+  std::string username = prefs_->GetString(vivaldiprefs::kDotNetUsername);
+  std::string account_id = prefs_->GetString(vivaldiprefs::kSyncUsername);
+  prefs_->ClearPref(vivaldiprefs::kDotNetUsername);
+  prefs_->ClearPref(vivaldiprefs::kSyncUsername);
 
   if (username.empty() || account_id.empty())
     return;
@@ -228,11 +228,9 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
   }
 
   account_info_.username = username;
-  profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountUsername,
-                                  username);
+  prefs_->SetString(vivaldiprefs::kVivaldiAccountUsername, username);
   device_id_ = base::GenerateGUID();
-  profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountDeviceId,
-                                  device_id_);
+  prefs_->SetString(vivaldiprefs::kVivaldiAccountDeviceId, device_id_);
 
   NotifyAccountUpdated();
 
@@ -259,14 +257,15 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
       url_encoded_client_secret.c_str(), url_encoded_username.c_str(),
       url_encoded_password.c_str(), url_encoded_device_id.c_str());
 
-  const GURL identity_server_url(g_browser_process->local_state()->GetString(
-      vivaldiprefs::kVivaldiAccountServerUrlIdentity));
+  const GURL identity_server_url(
+      local_state_->GetString(vivaldiprefs::kVivaldiAccountServerUrlIdentity));
 
   access_token_request_handler_ =
       std::make_unique<VivaldiAccountManagerRequestHandler>(
-          profile_, identity_server_url, body, net::HttpRequestHeaders(),
+          url_loader_factory_, identity_server_url, body,
+          net::HttpRequestHeaders(),
           base::BindRepeating(&VivaldiAccountManager::OnTokenRequestDone,
-                              base::Unretained(this), true));
+                              weak_factory_.GetWeakPtr(), true));
   if (save_password)
     password_for_saving_ = password;
   else
@@ -301,21 +300,22 @@ void VivaldiAccountManager::RequestNewToken() {
 
   ClearTokens();
 
-  const GURL identity_server_url(g_browser_process->local_state()->GetString(
-      vivaldiprefs::kVivaldiAccountServerUrlIdentity));
+  const GURL identity_server_url(
+      local_state_->GetString(vivaldiprefs::kVivaldiAccountServerUrlIdentity));
 
   access_token_request_handler_ =
       std::make_unique<VivaldiAccountManagerRequestHandler>(
-          profile_, identity_server_url, body, net::HttpRequestHeaders(),
+          url_loader_factory_, identity_server_url, body,
+          net::HttpRequestHeaders(),
           base::BindRepeating(&VivaldiAccountManager::OnTokenRequestDone,
-                              base::Unretained(this), false));
+                              weak_factory_.GetWeakPtr(), false));
 }
 
 void VivaldiAccountManager::ClearTokens() {
   access_token_.clear();
   token_received_time_ = base::Time();
   refresh_token_.clear();
-  profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountRefreshToken);
+  prefs_->ClearPref(vivaldiprefs::kVivaldiAccountRefreshToken);
   has_encrypted_refresh_token_ = false;
 
   last_token_fetch_error_ = FetchError();
@@ -332,9 +332,9 @@ void VivaldiAccountManager::Reset() {
   username.swap(account_info_.username);
   account_info_ = AccountInfo();
   account_info_.username.swap(username);
-  profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountId);
+  prefs_->ClearPref(vivaldiprefs::kVivaldiAccountId);
   device_id_.clear();
-  profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountDeviceId);
+  prefs_->ClearPref(vivaldiprefs::kVivaldiAccountDeviceId);
 }
 
 void VivaldiAccountManager::OnTokenRequestDone(
@@ -354,10 +354,11 @@ void VivaldiAccountManager::OnTokenRequestDone(
   if (response_code == net::HTTP_BAD_REQUEST) {
     std::string server_message = ParseFailureResponse(std::move(response_body));
     if (!using_password && !password_handler_.password().empty()) {
-      content::GetUIThreadTaskRunner({})->PostTask(
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::BindOnce(&VivaldiAccountManager::Login, base::Unretained(this),
-                         account_info_.username, std::string(), false));
+          base::BindOnce(&VivaldiAccountManager::Login,
+                         weak_factory_.GetWeakPtr(), account_info_.username,
+                         std::string(), false));
     } else {
       NotifyTokenFetchFailed(INVALID_CREDENTIALS, server_message,
                              response_code);
@@ -391,25 +392,25 @@ void VivaldiAccountManager::OnTokenRequestDone(
   if (OSCrypt::EncryptString(refresh_token_, &encrypted_refresh_token)) {
     std::string encoded_refresh_token;
     base::Base64Encode(encrypted_refresh_token, &encoded_refresh_token);
-    profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountRefreshToken,
-                                    encoded_refresh_token);
+    prefs_->SetString(vivaldiprefs::kVivaldiAccountRefreshToken,
+                      encoded_refresh_token);
   }
 
   token_received_time_ = base::Time::Now();
   NotifyTokenFetchSucceeded();
 
   if (account_info_.account_id.empty() || account_info_.picture_url.empty()) {
-    const GURL open_id_server_url(g_browser_process->local_state()->GetString(
-        vivaldiprefs::kVivaldiAccountServerUrlOpenId));
+    const GURL open_id_server_url(
+        local_state_->GetString(vivaldiprefs::kVivaldiAccountServerUrlOpenId));
     net::HttpRequestHeaders headers;
     headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
                       std::string("Bearer ") + access_token_);
     account_info_request_handler_ =
         std::make_unique<VivaldiAccountManagerRequestHandler>(
-            profile_, open_id_server_url, "", headers,
+            url_loader_factory_, open_id_server_url, "", headers,
             base::BindRepeating(
                 &VivaldiAccountManager::OnAccountInfoRequestDone,
-                base::Unretained(this)));
+                weak_factory_.GetWeakPtr()));
   }
 
   return;
@@ -453,8 +454,7 @@ void VivaldiAccountManager::OnAccountInfoRequestDone(
     return;
   }
 
-  profile_->GetPrefs()->SetString(vivaldiprefs::kVivaldiAccountId,
-                                  account_info_.account_id);
+  prefs_->SetString(vivaldiprefs::kVivaldiAccountId, account_info_.account_id);
 
   NotifyAccountUpdated();
   return;

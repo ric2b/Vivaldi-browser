@@ -55,7 +55,7 @@ void FloatingAccessibilityController::Show(FloatingMenuPosition position) {
   DCHECK(!bubble_view_);
 
   TrayBubbleView::InitParams init_params;
-  init_params.delegate = this;
+  init_params.delegate = GetWeakPtr();
   // Our view uses SettingsBubbleContainer since it is activatable and is
   // included in the collision detection logic.
   init_params.parent_window = Shell::GetContainer(
@@ -81,8 +81,12 @@ void FloatingAccessibilityController::Show(FloatingMenuPosition position) {
   bubble_view_->SetFocusBehavior(
       ActionableView::FocusBehavior::ACCESSIBLE_ONLY);
 
-  menu_view_->SetPaintToLayer();
-  menu_view_->layer()->SetFillsBoundsOpaquely(false);
+  // In dark light mode, we switch TrayBubbleView to use a textured layer
+  // instead of solid color layer, so no need to create an extra layer here.
+  if (!features::IsDarkLightModeEnabled()) {
+    menu_view_->SetPaintToLayer();
+    menu_view_->layer()->SetFillsBoundsOpaquely(false);
+  }
 
   bubble_widget_ = views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
   bubble_view_->SetCanActivate(true);

@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/mwb_element_shared_style.css.js';
 
@@ -10,6 +11,7 @@ import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './bookmark_folder.html.js';
+import {ActionSource} from './bookmarks.mojom-webui.js';
 import {BookmarksApiProxy, BookmarksApiProxyImpl} from './bookmarks_api_proxy.js';
 
 export interface BookmarkFolderElement {
@@ -48,7 +50,8 @@ export class BookmarkFolderElement extends PolymerElement {
       open_: {
         type: Boolean,
         value: false,
-        computed: 'computeIsOpen_(openFolders, folder.id)'
+        computed:
+            'computeIsOpen_(openFolders, folder.id, folder.children.length)',
       },
 
       openFolders: Array,
@@ -87,26 +90,30 @@ export class BookmarkFolderElement extends PolymerElement {
 
     event.preventDefault();
     event.stopPropagation();
-    this.bookmarksApi_.openBookmark(event.model.item.id!, this.depth, {
-      middleButton: true,
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-    });
+    this.bookmarksApi_.openBookmark(
+        event.model.item.id!, this.depth, {
+          middleButton: true,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+        },
+        ActionSource.kBookmark);
   }
 
   private onBookmarkClick_(
       event: DomRepeatEvent<chrome.bookmarks.BookmarkTreeNode, MouseEvent>) {
     event.preventDefault();
     event.stopPropagation();
-    this.bookmarksApi_.openBookmark(event.model.item.id!, this.depth, {
-      middleButton: false,
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-    });
+    this.bookmarksApi_.openBookmark(
+        event.model.item.id!, this.depth, {
+          middleButton: false,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+        },
+        ActionSource.kBookmark);
   }
 
   private onBookmarkContextMenu_(
@@ -114,14 +121,15 @@ export class BookmarkFolderElement extends PolymerElement {
     event.preventDefault();
     event.stopPropagation();
     this.bookmarksApi_.showContextMenu(
-        event.model.item.id, event.clientX, event.clientY);
+        event.model.item.id, event.clientX, event.clientY,
+        ActionSource.kBookmark);
   }
 
   private onFolderContextMenu_(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
     this.bookmarksApi_.showContextMenu(
-        this.folder.id, event.clientX, event.clientY);
+        this.folder.id, event.clientX, event.clientY, ActionSource.kBookmark);
   }
 
   private getBookmarkIcon_(url: string): string {
@@ -158,7 +166,7 @@ export class BookmarkFolderElement extends PolymerElement {
       detail: {
         id: this.folder.id,
         open: !this.open_,
-      }
+      },
     }));
 
     chrome.metricsPrivate.recordUserAction(
@@ -168,7 +176,8 @@ export class BookmarkFolderElement extends PolymerElement {
 
   private computeIsOpen_() {
     return Boolean(this.openFolders) &&
-        this.openFolders.includes(this.folder.id);
+        this.openFolders.includes(this.folder.id) && this.folder.children &&
+        this.folder.children.length > 0;
   }
 
   private getFocusableRows_(): HTMLElement[] {

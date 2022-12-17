@@ -12,7 +12,6 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
-#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -35,7 +34,8 @@
 #include "chrome/browser/apps/app_service/menu_item_constants.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
-#include "chrome/browser/ash/crostini/crostini_terminal.h"
+#include "chrome/browser/ash/guest_os/guest_os_terminal.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
@@ -67,27 +67,6 @@ bool ShouldObserveMediaRequests() {
   return true;
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-// Make |app_id| the preferred app for handling |url|, without needing the user
-// to choose the app through an intent picker. This function must be called
-// after the corresponding intent filter has already been registered.
-void AddDefaultPreferredApp(const std::string& app_id,
-                            const GURL& url,
-                            apps::AppServiceProxy* proxy) {
-  // TODO(crbug.com/1333422): Call proxy()->AddPreferredApp() directly.
-  if (proxy->PreferredAppsImpl()) {
-    proxy->PreferredAppsImpl()->AddPreferredApp(
-        GetWebAppType(), app_id, apps_util::MakeIntentFilterForUrlScope(url),
-        /*intent=*/nullptr, /*from_publisher=*/true);
-  } else {
-    proxy->AppService().get()->AddPreferredApp(
-        apps::ConvertAppTypeToMojomAppType(GetWebAppType()), app_id,
-        apps_util::CreateIntentFilterForUrlScope(url),
-        /*intent=*/nullptr, /*from_publisher=*/true);
-  }
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 }  // namespace
 
 WebApps::WebApps(apps::AppServiceProxy* proxy)
@@ -98,14 +77,22 @@ WebApps::WebApps(apps::AppServiceProxy* proxy)
       app_type_(GetWebAppType()),
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       instance_registry_(&proxy->InstanceRegistry()),
-#endif
       publisher_helper_(
           profile_,
           provider_,
           ash::SystemWebAppManager::GetForLocalAppsUnchecked(profile_),
           app_type_,
           this,
-          ShouldObserveMediaRequests()) {
+          ShouldObserveMediaRequests())
+#else
+      publisher_helper_(profile_,
+                        provider_,
+                        /*swa_manager=*/nullptr,
+                        app_type_,
+                        this,
+                        ShouldObserveMediaRequests())
+#endif
+{
   Initialize(proxy->AppService());
 }
 
@@ -149,6 +136,33 @@ void WebApps::LoadIcon(const std::string& app_id,
                               std::move(callback));
 }
 
+void WebApps::Launch(const std::string& app_id,
+                     int32_t event_flags,
+                     apps::LaunchSource launch_source,
+                     apps::WindowInfoPtr window_info) {
+  publisher_helper().Launch(app_id, event_flags, launch_source,
+                            std::move(window_info));
+}
+
+void WebApps::LaunchAppWithFiles(const std::string& app_id,
+                                 int32_t event_flags,
+                                 apps::LaunchSource launch_source,
+                                 std::vector<base::FilePath> file_paths) {
+  publisher_helper().LaunchAppWithFiles(app_id, event_flags, launch_source,
+                                        std::move(file_paths));
+}
+
+void WebApps::LaunchAppWithIntent(const std::string& app_id,
+                                  int32_t event_flags,
+                                  apps::IntentPtr intent,
+                                  apps::LaunchSource launch_source,
+                                  apps::WindowInfoPtr window_info,
+                                  base::OnceCallback<void(bool)> callback) {
+  publisher_helper().LaunchAppWithIntent(app_id, event_flags, std::move(intent),
+                                         launch_source, std::move(window_info),
+                                         std::move(callback));
+}
+
 void WebApps::LaunchAppWithParams(apps::AppLaunchParams&& params,
                                   apps::LaunchCallback callback) {
   publisher_helper().LaunchAppWithParams(std::move(params));
@@ -162,6 +176,26 @@ void WebApps::LaunchShortcut(const std::string& app_id,
   publisher_helper().ExecuteContextMenuCommand(app_id, shortcut_id, display_id);
 }
 
+void WebApps::SetPermission(const std::string& app_id,
+                            apps::PermissionPtr permission) {
+  publisher_helper().SetPermission(app_id, std::move(permission));
+}
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void WebApps::Uninstall(const std::string& app_id,
+                        apps::UninstallSource uninstall_source,
+                        bool clear_site_data,
+                        bool report_abuse) {
+  const WebApp* web_app = GetWebApp(app_id);
+  if (!web_app) {
+    return;
+  }
+
+  publisher_helper().UninstallWebApp(web_app, uninstall_source, clear_site_data,
+                                     report_abuse);
+}
+#endif
+
 void WebApps::Connect(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
     apps::mojom::ConnectOptionsPtr opts) {
@@ -172,38 +206,24 @@ void WebApps::Connect(
                                 std::move(subscriber_remote)));
 }
 
-void WebApps::LoadIcon(const std::string& app_id,
-                       apps::mojom::IconKeyPtr icon_key,
-                       apps::mojom::IconType icon_type,
-                       int32_t size_hint_in_dip,
-                       bool allow_placeholder_icon,
-                       LoadIconCallback callback) {
-  if (!icon_key) {
-    // On failure, we still run the callback, with an empty IconValue.
-    std::move(callback).Run(apps::mojom::IconValue::New());
-    return;
-  }
-
-  publisher_helper().LoadIcon(
-      app_id, apps::ConvertMojomIconTypeToIconType(icon_type), size_hint_in_dip,
-      static_cast<IconEffects>(icon_key->icon_effects),
-      apps::IconValueToMojomIconValueCallback(std::move(callback)));
-}
-
 void WebApps::Launch(const std::string& app_id,
                      int32_t event_flags,
                      apps::mojom::LaunchSource launch_source,
                      apps::mojom::WindowInfoPtr window_info) {
-  publisher_helper().Launch(app_id, event_flags, launch_source,
-                            std::move(window_info));
+  publisher_helper().Launch(
+      app_id, event_flags,
+      apps::ConvertMojomLaunchSourceToLaunchSource(launch_source),
+      apps::ConvertMojomWindowInfoToWindowInfo(window_info));
 }
 
 void WebApps::LaunchAppWithFiles(const std::string& app_id,
                                  int32_t event_flags,
                                  apps::mojom::LaunchSource launch_source,
                                  apps::mojom::FilePathsPtr file_paths) {
-  publisher_helper().LaunchAppWithFiles(app_id, event_flags, launch_source,
-                                        std::move(file_paths));
+  publisher_helper().LaunchAppWithFiles(
+      app_id, event_flags,
+      apps::ConvertMojomLaunchSourceToLaunchSource(launch_source),
+      apps::ConvertMojomFilePathsToFilePaths(std::move(file_paths)));
 }
 
 void WebApps::LaunchAppWithIntent(const std::string& app_id,
@@ -212,14 +232,17 @@ void WebApps::LaunchAppWithIntent(const std::string& app_id,
                                   apps::mojom::LaunchSource launch_source,
                                   apps::mojom::WindowInfoPtr window_info,
                                   LaunchAppWithIntentCallback callback) {
-  publisher_helper().LaunchAppWithIntent(app_id, event_flags, std::move(intent),
-                                         launch_source, std::move(window_info),
-                                         std::move(callback));
+  publisher_helper().LaunchAppWithIntent(
+      app_id, event_flags, apps::ConvertMojomIntentToIntent(intent),
+      apps::ConvertMojomLaunchSourceToLaunchSource(launch_source),
+      apps::ConvertMojomWindowInfoToWindowInfo(window_info),
+      std::move(callback));
 }
 
 void WebApps::SetPermission(const std::string& app_id,
                             apps::mojom::PermissionPtr permission) {
-  publisher_helper().SetPermission(app_id, std::move(permission));
+  publisher_helper().SetPermission(
+      app_id, apps::ConvertMojomPermissionToPermission(permission));
 }
 
 void WebApps::OpenNativeSettings(const std::string& app_id) {
@@ -241,15 +264,6 @@ void WebApps::PublishWebApps(std::vector<apps::AppPtr> apps) {
   if (!is_ready_) {
     return;
   }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  const WebApp* web_app = GetWebApp(ash::kChromeUITrustedProjectorSwaAppId);
-  if (web_app) {
-    AddDefaultPreferredApp(ash::kChromeUITrustedProjectorSwaAppId,
-                           GURL(ash::kChromeUIUntrustedProjectorPwaUrl),
-                           proxy());
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (apps.empty()) {
     return;
@@ -281,6 +295,14 @@ void WebApps::PublishWebApps(std::vector<apps::AppPtr> apps) {
                        apps::ConvertAppTypeToMojomAppType(app_type()),
                        should_notify_initialized);
   }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  const WebApp* web_app = GetWebApp(ash::kChromeUITrustedProjectorSwaAppId);
+  if (web_app) {
+    proxy()->SetSupportedLinksPreference(
+        ash::kChromeUITrustedProjectorSwaAppId);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void WebApps::PublishWebApp(apps::AppPtr app) {
@@ -289,20 +311,23 @@ void WebApps::PublishWebApp(apps::AppPtr app) {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (app->app_id == ash::kChromeUITrustedProjectorSwaAppId) {
-    // After OOBE, PublishWebApps() above could execute before the intent filter
-    // has been registered. Since we need to call AddDefaultPreferredApp() after
-    // the intent filter has been registered, we need this call for the OOBE
-    // case.
-    AddDefaultPreferredApp(ash::kChromeUITrustedProjectorSwaAppId,
-                           GURL(ash::kChromeUIUntrustedProjectorPwaUrl),
-                           proxy());
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  bool is_projector = app->app_id == ash::kChromeUITrustedProjectorSwaAppId;
+#endif
 
   auto mojom_app = apps::ConvertAppToMojomApp(app);
   apps::AppPublisher::Publish(std::move(app));
   PublisherBase::Publish(std::move(mojom_app), subscribers_);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (is_projector) {
+    // After OOBE, PublishWebApps() above could execute before the Projector app
+    // has been registered. Since we need to call SetSupportedLinksPreference()
+    // after the intent filter has been registered, we need this call for the
+    // OOBE case.
+    proxy()->SetSupportedLinksPreference(
+        ash::kChromeUITrustedProjectorSwaAppId);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void WebApps::ModifyWebAppCapabilityAccess(
@@ -365,13 +390,10 @@ void WebApps::Uninstall(const std::string& app_id,
                         apps::mojom::UninstallSource uninstall_source,
                         bool clear_site_data,
                         bool report_abuse) {
-  const WebApp* web_app = GetWebApp(app_id);
-  if (!web_app) {
-    return;
-  }
-
-  publisher_helper().UninstallWebApp(web_app, uninstall_source, clear_site_data,
-                                     report_abuse);
+  Uninstall(
+      app_id,
+      apps::ConvertMojomUninstallSourceToUninstallSource(uninstall_source),
+      clear_site_data, report_abuse);
 }
 
 void WebApps::PauseApp(const std::string& app_id) {
@@ -405,22 +427,19 @@ void WebApps::GetMenuModel(const std::string& app_id,
     auto* system_app =
         ash::SystemWebAppManager::Get(profile())->GetSystemApp(swa_type);
     if (system_app && system_app->ShouldShowNewWindowMenuOption()) {
-      apps::AddCommandItem(menu_type == apps::mojom::MenuType::kAppList
-                               ? ash::LAUNCH_NEW
-                               : ash::MENU_OPEN_NEW,
+      apps::AddCommandItem(ash::LAUNCH_NEW,
                            IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW, &menu_items);
     }
   } else {
     apps::CreateOpenNewSubmenu(
-        menu_type,
         publisher_helper().GetWindowMode(app_id) == apps::WindowMode::kBrowser
             ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
             : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
         &menu_items);
   }
 
-  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
-    crostini::AddTerminalMenuItems(profile_, &menu_items);
+  if (app_id == guest_os::kTerminalSystemAppId) {
+    guest_os::AddTerminalMenuItems(profile_, &menu_items);
   }
 
   if (menu_type == apps::mojom::MenuType::kShelf &&
@@ -439,8 +458,8 @@ void WebApps::GetMenuModel(const std::string& app_id,
                          &menu_items);
   }
 
-  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
-    crostini::AddTerminalMenuShortcuts(profile_, ash::LAUNCH_APP_SHORTCUT_FIRST,
+  if (app_id == guest_os::kTerminalSystemAppId) {
+    guest_os::AddTerminalMenuShortcuts(profile_, ash::LAUNCH_APP_SHORTCUT_FIRST,
                                        std::move(menu_items),
                                        std::move(callback));
   } else {
@@ -533,8 +552,8 @@ void WebApps::ExecuteContextMenuCommand(const std::string& app_id,
                                         int command_id,
                                         const std::string& shortcut_id,
                                         int64_t display_id) {
-  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
-    if (crostini::ExecuteTerminalMenuShortcutCommand(profile_, shortcut_id,
+  if (app_id == guest_os::kTerminalSystemAppId) {
+    if (guest_os::ExecuteTerminalMenuShortcutCommand(profile_, shortcut_id,
                                                      display_id)) {
       return;
     }

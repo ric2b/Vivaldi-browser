@@ -18,7 +18,7 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
       &contentsimpl->GetController();
 
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      target_contents->GetMainFrame());
+      target_contents->GetPrimaryMainFrame());
 
   bool rewrite_virtual_urls = rfhi->frame_tree_node()->IsOutermostMainFrame();
 

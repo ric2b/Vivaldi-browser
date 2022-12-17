@@ -42,8 +42,15 @@ void FakeBluetoothHidDetector::SimulatePairingStarted(
   NotifyBluetoothHidDetectionStatusChanged();
 }
 
-void FakeBluetoothHidDetector::SimulatePairingFinished() {
+void FakeBluetoothHidDetector::SetPairingState(
+    absl::optional<BluetoothHidPairingState> pairing_state) {
+  current_pairing_state_ = std::move(pairing_state);
+  NotifyBluetoothHidDetectionStatusChanged();
+}
+
+void FakeBluetoothHidDetector::SimulatePairingSessionEnded() {
   current_pairing_device_.reset();
+  current_pairing_state_.reset();
   NotifyBluetoothHidDetectionStatusChanged();
 }
 
@@ -53,8 +60,10 @@ void FakeBluetoothHidDetector::PerformStartBluetoothHidDetection(
   is_bluetooth_hid_detection_active_ = true;
 }
 
-void FakeBluetoothHidDetector::PerformStopBluetoothHidDetection() {
+void FakeBluetoothHidDetector::PerformStopBluetoothHidDetection(
+    bool is_using_bluetooth) {
   is_bluetooth_hid_detection_active_ = false;
+  is_using_bluetooth_ = is_using_bluetooth;
 }
 
 }  // namespace ash::hid_detection

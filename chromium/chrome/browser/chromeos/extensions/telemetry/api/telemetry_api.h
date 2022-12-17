@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_TELEMETRY_API_TELEMETRY_API_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_TELEMETRY_API_TELEMETRY_API_H_
 
-#include "ash/webui/telemetry_extension_ui/mojom/probe_service.mojom.h"
-#include "ash/webui/telemetry_extension_ui/services/probe_service.h"
+#include <memory>
+
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/extensions/telemetry/api/base_telemetry_extension_api_guard_function.h"
+#include "chrome/browser/chromeos/extensions/telemetry/api/remote_probe_service_strategy.h"
+#include "chromeos/crosapi/mojom/probe_service.mojom.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_histogram_value.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -24,10 +27,14 @@ class TelemetryApiFunctionBase : public BaseTelemetryExtensionApiGuardFunction {
  protected:
   ~TelemetryApiFunctionBase() override;
 
-  mojo::Remote<ash::health::mojom::ProbeService> remote_probe_service_;
+  mojo::Remote<crosapi::mojom::TelemetryProbeService>& GetRemoteService();
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  bool IsCrosApiAvailable() override;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
  private:
-  ash::ProbeService probe_service_;
+  std::unique_ptr<RemoteProbeServiceStrategy> remote_probe_service_strategy_;
 };
 
 class OsTelemetryGetBatteryInfoFunction : public TelemetryApiFunctionBase {
@@ -47,7 +54,7 @@ class OsTelemetryGetBatteryInfoFunction : public TelemetryApiFunctionBase {
   // BaseTelemetryExtensionApiGuardFunction:
   void RunIfAllowed() override;
 
-  void OnResult(ash::health::mojom::TelemetryInfoPtr ptr);
+  void OnResult(crosapi::mojom::ProbeTelemetryInfoPtr ptr);
 };
 
 class OsTelemetryGetCpuInfoFunction : public TelemetryApiFunctionBase {
@@ -65,7 +72,7 @@ class OsTelemetryGetCpuInfoFunction : public TelemetryApiFunctionBase {
   // BaseTelemetryExtensionApiGuardFunction:
   void RunIfAllowed() override;
 
-  void OnResult(ash::health::mojom::TelemetryInfoPtr ptr);
+  void OnResult(crosapi::mojom::ProbeTelemetryInfoPtr ptr);
 };
 
 class OsTelemetryGetMemoryInfoFunction : public TelemetryApiFunctionBase {
@@ -85,7 +92,7 @@ class OsTelemetryGetMemoryInfoFunction : public TelemetryApiFunctionBase {
   // BaseTelemetryExtensionApiGuardFunction:
   void RunIfAllowed() override;
 
-  void OnResult(ash::health::mojom::TelemetryInfoPtr ptr);
+  void OnResult(crosapi::mojom::ProbeTelemetryInfoPtr ptr);
 };
 
 class OsTelemetryGetOemDataFunction : public TelemetryApiFunctionBase {
@@ -103,7 +110,27 @@ class OsTelemetryGetOemDataFunction : public TelemetryApiFunctionBase {
   // BaseTelemetryExtensionApiGuardFunction:
   void RunIfAllowed() override;
 
-  void OnResult(ash::health::mojom::OemDataPtr ptr);
+  void OnResult(crosapi::mojom::ProbeOemDataPtr ptr);
+};
+
+class OsTelemetryGetOsVersionInfoFunction : public TelemetryApiFunctionBase {
+ public:
+  DECLARE_EXTENSION_FUNCTION("os.telemetry.getOsVersionInfo",
+                             OS_TELEMETRY_GETOSVERSIONINFO)
+
+  OsTelemetryGetOsVersionInfoFunction();
+  OsTelemetryGetOsVersionInfoFunction(
+      const OsTelemetryGetOsVersionInfoFunction&) = delete;
+  OsTelemetryGetOsVersionInfoFunction& operator=(
+      const OsTelemetryGetOsVersionInfoFunction&) = delete;
+
+ private:
+  ~OsTelemetryGetOsVersionInfoFunction() override;
+
+  // BaseTelemetryExtensionApiGuardFunction:
+  void RunIfAllowed() override;
+
+  void OnResult(crosapi::mojom::ProbeTelemetryInfoPtr ptr);
 };
 
 class OsTelemetryGetVpdInfoFunction : public TelemetryApiFunctionBase {
@@ -121,7 +148,28 @@ class OsTelemetryGetVpdInfoFunction : public TelemetryApiFunctionBase {
   // BaseTelemetryExtensionApiGuardFunction:
   void RunIfAllowed() override;
 
-  void OnResult(ash::health::mojom::TelemetryInfoPtr ptr);
+  void OnResult(crosapi::mojom::ProbeTelemetryInfoPtr ptr);
+};
+
+class OsTelemetryGetStatefulPartitionInfoFunction
+    : public TelemetryApiFunctionBase {
+ public:
+  DECLARE_EXTENSION_FUNCTION("os.telemetry.getStatefulPartitionInfo",
+                             OS_TELEMETRY_GETSTATEFULPARTITIONINFO)
+
+  OsTelemetryGetStatefulPartitionInfoFunction();
+  OsTelemetryGetStatefulPartitionInfoFunction(
+      const OsTelemetryGetStatefulPartitionInfoFunction&) = delete;
+  OsTelemetryGetStatefulPartitionInfoFunction& operator=(
+      const OsTelemetryGetStatefulPartitionInfoFunction&) = delete;
+
+ private:
+  ~OsTelemetryGetStatefulPartitionInfoFunction() override;
+
+  // BaseTelemetryExtensionApiGuardFunction:
+  void RunIfAllowed() override;
+
+  void OnResult(crosapi::mojom::ProbeTelemetryInfoPtr ptr);
 };
 
 }  // namespace chromeos

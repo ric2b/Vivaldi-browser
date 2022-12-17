@@ -95,6 +95,11 @@ blink::mojom::FetchAPIRequestPtr TypeConverter<
   output->is_history_navigation =
       input.transition_type & ui::PAGE_TRANSITION_FORWARD_BACK;
   output->devtools_stack_id = input.devtools_stack_id;
+  if (input.trust_token_params) {
+    output->trust_token_params = input.trust_token_params->Clone();
+  }
+  output->target_address_space =
+      static_cast<network::mojom::IPAddressSpace>(input.target_address_space);
   return output;
 }
 

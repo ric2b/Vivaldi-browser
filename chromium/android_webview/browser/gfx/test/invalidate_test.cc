@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 namespace android_webview {
@@ -46,7 +47,8 @@ void AppendSurfaceDrawQuad(viz::CompositorRenderPass& render_pass,
   surface_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_rect),
                        gfx::Rect(quad_state->quad_layer_rect),
                        viz::SurfaceRange(absl::nullopt, child_id),
-                       SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false);
+                       SkColors::kWhite,
+                       /*stretch_content_to_fill_bounds=*/false);
 }
 
 void AppendSolidColorDrawQuad(viz::CompositorRenderPass& render_pass) {
@@ -63,7 +65,7 @@ void AppendSolidColorDrawQuad(viz::CompositorRenderPass& render_pass) {
       render_pass.CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
   solid_color_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_rect),
                            gfx::Rect(quad_state->quad_layer_rect),
-                           SK_ColorWHITE, /*force_anti_aliasing_off=*/false);
+                           SkColors::kWhite, /*force_anti_aliasing_off=*/false);
 }
 
 class VizClient : public viz::mojom::CompositorFrameSinkClient {
@@ -278,8 +280,8 @@ class InvalidateTest
     // explicitly.
     render_thread_manager_ = std::make_unique<RenderThreadManager>(
         base::ThreadTaskRunnerHandle::Get());
-
-    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size(100, 100));
+    surface_ = gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplayEGL(),
+                                                  gfx::Size(100, 100));
     DCHECK(surface_);
     DCHECK(surface_->GetHandle());
     context_ = gl::init::CreateGLContext(nullptr, surface_.get(),
@@ -318,6 +320,11 @@ class InvalidateTest
     // no resources in this test
     DCHECK(resources.empty());
   }
+
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      viz::FrameSinkId frame_sink_id,
+      uint32_t layer_tree_frame_sink_id,
+      uint32_t sequence_id) override {}
 
  protected:
   std::unique_ptr<ChildFrame> CreateChildFrame(

@@ -68,7 +68,7 @@ scoped_refptr<URLRequestThrottlerEntryInterface>
 
   // Create the entry if needed.
   if (entry.get() == nullptr) {
-    entry = new URLRequestThrottlerEntry(this, url_id);
+    entry = base::MakeRefCounted<URLRequestThrottlerEntry>(this, url_id);
 
     // We only disable back-off throttling on an entry that we have
     // just constructed.  This is to allow unit tests to explicitly override
@@ -92,14 +92,14 @@ scoped_refptr<URLRequestThrottlerEntryInterface>
 
 void URLRequestThrottlerManager::OverrideEntryForTests(
     const GURL& url,
-    URLRequestThrottlerEntry* entry) {
+    scoped_refptr<URLRequestThrottlerEntry> entry) {
   // Normalize the url.
   std::string url_id = GetIdFromUrl(url);
 
   // Periodically garbage collect old entries.
   GarbageCollectEntriesIfNecessary();
 
-  url_entries_[url_id] = entry;
+  url_entries_[url_id] = std::move(entry);
 }
 
 void URLRequestThrottlerManager::EraseEntryForTests(const GURL& url) {

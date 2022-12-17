@@ -50,7 +50,8 @@ class SigninViewControllerDelegate {
   // displays the sync confirmation dialog. The returned object should delete
   // itself when the window it's managing is closed.
   static SigninViewControllerDelegate* CreateSyncConfirmationDelegate(
-      Browser* browser);
+      Browser* browser,
+      bool is_signin_intercept = false);
 
   // Returns a platform-specific SigninViewControllerDelegate instance that
   // displays the modal sign in error dialog. The returned object should delete
@@ -66,13 +67,18 @@ class SigninViewControllerDelegate {
       Browser* browser,
       const CoreAccountId& account_id,
       signin_metrics::ReauthAccessPoint access_point);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Returns a platform-specific SigninViewControllerDelegate instance that
   // displays the profile customization modal dialog. The returned object should
   // delete itself when the window it's managing is closed.
+  // If `show_profile_switch_iph` is true, shows a profile switch IPH after the
+  // user completes the profile customization.
   static SigninViewControllerDelegate* CreateProfileCustomizationDelegate(
-      Browser* browser);
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+      Browser* browser,
+      bool show_profile_switch_iph = false);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS_LACROS)

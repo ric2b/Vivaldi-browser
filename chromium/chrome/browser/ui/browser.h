@@ -305,9 +305,6 @@ class Browser : public TabStripModelObserver,
     // User-set title of this browser window, if there is one.
     std::string user_title;
 
-    // Title if this is a picture in picture browser window.
-    std::string picture_in_picture_window_title;
-
     // Only applied when not in forced app mode. True if the browser is
     // resizeable.
     bool can_resize = true;
@@ -315,6 +312,10 @@ class Browser : public TabStripModelObserver,
     // Only applied when not in forced app mode. True if the browser can be
     // maximizable.
     bool can_maximize = true;
+
+    // Aspect ratio parameters specific to TYPE_PICTURE_IN_PICTURE.
+    float initial_aspect_ratio = 1.0f;
+    bool lock_aspect_ratio = false;
 
     // Vivaldi
     static CreateParams CreateForDevToolsForVivaldi(Profile* profile);
@@ -390,6 +391,14 @@ class Browser : public TabStripModelObserver,
   }
   bool is_session_restore() const {
     return creation_source_ == CreationSource::kSessionRestore;
+  }
+
+  // Tells the browser whether it should skip showing any dialogs that ask the
+  // user to confirm that they want to close the browser when it is being
+  // closed.
+  void set_force_skip_warning_user_on_close(
+      bool force_skip_warning_user_on_close) {
+    force_skip_warning_user_on_close_ = force_skip_warning_user_on_close;
   }
 
   // Accessors ////////////////////////////////////////////////////////////////
@@ -756,6 +765,10 @@ class Browser : public TabStripModelObserver,
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   void RunScreenAIAnnotator();
+
+  // Ownership will be transferred to browser.
+  void SetScreenAIAnnotatorForTesting(
+      std::unique_ptr<screen_ai::AXScreenAIAnnotator> annotator);
 #endif
 
   // Vivaldi
@@ -916,6 +929,8 @@ class Browser : public TabStripModelObserver,
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) override;
+  bool IsFullscreenForTabOrPending(const content::WebContents* web_contents,
+                                   int64_t* display_id) override;
   blink::mojom::DisplayMode GetDisplayMode(
       const content::WebContents* web_contents) override;
   blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel(
@@ -1177,7 +1192,10 @@ class Browser : public TabStripModelObserver,
   std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive_;
 
   // This Browser's window.
-  raw_ptr<BrowserWindow> window_;
+  //
+  // TODO(crbug.com/1298696): pixel_browser_tests breaks with MTECheckedPtr
+  // enabled. Triage.
+  raw_ptr<BrowserWindow, DegradeToNoOpWhenMTE> window_;
 
   std::unique_ptr<TabStripModelDelegate> const tab_strip_model_delegate_;
   std::unique_ptr<TabStripModel> const tab_strip_model_;
@@ -1293,8 +1311,6 @@ class Browser : public TabStripModelObserver,
 
   std::string user_title_;
 
-  std::string picture_in_picture_window_title_;
-
   // Controls both signin and sync consent.
   SigninViewController signin_view_controller_;
 
@@ -1305,6 +1321,9 @@ class Browser : public TabStripModelObserver,
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
   WarnBeforeClosingCallback warn_before_closing_callback_;
+
+  // Tells if the browser should skip warning the user when closing the window.
+  bool force_skip_warning_user_on_close_ = false;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   std::unique_ptr<extensions::ExtensionBrowserWindowHelper>

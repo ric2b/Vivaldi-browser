@@ -32,11 +32,12 @@ using testing::NotNull;
 
 namespace {
 
-const base::Value origins[]{base::Value("example1.example.com"),
-                            base::Value("example2.example.com")};
-const base::Value more_origins[]{base::Value("example1.example.com"),
-                                 base::Value("example2.example.com"),
-                                 base::Value("example3.example.com")};
+base::Value::List GetOrigins() {
+  base::Value::List origins;
+  origins.Append("example1.example.com");
+  origins.Append("example2.example.com");
+  return origins;
+}
 
 // A sample VerifiedAccess v2 challenge rerepsented as a JSON string.
 constexpr char kJsonChallenge[] =
@@ -98,16 +99,12 @@ class DeviceTrustServiceTest
 
   void EnableServicePolicy() {
     prefs_.SetUserPref(kContextAwareAccessSignalsAllowlistPref,
-                       std::make_unique<base::ListValue>(origins));
+                       base::Value(GetOrigins()));
   }
 
   void DisableServicePolicy() {
     prefs_.SetUserPref(kContextAwareAccessSignalsAllowlistPref,
-                       std::make_unique<base::ListValue>());
-  }
-
-  const base::Value* GetPolicyUrls() {
-    return prefs_.GetList(kContextAwareAccessSignalsAllowlistPref);
+                       base::Value(base::Value::List()));
   }
 
   std::unique_ptr<DeviceTrustService> CreateService() {

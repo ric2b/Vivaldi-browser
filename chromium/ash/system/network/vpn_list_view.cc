@@ -30,7 +30,7 @@
 #include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/network/network_connect.h"
+#include "chromeos/ash/components/network/network_connect.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "components/onc/onc_constants.h"
@@ -86,6 +86,14 @@ bool VpnProviderMatchesNetwork(const VpnProvider* provider,
 
   // Internal provider types all match the default internal provider.
   return provider->type == VpnType::kOpenVPN;
+}
+
+// crbug/1303306: 'Add VPN' button should be disabled on a locked user session
+// or before user login.
+bool CanAddVpnButtonBeEnabled(LoginStatus login_status) {
+  return login_status != LoginStatus::NOT_LOGGED_IN &&
+         login_status != LoginStatus::LOCKED &&
+         login_status != LoginStatus::KIOSK_APP;
 }
 
 // Returns the PrefService that should be used for kVpnConfigAllowed, which is
@@ -152,12 +160,10 @@ class VPNListProviderEntry : public views::View {
                             base::Unretained(this)),
         enabled_icon, disabled_icon, button_accessible_name_id);
 
-    // 'Add VPN' is disabled in the login screen since user configured
-    // device-wide VPNs are unsupported.
     LoginStatus login_status =
         Shell::Get()->session_controller()->login_status();
     add_vpn_button->SetEnabled(enabled &&
-                               login_status != LoginStatus::NOT_LOGGED_IN);
+                               CanAddVpnButtonBeEnabled(login_status));
     tri_view->AddView(TriView::Container::END, add_vpn_button);
   }
 
@@ -284,9 +290,8 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
     if (IsVpnConfigAllowed()) {
       disconnect_button_ = TrayPopupUtils::CreateTrayPopupButton(
           // TODO(stevenjb): Replace with mojo API. https://crbug.com/862420.
-          base::BindRepeating(
-              &chromeos::NetworkConnect::DisconnectFromNetworkId,
-              base::Unretained(chromeos::NetworkConnect::Get()), guid_),
+          base::BindRepeating(&NetworkConnect::DisconnectFromNetworkId,
+                              base::Unretained(NetworkConnect::Get()), guid_),
           l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT));
       disconnect_button_->SetAccessibleName(l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_NETWORK_DISCONNECT_BUTTON_A11Y_LABEL, label));

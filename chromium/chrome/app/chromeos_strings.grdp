@@ -44,81 +44,8 @@
     Family Link
   </message>
 
-  <!-- Wallpaper Manager (Deprecated Chrome App Version) -->
-  <message name="IDS_WALLPAPER_MANAGER_APP_NAME" desc="Name of the app which allows users to pick their wallpaper.">
-    Wallpaper Picker
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_ALL_CATEGORY_LABEL" desc="Wallpaper category label.">
-    All
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_DELETE_COMMAND_LABEL" desc="Wallpaper delete command label.">
-    Delete
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_MY_IMAGES_CATEGORY_LABEL" desc="Wallpaper category label, the equivalent of the Custom category on the new wallpaper picker.">
-    My Images
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_SELECT_CUSTOM_LABEL" desc="Selects custom wallpaper label.">
-    Custom Image:
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_POSITION_LABEL" desc="Custom wallpaper position label.">
-    Position:
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_COLOR_LABEL" desc="Custom wallpaper color label.">
-    Color:
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_REFRESH_LABEL" desc="The label of the refresh option in the top bar. Upon click, the wallpaper picker will fetch the online wallpapers again.">
-    Refresh
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_EXPLORE_LABEL" desc="The label of the explore option in the top bar. Upon click, a link with more information on the selected wallpaper will open.">
-    Explore
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_SHOW_CUSTOM_WALLPAPER_ON_START_WARNING" desc="The string displayed to user when set custom wallpaper.">
-    Wallpapers appear on the Sign-in Screen.
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_DAILY_REFRESH_LABEL" desc="Wallpaper daily refresh checkbox label. It is the equivalent of surprise me on the new wallpaper picker.">
-    Daily Refresh
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_NETWORK_ERROR" desc="The string displayed when user can't use wallpaper picker because they're not connected to the internet.">
-    The images are currently not available. Please reconnect to the internet to see wallpaper collections.
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_IMAGE_ERROR" desc="The string displayed to user when downloading the wallpaper failed on the new wallpaper picker.">
-    There's an error. Please try again by choosing other images.
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_DOWNLOAD_CANCEL" desc="The string displayed to user when downloading the wallpaper canceled.">
-    Download was canceled.
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_ACCESS_FILE_FAILURE" desc="The string displayed to user when accessing custom wallpaper on disk failed.">
-    Chrome cannot access the image.
-  </message>
   <message name="IDS_WALLPAPER_MANAGER_INVALID_WALLPAPER" desc="The string displayed to user when user selected wallpaper can not be set as a wallpaper.">
     Chrome cannot set wallpaper.
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_NO_IMAGES_AVAILABLE" desc="The string displayed to user when there're no local files that can be used as wallpaper.">
-    No images available
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_LAYOUT_CENTER" desc="Label for option to center a customized wallpaper.">
-    Center
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_LAYOUT_CENTER_CROPPED" desc="Label for option to center crop a customized wallpaper.">
-    Center Cropped
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_LAYOUT_STRETCH" desc="Label for option to stretch a customized wallpaper.">
-    Stretch
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_CURRENTLY_SET_LABEL" desc="The string displayed before the title of the currently set wallpaper.">
-    Currently set
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_CONFIRM_PREVIEW_WALLPAPER_LABEL" desc="Label for the button that confirms setting the preview wallpaper.">
-    Set Wallpaper
-  </message>
-  <message name="IDS_WALLPAPER_MANAGER_SET_SUCCESSFULLY_MESSAGE" desc="Message shown to user after setting wallpaper is done.">
-    Wallpaper set successfully
-  </message>
-  <message name="IDS_CURRENT_WALLPAPER_SET_BY_MESSAGE" desc="The string displayed to user if the current wallpaper is set by a third party wallpaper app/extension.">
-    The current wallpaper is set by '<ph name="APP_NAME">$1</ph>'. You may need to uninstall '<ph name="APP_NAME">$1</ph>' before selecting a different wallpaper.
-  </message>
-  <message name="IDS_DEFAULT_WALLPAPER_ACCESSIBLE_LABEL" desc="Accessibility text read by chromevox when the default wallpaper is focused.">
-    Default wallpaper
   </message>
 
   <!-- MultiDevice setup dialog. -->
@@ -1361,6 +1288,12 @@
   <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_SUBTITLE" desc="The sub-title of the dialog that allows user to opt-in into several Google marketing options.">
     Get <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> tips, offers, and updates, and share feedback.
   </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_WITH_CLOUDGAMINGDEVICE_TITLE" desc="An alternate title for the last dialog the marketing opt-in for cloud gaming devices.">
+    Setup is complete! Get your device ready for gaming next
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_WITH_CLOUDGAMINGDEVICE_SUBTITLE" desc="An alternate subtitle for the last dialog the marketing opt-in for cloud gaming devices.">
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is built for gaming. The Explore app will open next where you can access hundreds of the latest games, see gaming offers, and discover gaming features that come with your device.
+  </message>
   <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_UNSUBSCRIBE_SHORT" desc="Disclaimer about being able to unsubscribe">
     Unsubscribe anytime.
   </message>
@@ -1375,6 +1308,9 @@
   </message>
   <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_GET_CHROMEBOOK_UPDATES_SIGN_ME_UP" desc="A lablel next to the checkbox that controls user subscription to marketing updates and useful information about the user's Chrome device.">
     Sign me up
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_WITH_CLOUDGAMINGDEVICE_SIGN_ME_UP" desc="Alternate the lablel next to the checkbox that controls user subscription to marketing updates and useful information about the user's Chrome device for gaming device.">
+    Sign up for <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> emails
   </message>
   <message name="IDS_LOGIN_GET_STARTED" desc="A label on the button. Used on the welcome screen (the first one on OOBE) and on the marketing optin screen (the last one in OOBE).">
     Get started
@@ -1494,6 +1430,27 @@
   </message>
   <message name="IDS_LOGIN_PASSWORD_CHANGED_TRY_AGAIN" desc="Label for the retry button on the proceed anyway step in the the GAIA password changed flow">
     Try again
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_TITLE" desc="Title for the data loss warning screen if the user decided not to recover local data">
+    Local data will be deleted
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_SUBTITLE_P1" desc="First paragraph of subtitle message for the data loss warning screen if the user decided not to recover local data">
+    Local data is protected by your old password. If you recently changed your password, try your old password again.
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_SUBTITLE_P2" desc="Second paragraph of subtitle message for the data loss warning screen if the user decided not to recover local data">
+    If you continue without entering your old password, your local data will be deleted. You’ll sign in with your Google Account to set up this user again.
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_RECOVER_DATA_TITLE" desc="Title for the screen to recover local data by entering old password.">
+    Restore your local data
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_RECOVER_DATA_SUBTITLE" desc="Subtitle for the screen to recover local data by entering old password.">
+    Your password has changed. To restore your local data, you need to enter your old password.
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_CONTINUE_AND_DELETE_BUTTON" desc="Button to continue and delete data without providing old password on the data loss warning dialog.">
+    Continue and delete data
+  </message>
+  <message name="IDS_LOGIN_PASSWORD_CHANGED_CONTINUE_WITHOUT_LOCAL_DATA_BUTTON" desc="Button to confirm continue without local data on the recover local data dialog.">
+    Continue without local data
   </message>
   <message name="IDS_LOGIN_SAML_NOTICE" desc="Text message displayed above SAML portal to early indicate that the user is being redirected to another sign-in provider. This is the version of the string used in the GAIA flow.">
     This sign-in service is hosted by <ph name="SAML_DOMAIN">$1<ex>saml.com</ex></ph>
@@ -2028,9 +1985,6 @@
     Skip for now
   </message>
 
-  <message name="IDS_AUTO_ENROLLMENT_CHECK_SCREEN_HEADER" desc="Header of message only used for accessibility label in the current design,  notifying about pending auto-enrollment check completion.">
-    Determining device configuration.
-  </message>
   <message name="IDS_AUTO_ENROLLMENT_CHECK_SCREEN_MESSAGE" desc="Warning message shown on screen notifying about pending auto-enrollment check completion.">
     Determining device configuration...
   </message>
@@ -2347,6 +2301,9 @@
   <message name="IDS_LOGIN_MAYBE_CAPTIVE_PORTAL_TITLE" desc="An offline message title shown when we suggest that user may be behind the captive portal.">
     Network not available
   </message>
+  <message name="IDS_LOGIN_AUTO_ENROLLMENT_OFFLINE_TITLE" desc="A message title shown when we suggest that user can't reach proper servers during auto-enrollment.">
+    Can't reach Google
+  </message>
   <message name="IDS_LOGIN_MAYBE_CAPTIVE_PORTAL" desc="An offline message shown when we suggest that user may be behind the captive portal. Translation note: enter as Guest - could also be said enter as Guest user. Word user may be added to the translation if needed.">
     To use <ph name="NETWORK_ID">$1<ex>&gt;b&lt;Public Wifi&gt;/b&lt;</ex></ph> you may first need to <ph name="LINK_START">$2<ex>&gt;a&lt;</ex></ph>visit the network's sign-in page<ph name="LINK_END">$3<ex>&gt;/a&lt;</ex></ph>, which will open automatically in a few seconds. If it doesn't happen, the network can't be used.
   </message>
@@ -2375,7 +2332,7 @@
     Please connect to the Internet to update your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
   <message name="IDS_LOGIN_AUTO_ENROLLMENT_OFFLINE_MESSAGE" desc="An offline message that shows in the error screen when auto-enrollment state failed to be downloaded.">
-    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is unable to connect to the Internet using <ph name="NETWORK_NAME">$2<ex>Ethernet</ex></ph>. Please choose another network. <ph name="LEARN_MORE_LINK_START">$3<ex>&gt;a&lt;</ex></ph>Learn more<ph name="LEARN_MORE_LINK_END">$4<ex>&gt;/a&lt;</ex></ph>
+    We can't reach Google through the connected network. Try choosing a different network or checking your network settings or proxy settings (if you are using a proxy).
   </message>
   <message name="IDS_UPDATE_PROXY_ERROR_MESSAGE" desc="An offline message that shows up when a proxy error has appeared in the OOBE update screen.">
     The update check failed using the current proxy settings. Please adjust your <ph name="PROXY_SETTINGS_LINK_START">$1<ex>&gt;a&lt;</ex></ph>proxy settings<ph name="PROXY_SETTINGS_LINK_END">$2<ex>&gt;/a&lt;</ex></ph>.
@@ -3229,6 +3186,12 @@
   <message name="IDS_NETWORK_UI_TAB_NETWORK_SELECT" desc="Network Select tab name">
     Network Select
   </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_METRICS" desc="Network metrics tab name">
+    Network Metrics
+  </message>
+  <message name="IDS_NETWORK_UI_TAB_NETWORK_HOTSPOT" desc="Hotspot tab name">
+    Hotspot
+  </message>
   <message name="IDS_NETWORK_UI_AUTO_REFRESH" desc="Instructions for how to auto-refresh the page">
     Add a query param in URL to auto-refresh the page: chrome://network/?refresh=&lt;sec&gt;
   </message>
@@ -3352,6 +3315,54 @@
   <message name="IDS_NETWORK_UI_NETWORK_LOGS_DEBUGGING_UNKNOWN" desc="Text displayed when the Shill debugging mode is unknown.">
     Unknown
   </message>
+  <message name="IDS_NETWORK_UI_NETWORK_METRICS_LABEL" desc="Title for the section for displaying WiFi performance metrics.">
+    WiFi Performance Metrics
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_METRICS_RENDER_BUTTON" desc="Text displayed on the button for rendering graph.">
+    Render
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_METRICS_START_BUTTON" desc="Text displayed on the button for starting plots.">
+    Start
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_METRICS_STOP_BUTTON" desc="Text displayed on the button for stopping plots.">
+    Stop
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_METRICS_INCREASE_RATE_BUTTON" desc="Text displayed on the button for increasing the sample rate of plots.">
+    Increase rate
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_METRICS_DECREASE_RATE_BUTTON" desc="Text displayed on the button for decreasing the sample rate of plots.">
+    Decrease rate
+  </message>
+  <message name="IDS_NETWORK_UI_TETHERING_CAPABILITIES_LABEL" desc="Title for the section for displaying and refreshing tethering capabilities.">
+    Tethering Capabilities:
+  </message>
+  <message name="IDS_NETWORK_UI_REFRESH_TETHERING_CAPABILITIES_BUTTON_TEXT" desc="Text for button which, when pressed, refreshing the tethering capabilities.">
+    Refresh Tethering Capabilities
+  </message>
+  <message name="IDS_NETWORK_UI_TETHERING_STATUS_LABEL" desc="Title for the section for displaying and refreshing tethering status.">
+    Tethering Status:
+  </message>
+  <message name="IDS_NETWORK_UI_REFRESH_TETHERING_STATUS_BUTTON_TEXT" desc="Text for button which, when pressed, refresh the tethering status.">
+    Refresh Tethering Status
+  </message>
+  <message name="IDS_NETWORK_UI_TETHERING_CONFIG_LABEL" desc="Title for the section for displaying and refreshing tethering configuration.">
+    Tethering Configuration:
+  </message>
+  <message name="IDS_NETWORK_UI_REFRESH_TETHERING_CONFIG_BUTTON_TEXT" desc="Text for button which, when pressed, refresh the tethering configuration.">
+    Refresh Tethering Configuration
+  </message>
+  <message name="IDS_NETWORK_UI_SET_TETHERING_CONFIG_BUTTON_TEXT" desc="Text for button which, when pressed, set the tethering configuration.">
+    Set Tethering Configuration
+  </message>
+  <message name="IDS_NETWORK_UI_TETHERING_READINESS_LABEL" desc="Title for the section for displaying and checking tethering readiness.">
+    Tethering Readiness:
+  </message>
+  <message name="IDS_NETWORK_UI_CHECK_TETHERING_READINESS_BUTTON_TEXT" desc="Text for button which, when pressed, check the tethering readiness.">
+    Check Tethering Readiness
+  </message>
+  <message name="IDS_NETWORK_UI_SET_TETHERING_ENABLED_LABEL" desc="Title for the section for enabling or disabling tethering.">
+    Enable/Disable Tethering
+  </message>
 
   <message name="IDS_DEVICE_LOG_LINK_TEXT" desc="Message preceeding link to chrome://device-log">
     To view network UI logs, see: <ph name="DEVICE_LOG_LINK">&lt;a href="chrome://device-log"&gt;chrome://device-log&lt;/a&gt;</ph>
@@ -3372,28 +3383,6 @@
   </message>
   <message name="IDS_SET_TIME_TIMEZONE_LABEL" desc="Label for the set time dialog timezone select element.">
     Timezone
-  </message>
-
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_TITLE" desc="Title of a prompt dialog for granting permissions to a volume (eg. USB drive, SD card, MTP device) with the specified name. Only used for screen readers (a11y); not visible.">
-    Permission requested
-  </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_MESSAGE" desc="Message in a prompt dialog for granting read-only permissions to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
-    <ph name="APP_NAME">$1<ex>Super Kiosk app</ex></ph> wants to copy files from <ph name="VOLUME_NAME">$2<ex>FooBar 4GB</ex></ph>.
-  </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_WRITABLE_MESSAGE" desc="Message in a prompt dialog for granting full permissions (read, write, delete, create files and directories) to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
-    <ph name="APP_NAME">$1<ex>Super Kiosk app</ex></ph> wants to access <ph name="VOLUME_NAME">$2<ex>FooBar 4GB</ex></ph>. It may modify or delete your files.
-  </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_ALLOW_BUTTON" desc="Label on the button to grant permissions.">
-    Allow
-  </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_DENY_BUTTON" desc="Label on the button to reject permissions.">
-    Deny
-  </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_NOTIFICATION_MESSAGE" desc="Message in a notification about granted read-only pemissions (read, write, delete, create files and directories) to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
-    Read-only access to <ph name="VOLUME_NAME">$1<ex>FooBar 4GB</ex></ph> has been granted.
-  </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_NOTIFICATION_WRITABLE_MESSAGE" desc="Message in a notification about granted full permissions (read, write, delete, create files and directories) to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
-    Read and write access to <ph name="VOLUME_NAME">$1<ex>FooBar 4GB</ex></ph> has been granted.
   </message>
 
   <!-- Webstore widget -->
@@ -3709,6 +3698,18 @@
   </message>
   <message name="IDS_ARC_LOW_DISK_SPACE_ERROR" desc="Android sign-in failed due to low disk space">
     Disk space is critically low. Please free up disk space.
+  </message>
+  <message name="IDS_ARC_LOW_DISK_SPACE_PRE_STOP_NOTIFICATION_TITLE" desc="Title of the notification warning Android users that they are critically low on disk space">
+    Device disk space critically low
+  </message>
+  <message name="IDS_ARC_LOW_DISK_SPACE_PRE_STOP_NOTIFICATION_MESSAGE" desc="Message in the notification warning Android users that they are critically low on disk space">
+    Free up space to avoid losing access to Android.
+  </message>
+  <message name="IDS_ARC_LOW_DISK_SPACE_POST_STOP_NOTIFICATION_TITLE" desc="Title of the notification shown when Android is stopped due to low disk space">
+    Android apps were stopped
+  </message>
+  <message name="IDS_ARC_LOW_DISK_SPACE_POST_STOP_NOTIFICATION_MESSAGE" desc="Message in the notification shown when Android is stopped due to low disk space">
+    Free up disk space to launch Android apps.
   </message>
   <message name="IDS_ARC_SIGN_IN_UNKNOWN_ERROR" desc="Android sign-in error because of unknown error">
     Something went wrong. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
@@ -5076,14 +5077,8 @@
   <message name="IDS_ECHE_APP_SCREEN_LOCK_SETTINGS_BUTTON" desc="Label for the button in the screen lock notification of EcheApp to open the settings app.">
     Settings
   </message>
-  <message name="IDS_ECHE_APP_SCREEN_LOCK_LEARN_MORE" desc="Learn more link text in screen lock notification of EcheApp.">
-    Learn more
-  </message>
   <message name="IDS_ECHE_APP_NOTIFICATION_TRY_AGAIN_BUTTON" desc="Label for the connection lost button of EcheApp to try again.">
     Try again
-  </message>
-  <message name="IDS_ECHE_APP_NOTIFICATION_LEARN_MORE_BUTTON" desc="Learn more link text in connection lost notification of EcheApp.">
-    Learn more
   </message>
   <message name="IDS_ECHE_APP_SCREEN_LOCK_NOTIFICATION_TITLE" desc="Title for notification shown when screen lock is not enabled while using app stream of EcheApp.">
     Can't open <ph name="APP_NAME">$1<ex>the app</ex></ph>
@@ -5123,6 +5118,12 @@
   </message>
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_GENERAL_DESCRIPTION_CHILD" desc="The label that explains the location of the fingerprint sensor on the device, when a child account is in use.">
     To set up fingerprint, have your child touch the fingerprint sensor. Your child’s fingerprint data is stored securely and never leaves this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LEFT_OF_POWER_BUTTON_TOP_RIGHT" desc="The label that explains the location of the fingerprint sensor for devices with fingerprint sensor located left to the power button on the top right corner of the keyboard.">
+    Touch the fingerprint sensor at the top right corner of your keyboard, next to the Power button. Your fingerprint data is stored securely and never leaves your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LEFT_OF_POWER_BUTTON_TOP_RIGHT_CHILD" desc="The label that explains the location of the fingerprint sensor for devices with fingerprint sensor located left to the power button on the top right corner of the keyboard, when a child account is in use.">
+    To set up fingerprint, have your child touch the fingerprint sensor at the top right corner of the keyboard, next to the Power button. Your child’s fingerprint data is stored securely and never leaves this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_PROGRESS_TITLE" desc="The title of the dialog that shows where the fingerprint sensor is.">
     Lift, then touch again
@@ -5425,9 +5426,6 @@
   </message>
 
   <!-- Strings for Plugin VM -->
-  <message name="IDS_PLUGIN_VM_APP_NAME" desc="Product name for 'Parallels Desktop'. Should not be translated as it is a third party name." translateable="false">
-    Parallels Desktop
-  </message>
   <message name="IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_TITLE" desc="Title of the Plugin VM installer when asking user to start installation.">
     Set up <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph> on your Chromebook
   </message>
@@ -6056,6 +6054,15 @@ You can manage this account’s settings by installing the Family Link app on yo
   <message name="IDS_SUGGESTION_EMOJI_CHOSEN" desc="String announced by screenreader when users selected an emoji in the pop-up.">
     <ph name="EMOJI_NAME">$1<ex>Party popper</ex></ph>. <ph name="EMOJI_INDEX">$2<ex>5</ex></ph> of <ph name="EMOJI_COUNT">$3<ex>5</ex></ph>.
   </message>
+  <message name="IDS_SUGGESTION_DIACRITICS_OPEN" desc="String announced by screenreader when diacritics suggestion pops up.">
+    Accent marks menu open. Press left or right to navigate and enter to insert.
+  </message>
+  <message name="IDS_SUGGESTION_DIACRITICS_INSERTED" desc="String announced by screenreader when diacritics are inserted.">
+    Accent mark inserted.
+  </message>
+  <message name="IDS_SUGGESTION_DIACRITICS_DISMISSED" desc="String announced by screenreader when diacritics are dismissed.">
+    Accent marks menu dismissed.
+  </message>
   <message name="IDS_SUGGESTION_DISMISSED" desc="String announced by screenreader when suggestion pop-up disappears.">
     Suggestion dismissed
   </message>
@@ -6214,8 +6221,11 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
   <message name="IDS_THEME_SELECTION_TITLE" desc="Title of the theme selection screen.">
     Personalize your display theme
   </message>
-  <message name="IDS_THEME_SELECTION_DESCRIPTION" desc="Description of the theme selection screen.">
+  <message name="IDS_THEME_SELECTION_DESCRIPTION_CLAMSHELL" desc="Description of the theme selection screen for clamshell devices.">
     Choose the theme that fits your needs. To change your theme, wallpaper, screen saver, and more, just right-click on the desktop.
+  </message>
+  <message name="IDS_THEME_SELECTION_DESCRIPTION_TABLET" desc="Description of the theme selection screen for tablets.">
+    Choose the theme that fits your needs. To change your theme, wallpaper, screen saver, and more, just touch &amp; hold on the desktop.
   </message>
   <message name="IDS_THEME_LIGHT_LABEL" desc="Name of the light theme button">
     Light theme

@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/html/html_frame_set_element.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_button.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
@@ -15,6 +16,7 @@
 #include "third_party/blink/renderer/core/layout/layout_fieldset.h"
 #include "third_party/blink/renderer/core/layout/layout_file_upload_control.h"
 #include "third_party/blink/renderer/core/layout/layout_flexible_box.h"
+#include "third_party/blink/renderer/core/layout/layout_frame_set.h"
 #include "third_party/blink/renderer/core/layout/layout_grid.h"
 #include "third_party/blink/renderer/core/layout/layout_inside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
@@ -44,6 +46,7 @@
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_button.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_fieldset.h"
+#include "third_party/blink/renderer/core/layout/ng/layout_ng_frame_set.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_progress.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_ruby_as_block.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_ruby_text.h"
@@ -187,6 +190,17 @@ LayoutObject* LayoutObjectFactory::CreateListMarker(Node& node,
                                                     LegacyLayout legacy) {
   const Node* parent = node.parentNode();
   const ComputedStyle* parent_style = parent->GetComputedStyle();
+
+  if (legacy == LegacyLayout::kForce) {
+    // A table inside an inline element with specified columns may end up
+    // marking a list-item ancestor with a size container-type for forced legacy
+    // without re-attaching it during interleaved style recalc. Enforce
+    // legacy/ng consistency between list-item and marker.
+    DCHECK(!RuntimeEnabledFeatures::LayoutNGPrintingEnabled());
+    DCHECK(parent->GetLayoutObject());
+    if (parent->GetLayoutObject()->IsLayoutNGObject())
+      legacy = LegacyLayout::kAuto;
+  }
   bool is_inside =
       parent_style->ListStylePosition() == EListStylePosition::kInside ||
       (IsA<HTMLLIElement>(parent) && !parent_style->IsInsideListElement());
@@ -283,6 +297,15 @@ LayoutBlockFlow* LayoutObjectFactory::CreateFileUploadControl(
     LegacyLayout legacy) {
   return CreateObject<LayoutBlockFlow, LayoutNGBlockFlow,
                       LayoutFileUploadControl>(node, legacy);
+}
+
+LayoutBox* LayoutObjectFactory::CreateFrameSet(HTMLFrameSetElement& element,
+                                               const ComputedStyle& style,
+                                               LegacyLayout legacy) {
+  const bool disable_ng_for_type =
+      !RuntimeEnabledFeatures::LayoutNGFrameSetEnabled();
+  return CreateObject<LayoutBox, LayoutNGFrameSet, LayoutFrameSet>(
+      element, legacy, disable_ng_for_type);
 }
 
 LayoutObject* LayoutObjectFactory::CreateSliderTrack(Node& node,
@@ -424,9 +447,10 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableWithParent(
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(),
           parent.IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);
-  LegacyLayout legacy = parent.ForceLegacyLayout() || child_forces_legacy
-                            ? LegacyLayout::kForce
-                            : LegacyLayout::kAuto;
+  LegacyLayout legacy =
+      parent.ForceLegacyLayoutForChildren() || child_forces_legacy
+          ? LegacyLayout::kForce
+          : LegacyLayout::kAuto;
 
   LayoutBlock* new_table =
       CreateTable(parent.GetDocument(), *new_style, legacy);
@@ -440,8 +464,9 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableSectionWithParent(
   scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRowGroup);
-  LegacyLayout legacy =
-      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+  LegacyLayout legacy = parent.ForceLegacyLayoutForChildren()
+                            ? LegacyLayout::kForce
+                            : LegacyLayout::kAuto;
 
   LayoutBox* new_section =
       CreateTableSection(parent.GetDocument(), *new_style, legacy);
@@ -455,8 +480,9 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableRowWithParent(
   scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRow);
-  LegacyLayout legacy =
-      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+  LegacyLayout legacy = parent.ForceLegacyLayoutForChildren()
+                            ? LegacyLayout::kForce
+                            : LegacyLayout::kAuto;
   LayoutBox* new_row = CreateTableRow(parent.GetDocument(), *new_style, legacy);
   new_row->SetDocumentForAnonymous(&parent.GetDocument());
   new_row->SetStyle(std::move(new_style));
@@ -468,8 +494,9 @@ LayoutBlockFlow* LayoutObjectFactory::CreateAnonymousTableCellWithParent(
   scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableCell);
-  LegacyLayout legacy =
-      parent.ForceLegacyLayout() ? LegacyLayout::kForce : LegacyLayout::kAuto;
+  LegacyLayout legacy = parent.ForceLegacyLayoutForChildren()
+                            ? LegacyLayout::kForce
+                            : LegacyLayout::kAuto;
   LayoutBlockFlow* new_cell =
       CreateTableCell(parent.GetDocument(), *new_style, legacy);
   new_cell->SetDocumentForAnonymous(&parent.GetDocument());

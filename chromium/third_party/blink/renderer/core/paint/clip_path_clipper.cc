@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/style/clip_path_operation.h"
 #include "third_party/blink/renderer/core/style/reference_clip_path_operation.h"
 #include "third_party/blink/renderer/core/style/shape_clip_path_operation.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
@@ -106,8 +107,9 @@ static void PaintWorkletBasedClip(GraphicsContext& context,
   gfx::RectF src_rect = bounding_box.value();
   // Dark mode should always be disabled for clip mask.
   context.DrawImage(paint_worklet_image.get(), Image::kSyncDecode,
-                    ImageAutoDarkMode::Disabled(), src_rect, &src_rect,
-                    SkBlendMode::kSrcOver, kRespectImageOrientation);
+                    ImageAutoDarkMode::Disabled(), ImagePaintTimingInfo(),
+                    src_rect, &src_rect, SkBlendMode::kSrcOver,
+                    kRespectImageOrientation);
 }
 
 gfx::RectF ClipPathClipper::LocalReferenceBox(const LayoutObject& object) {
@@ -215,11 +217,11 @@ void ClipPathClipper::PaintClipPathAsMaskImage(
     const DisplayItemClient& display_item_client) {
   const auto* properties = layout_object.FirstFragment().PaintProperties();
   DCHECK(properties);
-  DCHECK(properties->MaskClip());
   DCHECK(properties->ClipPathMask());
+  DCHECK(properties->ClipPathMask()->OutputClip());
   PropertyTreeStateOrAlias property_tree_state(
-      properties->MaskClip()->LocalTransformSpace(), *properties->MaskClip(),
-      *properties->ClipPathMask());
+      properties->ClipPathMask()->LocalTransformSpace(),
+      *properties->ClipPathMask()->OutputClip(), *properties->ClipPathMask());
   ScopedPaintChunkProperties scoped_properties(
       context.GetPaintController(), property_tree_state, display_item_client,
       DisplayItem::kSVGClip);

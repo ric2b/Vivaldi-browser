@@ -24,13 +24,13 @@
 namespace blink {
 
 namespace {
-// TODO(crbug.com/1223353): Remove usage of Thread::Current()->GetTaskRunner()
-// when canvas capture no longer requires a task runner when trying to capture
-// a detached canvas.
+// TODO(crbug.com/1223353): Remove usage of
+// Thread::Current()->GetDeprecatedTaskRunner() when canvas capture no longer
+// requires a task runner when trying to capture a detached canvas.
 scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunnerFromFrame(
     LocalFrame* frame) {
   return frame ? frame->GetTaskRunner(TaskType::kInternalMediaRealTime)
-               : Thread::Current()->GetTaskRunner();
+               : Thread::Current()->GetDeprecatedTaskRunner();
 }
 }  // namespace
 
@@ -67,6 +67,19 @@ MediaStreamVideoCapturerSource::MediaStreamVideoCapturerSource(
 
 MediaStreamVideoCapturerSource::~MediaStreamVideoCapturerSource() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+}
+
+void MediaStreamVideoCapturerSource::KeepDeviceAliveForTransfer(
+    base::UnguessableToken session_id,
+    base::UnguessableToken transfer_id,
+    KeepDeviceAliveForTransferCallback keep_alive_cb) {
+  if (!frame_) {
+    std::move(keep_alive_cb).Run(/*device_found=*/false);
+    return;
+  }
+
+  GetMediaStreamDispatcherHost()->KeepDeviceAliveForTransfer(
+      session_id, transfer_id, std::move(keep_alive_cb));
 }
 
 void MediaStreamVideoCapturerSource::SetDeviceCapturerFactoryCallbackForTesting(
@@ -115,12 +128,16 @@ void MediaStreamVideoCapturerSource::OnCapturingLinkSecured(bool is_secure) {
 
 void MediaStreamVideoCapturerSource::StartSourceImpl(
     VideoCaptureDeliverFrameCB frame_callback,
-    EncodedVideoFrameCB encoded_frame_callback) {
+    EncodedVideoFrameCB encoded_frame_callback,
+    VideoCaptureCropVersionCB crop_version_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   state_ = kStarting;
   frame_callback_ = std::move(frame_callback);
+  crop_version_callback_ = std::move(crop_version_callback);
+
   source_->StartCapture(
-      capture_params_, frame_callback_,
+      capture_params_, frame_callback_, crop_version_callback_,
       WTF::BindRepeating(&MediaStreamVideoCapturerSource::OnRunStateChanged,
                          WTF::Unretained(this), capture_params_));
 }
@@ -157,7 +174,7 @@ void MediaStreamVideoCapturerSource::RestartSourceImpl(
   new_capture_params.requested_format = new_format;
   state_ = kRestarting;
   source_->StartCapture(
-      new_capture_params, frame_callback_,
+      new_capture_params, frame_callback_, crop_version_callback_,
       WTF::BindRepeating(&MediaStreamVideoCapturerSource::OnRunStateChanged,
                          WTF::Unretained(this), new_capture_params));
 }
@@ -199,7 +216,7 @@ void MediaStreamVideoCapturerSource::ChangeSourceImpl(
   SetDevice(new_device);
   source_ = device_capturer_factory_callback_.Run(new_device.session_id());
   source_->StartCapture(
-      capture_params_, frame_callback_,
+      capture_params_, frame_callback_, crop_version_callback_,
       WTF::BindRepeating(&MediaStreamVideoCapturerSource::OnRunStateChanged,
                          WTF::Unretained(this), capture_params_));
 }
@@ -227,6 +244,10 @@ absl::optional<uint32_t> MediaStreamVideoCapturerSource::GetNextCropVersion() {
   return ++current_crop_version_;
 }
 #endif
+
+uint32_t MediaStreamVideoCapturerSource::GetCropVersion() const {
+  return current_crop_version_;
+}
 
 base::WeakPtr<MediaStreamVideoSource>
 MediaStreamVideoCapturerSource::GetWeakPtr() const {

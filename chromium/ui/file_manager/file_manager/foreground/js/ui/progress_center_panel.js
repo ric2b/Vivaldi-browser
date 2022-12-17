@@ -176,7 +176,9 @@ export class ProgressCenterPanel {
               strf('FILE_ITEMS_COPIED', source);
         }
         if (item.type === ProgressItemType.EXTRACT) {
-          return strf('FILE_ITEMS_EXTRACTED', count);
+          return item.state == ProgressItemState.PROGRESSING ?
+              strf('EXTRACT_ITEMS_REMAINING', count) :
+              strf('FILE_ITEMS_EXTRACTED', count);
         }
         if (item.type === ProgressItemType.MOVE) {
           return hasDestination ?
@@ -308,10 +310,11 @@ export class ProgressCenterPanel {
       panelItem.signalCallback = (signal) => {
         if (signal === 'cancel' && item.cancelCallback) {
           item.cancelCallback();
-        }
-        if (signal === 'dismiss') {
+        } else if (signal === 'dismiss') {
           this.feedbackHost_.removePanelItem(panelItem);
           this.dismissErrorItemCallback(item.id);
+        } else if (signal === 'learn-more') {
+          window.open(item.learnMoreLink, '_blank');
         }
       };
       panelItem.progress = item.progressRateInPercent.toString();
@@ -348,6 +351,9 @@ export class ProgressCenterPanel {
           this.feedbackHost_.removePanelItem(panelItem);
           break;
         case ProgressItemState.ERROR:
+          if (item.learnMoreLink) {
+            panelItem.dataset.learnMoreLink = item.learnMoreLink;
+          }
           panelItem.panelType = panelItem.panelTypeError;
           panelItem.primaryText = item.message;
           panelItem.secondaryText = '';

@@ -6,8 +6,8 @@
  * @fileoverview An element that lists phones usable as security keys,
     optionally with a drop-down menu for editing or deleting them.
  */
-import '../settings_shared_css.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import '../settings_shared.css.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 
 import {AnchorAlignment} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
@@ -33,7 +33,7 @@ class SecurityKeysPhonesListElement extends PolymerElement {
   }
 
   immutable: boolean;
-  phones: Array<SecurityKeysPhone>;
+  phones: SecurityKeysPhone[];
   // Contains the public key of the phone that the action menu was opened for.
   private publicKeyForActionMenu_: string|null;
 

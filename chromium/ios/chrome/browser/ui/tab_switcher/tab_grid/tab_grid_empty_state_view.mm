@@ -11,6 +11,14 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -22,6 +30,19 @@ const CGFloat kImageWidth = 150.0;
 
 // Returns the image to display for the given grid `page`.
 UIImage* ImageForPage(TabGridPage page) {
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    switch (page) {
+      case TabGridPageIncognitoTabs:
+        return [UIImage imageNamed:@"tab_grid_incognito_tabs_empty"];
+      case TabGridPageRegularTabs:
+        return [UIImage imageNamed:@"tab_grid_regular_tabs_empty"];
+      case TabGridPageRemoteTabs:
+        return [UIImage imageNamed:@"tab_grid_remote_tabs_empty"];
+      case TabGridPageClosedTabs:
+        return [UIImage imageNamed:@"tab_grid_closed_tabs_empty"];
+    }
+  }
   switch (page) {
     case TabGridPageIncognitoTabs:
       return [UIImage imageNamed:@"tab_grid_incognito_tabs_empty"];
@@ -30,6 +51,12 @@ UIImage* ImageForPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // No-op. Empty page.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
   return nil;
 }
@@ -40,6 +67,25 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
     return l10n_util::GetNSString(IDS_IOS_TAB_GRID_SEARCH_RESULTS_EMPTY_TITLE);
   }
 
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    switch (page) {
+      case TabGridPageIncognitoTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE);
+      case TabGridPageRegularTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_GRID_REGULAR_TABS_EMPTY_TITLE);
+      case TabGridPageRemoteTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_TITLE);
+      case TabGridPageClosedTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_TITLE);
+    }
+  }
+  // End Vivaldi
+
   switch (page) {
     case TabGridPageIncognitoTabs:
       return l10n_util::GetNSString(
@@ -49,6 +95,13 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
     case TabGridPageRemoteTabs:
       // No-op. Empty page.
       break;
+
+    // Vivaldi
+    // The enum case has to be covered within switch statement
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
 
   return nil;
@@ -60,6 +113,25 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     return nil;
   }
 
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    switch (page) {
+      case TabGridPageIncognitoTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_MESSAGE);
+      case TabGridPageRegularTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_GRID_REGULAR_TABS_EMPTY_MESSAGE);
+      case TabGridPageRemoteTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_MESSAGE);
+      case TabGridPageClosedTabs:
+        return l10n_util::GetNSString(
+            IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_MESSAGE);
+    }
+  }
+  // End Vivaldi
+
   switch (page) {
     case TabGridPageIncognitoTabs:
       return l10n_util::GetNSString(
@@ -70,6 +142,12 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     case TabGridPageRemoteTabs:
       // No-op. Empty page.
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      break;
+    // End Vivaldi
+
   }
 
   return nil;
@@ -184,6 +262,15 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
       [[UIImageView alloc] initWithImage:ImageForPage(_activePage)];
   _imageView = imageView;
   imageView.translatesAutoresizingMaskIntoConstraints = NO;
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    topLabel.textColor = [UIColor colorNamed:vTabGridEmptyStateTitleTextColor];
+    bottomLabel.textColor =
+        [UIColor colorNamed:vTabGridEmptyStateBodyTextColor];
+    imageView.contentMode = UIViewContentModeScaleAspectFit;
+  }
+  // End Vivaldi
 
   [container addSubview:imageView];
 

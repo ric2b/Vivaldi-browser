@@ -29,6 +29,8 @@ class WaylandDisplayObserver : public base::CheckedObserver {
   // to be followed by "done" event, |false| otherwise.
   virtual bool SendDisplayMetrics(const display::Display& display,
                                   uint32_t changed_metrics) = 0;
+  // Called when wl_output is destroyed.
+  virtual void OnOutputDestroyed() = 0;
 
  protected:
   ~WaylandDisplayObserver() override {}
@@ -46,6 +48,7 @@ class WaylandDisplayHandler : public display::DisplayObserver,
   ~WaylandDisplayHandler() override;
   void Initialize();
   void AddObserver(WaylandDisplayObserver* observer);
+  void RemoveObserver(WaylandDisplayObserver* observer);
   int64_t id() const;
 
   // Overridden from display::DisplayObserver:
@@ -58,12 +61,7 @@ class WaylandDisplayHandler : public display::DisplayObserver,
   // Unset the xdg output object.
   void UnsetXdgOutputResource();
 
-  // TODO(b/223538419): Move this functionality into an observer
-  // Called when a color_management_output object is created through
-  // get_color_management_output() request by the wayland client.
-  void OnGetColorManagementOutput(wl_resource* color_manager_output_resource);
-  // Unset the color management object
-  void UnsetColorManagementOutputResource();
+  size_t CountObserversForTesting() const;
 
  protected:
   wl_resource* output_resource() const { return output_resource_; }
@@ -71,11 +69,13 @@ class WaylandDisplayHandler : public display::DisplayObserver,
   // Overridable for testing.
   virtual void XdgOutputSendLogicalPosition(const gfx::Point& position);
   virtual void XdgOutputSendLogicalSize(const gfx::Size& size);
+  virtual void XdgOutputSendDescription(const std::string& desc);
 
  private:
   // Overridden from WaylandDisplayObserver:
   bool SendDisplayMetrics(const display::Display& display,
                           uint32_t changed_metrics) override;
+  void OnOutputDestroyed() override;
 
   // Output.
   WaylandDisplayOutput* output_;
@@ -85,9 +85,6 @@ class WaylandDisplayHandler : public display::DisplayObserver,
 
   // Resource associated with a zxdg_output_v1 object.
   wl_resource* xdg_output_resource_ = nullptr;
-
-  // Resource associated with a zcr_color_management_output_v1 object.
-  wl_resource* color_management_output_resource_ = nullptr;
 
   base::ObserverList<WaylandDisplayObserver> observers_;
 

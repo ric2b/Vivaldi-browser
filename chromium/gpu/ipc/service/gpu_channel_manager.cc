@@ -459,12 +459,8 @@ GpuChannel* GpuChannelManager::EstablishChannel(
     const base::UnguessableToken& channel_token,
     int client_id,
     uint64_t client_tracing_id,
-    bool is_gpu_host,
-    bool cache_shaders_on_disk) {
+    bool is_gpu_host) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-  if (gr_shader_cache_ && cache_shaders_on_disk)
-    gr_shader_cache_->CacheClientIdOnDisk(client_id);
 
   std::unique_ptr<GpuChannel> gpu_channel = GpuChannel::Create(
       this, channel_token, scheduler_, sync_point_manager_, share_group_,
@@ -503,6 +499,41 @@ void GpuChannelManager::SetChannelClientPid(int client_id,
   }
 }
 
+void GpuChannelManager::SetChannelDiskCacheHandle(
+    int client_id,
+    const gpu::GpuDiskCacheHandle& handle) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  GpuChannel* gpu_channel = LookupChannel(client_id);
+  if (gpu_channel) {
+    gpu_channel->RegisterCacheHandle(handle);
+  }
+
+  // Record the client id for the shader specific cache.
+  if (gr_shader_cache_ &&
+      gpu::GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
+    gr_shader_cache_->CacheClientIdOnDisk(client_id);
+  }
+}
+
+void GpuChannelManager::OnDiskCacheHandleDestoyed(
+    const gpu::GpuDiskCacheHandle& handle) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  switch (gpu::GetHandleType(handle)) {
+    case gpu::GpuDiskCacheType::kGlShaders: {
+      // Currently there isn't any handling necessary for when the disk cache is
+      // destroyed for the shader cache because it consists of just 2 massive
+      // caches that are long-living and shared across all channels (i.e.
+      // unfortunately there is currently no access partitioning for it w.r.t
+      // different handles).
+      break;
+    }
+    case gpu::GpuDiskCacheType::kDawnWebGPU: {
+      // TODO(dawn:549) Implement cache destruction for Dawn.
+      break;
+    }
+  }
+}
+
 void GpuChannelManager::InternalDestroyGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
     int client_id) {
@@ -525,19 +556,31 @@ void GpuChannelManager::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
   }
 }
 
-void GpuChannelManager::PopulateShaderCache(int32_t client_id,
-                                            const std::string& key,
-                                            const std::string& program) {
+void GpuChannelManager::PopulateCache(const gpu::GpuDiskCacheHandle& handle,
+                                      const std::string& key,
+                                      const std::string& data) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (client_id == kGrShaderCacheClientId) {
-    if (gr_shader_cache_)
-      gr_shader_cache_->PopulateCache(key, program);
-    return;
-  }
+  switch (gpu::GetHandleType(handle)) {
+    case gpu::GpuDiskCacheType::kGlShaders: {
+      auto gl_shader_handle =
+          absl::get<gpu::GpuDiskCacheGlShaderHandle>(handle);
+      if (gl_shader_handle == kGrShaderGpuDiskCacheHandle) {
+        if (gr_shader_cache_)
+          gr_shader_cache_->PopulateCache(key, data);
+        return;
+      }
 
-  if (program_cache())
-    program_cache()->LoadProgram(key, program);
+      if (program_cache())
+        program_cache()->LoadProgram(key, data);
+      break;
+    }
+    case gpu::GpuDiskCacheType::kDawnWebGPU: {
+      // TODO(dawn:549) Implement populating cache for Dawn.
+      NOTREACHED();
+      break;
+    }
+  }
 }
 
 void GpuChannelManager::LoseAllContexts() {
@@ -823,6 +866,15 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
 
     context =
         gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
+
+    if (!context && !features::UseGles2ForOopR()) {
+      LOG(ERROR) << "Failed to create GLES3 context, fallback to GLES2.";
+      attribs.client_major_es_version = 2;
+      attribs.client_minor_es_version = 0;
+      context =
+          gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
+    }
+
     if (!context) {
       // TODO(piman): This might not be fatal, we could recurse into
       // CreateGLContext to get more info, tho it should be exceedingly
@@ -951,7 +1003,7 @@ void GpuChannelManager::ScheduleGrContextCleanup() {
 
 void GpuChannelManager::StoreShader(const std::string& key,
                                     const std::string& shader) {
-  delegate_->StoreShaderToDisk(kGrShaderCacheClientId, key, shader);
+  delegate_->StoreBlobToDisk(kGrShaderGpuDiskCacheHandle, key, shader);
 }
 
 void GpuChannelManager::SetImageDecodeAcceleratorWorkerForTesting(

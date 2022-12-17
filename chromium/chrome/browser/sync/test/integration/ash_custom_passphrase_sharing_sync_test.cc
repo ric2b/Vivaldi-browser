@@ -18,6 +18,7 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/crosapi/mojom/account_manager.mojom.h"
 #include "chromeos/crosapi/mojom/sync.mojom-test-utils.h"
 #include "chromeos/crosapi/mojom/sync.mojom.h"
@@ -30,7 +31,7 @@
 #include "components/sync/nigori/cryptographer_impl.h"
 #include "components/sync/nigori/nigori_test_utils.h"
 #include "components/sync/protocol/os_preference_specifics.pb.h"
-#include "components/sync/test/fake_server/fake_server_nigori_helper.h"
+#include "components/sync/test/fake_server_nigori_helper.h"
 #include "content/public/test/browser_test.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
@@ -161,7 +162,8 @@ class AshCustomPassphraseSharingSyncTest : public SyncTest {
     // TODO(crbug.com/1102768): eventually this should be the case for all Ash
     // tests.
     DCHECK_EQ(index, 0);
-    return base::FilePath(chrome::kTestUserProfileDir);
+    return base::FilePath(
+        ash::BrowserContextHelper::kTestUserBrowserContextDirName);
   }
 
   void SetupCrosapi() {
@@ -252,19 +254,15 @@ IN_PROC_BROWSER_TEST_F(AshCustomPassphraseSharingSyncTest,
   // Data isn't decryptable yet, client should enter passphrase required state,
   // notify observers (Lacros) via crosapi and have default preference value.
   EXPECT_TRUE(passphrase_required_notified_to_crosapi_observer_checker.Wait());
-  ASSERT_TRUE(
-      PassphraseRequiredStateChecker(GetSyncService(0), /*desired_state=*/true)
-          .Wait());
-  ASSERT_NE(*preferences_helper::GetPrefs(0)->Get(
+  ASSERT_TRUE(PassphraseRequiredChecker(GetSyncService(0)).Wait());
+  ASSERT_NE(preferences_helper::GetPrefs(0)->GetValue(
                 prefs::kResolveTimezoneByGeolocationMigratedToMethod),
             kNewPrefValue);
 
   // Mimic passphrase being provided by Lacros, verify that passphrase is no
   // longer required and the data is decryptable.
   MimicDecryptionKeyProvidedByLacros(kKeyParams);
-  EXPECT_TRUE(
-      PassphraseRequiredStateChecker(GetSyncService(0), /*desired_state=*/false)
-          .Wait());
+  EXPECT_TRUE(PassphraseAcceptedChecker(GetSyncService(0)).Wait());
   EXPECT_TRUE(BooleanPrefValueChecker(
                   preferences_helper::GetPrefs(0),
                   prefs::kResolveTimezoneByGeolocationMigratedToMethod,
@@ -290,16 +288,12 @@ IN_PROC_BROWSER_TEST_F(AshCustomPassphraseSharingSyncTest,
       syncer::BuildCustomPassphraseNigoriSpecifics(kKeyParams);
   fake_server::SetNigoriInFakeServer(kCustomPassphraseSpecifics,
                                      GetFakeServer());
-  ASSERT_TRUE(
-      PassphraseRequiredStateChecker(GetSyncService(0), /*desired_state=*/true)
-          .Wait());
+  ASSERT_TRUE(PassphraseRequiredChecker(GetSyncService(0)).Wait());
 
   // Mimic that user entered the passphrase.
   ASSERT_TRUE(GetSyncService(0)->GetUserSettings()->SetDecryptionPassphrase(
       kKeyParams.password));
-  ASSERT_TRUE(
-      PassphraseRequiredStateChecker(GetSyncService(0), /*desired_state=*/false)
-          .Wait());
+  ASSERT_TRUE(PassphraseAcceptedChecker(GetSyncService(0)).Wait());
 
   // Lacros should be eventually notified that passphrase is available and be
   // able to retrieve it.

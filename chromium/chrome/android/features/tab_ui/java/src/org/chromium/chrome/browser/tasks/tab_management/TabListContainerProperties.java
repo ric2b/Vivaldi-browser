@@ -40,6 +40,17 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableIntPropertyKey BOTTOM_PADDING =
             new PropertyModel.WritableIntPropertyKey();
 
+    /**
+     * A property which controls whether to use the default animator specified in the underlying
+     * {@link TabListRecyclerView} or use a null item animator.
+     *
+     * TODO(crbug.com/1227656): This property is used only by the Incognito re-auth client and once
+     * the re-auth integration with tab-switcher design is further improved then remove this if no
+     * other clients use this property.
+     */
+    public static final PropertyModel.WritableBooleanPropertyKey TAB_LIST_ITEM_ANIMATOR_ENABLED =
+            new PropertyModel.WritableBooleanPropertyKey();
+
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_NORMAL =
             new PropertyModel.WritableObjectPropertyKey<>(true);
@@ -48,8 +59,9 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_PRIVATE =
             new PropertyModel.WritableObjectPropertyKey<>(true);
 
-    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO,
-            VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX, ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN,
-            BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET, BOTTOM_PADDING,
+    public static final PropertyKey[] ALL_KEYS =
+            new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO, VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX,
+                    ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT,
+                    SHADOW_TOP_OFFSET, BOTTOM_PADDING, TAB_LIST_ITEM_ANIMATOR_ENABLED,
             SCROLL_INDEX_NORMAL, SCROLL_INDEX_PRIVATE}; // Vivaldi
 }

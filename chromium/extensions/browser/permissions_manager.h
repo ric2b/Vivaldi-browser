@@ -8,6 +8,7 @@
 #include <set>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/common/extension_id.h"
@@ -64,12 +65,12 @@ class PermissionsManager : public KeyedService {
     // The extension has access to all sites (or a pattern sufficiently broad
     // as to be functionally similar, such as https://*.com/*). Note that since
     // this includes "broad" patterns, this may be true even if
-    // |has_site_access| is false.
+    // `has_site_access` is false.
     bool has_all_sites_access = false;
     // The extension wants access to all sites (or a pattern sufficiently broad
     // as to be functionally similar, such as https://*.com/*). Note that since
     // this includes "broad" patterns, this may be true even if
-    // |withheld_site_access| is false.
+    // `withheld_site_access` is false.
     bool withheld_all_sites_access = false;
   };
 
@@ -84,10 +85,22 @@ class PermissionsManager : public KeyedService {
     kCustomizeByExtension,
   };
 
+  enum class UpdateReason {
+    // Permissions were added to the extension.
+    kAdded,
+    // Permissions were removed from the extension.
+    kRemoved,
+    // Policy that affects permissions was updated.
+    kPolicy,
+  };
+
   class Observer {
    public:
-    virtual void UserPermissionsSettingsChanged(
+    virtual void OnUserPermissionsSettingsChanged(
         const UserPermissionsSettings& settings) {}
+    virtual void OnExtensionPermissionsUpdated(const Extension& extension,
+                                               const PermissionSet& permissions,
+                                               UpdateReason reason) {}
   };
 
   explicit PermissionsManager(content::BrowserContext* browser_context);
@@ -103,6 +116,11 @@ class PermissionsManager : public KeyedService {
 
   // Registers the user preference that stores user permissions.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  //  Updates the user site settings for the given `origin` to be
+  //  `site_settings`.
+  void UpdateUserSiteSetting(const url::Origin& origin,
+                             PermissionsManager::UserSiteSetting site_setting);
 
   // Adds `origin` to the list of sites the user has blocked all
   // extensions from running on. If `origin` is in permitted_sites, it will
@@ -144,8 +162,28 @@ class PermissionsManager : public KeyedService {
   // Returns null if there are no stored runtime-granted permissions.
   // TODO(https://crbug.com/931881): ExtensionPrefs should return
   // properly-bounded permissions.
-  std::unique_ptr<const PermissionSet> GetRuntimePermissionsFromPrefs(
+  std::unique_ptr<PermissionSet> GetRuntimePermissionsFromPrefs(
       const Extension& extension) const;
+
+  // Returns the set of permissions that the `extension` wants to have active at
+  // this time. This does *not* take into account user-granted or runtime-
+  // withheld permissions.
+  std::unique_ptr<PermissionSet> GetBoundedExtensionDesiredPermissions(
+      const Extension& extension) const;
+
+  // Returns the set of permissions that should be granted to the given
+  // `extension` according to the runtime-granted permissions and current
+  // preferences, omitting host permissions if the extension supports it and
+  // the user has withheld permissions.
+  std::unique_ptr<PermissionSet> GetEffectivePermissionsToGrant(
+      const Extension& extension,
+      const PermissionSet& desired_permissions) const;
+
+  // Notifies `observers_` that the permissions have been updated for an
+  // extension.
+  void NotifyExtensionPermissionsUpdated(const Extension& extension,
+                                         const PermissionSet& permissions,
+                                         UpdateReason reason);
 
   // Adds or removes observers.
   void AddObserver(Observer* observer);
@@ -153,7 +191,7 @@ class PermissionsManager : public KeyedService {
 
  private:
   // Called whenever `user_permissions_` have changed.
-  void OnUserPermissionsSettingsChanged() const;
+  void OnUserPermissionsSettingsChanged();
 
   // Removes `origin` from the list of sites the user has allowed all
   // extensions to run on and saves the change to `extension_prefs_`. Returns if
@@ -165,6 +203,17 @@ class PermissionsManager : public KeyedService {
   // Returns if the site has been removed.
   bool RemoveRestrictedSiteAndUpdatePrefs(const url::Origin& origin);
 
+  // Updates the given `extension` with the new `user_permitted_set` of sites
+  // all extensions are allowed to run on. Note that this only updates the
+  // permissions in the browser; updates must then be sent separately to the
+  // renderer and network service.
+  void UpdatePermissionsWithUserSettings(
+      const Extension& extension,
+      const PermissionSet& user_permitted_set);
+
+  // Notifies observers of a permissions change.
+  void NotifyObserversOfChange();
+
   base::ObserverList<Observer>::Unchecked observers_;
 
   // The associated browser context.
@@ -172,6 +221,8 @@ class PermissionsManager : public KeyedService {
 
   const raw_ptr<ExtensionPrefs> extension_prefs_;
   UserPermissionsSettings user_permissions_;
+
+  base::WeakPtrFactory<PermissionsManager> weak_factory_{this};
 };
 
 }  // namespace extensions

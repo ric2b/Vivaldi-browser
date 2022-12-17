@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
-import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.m.js';
-import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
-import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
+import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import './support_tool_shared.css.js';
 
@@ -14,6 +14,7 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {BrowserProxy, BrowserProxyImpl, PIIDataItem} from './browser_proxy.js';
 import {getTemplate} from './pii_selection.html.js';
+import {SupportToolPageMixin} from './support_tool_page_mixin.js';
 
 // Names of the radio buttons which allow the user to choose to keep or remove
 // their PII data.
@@ -23,7 +24,9 @@ enum PiiRadioButtons {
   INCLUDE_SOME = 'include-some',
 }
 
-export class PIISelectionElement extends PolymerElement {
+const PIISelectionElementBase = SupportToolPageMixin(PolymerElement);
+
+export class PIISelectionElement extends PIISelectionElementBase {
   static get is() {
     return 'pii-selection';
   }
@@ -36,7 +39,7 @@ export class PIISelectionElement extends PolymerElement {
     return {
       selectAll_: {
         type: Boolean,
-        value: false,
+        value: true,
       },
       detectedPIIItems_: {
         type: Array,
@@ -49,12 +52,12 @@ export class PIISelectionElement extends PolymerElement {
       },
       selectedRadioButton_: {
         type: String,
-        value: PiiRadioButtons.INCLUDE_NONE,
+        value: PiiRadioButtons.INCLUDE_ALL,
       },
       showPIISelection_: {
         type: Boolean,
         value: false,
-      }
+      },
     };
   }
 
@@ -99,9 +102,17 @@ export class PIISelectionElement extends PolymerElement {
       this.setSelectAll_(true);
     } else if (this.selectedRadioButton_ === PiiRadioButtons.INCLUDE_NONE) {
       this.setSelectAll_(false);
-    } else {
+    } else if (this.selectedRadioButton_ === PiiRadioButtons.INCLUDE_SOME) {
       this.showPIISelection_ = true;
     }
+  }
+
+  private showDisclaimer_(selectedButton: PiiRadioButtons): boolean {
+    return (selectedButton === PiiRadioButtons.INCLUDE_NONE);
+  }
+
+  private getPiiItemAriaLabel_(description: string, count: number): string {
+    return 'More info for ' + description + ' ' + count;
   }
 }
 

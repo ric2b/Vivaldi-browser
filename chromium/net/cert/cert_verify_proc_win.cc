@@ -285,7 +285,7 @@ void GetCertChainInfo(PCCERT_CHAIN_CONTEXT chain_context,
               NULL, X509_ASN_ENCODING, CRYPT_VERIFY_CERT_SIGN_SUBJECT_CERT,
               const_cast<PCERT_CONTEXT>(cert),
               CRYPT_VERIFY_CERT_SIGN_ISSUER_CERT,
-              const_cast<PCERT_CONTEXT>(issuer), 0, NULL)) {
+              const_cast<PCERT_CONTEXT>(issuer), 0, nullptr)) {
         verify_result->cert_status |= CERT_STATUS_INVALID;
         break;
       }
@@ -453,7 +453,7 @@ CRLSetResult CheckRevocationWithCRLSet(CRLSet* crl_set,
   // Compute the subject's serial.
   const CRYPT_INTEGER_BLOB* serial_blob =
       &subject_cert->pCertInfo->SerialNumber;
-  std::unique_ptr<uint8_t[]> serial_bytes(new uint8_t[serial_blob->cbData]);
+  auto serial_bytes = std::make_unique<uint8_t[]>(serial_blob->cbData);
   // The bytes of the serial number are stored little-endian.
   // Note: While MSDN implies that bytes are stripped from this serial,
   // they are not - only CertCompareIntegerBlob actually removes bytes.
@@ -1055,9 +1055,9 @@ CertVerifyProcWin::ResultDebugData::Clone() {
   return std::make_unique<ResultDebugData>(*this);
 }
 
-CertVerifyProcWin::CertVerifyProcWin() {}
+CertVerifyProcWin::CertVerifyProcWin() = default;
 
-CertVerifyProcWin::~CertVerifyProcWin() {}
+CertVerifyProcWin::~CertVerifyProcWin() = default;
 
 bool CertVerifyProcWin::SupportsAdditionalTrustAnchors() const {
   return false;
@@ -1250,25 +1250,10 @@ int CertVerifyProcWin::VerifyInternal(
 
   if (crl_set_result == kCRLSetRevoked) {
     verify_result->cert_status |= CERT_STATUS_REVOKED;
-  } else if (crl_set_result == kCRLSetUnknown && !rev_checking_enabled &&
-             ev_policy_oid) {
-    // We don't have fresh information about this chain from the CRLSet and
-    // it's probably an EV certificate. Retry with online revocation checking.
-    rev_checking_enabled = true;
-    chain_flags &= ~CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY;
-    verify_result->cert_status |= CERT_STATUS_REV_CHECKING_ENABLED;
-
-    CertFreeCertificateChain(chain_context);
-    if (!CertGetCertificateChain(chain_engine.get(), cert_list.get(),
-                                 nullptr,  // current system time
-                                 cert_list->hCertStore, &chain_para,
-                                 chain_flags,
-                                 nullptr,  // reserved
-                                 &chain_context)) {
-      verify_result->cert_status |= CERT_STATUS_INVALID;
-      return MapSecurityError(GetLastError());
-    }
   }
+
+  // Even if the cert is possibly EV and crl_set_result == kCRLSetUnknown, we
+  // don't check with online revocation checking enabled. See crbug.com/1268848.
 
   if (chain_context->TrustStatus.dwErrorStatus &
       CERT_TRUST_IS_NOT_VALID_FOR_USAGE) {

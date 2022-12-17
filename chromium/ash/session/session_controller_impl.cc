@@ -24,7 +24,6 @@
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_util.h"
-#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -209,6 +208,11 @@ void SessionControllerImpl::LockScreen() {
     client_->RequestLockScreen();
 }
 
+void SessionControllerImpl::HideLockScreen() {
+  if (client_)
+    client_->RequestHideLockScreen();
+}
+
 void SessionControllerImpl::RequestSignOut() {
   if (client_)
     client_->RequestSignOut();
@@ -232,11 +236,6 @@ void SessionControllerImpl::CycleActiveUser(CycleUserDirection direction) {
 void SessionControllerImpl::ShowMultiProfileLogin() {
   if (client_)
     client_->ShowMultiProfileLogin();
-}
-
-void SessionControllerImpl::EmitAshInitialized() {
-  if (client_)
-    client_->EmitAshInitialized();
 }
 
 PrefService* SessionControllerImpl::GetSigninScreenPrefService() const {
@@ -369,10 +368,7 @@ void SessionControllerImpl::SetUserSessionOrder(
 }
 
 void SessionControllerImpl::PrepareForLock(PrepareForLockCallback callback) {
-  if (FullscreenController::ShouldExitFullscreenBeforeLock())
-    FullscreenController::MaybeExitFullscreen();
-
-  std::move(callback).Run();
+  fullscreen_controller_->MaybeExitFullscreenBeforeLock(std::move(callback));
 }
 
 void SessionControllerImpl::StartLock(StartLockCallback callback) {
@@ -472,8 +468,6 @@ void SessionControllerImpl::SetIsDemoSession() {
 void SessionControllerImpl::SetSessionState(SessionState state) {
   if (state_ == state)
     return;
-
-  base::AutoReset<bool> in_progress(&session_state_change_in_progress_, true);
 
   const bool was_user_session_blocked = IsUserSessionBlocked();
   const bool was_locked = state_ == SessionState::LOCKED;

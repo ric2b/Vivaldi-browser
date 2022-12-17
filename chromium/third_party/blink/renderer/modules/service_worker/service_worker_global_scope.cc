@@ -51,7 +51,6 @@
 #include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_fetch_response_callback.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_stream_handle.mojom-blink.h"
-#include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_error.h"
@@ -59,6 +58,7 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_v8_value_converter.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_based_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
@@ -277,10 +277,13 @@ void ServiceWorkerGlobalScope::FetchAndRunClassicScript(
     const KURL& script_url,
     std::unique_ptr<WorkerMainScriptLoadParameters>
         worker_main_script_load_params,
+    std::unique_ptr<PolicyContainer> policy_container,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(!IsContextPaused());
+  // TODO(crbug.com/1177199): SetPolicyContainer once we passed down policy
+  // container from ServiceWorkerVersion
 
   if (installed_scripts_manager_) {
     // This service worker is installed. Load and run the installed script.
@@ -335,12 +338,16 @@ void ServiceWorkerGlobalScope::FetchAndRunModuleScript(
     const KURL& module_url_record,
     std::unique_ptr<WorkerMainScriptLoadParameters>
         worker_main_script_load_params,
+    std::unique_ptr<PolicyContainer> policy_container,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     network::mojom::CredentialsMode credentials_mode,
     RejectCoepUnsafeNone reject_coep_unsafe_none) {
   DCHECK(IsContextThread());
   DCHECK(!reject_coep_unsafe_none);
+  // TODO(crbug.com/1177199): SetPolicyContainer once we passed down policy
+  // container from ServiceWorkerVersion
+
   if (worker_main_script_load_params) {
     SetWorkerMainScriptLoadingParametersForModules(
         std::move(worker_main_script_load_params));
@@ -376,6 +383,13 @@ void ServiceWorkerGlobalScope::DidEvaluateScript() {
   DCHECK(!did_evaluate_script_);
   did_evaluate_script_ = true;
 
+  int number_of_fetch_handlers =
+      NumberOfEventListeners(event_type_names::kFetch);
+  if (number_of_fetch_handlers > 1) {
+    UseCounter::Count(this, WebFeature::kMultipleFetchHandlersInServiceWorker);
+  }
+  base::UmaHistogramCounts1000("ServiceWorker.NumberOfRegisteredFetchHandlers",
+                               number_of_fetch_handlers);
   event_queue_->Start();
 }
 
@@ -735,7 +749,8 @@ void ServiceWorkerGlobalScope::DispatchExtendableEventWithRespondWith(
   wait_until_observer->WillDispatchEvent();
   respond_with_observer->WillDispatchEvent();
   DispatchEventResult dispatch_result = DispatchEvent(*event);
-  respond_with_observer->DidDispatchEvent(dispatch_result);
+  respond_with_observer->DidDispatchEvent(ScriptController()->GetScriptState(),
+                                          dispatch_result);
   // false is okay because waitUntil() for events with respondWith() doesn't
   // care about the promise rejection or an uncaught runtime script error.
   wait_until_observer->DidDispatchEvent(false /* event_dispatch_failed */);
@@ -784,7 +799,7 @@ bool ServiceWorkerGlobalScope::CrossOriginIsolatedCapability() const {
   return Agent::IsCrossOriginIsolated();
 }
 
-bool ServiceWorkerGlobalScope::DirectSocketCapability() const {
+bool ServiceWorkerGlobalScope::IsolatedApplicationCapability() const {
   // TODO(mkwst): Make a decision here, and spec it.
   return false;
 }
@@ -947,6 +962,7 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithNoResponse(
     int fetch_event_id,
     const KURL& request_url,
     bool range_request,
+    absl::optional<network::DataElementChunkedDataPipe> request_body,
     base::TimeTicks event_dispatch_time,
     base::TimeTicks respond_with_settled_time) {
   DCHECK(IsContextThread());
@@ -969,7 +985,7 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithNoResponse(
 
   NoteRespondedToFetchEvent(request_url, range_request);
 
-  response_callback->OnFallback(std::move(timing));
+  response_callback->OnFallback(std::move(request_body), std::move(timing));
 }
 
 void ServiceWorkerGlobalScope::RespondToFetchEvent(
@@ -1505,10 +1521,7 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
   ScriptState* script_state = ScriptController()->GetScriptState();
   FetchEvent* fetch_event = MakeGarbageCollected<FetchEvent>(
       script_state, event_type_names::kFetch, event_init, respond_with_observer,
-      wait_until_observer,
-      mojo::PendingRemote<mojom::blink::WorkerTimingContainer>(
-          std::move(params->worker_timing_remote)),
-      navigation_preload_sent);
+      wait_until_observer, navigation_preload_sent);
   respond_with_observer->SetEvent(fetch_event);
 
   if (navigation_preload_sent) {
@@ -1592,7 +1605,8 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
     mojom::blink::ServiceWorkerObjectInfoPtr service_worker_info,
     mojom::blink::FetchHandlerExistence fetch_hander_existence,
     mojo::PendingReceiver<mojom::blink::ReportingObserver>
-        reporting_observer_receiver) {
+        reporting_observer_receiver,
+    mojom::blink::AncestorFrameType ancestor_frame_type) {
   DCHECK(IsContextThread());
   DCHECK(!global_scope_initialized_);
 
@@ -1618,6 +1632,8 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
       GetExecutionContext(), std::move(service_worker_info));
 
   SetFetchHandlerExistence(fetch_hander_existence);
+
+  ancestor_frame_type_ = ancestor_frame_type;
 
   if (reporting_observer_receiver) {
     ReportingContext::From(this)->Bind(std::move(reporting_observer_receiver));
@@ -2567,6 +2583,32 @@ void ServiceWorkerGlobalScope::NoteRespondedToFetchEvent(
 void ServiceWorkerGlobalScope::RecordQueuingTime(base::TimeTicks created_time) {
   base::UmaHistogramMediumTimes("ServiceWorker.FetchEvent.QueuingTime",
                                 base::TimeTicks::Now() - created_time);
+}
+
+bool ServiceWorkerGlobalScope::IsInFencedFrame() const {
+  return GetAncestorFrameType() ==
+         mojom::blink::AncestorFrameType::kFencedFrame;
+}
+
+mojom::blink::ServiceWorkerFetchHandlerType
+ServiceWorkerGlobalScope::FetchHandlerType() {
+  EventListenerVector* elv = GetEventListeners(event_type_names::kFetch);
+  if (!elv) {
+    return mojom::blink::ServiceWorkerFetchHandlerType::kNoHandler;
+  }
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope handle_scope(isolate);
+  // TODO(crbug.com/1349613): revisit the way to implement this.
+  // The following code returns kEmptyFetchHandler if all handlers are nop.
+  for (RegisteredEventListener& e : *elv) {
+    EventTarget* et = EventTarget::Create(ScriptController()->GetScriptState());
+    v8::Local<v8::Value> v =
+        To<JSBasedEventListener>(e.Callback())->GetEffectiveFunction(*et);
+    if (!v.As<v8::Function>()->Experimental_IsNopFunction()) {
+      return mojom::blink::ServiceWorkerFetchHandlerType::kNotSkippable;
+    }
+  }
+  return mojom::blink::ServiceWorkerFetchHandlerType::kEmptyFetchHandler;
 }
 
 }  // namespace blink

@@ -9,24 +9,14 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/check_op.h"
-#include "base/containers/contains.h"
-#include "base/containers/cxx20_erase.h"
-#include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/cast_mirroring_service_host.h"
 #include "chrome/browser/media/cast_remoting_connector.h"
-#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_metrics.h"
 #include "chrome/browser/media/router/mojo/media_sink_service_status.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/grit/chromium_strings.h"
 #include "components/media_router/browser/issues_observer.h"
 #include "components/media_router/browser/media_router_metrics.h"
@@ -35,7 +25,6 @@
 #include "components/media_router/browser/route_message_observer.h"
 #include "components/media_router/common/media_source.h"
 #include "components/media_router/common/providers/cast/cast_media_source.h"
-#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_streams_registry.h"
@@ -54,37 +43,7 @@
 namespace media_router {
 namespace {
 
-// Get the WebContents associated with the given tab id. Returns nullptr if the
-// tab id is invalid, or if the searching fails.
-// TODO(xjz): Move this to SessionTabHelper to allow it being used by
-// extensions::ExtensionTabUtil::GetTabById() as well.
-content::WebContents* GetWebContentsFromId(
-    int32_t tab_id,
-    content::BrowserContext* browser_context,
-    bool include_incognito) {
-  if (tab_id < 0)
-    return nullptr;
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  Profile* incognito_profile =
-      include_incognito && profile->HasPrimaryOTRProfile()
-          ? profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)
-          : nullptr;
-  for (auto* target_browser : *BrowserList::GetInstance()) {
-    if (target_browser->profile() == profile ||
-        target_browser->profile() == incognito_profile) {
-      TabStripModel* target_tab_strip = target_browser->tab_strip_model();
-      for (int i = 0; i < target_tab_strip->count(); ++i) {
-        content::WebContents* target_contents =
-            target_tab_strip->GetWebContentsAt(i);
-        if (sessions::SessionTabHelper::IdForTab(target_contents).id() ==
-            tab_id) {
-          return target_contents;
-        }
-      }
-    }
-  }
-  return nullptr;
-}
+const int kDefaultFrameTreeNodeId = -1;
 
 DesktopMediaPickerController::Params MakeDesktopPickerParams(
     content::WebContents* web_contents) {
@@ -209,7 +168,7 @@ void MediaRouterMojoImpl::RouteResponseReceived(
     const absl::optional<MediaRoute>& media_route,
     mojom::RoutePresentationConnectionPtr connection,
     const absl::optional<std::string>& error_text,
-    RouteRequestResult::ResultCode result_code) {
+    mojom::RouteRequestResultCode result_code) {
   DCHECK(!connection ||
          (connection->connection_remote && connection->connection_receiver));
   std::unique_ptr<RouteRequestResult> result;
@@ -223,8 +182,8 @@ void MediaRouterMojoImpl::RouteResponseReceived(
     std::string error = base::StringPrintf(
         "Mismatch in OffTheRecord status: request = %d, response = %d",
         is_off_the_record, media_route->is_off_the_record());
-    result = RouteRequestResult::FromError(error,
-                                           RouteRequestResult::ROUTE_NOT_FOUND);
+    result = RouteRequestResult::FromError(
+        error, mojom::RouteRequestResultCode::ROUTE_NOT_FOUND);
   } else {
     result = RouteRequestResult::FromSuccess(*media_route, presentation_id);
     OnRouteAdded(provider_id, *media_route);
@@ -253,14 +212,14 @@ void MediaRouterMojoImpl::CreateRoute(const MediaSource::Id& source_id,
   const MediaSink* sink = GetSinkById(sink_id);
   if (!sink) {
     std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromError(
-        "Sink not found", RouteRequestResult::SINK_NOT_FOUND);
+        "Sink not found", mojom::RouteRequestResultCode::SINK_NOT_FOUND);
     MediaRouterMetrics::RecordCreateRouteResultCode(result->result_code());
     std::move(callback).Run(nullptr, *result);
     return;
   }
 
   const MediaSource source(source_id);
-  if (source.IsTabMirroringSource() || source.IsLocalFileSource()) {
+  if (source.IsTabMirroringSource()) {
     // Ensure the CastRemotingConnector is created before mirroring starts.
     CastRemotingConnector* const connector =
         CastRemotingConnector::Get(web_contents);
@@ -298,12 +257,12 @@ void MediaRouterMojoImpl::CreateRoute(const MediaSource::Id& source_id,
                        presentation_id, origin, web_contents, timeout,
                        off_the_record, std::move(mr_callback)));
   } else {
-    // Previously the tab ID was set to -1 for non-mirroring sessions, which
-    // mostly works, but it breaks auto-joining.
-    const int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
+    const int frame_tree_node_id =
+        web_contents ? web_contents->GetPrimaryMainFrame()->GetFrameTreeNodeId()
+                     : kDefaultFrameTreeNodeId;
     media_route_providers_[provider_id]->CreateRoute(
-        source_id, sink_id, presentation_id, origin, tab_id, timeout,
-        off_the_record, std::move(mr_callback));
+        source_id, sink_id, presentation_id, origin, frame_tree_node_id,
+        timeout, off_the_record, std::move(mr_callback));
   }
 }
 
@@ -319,7 +278,7 @@ void MediaRouterMojoImpl::JoinRoute(const MediaSource::Id& source_id,
       GetProviderIdForPresentation(presentation_id);
   if (!provider_id || !HasJoinableRoute()) {
     std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromError(
-        "Route not found", RouteRequestResult::ROUTE_NOT_FOUND);
+        "Route not found", mojom::RouteRequestResultCode::ROUTE_NOT_FOUND);
     MediaRouterMetrics::RecordJoinRouteResultCode(result->result_code());
     // TODO(btolsch): This should really move |result| now that there's only a
     // single callback.
@@ -327,13 +286,15 @@ void MediaRouterMojoImpl::JoinRoute(const MediaSource::Id& source_id,
     return;
   }
 
-  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
+  const int frame_tree_node_id =
+      web_contents ? web_contents->GetPrimaryMainFrame()->GetFrameTreeNodeId()
+                   : kDefaultFrameTreeNodeId;
   auto mr_callback = base::BindOnce(
       &MediaRouterMojoImpl::RouteResponseReceived, weak_factory_.GetWeakPtr(),
       presentation_id, *provider_id, off_the_record, std::move(callback), true);
   media_route_providers_[*provider_id]->JoinRoute(
-      source_id, presentation_id, origin, tab_id, timeout, off_the_record,
-      std::move(mr_callback));
+      source_id, presentation_id, origin, frame_tree_node_id, timeout,
+      off_the_record, std::move(mr_callback));
 }
 
 void MediaRouterMojoImpl::TerminateRoute(const MediaRoute::Id& route_id) {
@@ -342,7 +303,7 @@ void MediaRouterMojoImpl::TerminateRoute(const MediaRoute::Id& route_id) {
       GetProviderIdForRoute(route_id);
   if (!provider_id) {
     MediaRouterMetrics::RecordJoinRouteResultCode(
-        RouteRequestResult::ROUTE_NOT_FOUND);
+        mojom::RouteRequestResultCode::ROUTE_NOT_FOUND);
     return;
   }
   auto callback =
@@ -718,7 +679,7 @@ void MediaRouterMojoImpl::OnTerminateRouteResult(
     const MediaRoute::Id& route_id,
     mojom::MediaRouteProviderId provider_id,
     const absl::optional<std::string>& error_text,
-    RouteRequestResult::ResultCode result_code) {
+    mojom::RouteRequestResultCode result_code) {
   MediaRouterMetrics::RecordMediaRouteProviderTerminateRoute(result_code,
                                                              provider_id);
 }
@@ -784,11 +745,10 @@ void MediaRouterMojoImpl::GetMediaSinkServiceStatus(
 }
 
 void MediaRouterMojoImpl::GetMirroringServiceHostForTab(
-    int32_t target_tab_id,
+    int32_t frame_tree_node_id,
     mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver) {
   mirroring::CastMirroringServiceHost::GetForTab(
-      GetWebContentsFromId(target_tab_id, context_,
-                           true /* include_incognito */),
+      content::WebContents::FromFrameTreeNodeId(frame_tree_node_id),
       std::move(receiver));
 }
 
@@ -796,7 +756,6 @@ void MediaRouterMojoImpl::GetMirroringServiceHostForTab(
 // but eventually it won't be.  When that happens, change the sigature so it can
 // report errors.  Also remove the |initiator_tab_id| parameter.
 void MediaRouterMojoImpl::GetMirroringServiceHostForDesktop(
-    int32_t initiator_tab_id,
     const std::string& desktop_stream_id,
     mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver) {
   if (!pending_stream_request_ ||
@@ -961,14 +920,14 @@ void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
   if (!err.empty()) {
     std::move(mr_callback)
         .Run(absl::nullopt, nullptr, err,
-             RouteRequestResult::DESKTOP_PICKER_FAILED);
+             mojom::RouteRequestResultCode::DESKTOP_PICKER_FAILED);
     return;
   }
 
   if (media_id.is_null()) {
     std::move(mr_callback)
         .Run(absl::nullopt, nullptr, "User canceled capture dialog",
-             RouteRequestResult::CANCELLED);
+             mojom::RouteRequestResultCode::CANCELLED);
     return;
   }
 
@@ -1000,7 +959,8 @@ void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
 
   media_route_providers_[provider_id]->CreateRoute(
       MediaSource::ForDesktop(request.stream_id, media_id.audio_share).id(),
-      sink_id, presentation_id, origin, -1, timeout, off_the_record,
+      sink_id, presentation_id, origin, kDefaultFrameTreeNodeId, timeout,
+      off_the_record,
       base::BindOnce(
           [](mojom::MediaRouteProvider::CreateRouteCallback inner_callback,
              base::WeakPtr<MediaRouterMojoImpl> self,
@@ -1008,7 +968,7 @@ void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
              const absl::optional<media_router::MediaRoute>& route,
              mojom::RoutePresentationConnectionPtr connection,
              const absl::optional<std::string>& error_text,
-             RouteRequestResult::ResultCode result_code) {
+             mojom::RouteRequestResultCode result_code) {
             if (self)
               self->pending_stream_request_.reset();
             std::move(inner_callback)

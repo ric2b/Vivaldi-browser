@@ -28,11 +28,11 @@
 #include "cc/base/histograms.h"
 #include "cc/document_transition/document_transition_request.h"
 #include "cc/input/browser_controls_offset_manager.h"
+#include "cc/input/input_handler.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scroll_utils.h"
 #include "cc/input/scrollbar_controller.h"
-#include "cc/input/threaded_input_handler.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/painted_overlay_scrollbar_layer_impl.h"
@@ -137,6 +137,11 @@ struct TestFrameData : public LayerTreeHostImpl::FrameData {
     begin_frame_ack = viz::BeginFrameAck::CreateManualAckWithDamage();
   }
 };
+
+void ClearMainThreadDeltasForTesting(LayerTreeHostImpl* host) {
+  host->active_tree()->ApplySentScrollAndScaleDeltasFromAbortedCommit(
+      /*main_frame_applied_deltas=*/false);
+}
 
 }  // namespace
 
@@ -358,6 +363,21 @@ class LayerTreeHostImplTest : public testing::Test,
   gfx::Size DipSizeToPixelSize(const gfx::Size& size) {
     return gfx::ScaleToRoundedSize(
         size, host_impl_->active_tree()->device_scale_factor());
+  }
+
+  void PushScrollOffsetsToPendingTree(
+      const base::flat_map<ElementId, gfx::PointF>& offsets) {
+    PropertyTrees property_trees(*host_impl_);
+    for (auto& entry : offsets) {
+      property_trees.scroll_tree_mutable().SetBaseScrollOffset(entry.first,
+                                                               entry.second);
+    }
+    host_impl_->sync_tree()
+        ->property_trees()
+        ->scroll_tree_mutable()
+        .PushScrollUpdatesFromMainThread(
+            property_trees, host_impl_->sync_tree(),
+            host_impl_->settings().commit_fractional_scroll_deltas);
   }
 
   static void ExpectClearedScrollDeltasRecursive(LayerImpl* root) {
@@ -831,9 +851,7 @@ class LayerTreeHostImplTest : public testing::Test,
     }
   }
 
-  ThreadedInputHandler& GetInputHandler() {
-    return host_impl_->GetInputHandler();
-  }
+  InputHandler& GetInputHandler() { return host_impl_->GetInputHandler(); }
 
   FakeImplTaskRunnerProvider task_runner_provider_;
   DebugScopedSetMainThreadBlocked always_main_thread_blocked_;
@@ -1097,8 +1115,6 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollDeltaTreeButNoChanges) {
 
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollDeltaRepeatedScrolls) {
   gfx::PointF scroll_offset(20, 30);
-  gfx::Vector2dF scroll_delta(11, -15);
-
   auto* root = SetupDefaultRootLayer(gfx::Size(110, 110));
   root->SetHitTestable(true);
   CreateScrollNode(root, gfx::Size(10, 10));
@@ -1108,31 +1124,128 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollDeltaRepeatedScrolls) {
       .UpdateScrollOffsetBaseForTesting(root->element_id(), scroll_offset);
   UpdateDrawProperties(host_impl_->active_tree());
 
-  std::unique_ptr<CompositorCommitData> commit_data;
-
+  gfx::Vector2dF scroll_delta(11, -15);
+  std::unique_ptr<CompositorCommitData> commit_data1;
   root->ScrollBy(scroll_delta);
-  commit_data = host_impl_->ProcessCompositorDeltas();
-  ASSERT_EQ(commit_data->scrolls.size(), 1u);
+  commit_data1 = host_impl_->ProcessCompositorDeltas();
+  ASSERT_EQ(commit_data1->scrolls.size(), 1u);
   EXPECT_TRUE(
-      ScrollInfoContains(*commit_data, root->element_id(), scroll_delta));
+      ScrollInfoContains(*commit_data1, root->element_id(), scroll_delta));
+
+  std::unique_ptr<CompositorCommitData> commit_data2;
+  gfx::Vector2dF scroll_delta2(-5, 27);
+  root->ScrollBy(scroll_delta2);
+  commit_data2 = host_impl_->ProcessCompositorDeltas();
+  ASSERT_EQ(commit_data2->scrolls.size(), 1u);
+  EXPECT_TRUE(
+      ScrollInfoContains(*commit_data2, root->element_id(), scroll_delta2));
+
+  // Simulate first commit by pushing base scroll offsets to pending tree
+  PushScrollOffsetsToPendingTree(
+      {{root->element_id(), gfx::PointAtOffsetFromOrigin(scroll_delta)}});
+  EXPECT_EQ(host_impl_->sync_tree()
+                ->property_trees()
+                ->scroll_tree()
+                .GetScrollOffsetDeltaForTesting(root->element_id()),
+            scroll_delta2);
+
+  // Simulate second commit by pushing base scroll offsets to pending tree
+  PushScrollOffsetsToPendingTree(
+      {{root->element_id(), gfx::PointAtOffsetFromOrigin(scroll_delta2)}});
+  EXPECT_EQ(host_impl_->sync_tree()
+                ->property_trees()
+                ->scroll_tree()
+                .GetScrollOffsetDeltaForTesting(root->element_id()),
+            gfx::Vector2dF(0, 0));
+}
+
+TEST_P(ScrollUnifiedLayerTreeHostImplTest, SyncedScrollAbortedCommit) {
+  LayerTreeSettings settings = DefaultSettings();
+  settings.commit_to_active_tree = false;
+  CreateHostImpl(settings, CreateLayerTreeFrameSink());
+  CreatePendingTree();
+  gfx::PointF scroll_offset(20, 30);
+  auto* root = SetupDefaultRootLayer(gfx::Size(110, 110));
+  auto& scroll_tree =
+      root->layer_tree_impl()->property_trees()->scroll_tree_mutable();
+  root->SetHitTestable(true);
+
+  // SyncedProperty should be created on the pending tree and then pushed to the
+  // active tree, to avoid bifurcation. Simulate commit by pushing base scroll
+  // offsets to pending tree.
+  PushScrollOffsetsToPendingTree({{root->element_id(), gfx::PointF(0, 0)}});
+  host_impl_->active_tree()
+      ->property_trees()
+      ->scroll_tree_mutable()
+      .PushScrollUpdatesFromPendingTree(
+          host_impl_->pending_tree()->property_trees(),
+          host_impl_->active_tree());
+
+  CreateScrollNode(root, gfx::Size(10, 10));
+  auto* synced_scroll = scroll_tree.GetSyncedScrollOffset(root->element_id());
+  ASSERT_TRUE(synced_scroll);
+  scroll_tree.UpdateScrollOffsetBaseForTesting(root->element_id(),
+                                               scroll_offset);
+  UpdateDrawProperties(host_impl_->active_tree());
+
+  gfx::Vector2dF scroll_delta(11, -15);
+  root->ScrollBy(scroll_delta);
+  EXPECT_EQ(scroll_delta, synced_scroll->UnsentDelta());
+  host_impl_->ProcessCompositorDeltas();
+  EXPECT_TRUE(synced_scroll->reflected_delta_in_main_tree().has_value());
+  EXPECT_FALSE(synced_scroll->next_reflected_delta_in_main_tree().has_value());
+  EXPECT_EQ(scroll_delta,
+            synced_scroll->reflected_delta_in_main_tree().value());
 
   gfx::Vector2dF scroll_delta2(-5, 27);
   root->ScrollBy(scroll_delta2);
-  commit_data = host_impl_->ProcessCompositorDeltas();
-  ASSERT_EQ(commit_data->scrolls.size(), 1u);
-  EXPECT_TRUE(ScrollInfoContains(*commit_data, root->element_id(),
-                                 scroll_delta + scroll_delta2));
+  EXPECT_EQ(scroll_delta2, synced_scroll->UnsentDelta());
+  host_impl_->ProcessCompositorDeltas();
+  EXPECT_TRUE(synced_scroll->reflected_delta_in_main_tree().has_value());
+  EXPECT_TRUE(synced_scroll->next_reflected_delta_in_main_tree().has_value());
+  EXPECT_EQ(scroll_delta,
+            synced_scroll->reflected_delta_in_main_tree().value());
+  EXPECT_EQ(scroll_delta2,
+            synced_scroll->next_reflected_delta_in_main_tree().value());
 
-  root->ScrollBy(gfx::Vector2d());
-  commit_data = host_impl_->ProcessCompositorDeltas();
-  EXPECT_TRUE(ScrollInfoContains(*commit_data, root->element_id(),
-                                 scroll_delta + scroll_delta2));
+  // Simulate aborting the second main frame. Scroll deltas applied by the
+  // second frame should be combined with delta from first frame.
+  root->layer_tree_impl()->ApplySentScrollAndScaleDeltasFromAbortedCommit(
+      /*main_frame_applied_deltas=*/true);
+  EXPECT_TRUE(synced_scroll->reflected_delta_in_main_tree().has_value());
+  EXPECT_FALSE(synced_scroll->next_reflected_delta_in_main_tree().has_value());
+  EXPECT_EQ(scroll_delta + scroll_delta2,
+            synced_scroll->reflected_delta_in_main_tree().value());
+
+  // Send a third main frame, pipelined behind the first.
+  gfx::Vector2dF scroll_delta3(-2, -13);
+  root->ScrollBy(scroll_delta3);
+  EXPECT_EQ(scroll_delta3, synced_scroll->UnsentDelta());
+  host_impl_->ProcessCompositorDeltas();
+  EXPECT_TRUE(synced_scroll->reflected_delta_in_main_tree().has_value());
+  EXPECT_TRUE(synced_scroll->next_reflected_delta_in_main_tree().has_value());
+  EXPECT_EQ(scroll_delta + scroll_delta2,
+            synced_scroll->reflected_delta_in_main_tree().value());
+  EXPECT_EQ(scroll_delta3,
+            synced_scroll->next_reflected_delta_in_main_tree().value());
+
+  // Simulate commit of the first frame
+  PushScrollOffsetsToPendingTree(
+      {{root->element_id(), scroll_offset + scroll_delta + scroll_delta2}});
+  EXPECT_EQ(scroll_offset + scroll_delta + scroll_delta2,
+            synced_scroll->PendingBase());
+  EXPECT_EQ(scroll_delta3, synced_scroll->PendingDelta());
+  EXPECT_TRUE(synced_scroll->reflected_delta_in_main_tree().has_value());
+  EXPECT_FALSE(synced_scroll->next_reflected_delta_in_main_tree().has_value());
+  EXPECT_EQ(scroll_delta3,
+            synced_scroll->reflected_delta_in_main_tree().value());
 }
 
 TEST_F(CommitToPendingTreeLayerTreeHostImplTest,
        GPUMemoryForSmallLayerHistogramTest) {
   base::HistogramTester histogram_tester;
   SetClientNameForMetrics("Renderer");
+  host_impl_->SetDownsampleMetricsForTesting(false);
   // With default tile size being set to 256 * 256, the following layer needs
   // one tile only which costs 256 * 256 * 4 / 1024 = 256KB memory.
   TestGPUMemoryForTilings(gfx::Size(200, 200));
@@ -1146,6 +1259,7 @@ TEST_F(CommitToPendingTreeLayerTreeHostImplTest,
        GPUMemoryForLargeLayerHistogramTest) {
   base::HistogramTester histogram_tester;
   SetClientNameForMetrics("Renderer");
+  host_impl_->SetDownsampleMetricsForTesting(false);
   // With default tile size being set to 256 * 256, the following layer needs
   // 4 tiles which cost 256 * 256 * 4 * 4 / 1024 = 1024KB memory.
   TestGPUMemoryForTilings(gfx::Size(500, 500));
@@ -3602,6 +3716,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ImplPinchZoom) {
     EXPECT_EQ(commit_data->page_scale_delta, page_scale_delta);
 
     EXPECT_EQ(gfx::PointF(75.0, 75.0), MaxScrollOffset(scroll_layer));
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   // Scrolling after a pinch gesture should always be in local space.  The
@@ -4193,6 +4308,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
     std::unique_ptr<CompositorCommitData> commit_data =
         host_impl_->ProcessCompositorDeltas();
     EXPECT_EQ(commit_data->page_scale_delta, page_scale_delta);
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   // Zoom-in clamping
@@ -4216,6 +4332,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
     std::unique_ptr<CompositorCommitData> commit_data =
         host_impl_->ProcessCompositorDeltas();
     EXPECT_EQ(commit_data->page_scale_delta, max_page_scale);
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   // Zoom-out clamping
@@ -4227,6 +4344,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
         ->property_trees()
         ->scroll_tree_mutable()
         .CollectScrollDeltasForTesting();
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     scroll_layer->layer_tree_impl()
         ->property_trees()
         ->scroll_tree_mutable()
@@ -4249,6 +4367,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
     EXPECT_EQ(commit_data->page_scale_delta, min_page_scale);
 
     EXPECT_TRUE(commit_data->scrolls.empty());
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   // Two-finger panning should not happen based on pinch events only
@@ -4260,6 +4379,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
         ->property_trees()
         ->scroll_tree_mutable()
         .CollectScrollDeltasForTesting();
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     scroll_layer->layer_tree_impl()
         ->property_trees()
         ->scroll_tree_mutable()
@@ -4283,6 +4403,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
         host_impl_->ProcessCompositorDeltas();
     EXPECT_EQ(commit_data->page_scale_delta, page_scale_delta);
     EXPECT_TRUE(commit_data->scrolls.empty());
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   // Two-finger panning should work with interleaved scroll events
@@ -4294,6 +4415,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
         ->property_trees()
         ->scroll_tree_mutable()
         .CollectScrollDeltasForTesting();
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     scroll_layer->layer_tree_impl()
         ->property_trees()
         ->scroll_tree_mutable()
@@ -4322,6 +4444,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
     EXPECT_EQ(commit_data->page_scale_delta, page_scale_delta);
     EXPECT_TRUE(ScrollInfoContains(*commit_data, scroll_layer->element_id(),
                                    gfx::Vector2dF(-10, -10)));
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   // Two-finger panning should work when starting fully zoomed out.
@@ -4332,6 +4455,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PinchGesture) {
         ->property_trees()
         ->scroll_tree_mutable()
         .CollectScrollDeltasForTesting();
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     scroll_layer->layer_tree_impl()
         ->property_trees()
         ->scroll_tree_mutable()
@@ -4383,6 +4507,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, SyncSubpixelScrollDelta) {
       ->property_trees()
       ->scroll_tree_mutable()
       .CollectScrollDeltasForTesting();
+  ClearMainThreadDeltasForTesting(host_impl_.get());
   scroll_layer->layer_tree_impl()
       ->property_trees()
       ->scroll_tree_mutable()
@@ -4435,6 +4560,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
       ->property_trees()
       ->scroll_tree_mutable()
       .CollectScrollDeltasForTesting();
+  ClearMainThreadDeltasForTesting(host_impl_.get());
   scroll_layer->layer_tree_impl()
       ->property_trees()
       ->scroll_tree_mutable()
@@ -4530,6 +4656,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
     std::unique_ptr<CompositorCommitData> commit_data =
         host_impl_->ProcessCompositorDeltas();
     EXPECT_EQ(commit_data->page_scale_delta, 1);
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   start_time += base::Seconds(10);
@@ -4661,6 +4788,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PageScaleAnimation) {
     EXPECT_EQ(commit_data->page_scale_delta, 2);
     EXPECT_TRUE(ScrollInfoContains(*commit_data, scroll_layer->element_id(),
                                    gfx::Vector2dF(-50, -50)));
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 
   start_time += base::Seconds(10);
@@ -5657,6 +5785,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
   settings.scrollbar_animator = LayerTreeSettings::AURA_OVERLAY;
   settings.scrollbar_fade_delay = base::Milliseconds(20);
   settings.scrollbar_fade_duration = base::Milliseconds(20);
+  settings.enable_scroll_update_optimizations = true;
   gfx::Size viewport_size(50, 50);
   gfx::Size content_size(100, 100);
 
@@ -5680,6 +5809,14 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
 
   // Scrollbars will flash shown but we should have a fade out animation
   // queued. Run it and fade out the scrollbars.
+  ASSERT_FALSE(scrollbar_controller->ScrollbarsHidden());
+  EXPECT_TRUE(scrollbar_controller->visibility_changed());
+  ClearMainThreadDeltasForTesting(host_impl_.get());
+  auto commit_data = host_impl_->ProcessCompositorDeltas();
+  using ScrollbarsInfo = CompositorCommitData::ScrollbarsUpdateInfo;
+  EXPECT_THAT(commit_data->scrollbars, testing::ElementsAre(ScrollbarsInfo{
+                                           scroll->element_id(), false}));
+  EXPECT_FALSE(scrollbar_controller->visibility_changed());
   {
     ASSERT_FALSE(animation_task_.is_null());
     ASSERT_FALSE(animation_task_.IsCancelled());
@@ -5691,6 +5828,11 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
     scrollbar_controller->Animate(fake_now);
 
     ASSERT_TRUE(scrollbar_controller->ScrollbarsHidden());
+    ClearMainThreadDeltasForTesting(host_impl_.get());
+    commit_data = host_impl_->ProcessCompositorDeltas();
+    EXPECT_THAT(commit_data->scrollbars, testing::ElementsAre(ScrollbarsInfo{
+                                             scroll->element_id(), true}));
+    EXPECT_FALSE(scrollbar_controller->visibility_changed());
   }
 
   // Move the mouse over the scrollbar region. This should post a delayed fade
@@ -5708,6 +5850,10 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
     did_request_redraw_ = false;
     did_request_commit_ = false;
     ASSERT_TRUE(scrollbar_controller->ScrollbarsHidden());
+    EXPECT_FALSE(scrollbar_controller->visibility_changed());
+    ClearMainThreadDeltasForTesting(host_impl_.get());
+    commit_data = host_impl_->ProcessCompositorDeltas();
+    EXPECT_TRUE(commit_data->scrollbars.empty());
     std::move(animation_task_).Run();
 
     base::TimeTicks fake_now = base::TimeTicks::Now();
@@ -5716,6 +5862,12 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
     scrollbar_controller->Animate(fake_now);
 
     ASSERT_FALSE(scrollbar_controller->ScrollbarsHidden());
+    EXPECT_TRUE(scrollbar_controller->visibility_changed());
+    ClearMainThreadDeltasForTesting(host_impl_.get());
+    commit_data = host_impl_->ProcessCompositorDeltas();
+    EXPECT_THAT(commit_data->scrollbars, testing::ElementsAre(ScrollbarsInfo{
+                                             scroll->element_id(), false}));
+    EXPECT_FALSE(scrollbar_controller->visibility_changed());
     EXPECT_TRUE(did_request_redraw_);
     EXPECT_TRUE(did_request_commit_);
   }
@@ -5869,8 +6021,9 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollBeforeMouseMove) {
 
   const float kDistanceToTriggerThumb =
       vert_scrollbar->ComputeThumbQuadRect().height() +
-      SingleScrollbarAnimationControllerThinning::
-          kMouseMoveDistanceToTriggerExpand;
+      scrollbar_controller
+          ->GetScrollbarAnimationController(ScrollbarOrientation::VERTICAL)
+          .MouseMoveDistanceToTriggerExpand();
 
   // Move the mouse near the thumb while its at the viewport top.
   auto near_thumb_at_top = gfx::Point(295, kDistanceToTriggerThumb - 1);
@@ -5924,9 +6077,10 @@ void LayerTreeHostImplTest::SetupMouseMoveAtWithDeviceScale(
   settings.scrollbar_fade_duration = base::Milliseconds(300);
   settings.scrollbar_animator = LayerTreeSettings::AURA_OVERLAY;
 
+  const int thumb_thickness = 15;
   gfx::Size viewport_size(300, 200);
   gfx::Size content_size(1000, 1000);
-  gfx::Size scrollbar_size(gfx::Size(15, viewport_size.height()));
+  gfx::Size scrollbar_size(gfx::Size(thumb_thickness, viewport_size.height()));
 
   CreateHostImpl(settings, CreateLayerTreeFrameSink());
   host_impl_->active_tree()->SetDeviceScaleFactor(device_scale_factor);
@@ -5934,7 +6088,8 @@ void LayerTreeHostImplTest::SetupMouseMoveAtWithDeviceScale(
   LayerImpl* root_scroll = OuterViewportScrollLayer();
   // The scrollbar is on the left side.
   auto* scrollbar = AddLayer<SolidColorScrollbarLayerImpl>(
-      host_impl_->active_tree(), ScrollbarOrientation::VERTICAL, 15, 0, true);
+      host_impl_->active_tree(), ScrollbarOrientation::VERTICAL,
+      thumb_thickness, 0, true);
   SetupScrollbarLayer(root_scroll, scrollbar);
   scrollbar->SetBounds(scrollbar_size);
   TouchActionRegion touch_action_region;
@@ -5949,28 +6104,31 @@ void LayerTreeHostImplTest::SetupMouseMoveAtWithDeviceScale(
           root_scroll->element_id());
 
   const float kMouseMoveDistanceToTriggerFadeIn =
-      ScrollbarAnimationController::kMouseMoveDistanceToTriggerFadeIn;
+      scrollbar_animation_controller
+          ->GetScrollbarAnimationController(ScrollbarOrientation::VERTICAL)
+          .MouseMoveDistanceToTriggerFadeIn();
 
   const float kMouseMoveDistanceToTriggerExpand =
-      SingleScrollbarAnimationControllerThinning::
-          kMouseMoveDistanceToTriggerExpand;
+      scrollbar_animation_controller
+          ->GetScrollbarAnimationController(ScrollbarOrientation::VERTICAL)
+          .MouseMoveDistanceToTriggerExpand();
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerFadeIn, 1));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerFadeIn + 1, 1));
   EXPECT_FALSE(scrollbar_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_animation_controller->MouseIsNearScrollbarThumb(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerExpand - 1, 10));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerExpand, 10));
   EXPECT_TRUE(scrollbar_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_TRUE(scrollbar_animation_controller->MouseIsNearScrollbarThumb(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerFadeIn, 100));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerFadeIn + 1, 100));
   EXPECT_FALSE(scrollbar_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_animation_controller->MouseIsNearScrollbarThumb(
@@ -6283,7 +6441,8 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
   // The background is default to transparent. If the background is opaque, we
   // would fill the frame with background colour when no layers are contributing
   // quads. This means we would end up with 0 quad.
-  EXPECT_EQ(host_impl_->active_tree()->background_color(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(host_impl_->active_tree()->background_color(),
+            SkColors::kTransparent);
 
   {
     TestFrameData frame;
@@ -8417,16 +8576,19 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollWithoutBubbling) {
   UpdateDrawProperties(host_impl_->active_tree());
   host_impl_->active_tree()->DidBecomeActive();
 
+  gfx::PointF grand_child_base(0, 2);
+  gfx::Vector2dF grand_child_delta;
   grand_child_layer->layer_tree_impl()
       ->property_trees()
       ->scroll_tree_mutable()
       .UpdateScrollOffsetBaseForTesting(grand_child_layer->element_id(),
-                                        gfx::PointF(0, 2));
+                                        grand_child_base);
+  gfx::PointF child_base(0, 3);
+  gfx::Vector2dF child_delta;
   child_layer->layer_tree_impl()
       ->property_trees()
       ->scroll_tree_mutable()
-      .UpdateScrollOffsetBaseForTesting(child_layer->element_id(),
-                                        gfx::PointF(0, 3));
+      .UpdateScrollOffsetBaseForTesting(child_layer->element_id(), child_base);
 
   DrawFrame();
   {
@@ -8448,12 +8610,19 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollWithoutBubbling) {
         host_impl_->ProcessCompositorDeltas();
 
     // The grand child should have scrolled up to its limit.
+    grand_child_delta = gfx::Vector2dF(0, -2);
     EXPECT_TRUE(ScrollInfoContains(*commit_data.get(),
                                    grand_child_layer->element_id(),
-                                   gfx::Vector2dF(0, -2)));
+                                   grand_child_delta));
 
     // The child should not have scrolled.
     ExpectNone(*commit_data.get(), child_layer->element_id());
+
+    grand_child_base += grand_child_delta;
+    child_base += child_delta;
+    PushScrollOffsetsToPendingTree(
+        {{child_layer->element_id(), child_base},
+         {grand_child_layer->element_id(), grand_child_base}});
 
     // The next time we scroll we should only scroll the parent.
     scroll_delta = gfx::Vector2d(0, -3);
@@ -8474,16 +8643,23 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollWithoutBubbling) {
               child_layer->scroll_tree_index());
     GetInputHandler().ScrollEnd();
 
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     commit_data = host_impl_->ProcessCompositorDeltas();
 
     // The child should have scrolled up to its limit.
-    EXPECT_TRUE(ScrollInfoContains(
-        *commit_data.get(), child_layer->element_id(), gfx::Vector2dF(0, -3)));
+    child_delta = gfx::Vector2dF(0, -3);
+    EXPECT_TRUE(ScrollInfoContains(*commit_data.get(),
+                                   child_layer->element_id(), child_delta));
 
     // The grand child should not have scrolled.
-    EXPECT_TRUE(ScrollInfoContains(*commit_data.get(),
-                                   grand_child_layer->element_id(),
-                                   gfx::Vector2dF(0, -2)));
+    grand_child_delta = gfx::Vector2dF();
+    ExpectNone(*commit_data.get(), grand_child_layer->element_id());
+
+    child_base += child_delta;
+    grand_child_base += grand_child_delta;
+    PushScrollOffsetsToPendingTree(
+        {{grand_child_layer->element_id(), grand_child_base},
+         {child_layer->element_id(), child_base}});
 
     // After scrolling the parent, another scroll on the opposite direction
     // should still scroll the child.
@@ -8505,16 +8681,24 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollWithoutBubbling) {
               grand_child_layer->scroll_tree_index());
     GetInputHandler().ScrollEnd();
 
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     commit_data = host_impl_->ProcessCompositorDeltas();
 
     // The grand child should have scrolled.
+    grand_child_delta = gfx::Vector2dF(0, 7);
     EXPECT_TRUE(ScrollInfoContains(*commit_data.get(),
                                    grand_child_layer->element_id(),
-                                   gfx::Vector2dF(0, 5)));
+                                   grand_child_delta));
 
     // The child should not have scrolled.
-    EXPECT_TRUE(ScrollInfoContains(
-        *commit_data.get(), child_layer->element_id(), gfx::Vector2dF(0, -3)));
+    child_delta = gfx::Vector2dF();
+    ExpectNone(*commit_data.get(), child_layer->element_id());
+
+    grand_child_base += grand_child_delta;
+    child_base += child_delta;
+    PushScrollOffsetsToPendingTree(
+        {{grand_child_layer->element_id(), grand_child_base},
+         {child_layer->element_id(), child_base}});
 
     // Scrolling should be adjusted from viewport space.
     host_impl_->active_tree()->PushPageScaleFromMainThread(2, 2, 2);
@@ -8536,12 +8720,13 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollWithoutBubbling) {
             .get());
     GetInputHandler().ScrollEnd();
 
+    ClearMainThreadDeltasForTesting(host_impl_.get());
     commit_data = host_impl_->ProcessCompositorDeltas();
 
-    // Should have scrolled by half the amount in layer space (5 - 2/2)
+    // Should have scrolled by half the amount in layer space (-2/2)
     EXPECT_TRUE(ScrollInfoContains(*commit_data.get(),
                                    grand_child_layer->element_id(),
-                                   gfx::Vector2dF(0, 4)));
+                                   gfx::Vector2dF(0, -1)));
   }
 }
 
@@ -8684,6 +8869,10 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollAxisAlignedRotatedLayer) {
   EXPECT_TRUE(ScrollInfoContains(*commit_data.get(), scroll_layer->element_id(),
                                  gfx::Vector2dF(0, gesture_scroll_delta.x())));
 
+  // Push scrolls to pending tree
+  PushScrollOffsetsToPendingTree(
+      {{scroll_layer->element_id(), gfx::PointF(10, 0)}});
+
   // Reset and scroll down with the wheel.
   SetScrollOffsetDelta(scroll_layer, gfx::Vector2dF());
   gfx::Vector2dF wheel_scroll_delta(0, 10);
@@ -8766,6 +8955,10 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollNonAxisAlignedRotatedLayer) {
     // The root scroll layer should not have scrolled, because the input delta
     // was close to the layer's axis of movement.
     EXPECT_EQ(commit_data->scrolls.size(), 1u);
+
+    PushScrollOffsetsToPendingTree(
+        {{child_scroll_id,
+          gfx::PointAtOffsetFromOrigin(expected_scroll_delta)}});
   }
   {
     // Now reset and scroll the same amount horizontally.
@@ -8797,6 +8990,10 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollNonAxisAlignedRotatedLayer) {
 
     // The root scroll layer shouldn't have scrolled.
     ExpectNone(*commit_data.get(), scroll_layer->element_id());
+
+    PushScrollOffsetsToPendingTree(
+        {{child_scroll_id,
+          gfx::PointAtOffsetFromOrigin(expected_scroll_delta)}});
   }
 }
 
@@ -8876,6 +9073,11 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollPerspectiveTransformedLayer) {
     // The root scroll layer should not have scrolled, because the input delta
     // was close to the layer's axis of movement.
     EXPECT_EQ(commit_data->scrolls.size(), 1u);
+
+    PushScrollOffsetsToPendingTree(
+        {{child->element_id(),
+          gfx::PointAtOffsetFromOrigin(expected_scroll_deltas[i])}});
+    ClearMainThreadDeltasForTesting(host_impl_.get());
   }
 }
 
@@ -8911,6 +9113,9 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollScaledLayer) {
       host_impl_->ProcessCompositorDeltas();
   EXPECT_TRUE(ScrollInfoContains(*commit_data.get(), scroll_layer->element_id(),
                                  gfx::Vector2dF(0, scroll_delta.y() / scale)));
+  PushScrollOffsetsToPendingTree(
+      {{scroll_layer->element_id(), gfx::PointAtOffsetFromOrigin(gfx::Vector2dF(
+                                        0, scroll_delta.y() / scale))}});
 
   // Reset and scroll down with the wheel.
   SetScrollOffsetDelta(scroll_layer, gfx::Vector2dF());
@@ -10726,7 +10931,7 @@ class LayerTreeHostImplViewportCoveredTest : public LayerTreeHostImplTest {
   }
 
   void SetupActiveTreeLayers() {
-    host_impl_->active_tree()->set_background_color(SK_ColorGRAY);
+    host_impl_->active_tree()->set_background_color(SkColors::kGray);
     LayerImpl* root = SetupDefaultRootLayer(viewport_size_);
     child_ = AddLayer<BlendStateCheckLayer>(host_impl_->active_tree(),
                                             host_impl_->resource_provider());
@@ -11098,7 +11303,7 @@ class FakeLayerWithQuads : public LayerImpl {
         render_pass->CreateAndAppendSharedQuadState();
     PopulateSharedQuadState(shared_quad_state, contents_opaque());
 
-    SkColor gray = SkColorSetRGB(100, 100, 100);
+    SkColor4f gray = SkColors::kGray;
     gfx::Rect quad_rect(bounds());
     gfx::Rect visible_quad_rect(quad_rect);
     auto* my_quad =
@@ -11148,7 +11353,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, LayersFreeTextures) {
 
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, HasTransparentBackground) {
   SetupDefaultRootLayer(gfx::Size(10, 10));
-  host_impl_->active_tree()->set_background_color(SK_ColorWHITE);
+  host_impl_->active_tree()->set_background_color(SkColors::kWhite);
   UpdateDrawProperties(host_impl_->active_tree());
 
   // Verify one quad is drawn when transparent background set is not set.
@@ -11172,7 +11377,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, HasTransparentBackground) {
   host_impl_->SetFullViewportDamage();
 
   // Verify no quads are drawn when transparent background is set.
-  host_impl_->active_tree()->set_background_color(SK_ColorTRANSPARENT);
+  host_impl_->active_tree()->set_background_color(SkColors::kTransparent);
   host_impl_->SetFullViewportDamage();
   args = viz::CreateBeginFrameArgsForTesting(
       BEGINFRAME_FROM_HERE, viz::BeginFrameArgs::kManualSourceId, 1,
@@ -11191,7 +11396,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, HasTransparentBackground) {
   host_impl_->SetFullViewportDamage();
 
   // Verify no quads are drawn when semi-transparent background is set.
-  host_impl_->active_tree()->set_background_color(SkColorSetARGB(5, 255, 0, 0));
+  host_impl_->active_tree()->set_background_color({1.0f, 0.0f, 0.0f, 0.1f});
   host_impl_->SetFullViewportDamage();
   host_impl_->WillBeginImplFrame(viz::CreateBeginFrameArgsForTesting(
       BEGINFRAME_FROM_HERE, viz::BeginFrameArgs::kManualSourceId, 1,
@@ -14812,7 +15017,13 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
 
   // Verify no jump.
   float y = CurrentScrollOffset(scrolling_layer).y();
-  EXPECT_TRUE(y > 1 && y < 49);
+  if (features::IsImpulseScrollAnimationEnabled()) {
+    // Impulse scroll animation is faster than non-impulse, which results in a
+    // traveled distance larger than the original 50px.
+    EXPECT_TRUE(y > 50 && y < 100);
+  } else {
+    EXPECT_TRUE(y > 1 && y < 49);
+  }
 }
 
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollAnimatedWithDelay) {
@@ -15914,11 +16125,14 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
   settings.scrollbar_fade_duration = base::Milliseconds(300);
   settings.scrollbar_animator = LayerTreeSettings::AURA_OVERLAY;
 
+  const int thumb_thickness = 15;
   gfx::Size viewport_size(300, 200);
   gfx::Size content_size(1000, 1000);
   gfx::Size child_layer_size(250, 150);
-  gfx::Size scrollbar_size_1(gfx::Size(15, viewport_size.height()));
-  gfx::Size scrollbar_size_2(gfx::Size(15, child_layer_size.height()));
+  gfx::Size scrollbar_size_1(
+      gfx::Size(thumb_thickness, viewport_size.height()));
+  gfx::Size scrollbar_size_2(
+      gfx::Size(thumb_thickness, child_layer_size.height()));
 
   CreateHostImpl(settings, CreateLayerTreeFrameSink());
   host_impl_->active_tree()->SetDeviceScaleFactor(1);
@@ -15932,7 +16146,8 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
 
   // scrollbar_1 on root scroll.
   auto* scrollbar_1 = AddLayer<SolidColorScrollbarLayerImpl>(
-      host_impl_->active_tree(), ScrollbarOrientation::VERTICAL, 15, 0, true);
+      host_impl_->active_tree(), ScrollbarOrientation::VERTICAL,
+      thumb_thickness, 0, true);
   SetupScrollbarLayer(root_scroll, scrollbar_1);
   scrollbar_1->SetBounds(scrollbar_size_1);
   TouchActionRegion touch_action_region;
@@ -15950,16 +16165,19 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
   EXPECT_TRUE(scrollbar_1_animation_controller);
 
   const float kMouseMoveDistanceToTriggerFadeIn =
-      ScrollbarAnimationController::kMouseMoveDistanceToTriggerFadeIn;
+      scrollbar_1_animation_controller
+          ->GetScrollbarAnimationController(ScrollbarOrientation::VERTICAL)
+          .MouseMoveDistanceToTriggerFadeIn();
 
   const float kMouseMoveDistanceToTriggerExpand =
-      SingleScrollbarAnimationControllerThinning::
-          kMouseMoveDistanceToTriggerExpand;
+      scrollbar_1_animation_controller
+          ->GetScrollbarAnimationController(ScrollbarOrientation::VERTICAL)
+          .MouseMoveDistanceToTriggerExpand();
 
   // Mouse moves close to the scrollbar, goes over the scrollbar, and
   // moves back to where it was.
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerFadeIn, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerFadeIn + 1, 0));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -15968,7 +16186,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerExpand, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerExpand + 1, 0));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -15977,7 +16195,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(14 + kMouseMoveDistanceToTriggerExpand, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerExpand, 0));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -15994,7 +16212,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(14 + kMouseMoveDistanceToTriggerExpand, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerExpand, 0));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -16003,7 +16221,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerExpand, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerExpand + 1, 0));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -16012,7 +16230,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(15 + kMouseMoveDistanceToTriggerFadeIn, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerFadeIn + 1, 0));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -16022,7 +16240,8 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
 
   // scrollbar_2 on child.
   auto* scrollbar_2 = AddLayer<SolidColorScrollbarLayerImpl>(
-      host_impl_->active_tree(), ScrollbarOrientation::VERTICAL, 15, 0, true);
+      host_impl_->active_tree(), ScrollbarOrientation::VERTICAL,
+      thumb_thickness, 0, true);
   LayerImpl* child =
       AddScrollableLayer(root_scroll, gfx::Size(100, 100), child_layer_size);
   child->SetOffsetToTransformParent(gfx::Vector2dF(50, 50));
@@ -16060,7 +16279,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
       ScrollbarOrientation::VERTICAL));
 
   GetInputHandler().MouseMoveAt(
-      gfx::Point(64 + kMouseMoveDistanceToTriggerExpand, 50));
+      gfx::Point(50 + thumb_thickness + kMouseMoveDistanceToTriggerExpand, 50));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_FALSE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(
@@ -16074,7 +16293,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtTestScrollbarStates(
   EXPECT_FALSE(scrollbar_2_animation_controller->MouseIsOverScrollbarThumb(
       ScrollbarOrientation::VERTICAL));
   GetInputHandler().MouseMoveAt(
-      gfx::Point(14 + kMouseMoveDistanceToTriggerExpand, 0));
+      gfx::Point(thumb_thickness + kMouseMoveDistanceToTriggerExpand, 0));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbar(
       ScrollbarOrientation::VERTICAL));
   EXPECT_TRUE(scrollbar_1_animation_controller->MouseIsNearScrollbarThumb(

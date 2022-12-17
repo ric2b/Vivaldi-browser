@@ -22,7 +22,7 @@
 #include "chrome/browser/lookalikes/lookalike_url_controller_client.h"
 #include "chrome/browser/lookalikes/lookalike_url_service.h"
 #include "chrome/browser/lookalikes/lookalike_url_tab_storage.h"
-#include "chrome/browser/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
+#include "chrome/browser/preloading/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "components/lookalikes/core/features.h"
@@ -413,19 +413,12 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::PerformChecks(
 
   LookalikeUrlMatchType match_type =
       first_is_lookalike ? first_match_type : last_match_type;
-  if (match_type == LookalikeUrlMatchType::kCharacterSwapSiteEngagement ||
-      match_type == LookalikeUrlMatchType::kCharacterSwapTop500) {
-    GURL lookalike_url = first_is_lookalike ? first_url : last_url;
 
-    navigation_handle()->GetRenderFrameHost()->AddMessageToConsole(
-        blink::mojom::ConsoleMessageLevel::kWarning,
-        base::StringPrintf(
-            "Chrome has determined that %s could be fake or fraudulent.\n\n"
-            "Future Chrome versions will show a warning on this domain name. "
-            "If you believe this is shown in error please visit "
-            "https://g.co/chrome/lookalike-warnings",
-            lookalike_url.host().c_str()));
-  }
+  // IMPORTANT: Every time that a new lookalike heuristic is added, before
+  // adding a warning UI, a console message should be printed here. To do that,
+  // `lookalikes::GetConsoleMessage(lookalike_url, is_new_heuristic)` should be
+  // called with `is_new_heuristic=true`. The `lookalike_url` could be first_url
+  // or last_url depending on the value of `first_is_lookalike`.
 
   RecordUMAFromMatchType(match_type);
   // Interstitial normally records UKM, but still record when it's not shown.
@@ -473,12 +466,6 @@ bool LookalikeUrlNavigationThrottle::IsLookalikeUrl(
 
   // If the host is allowlisted by policy, don't show any warning.
   if (IsAllowedByEnterprisePolicy(profile_->GetPrefs(), url)) {
-    return false;
-  }
-
-  // If the URL is in the component allowlist, don't show any warning.
-  if (reputation::IsUrlAllowlistedBySafetyTipsComponent(
-          proto, url.GetWithEmptyPath())) {
     return false;
   }
 
@@ -538,13 +525,24 @@ bool LookalikeUrlNavigationThrottle::IsLookalikeUrl(
     GURL::Replacements replace_host;
     replace_host.SetHostStr(suggested_domain);
     *suggested_url = url.ReplaceComponents(replace_host).GetWithEmptyPath();
-    return true;
+
+    // Only flag the URL if its not allowed to spoof the suggested URL.
+    if (!reputation::IsUrlAllowlistedBySafetyTipsComponent(
+            proto, url.GetWithEmptyPath(), *suggested_url)) {
+      return true;
+    }
   }
 
   if (ShouldBlockBySpoofCheckResult(navigated_domain)) {
     *match_type = LookalikeUrlMatchType::kFailedSpoofChecks;
     *suggested_url = GURL();
-    return true;
+
+    // Only flag the URL if its not allowed to spoof itself (which is how we
+    // indicate spoof-check-specific allowlisting).
+    if (!reputation::IsUrlAllowlistedBySafetyTipsComponent(
+            proto, url.GetWithEmptyPath(), url.GetWithEmptyPath())) {
+      return true;
+    }
   }
 
   return false;

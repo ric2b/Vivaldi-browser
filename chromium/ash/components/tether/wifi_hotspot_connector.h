@@ -13,19 +13,17 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "chromeos/network/network_connect.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "chromeos/network/network_state.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 
 namespace base {
 class TaskRunner;
 }  // namespace base
 
 namespace ash {
+
+class NetworkConnect;
+class NetworkState;
+class NetworkStateHandler;
 
 namespace tether {
 

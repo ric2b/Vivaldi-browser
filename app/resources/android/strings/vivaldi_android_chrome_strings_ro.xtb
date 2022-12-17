@@ -31,6 +31,9 @@
 <translation id="4167670741834902166">Filă privată nouă</translation>
 <translation id="4243710787042215766">Deschide într-o filă privată</translation>
 <translation id="4526803704855831732">File private</translation>
+<translation id="4719086422742491124">Aflați despre subiectele de pe site-urile web fără a părăsi pagina. Selectați unul sau mai multe cuvinte de pe pagină pentru a le căuta.
+
+Atingeți pentru a căuta este o funcție care este disponibilă numai atunci când Google este stabilit ca motor de căutare implicit în Vivaldi.</translation>
 <translation id="4759238208242260848">Descărcări</translation>
 <translation id="4883379392681899581">Părăsește modul privat</translation>
 <translation id="4943872375798546930">Niciun rezultat</translation>
@@ -39,10 +42,10 @@
 <translation id="5118676864324397542">Spațiu de stocare <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Filă nouă</translation>
-<translation id="572328651809341494">File recente</translation>
-<translation id="5840488417521835756">Aflați despre subiectele de pe site-uri fără să părăsiți pagina. Funcția Atinge pentru a căuta este o caracteristică disponibilă numai atunci când Google este setat ca motor de căutare implicit în Vivaldi. Această funcție trimite către Google Search un cuvânt și contextul înconjurător, primind înapoi definiții, imagini, rezultate de căutări și alte detalii.
+<translation id="5375131951310889874">Aflați despre subiectele de pe site-urile web fără a părăsi pagina. Atingeți pentru a căuta este o funcție care este disponibilă numai atunci când Google este stabilit ca motor de căutare implicit în Vivaldi. Trimite un cuvânt și contextul din jurul lui către Google Search, returnând definiții, imagini, rezultate ale căutării și alte detalii.
 
-Pentru a ajusta termenul de căutare, apăsați lung pentru a selecta textul. Pentru a rafina căutarea, glisați panoul până în partea de sus și atingeți caseta de căutare.</translation>
+Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru a rafina căutarea, glisați panoul până la capăt și atingeți caseta de căutare.</translation>
+<translation id="572328651809341494">File recente</translation>
 <translation id="6150320133806434356">Marcajul a fost salvat</translation>
 <translation id="6336451774241870485">Filă privată nouă</translation>
 <translation id="6585139692466700358">Oferă traducerea paginilor în alte limbi folosind seviciul de traducere Vivaldi</translation>
@@ -53,7 +56,6 @@ Pentru a ajusta termenul de căutare, apăsați lung pentru a selecta textul. Pe
 <translation id="732145680195464316">Marcajul a fost salvat în <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Despre Vivaldi</translation>
 <translation id="7465104139234185284">Închide toate filele private</translation>
-<translation id="7519434535192513364">Funcția Atinge pentru a căuta este o caracteristică disponibilă numai atunci când Google este setat ca motor de căutare implicit în Vivaldi. Această funcție trimite către Google Search un cuvânt și pagina curentă drept context. Puteți dezactiva această funcție în <ph name="BEGIN_LINK" />Setări<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Acordul de licență pentru utilizator</translation>
 <translation id="85991616550051997">La pagina de pornire</translation>
 <translation id="8820817407110198400">Marcaje</translation>

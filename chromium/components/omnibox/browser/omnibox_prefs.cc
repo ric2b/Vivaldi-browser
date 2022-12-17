@@ -42,8 +42,14 @@ const char kSuggestionGroupVisibility[] = "omnibox.suggestionGroupVisibility";
 // Boolean that specifies whether to always show full URLs in the omnibox.
 const char kPreventUrlElisionsInOmnibox[] = "omnibox.prevent_url_elisions";
 
-// A cache of zero suggest results using JSON serialized into a string.
+// A cache of NTP zero suggest results using a JSON dictionary serialized into a
+// string.
 const char kZeroSuggestCachedResults[] = "zerosuggest.cachedresults";
+
+// A cache of SRP/Web zero suggest results using a JSON dictionary serialized
+// into a string keyed off the page URL.
+const char kZeroSuggestCachedResultsWithURL[] =
+    "zerosuggest.cachedresults_with_url";
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kSuggestionGroupVisibility);
@@ -57,12 +63,11 @@ SuggestionGroupVisibility GetUserPreferenceForSuggestionGroupVisibility(
     int suggestion_group_id) {
   DCHECK(prefs);
 
-  const base::Value* dictionary =
-      prefs->GetDictionary(kSuggestionGroupVisibility);
-  DCHECK(dictionary);
+  const base::Value::Dict& dictionary =
+      prefs->GetValueDict(kSuggestionGroupVisibility);
 
   absl::optional<int> value =
-      dictionary->FindIntKey(base::NumberToString(suggestion_group_id));
+      dictionary.FindInt(base::NumberToString(suggestion_group_id));
 
   if (value == SuggestionGroupVisibility::HIDDEN ||
       value == SuggestionGroupVisibility::SHOWN) {
@@ -72,20 +77,45 @@ SuggestionGroupVisibility GetUserPreferenceForSuggestionGroupVisibility(
   return SuggestionGroupVisibility::DEFAULT;
 }
 
-void SetSuggestionGroupVisibility(PrefService* prefs,
-                                  int suggestion_group_id,
-                                  SuggestionGroupVisibility new_value) {
+void SetUserPreferenceForSuggestionGroupVisibility(
+    PrefService* prefs,
+    int suggestion_group_id,
+    SuggestionGroupVisibility visibility) {
   DCHECK(prefs);
 
   DictionaryPrefUpdate update(prefs, kSuggestionGroupVisibility);
-  update->SetIntKey(base::NumberToString(suggestion_group_id), new_value);
+  update->SetIntKey(base::NumberToString(suggestion_group_id), visibility);
 
   base::SparseHistogram::FactoryGet(
-      new_value == SuggestionGroupVisibility::SHOWN
+      visibility == SuggestionGroupVisibility::SHOWN
           ? kToggleSuggestionGroupIdOnHistogram
           : kToggleSuggestionGroupIdOffHistogram,
       base::HistogramBase::kUmaTargetedHistogramFlag)
       ->Add(suggestion_group_id);
+}
+
+void SetUserPreferenceForZeroSuggestCachedResponse(
+    PrefService* prefs,
+    const std::string& page_url,
+    const std::string& response) {
+  DCHECK(prefs);
+
+  // Constrain the ZPS cache to a single entry by overwriting the existing
+  // value.
+  base::Value::Dict new_dict;
+  new_dict.Set(page_url, response);
+  prefs->SetDict(kZeroSuggestCachedResultsWithURL, std::move(new_dict));
+}
+
+std::string GetUserPreferenceForZeroSuggestCachedResponse(
+    PrefService* prefs,
+    const std::string& page_url) {
+  DCHECK(prefs);
+
+  const base::Value::Dict& dictionary =
+      prefs->GetValueDict(omnibox::kZeroSuggestCachedResultsWithURL);
+  auto* value_ptr = dictionary.FindString(page_url);
+  return (value_ptr ? *value_ptr : std::string());
 }
 
 }  // namespace omnibox

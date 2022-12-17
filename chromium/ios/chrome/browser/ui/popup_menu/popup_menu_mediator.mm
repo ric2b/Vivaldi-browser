@@ -4,31 +4,32 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_mediator.h"
 
-#include "base/check_op.h"
-#include "base/feature_list.h"
+#import "base/check_op.h"
+#import "base/feature_list.h"
 #import "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
+#import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/common/bookmark_pref_names.h"
-#include "components/feature_engagement/public/feature_constants.h"
-#include "components/feature_engagement/public/tracker.h"
-#include "components/language/ios/browser/ios_language_detection_tab_helper.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/common/bookmark_pref_names.h"
+#import "components/feature_engagement/public/feature_constants.h"
+#import "components/feature_engagement/public/tracker.h"
+#import "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper_observer_bridge.h"
-#include "components/open_from_clipboard/clipboard_recent_content.h"
+#import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
-#include "components/prefs/pref_change_registrar.h"
-#include "components/prefs/pref_service.h"
-#include "components/profile_metrics/browser_profile_type.h"
-#include "components/translate/core/browser/translate_manager.h"
-#include "components/translate/core/browser/translate_prefs.h"
+#import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
+#import "components/profile_metrics/browser_profile_type.h"
+#import "components/translate/core/browser/translate_manager.h"
+#import "components/translate/core/browser/translate_prefs.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
+#import "ios/chrome/browser/follow/follow_browser_agent.h"
 #import "ios/chrome/browser/follow/follow_menu_updater.h"
 #import "ios/chrome/browser/follow/follow_tab_helper.h"
 #import "ios/chrome/browser/follow/follow_util.h"
@@ -38,13 +39,13 @@
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
 #import "ios/chrome/browser/overlays/public/web_content_area/http_auth_overlay.h"
-#include "ios/chrome/browser/policy/browser_policy_connector_ios.h"
+#import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
-#include "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
-#include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_constants.h"
@@ -69,23 +70,26 @@
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ios/components/webui/web_ui_url_constants.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/follow/follow_provider.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/components/webui/web_ui_url_constants.h"
+#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
-#include "ios/web/common/features.h"
-#include "ios/web/common/user_agent.h"
-#include "ios/web/public/favicon/favicon_status.h"
+#import "ios/web/common/features.h"
+#import "ios/web/common/user_agent.h"
+#import "ios/web/public/favicon/favicon_status.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/web_client.h"
+#import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/image/image.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/gfx/image/image.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/notes/note_ui_constants.h"
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -197,10 +201,10 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 @property(nonatomic, assign) BOOL contentBlocked;
 
 // URLs for the current webpage, which are used to update the follow status.
-@property(nonatomic, strong) FollowWebPageURLs* webPageURLs;
+@property(nonatomic, strong) WebPageURLs* webPage;
 
 // YES if the current website has been followed.
-@property(nonatomic, assign) BOOL followStatus;
+@property(nonatomic, assign) BOOL followed;
 
 #pragma mark*** Specific Items ***
 
@@ -216,6 +220,10 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 @property(nonatomic, strong) PopupMenuToolsItem* requestDesktopSiteItem;
 @property(nonatomic, strong) PopupMenuToolsItem* requestMobileSiteItem;
 @property(nonatomic, strong) PopupMenuToolsItem* readingListItem;
+
+// Vivaldi
+@property(nonatomic, strong) PopupMenuToolsItem* noteItem;
+
 // Array containing all the nonnull items/
 @property(nonatomic, strong)
     NSArray<TableViewItem<PopupMenuItem>*>* specificItems;
@@ -259,8 +267,12 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
     _webState->RemoveObserver(_webStateObserver.get());
     _webStateObserver.reset();
     if (self.followItem) {
-      FollowTabHelper::FromWebState(_webState)->remove_follow_menu_updater();
-      self.webPageURLs = nil;
+      FollowTabHelper* followTabHelper =
+          FollowTabHelper::FromWebState(_webState);
+      if (followTabHelper) {
+        followTabHelper->RemoveFollowMenuUpdater();
+      }
+      self.webPage = nil;
     }
     _webState = nullptr;
   }
@@ -422,7 +434,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   if (_webState) {
     _webState->AddObserver(_webStateObserver.get());
 
-    // Observer the language::IOSLanguageDetectionTabHelper for |_webState|.
+    // Observer the language::IOSLanguageDetectionTabHelper for `_webState`.
     _iOSLanguageDetectionTabHelperObserverBridge =
         std::make_unique<language::IOSLanguageDetectionTabHelperObserverBridge>(
             language::IOSLanguageDetectionTabHelper::FromWebState(_webState),
@@ -520,8 +532,11 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       case PopupMenuTypeToolsMenu:
         [self createToolsMenuItems];
         if (self.webState && self.followItem) {
-          FollowTabHelper::FromWebState(self.webState)
-              ->set_follow_menu_updater(self);
+          FollowTabHelper* followTabHelper =
+              FollowTabHelper::FromWebState(self.webState);
+          if (followTabHelper) {
+            followTabHelper->SetFollowMenuUpdater(self);
+          }
         }
         break;
       case PopupMenuTypeNavigationForward:
@@ -567,6 +582,10 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
     if (self.readingListItem)
       [specificItems addObject:self.readingListItem];
     self.specificItems = specificItems;
+      // Vivaldi noteItem
+      if (self.noteItem)
+        [specificItems addObject:self.noteItem];
+      // End Vivaldi
   }
   return _items;
 }
@@ -654,15 +673,21 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       }));
 }
 
-- (void)updateFollowStatus {
+- (void)toggleFollowed {
   DCHECK(IsWebChannelsEnabled());
-  if (self.followStatus) {
-    [self.feedMetricsRecorder recordUnfollowFromMenu];
+  DCHECK(self.followBrowserAgent);
+
+  if (self.followed) {
+    self.followBrowserAgent->UnfollowWebSite(self.webPage,
+                                             FollowSource::PopupMenu);
   } else {
-    [self.feedMetricsRecorder recordFollowFromMenu];
+    self.followBrowserAgent->FollowWebSite(self.webPage,
+                                           FollowSource::PopupMenu);
   }
-  ios::GetChromeBrowserProvider().GetFollowProvider()->UpdateFollowStatus(
-      self.webPageURLs, !self.followStatus);
+}
+
+- (web::WebState*)currentWebState {
+  return self.webState;
 }
 
 #pragma mark - IOSLanguageDetectionTabHelperObserving
@@ -690,24 +715,20 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 #pragma mark - FollowMenuUpdater
 
-- (void)updateFollowMenuItemWithFollowWebPageURLs:
-            (FollowWebPageURLs*)webPageURLs
-                                           status:(BOOL)status
-                                       domainName:(NSString*)domainName
-                                          enabled:(BOOL)enabled {
+- (void)updateFollowMenuItemWithWebPage:(WebPageURLs*)webPage
+                               followed:(BOOL)followed
+                             domainName:(NSString*)domainName
+                                enabled:(BOOL)enabled {
   DCHECK(IsWebChannelsEnabled());
-  self.webPageURLs = webPageURLs;
-  self.followStatus = status;
+  self.webPage = webPage;
+  self.followed = followed;
   self.followItem.enabled = enabled;
   self.followItem.title =
-      status ? l10n_util::GetNSStringF(IDS_IOS_TOOLS_MENU_UNFOLLOW,
-                                       base::SysNSStringToUTF16(@""))
-             : l10n_util::GetNSStringF(IDS_IOS_TOOLS_MENU_FOLLOW,
-                                       base::SysNSStringToUTF16(@""));
-  self.followItem.image =
-      [[UIImage imageNamed:self.followStatus ? @"popup_menu_unfollow"
-                                             : @"popup_menu_follow"]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      followed ? l10n_util::GetNSStringF(IDS_IOS_TOOLS_MENU_UNFOLLOW, u"")
+               : l10n_util::GetNSStringF(IDS_IOS_TOOLS_MENU_FOLLOW, u"");
+  self.followItem.image = [[UIImage
+      imageNamed:followed ? @"popup_menu_unfollow" : @"popup_menu_follow"]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 
   [self.popupMenu itemsHaveChanged:@[ self.followItem ]];
 }
@@ -746,7 +767,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   [self.popupMenu itemsHaveChanged:self.specificItems];
 }
 
-// Updates the |bookmark| item to match the bookmarked status of the page.
+// Updates `self.bookmarkItem` to match the bookmarked status of the page.
 - (void)updateBookmarkItem {
   if (!self.bookmarkItem)
     return;
@@ -772,7 +793,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   [self.popupMenu itemsHaveChanged:@[ self.bookmarkItem ]];
 }
 
-// Updates the |reloadStopItem| item to match the current behavior.
+// Updates the `reloadStopItem` item to match the current behavior.
 - (void)updateReloadStopItem {
   if ([self isPageLoading] &&
       self.reloadStopItem.accessibilityIdentifier == kToolsMenuReload) {
@@ -1110,6 +1131,12 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       @"popup_menu_add_bookmark", kToolsMenuAddToBookmarks);
   [actionsArray addObject:self.bookmarkItem];
 
+  // Vivaldi - Notes
+  self.noteItem = CreateTableViewItem(
+       IDS_VIVALDI_TOOLS_MENU_ADD_TO_NOTES, PopupMenuActionPageBookmark,
+       @"popup_menu_add_note", kToolsMenuAddToNotes);
+  [actionsArray addObject:self.noteItem];
+
   // Translate.
   [self logTranslateAvailability];
   self.translateItem = CreateTableViewItem(
@@ -1199,6 +1226,10 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   TableViewItem* bookmarks = CreateTableViewItem(
       IDS_IOS_TOOLS_MENU_BOOKMARKS, PopupMenuActionBookmarks,
       @"popup_menu_bookmarks", kToolsMenuBookmarksId);
+  // Vivaldi Notes
+  TableViewItem* notes = CreateTableViewItem(
+      IDS_VIVALDI_TOOLS_MENU_NOTES, PopupMenuActionNotes,
+      @"popup_menu_notes", kToolsMenuNotesId);
 
   // Reading List.
   self.readingListItem = CreateTableViewItem(
@@ -1238,17 +1269,24 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   // Settings.
   TableViewItem* settings =
       CreateTableViewItem(IDS_IOS_TOOLS_MENU_SETTINGS, PopupMenuActionSettings,
-                          @"popup_menu_settings", kToolsMenuSettingsId);
+                          @"popup_menu_settings", kToolsMenuSettingsActionId);
 
   if (self.isIncognito &&
       base::FeatureList::IsEnabled(kUpdateHistoryEntryPointsInIncognito)) {
     return @[ bookmarks, self.readingListItem, downloadsFolder, settings ];
   }
 
+  if (!vivaldi::IsVivaldiRunning()) {
   return @[
     bookmarks, self.readingListItem, recentTabs, history, downloadsFolder,
     settings
   ];
+  } else {
+      return @[
+        bookmarks, notes, self.readingListItem, recentTabs, history, downloadsFolder,
+        settings
+      ];
+  }
 }
 
 // Creates the section for enterprise info.
@@ -1281,7 +1319,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 }
 
 // Returns YES if incognito NTP title and image should be used for back/forward
-// item associated with |URL|.
+// item associated with `URL`.
 - (BOOL)shouldUseIncognitoNTPResourcesForURL:(const GURL&)URL {
   return URL.DeprecatedGetOriginAsURL() == kChromeUINewTabURL &&
          self.isIncognito &&

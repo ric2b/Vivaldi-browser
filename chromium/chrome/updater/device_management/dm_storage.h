@@ -40,6 +40,9 @@ class TokenServiceInterface {
   // Writes |dm_token| into storage.
   virtual bool StoreDmToken(const std::string& dm_token) = 0;
 
+  // Deletes the DM token from storage.
+  virtual bool DeleteDmToken() = 0;
+
   // Returns the device management token from storage, or returns an empty
   // string if no device management token is found.
   virtual std::string GetDmToken() const = 0;
@@ -80,7 +83,10 @@ class DMStorage : public base::RefCountedThreadSafe<DMStorage> {
 
   // Writes a special DM token to storage to mark current device as
   // deregistered.
-  bool DeregisterDevice();
+  bool InvalidateDMToken();
+
+  // Deletes the existing DM token for re-registration.
+  bool DeleteDMToken();
 
   // Returns true if the DM token is valid, where valid is defined as non-blank
   // and not de-registered.
@@ -88,6 +94,9 @@ class DMStorage : public base::RefCountedThreadSafe<DMStorage> {
 
   // Returns true if the device is de-registered.
   bool IsDeviceDeregistered() const;
+
+  // Checks if the caller has permissions to persist the DM policies.
+  bool CanPersistPolicies() const;
 
   // Persists DM policies.
   //
@@ -133,11 +142,15 @@ class DMStorage : public base::RefCountedThreadSafe<DMStorage> {
   ~DMStorage();
 
   const base::FilePath policy_cache_root_;
+  const base::FilePath policy_info_file_;
   std::unique_ptr<TokenServiceInterface> token_service_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };
 
+// Returns the DMStorage under which the Device Management policies are
+// persisted. For Windows, this is `%ProgramFiles(x86)%\{CompanyName}\Policies`.
+// For macOS, this is `/Library/{CompanyName}/{KEYSTONE_NAME}/DeviceManagement`.
 scoped_refptr<DMStorage> GetDefaultDMStorage();
 
 }  // namespace updater

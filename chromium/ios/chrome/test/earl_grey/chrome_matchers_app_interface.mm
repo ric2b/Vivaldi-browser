@@ -22,10 +22,10 @@
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
+#import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
@@ -44,6 +44,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
+#import "ios/chrome/browser/ui/settings/privacy/privacy_constants.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_ui_swift.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
@@ -60,6 +61,7 @@
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/ui/promo_style/constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/chrome/test/app/window_test_util.h"
@@ -507,10 +509,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
       grey_userInteractionEnabled(), nil);
 }
 
-+ (id<GREYMatcher>)settingsMenuButton {
-  return grey_accessibilityID(kToolsMenuSettingsId);
-}
-
 + (id<GREYMatcher>)settingsDoneButton {
   return grey_accessibilityID(kSettingsDoneButtonId);
 }
@@ -539,10 +537,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)autofillCreditCardTableView {
   return grey_accessibilityID(kAutofillCreditCardTableViewId);
-}
-
-+ (id<GREYMatcher>)addPaymentMethodButton {
-  return grey_accessibilityID(kSettingsAddPaymentMethodButtonId);
 }
 
 + (id<GREYMatcher>)addCreditCardButton {
@@ -620,6 +614,10 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)settingsPrivacyTableView {
   return grey_accessibilityID(kPrivacyTableViewId);
+}
+
++ (id<GREYMatcher>)settingsPrivacySafeBrowsingTableView {
+  return grey_accessibilityID(kPrivacySafeBrowsingTableViewId);
 }
 
 + (id<GREYMatcher>)contentSettingsButton {
@@ -793,20 +791,12 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kToolsMenuNewWindowId);
 }
 
-+ (id<GREYMatcher>)readingListMenuButton {
-  return grey_accessibilityID(kToolsMenuReadingListId);
-}
-
-+ (id<GREYMatcher>)bookmarksMenuButton {
-  return grey_accessibilityID(kToolsMenuBookmarksId);
-}
-
-+ (id<GREYMatcher>)recentTabsMenuButton {
-  return grey_accessibilityID(kToolsMenuOtherDevicesId);
-}
-
 + (id<GREYMatcher>)systemSelectionCallout {
-  return grey_kindOfClass(NSClassFromString(@"UICalloutBarButton"));
+  if (@available(iOS 16.0, *)) {
+    return grey_kindOfClass(NSClassFromString(@"_UIEditMenuListViewCell"));
+  } else {
+    return grey_kindOfClass(NSClassFromString(@"UICalloutBarButton"));
+  }
 }
 
 + (id<GREYMatcher>)systemSelectionCalloutLinkToTextButton {
@@ -1064,6 +1054,92 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kSettingsToolbarAddButtonId);
 }
 
+#pragma mark - Overflow Menu Destinations
+
++ (id<GREYMatcher>)bookmarksDestinationButton {
+  return grey_accessibilityID(kToolsMenuBookmarksId);
+}
+
++ (id<GREYMatcher>)downloadsDestinationButton {
+  return grey_accessibilityID(kToolsMenuDownloadsId);
+}
+
++ (id<GREYMatcher>)historyDestinationButton {
+  return grey_accessibilityID(kToolsMenuHistoryId);
+}
+
++ (id<GREYMatcher>)passwordsDestinationButton {
+  return grey_accessibilityID(kToolsMenuPasswordsId);
+}
+
++ (id<GREYMatcher>)readingListDestinationButton {
+  return grey_accessibilityID(kToolsMenuReadingListId);
+}
+
++ (id<GREYMatcher>)recentTabsDestinationButton {
+  return grey_accessibilityID(kToolsMenuOtherDevicesId);
+}
+
++ (id<GREYMatcher>)settingsDestinationButton {
+  return grey_accessibilityID(kToolsMenuSettingsId);
+}
+
++ (id<GREYMatcher>)siteInfoDestinationButton {
+  return grey_accessibilityID(kToolsMenuSiteInformation);
+}
+
+#pragma mark - Overflow Menu Actions
+
++ (id<GREYMatcher>)settingsActionButton {
+  return grey_accessibilityID(kToolsMenuSettingsActionId);
+}
+
+#pragma mark - Promo style view controller
+
+// Returns matcher for the primary action button.
++ (id<GREYMatcher>)promoStylePrimaryActionButtonMatcher {
+  return grey_accessibilityID(kPromoStylePrimaryActionAccessibilityIdentifier);
+}
+
+// Returns matcher for the secondary action button.
++ (id<GREYMatcher>)promoStyleSecondaryActionButtonMatcher {
+  return grey_accessibilityID(
+      kPromoStyleSecondaryActionAccessibilityIdentifier);
+}
+
+#pragma mark - Incognito Interstitial
+
++ (id<GREYMatcher>)incognitoInterstitial {
+  return grey_accessibilityID(kIncognitoInterstitialAccessibilityIdentifier);
+}
+
++ (id<GREYMatcher>)incognitoInterstitialLabelForURL:(NSString*)url {
+  return grey_allOf(grey_accessibilityID(
+                        kIncognitoInterstitialURLLabelAccessibilityIdentifier),
+                    grey_accessibilityLabel(url), nullptr);
+}
+
++ (id<GREYMatcher>)incognitoInterstitialOpenInChromeIncognitoButton {
+  return grey_allOf(
+      [ChromeMatchersAppInterface promoStylePrimaryActionButtonMatcher],
+      grey_accessibilityLabel(l10n_util::GetNSString(
+          IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME_INCOGNITO)),
+      nullptr);
+}
+
++ (id<GREYMatcher>)incognitoInterstitialOpenInChromeButton {
+  return grey_allOf(
+      [ChromeMatchersAppInterface promoStyleSecondaryActionButtonMatcher],
+      grey_accessibilityLabel(l10n_util::GetNSString(
+          IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME)),
+      nullptr);
+}
+
++ (id<GREYMatcher>)incognitoInterstitialCancelButton {
+  return grey_accessibilityID(
+      kIncognitoInterstitialCancelButtonAccessibilityIdentifier);
+}
+
 #pragma mark - Manual Fallback
 
 + (id<GREYMatcher>)manualFallbackFormSuggestionViewMatcher {
@@ -1166,27 +1242,29 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)activityViewHeaderWithURLHost:(NSString*)host
                                            title:(NSString*)pageTitle {
-#if TARGET_IPHONE_SIMULATOR
+  // The title of the activity view starts as the URL, then asynchronously
+  // changes to the page title. Sometimes, the activity view fails to update
+  // the text to the page title, causing test flake. Allow matcher to pass
+  // with either value for the activity view title.
+
+  GREYMatchesBlock matches = ^BOOL(id element) {
+    NSString* label = [element accessibilityLabel];
+    NSLog(@"label is %@ %d %d", label, [label containsString:host],
+          [label containsString:pageTitle]);
+    return [label containsString:host] || [label containsString:pageTitle];
+  };
+  GREYDescribeToBlock describe = ^void(id<GREYDescription> description) {
+    [description
+        appendText:[NSString stringWithFormat:
+                                 @"accessibilityLabel containing %@ or %@",
+                                 host, pageTitle]];
+  };
+
   return grey_allOf(
-      // The title of the activity view starts as the URL, then asynchronously
-      // changes to the page title. Sometimes, the activity view fails to update
-      // the text to the page title, causing test flake. Allow matcher to pass
-      // with either value for the activity view title.
-      grey_anyOf(grey_accessibilityLabel(host),
-                 grey_accessibilityLabel(pageTitle), nil),
-      grey_ancestor(
-          grey_allOf(grey_accessibilityTrait(UIAccessibilityTraitHeader),
-                     grey_kindOfClassName(@"LPLinkView"), nil)),
+      grey_kindOfClassName(@"LPLinkView"),
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe],
       nil);
-#else
-  // Device tests tend to fail more often if the host is allowed in the
-  // grey_anyOf as above.
-  return grey_allOf(grey_accessibilityLabel(pageTitle),
-                    grey_ancestor(grey_allOf(
-                        grey_accessibilityTrait(UIAccessibilityTraitHeader),
-                        grey_kindOfClassName(@"LPLinkView"), nil)),
-                    nil);
-#endif
 }
 
 + (id<GREYMatcher>)manualFallbackSuggestPasswordMatcher {

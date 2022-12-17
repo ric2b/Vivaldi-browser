@@ -9,7 +9,8 @@ import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
 import 'chrome://nearby/mojo/nearby_share_target_types.mojom-lite.js';
 import 'chrome://nearby/mojo/nearby_share_share_type.mojom-lite.js';
 import 'chrome://nearby/mojo/nearby_share.mojom-lite.js';
-import 'chrome://nearby/shared/nearby_preview.js';
+
+import {NearbyPreviewElement} from 'chrome://nearby/shared/nearby_preview.js';
 
 import {assertEquals} from '../../chai_assert.js';
 
@@ -36,10 +37,11 @@ suite('PreviewTest', function() {
     previewElement.payloadPreview = {
       description: title,
       fileCount: 1,
-      shareType: /** @type {nearbyShare.mojom.ShareType} */ (0)
+      shareType: /** @type {nearbyShare.mojom.ShareType} */ (0),
     };
 
-    const renderedTitle = previewElement.$$('#title').textContent;
+    const renderedTitle =
+        previewElement.shadowRoot.querySelector('#title').textContent;
     assertEquals(title, renderedTitle);
   });
 });

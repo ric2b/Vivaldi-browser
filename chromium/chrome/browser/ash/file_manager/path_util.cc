@@ -21,7 +21,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "chrome/browser/ash/arc/fileapi/arc_content_file_system_url_util.h"
 #include "chrome/browser/ash/arc/fileapi/arc_documents_provider_root.h"
 #include "chrome/browser/ash/arc/fileapi/arc_documents_provider_root_map.h"
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
@@ -33,6 +32,7 @@
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/smb_client/smb_service.h"
@@ -89,7 +89,7 @@ constexpr base::FilePath::CharType kArcDownloadRoot[] =
 constexpr base::FilePath::CharType kArcExternalFilesRoot[] =
     FILE_PATH_LITERAL("/external_files");
 // Sync with the volume provider in ARC++ side.
-constexpr char kArcRemovableMediaContentUrlPrefix[] =
+constexpr char kArcStorageContentUrlPrefix[] =
     "content://org.chromium.arc.volumeprovider/";
 // A predefined removable media UUID for testing. Defined in
 // ash/components/arc/volume_mounter/arc_volume_mounter_bridge.cc.
@@ -182,8 +182,7 @@ std::string GetSourcePathForRemovableMedia(const std::string& volume_name) {
   const auto& mount_points =
       ash::disks::DiskMountManager::GetInstance()->mount_points();
   const auto found = mount_points.find(mount_path);
-  return found == mount_points.end() ? std::string()
-                                     : found->second.source_path;
+  return found == mount_points.end() ? std::string() : found->source_path;
 }
 
 // Returns the UUID of a removable device using its volume name as a key.
@@ -324,8 +323,6 @@ bool MigratePathFromOldFormat(Profile* profile,
                               const base::FilePath& old_base,
                               const base::FilePath& old_path,
                               base::FilePath* new_path) {
-  const base::FilePath new_base = GetMyFilesFolderForProfile(profile);
-
   // Special case, migrating /home/chronos/user which is set early (before a
   // profile is attached to the browser process) to default to
   // /home/chronos/u-{hash}/MyFiles/Downloads.
@@ -333,6 +330,12 @@ bool MigratePathFromOldFormat(Profile* profile,
       old_path == base::FilePath("/home/chronos/user")) {
     *new_path = GetDownloadsFolderForProfile(profile);
     return true;
+  }
+
+  // If the `new_base` is already parent of `old_path`, no need to migrate.
+  const base::FilePath new_base = GetMyFilesFolderForProfile(profile);
+  if (new_base.IsParent(old_path)) {
+    return false;
   }
 
   base::FilePath relative;
@@ -387,7 +390,10 @@ std::string GetCrostiniMountPointName(Profile* profile) {
 }
 
 std::string GetGuestOsMountPointName(Profile* profile,
-                                     crostini::ContainerId id) {
+                                     const guest_os::GuestId& id) {
+  if (id.vm_type == guest_os::VmType::ARCVM) {
+    return kAndroidFilesMountPointName;
+  }
   return base::JoinString(
       {"guestos", ash::ProfileHelper::GetUserIdHashFromProfile(profile),
        base::EscapeAllExceptUnreserved(id.vm_name),
@@ -489,9 +495,9 @@ bool ConvertFileSystemURLToPathInsideVM(
   } else if (id == GetCrostiniMountPointName(profile)) {
     // Crostini.
     if (map_crostini_home) {
-      absl::optional<crostini::ContainerInfo> container_info =
-          crostini::CrostiniManager::GetForProfile(profile)->GetContainerInfo(
-              crostini::ContainerId::GetDefault());
+      auto container_info =
+          guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetInfo(
+              crostini::DefaultContainerId());
       if (!container_info) {
         return false;
       }
@@ -544,9 +550,9 @@ bool ConvertPathInsideVMToFileSystemURL(
   base::FilePath relative_path;
 
   if (map_crostini_home) {
-    absl::optional<crostini::ContainerInfo> container_info =
-        crostini::CrostiniManager::GetForProfile(profile)->GetContainerInfo(
-            crostini::ContainerId::GetDefault());
+    auto container_info =
+        guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetInfo(
+            crostini::DefaultContainerId());
     if (container_info &&
         AppendRelativePath(container_info->homedir, inside, &relative_path)) {
       *file_system_url = mount_points->CreateExternalFileSystemURL(
@@ -650,7 +656,7 @@ bool ConvertPathToArcUrl(const base::FilePath& path,
       GetDownloadsFolderForProfile(primary_profile);
   base::FilePath result_path(kArcDownloadRoot);
   if (primary_downloads.AppendRelativePath(path, &result_path)) {
-    *arc_url_out = GURL(arc::kFileSystemFileproviderUrl)
+    *arc_url_out = GURL(kArcStorageContentUrlPrefix)
                        .Resolve(base::EscapePath(result_path.AsUTF8Unsafe()));
     return true;
   }
@@ -659,7 +665,7 @@ bool ConvertPathToArcUrl(const base::FilePath& path,
   result_path = base::FilePath(kArcExternalFilesRoot);
   if (base::FilePath(kAndroidFilesPath)
           .AppendRelativePath(path, &result_path)) {
-    *arc_url_out = GURL(arc::kFileSystemFileproviderUrl)
+    *arc_url_out = GURL(kArcStorageContentUrlPrefix)
                        .Resolve(base::EscapePath(result_path.AsUTF8Unsafe()));
     return true;
   }
@@ -685,7 +691,7 @@ bool ConvertPathToArcUrl(const base::FilePath& path,
       return false;
     }
     *arc_url_out =
-        GURL(kArcRemovableMediaContentUrlPrefix)
+        GURL(kArcStorageContentUrlPrefix)
             .Resolve(base::EscapePath(relative_path_with_uuid.AsUTF8Unsafe()));
     return true;
   }
@@ -1077,6 +1083,7 @@ absl::optional<base::FilePath> GetDisplayablePath(Profile* profile,
       break;
     case VOLUME_TYPE_ANDROID_FILES:
     case VOLUME_TYPE_CROSTINI:
+    case VOLUME_TYPE_GUEST_OS:
       result = base::FilePath(l10n_util::GetStringUTF8(
                                   IDS_FILE_BROWSER_MY_FILES_ROOT_LABEL))
                    .Append(volume->volume_label());
@@ -1086,7 +1093,6 @@ absl::optional<base::FilePath> GetDisplayablePath(Profile* profile,
     case VOLUME_TYPE_MOUNTED_ARCHIVE_FILE:
     case VOLUME_TYPE_PROVIDED:
     case VOLUME_TYPE_DOCUMENTS_PROVIDER:
-    case VOLUME_TYPE_GUEST_OS:
     case VOLUME_TYPE_MTP:
     case VOLUME_TYPE_SMB:
       result = base::FilePath(volume->volume_label());

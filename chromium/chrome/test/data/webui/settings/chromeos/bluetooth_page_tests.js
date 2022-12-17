@@ -23,10 +23,10 @@ function getFakePrefs() {
             key: 'ash.user.bluetooth.adapter_enabled',
             type: chrome.settingsPrivate.PrefType.BOOLEAN,
             value: false,
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   };
 }
 
@@ -138,7 +138,7 @@ suite('Bluetooth', function() {
     bluetoothApis.bluetoothPrivateApiForTest = bluetoothPrivateApi;
 
     browserProxy = new TestBluetoothPageBrowserProxy();
-    BluetoothPageBrowserProxyImpl.setInstance(browserProxy);
+    BluetoothPageBrowserProxyImpl.setInstanceForTesting(browserProxy);
 
     PolymerTest.clearBody();
     bluetoothPage = document.createElement('settings-bluetooth-page');
@@ -161,7 +161,7 @@ suite('Bluetooth', function() {
     assertTrue(bluetoothPage.isToggleEnabled_());
 
     // Test that tapping the single settings-box div enables bluetooth.
-    const div = bluetoothPage.$$('.link-wrapper');
+    const div = bluetoothPage.shadowRoot.querySelector('.link-wrapper');
     assertTrue(!!div);
     div.click();
 
@@ -215,7 +215,7 @@ suite('Bluetooth', function() {
     params.append('settingId', '100');
     Router.getInstance().navigateTo(routes.BLUETOOTH, params);
 
-    const toggle = bluetoothPage.$$('#enableBluetooth');
+    const toggle = bluetoothPage.shadowRoot.querySelector('#enableBluetooth');
     await waitAfterNextRender(toggle);
     assertEquals(
         toggle, getDeepActiveElement(),
@@ -233,11 +233,12 @@ suite('Bluetooth', function() {
       });
 
       flush();
-      const div = bluetoothPage.$$('.link-wrapper');
+      const div = bluetoothPage.shadowRoot.querySelector('.link-wrapper');
       div.click();
 
       await flushAsync();
-      subpage = bluetoothPage.$$('settings-bluetooth-subpage');
+      subpage =
+          bluetoothPage.shadowRoot.querySelector('settings-bluetooth-subpage');
       subpage.listUpdateFrequencyMs = 0;
       assertTrue(!!subpage);
       assertTrue(subpage.bluetoothToggleState);
@@ -330,8 +331,10 @@ suite('Bluetooth', function() {
 
     test('pair device', async function() {
       bluetoothApi.simulateDevicesAddedForTest([
-        fakeUnpairedDevice1, fakeUnpairedDevice2, fakePairedDevice1,
-        fakePairedDevice2
+        fakeUnpairedDevice1,
+        fakeUnpairedDevice2,
+        fakePairedDevice1,
+        fakePairedDevice2,
       ]);
 
       await waitForListUpdateTimeout();
@@ -354,8 +357,10 @@ suite('Bluetooth', function() {
 
     test('pair dialog', async function() {
       bluetoothApi.simulateDevicesAddedForTest([
-        fakeUnpairedDevice1, fakeUnpairedDevice2, fakePairedDevice1,
-        fakePairedDevice2
+        fakeUnpairedDevice1,
+        fakeUnpairedDevice2,
+        fakePairedDevice1,
+        fakePairedDevice2,
       ]);
       await waitForListUpdateTimeout();
 
@@ -664,8 +669,10 @@ suite('Bluetooth', function() {
 
       test('Unpaired and paired devices: devices added', async function() {
         bluetoothApi.simulateDevicesAddedForTest([
-          fakeUnpairedDevice1, fakeUnpairedDevice2, fakePairedDevice1,
-          fakePairedDevice2
+          fakeUnpairedDevice1,
+          fakeUnpairedDevice2,
+          fakePairedDevice1,
+          fakePairedDevice2,
         ]);
 
         await waitForListUpdateTimeout();
@@ -743,7 +750,7 @@ suite('Bluetooth', function() {
 
     test('Enterprise-managed icon UI state', async function() {
       const getManagedIcon = () => {
-        return listItem.$$('#managedIcon');
+        return listItem.shadowRoot.querySelector('#managedIcon');
       };
       assertFalse(!!getManagedIcon());
 

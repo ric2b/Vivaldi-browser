@@ -22,10 +22,13 @@
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_prefs.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
+#include "chrome/browser/enterprise/connectors/reporting/realtime_reporting_client.h"
+#include "chrome/browser/enterprise/connectors/reporting/realtime_reporting_client_factory.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
+#include "chrome/browser/safe_browsing/test_extension_event_observer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/safe_browsing_private.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -45,11 +48,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/tpm/stub_install_attributes.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
@@ -96,7 +99,7 @@ class SafeBrowsingEventObserver : public TestEventRouter::EventObserver {
   // extensions::TestEventRouter::EventObserver:
   void OnBroadcastEvent(const extensions::Event& event) override {
     if (event.event_name == event_name_) {
-      event_args_ = event.event_args->Clone();
+      event_args_ = base::Value(event.event_args.Clone());
     }
   }
 
@@ -107,12 +110,6 @@ class SafeBrowsingEventObserver : public TestEventRouter::EventObserver {
   // The arguments passed for the last observed event.
   base::Value event_args_;
 };
-
-std::unique_ptr<KeyedService> BuildSafeBrowsingPrivateEventRouter(
-    content::BrowserContext* context) {
-  return std::unique_ptr<KeyedService>(
-      new SafeBrowsingPrivateEventRouter(context));
-}
 
 class SafeBrowsingPrivateEventRouterTestBase : public testing::Test {
  public:
@@ -250,7 +247,8 @@ class SafeBrowsingPrivateEventRouterTestBase : public testing::Test {
       // Set a mock cloud policy client in the router.
       client_ = std::make_unique<policy::MockCloudPolicyClient>();
       client_->SetDMToken("fake-token");
-      SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
+      enterprise_connectors::RealtimeReportingClientFactory::GetForProfile(
+          profile_)
           ->SetBrowserCloudPolicyClientForTesting(client_.get());
     }
 
@@ -270,7 +268,13 @@ class SafeBrowsingPrivateEventRouterTestBase : public testing::Test {
                             std::map<std::string, std::vector<std::string>>()) {
     event_router_ = extensions::CreateAndUseTestEventRouter(profile_);
     SafeBrowsingPrivateEventRouterFactory::GetInstance()->SetTestingFactory(
-        profile_, base::BindRepeating(&BuildSafeBrowsingPrivateEventRouter));
+        profile_, base::BindRepeating(
+                      &safe_browsing::BuildSafeBrowsingPrivateEventRouter));
+
+    enterprise_connectors::RealtimeReportingClientFactory::GetInstance()
+        ->SetTestingFactory(
+            profile_,
+            base::BindRepeating(&safe_browsing::BuildRealtimeReportingClient));
 
     SetReportingPolicy(realtime_reporting_enable, authorized,
                        enabled_event_names, enabled_opt_in_events);
@@ -869,8 +873,8 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnPasswordBreach) {
   validator.ExpectPasswordBreachEvent(
       "SAFETY_CHECK",
       {
-          {"https://first.example.com/", u"first_user_name"},
-          {"https://second.example.com/", u"second_user_name"},
+          {"https://first.example.com/", u"*****"},
+          {"https://second.example.com/", u"*****@gmail.com"},
       },
       profile_->GetProfileUserName());
 
@@ -878,7 +882,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest, TestOnPasswordBreach) {
       "SAFETY_CHECK",
       {
           {GURL("https://first.example.com"), u"first_user_name"},
-          {GURL("https://second.example.com"), u"second_user_name"},
+          {GURL("https://second.example.com"), u"second_user_name@gmail.com"},
       });
 }
 
@@ -930,7 +934,7 @@ TEST_F(SafeBrowsingPrivateEventRouterTest,
   validator.ExpectPasswordBreachEvent(
       "SAFETY_CHECK",
       {
-          {"https://secondexample.com/", u"second_user_name"},
+          {"https://secondexample.com/", u"*****"},
       },
       profile_->GetProfileUserName());
 
@@ -1370,13 +1374,6 @@ class SafeBrowsingIsRealtimeReportingEnabledTest
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 #endif
 };
-
-TEST_P(SafeBrowsingIsRealtimeReportingEnabledTest,
-       ShouldInitRealtimeReportingClient) {
-  EXPECT_EQ(
-      should_init(),
-      SafeBrowsingPrivateEventRouter::ShouldInitRealtimeReportingClient());
-}
 
 TEST_P(SafeBrowsingIsRealtimeReportingEnabledTest, CheckRealtimeReport) {
   // In production, the router won't actually be authorized unless it was

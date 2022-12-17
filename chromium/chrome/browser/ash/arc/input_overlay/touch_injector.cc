@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/public/cpp/window_properties.h"
+#include "ash/utility/transformer_util.h"
 #include "base/bind.h"
 #include "base/containers/flat_set.h"
 #include "base/task/thread_pool.h"
@@ -16,6 +17,8 @@
 #include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_uma.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_id_manager.h"
 #include "ui/aura/window.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/controls/label.h"
@@ -166,6 +169,7 @@ void TouchInjector::RegisterEventRewriter() {
   if (observation_.IsObserving())
     return;
   observation_.Observe(target_window_->GetHost()->GetEventSource());
+  Update();
 }
 
 void TouchInjector::UnRegisterEventRewriter() {
@@ -173,6 +177,14 @@ void TouchInjector::UnRegisterEventRewriter() {
     return;
   DispatchTouchCancelEvent();
   observation_.Reset();
+  // Need reset pending input bind if it is unregistered in edit mode.
+  for (auto& action : actions_)
+    action->ResetPendingBind();
+}
+
+void TouchInjector::Update() {
+  UpdateForDisplayMetricsChanged();
+  UpdateForWindowBoundsChanged();
 }
 
 void TouchInjector::OnBindingChange(
@@ -211,16 +223,14 @@ void TouchInjector::OnBindingSave() {
 }
 
 void TouchInjector::OnBindingCancel() {
-  auto bounds = CalculateWindowContentBounds(target_window_);
   for (auto& action : actions_)
-    action->CancelPendingBind(bounds);
+    action->CancelPendingBind(content_bounds_);
   display_overlay_controller_->SetDisplayMode(DisplayMode::kView);
 }
 
 void TouchInjector::OnBindingRestore() {
-  auto bounds = CalculateWindowContentBounds(target_window_);
   for (auto& action : actions_)
-    action->RestoreToDefault(bounds);
+    action->RestoreToDefault(content_bounds_);
 }
 
 const std::string* TouchInjector::GetPackageName() const {
@@ -244,18 +254,47 @@ void TouchInjector::OnProtoDataAvailable(AppDataProto& proto) {
 
 void TouchInjector::OnInputMenuViewRemoved() {
   OnSaveProtoFile();
-  const auto* package_name = GetPackageName();
   // Record UMA stats upon |InputMenuView| close because it needs to ignore the
   // unfinalized menu state change.
   if (touch_injector_enable_ != touch_injector_enable_uma_) {
     touch_injector_enable_uma_ = touch_injector_enable_;
-    RecordInputOverlayFeatureState(*package_name, touch_injector_enable_uma_);
+    RecordInputOverlayFeatureState(touch_injector_enable_uma_);
   }
 
   if (input_mapping_visible_ != input_mapping_visible_uma_) {
     input_mapping_visible_uma_ = input_mapping_visible_;
-    RecordInputOverlayMappingHintState(*package_name,
-                                       input_mapping_visible_uma_);
+    RecordInputOverlayMappingHintState(input_mapping_visible_uma_);
+  }
+}
+
+void TouchInjector::NotifyFirstTimeLaunch() {
+  first_launch_ = true;
+  show_nudge_ = true;
+}
+
+void TouchInjector::UpdateForDisplayMetricsChanged() {
+  if (rotation_transform_)
+    rotation_transform_.reset();
+
+  auto display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(target_window_);
+  // No need to transform if there is no rotation.
+  if (display.panel_rotation() == display::Display::ROTATE_0)
+    return;
+
+  rotation_transform_ =
+      std::make_unique<gfx::Transform>(ash::CreateRotationTransform(
+          display::Display::ROTATE_0, display.panel_rotation(),
+          gfx::SizeF(display.GetSizeInPixel())));
+
+  UpdateForWindowBoundsChanged();
+}
+
+void TouchInjector::UpdateForWindowBoundsChanged() {
+  content_bounds_ = CalculateWindowContentBounds(target_window_);
+  for (auto& action : actions_) {
+    action->UpdateTouchDownPositions(content_bounds_,
+                                     rotation_transform_.get());
   }
 }
 
@@ -384,7 +423,6 @@ bool TouchInjector::LocatedEventOnMenuEntry(const ui::Event& event,
   if (!event.IsLocatedEvent())
     return false;
 
-  auto event_location = event.AsLocatedEvent()->root_location();
   auto menu_anchor_bounds =
       display_overlay_controller_->GetOverlayMenuEntryBounds();
   if (!menu_anchor_bounds) {
@@ -392,6 +430,12 @@ bool TouchInjector::LocatedEventOnMenuEntry(const ui::Event& event,
            display_mode_ != DisplayMode::kPreMenu);
     return false;
   }
+
+  auto event_location = gfx::Point(event.AsLocatedEvent()->root_location());
+  target_window_->GetHost()->ConvertPixelsToDIP(&event_location);
+  // Convert |event_location| from root window location to screen location.
+  auto origin = target_window_->GetRootWindow()->GetBoundsInScreen().origin();
+  event_location.Offset(origin.x(), origin.y());
 
   if (!press_required)
     return menu_anchor_bounds->Contains(event_location);
@@ -419,7 +463,6 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
     const ui::Event& event,
     const ui::EventRewriter::Continuation continuation) {
   continuation_ = continuation;
-  auto bounds = CalculateWindowContentBounds(target_window_);
 
   // This is for Tab key as Accessibility requirement.
   // - For key event, Tab key is used to enter into the |kPreMenu| mode. And any
@@ -434,7 +477,7 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
       CleanupTouchEvents();
       display_overlay_controller_->SetDisplayMode(DisplayMode::kPreMenu);
     }
-    return DiscardEvent(continuation);
+    return SendEvent(continuation, &event);
   } else if (display_mode_ == DisplayMode::kPreMenu) {
     if (event.IsKeyEvent()) {
       auto* key_event = event.AsKeyEvent();
@@ -445,7 +488,7 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
       } else {
         return SendEvent(continuation, &event);
       }
-    } else if (LocatedEventOnMenuEntry(event, bounds,
+    } else if (LocatedEventOnMenuEntry(event, content_bounds_,
                                        /*press_required=*/false)) {
       return SendEvent(continuation, &event);
     } else {
@@ -458,7 +501,8 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
 
   // |display_overlay_controller_| is null for unittest.
   if (display_overlay_controller_ &&
-      LocatedEventOnMenuEntry(event, bounds, /*press_required=*/true)) {
+      LocatedEventOnMenuEntry(event, content_bounds_,
+                              /*press_required=*/true)) {
     // Release all active touches when the display mode is changed from |kView|
     // to |kMenu|.
     CleanupTouchEvents();
@@ -478,7 +522,7 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
     target_window_->GetHost()->ConvertPixelsToDIP(&location);
     auto location_f = gfx::PointF(location);
     // Send touch event as it is if the event is outside of the content bounds.
-    if (!bounds.Contains(location_f))
+    if (!content_bounds_.Contains(location_f))
       return SendEvent(continuation, &event);
 
     std::unique_ptr<ui::TouchEvent> new_touch_event =
@@ -487,7 +531,15 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
     if (new_touch_event)
       return SendEventFinally(continuation, new_touch_event.get());
 
-    return DiscardEvent(continuation);
+    // TODO(b/237037540): workaround for b/233785660. Theoretically it
+    // should discard the event if original touch-move or touch-release with
+    // same ID is not rewritten due to missing original touch-press. But
+    // thinking of real world user cases, it's unlikely to trigger any issues
+    // with sending original event. The logic is already complicated in
+    // |RewriteEvent()| so here it uses a workaround. The menu entry will be
+    // removed and simplify the logic in future version, then it will be
+    // fundamentally improved.
+    return SendEvent(continuation, &event);
   }
 
   if (mouse_lock_ && mouse_lock_->Process(event))
@@ -496,8 +548,9 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
   std::list<ui::TouchEvent> touch_events;
   for (auto& action : actions_) {
     bool keep_original_event = false;
-    bool rewritten = action->RewriteEvent(event, bounds, is_mouse_locked_,
-                                          touch_events, keep_original_event);
+    bool rewritten = action->RewriteEvent(
+        event, content_bounds_, is_mouse_locked_, rotation_transform_.get(),
+        touch_events, keep_original_event);
     if (!rewritten)
       continue;
     if (keep_original_event)
@@ -630,9 +683,8 @@ void TouchInjector::LoadMenuStateFromProto(AppDataProto& proto) {
 void TouchInjector::RecordMenuStateOnLaunch() {
   touch_injector_enable_uma_ = touch_injector_enable_;
   input_mapping_visible_uma_ = input_mapping_visible_;
-  const auto* package_name = GetPackageName();
-  RecordInputOverlayFeatureState(*package_name, touch_injector_enable_uma_);
-  RecordInputOverlayMappingHintState(*package_name, input_mapping_visible_uma_);
+  RecordInputOverlayFeatureState(touch_injector_enable_uma_);
+  RecordInputOverlayMappingHintState(input_mapping_visible_uma_);
 }
 
 int TouchInjector::GetRewrittenTouchIdForTesting(ui::PointerId original_id) {

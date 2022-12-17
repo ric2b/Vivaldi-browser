@@ -340,7 +340,8 @@ class FakeControllerServiceWorker
       }
 
       case ResponseMode::kFallbackResponse:
-        response_callback->OnFallback(std::move(timing));
+        response_callback->OnFallback(/*request_body=*/absl::nullopt,
+                                      std::move(timing));
         std::move(callback).Run(
             blink::mojom::ServiceWorkerEventStatus::COMPLETED);
         break;
@@ -560,9 +561,7 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
     ServiceWorkerSubresourceLoaderFactory::Create(
         connector_, loader_factory_,
         service_worker_url_loader_factory.BindNewPipeAndPassReceiver(),
-        blink::scheduler::GetSequencedTaskRunnerForTesting(),
-        blink::scheduler::GetSequencedTaskRunnerForTesting(),
-        base::DoNothing());
+        blink::scheduler::GetSequencedTaskRunnerForTesting());
     return service_worker_url_loader_factory;
   }
 

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="gl">
 <translation id="1397811292916898096">Buscar con <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tocar para buscar é unha función que só está dispoñible cando Google está configurado como motor de busca predeterminado en Vivaldi. Envía a palabra seleccionada e a páxina na que stá presente como contexto á Busca de Google. Podes desactivalo en <ph name="BEGIN_LINK" />Configuración<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alternar entre lapelas normais ou privadas</translation>
 <translation id="1644574205037202324">Historial</translation>
 <translation id="17513872634828108">Lapelas abertas</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nova lapela privada</translation>
 <translation id="4243710787042215766">Abrir nunha lapela privada</translation>
 <translation id="4526803704855831732">Lapelas privadas</translation>
+<translation id="4719086422742491124">Obtén información sobre temas dos sitios web sen saír da páxina. Seleccione unha ou máis palabras na páxina para buscalas.
+
+Tocar para buscar é unha función que só está dispoñible cando Google está configurado como motor de busca predeterminado en Vivaldi.</translation>
 <translation id="4759238208242260848">Descargas</translation>
 <translation id="4883379392681899581">Saír do modo privado</translation>
 <translation id="4943872375798546930">Sen resultados</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542">Almacenamento de <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
 <translation id="5233638681132016545">Nova lapela</translation>
-<translation id="572328651809341494">Lapelas recentes</translation>
-<translation id="5840488417521835756">Obtén información sobre os temas tratados nos sitios web sen saír da páxina. A función Premer para buscar só está dispoñible cando Google foi establecido como buscador por defecto en Vivaldi. Esta envía unha palabra e o seu contexto ao buscador de Google para amosarche definicións, imaxes, resultados da busca e outros detalles.
+<translation id="5375131951310889874">Obtén información sobre temas dos sitios web sen saír da páxina. Tocar para buscar é unha función que só está dispoñible cando Google está configurado como motor de busca predeterminado en Vivaldi. Envía unha palabra e o seu contexto circundante á Busca de Google, devolvéndoche definicións, imaxes, resultados de busca e outros detalles.
 
-Para modificar o termo da busca, mantén premido calquera texto para seleccionalo. Para refinar a busca, desliza o panel cara arriba e logo prema o cadro de busca.</translation>
+Para axustar a busca do termo, prema prolongamente para seleccionalo. Para refinar a busca, desliza o panel cara arriba e toca a caixa de busca.</translation>
+<translation id="572328651809341494">Lapelas recentes</translation>
 <translation id="6150320133806434356">Marcador gardado</translation>
 <translation id="6336451774241870485">Nova lapela privada</translation>
 <translation id="6585139692466700358">Ofrecer traducir páxinas usando o servizo de tradución de Vivaldi</translation>
@@ -53,7 +57,6 @@ Para modificar o termo da busca, mantén premido calquera texto para seleccional
 <translation id="732145680195464316">O marcador foi gardado en <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Acerca do Vivaldi</translation>
 <translation id="7465104139234185284">Pechar todas as lapelas privadas</translation>
-<translation id="7519434535192513364">A función Premer para buscar só está dispoñible cando Google foi establecido como buscador por defecto en Vivaldi. Esta envía a palabra seleccionada e a páxina actual como contexto ao buscador de Google. Podes desactivala en <ph name="BEGIN_LINK" />Ajustes<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Contrato de licenza para o usuario final</translation>
 <translation id="85991616550051997">Ir á páxina principal</translation>
 <translation id="8820817407110198400">Marcadores</translation>

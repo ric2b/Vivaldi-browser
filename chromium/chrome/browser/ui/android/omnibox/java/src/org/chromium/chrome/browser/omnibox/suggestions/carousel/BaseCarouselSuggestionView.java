@@ -69,7 +69,7 @@ public class BaseCarouselSuggestionView extends LinearLayout {
             @Override
             public void getItemOffsets(
                     Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
-                outRect.left = mItemSpacingPx;
+                outRect.left = 0;
                 outRect.right = mItemSpacingPx;
             }
         });
@@ -130,5 +130,14 @@ public class BaseCarouselSuggestionView extends LinearLayout {
     public void setItemSpacingPx(int itemSpacingPx) {
         mItemSpacingPx = itemSpacingPx;
         mRecyclerView.requestLayout();
+    }
+
+    /**
+     * Set the carousel to have horizontal fade effect.
+     *
+     * @param enableFade whether we should enable horizontal fade.
+     */
+    public void setCarouselHorizontalFade(boolean enableFade) {
+        mRecyclerView.setHorizontalFadingEdgeEnabled(enableFade);
     }
 }

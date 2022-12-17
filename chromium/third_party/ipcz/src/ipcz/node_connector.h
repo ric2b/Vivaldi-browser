@@ -29,7 +29,7 @@ class Portal;
 // Once an initial handshake is complete the underlying transport is adopted by
 // a new NodeLink and handed off to the local Node to communicate with the
 // remote node, and this object is destroyed.
-class NodeConnector : public RefCounted, public msg::NodeMessageListener {
+class NodeConnector : public msg::NodeMessageListener {
  public:
   // Constructs a new NodeConnector to send and receive a handshake on
   // `transport`. The specific type of connector to create is determined by a
@@ -48,6 +48,18 @@ class NodeConnector : public RefCounted, public msg::NodeMessageListener {
                                 IpczConnectNodeFlags flags,
                                 const std::vector<Ref<Portal>>& initial_portals,
                                 ConnectCallback callback = nullptr);
+
+  // Handles a request on `node` (which must be a broker) to accept a new
+  // non-broker node referral from `referrer`, referring a new non-broker node
+  // on the remote end of `transport_to_referred_node`. This performs a
+  // handshake with the referred node before introducing it and the referrer to
+  // each other.
+  static bool HandleNonBrokerReferral(
+      Ref<Node> node,
+      uint64_t referral_id,
+      uint32_t num_initial_portals,
+      Ref<NodeLink> referrer,
+      Ref<DriverTransport> transport_to_referred_node);
 
   virtual bool Connect() = 0;
 
@@ -77,16 +89,15 @@ class NodeConnector : public RefCounted, public msg::NodeMessageListener {
   const Ref<DriverTransport> transport_;
   const IpczConnectNodeFlags flags_;
   const std::vector<Ref<Portal>> waiting_portals_;
-  Ref<NodeConnector> active_self_;
-
- private:
-  bool ActivateTransportAndConnect();
-  void EstablishWaitingPortals(Ref<NodeLink> to_link,
-                               LinkSide link_side,
-                               size_t max_valid_portals);
 
   // NodeMessageListener overrides:
   void OnTransportError() override;
+
+ private:
+  bool ActivateTransport();
+  void EstablishWaitingPortals(Ref<NodeLink> to_link,
+                               LinkSide link_side,
+                               size_t max_valid_portals);
 
   const ConnectCallback callback_;
 };

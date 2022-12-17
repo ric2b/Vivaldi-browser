@@ -381,6 +381,8 @@ bool QuicHttpStream::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
     is_first_stream = stream_->IsFirstStream();
     load_timing_info->first_early_hints_time =
         stream_->first_early_hints_time();
+    load_timing_info->receive_headers_start =
+        stream_->headers_received_start_time();
   }
 
   if (is_first_stream) {
@@ -700,8 +702,6 @@ int QuicHttpStream::ProcessResponseHeaders(
 
   response_info_->connection_info =
       ConnectionInfoFromQuicVersion(quic_session()->GetQuicVersion());
-  response_info_->vary_data.Init(*request_info_,
-                                 *response_info_->headers.get());
   response_info_->was_alpn_negotiated = true;
   response_info_->alpn_negotiated_protocol =
       HttpResponseInfo::ConnectionInfoToString(response_info_->connection_info);

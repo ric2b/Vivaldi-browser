@@ -13,13 +13,17 @@ TriggerContext::Options::Options(const std::string& _experiment_ids,
                                  bool _onboarding_shown,
                                  bool _is_direct_action,
                                  const std::string& _initial_url,
-                                 bool _is_in_chrome_triggered)
+                                 bool _is_in_chrome_triggered,
+                                 bool _is_externally_triggered,
+                                 bool _skip_autofill_assistant_onboarding)
     : experiment_ids(_experiment_ids),
       is_cct(_is_cct),
       onboarding_shown(_onboarding_shown),
       is_direct_action(_is_direct_action),
       initial_url(_initial_url),
-      is_in_chrome_triggered(_is_in_chrome_triggered) {}
+      is_in_chrome_triggered(_is_in_chrome_triggered),
+      is_externally_triggered(_is_externally_triggered),
+      skip_autofill_assistant_onboarding(_skip_autofill_assistant_onboarding) {}
 
 TriggerContext::Options::Options() = default;
 TriggerContext::Options::~Options() = default;
@@ -36,7 +40,9 @@ TriggerContext::TriggerContext(
                      options.onboarding_shown,
                      options.is_direct_action,
                      options.initial_url,
-                     options.is_in_chrome_triggered) {}
+                     options.is_in_chrome_triggered,
+                     options.is_externally_triggered,
+                     options.skip_autofill_assistant_onboarding) {}
 
 TriggerContext::TriggerContext(
     std::unique_ptr<ScriptParameters> script_parameters,
@@ -45,13 +51,17 @@ TriggerContext::TriggerContext(
     bool onboarding_shown,
     bool is_direct_action,
     const std::string& initial_url,
-    bool is_in_chrome_triggered)
+    bool is_in_chrome_triggered,
+    bool is_externally_triggered,
+    bool skip_autofill_assistant_onboarding)
     : script_parameters_(std::move(script_parameters)),
       experiment_ids_(std::move(experiment_ids)),
       cct_(is_cct),
       onboarding_shown_(onboarding_shown),
       direct_action_(is_direct_action),
       is_in_chrome_triggered_(is_in_chrome_triggered),
+      is_externally_triggered_(is_externally_triggered),
+      skip_autofill_assistant_onboarding_(skip_autofill_assistant_onboarding),
       initial_url_(initial_url) {}
 
 TriggerContext::TriggerContext(std::vector<const TriggerContext*> contexts)
@@ -73,6 +83,9 @@ TriggerContext::TriggerContext(std::vector<const TriggerContext*> contexts)
     onboarding_shown_ |= context->GetOnboardingShown();
     direct_action_ |= context->GetDirectAction();
     is_in_chrome_triggered_ |= context->GetInChromeTriggered();
+    is_externally_triggered_ |= context->GetIsExternallyTriggered();
+    skip_autofill_assistant_onboarding_ |=
+        context->GetSkipAutofillAssistantOnboarding();
     if (initial_url_.empty()) {
       initial_url_ = context->GetInitialUrl();
     }
@@ -137,6 +150,14 @@ TriggerScriptProto::TriggerUIType TriggerContext::GetTriggerUIType() const {
 void TriggerContext::SetTriggerUIType(
     TriggerScriptProto::TriggerUIType trigger_ui_type) {
   trigger_ui_type_ = trigger_ui_type;
+}
+
+bool TriggerContext::GetIsExternallyTriggered() const {
+  return is_externally_triggered_;
+}
+
+bool TriggerContext::GetSkipAutofillAssistantOnboarding() const {
+  return skip_autofill_assistant_onboarding_;
 }
 
 }  // namespace autofill_assistant

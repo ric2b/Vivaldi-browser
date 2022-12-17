@@ -46,6 +46,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -100,7 +101,7 @@ class PlatformAppContextMenu : public RenderViewContextMenu {
       : RenderViewContextMenu(render_frame_host, params) {}
 
   bool HasCommandWithId(int command_id) {
-    return menu_model_.GetIndexOfCommandId(command_id) != -1;
+    return menu_model_.GetIndexOfCommandId(command_id).has_value();
   }
 
   void Show() override {}
@@ -243,16 +244,14 @@ class PlatformAppWithFileBrowserTest : public PlatformAppBrowserTest {
     const extensions::Extension* extension = LoadExtension(extension_path);
     ASSERT_TRUE(extension);
 
-    apps::mojom::FilePathsPtr launch_files = apps::mojom::FilePaths::New();
-    launch_files->file_paths.push_back(file_path);
+    std::vector<base::FilePath> launch_files;
+    launch_files.push_back(file_path);
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->LaunchAppWithFiles(
             extension->id(),
-            apps::GetEventFlags(
-                apps::mojom::LaunchContainer::kLaunchContainerNone,
-                WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                true /* preferred_container */),
-            apps::mojom::LaunchSource::kFromTest, std::move(launch_files));
+            apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                true /* preferred_container */),
+            apps::LaunchSource::kFromTest, std::move(launch_files));
     ASSERT_TRUE(catcher.GetNextResult());
   }
 
@@ -270,9 +269,8 @@ class PlatformAppWithFileBrowserTest : public PlatformAppBrowserTest {
     }
 
     apps::AppLaunchParams params(
-        extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-        WindowOpenDisposition::NEW_WINDOW,
-        apps::mojom::LaunchSource::kFromTest);
+        extension->id(), apps::LaunchContainer::kLaunchContainerNone,
+        WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest);
     params.command_line = command_line;
     params.current_directory = test_data_dir_;
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
@@ -951,9 +949,8 @@ void PlatformAppDevToolsBrowserTest::RunTestWithDevTools(const char* name,
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
         ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-            extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-            WindowOpenDisposition::NEW_WINDOW,
-            apps::mojom::LaunchSource::kFromTest));
+            extension->id(), apps::LaunchContainer::kLaunchContainerNone,
+            WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest));
     app_loaded_observer.Wait();
     window = GetFirstAppWindow();
     ASSERT_TRUE(window);
@@ -1102,9 +1099,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
       ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-          extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-          WindowOpenDisposition::NEW_WINDOW,
-          apps::mojom::LaunchSource::kFromTest));
+          extension->id(), apps::LaunchContainer::kLaunchContainerNone,
+          WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest));
 
   ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
 }
@@ -1127,9 +1123,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, PRE_ComponentAppBackgroundPage) {
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
       ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-          extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-          WindowOpenDisposition::NEW_WINDOW,
-          apps::mojom::LaunchSource::kFromTest));
+          extension->id(), apps::LaunchContainer::kLaunchContainerNone,
+          WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest));
 
   ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
   ASSERT_FALSE(should_not_install.seen());
@@ -1168,9 +1163,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, ComponentAppBackgroundPage) {
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
       ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-          extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-          WindowOpenDisposition::NEW_WINDOW,
-          apps::mojom::LaunchSource::kFromTest));
+          extension->id(), apps::LaunchContainer::kLaunchContainerNone,
+          WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest));
 
   ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
 }
@@ -1196,9 +1190,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
         ->LaunchAppWithParamsForTesting(apps::AppLaunchParams(
-            extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-            WindowOpenDisposition::NEW_WINDOW,
-            apps::mojom::LaunchSource::kFromTest));
+            extension->id(), apps::LaunchContainer::kLaunchContainerNone,
+            WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromTest));
     ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
   }
 
@@ -1331,10 +1324,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppIncognitoBrowserTest,
   registry->AddObserver(this);
   apps::AppServiceProxyFactory::GetForProfile(incognito_profile)
       ->Launch(file_manager->id(),
-               apps::GetEventFlags(
-                   apps::mojom::LaunchContainer::kLaunchContainerWindow,
-                   WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                   true /* prefer_container */),
+               apps::GetEventFlags(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                   true /* prefer_container */),
                apps::mojom::LaunchSource::kFromTest);
 
   while (!base::Contains(opener_app_ids_, file_manager->id())) {

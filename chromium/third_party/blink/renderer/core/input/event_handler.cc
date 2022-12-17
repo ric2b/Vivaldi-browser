@@ -441,7 +441,7 @@ static bool IsSubmitImage(const Node* node) {
 bool EventHandler::UsesHandCursor(const Node* node) {
   if (!node)
     return false;
-  return ((node->IsLink() || IsSubmitImage(node)) && !HasEditableStyle(*node));
+  return ((node->IsLink() || IsSubmitImage(node)) && !IsEditable(*node));
 }
 
 void EventHandler::CursorUpdateTimerFired(TimerBase*) {
@@ -520,7 +520,7 @@ bool EventHandler::ShouldShowIBeamForNode(const Node* node,
   if (node->IsTextNode() && (node->CanStartSelection() || result.IsOverLink()))
     return true;
 
-  return HasEditableStyle(*node);
+  return IsEditable(*node);
 }
 
 absl::optional<ui::Cursor> EventHandler::SelectCursor(
@@ -1130,6 +1130,13 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
       // scrollbar hovering.
       scrollbar->MouseMoved(mev.Event());
     }
+
+    // Set Effective pan action before Pointer cursor is updated.
+    const WebPointerEvent web_pointer_event(WebInputEvent::Type::kPointerMove,
+                                            mev.Event());
+    pointer_event_manager_->SendEffectivePanActionAtPointer(web_pointer_event,
+                                                            mev.InnerNode());
+
     LocalFrameView* view = frame_->View();
     if ((!is_remote_frame || is_portal) && view) {
       absl::optional<ui::Cursor> optional_cursor =
@@ -1411,6 +1418,10 @@ Element* EventHandler::EffectiveMouseEventTargetElement(
 
 Element* EventHandler::GetElementUnderMouse() {
   return mouse_event_manager_->GetElementUnderMouse();
+}
+
+Element* EventHandler::CurrentTouchDownElement() {
+  return pointer_event_manager_->CurrentTouchDownElement();
 }
 
 bool EventHandler::IsPointerIdActiveOnFrame(PointerId pointer_id,

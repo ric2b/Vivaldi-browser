@@ -289,18 +289,17 @@ void VivaldiImageStore::LoadMappingsOnFileThread() {
   if (!data)
     return;
 
-  base::JSONReader::ValueWithError root =
-      base::JSONReader::ReadAndReturnValueWithError(
-          base::StringPiece(data->front_as<char>(), data->size()));
-  if (!root.value) {
+  auto root = base::JSONReader::ReadAndReturnValueWithError(
+      base::StringPiece(data->front_as<char>(), data->size()));
+  if (!root.has_value()) {
     LOG(ERROR) << file_path.value() << " is not a valid JSON - "
-               << root.error_message;
+               << root.error().message;
     return;
   }
 
-  if (root.value->is_dict()) {
+  if (root.value().is_dict()) {
     if (base::Value::Dict* mappings =
-            root.value->GetDict().FindDict("mappings")) {
+            root.value().GetDict().FindDict("mappings")) {
       InitMappingsOnFileThread(*mappings);
     }
   }

@@ -175,6 +175,7 @@ chrome.fileManagerPrivate.DriveSyncErrorType = {
   DELETE_WITHOUT_PERMISSION: 'delete_without_permission',
   SERVICE_UNAVAILABLE: 'service_unavailable',
   NO_SERVER_SPACE: 'no_server_space',
+  NO_SERVER_SPACE_ORGANIZATION: 'no_server_space_organization',
   NO_LOCAL_SPACE: 'no_local_space',
   MISC: 'misc',
 };
@@ -319,10 +320,37 @@ chrome.fileManagerPrivate.IOTaskState = {
 chrome.fileManagerPrivate.IOTaskType = {
   COPY: 'copy',
   DELETE: 'delete',
+  EMPTY_TRASH: 'empty_trash',
   EXTRACT: 'extract',
   MOVE: 'move',
+  RESTORE: 'restore',
   TRASH: 'trash',
   ZIP: 'zip',
+};
+
+/** @enum {string} */
+chrome.fileManagerPrivate.RecentDateBucket = {
+  TODAY: 'today',
+  YESTERDAY: 'yesterday',
+  EARLIER_THIS_WEEK: 'earlier_this_week',
+  EARLIER_THIS_MONTH: 'earlier_this_month',
+  EARLIER_THIS_YEAR: 'earlier_this_year',
+  OLDER: 'older',
+};
+
+/** @enum {string} */
+chrome.fileManagerPrivate.VmType = {
+  TERMINA: 'termina',
+  PLUGIN_VM: 'plugin_vm',
+  BOREALIS: 'borealis',
+  BRUSCHETTA: 'bruschetta',
+  ARCVM: 'arcvm',
+};
+
+/** @enum {string} */
+chrome.fileManagerPrivate.UserType = {
+  UNMANAGED: 'kUnmanaged',
+  ORGANIZATION: 'kOrganization'
 };
 
 /**
@@ -390,6 +418,17 @@ chrome.fileManagerPrivate.EntryProperties;
  * }}
  */
 chrome.fileManagerPrivate.MountPointSizeStats;
+
+/**
+ * @typedef {{
+ *   userType: !chrome.fileManagerPrivate.UserType,
+ *   usedUserBytes: number,
+ *   totalUserBytes: number,
+ *   organizationLimitExceeded: boolean,
+ *   organizationName: string
+ * }}
+ */
+chrome.fileManagerPrivate.DriveQuotaMetadata;
 
 /**
  * @typedef {{
@@ -598,6 +637,7 @@ chrome.fileManagerPrivate.LinuxPackageInfo;
  * @typedef {{
  * id: number,
  * displayName: string,
+ * vmType: !chrome.fileManagerPrivate.VmType,
  * }}
  */
 chrome.fileManagerPrivate.MountableGuest;
@@ -703,9 +743,42 @@ chrome.fileManagerPrivate.IOTaskParams;
  *   taskId: number,
  *   remainingSeconds: number,
  *   errorName: string,
+ *   outputs: (Array<Entry>|undefined),
  * }}
  */
 chrome.fileManagerPrivate.ProgressStatus;
+
+/**
+ * @typedef {{
+ *   sourceUrl: string,
+ *   isDlpRestricted: boolean,
+ * }}
+ */
+chrome.fileManagerPrivate.DlpMetadata;
+
+/** @enum {string} */
+chrome.fileManagerPrivate.DlpLevel = {
+  BLOCK: 'block',
+  ALLOW: 'allow',
+};
+
+/**
+ * @typedef {{
+ *   level: chrome.fileManagerPrivate.DlpLevel,
+ *   urls: !Array<string>,
+ *   components: !Array<chrome.fileManagerPrivate.VolumeType>,
+ * }}
+ */
+chrome.fileManagerPrivate.DlpRestrictionDetails;
+
+/**
+ * @typedef {{
+ *   restoreEntry: !Entry,
+ *   trashInfoFileName: string,
+ *   deletionDate: Date,
+ * }}
+ */
+chrome.fileManagerPrivate.ParsedTrashInfoFile;
 
 /**
  * Logout the current user for navigating to the re-authentication screen for
@@ -925,10 +998,23 @@ chrome.fileManagerPrivate.getDisallowedTransfers = function(
  * Returns a list of files that are restricted by any Data Leak Prevention
  * (DLP) rule. |entries| list of source entries to be checked.
  * @param {!Array<!Entry>} entries
- * @param {!Array<!Entry>} callback Entries of files that are restricted
- * by at least one DLP rule.
+ * @param {function((!Array<!chrome.fileManagerPrivate.DlpMetadata>|undefined))}
+ * callback Callback with the list of chrome.fileManagerPrivate.DlpMetadata
+ * containing DLP information about the entries.
  */
-chrome.fileManagerPrivate.getFilesRestrictedByDlp = function(entries, callback) {};
+chrome.fileManagerPrivate.getDlpMetadata = function(entries, callback) {};
+
+/**
+ * Retrieves Data Leak Prevention (DLP) restriction details.
+ * @param {string} sourceUrl Source URL of the Entry for which the details
+ *     should be shown.
+ * @param {function(!Array<chrome.fileManagerPrivate.DlpRestrictionDetails>)}
+ * callback Callback with the list of
+ * chrome.fileManagerPrivate.DlpRestrictionDetails containing summarized
+ * restriction information about the entry.
+ */
+chrome.fileManagerPrivate.getDlpRestrictionDetails = function(
+    sourceUrl, callback) {};
 
 /**
  * Starts to copy an entry. If the source is a directory, the copy is done
@@ -961,6 +1047,14 @@ chrome.fileManagerPrivate.cancelCopy = function(copyId, callback) {};
  *     not be determined.
  */
 chrome.fileManagerPrivate.getSizeStats = function(volumeId, callback) {};
+
+/**
+ * Retrieves drive quota metadata.
+ * @param {function((!chrome.fileManagerPrivate.DriveQuotaMetadata|undefined))}
+ *     callback Name/value pairs of drive quota metadata. Will be undefined if
+ *     quota metadata could not be determined.
+ */
+chrome.fileManagerPrivate.getDriveQuotaMetadata = function(callback) {};
 
 /**
  * Formats a mounted volume. |volumeId| ID of the volume to be formatted.
@@ -1435,11 +1529,25 @@ chrome.fileManagerPrivate.cancelIOTask = function (taskId) { };
 chrome.fileManagerPrivate.pollDriveHostedFilePinStates = function() {};
 
 /**
+ * Opens the page to manage currently syncing folders.
+ */
+chrome.fileManagerPrivate.openManageSyncSettings = function() {};
+
+/**
  * Returns color via `callback` for Files app foreground window frame.
  * @param {function(string): void} callback |color| String containing the color
  *     of the title bar.
  */
 chrome.fileManagerPrivate.getFrameColor = function(callback) {};
+
+/**
+ * Parses the supplied .trashinfo files and returns the successfully parsed
+ * data.
+ * @param {!Array<!Entry>} entries
+ * @param {function(!Array<!chrome.fileManagerPrivate.ParsedTrashInfoFile>):
+ *     void} callback
+ */
+chrome.fileManagerPrivate.parseTrashInfoFiles = function(entries, callback) {};
 
 /** @type {!ChromeEvent} */
 chrome.fileManagerPrivate.onMountCompleted;

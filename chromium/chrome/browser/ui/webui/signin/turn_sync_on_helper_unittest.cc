@@ -16,7 +16,6 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
 #include "chrome/browser/sync/sync_service_factory.h"
+#include "chrome/browser/sync/sync_startup_tracker.h"
 #include "chrome/browser/ui/webui/signin/signin_ui_error.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/test/base/fake_profile_manager.h"
@@ -47,7 +47,6 @@
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
@@ -78,6 +77,7 @@ namespace {
 
 const char kEmail[] = "foo@gmail.com";
 const char kPreviousEmail[] = "notme@bar.com";
+const char kPreviousAccountId[] = "gaia_id_for_not_me_at_bar_com";
 const char kEnterpriseEmail[] = "enterprise@managed.com";
 const char kEnterpriseHostedDomain[] = "managed.com";
 
@@ -147,6 +147,7 @@ class TestTurnSyncOnHelperDelegate : public TurnSyncOnHelper::Delegate {
   void ShowSyncConfirmation(
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override;
+  bool ShouldAbortBeforeShowSyncDisabledConfirmation() override;
   void ShowSyncDisabledConfirmation(
       bool is_managed_account,
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
@@ -461,11 +462,13 @@ class TurnSyncOnHelperTest : public testing::Test {
         .Times(0);
   }
 
-  void CheckSyncAborted(bool has_primary_account) {
+  void CheckSyncAborted(bool kept_account, int destroyed_delegate_count = 1) {
     EXPECT_FALSE(
         identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
-    EXPECT_EQ(has_primary_account,
-              identity_manager()->HasAccountWithRefreshToken(account_id()));
+    EXPECT_EQ(kept_account,
+              identity_manager()->HasPrimaryAccountWithRefreshToken(
+                  signin::ConsentLevel::kSignin));
+    EXPECT_EQ(delegate_destroyed_, destroyed_delegate_count);
   }
 
   void CheckDelegateCalls() {
@@ -528,12 +531,21 @@ class TurnSyncOnHelperTest : public testing::Test {
       std::move(callback).Run(sync_confirmation_result_);
   }
 
+  bool OnShouldAbortBeforeShowSyncDisabledConfirmation() {
+    EXPECT_FALSE(sync_confirmation_shown_);
+    EXPECT_EQ(sync_disabled_confirmation_, kNotShown);
+    if (abort_before_show_sync_disabled_confirmation_)
+      sync_disabled_confirmation_ = kAbortedBeforeShown;
+    return abort_before_show_sync_disabled_confirmation_;
+  }
+
   void OnShowSyncDisabledConfirmation(
       bool is_managed_account,
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) {
     EXPECT_EQ(sync_disabled_confirmation_, kNotShown)
-        << "Sync disabled confirmation should be shown only once.";
+        << "Sync disabled confirmation should be shown only once or aborted "
+           "without showing.";
     sync_disabled_confirmation_ =
         is_managed_account ? kShownManaged : kShownNonManaged;
     if (run_delegate_callbacks_)
@@ -601,13 +613,19 @@ class TurnSyncOnHelperTest : public testing::Test {
 
  protected:
   // Type of sync disabled confirmation shown.
-  enum SyncDisabledConfirmation { kNotShown, kShownManaged, kShownNonManaged };
+  enum SyncDisabledConfirmation {
+    kNotShown,
+    kAbortedBeforeShown,
+    kShownManaged,
+    kShownNonManaged
+  };
 
   // Delegate behavior.
   signin::SigninChoice merge_data_choice_ = signin::SIGNIN_CHOICE_CANCEL;
   signin::SigninChoice enterprise_choice_ = signin::SIGNIN_CHOICE_CANCEL;
   LoginUIService::SyncConfirmationUIClosedResult sync_confirmation_result_ =
       LoginUIService::SyncConfirmationUIClosedResult::ABORT_SYNC;
+  bool abort_before_show_sync_disabled_confirmation_ = false;
   bool run_delegate_callbacks_ = true;
 
   // Expected delegate calls.
@@ -640,9 +658,6 @@ class TurnSyncOnHelperTest : public testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   testing::NiceMock<account_manager::MockAccountManagerFacade>
       mock_account_manager_facade_;
-
-  base::test::ScopedFeatureList scoped_feature_list_{
-      switches::kLacrosNonSyncingProfiles};
 #endif
 
   // State of the delegate calls.
@@ -689,6 +704,11 @@ void TestTurnSyncOnHelperDelegate::ShowSyncConfirmation(
     base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
         callback) {
   test_fixture_->OnShowSyncConfirmation(std::move(callback));
+}
+
+bool TestTurnSyncOnHelperDelegate::
+    ShouldAbortBeforeShowSyncDisabledConfirmation() {
+  return test_fixture_->OnShouldAbortBeforeShowSyncDisabledConfirmation();
 }
 
 void TestTurnSyncOnHelperDelegate::ShowSyncDisabledConfirmation(
@@ -763,7 +783,7 @@ TEST_F(TurnSyncOnHelperTest, SyncDisabledAbortRemoveAccount) {
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   base::RunLoop().RunUntilIdle();
   // Check expectations.
-  CheckSyncAborted(/*has_primary_account=*/false);
+  CheckSyncAborted(/*kept_account=*/false);
   CheckDelegateCalls();
 }
 
@@ -783,7 +803,7 @@ TEST_F(TurnSyncOnHelperTest, SyncDisabledAbortKeepAccount) {
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
   base::RunLoop().RunUntilIdle();
   // Check expectations.
-  CheckSyncAborted(/*has_primary_account=*/false);
+  CheckSyncAborted(/*kept_account=*/false);
   CheckDelegateCalls();
 }
 
@@ -833,6 +853,44 @@ TEST_F(TurnSyncOnHelperTest, SyncDisabledManagedContinueKeepAccount) {
   CheckDelegateCalls();
 }
 
+// Tests that the sync aborted before displaying the sync disabled message and
+// `SigninAbortedMode::REMOVE_ACCOUNT` is honored.
+TEST_F(TurnSyncOnHelperTest, SyncDisabledAbortWithoutShowingUI_RemoveAccount) {
+  // Set expectations.
+  expected_sync_disabled_confirmation_ = kAbortedBeforeShown;
+  SetExpectationsForSyncDisabled(profile());
+  // Configure the test.
+  abort_before_show_sync_disabled_confirmation_ = true;
+
+  // Signin flow.
+  EXPECT_FALSE(
+      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
+  CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
+  base::RunLoop().RunUntilIdle();
+  // Check expectations.
+  CheckSyncAborted(/*kept_account=*/false);
+  CheckDelegateCalls();
+}
+
+// Tests that the sync aborted before displaying the sync disabled message and
+// `SigninAbortedMode::KEEP_ACCOUNT` is honored.
+TEST_F(TurnSyncOnHelperTest, SyncDisabledAbortWithoutShowingUI_KeepAccount) {
+  // Set expectations.
+  expected_sync_disabled_confirmation_ = kAbortedBeforeShown;
+  SetExpectationsForSyncDisabled(profile());
+  // Configure the test.
+  abort_before_show_sync_disabled_confirmation_ = true;
+
+  // Signin flow.
+  EXPECT_FALSE(
+      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
+  CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
+  base::RunLoop().RunUntilIdle();
+  // Check expectations.
+  CheckSyncAborted(/*kept_account=*/true);
+  CheckDelegateCalls();
+}
+
 // Aborts the flow after the cross account dialog.
 TEST_F(TurnSyncOnHelperTest, CrossAccountAbort) {
   // Set expectations.
@@ -841,6 +899,8 @@ TEST_F(TurnSyncOnHelperTest, CrossAccountAbort) {
   // Configure the test.
   profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                    kPreviousEmail);
+  profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
+                                   kPreviousAccountId);
   // Signin flow.
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   // Check expectations.
@@ -858,6 +918,8 @@ TEST_F(TurnSyncOnHelperTest, CrossAccountAbortAlreadyManaged) {
   // Configure the test.
   profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                    kPreviousEmail);
+  profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
+                                   kPreviousAccountId);
   user_policy_signin_service()->set_dm_token("foo");
   user_policy_signin_service()->set_client_id("bar");
   chrome::enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
@@ -881,10 +943,12 @@ TEST_F(TurnSyncOnHelperTest, CrossAccountContinue) {
   merge_data_choice_ = signin::SIGNIN_CHOICE_CONTINUE;
   profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                    kPreviousEmail);
+  profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
+                                   kPreviousAccountId);
   // Signin flow.
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   // Check expectations.
-  CheckSyncAborted(/*has_primary_account=*/false);
+  CheckSyncAborted(/*kept_account=*/false);
   CheckDelegateCalls();
 }
 
@@ -899,6 +963,8 @@ TEST_F(TurnSyncOnHelperTest, CrossAccountContinueAlreadyManaged) {
   merge_data_choice_ = signin::SIGNIN_CHOICE_CONTINUE;
   profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                    kPreviousEmail);
+  profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
+                                   kPreviousAccountId);
   user_policy_signin_service()->set_dm_token("foo");
   user_policy_signin_service()->set_client_id("bar");
   chrome::enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
@@ -907,7 +973,7 @@ TEST_F(TurnSyncOnHelperTest, CrossAccountContinueAlreadyManaged) {
   // Check expectations.
   // This was already a signed-in and managed enterprise account so we keep the
   // user signed-in, overriding SigninAbortedMode::REMOVE_ACCOUNT.
-  CheckSyncAborted(/*has_primary_account=*/true);
+  CheckSyncAborted(/*kept_account=*/true);
   CheckDelegateCalls();
 }
 
@@ -925,6 +991,8 @@ TEST_F(TurnSyncOnHelperTest, CrossAccountNewProfile) {
   merge_data_choice_ = signin::SIGNIN_CHOICE_NEW_PROFILE;
   profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                    kPreviousEmail);
+  profile()->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
+                                   kPreviousAccountId);
   // Signin flow.
   ProfileWaiter profile_waiter;
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
@@ -1089,7 +1157,7 @@ TEST_F(TurnSyncOnHelperTest, SignedInAccountUndoSyncRemoveAccount) {
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   // This was already a signed-in and managed enterprise account so we keep the
   // user signed-in, overriding SigninAbortedMode::REMOVE_ACCOUNT.
-  CheckSyncAborted(/*has_primary_account=*/true);
+  CheckSyncAborted(/*kept_account=*/true);
   CheckDelegateCalls();
 }
 
@@ -1105,7 +1173,7 @@ TEST_F(TurnSyncOnHelperTest, UndoSync) {
       identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
   CreateTurnOnSyncHelper(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   // Check expectations.
-  CheckSyncAborted(/*has_primary_account=*/false);
+  CheckSyncAborted(/*kept_account=*/false);
   CheckDelegateCalls();
 }
 
@@ -1222,7 +1290,8 @@ TEST_F(TurnSyncOnHelperTest,
       SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW));
   sync_confirmation_result_ = LoginUIService::SyncConfirmationUIClosedResult::
       SYNC_WITH_DEFAULT_SETTINGS;
-  sync_starter->SyncStartupCompleted();
+  sync_starter->OnSyncStartupStateChanged(
+      SyncStartupTracker::ServiceStartupState::kComplete);
   CheckDelegateCalls();
 }
 
@@ -1258,7 +1327,8 @@ TEST_F(TurnSyncOnHelperTest,
       SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW));
   sync_confirmation_result_ = LoginUIService::SyncConfirmationUIClosedResult::
       SYNC_WITH_DEFAULT_SETTINGS;
-  sync_starter->SyncStartupCompleted();
+  sync_starter->OnSyncStartupStateChanged(
+      SyncStartupTracker::ServiceStartupState::kComplete);
   CheckDelegateCalls();
 }
 
@@ -1294,7 +1364,8 @@ TEST_F(TurnSyncOnHelperTest,
       SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW));
   sync_confirmation_result_ = LoginUIService::SyncConfirmationUIClosedResult::
       SYNC_WITH_DEFAULT_SETTINGS;
-  sync_starter->SyncStartupFailed();
+  sync_starter->OnSyncStartupStateChanged(
+      SyncStartupTracker::ServiceStartupState::kError);
   CheckDelegateCalls();
 }
 
@@ -1332,7 +1403,8 @@ TEST_F(TurnSyncOnHelperTest,
       SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW));
   sync_confirmation_result_ = LoginUIService::SyncConfirmationUIClosedResult::
       SYNC_WITH_DEFAULT_SETTINGS;
-  sync_starter->SyncStartupFailed();
+  sync_starter->OnSyncStartupStateChanged(
+      SyncStartupTracker::ServiceStartupState::kError);
   CheckDelegateCalls();
 }
 

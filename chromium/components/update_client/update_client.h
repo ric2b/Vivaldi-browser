@@ -411,7 +411,7 @@ class UpdateClient : public base::RefCountedThreadSafe<UpdateClient> {
 
       // Sent when a CRX has not been updated because there was no update
       // available for this component.
-      COMPONENT_NOT_UPDATED,
+      COMPONENT_ALREADY_UP_TO_DATE,
 
       // Sent when an error ocurred during an update for any reason, including
       // the update check itself failed, or the download of the update payload
@@ -454,10 +454,12 @@ class UpdateClient : public base::RefCountedThreadSafe<UpdateClient> {
   // one CRX. These cases are usually associated with on-demand install
   // scenarios, which are triggered by user actions. Installs are never
   // queued up.
-  virtual void Install(const std::string& id,
-                       CrxDataCallback crx_data_callback,
-                       CrxStateChangeCallback crx_state_change_callback,
-                       Callback callback) = 0;
+  // Returns a closure that can be called to cancel the installation.
+  virtual base::RepeatingClosure Install(
+      const std::string& id,
+      CrxDataCallback crx_data_callback,
+      CrxStateChangeCallback crx_state_change_callback,
+      Callback callback) = 0;
 
   // Updates the specified CRXs. Calls back on |crx_data_callback| before the
   // update is attempted to give the caller the opportunity to provide the

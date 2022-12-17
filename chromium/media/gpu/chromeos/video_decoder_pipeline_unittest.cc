@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/thread_pool.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -107,8 +108,13 @@ class MockChromeOsCdmContext : public chromeos::ChromeOsCdmContext {
                void(const DecryptConfig*,
                     const std::vector<uint8_t>&,
                     chromeos::ChromeOsCdmContext::GetHwKeyDataCB));
+  MOCK_METHOD1(GetHwConfigData,
+               void(chromeos::ChromeOsCdmContext::GetHwConfigDataCB));
+  MOCK_METHOD1(GetScreenResolutions,
+               void(chromeos::ChromeOsCdmContext::GetScreenResolutionsCB));
   MOCK_METHOD0(GetCdmContextRef, std::unique_ptr<CdmContextRef>());
   MOCK_CONST_METHOD0(UsingArcCdm, bool());
+  MOCK_CONST_METHOD0(IsRemoteCdm, bool());
 };
 // A real implementation of this class would actually hold onto a reference of
 // the owner of the CdmContext to ensure it is not destructed before the
@@ -350,7 +356,7 @@ class VideoDecoderPipelineTest
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<VideoFrameConverter> converter_;
   std::unique_ptr<VideoDecoderPipeline> decoder_;
-  MockVideoFramePool* pool_;
+  raw_ptr<MockVideoFramePool> pool_;
 };
 
 // Verifies the status code for several typical CreateDecoderFunctionCB cases.

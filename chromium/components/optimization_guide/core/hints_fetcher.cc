@@ -14,6 +14,7 @@
 #include "base/strings/strcat.h"
 #include "base/time/default_clock.h"
 #include "components/optimization_guide/core/hints_processing_util.h"
+#include "components/optimization_guide/core/optimization_guide_common.mojom.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_logger.h"
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
@@ -181,6 +182,7 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
 
   if (active_url_loader_) {
     OPTIMIZATION_GUIDE_LOG(
+        optimization_guide_common::mojom::LogSource::HINTS,
         optimization_guide_logger_,
         "No hints fetched: HintsFetcher busy in another fetch");
     RecordRequestStatusHistogram(request_context_,
@@ -193,7 +195,8 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
       GetSizeLimitedHostsDueForHintsRefresh(hosts);
   std::vector<GURL> valid_urls = GetSizeLimitedURLsForFetching(urls);
   if (filtered_hosts.empty() && valid_urls.empty()) {
-    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_common::mojom::LogSource::HINTS,
+                           optimization_guide_logger_,
                            "No hints fetched: No hosts/URLs");
     RecordRequestStatusHistogram(
         request_context_, HintsFetcherRequestStatus::kNoHostsOrURLsToFetch);
@@ -207,7 +210,8 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
             valid_urls.size());
 
   if (optimization_types.empty()) {
-    OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,
+    OPTIMIZATION_GUIDE_LOG(optimization_guide_common::mojom::LogSource::HINTS,
+                           optimization_guide_logger_,
                            "No hints fetched: No supported optimization types");
     RecordRequestStatusHistogram(
         request_context_,
@@ -227,10 +231,10 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
 
   get_hints_request.set_context(request_context_);
 
-  *get_hints_request.mutable_active_field_trials() =
-      GetActiveFieldTrialsAllowedForFetch();
-
   get_hints_request.set_locale(locale);
+
+  *get_hints_request.mutable_origin_info() =
+      optimization_guide::GetClientOriginInfo();
 
   for (const auto& url : valid_urls)
     get_hints_request.add_urls()->set_url(url.spec());
@@ -249,20 +253,28 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
           sender: "HintsFetcher"
           description:
             "Requests Hints from the Optimization Guide Service for use in "
-            "providing data saving and pageload optimizations for Chrome."
+            "providing metadata about page loads for Chrome for features such "
+            "as price tracking and trust information about the websites users "
+            "visit."
           trigger:
-            "Requested periodically if Data Saver is enabled and the browser "
-            "has Hints that are older than a threshold set by "
-            "the server."
-          data: "A list of the user's most engaged websites."
+            "Requested once per page load if user has consented to sending "
+            "URLs to Google to make browsing better and the browser does not "
+            "have a valid hint for the current page load."
+          data: "The URL and host of the current page load."
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
           cookies_allowed: NO
           setting:
-            "Users can control Data Saver on Android via 'Data Saver' setting. "
-            "Data Saver is not available on iOS."
-          policy_exception_justification: "Not implemented."
+            "Users can control this via the Make searches and browsing better' "
+            "under Settings > Sync and Google services > Make searches and "
+            "browsing better."
+          chrome_policy {
+            UrlKeyedAnonymizedDataCollectionEnabled {
+              policy_options {mode: MANDATORY}
+              UrlKeyedAnonymizedDataCollectionEnabled: false
+            }
+          }
         })");
 
   auto resource_request = std::make_unique<network::ResourceRequest>();
@@ -288,14 +300,6 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
   UMA_HISTOGRAM_COUNTS_100(
       "OptimizationGuide.HintsFetcher.GetHintsRequest.UrlCount",
       valid_urls.size());
-
-  // |active_url_loader_| should not retry on 5xx errors since the server may
-  // already be overloaded. |active_url_loader_| should retry on network changes
-  // since the network stack may receive the connection change event later than
-  // |this|.
-  static const int kMaxRetries = 1;
-  active_url_loader_->SetRetryOptions(
-      kMaxRetries, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
 
   // It's safe to use |base::Unretained(this)| here because |this| owns
   // |active_url_loader_| and the callback will be canceled if
@@ -445,6 +449,7 @@ std::vector<GURL> HintsFetcher::GetSizeLimitedURLsForFetching(
               GetStringNameForRequestContext(request_context_),
           urls.size() - i);
       OPTIMIZATION_GUIDE_LOG(
+          optimization_guide_common::mojom::LogSource::HINTS,
           optimization_guide_logger_,
           base::StrCat({"Skipped adding URL due to limit, context:",
                         GetStringNameForRequestContext(request_context_),
@@ -455,6 +460,7 @@ std::vector<GURL> HintsFetcher::GetSizeLimitedURLsForFetching(
       valid_urls.push_back(urls[i]);
     } else {
       OPTIMIZATION_GUIDE_LOG(
+          optimization_guide_common::mojom::LogSource::HINTS,
           optimization_guide_logger_,
           base::StrCat({"Skipped adding invalid URL, context:",
                         GetStringNameForRequestContext(request_context_),
@@ -493,6 +499,7 @@ std::vector<std::string> HintsFetcher::GetSizeLimitedHostsDueForHintsRefresh(
     if (host_info.IsIPAddress() ||
         !net::IsCanonicalizedHostCompliant(canonicalized_host)) {
       OPTIMIZATION_GUIDE_LOG(
+          optimization_guide_common::mojom::LogSource::HINTS,
           optimization_guide_logger_,
           base::StrCat({"Skipped adding invalid host:", host}));
       continue;
@@ -513,6 +520,7 @@ std::vector<std::string> HintsFetcher::GetSizeLimitedHostsDueForHintsRefresh(
       target_hosts.push_back(host);
     } else {
       OPTIMIZATION_GUIDE_LOG(
+          optimization_guide_common::mojom::LogSource::HINTS,
           optimization_guide_logger_,
           base::StrCat({"Skipped refreshing hints for host:", host}));
     }

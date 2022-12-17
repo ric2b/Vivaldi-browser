@@ -148,7 +148,7 @@ void HandleScriptCommand(bool* is_called,
                          bool user_is_interacting,
                          web::WebFrame* sender_frame) {
   *is_called = true;
-  EXPECT_TRUE(expected_value->Equals(&value));
+  EXPECT_EQ(*expected_value, value);
   EXPECT_EQ(expected_url, url);
   EXPECT_EQ(expected_user_is_interacting, user_is_interacting);
   EXPECT_EQ(expected_sender_frame, sender_frame);
@@ -172,8 +172,7 @@ class WebStateImplTest : public web::WebTest {
     web_state_->GetNavigationManagerImpl().AddPendingItem(
         GURL::EmptyGURL(), web::Referrer(), ui::PAGE_TRANSITION_LINK,
         NavigationInitiationType::RENDERER_INITIATED,
-        /*is_post_navigation=*/false,
-        /*is_using_https_as_default_scheme=*/false);
+        /*is_post_navigation=*/false, HttpsUpgradeType::kNone);
     web_state_->GetNavigationManagerImpl().CommitPendingItem();
   }
 

@@ -12,7 +12,7 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/ash/assistant/search_and_assistant_enabled_checker.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 // AssistantSetup is the class responsible for start Assistant OptIn flow.
@@ -44,7 +44,7 @@ class AssistantSetup : public ash::AssistantSetup,
  private:
   // ash::AssistantStateObserver:
   void OnAssistantStatusChanged(
-      chromeos::assistant::AssistantStatus status) override;
+      ash::assistant::AssistantStatus status) override;
 
   void SyncSettingsState();
   void OnGetSettingsResponse(const std::string& settings);

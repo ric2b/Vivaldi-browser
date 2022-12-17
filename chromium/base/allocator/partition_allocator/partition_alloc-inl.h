@@ -12,6 +12,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
 #include "base/allocator/partition_allocator/partition_ref_count.h"
 #include "base/allocator/partition_allocator/random.h"
+#include "base/allocator/partition_allocator/tagging.h"
 #include "build/build_config.h"
 
 // Prefetch *x into memory.
@@ -53,7 +54,7 @@ PA_ALWAYS_INLINE bool RandomPeriod() {
   static thread_local uint8_t counter = 0;
   if (PA_UNLIKELY(counter == 0)) {
     // It's OK to truncate this value.
-    counter = static_cast<uint8_t>(::partition_alloc::internal::RandomValue());
+    counter = static_cast<uint8_t>(RandomValue());
   }
   // If `counter` is 0, this will wrap. That is intentional and OK.
   counter--;
@@ -61,17 +62,22 @@ PA_ALWAYS_INLINE bool RandomPeriod() {
 }
 #endif  // !BUILDFLAG(PA_DCHECK_IS_ON)
 
+PA_ALWAYS_INLINE uintptr_t ObjectInnerPtr2Addr(const void* ptr) {
+  return UntagPtr(ptr);
+}
+PA_ALWAYS_INLINE uintptr_t ObjectPtr2Addr(const void* object) {
+  // TODO(bartekn): Check that |object| is indeed an object start.
+  return ObjectInnerPtr2Addr(object);
+}
+PA_ALWAYS_INLINE void* SlotStartAddr2Ptr(uintptr_t slot_start) {
+  // TODO(bartekn): Check that |slot_start| is indeed a slot start.
+  return TagAddr(slot_start);
+}
+PA_ALWAYS_INLINE uintptr_t SlotStartPtr2Addr(const void* slot_start) {
+  // TODO(bartekn): Check that |slot_start| is indeed a slot start.
+  return UntagPtr(slot_start);
+}
+
 }  // namespace partition_alloc::internal
-
-namespace base::internal {
-
-// TODO(https://crbug.com/1288247): Remove these 'using' declarations once
-// the migration to the new namespaces gets done.
-using ::partition_alloc::internal::SecureMemset;
-#if !BUILDFLAG(PA_DCHECK_IS_ON)
-using ::partition_alloc::internal::RandomPeriod;
-#endif  // !BUILDFLAG(PA_DCHECK_IS_ON)
-
-}  // namespace base::internal
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_ALLOC_INL_H_

@@ -118,11 +118,11 @@ void MigratePrefs(PrefService* prefs, const std::string& project_id) {
         project_id, prefs->GetString(kActiveRegistrationTokenDeprecated));
   }
 
-  auto* old_subscriptions =
-      prefs->GetDictionary(kTypeSubscribedForInvalidationsDeprecated);
+  const auto& old_subscriptions =
+      prefs->GetValueDict(kTypeSubscribedForInvalidationsDeprecated);
   {
     PerProjectDictionaryPrefUpdate update(prefs, project_id);
-    *update = old_subscriptions->Clone();
+    *update = base::Value(old_subscriptions.Clone());
   }
   prefs->ClearPref(kActiveRegistrationTokenDeprecated);
   prefs->ClearPref(kTypeSubscribedForInvalidationsDeprecated);
@@ -617,14 +617,12 @@ void PerUserTopicSubscriptionManager::NotifySubscriptionChannelStateChange(
   }
 }
 
-base::DictionaryValue PerUserTopicSubscriptionManager::CollectDebugData()
-    const {
-  base::DictionaryValue status;
+base::Value::Dict PerUserTopicSubscriptionManager::CollectDebugData() const {
+  base::Value::Dict status;
   for (const auto& topic_to_private_topic : topic_to_private_topic_) {
-    status.SetStringKey(topic_to_private_topic.first,
-                        topic_to_private_topic.second);
+    status.Set(topic_to_private_topic.first, topic_to_private_topic.second);
   }
-  status.SetStringKey("Instance id token", instance_id_token_);
+  status.Set("Instance id token", instance_id_token_);
   return status;
 }
 

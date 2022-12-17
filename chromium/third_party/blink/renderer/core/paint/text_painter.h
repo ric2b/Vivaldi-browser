@@ -40,9 +40,6 @@ class CORE_EXPORT TextPainter : public TextPainterBase {
     combined_text_ = combined_text;
   }
 
-  void ClipDecorationsStripe(float upper,
-                             float stripe_width,
-                             float dilation) override;
   void Paint(unsigned start_offset,
              unsigned end_offset,
              unsigned length,
@@ -54,8 +51,7 @@ class CORE_EXPORT TextPainter : public TextPainterBase {
                                          TextDecorationInfo&,
                                          const PaintInfo&,
                                          const Vector<AppliedTextDecoration>&,
-                                         const TextPaintStyle& text_style,
-                                         bool* has_line_through_decoration);
+                                         const TextPaintStyle& text_style);
   void PaintDecorationsOnlyLineThrough(TextDecorationInfo&,
                                        const PaintInfo&,
                                        const Vector<AppliedTextDecoration>&,
@@ -75,6 +71,13 @@ class CORE_EXPORT TextPainter : public TextPainterBase {
                      unsigned truncation_point,
                      DOMNodeId node_id,
                      const AutoDarkMode& auto_dark_mode);
+
+  void ClipDecorationsStripe(float upper, float stripe_width, float dilation);
+
+  void PaintDecorationUnderOrOverLine(GraphicsContext& context,
+                                      TextDecorationInfo& decoration_info,
+                                      TextDecorationLine line,
+                                      const cc::PaintFlags* flags = nullptr);
 
   const TextRun& run_;
   LayoutTextCombine* combined_text_ = nullptr;

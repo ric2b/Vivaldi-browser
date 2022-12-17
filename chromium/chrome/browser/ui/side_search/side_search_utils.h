@@ -12,8 +12,8 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
+class Browser;
 class Profile;
-class SessionID;
 
 namespace content {
 class WebContents;
@@ -26,31 +26,13 @@ void MaybeAddSideSearchTabRestoreData(
     content::WebContents* web_contents,
     std::map<std::string, std::string>& extra_data);
 
-// Add side search state data for a window's state restore data if applicable.
-// TODO(tluk): Remove this now that we are no longer supporting per-window UX.
-void MaybeAddSideSearchWindowRestoreData(
-    bool toggled_open,
-    std::map<std::string, std::string>& extra_data);
-
 // Returns side search tab restore state data if applicable or empty.
 absl::optional<std::pair<std::string, std::string>>
 MaybeGetSideSearchTabRestoreData(content::WebContents* web_contents);
 
-// TODO(tluk): Remove this now that we are no longer supporting per-window UX.
-void MaybeRestoreSideSearchWindowState(
-    SideSearchTabContentsHelper::Delegate* delegate,
-    const std::map<std::string, std::string>& extra_data);
-
 // If applicable, persists the required tab data to be able to successfully
 // restore the side search tab state on restoring a session.
 void MaybeSaveSideSearchTabSessionData(content::WebContents* web_contents);
-
-// If applicable, persists the required window data to be able to successfully
-// restore the side seardch window state on restoring a session.
-// TODO(tluk): Remove this now that we are no longer supporting per-window UX.
-void MaybeSaveSideSearchWindowSessionData(Profile* profile,
-                                          SessionID window_id,
-                                          bool toggled_open);
 
 void SetSideSearchTabStateFromRestoreData(
     content::WebContents* web_contents,
@@ -63,6 +45,9 @@ bool IsSidePanelWebContents(content::WebContents* web_contents);
 // Returns true if side search with DSE support for participating search engines
 // is enabled.
 bool IsDSESupportEnabled(const Profile* profile);
+
+// Returns true if side search is enabled and is supported for `browser`.
+bool IsEnabledForBrowser(const Browser* browser);
 
 }  // namespace side_search
 

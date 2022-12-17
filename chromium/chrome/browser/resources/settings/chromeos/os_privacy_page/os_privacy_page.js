@@ -8,13 +8,13 @@
  * security settings.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 import './peripheral_data_access_protection_dialog.js';
 import '../../controls/settings_toggle_button.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import '../../settings_page/settings_subpage.js';
 import '../os_people_page/users_page.js';
 import '../../settings_page/settings_animated_pages.js';
@@ -24,6 +24,7 @@ import '../os_people_page/lock_screen_password_prompt_dialog.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {afterNextRender, html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {LockStateBehavior, LockStateBehaviorInterface} from '../os_people_page/lock_state_behavior.js';
@@ -44,8 +45,10 @@ import {PeripheralDataAccessBrowserProxy, PeripheralDataAccessBrowserProxyImpl} 
  */
 const OsSettingsPrivacyPageElementBase = mixinBehaviors(
     [
-      DeepLinkingBehavior, RouteObserverBehavior, LockStateBehavior,
-      PrefsBehavior
+      DeepLinkingBehavior,
+      RouteObserverBehavior,
+      LockStateBehavior,
+      PrefsBehavior,
     ],
     PolymerElement);
 
@@ -111,13 +114,13 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
 
       /**
        * Used by DeepLinkingBehavior to focus this page's deep links.
-       * @type {!Set<!chromeos.settings.mojom.Setting>}
+       * @type {!Set<!Setting>}
        */
       supportedSettingIds: {
         type: Object,
         value: () => new Set([
-          chromeos.settings.mojom.Setting.kVerifiedAccess,
-          chromeos.settings.mojom.Setting.kUsageStatsAndCrashReports,
+          Setting.kVerifiedAccess,
+          Setting.kUsageStatsAndCrashReports,
         ]),
       },
 
@@ -272,8 +275,7 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
     this.browserProxy_.isThunderboltSupported().then(enabled => {
       this.isThunderboltSupported_ = enabled;
       if (this.isThunderboltSupported_) {
-        this.supportedSettingIds.add(
-            chromeos.settings.mojom.Setting.kPeripheralDataAccessProtection);
+        this.supportedSettingIds.add(Setting.kPeripheralDataAccessProtection);
       }
     });
 
@@ -289,6 +291,13 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
       }
     });
     // </if>
+  }
+
+  /** @override */
+  ready() {
+    super.ready();
+
+    this.addEventListener('auth-token-invalid', this.onAuthTokenInvalid_);
   }
 
   /**
@@ -354,6 +363,14 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
    * */
   onAuthTokenObtained_(e) {
     this.authToken_ = e.detail;
+  }
+
+  /**
+   * Should request the password again to get latest token.
+   * @private
+   */
+  onAuthTokenInvalid_() {
+    this.setModes_ = undefined;
   }
 
   /**

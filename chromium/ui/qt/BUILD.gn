@@ -8,7 +8,7 @@ import("//ui/qt/qt.gni")
 
 assert(use_qt)
 assert(is_linux)
-assert(!is_chromecast)
+assert(!is_castos)
 
 pkg_config("qt5_config") {
   packages = [
@@ -79,7 +79,7 @@ shared_library("qt5_shim") {
 }
 
 component("qt") {
-  visibility = [ "//ui/views/linux_ui:linux_ui_factory" ]
+  visibility = [ "//ui/linux:linux_ui_factory" ]
 
   defines = [ "IS_QT_IMPL" ]
 
@@ -88,14 +88,17 @@ component("qt") {
   deps = [
     ":qt_interface",
     "//base",
-    "//skia",
+    "//printing/buildflags",
+    "//ui/base/ime/linux",
     "//ui/color",
     "//ui/color:mixers",
     "//ui/gfx",
+    "//ui/linux:linux_ui_impl",
     "//ui/native_theme",
     "//ui/shell_dialogs",
     "//ui/views",
   ]
+  public_deps = [ "//skia" ]
 
   sources = [
     "qt_ui.cc",

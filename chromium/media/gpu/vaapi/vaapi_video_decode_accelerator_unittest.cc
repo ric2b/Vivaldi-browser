@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
@@ -63,6 +64,7 @@ class MockAcceleratedVideoDecoder : public AcceleratedVideoDecoder {
   MOCK_CONST_METHOD0(GetPicSize, gfx::Size());
   MOCK_CONST_METHOD0(GetProfile, VideoCodecProfile());
   MOCK_CONST_METHOD0(GetBitDepth, uint8_t());
+  MOCK_CONST_METHOD0(GetChromaSampling, VideoChromaSampling());
   MOCK_CONST_METHOD0(GetVisibleRect, gfx::Rect());
   MOCK_CONST_METHOD0(GetRequiredNumOfPictures, size_t());
   MOCK_CONST_METHOD0(GetNumReferenceFrames, size_t());
@@ -397,8 +399,8 @@ class VaapiVideoDecodeAcceleratorTest : public TestWithParam<TestParams>,
   base::Thread decoder_thread_;
 
   // Ownership passed to |vda_|, but we retain a pointer to it for MOCK checks.
-  MockAcceleratedVideoDecoder* mock_decoder_;
-  MockVaapiPictureFactory* mock_vaapi_picture_factory_;
+  raw_ptr<MockAcceleratedVideoDecoder> mock_decoder_;
+  raw_ptr<MockVaapiPictureFactory> mock_vaapi_picture_factory_;
 
   scoped_refptr<MockVaapiWrapper> mock_vaapi_wrapper_;
   scoped_refptr<MockVaapiWrapper> mock_vpp_vaapi_wrapper_;

@@ -40,11 +40,16 @@
 #include "device/bluetooth/bluez/bluetooth_local_gatt_service_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_pairing_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_socket_bluez.h"
+#include "device/bluetooth/bluez/bluez_features.h"
+#if BUILDFLAG(IS_CHROMEOS)
+#include "device/bluetooth/chromeos_platform_features.h"
+#endif // BUILDFLAG(IS_CHROMEOS)
 #include "device/bluetooth/dbus/bluetooth_adapter_client.h"
 #include "device/bluetooth/dbus/bluetooth_admin_policy_client.h"
 #include "device/bluetooth/dbus/bluetooth_agent_manager_client.h"
 #include "device/bluetooth/dbus/bluetooth_agent_service_provider.h"
 #include "device/bluetooth/dbus/bluetooth_battery_client.h"
+#include "device/bluetooth/dbus/bluetooth_debug_manager_client.h"
 #include "device/bluetooth/dbus/bluetooth_device_client.h"
 #include "device/bluetooth/dbus/bluetooth_gatt_application_service_provider.h"
 #include "device/bluetooth/dbus/bluetooth_gatt_manager_client.h"
@@ -375,12 +380,49 @@ void BluetoothAdapterBlueZ::Init() {
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
   initialized_ = true;
+
+#if BUILDFLAG(IS_CHROMEOS)
+  bluez::BluezDBusManager::Get()
+      ->GetBluetoothDebugManagerClient()
+      ->SetDevCoredump(
+          base::FeatureList::IsEnabled(
+              chromeos::bluetooth::features::kBluetoothCoredump),
+          base::BindOnce(&BluetoothAdapterBlueZ::OnSetDevCoredumpSuccess,
+                         weak_ptr_factory_.GetWeakPtr()),
+          base::BindOnce(&BluetoothAdapterBlueZ::OnSetDevCoredumpError,
+                         weak_ptr_factory_.GetWeakPtr()));
+#endif // BUILDFLAG(IS_CHROMEOS)
+
+  bluez::BluezDBusManager::Get()
+      ->GetBluetoothDebugManagerClient()
+      ->SetLLPrivacy(
+          base::FeatureList::IsEnabled(bluez::features::kLinkLayerPrivacy),
+          base::BindOnce(&BluetoothAdapterBlueZ::OnSetLLPrivacySuccess,
+                         weak_ptr_factory_.GetWeakPtr()),
+          base::BindOnce(&BluetoothAdapterBlueZ::OnSetLLPrivacyError,
+                         weak_ptr_factory_.GetWeakPtr()));
+
   std::move(init_callback_).Run();
 }
 
 BluetoothAdapterBlueZ::~BluetoothAdapterBlueZ() {
   Shutdown();
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+void BluetoothAdapterBlueZ::OnSetDevCoredumpSuccess() {
+  bool flag = base::FeatureList::IsEnabled(
+      chromeos::bluetooth::features::kBluetoothCoredump);
+  BLUETOOTH_LOG(DEBUG) << "Bluetooth devcoredump state set to " << flag;
+}
+
+void BluetoothAdapterBlueZ::OnSetDevCoredumpError(
+    const std::string& error_name,
+    const std::string& error_message) {
+  BLUETOOTH_LOG(ERROR) << "Failed to update bluetooth devcoredump state: "
+                       << error_name << ": " << error_message;
+}
+#endif // BUILDFLAG(IS_CHROMEOS)
 
 std::string BluetoothAdapterBlueZ::GetAddress() const {
   if (!IsPresent())
@@ -1122,6 +1164,18 @@ void BluetoothAdapterBlueZ::Cancel() {
   DCHECK(IsPresent());
   DCHECK(agent_.get());
   BLUETOOTH_LOG(EVENT) << "Cancel";
+}
+
+void BluetoothAdapterBlueZ::OnSetLLPrivacySuccess() {
+  bool flag = base::FeatureList::IsEnabled(bluez::features::kLinkLayerPrivacy);
+  BLUETOOTH_LOG(DEBUG) << "LL Privacy value set to " << flag;
+}
+
+void BluetoothAdapterBlueZ::OnSetLLPrivacyError(
+    const std::string& error_name,
+    const std::string& error_message) {
+  BLUETOOTH_LOG(ERROR) << "Failed to enable LL Privacy: " << error_name << ": "
+                       << error_message;
 }
 
 void BluetoothAdapterBlueZ::OnRegisterAgent() {

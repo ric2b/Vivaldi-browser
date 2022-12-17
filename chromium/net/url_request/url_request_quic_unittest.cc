@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "net/base/features.h"
 #include "net/base/isolation_info.h"
@@ -23,6 +24,7 @@
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/test_net_log_util.h"
@@ -33,6 +35,7 @@
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_dispatcher.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_time.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/tools/quic_memory_cache_backend.h"
 #include "net/third_party/quiche/src/quiche/quic/tools/quic_simple_dispatcher.h"
@@ -219,6 +222,14 @@ class URLRequestQuicTest
            std::string(path);
   }
 
+  void SetDelay(absl::string_view host,
+                absl::string_view path,
+                base::TimeDelta delay) {
+    memory_cache_backend_.SetResponseDelay(
+        host, path,
+        quic::QuicTime::Delta::FromMilliseconds(delay.InMilliseconds()));
+  }
+
  private:
   void StartQuicServer(quic::ParsedQuicVersion version) {
     // Set up in-memory cache.
@@ -247,7 +258,7 @@ class URLRequestQuicTest
         server_->Listen(net::IPEndPoint(net::IPAddress::IPv4AllZeros(), 0));
     EXPECT_GE(rv, 0) << "Quic server fails to start";
 
-    std::unique_ptr<MockHostResolver> resolver(new MockHostResolver());
+    auto resolver = std::make_unique<MockHostResolver>();
     resolver->rules()->AddRule("test.example.com", "127.0.0.1");
     host_resolver_ = std::make_unique<MappedHostResolver>(std::move(resolver));
     // Use a mapped host resolver so that request for test.example.com
@@ -280,7 +291,7 @@ class URLRequestQuicTest
 // received.
 class CheckLoadTimingDelegate : public TestDelegate {
  public:
-  CheckLoadTimingDelegate(bool session_reused)
+  explicit CheckLoadTimingDelegate(bool session_reused)
       : session_reused_(session_reused) {}
 
   CheckLoadTimingDelegate(const CheckLoadTimingDelegate&) = delete;
@@ -447,6 +458,25 @@ TEST_P(URLRequestQuicTest, RequestHeadersCallback) {
   ASSERT_TRUE(request->is_pending());
   delegate.RunUntilComplete();
   EXPECT_EQ(OK, delegate.request_status());
+}
+
+TEST_P(URLRequestQuicTest, DelayedResponseStart) {
+  auto context = BuildContext();
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request =
+      CreateRequest(context.get(), GURL(UrlFromPath(kHelloPath)), &delegate);
+
+  constexpr auto delay = base::Milliseconds(300);
+
+  this->SetDelay(kTestServerHost, kHelloPath, delay);
+  request->Start();
+  ASSERT_TRUE(request->is_pending());
+  delegate.RunUntilComplete();
+  LoadTimingInfo timing_info;
+  request->GetLoadTimingInfo(&timing_info);
+  EXPECT_EQ(OK, delegate.request_status());
+  EXPECT_GE((timing_info.receive_headers_start - timing_info.request_start),
+            delay);
 }
 
 // Tests that if there's an Expect-CT failure at the QUIC layer, a report is

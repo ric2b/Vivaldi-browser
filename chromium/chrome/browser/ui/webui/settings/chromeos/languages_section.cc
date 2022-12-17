@@ -10,8 +10,8 @@
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_features_util.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
@@ -101,11 +101,6 @@ const std::vector<SearchConcept>& GetEditDictionarySearchConceptsV2() {
        {.subpage = mojom::Subpage::kEditDictionary}},
   });
   return *tags;
-}
-
-bool IsLanguageSettingsV2Update2Enabled() {
-  return base::FeatureList::IsEnabled(
-      ::chromeos::features::kLanguageSettingsUpdate2);
 }
 
 const std::vector<SearchConcept>& GetSmartInputsSearchConcepts() {
@@ -204,6 +199,8 @@ void AddInputMethodOptionsStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_AUTO_CORRECTION},
       {"inputMethodOptionsPredictiveWriting",
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_PREDICTIVE_WRITING},
+      {"inputMethodOptionsDiacriticsOnPhysicalKeyboardLongpress",
+       IDS_SETTINGS_INPUT_METHOD_OPTIONS_DIACRITICS_ON_PHYSICAL_KEYBOARD_LONGPRESS},
       {"inputMethodOptionsXkbLayout",
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_XKB_LAYOUT},
       {"inputMethodOptionsZhuyinKeyboardLayout",
@@ -252,6 +249,10 @@ void AddInputMethodOptionsStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedStrings(kLocalizedStrings);
   html_source->AddBoolean("allowPredictiveWriting",
                           IsPredictiveWritingAllowed());
+  html_source->AddBoolean(
+      "allowDiacriticsOnPhysicalKeyboardLongpress",
+      base::FeatureList::IsEnabled(
+          ::chromeos::features::kDiacriticsOnPhysicalKeyboardLongpress));
 }
 
 void AddLanguagesPageStringsV2(content::WebUIDataSource* html_source) {
@@ -447,8 +448,7 @@ void LanguagesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddLanguagesPageStringsV2(html_source);
   AddInputPageStringsV2(html_source);
 
-  html_source->AddBoolean("enableLanguageSettingsV2Update2",
-                          IsLanguageSettingsV2Update2Enabled());
+  html_source->AddBoolean("enableLanguageSettingsV2Update2", true);
   html_source->AddBoolean("onDeviceGrammarCheckEnabled",
                           base::FeatureList::IsEnabled(
                               ::chromeos::features::kOnDeviceGrammarCheck));

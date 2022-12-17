@@ -23,6 +23,7 @@
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/privacy_container_view.h"
+#include "ash/app_list/views/recent_apps_view.h"
 #include "ash/app_list/views/search_result_container_view.h"
 #include "ash/app_list/views/search_result_page_view.h"
 #include "ash/app_list/views/search_result_tile_item_list_view.h"
@@ -859,7 +860,7 @@ TEST_F(AppListPeriodicMetricsTest, PeriodicAppListMetrics_NumberOfApps) {
 
   // Create a folder and add 3 items to it.
   const std::string folder_id = "folder_id";
-  model->AddFolderItemForTest(folder_id);
+  model->CreateFolderItem(folder_id);
   for (int i = 0; i < 3; i++) {
     auto item =
         std::make_unique<AppListItem>(base::StringPrintf("id_in_folder_%d", i));

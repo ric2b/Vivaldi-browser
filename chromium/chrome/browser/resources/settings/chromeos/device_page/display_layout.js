@@ -8,12 +8,12 @@
  * more displays and allows them to be arranged.
  */
 
-import '//resources/polymer/v3_0/paper-styles/shadow.js';
-import '../../settings_shared_css.js';
+import 'chrome://resources/polymer/v3_0/paper-styles/shadow.js';
+import '../../settings_shared.css.js';
 
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
-import {IronResizableBehavior} from '//resources/polymer/v3_0/iron-resizable-behavior/iron-resizable-behavior.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {IronResizableBehavior} from 'chrome://resources/polymer/v3_0/iron-resizable-behavior/iron-resizable-behavior.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl} from './device_page_browser_proxy.js';
 import {DragBehavior, DragBehaviorInterface, DragPosition} from './drag_behavior.js';
@@ -345,7 +345,7 @@ class DisplayLayoutElement extends DisplayLayoutElementBase {
           this.hasDragStarted_ = true;
           this.lastDragCoordinates_ = {
             x: calculatedBounds.left,
-            y: calculatedBounds.top
+            y: calculatedBounds.top,
           };
         }
 

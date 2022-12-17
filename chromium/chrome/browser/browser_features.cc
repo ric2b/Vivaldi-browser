@@ -27,7 +27,7 @@ const base::Feature kColorProviderRedirectionForThemeProvider = {
 
 // Destroy profiles when their last browser window is closed, instead of when
 // the browser exits.
-const base::Feature kDestroyProfileOnBrowserClose{
+const base::Feature kDestroyProfileOnBrowserClose {
   "DestroyProfileOnBrowserClose",
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
       base::FEATURE_ENABLED_BY_DEFAULT
@@ -41,6 +41,11 @@ const base::Feature kDestroyProfileOnBrowserClose{
 // Profiles. This flags lets us destroy the System Profile, as well.
 const base::Feature kDestroySystemProfiles{"DestroySystemProfiles",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Let DevTools front-end talk to the target of type "tab" rather than
+// "frame" when inspecting a WebContents.
+const base::Feature kDevToolsTabTarget{"DevToolsTabTarget",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Nukes profile directory before creating a new profile using
 // ProfileManager::CreateMultiProfileAsync().
@@ -156,7 +161,7 @@ const base::Feature kObserverBasedPostProfileInit{
 // Controls whether the static key pinning list can be updated via component
 // updater.
 const base::Feature kKeyPinningComponentUpdater{
-    "KeyPinningComponentUpdater", base::FEATURE_DISABLED_BY_DEFAULT};
+    "KeyPinningComponentUpdater", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When this feature is enabled, the network service will restart unsandboxed if
 // a previous attempt to launch it sandboxed failed.
@@ -164,4 +169,10 @@ const base::Feature kRestartNetworkServiceUnsandboxedForFailedLaunch{
     "RestartNetworkServiceUnsandboxedForFailedLaunch",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
+#if BUILDFLAG(IS_WIN)
+// When this feature is enabled, metrics are gathered regarding the performance
+// and reliability of app-bound encryption primitives on a background thread.
+const base::Feature kAppBoundEncryptionMetrics{
+    "AppBoundEncryptionMetrics", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
 }  // namespace features

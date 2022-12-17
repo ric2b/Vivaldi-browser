@@ -7,10 +7,12 @@
 
 #include <fuchsia/web/cpp/fidl.h>
 
-#include "base/callback.h"
-#include "components/cast/message_port/message_port.h"
-#include "components/cast_streaming/browser/public/receiver_session.h"
-#include "third_party/openscreen/src/cast/common/public/message_port.h"
+#include "components/cast_streaming/public/mojom/demuxer_connector.mojom.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
+
+namespace cast_streaming {
+class ReceiverSession;
+}  // namespace cast_streaming
 
 // Holds a Cast Streaming Receiver Session.
 class ReceiverSessionClient {
@@ -24,16 +26,18 @@ class ReceiverSessionClient {
 
   ReceiverSessionClient& operator=(const ReceiverSessionClient&) = delete;
 
-  void SetCastStreamingReceiver(
+  void SetDemuxerConnector(
       mojo::AssociatedRemote<cast_streaming::mojom::DemuxerConnector>
           demuxer_connector);
 
+  bool HasReceiverSession();
+
  private:
   // Populated in the ctor, and removed when |receiver_session_| is created in
-  // SetCastStreamingReceiver().
+  // SetDemuxerConnector().
   fidl::InterfaceRequest<fuchsia::web::MessagePort> message_port_request_;
 
-  // Created in SetCastStreamingReceiver(), and empty prior to that call.
+  // Created in SetDemuxerConnector(), and empty prior to that call.
   std::unique_ptr<cast_streaming::ReceiverSession> receiver_session_;
 
   const bool video_only_receiver_;

@@ -50,6 +50,7 @@
 <translation id="5076161749301278626">Kas kuvada poe arvustused?</translation>
 <translation id="5082793167783849073">Looge rühm, et lehti kiiresti võrrelda. Alustamiseks puudutage pikalt linki.</translation>
 <translation id="5490235265819901748">Vahelehegruppi laiendati</translation>
+<translation id="5494920125229734069">Valige kõik</translation>
 <translation id="5533021382642990449">Kuva hiljem</translation>
 <translation id="5556417849629758491">Poe teabe vaatamine, valik saadaval ekraanikuva ülaosas</translation>
 <translation id="5558362125926932819">Sule <ph name="NUMBER_OF_TABS" /> vahelehega vahelehegrupp</translation>
@@ -57,6 +58,7 @@
 <translation id="575494663145460764">Kas soovite hinnalanguste puhul märguandeid saada?</translation>
 <translation id="58326064309361797">Lohistage vahelehti, et neid grupeerida</translation>
 <translation id="5846292395804797011">Sule <ph name="NUMBER_OF_TABS" /> vahelehega grupp <ph name="TITLE_OF_GROUP" /></translation>
+<translation id="5972844218283131174">Tühista kõik valikud</translation>
 <translation id="6040143037577758943">Sulge</translation>
 <translation id="6054741997831917303">Selle üksuse hind <ph name="PREVIOUS_PRICE" /> langes hiljuti ja uus hind on <ph name="NEW_PRICE" /></translation>
 <translation id="6193448654517602979">Valige vahelehed</translation>

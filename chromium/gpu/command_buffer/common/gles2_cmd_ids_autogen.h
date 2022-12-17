@@ -318,28 +318,24 @@
   OP(InitializeDiscardableTextureCHROMIUM)                     /* 559 */ \
   OP(UnlockDiscardableTextureCHROMIUM)                         /* 560 */ \
   OP(LockDiscardableTextureCHROMIUM)                           /* 561 */ \
-  OP(TexStorage2DImageCHROMIUM)                                /* 562 */ \
-  OP(SetColorSpaceMetadataCHROMIUM)                            /* 563 */ \
-  OP(WindowRectanglesEXTImmediate)                             /* 564 */ \
-  OP(CreateGpuFenceINTERNAL)                                   /* 565 */ \
-  OP(WaitGpuFenceCHROMIUM)                                     /* 566 */ \
-  OP(DestroyGpuFenceCHROMIUM)                                  /* 567 */ \
-  OP(SetReadbackBufferShadowAllocationINTERNAL)                /* 568 */ \
-  OP(FramebufferTextureMultiviewOVR)                           /* 569 */ \
-  OP(MaxShaderCompilerThreadsKHR)                              /* 570 */ \
-  OP(CreateAndTexStorage2DSharedImageINTERNALImmediate)        /* 571 */ \
-  OP(BeginSharedImageAccessDirectCHROMIUM)                     /* 572 */ \
-  OP(EndSharedImageAccessDirectCHROMIUM)                       /* 573 */ \
-  OP(BeginBatchReadAccessSharedImageCHROMIUM)                  /* 574 */ \
-  OP(EndBatchReadAccessSharedImageCHROMIUM)                    /* 575 */ \
-  OP(EnableiOES)                                               /* 576 */ \
-  OP(DisableiOES)                                              /* 577 */ \
-  OP(BlendEquationiOES)                                        /* 578 */ \
-  OP(BlendEquationSeparateiOES)                                /* 579 */ \
-  OP(BlendFunciOES)                                            /* 580 */ \
-  OP(BlendFuncSeparateiOES)                                    /* 581 */ \
-  OP(ColorMaskiOES)                                            /* 582 */ \
-  OP(IsEnablediOES)                                            /* 583 */
+  OP(WindowRectanglesEXTImmediate)                             /* 562 */ \
+  OP(CreateGpuFenceINTERNAL)                                   /* 563 */ \
+  OP(WaitGpuFenceCHROMIUM)                                     /* 564 */ \
+  OP(DestroyGpuFenceCHROMIUM)                                  /* 565 */ \
+  OP(SetReadbackBufferShadowAllocationINTERNAL)                /* 566 */ \
+  OP(FramebufferTextureMultiviewOVR)                           /* 567 */ \
+  OP(MaxShaderCompilerThreadsKHR)                              /* 568 */ \
+  OP(CreateAndTexStorage2DSharedImageINTERNALImmediate)        /* 569 */ \
+  OP(BeginSharedImageAccessDirectCHROMIUM)                     /* 570 */ \
+  OP(EndSharedImageAccessDirectCHROMIUM)                       /* 571 */ \
+  OP(EnableiOES)                                               /* 572 */ \
+  OP(DisableiOES)                                              /* 573 */ \
+  OP(BlendEquationiOES)                                        /* 574 */ \
+  OP(BlendEquationSeparateiOES)                                /* 575 */ \
+  OP(BlendFunciOES)                                            /* 576 */ \
+  OP(BlendFuncSeparateiOES)                                    /* 577 */ \
+  OP(ColorMaskiOES)                                            /* 578 */ \
+  OP(IsEnablediOES)                                            /* 579 */
 
 enum CommandId {
   kOneBeforeStartPoint =

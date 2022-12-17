@@ -57,6 +57,11 @@ REMOTE_COCOA_APP_SHIM_EXPORT
 // https://crbug.com/960904
 - (void)enforceNeverMadeVisible;
 
+// Order window for all cases, including for children windows that
+// -[NSWindow orderWindow:] can't properly handle.
+- (void)reallyOrderWindow:(NSWindowOrderingMode)place
+               relativeTo:(NSInteger)otherWin;
+
 // Order the window to the front (space switch if necessary), and ensure that
 // the window maintains its key state. A space switch will normally activate a
 // window, so this function prevents that if the window is currently inactive.
@@ -69,6 +74,9 @@ REMOTE_COCOA_APP_SHIM_EXPORT
 
 // The NativeWidgetNSWindowBridge that this will use to call back to the host.
 @property(assign, nonatomic) remote_cocoa::NativeWidgetNSWindowBridge* bridge;
+
+// Whether this window functions as a tooltip.
+@property(assign, nonatomic) BOOL isTooltip;
 @end
 
 #endif  // COMPONENTS_REMOTE_COCOA_APP_SHIM_NATIVE_WIDGET_MAC_NSWINDOW_H_

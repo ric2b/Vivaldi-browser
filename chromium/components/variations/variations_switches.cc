@@ -13,6 +13,13 @@ const char kDisableFieldTrialTestingConfig[] = "disable-field-trial-config";
 // Disable variations safe mode.
 const char kDisableVariationsSafeMode[] = "disable-variations-safe-mode";
 
+// Disables throttling for fetching the variations seed on mobile platforms. The
+// seed will be fetched on startup and every time the app enters the foreground,
+// regardless of the time passed in between the fetches. On Desktop, this switch
+// has no effect (the seed is fetched periodically instead).
+const char kDisableVariationsSeedFetchThrottling[] =
+    "disable-variations-seed-fetch-throttling";
+
 // TODO(asvitkine): Consider removing or renaming this functionality.
 // Enables the benchmarking extensions.
 const char kEnableBenchmarking[] = "enable-benchmarking";
@@ -60,6 +67,11 @@ const char kForceDisableVariationIds[] = "force-disable-variation-ids";
 // across sessions.
 const char kVariationsOverrideCountry[] = "variations-override-country";
 
+// Specifies the location of a seed file for Local State's seed to be
+// populated from. The seed file must be in json format with the keys
+// |kVariationsCompressedSeed| and |kVariationsSeedSignature|.
+const char kVariationsTestSeedPath[] = "variations-test-seed-path";
+
 // Specifies a custom URL for the server which reports variation data to the
 // client. Specifying this switch enables the Variations service on
 // unofficial builds. See variations_service.cc.
@@ -69,6 +81,10 @@ const char kVariationsServerURL[] = "variations-server-url";
 // requests to |kVariationsServerURL| fail. Requests to this URL will be
 // encrypted.
 const char kVariationsInsecureServerURL[] = "variations-insecure-server-url";
+
+// Override the time interval between each variation seed fetches. Unit is in
+// minutes. The minimum is 1 minute. The default is 30 minutes.
+const char kVariationsSeedFetchInterval[] = "variations-seed-fetch-interval";
 
 // Enables delta-compression when fetching a new seed via the "first run" code
 // path on Android.

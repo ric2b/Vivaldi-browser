@@ -102,8 +102,7 @@ class TabsEventRouter : public TabStripModelObserver,
                              int index,
                              bool was_active);
   void DispatchActiveTabChanged(content::WebContents* old_contents,
-                                content::WebContents* new_contents,
-                                int index);
+                                content::WebContents* new_contents);
   void DispatchTabSelectionChanged(TabStripModel* tab_strip_model,
                                    const ui::ListSelectionModel& old_model);
   void DispatchTabMoved(content::WebContents* contents,
@@ -135,7 +134,7 @@ class TabsEventRouter : public TabStripModelObserver,
   void DispatchEvent(Profile* profile,
                      events::HistogramValue histogram_value,
                      const std::string& event_name,
-                     std::unique_ptr<base::ListValue> args,
+                     base::Value::List args,
                      EventRouter::UserGestureState user_gesture);
 
   // Packages |changed_property_names| as a tab updated event for the tab

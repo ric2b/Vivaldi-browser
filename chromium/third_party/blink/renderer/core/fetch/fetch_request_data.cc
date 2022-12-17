@@ -62,8 +62,9 @@ bool IsExcludedHeaderForServiceWorkerFetchEvent(const String& header_name) {
   return false;
 }
 
-void SignalError(
-    Persistent<DataPipeBytesConsumer::CompletionNotifier> notifier) {
+void SignalError(Persistent<DataPipeBytesConsumer::CompletionNotifier> notifier,
+                 uint32_t reason,
+                 const std::string& description) {
   notifier->SignalError(BytesConsumer::Error());
 }
 
@@ -144,7 +145,7 @@ FetchRequestData* FetchRequestData::Create(
       auto body_remote = std::make_unique<
           mojo::Remote<network::mojom::blink::ChunkedDataPipeGetter>>(
           fetch_api_request->body.TakeStreamBody());
-      body_remote->set_disconnect_handler(
+      body_remote->set_disconnect_with_reason_handler(
           WTF::Bind(SignalError, WrapPersistent(completion_notifier)));
       auto* body_remote_raw = body_remote.get();
       (*body_remote_raw)
@@ -177,6 +178,7 @@ FetchRequestData* FetchRequestData::Create(
     request->SetReferrerPolicy(fetch_api_request->referrer->policy);
   }
   request->SetMode(fetch_api_request->mode);
+  request->SetTargetAddressSpace(fetch_api_request->target_address_space);
   request->SetCredentials(fetch_api_request->credentials_mode);
   request->SetCacheMode(fetch_api_request->cache_mode);
   request->SetRedirect(fetch_api_request->redirect_mode);
@@ -188,6 +190,17 @@ FetchRequestData* FetchRequestData::Create(
       fetch_api_request->priority));
   if (fetch_api_request->fetch_window_id)
     request->SetWindowId(fetch_api_request->fetch_window_id.value());
+
+  if (fetch_api_request->trust_token_params) {
+    if (script_state) {
+      // script state might be null for some tests
+      DCHECK(RuntimeEnabledFeatures::TrustTokensEnabled(
+          ExecutionContext::From(script_state)));
+    }
+    absl::optional<network::mojom::blink::TrustTokenParams> trust_token_params =
+        std::move(*(fetch_api_request->trust_token_params->Clone().get()));
+    request->SetTrustTokenParams(trust_token_params);
+  }
 
   return request;
 }
@@ -204,6 +217,7 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->referrer_string_ = referrer_string_;
   request->referrer_policy_ = referrer_policy_;
   request->mode_ = mode_;
+  request->target_address_space_ = target_address_space_;
   request->credentials_ = credentials_;
   request->cache_mode_ = cache_mode_;
   request->redirect_ = redirect_;
@@ -216,8 +230,6 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->is_history_navigation_ = is_history_navigation_;
   request->window_id_ = window_id_;
   request->trust_token_params_ = trust_token_params_;
-  request->allow_http1_for_streaming_upload_ =
-      allow_http1_for_streaming_upload_;
   return request;
 }
 

@@ -83,7 +83,7 @@ bool ShouldInterveneDownloadByFramePolicy(LocalFrame* frame) {
   if (!has_gesture) {
     UseCounter::Count(document, WebFeature::kDownloadWithoutUserGesture);
   }
-  if (frame->IsAdSubframe()) {
+  if (frame->IsAdFrame()) {
     UseCounter::Count(document, WebFeature::kDownloadInAdFrame);
     if (!has_gesture) {
       UseCounter::Count(document,
@@ -119,7 +119,7 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
 HTMLAnchorElement::~HTMLAnchorElement() = default;
 
 bool HTMLAnchorElement::SupportsFocus() const {
-  if (HasEditableStyle(*this))
+  if (IsEditable(*this))
     return HTMLElement::SupportsFocus();
   // If not a link we should still be able to focus the element if it has
   // tabIndex.
@@ -212,11 +212,11 @@ void HTMLAnchorElement::DefaultEventHandler(Event& event) {
 }
 
 bool HTMLAnchorElement::HasActivationBehavior() const {
-  return true;
+  return IsLink();
 }
 
 void HTMLAnchorElement::SetActive(bool active) {
-  if (active && HasEditableStyle(*this))
+  if (active && IsEditable(*this))
     return;
 
   HTMLElement::SetActive(active);
@@ -288,7 +288,7 @@ bool HTMLAnchorElement::HasLegalLinkAttribute(const QualifiedName& name) const {
 bool HTMLAnchorElement::CanStartSelection() const {
   if (!IsLink())
     return HTMLElement::CanStartSelection();
-  return HasEditableStyle(*this);
+  return IsEditable(*this);
 }
 
 bool HTMLAnchorElement::draggable() const {
@@ -358,7 +358,7 @@ int HTMLAnchorElement::DefaultTabIndex() const {
 }
 
 bool HTMLAnchorElement::IsLiveLink() const {
-  return IsLink() && !HasEditableStyle(*this);
+  return IsLink() && !IsEditable(*this);
 }
 
 void HTMLAnchorElement::SendPings(const KURL& destination_url) const {
@@ -537,11 +537,9 @@ void HTMLAnchorElement::HandleClick(Event& event) {
     // If the impression could not be set, or if the value was null, mark that
     // the frame request is eligible for attribution by adding an impression.
     if (!frame_request.Impression() &&
-        CanRegisterAttributionInContext(
-            frame, this,
-            /*request_id=*/absl::nullopt,
-            AttributionSrcLoader::RegisterContext::kAttributionSrc,
-            /*log_issues=*/false)) {
+        frame->GetAttributionSrcLoader()->CanRegister(
+            completed_url, this,
+            /*request_id=*/absl::nullopt)) {
       frame_request.SetImpression(blink::Impression());
     }
   }

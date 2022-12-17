@@ -79,6 +79,7 @@ class FeedStream : public FeedApi,
     virtual DisplayMetrics GetDisplayMetrics() = 0;
     virtual std::string GetLanguageTag() = 0;
     virtual bool IsAutoplayEnabled() = 0;
+    virtual TabGroupEnabledState GetTabGroupEnabledState() = 0;
     virtual void ClearAll() = 0;
     virtual AccountInfo GetAccountInfo() = 0;
     virtual void PrefetchImage(const GURL& url) = 0;
@@ -159,11 +160,9 @@ class FeedStream : public FeedApi,
   void ReportPageLoaded() override;
   void ReportOpenAction(const GURL& url,
                         const StreamType& stream_type,
-                        const std::string& slice_id) override;
+                        const std::string& slice_id,
+                        OpenActionType action_type) override;
   void ReportOpenVisitComplete(base::TimeDelta visit_time) override;
-  void ReportOpenInNewTabAction(const GURL& url,
-                                const StreamType& stream_type,
-                                const std::string& slice_id) override;
   void ReportStreamScrolled(const StreamType& stream_type,
                             int distance_dp) override;
   void ReportStreamScrollStart() override;
@@ -183,7 +182,7 @@ class FeedStream : public FeedApi,
   base::Time GetLastFetchTime(const StreamType& stream_type) override;
   void SetContentOrder(const StreamType& stream_type,
                        ContentOrder content_order) override;
-  ContentOrder GetContentOrder(const StreamType& stream_type) override;
+  ContentOrder GetContentOrder(const StreamType& stream_type) const override;
   ContentOrder GetContentOrderFromPrefs(const StreamType& stream_type) override;
   void IncrementFollowedFromWebPageMenuCount() override;
 
@@ -354,7 +353,7 @@ class FeedStream : public FeedApi,
     // |UnloadModel()|.
     std::unique_ptr<StreamModel> model;
     int unload_on_detach_sequence_number = 0;
-    ContentIdSet content_ids;
+    ContentHashSet content_ids;
     std::vector<UnreadContentNotifier> unread_content_notifiers;
     std::vector<base::OnceCallback<void(bool)>> load_more_complete_callbacks;
     std::vector<base::OnceCallback<void(bool)>> refresh_complete_callbacks;

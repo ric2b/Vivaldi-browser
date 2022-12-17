@@ -11,6 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/default_clock.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/autofill/core/browser/payments/autofill_wallet_model_type_controller.h"
@@ -23,7 +24,7 @@
 #include "components/browser_sync/active_devices_provider_impl.h"
 #include "components/browser_sync/browser_sync_client.h"
 #include "components/history/core/browser/sync/history_delete_directives_model_type_controller.h"
-#include "components/history/core/browser/sync/typed_url_model_type_controller.h"
+#include "components/history/core/browser/sync/history_model_type_controller.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
 #include "components/password_manager/core/browser/sync/password_model_type_controller.h"
@@ -267,20 +268,18 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
 
   // TypedUrl sync is enabled by default.  Register unless explicitly disabled.
   if (!disabled_types.Has(syncer::TYPED_URLS)) {
-    // TypedURLModelTypeController uses a proxy delegate internally, as
+    // HistoryModelTypeController uses a proxy delegate internally, as
     // provided by HistoryService.
-    controllers.push_back(
-        std::make_unique<history::TypedURLModelTypeController>(
-            syncer::TYPED_URLS, sync_service, sync_client_->GetHistoryService(),
-            sync_client_->GetPrefService()));
+    controllers.push_back(std::make_unique<history::HistoryModelTypeController>(
+        syncer::TYPED_URLS, sync_service, sync_client_->GetHistoryService(),
+        sync_client_->GetPrefService()));
   }
 
   if (!disabled_types.Has(syncer::HISTORY) &&
       base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType)) {
-    controllers.push_back(
-        std::make_unique<history::TypedURLModelTypeController>(
-            syncer::HISTORY, sync_service, sync_client_->GetHistoryService(),
-            sync_client_->GetPrefService()));
+    controllers.push_back(std::make_unique<history::HistoryModelTypeController>(
+        syncer::HISTORY, sync_service, sync_client_->GetHistoryService(),
+        sync_client_->GetPrefService()));
   }
 
   // Delete directive sync is enabled by default.

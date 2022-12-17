@@ -555,7 +555,6 @@ class CRWWebControllerResponseTest : public CRWWebControllerTest {
     // Mock those necessary interactions.
     if (@available(iOS 15, *)) {
       if (*out_policy == WKNavigationResponsePolicyDownload) {
-        DCHECK(web::features::IsNewDownloadAPIEnabled());
         id mock_download = [OCMockObject mockForClass:[WKDownload class]];
 
         __block bool delegate_set = false;
@@ -611,9 +610,7 @@ class CRWWebControllerResponseTest : public CRWWebControllerTest {
   // a different policy). This method returns the expected policy for the test.
   [[nodiscard]] static WKNavigationResponsePolicy ExpectedPolicyForDownload() {
     if (@available(iOS 15, *)) {
-      if (web::features::IsNewDownloadAPIEnabled()) {
-        return WKNavigationResponsePolicyDownload;
-      }
+      return WKNavigationResponsePolicyDownload;
     }
     return WKNavigationResponsePolicyCancel;
   }
@@ -1300,11 +1297,10 @@ TEST_F(ScriptExecutionTest, UserScriptOnAppSpecificPage) {
   // Change last committed URL to app-specific URL.
   NavigationManagerImpl& nav_manager =
       [web_controller() webStateImpl]->GetNavigationManagerImpl();
-  nav_manager.AddPendingItem(GURL(kTestAppSpecificURL), Referrer(),
-                             ui::PAGE_TRANSITION_TYPED,
-                             NavigationInitiationType::BROWSER_INITIATED,
-                             /*is_post_navigation=*/false,
-                             /*is_using_https_as_default_scheme=*/false);
+  nav_manager.AddPendingItem(
+      GURL(kTestAppSpecificURL), Referrer(), ui::PAGE_TRANSITION_TYPED,
+      NavigationInitiationType::BROWSER_INITIATED,
+      /*is_post_navigation=*/false, web::HttpsUpgradeType::kNone);
   nav_manager.CommitPendingItem();
 
   NSError* error = nil;

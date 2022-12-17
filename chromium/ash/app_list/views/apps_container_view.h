@@ -10,33 +10,35 @@
 #include <memory>
 
 #include "ash/app_list/app_list_model_provider.h"
+#include "ash/app_list/app_list_view_provider.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/views/app_list_folder_controller.h"
 #include "ash/app_list/views/app_list_nudge_controller.h"
 #include "ash/app_list/views/app_list_page.h"
 #include "ash/app_list/views/app_list_toast_container_view.h"
 #include "ash/app_list/views/paged_apps_grid_view.h"
-#include "ash/app_list/views/recent_apps_view.h"
 #include "ash/app_list/views/search_result_page_dialog_controller.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/views/controls/separator.h"
+#include "ui/views/focus/focus_manager.h"
 
 namespace ash {
 
 class ApplicationDragAndDropHost;
 class AppListFolderItem;
 class AppListFolderView;
+class AppListKeyboardController;
 class AppListNudgeController;
 class ContentsView;
 class ContinueSectionView;
 class FolderBackgroundView;
+class GradientLayerDelegate;
 class PageSwitcher;
 class SearchResultPageAnchoredDialog;
 class SuggestionChipContainerView;
-class GradientLayerDelegate;
 
 // AppsContainerView contains a root level AppsGridView to render the root level
 // app items, and a AppListFolderView to render the app items inside the active
@@ -48,8 +50,9 @@ class ASH_EXPORT AppsContainerView
       public AppListFolderController,
       public PaginationModelObserver,
       public PagedAppsGridView::ContainerDelegate,
-      public RecentAppsView::Delegate,
-      public AppListToastContainerView::Delegate {
+      public AppListToastContainerView::Delegate,
+      public views::FocusChangeListener,
+      public AppListViewProvider {
  public:
   explicit AppsContainerView(ContentsView* contents_view);
 
@@ -117,7 +120,12 @@ class ASH_EXPORT AppsContainerView
   const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
-  void OnThemeChanged() override;
+  void AddedToWidget() override;
+  void RemovedFromWidget() override;
+
+  // views::FocusChangeListener overrides:
+  void OnWillChangeFocus(View* focused_before, View* focused_now) override {}
+  void OnDidChangeFocus(View* focused_before, View* focused_now) override;
 
   // AppListPage overrides:
   void OnShown() override;
@@ -169,13 +177,7 @@ class ASH_EXPORT AppsContainerView
   void OnCardifiedStateStarted() override;
   void OnCardifiedStateEnded() override;
 
-  // RecentAppsView::Delegate:
-  void MoveFocusUpFromRecents() override;
-  void MoveFocusDownFromRecents(int column) override;
-
   // AppListToastContainerView::Delegate:
-  bool MoveFocusUpFromToast(int column) override;
-  bool MoveFocusDownFromToast(int column) override;
   void OnNudgeRemoved() override;
 
   // Handles `AppListController::UpdateAppListWithNewSortingOrder()` for the
@@ -198,8 +200,12 @@ class ASH_EXPORT AppsContainerView
   // Updates the nudge in `toast_container_` when app list visibility changes.
   void OnAppListVisibilityChanged(bool shown);
 
-  ContinueSectionView* GetContinueSection();
-  RecentAppsView* GetRecentApps();
+  // AppListViewProvider:
+  ContinueSectionView* GetContinueSectionView() override;
+  RecentAppsView* GetRecentAppsView() override;
+  AppsGridView* GetAppsGridView() override;
+  AppListToastContainerView* GetToastContainerView() override;
+
   views::Separator* separator() { return separator_; }
   PagedAppsGridView* apps_grid_view() { return apps_grid_view_; }
   FolderBackgroundView* folder_background_view() {
@@ -233,8 +239,6 @@ class ASH_EXPORT AppsContainerView
 
   // Gets the height of the `separator_` including its vertical margin.
   int GetSeparatorHeight();
-
-  views::View* GetShowContinueSectionButtonForTest();
 
   SearchResultPageAnchoredDialog* dialog_for_test() {
     return dialog_controller_->dialog();
@@ -346,6 +350,7 @@ class ASH_EXPORT AppsContainerView
   // within the apps container.
   std::unique_ptr<AppListConfig> app_list_config_;
 
+  std::unique_ptr<AppListKeyboardController> app_list_keyboard_controller_;
   std::unique_ptr<AppListNudgeController> app_list_nudge_controller_;
 
   // Controller for showing a modal dialog in the continue section.

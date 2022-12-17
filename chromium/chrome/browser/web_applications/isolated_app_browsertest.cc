@@ -238,7 +238,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppBrowserTest,
   // The app's frame should belong to an isolated PWA browser window.
   Browser* app_browser = GetBrowserFromFrame(app_frame);
   EXPECT_NE(app_browser, browser());
-  EXPECT_TRUE(web_app::AppBrowserController::IsForWebApp(app_browser, app_id));
+  EXPECT_TRUE(AppBrowserController::IsForWebApp(app_browser, app_id));
   EXPECT_EQ(content::RenderFrameHost::WebExposedIsolationLevel::
                 kMaybeIsolatedApplication,
             app_frame->GetWebExposedIsolationLevel());
@@ -265,7 +265,7 @@ IN_PROC_BROWSER_TEST_F(
   // The app's frame should belong to an isolated PWA browser window.
   Browser* app_browser = GetBrowserFromFrame(app_frame);
   EXPECT_NE(app_browser, browser());
-  EXPECT_TRUE(web_app::AppBrowserController::IsForWebApp(app_browser, app_id));
+  EXPECT_TRUE(AppBrowserController::IsForWebApp(app_browser, app_id));
   EXPECT_EQ(content::RenderFrameHost::WebExposedIsolationLevel::
                 kMaybeIsolatedApplication,
             app_frame->GetWebExposedIsolationLevel());
@@ -284,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppBrowserTest, NoOpenInChrome) {
       /*provider=*/nullptr, app_browser);
   app_menu_model->Init();
   ui::MenuModel* model = app_menu_model.get();
-  int index = -1;
+  size_t index = 0;
   const bool found = app_menu_model->GetModelAndIndexForCommandId(
       IDC_OPEN_IN_CHROME, &model, &index);
   EXPECT_FALSE(found);
@@ -521,7 +521,7 @@ IN_PROC_BROWSER_TEST_F(
       NotificationHandler::Type::WEB_PERSISTENT);
   EXPECT_EQ(notifications.size(), 1UL);
 
-  web_app::BrowserWaiter browser_waiter(nullptr);
+  BrowserWaiter browser_waiter(nullptr);
   notification_tester_->SimulateClick(NotificationHandler::Type::WEB_PERSISTENT,
                                       notifications[0].id(), absl::nullopt,
                                       absl::nullopt);

@@ -29,7 +29,6 @@ class DataChannelInterface;
 
 namespace blink {
 class LocalFrame;
-class MediaConstraints;
 class MockPeerConnectionTracker;
 class PeerConnectionTrackerTest;
 class RTCAnswerOptionsPlatform;
@@ -105,15 +104,13 @@ class MODULES_EXPORT PeerConnectionTracker
 
   // Sends an update when a PeerConnection has been created in Javascript. This
   // should be called once and only once for each PeerConnection. The
-  // |pc_handler| is the handler object associated with the PeerConnection, the
-  // |servers| are the server configurations used to establish the connection,
-  // the |constraints| are the media constraints used to initialize the
-  // PeerConnection, the |frame| is the WebLocalFrame object representing the
-  // page in which the PeerConnection is created.
+  // `pc_handler` is the handler object associated with the PeerConnection,
+  // the `config` is used to initialize the PeerConnection and the `frame` is
+  // the WebLocalFrame object representing the page in which the PeerConnection
+  // is created.
   void RegisterPeerConnection(
       RTCPeerConnectionHandler* pc_handler,
       const webrtc::PeerConnectionInterface::RTCConfiguration& config,
-      const MediaConstraints& constraints,
       const blink::WebLocalFrame* frame);
 
   // Sends an update when a PeerConnection has been destroyed.
@@ -194,19 +191,7 @@ class MODULES_EXPORT PeerConnectionTracker
       webrtc::PeerConnectionInterface::SignalingState state);
 
   // Sends an update when the ICE connection state of a PeerConnection has
-  // changed. There's a legacy and non-legacy version. The non-legacy version
-  // reflects the blink::RTCPeerConnection::iceConnectionState.
-  //
-  // "Legacy" usage: In Unifed Plan, TrackLegacyIceConnectionStateChange() is
-  // used to report the webrtc::PeerConnection layer implementation of the
-  // state, which might not always be the same as the
-  // blink::RTCPeerConnection::iceConnectionState reported with
-  // TrackIceConnectionStateChange(). In Plan B, the webrtc::PeerConnection
-  // layer implementation is the only iceConnectionState version, and
-  // TrackLegacyIceConnectionStateChange() is not applicable.
-  virtual void TrackLegacyIceConnectionStateChange(
-      RTCPeerConnectionHandler* pc_handler,
-      webrtc::PeerConnectionInterface::IceConnectionState state);
+  // changed.
   virtual void TrackIceConnectionStateChange(
       RTCPeerConnectionHandler* pc_handler,
       webrtc::PeerConnectionInterface::IceConnectionState state);

@@ -34,12 +34,12 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/ev_root_ca_metadata.h"
-#include "net/cert/internal/extended_key_usage.h"
-#include "net/cert/internal/parse_certificate.h"
-#include "net/cert/internal/signature_algorithm.h"
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/ocsp_revocation_status.h"
 #include "net/cert/pem.h"
+#include "net/cert/pki/extended_key_usage.h"
+#include "net/cert/pki/parse_certificate.h"
+#include "net/cert/pki/signature_algorithm.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
@@ -191,16 +191,17 @@ scoped_refptr<CertVerifyProc> CreateCertVerifyProc(
   switch (type) {
 #if BUILDFLAG(IS_ANDROID)
     case CERT_VERIFY_PROC_ANDROID:
-      return new CertVerifyProcAndroid(std::move(cert_net_fetcher));
+      return base::MakeRefCounted<CertVerifyProcAndroid>(
+          std::move(cert_net_fetcher));
 #elif BUILDFLAG(IS_IOS)
     case CERT_VERIFY_PROC_IOS:
-      return new CertVerifyProcIOS();
+      return base::MakeRefCounted<CertVerifyProcIOS>();
 #elif BUILDFLAG(IS_MAC)
     case CERT_VERIFY_PROC_MAC:
-      return new CertVerifyProcMac();
+      return base::MakeRefCounted<CertVerifyProcMac>();
 #elif BUILDFLAG(IS_WIN)
     case CERT_VERIFY_PROC_WIN:
-      return new CertVerifyProcWin();
+      return base::MakeRefCounted<CertVerifyProcWin>();
 #endif
     case CERT_VERIFY_PROC_BUILTIN:
       return CreateCertVerifyProcBuiltin(std::move(cert_net_fetcher),
@@ -229,9 +230,15 @@ const std::vector<CertVerifyProcType> kAllCertVerifiers = {
 #elif BUILDFLAG(IS_IOS)
     CERT_VERIFY_PROC_IOS
 #elif BUILDFLAG(IS_MAC)
-    CERT_VERIFY_PROC_MAC, CERT_VERIFY_PROC_BUILTIN
+    CERT_VERIFY_PROC_MAC, CERT_VERIFY_PROC_BUILTIN,
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+    CERT_VERIFY_PROC_BUILTIN_CHROME_ROOTS
+#endif
 #elif BUILDFLAG(IS_WIN)
-    CERT_VERIFY_PROC_WIN, CERT_VERIFY_PROC_BUILTIN_CHROME_ROOTS
+    CERT_VERIFY_PROC_WIN,
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+    CERT_VERIFY_PROC_BUILTIN_CHROME_ROOTS
+#endif
 #elif BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     CERT_VERIFY_PROC_BUILTIN
 #else
@@ -622,11 +629,19 @@ TEST_P(CertVerifyProcInternalTest, TrustedIntermediateCertWithEVPolicy) {
   ASSERT_EQ(3U, orig_certs.size());
 
   for (bool trust_the_intermediate : {false, true}) {
+    SCOPED_TRACE(trust_the_intermediate);
+
     // Need to build unique certs for each try otherwise caching can break
     // things.
     CertBuilder root(orig_certs[2]->cert_buffer(), nullptr);
+    root.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
+    root.GenerateECKey();
     CertBuilder intermediate(orig_certs[1]->cert_buffer(), &root);
+    intermediate.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
+    intermediate.GenerateECKey();
     CertBuilder leaf(orig_certs[0]->cert_buffer(), &intermediate);
+    leaf.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
+    leaf.GenerateECKey();
 
     // The policy that "explicit-policy-chain.pem" target certificate asserts.
     static const char kEVTestCertPolicy[] = "1.2.3.4";
@@ -1192,8 +1207,7 @@ class CertVerifyProcInspectSignatureAlgorithmsTest : public ::testing::Test {
     CertVerifyResult dummy_result;
     CertVerifyResult verify_result;
 
-    scoped_refptr<CertVerifyProc> verify_proc =
-        new MockCertVerifyProc(dummy_result);
+    auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(dummy_result);
 
     return verify_proc->Verify(
         chain.get(), "test.example.com", /*ocsp_response=*/std::string(),
@@ -1621,7 +1635,7 @@ TEST_P(CertVerifyProcInternalTest, TestKnownRoot) {
                              << "against mattm.";
   EXPECT_TRUE(verify_result.is_issued_by_known_root);
 #if BUILDFLAG(IS_MAC)
-  if (VerifyProcTypeIsBuiltin()) {
+  if (verify_proc_type() == CERT_VERIFY_PROC_BUILTIN) {
     auto* mac_trust_debug_info =
         net::TrustStoreMac::ResultDebugData::Get(&verify_result);
     ASSERT_TRUE(mac_trust_debug_info);
@@ -1848,8 +1862,7 @@ TEST(CertVerifyProcTest, IntranetHostsRejected) {
   // Intranet names for public CAs should be flagged:
   CertVerifyResult dummy_result;
   dummy_result.is_issued_by_known_root = true;
-  scoped_refptr<CertVerifyProc> verify_proc =
-      new MockCertVerifyProc(dummy_result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(dummy_result);
   error = verify_proc->Verify(
       cert.get(), "webmail", /*ocsp_response=*/std::string(),
       /*sct_list=*/std::string(), 0, CRLSet::BuiltinCRLSet().get(),
@@ -3114,11 +3127,12 @@ class CertVerifyProcInternalWithNetFetchingTest
   // Creates a CRL issued and signed by |crl_issuer|, marking |revoked_serials|
   // as revoked, and registers it to be served by the test server.
   // Returns the full URL to retrieve the CRL from the test server.
-  GURL CreateAndServeCrl(CertBuilder* crl_issuer,
-                         const std::vector<uint64_t>& revoked_serials,
-                         DigestAlgorithm digest = DigestAlgorithm::Sha256) {
+  GURL CreateAndServeCrl(
+      CertBuilder* crl_issuer,
+      const std::vector<uint64_t>& revoked_serials,
+      absl::optional<SignatureAlgorithm> signature_algorithm = absl::nullopt) {
     std::string crl = BuildCrl(crl_issuer->GetSubject(), crl_issuer->GetKey(),
-                               revoked_serials, digest);
+                               revoked_serials, signature_algorithm);
     std::string crl_path = MakeRandomPath(".crl");
     return RegisterSimpleTestServerHandler(crl_path, HTTP_OK,
                                            "application/pkix-crl", crl);
@@ -3428,8 +3442,13 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
 
   // Build slightly modified variants of |orig_certs|.
   CertBuilder root(orig_certs[2]->cert_buffer(), nullptr);
+  root.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
+  root.GenerateECKey();
   CertBuilder intermediate(orig_certs[1]->cert_buffer(), &root);
+  intermediate.GenerateECKey();
   CertBuilder leaf(orig_certs[0]->cert_buffer(), &intermediate);
+  leaf.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
+  leaf.GenerateECKey();
 
   // Make the leaf certificate have an AIA (CA Issuers) that points to the
   // embedded test server. This uses a random URL for predictable behavior in
@@ -3443,11 +3462,11 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
   // that is SHA1 signed. Note that the subjectKeyIdentifier for `intermediate`
   // is intentionally not changed, so that path building will consider both
   // certificate paths.
-  intermediate.SetSignatureAlgorithmRsaPkca1(DigestAlgorithm::Sha256);
+  intermediate.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha256);
   intermediate.SetRandomSerialNumber();
   auto intermediate_sha256 = intermediate.DupCertBuffer();
 
-  intermediate.SetSignatureAlgorithmRsaPkca1(DigestAlgorithm::Sha1);
+  intermediate.SetSignatureAlgorithm(SignatureAlgorithm::kEcdsaSha1);
   intermediate.SetRandomSerialNumber();
   auto intermediate_sha1 = intermediate.DupCertBuffer();
 
@@ -3998,9 +4017,10 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
   intermediate->SetCrlDistributionPointUrl(CreateAndServeCrl(root.get(), {}));
 
   // Leaf is revoked by intermediate issued CRL which is signed with
-  // sha1WithRSAEncryption.
-  leaf->SetCrlDistributionPointUrl(CreateAndServeCrl(
-      intermediate.get(), {leaf->GetSerialNumber()}, DigestAlgorithm::Sha1));
+  // ecdsaWithSha256.
+  leaf->SetCrlDistributionPointUrl(
+      CreateAndServeCrl(intermediate.get(), {leaf->GetSerialNumber()},
+                        SignatureAlgorithm::kEcdsaSha1));
 
   // Trust the root and build a chain to verify that includes the intermediate.
   ScopedTestRoot scoped_root(root->GetX509Certificate().get());
@@ -4040,11 +4060,17 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
 
   // Root-issued CRL which does not revoke intermediate.
   intermediate->SetCrlDistributionPointUrl(CreateAndServeCrl(root.get(), {}));
+  // This test wants to check handling of MD5 CRLs, but ecdsa-with-md5
+  // signatureAlgorithm does not exist. Use an RSA private key for intermediate
+  // so that the CRL will be signed with the md5WithRSAEncryption algorithm.
+  intermediate->GenerateRSAKey();
+  leaf->SetSignatureAlgorithm(SignatureAlgorithm::kRsaPkcs1Sha256);
 
   // Leaf is revoked by intermediate issued CRL which is signed with
   // md5WithRSAEncryption.
-  leaf->SetCrlDistributionPointUrl(CreateAndServeCrl(
-      intermediate.get(), {leaf->GetSerialNumber()}, DigestAlgorithm::Md5));
+  leaf->SetCrlDistributionPointUrl(
+      CreateAndServeCrl(intermediate.get(), {leaf->GetSerialNumber()},
+                        SignatureAlgorithm::kRsaPkcs1Md5));
 
   // Trust the root and build a chain to verify that includes the intermediate.
   ScopedTestRoot scoped_root(root->GetX509Certificate().get());
@@ -4191,11 +4217,11 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
              CRLSet::BuiltinCRLSet().get(), CertificateList(), &verify_result);
   EXPECT_THAT(error, IsOk());
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_EV);
-  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
+  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
 // Tests that an EV cert verification with that could not retrieve online OCSP
-// revocation information is verified but not marked as CERT_STATUS_IS_EV.
+// revocation information is verified but still marked as CERT_STATUS_IS_EV.
 TEST_P(CertVerifyProcInternalWithNetFetchingTest,
        EVOnlineOCSPRevocationCheckingSoftFail) {
   if (!SupportsEV()) {
@@ -4233,12 +4259,12 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
       Verify(chain.get(), ocsp_test_server.host_port_pair().host(), flags,
              CRLSet::BuiltinCRLSet().get(), CertificateList(), &verify_result);
   EXPECT_THAT(error, IsOk());
-  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_EV);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_EV);
+  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
 // Tests that an EV cert verification with online OCSP returning affirmatively
-// revoked is not marked as CERT_STATUS_IS_EV. On some platforms verification
-// will fail with ERR_CERT_REVOKED.
+// revoked is marked as CERT_STATUS_IS_EV.
 TEST_P(CertVerifyProcInternalWithNetFetchingTest,
        EVOnlineOCSPRevocationCheckingRevoked) {
   if (!SupportsEV()) {
@@ -4275,11 +4301,9 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
   int error =
       Verify(chain.get(), ocsp_test_server.host_port_pair().host(), flags,
              CRLSet::BuiltinCRLSet().get(), CertificateList(), &verify_result);
-  if (VerifyProcTypeIsBuiltin())
-    EXPECT_THAT(error, IsOk());
-  else
-    EXPECT_THAT(error, IsError(ERR_CERT_REVOKED));
-  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_EV);
+  EXPECT_THAT(error, IsOk());
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_EV);
+  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
 TEST(CertVerifyProcTest, RejectsPublicSHA1Leaves) {
@@ -4291,7 +4315,7 @@ TEST(CertVerifyProcTest, RejectsPublicSHA1Leaves) {
   result.has_sha1 = true;
   result.has_sha1_leaf = true;
   result.is_issued_by_known_root = true;
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -4312,7 +4336,7 @@ TEST(CertVerifyProcTest, RejectsPublicSHA1IntermediatesUnlessAllowed) {
   result.has_sha1 = true;
   result.has_sha1_leaf = false;
   result.is_issued_by_known_root = true;
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -4339,7 +4363,7 @@ TEST(CertVerifyProcTest, RejectsPrivateSHA1UnlessFlag) {
   result.has_sha1 = true;
   result.has_sha1_leaf = true;
   result.is_issued_by_known_root = false;
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   // SHA-1 should be rejected by default for private roots...
   int flags = 0;
@@ -4396,7 +4420,7 @@ class CertVerifyProcWeakDigestTest
     : public testing::TestWithParam<WeakDigestTestData> {
  public:
   CertVerifyProcWeakDigestTest() = default;
-  virtual ~CertVerifyProcWeakDigestTest() = default;
+  ~CertVerifyProcWeakDigestTest() override = default;
 };
 
 // Tests that the CertVerifyProc::Verify() properly surfaces the (weak) hash
@@ -4438,8 +4462,7 @@ TEST_P(CertVerifyProcWeakDigestTest, VerifyDetectsAlgorithm) {
   //
   // This is sufficient for the purposes of this test, as the checking for weak
   // hash algorithms is done by CertVerifyProc::Verify().
-  scoped_refptr<CertVerifyProc> proc =
-      new MockCertVerifyProc(CertVerifyResult());
+  auto proc = base::MakeRefCounted<MockCertVerifyProc>(CertVerifyResult());
   int error = proc->Verify(ee_chain.get(), "127.0.0.1",
                            /*ocsp_response=*/std::string(),
                            /*sct_list=*/std::string(), flags,
@@ -4569,7 +4592,7 @@ class CertVerifyProcNameTest : public ::testing::Test {
     ASSERT_TRUE(cert);
     CertVerifyResult result;
     result.is_issued_by_known_root = false;
-    scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+    auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
     CertVerifyResult verify_result;
     int error = verify_proc->Verify(
@@ -4678,7 +4701,7 @@ TEST(CertVerifyProcTest, HasTrustAnchorVerifyUMA) {
 
   const base::HistogramBase::Sample kGTSRootR4HistogramID = 486;
 
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   histograms.ExpectTotalCount(kTrustAnchorVerifyHistogram, 0);
 
@@ -4726,7 +4749,7 @@ TEST(CertVerifyProcTest, LogsOnlyMostSpecificTrustAnchorUMA) {
 
   const base::HistogramBase::Sample kGTSRootR3HistogramID = 485;
 
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   histograms.ExpectTotalCount(kTrustAnchorVerifyHistogram, 0);
 
@@ -4764,7 +4787,7 @@ TEST(CertVerifyProcTest, HasTrustAnchorVerifyOutOfDateUMA) {
   result.public_key_hashes.push_back(HashValue(root_hash));
   result.is_issued_by_known_root = true;
 
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   histograms.ExpectTotalCount(kTrustAnchorVerifyHistogram, 0);
   histograms.ExpectTotalCount(kTrustAnchorVerifyOutOfDateHistogram, 0);
@@ -4797,7 +4820,7 @@ TEST(CertVerifyProcTest, DoesNotRecalculateStapledOCSPResult) {
   result.ocsp_result.response_status = OCSPVerifyResult::PROVIDED;
   result.ocsp_result.revocation_status = OCSPRevocationStatus::GOOD;
 
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -4828,7 +4851,7 @@ TEST(CertVerifyProcTest, CalculateStapledOCSPResultIfNotAlreadyDone) {
   EXPECT_EQ(OCSPRevocationStatus::UNKNOWN,
             result.ocsp_result.revocation_status);
 
-  scoped_refptr<CertVerifyProc> verify_proc = new MockCertVerifyProc(result);
+  auto verify_proc = base::MakeRefCounted<MockCertVerifyProc>(result);
 
   int flags = 0;
   CertVerifyResult verify_result;

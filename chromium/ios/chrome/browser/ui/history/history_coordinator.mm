@@ -31,6 +31,9 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -38,7 +41,7 @@
 @interface HistoryCoordinator () <BrowserObserving,
                                   HistoryMenuProvider,
                                   HistoryUIDelegate> {
-  // Provides delegate bridge instance for |_browsingHistoryDriver|.
+  // Provides delegate bridge instance for `_browsingHistoryDriver`.
   std::unique_ptr<IOSBrowsingHistoryDriverDelegateBridge>
       _browsingHistoryDriverDelegate;
   // Provides dependencies and funnels callbacks from BrowsingHistoryService.
@@ -128,6 +131,14 @@
     [self.historyNavigationController
         setModalPresentationStyle:UIModalPresentationCustom];
   }
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+      [self.historyNavigationController
+          setModalPresentationStyle:UIModalPresentationFullScreen];
+  }
+  // End Vivaldi
+
   [self.baseViewController
       presentViewController:self.historyNavigationController
                    animated:YES
@@ -138,7 +149,7 @@
   [self stopWithCompletion:nil];
 }
 
-// This method should always execute the |completionHandler|.
+// This method should always execute the `completionHandler`.
 - (void)stopWithCompletion:(ProceduralBlock)completionHandler {
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
@@ -161,8 +172,8 @@
 }
 
 - (void)dismissHistoryNavigationWithCompletion:(ProceduralBlock)completion {
-  // Make sure to stop |self.historyTableViewController.contextMenuCoordinator|
-  // before dismissing, or |self.historyNavigationController| will dismiss that
+  // Make sure to stop `self.historyTableViewController.contextMenuCoordinator`
+  // before dismissing, or `self.historyNavigationController` will dismiss that
   // instead of itself.
   [self.historyTableViewController.contextMenuCoordinator stop];
   [self.historyNavigationController dismissViewControllerAnimated:YES
@@ -293,8 +304,8 @@
   }];
 }
 
-// Triggers the URL sharing flow for the given |URL| and |title|, with the
-// origin |view| representing the UI component for that URL.
+// Triggers the URL sharing flow for the given `URL` and `title`, with the
+// origin `view` representing the UI component for that URL.
 - (void)shareURL:(const GURL&)URL
            title:(NSString*)title
         fromView:(UIView*)view {

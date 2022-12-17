@@ -13,7 +13,6 @@
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chromeos/dbus/hermes/hermes_clients.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/prefs/pref_service.h"
@@ -50,30 +49,34 @@
 #include "ui/aura/env.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/audio/audio_devices_pref_handler_impl.h"
-#include "ash/components/audio/cras_audio_handler.h"
-#include "ash/components/disks/disk_mount_manager.h"
-#include "chromeos/network/network_handler.h"
-#include "extensions/shell/browser/shell_audio_controller_chromeos.h"
-#include "extensions/shell/browser/shell_network_controller_chromeos.h"
+#if BUILDFLAG(IS_LINUX)
+#include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/bluetooth/dbus/dbus_bluez_manager_wrapper_linux.h"
 #endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/dbus/audio/cras_audio_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "ash/components/disks/disk_mount_manager.h"
+#include "chromeos/ash/components/audio/audio_devices_pref_handler_impl.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/dbus/audio/cras_audio_client.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/hermes/hermes_clients.h"
+#include "chromeos/ash/components/dbus/shill/shill_clients.h"
+#include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#include "device/bluetooth/dbus/bluez_dbus_thread_manager.h"
+#include "extensions/shell/browser/shell_audio_controller_chromeos.h"
+#include "extensions/shell/browser/shell_network_controller_chromeos.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/dbus/lacros_dbus_thread_manager.h"
+#include "device/bluetooth/dbus/bluez_dbus_thread_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_NACL)
@@ -122,18 +125,23 @@ void ShellBrowserMainParts::PostCreateMainMessageLoop() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (bus) {
-    chromeos::hermes_clients::Initialize(bus);
-    chromeos::CrasAudioClient::Initialize(bus);
+    ash::shill_clients::Initialize(bus);
+    ash::hermes_clients::Initialize(bus);
+    ash::CrasAudioClient::Initialize(bus);
+    ash::CrosDisksClient::Initialize(bus);
     chromeos::PowerManagerClient::Initialize(bus);
   } else {
-    chromeos::hermes_clients::InitializeFakes();
-    chromeos::CrasAudioClient::InitializeFake();
+    ash::shill_clients::InitializeFakes();
+    ash::hermes_clients::InitializeFakes();
+    ash::CrasAudioClient::InitializeFake();
+    ash::CrosDisksClient::InitializeFake();
     chromeos::PowerManagerClient::InitializeFake();
   }
 
+  // Depends on CrosDisksClient.
   ash::disks::DiskMountManager::Initialize();
 
-  chromeos::NetworkHandler::Initialize();
+  ash::NetworkHandler::Initialize();
   network_controller_ = std::make_unique<ShellNetworkController>(
       base::CommandLine::ForCurrentProcess()->GetSwitchValueNative(
           switches::kAppShellPreferredNetwork));
@@ -152,7 +160,7 @@ void ShellBrowserMainParts::PostCreateMainMessageLoop() {
 #endif
 
 #if BUILDFLAG(IS_LINUX)
-  bluez::BluezDBusManager::Initialize(nullptr /* system_bus */);
+  bluez::DBusBluezManagerWrapperLinux::Initialize();
 #endif
 }
 
@@ -293,16 +301,17 @@ void ShellBrowserMainParts::PostDestroyThreads() {
   bluez::BluezDBusManager::Shutdown();
 #elif BUILDFLAG(IS_LINUX)
   device::BluetoothAdapterFactory::Shutdown();
-  bluez::BluezDBusManager::Shutdown();
-  bluez::BluezDBusThreadManager::Shutdown();
+  bluez::DBusBluezManagerWrapperLinux::Shutdown();
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   network_controller_.reset();
-  chromeos::NetworkHandler::Shutdown();
+  ash::NetworkHandler::Shutdown();
   ash::disks::DiskMountManager::Shutdown();
   chromeos::PowerManagerClient::Shutdown();
-  chromeos::CrasAudioClient::Shutdown();
+  ash::CrosDisksClient::Shutdown();
+  ash::CrasAudioClient::Shutdown();
+  ash::shill_clients::Shutdown();
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

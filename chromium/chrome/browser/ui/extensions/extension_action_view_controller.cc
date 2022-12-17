@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
@@ -37,6 +38,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -88,28 +90,11 @@ bool ExtensionActionViewController::AnyActionHasCurrentSiteAccess(
     content::WebContents* web_contents) {
   for (const auto& action : actions) {
     if (action->GetSiteInteraction(web_contents) ==
-        extensions::SitePermissionsHelper::SiteInteraction::kActive) {
+        extensions::SitePermissionsHelper::SiteInteraction::kGranted) {
       return true;
     }
   }
   return false;
-}
-
-// static
-bool ExtensionActionViewController::AnyActionRequiresPageRefreshToRun(
-    const std::vector<ToolbarActionViewController*>& actions,
-    content::WebContents* web_contents) {
-  ExtensionActionRunner* action_runner =
-      ExtensionActionRunner::GetForWebContents(web_contents);
-
-  return std::any_of(
-      actions.begin(), actions.end(),
-      [action_runner](ToolbarActionViewController* action) {
-        auto blocked_actions =
-            action_runner->GetBlockedActions(action->GetId());
-        return blocked_actions &
-               ExtensionActionRunner::kRefreshRequiredActionsMask;
-      });
 }
 
 ExtensionActionViewController::ExtensionActionViewController(
@@ -192,11 +177,11 @@ std::u16string ExtensionActionViewController::GetAccessibleName(
     case extensions::SitePermissionsHelper::SiteInteraction::kNone:
       // No string for neither having nor wanting access.
       break;
-    case extensions::SitePermissionsHelper::SiteInteraction::kPending:
+    case extensions::SitePermissionsHelper::SiteInteraction::kWithheld:
     case extensions::SitePermissionsHelper::SiteInteraction::kActiveTab:
       site_interaction_description_id = IDS_EXTENSIONS_WANTS_ACCESS_TO_SITE;
       break;
-    case extensions::SitePermissionsHelper::SiteInteraction::kActive:
+    case extensions::SitePermissionsHelper::SiteInteraction::kGranted:
       site_interaction_description_id = IDS_EXTENSIONS_HAS_ACCESS_TO_SITE;
       break;
   }
@@ -226,7 +211,7 @@ bool ExtensionActionViewController::IsEnabled(
   return extension_action_->GetIsVisible(
              sessions::SessionTabHelper::IdForTab(web_contents).id()) ||
          site_interaction ==
-             extensions::SitePermissionsHelper::SiteInteraction::kPending ||
+             extensions::SitePermissionsHelper::SiteInteraction::kWithheld ||
          site_interaction ==
              extensions::SitePermissionsHelper::SiteInteraction::kActiveTab;
 }
@@ -238,12 +223,15 @@ bool ExtensionActionViewController::IsShowingPopup() const {
 bool ExtensionActionViewController::IsRequestingSiteAccess(
     content::WebContents* web_contents) const {
   return GetSiteInteraction(web_contents) ==
-         extensions::SitePermissionsHelper::SiteInteraction::kPending;
+         extensions::SitePermissionsHelper::SiteInteraction::kWithheld;
 }
 
 void ExtensionActionViewController::HidePopup() {
   if (IsShowingPopup()) {
-    popup_host_->Close();
+    // Only call Close() on the popup if it's been shown; otherwise, the popup
+    // will be cleaned up in ShowPopup().
+    if (has_opened_popup_)
+      popup_host_->Close();
     // We need to do these actions synchronously (instead of closing and then
     // performing the rest of the cleanup in OnExtensionHostDestroyed()) because
     // the extension host may close asynchronously, and we need to keep the view
@@ -476,6 +464,12 @@ void ExtensionActionViewController::ShowPopup(
       std::move(callback).Run(nullptr);
     return;
   }
+  // NOTE: Today, ShowPopup() always synchronously creates the platform-specific
+  // popup class, which is what we care most about (since `has_opened_popup_`
+  // is used to determine whether we need to manually close the
+  // ExtensionViewHost). This doesn't necessarily mean that the popup has
+  // completed rendering on the screen.
+  has_opened_popup_ = true;
   platform_delegate_->ShowPopup(std::move(popup_host), show_action,
                                 std::move(callback));
   view_delegate_->OnPopupShown(grant_tab_permissions);
@@ -485,6 +479,7 @@ void ExtensionActionViewController::OnPopupClosed() {
   DCHECK(popup_host_observation_.IsObservingSource(popup_host_.get()));
   popup_host_observation_.Reset();
   popup_host_ = nullptr;
+  has_opened_popup_ = false;
   extensions_container_->SetPopupOwner(nullptr);
   if (extensions_container_->GetPoppedOutAction() == this)
     extensions_container_->UndoPopOut();
@@ -530,6 +525,11 @@ ExtensionActionViewController::GetIconImageSource(
           extensions::SitePermissionsHelper::SiteInteraction::kNone &&
       !action_is_visible;
   image_source->set_grayscale(grayscale);
+
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControl)) {
+    return image_source;
+  }
 
   bool was_blocked = extensions::SitePermissionsHelper(browser_->profile())
                          .HasBeenBlocked(*extension(), web_contents);

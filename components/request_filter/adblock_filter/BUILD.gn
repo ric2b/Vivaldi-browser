@@ -1,59 +1,21 @@
 # Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
-import("//testing/test.gni")
-
-source_set("adblock_parser") {
-  sources = [
-    "adblock_content_injection_rule.cc",
-    "adblock_content_injection_rule.h",
-    "adblock_request_filter_rule.cc",
-    "adblock_request_filter_rule.h",
-    "adblock_metadata.cc",
-    "adblock_metadata.h",
-    "adblock_rule_parser.cc",
-    "adblock_rule_parser.h",
-    "adblock_ruleset_file_parser.cc",
-    "adblock_ruleset_file_parser.h",
-    "ddg_rules_parser.cc",
-    "ddg_rules_parser.h",
-    "parse_result.cc",
-    "parse_result.h",
-    "parse_utils.cc",
-    "parse_utils.h",
-  ]
-  deps = [
-    "//base",
-    "//base:i18n",
-    "//url",
-  ]
-}
-
 source_set("adblock_filter") {
   sources = [
     "adblock_content_injection_provider.cc",
     "adblock_content_injection_provider.h",
     "adblock_cosmetic_filter.cc",
     "adblock_cosmetic_filter.h",
-    "adblock_known_sources_handler_impl.cc",
-    "adblock_known_sources_handler_impl.h",
-    "adblock_known_sources_handler.cc",
-    "adblock_known_sources_handler.h",
     "adblock_request_filter.cc",
     "adblock_request_filter.h",
     "adblock_resources.h",
     "adblock_resources.cc",
     "adblock_rule_pattern_matcher.cc",
     "adblock_rule_pattern_matcher.h",
-    "adblock_rule_service_factory.cc",
-    "adblock_rule_service_factory.h",
+    "adblock_rule_service_content.cc",
+    "adblock_rule_service_content.h",
     "adblock_rule_service_impl.cc",
     "adblock_rule_service_impl.h",
-    "adblock_rule_service.cc",
-    "adblock_rule_service.h",
-    "adblock_rule_service_storage.cc",
-    "adblock_rule_service_storage.h",
-    "adblock_rule_source_handler.cc",
-    "adblock_rule_source_handler.h",
     "adblock_rules_index_builder.cc",
     "adblock_rules_index_builder.h",
     "adblock_rules_index_manager.cc",
@@ -64,6 +26,8 @@ source_set("adblock_filter") {
     "blocked_urls_reporter_tab_helper.h",
     "blocked_urls_reporter.cc",
     "blocked_urls_reporter.h",
+    "flat_rules_compiler.cc",
+    "flat_rules_compiler.h",
     "stylesheet_builder.cc",
     "stylesheet_builder.h",
     "utils.cc",
@@ -71,7 +35,6 @@ source_set("adblock_filter") {
   ]
 
   deps = [
-    ":adblock_parser",
     ":package_adblocker_files",
     "mojom",
     "//base:base",
@@ -81,24 +44,11 @@ source_set("adblock_filter") {
     "//content/public/browser",
     "//url",
     "//third_party/re2",
+    "//vivaldi/components/ad_blocker",
+    "//vivaldi/components/ad_blocker:adblock_parser",
     "//vivaldi/components/request_filter/adblock_filter/flat:adblock_rules_list",
     "//vivaldi/components/content_injection",
     "//third_party/blink/public/common",
-  ]
-}
-
-source_set("unit_tests") {
-  testonly = true
-
-  sources = [
-    "adblock_rule_parser_unittest.cc",
-    "ddg_rules_parser_unittest.cc",
-  ]
-
-  deps = [
-    ":adblock_parser",
-     "//base",
-    "//testing/gtest",
   ]
 }
 

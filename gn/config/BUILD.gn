@@ -13,6 +13,9 @@ config("features") {
   ]
   if (system_proprietary_codecs) {
     defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
+    if (vivaldi_use_system_media_demuxer) {
+      defines += [ "VIVALDI_USE_SYSTEM_MEDIA_DEMUXER" ]
+    }
   }
   if (is_mac && vivaldi_disable_sparkle) {
     defines += [ "VIVALDI_SPARKLE_DISABLED" ]

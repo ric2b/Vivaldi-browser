@@ -28,7 +28,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/network/firewall_hole.h"
+#include "chromeos/ash/components/network/firewall_hole.h"
 #include "content/public/browser/browser_thread.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -143,7 +143,7 @@ class CONTENT_EXPORT PepperTCPServerSocketMessageFilter
   void OpenFirewallHole(const ppapi::host::ReplyMessageContext& context,
                         const net::IPEndPoint& local_addr);
   void OnFirewallHoleOpened(const ppapi::host::ReplyMessageContext& context,
-                            std::unique_ptr<chromeos::FirewallHole> hole);
+                            std::unique_ptr<ash::FirewallHole> hole);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Following fields are initialized and used only on the IO thread.
@@ -161,8 +161,7 @@ class CONTENT_EXPORT PepperTCPServerSocketMessageFilter
   PP_NetAddress_Private bound_addr_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  std::unique_ptr<chromeos::FirewallHole,
-                  content::BrowserThread::DeleteOnUIThread>
+  std::unique_ptr<ash::FirewallHole, content::BrowserThread::DeleteOnUIThread>
       firewall_hole_;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

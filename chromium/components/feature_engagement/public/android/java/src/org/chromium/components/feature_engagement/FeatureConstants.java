@@ -17,7 +17,6 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_SHARE_FEATURE,
         FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_FEATURE,
         FeatureConstants.ADD_TO_HOMESCREEN_MESSAGE_FEATURE,
-        FeatureConstants.ADD_TO_HOMESCREEN_TEXT_BUBBLE_FEATURE,
         FeatureConstants.AUTO_DARK_OPT_OUT_FEATURE,
         FeatureConstants.AUTO_DARK_USER_EDUCATION_MESSAGE_FEATURE,
         FeatureConstants.AUTO_DARK_USER_EDUCATION_MESSAGE_OPT_IN_FEATURE,
@@ -26,18 +25,11 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.CHROME_HOME_EXPAND_FEATURE,
         FeatureConstants.CHROME_HOME_PULL_TO_REFRESH_FEATURE, FeatureConstants.CROW_FEATURE,
         FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING,
+        FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING_ACTION_CHIP,
         FeatureConstants.DATA_SAVER_PREVIEW_FEATURE, FeatureConstants.DATA_SAVER_DETAIL_FEATURE,
         FeatureConstants.DATA_SAVER_MILESTONE_PROMO_FEATURE, FeatureConstants.EPHEMERAL_TAB_FEATURE,
         FeatureConstants.EXPLORE_SITES_TILE_FEATURE, FeatureConstants.PREVIEWS_OMNIBOX_UI_FEATURE,
-        FeatureConstants.TRANSLATE_MENU_BUTTON_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_TRANSLATION_ENABLE_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_WEB_SEARCH_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_PROMOTE_TAP_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_PROMOTE_PANEL_OPEN_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_OPT_IN_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS_FEATURE,
-        FeatureConstants.CONTEXTUAL_SEARCH_IN_PANEL_HELP_FEATURE,
-        FeatureConstants.INSTANCE_SWITCHER,
+        FeatureConstants.TRANSLATE_MENU_BUTTON_FEATURE, FeatureConstants.INSTANCE_SWITCHER,
         FeatureConstants.KEYBOARD_ACCESSORY_ADDRESS_FILL_FEATURE,
         FeatureConstants.KEYBOARD_ACCESSORY_BAR_SWIPING_FEATURE,
         FeatureConstants.KEYBOARD_ACCESSORY_PASSWORD_FILLING_FEATURE,
@@ -71,13 +63,13 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.READ_LATER_APP_MENU_BOOKMARK_THIS_PAGE_FEATURE,
         FeatureConstants.READ_LATER_APP_MENU_BOOKMARKS_FEATURE,
         FeatureConstants.READ_LATER_BOTTOM_SHEET_FEATURE,
-        FeatureConstants.READ_LATER_CONTEXT_MENU_FEATURE, FeatureConstants.IPH_MIC_TOOLBAR_FEATURE,
-        FeatureConstants.IPH_SHARE_SCREENSHOT_FEATURE,
+        FeatureConstants.READ_LATER_CONTEXT_MENU_FEATURE,
+        FeatureConstants.REQUEST_DESKTOP_SITE_APP_MENU_FEATURE,
+        FeatureConstants.IPH_MIC_TOOLBAR_FEATURE, FeatureConstants.IPH_SHARE_SCREENSHOT_FEATURE,
         FeatureConstants.IPH_SHARING_HUB_LINK_TOGGLE_FEATURE,
         FeatureConstants.IPH_WEB_FEED_FOLLOW_FEATURE,
         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE,
         FeatureConstants.SHARED_HIGHLIGHTING_BUILDER_FEATURE,
-        FeatureConstants.START_SURFACE_TAB_SWITCHER_HOME_BUTTON_FEATURE,
         FeatureConstants.SHARED_HIGHLIGHTING_RECEIVER_FEATURE,
         FeatureConstants.SHARING_HUB_WEBNOTES_STYLIZE_FEATURE,
         FeatureConstants.VIDEO_TUTORIAL_NTP_CHROME_INTRO_FEATURE,
@@ -85,7 +77,7 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.VIDEO_TUTORIAL_NTP_SEARCH_FEATURE,
         FeatureConstants.VIDEO_TUTORIAL_NTP_SUMMARY_FEATURE,
         FeatureConstants.VIDEO_TUTORIAL_NTP_VOICE_SEARCH_FEATURE,
-        FeatureConstants.VIDEO_TUTORIAL_TRY_NOW_FEATURE})
+        FeatureConstants.VIDEO_TUTORIAL_TRY_NOW_FEATURE, FeatureConstants.PRICE_DROP_NTP_FEATURE})
 @Retention(RetentionPolicy.SOURCE)
 public @interface FeatureConstants {
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_NEW_TAB_FEATURE =
@@ -95,12 +87,13 @@ public @interface FeatureConstants {
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_FEATURE =
             "IPH_AdaptiveButtonInTopToolbarCustomization_VoiceSearch";
     String ADD_TO_HOMESCREEN_MESSAGE_FEATURE = "IPH_AddToHomescreenMessage";
-    String ADD_TO_HOMESCREEN_TEXT_BUBBLE_FEATURE = "IPH_AddToHomescreenTextBubble";
     String AUTO_DARK_OPT_OUT_FEATURE = "IPH_AutoDarkOptOut";
     String AUTO_DARK_USER_EDUCATION_MESSAGE_FEATURE = "IPH_AutoDarkUserEducationMessage";
     String AUTO_DARK_USER_EDUCATION_MESSAGE_OPT_IN_FEATURE =
             "IPH_AutoDarkUserEducationMessageOptIn";
     String CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING = "IPH_ContextualPageActions_PriceTracking";
+    String CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING_ACTION_CHIP =
+            "IPH_ContextualPageActions_PriceTrackingActionChip";
     String CROW_FEATURE = "IPH_Crow";
     String DOWNLOAD_PAGE_FEATURE = "IPH_DownloadPage";
     String DOWNLOAD_PAGE_SCREENSHOT_FEATURE = "IPH_DownloadPageScreenshot";
@@ -126,44 +119,7 @@ public @interface FeatureConstants {
     String READ_LATER_APP_MENU_BOOKMARK_THIS_PAGE_FEATURE = "IPH_ReadLaterAppMenuBookmarkThisPage";
     String READ_LATER_APP_MENU_BOOKMARKS_FEATURE = "IPH_ReadLaterAppMenuBookmarks";
     String READ_LATER_BOTTOM_SHEET_FEATURE = "IPH_ReadLaterBottomSheet";
-
-    /**
-     * An IPH feature that encourages users to get better translations by enabling access to page
-     * content.
-     */
-    String CONTEXTUAL_SEARCH_TRANSLATION_ENABLE_FEATURE = "IPH_ContextualSearchTranslationEnable";
-
-    /**
-     * An IPH feature that encourages users who search a query from a web page in a new tab, to use
-     * Contextual Search instead.
-     */
-    String CONTEXTUAL_SEARCH_WEB_SEARCH_FEATURE = "IPH_ContextualSearchWebSearch";
-
-    /**
-     * An IPH feature for promoting tap over longpress for activating Contextual Search.
-     */
-    String CONTEXTUAL_SEARCH_PROMOTE_TAP_FEATURE = "IPH_ContextualSearchPromoteTap";
-
-    /**
-     * An IPH feature for encouraging users to open the Contextual Search Panel.
-     */
-    String CONTEXTUAL_SEARCH_PROMOTE_PANEL_OPEN_FEATURE = "IPH_ContextualSearchPromotePanelOpen";
-
-    /**
-     * An IPH feature for encouraging users to opt-in for Contextual Search.
-     */
-    String CONTEXTUAL_SEARCH_OPT_IN_FEATURE = "IPH_ContextualSearchOptIn";
-
-    /**
-     * An IPH feature educating users that tap to use longpress instead.
-     */
-    String CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS_FEATURE =
-            "IPH_ContextualSearchTappedButShouldLongpress";
-
-    /**
-     * Another IPH to use longpress instead of tap, but this one appears inside the Panel.
-     */
-    String CONTEXTUAL_SEARCH_IN_PANEL_HELP_FEATURE = "IPH_ContextualSearchInPanelHelp";
+    String REQUEST_DESKTOP_SITE_APP_MENU_FEATURE = "IPH_RequestDesktopSiteAppMenu";
 
     /**
      * An IPH feature indicating to users that there are settings for downloads and they are
@@ -381,12 +337,6 @@ public @interface FeatureConstants {
     String SHARED_HIGHLIGHTING_BUILDER_FEATURE = "IPH_SharedHighlightingBuilder";
 
     /**
-     * An IPH feature to prompt users to click home button on the tab switcher surface when start
-     * surface is enabled.
-     */
-    String START_SURFACE_TAB_SWITCHER_HOME_BUTTON_FEATURE = "IPH_StartSurfaceTabSwitcherHomeButton";
-
-    /**
      * An IPH feature encouraging users to create highlights.
      */
     String SHARED_HIGHLIGHTING_RECEIVER_FEATURE = "IPH_SharedHighlightingReceiver";
@@ -395,4 +345,9 @@ public @interface FeatureConstants {
      * An IPH feature to inform users about the Webnotes Stylize feature in Sharing Hub.
      */
     String SHARING_HUB_WEBNOTES_STYLIZE_FEATURE = "IPH_SharingHubWebnotesStylize";
+
+    /**
+     * An IPH feature to inform users that a price drop has occurred in any of their open tabs
+     */
+    String PRICE_DROP_NTP_FEATURE = "IPH_PriceDropNTP";
 }

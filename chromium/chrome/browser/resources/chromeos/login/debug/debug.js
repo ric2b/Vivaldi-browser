@@ -310,7 +310,7 @@ cr.define('cr.ui.login.debug', function() {
             screen.setError(
                 'ChromeOS was unable to connect to Public Wifi. ' +
                 'Please select another network or try again.');
-          }
+          },
         },
       ],
     },
@@ -357,20 +357,6 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'oobe-update',
       kind: ScreenKind.NORMAL,
-      states: [
-        {
-          // Checking for update
-          id: 'check-update',
-        },
-        {
-          // Ask for permission to update over celluar
-          id: 'require-permission-celluar',
-          trigger: (screen) => {
-            screen.onBeforeShow();
-            screen.setUpdateState('cellular');
-          },
-        },
-      ],
     },
     {
       id: 'auto-enrollment-check',
@@ -488,7 +474,7 @@ cr.define('cr.ui.login.debug', function() {
             screen.setErrorState(2);  // offline
             screen.allowGuestSignin(true);
             screen.allowOfflineLogin(true);
-          }
+          },
         },
       ],
     },
@@ -596,7 +582,7 @@ cr.define('cr.ui.login.debug', function() {
             helpLinkText: 'Learn more',
           },
         },
-      ]
+      ],
     },
     {
       id: 'smart-privacy-protection',
@@ -682,14 +668,14 @@ cr.define('cr.ui.login.debug', function() {
         {
           id: 'default',
           trigger: (screen) => {
-            screen.loadParams({});
+            screen.onBeforeShow({});
           },
         },
         {
           // kAccountsPrefLoginScreenDomainAutoComplete value is set
           id: 'offline-gaia-domain',
           trigger: (screen) => {
-            screen.loadParams({
+            screen.onBeforeShow({
               emailDomain: 'somedomain.com',
             });
           },
@@ -698,7 +684,7 @@ cr.define('cr.ui.login.debug', function() {
           // Device is enterprise-managed.
           id: 'offline-gaia-enterprise',
           trigger: (screen) => {
-            screen.loadParams({
+            screen.onBeforeShow({
               enterpriseDomainManager: 'example.com',
             });
           },
@@ -796,7 +782,7 @@ cr.define('cr.ui.login.debug', function() {
           trigger: (screen) => {
             const error = 'Some error text';
             screen.showErrorDialog(error);
-          }
+          },
         },
       ],
     },
@@ -905,7 +891,7 @@ cr.define('cr.ui.login.debug', function() {
             screen.setArcTransition(3);
             screen.setManagementEntity('example.com');
             screen.setUIStep('progress');
-          }
+          },
         },
         {
           id: 'add-management-unknown-admin',
@@ -913,21 +899,21 @@ cr.define('cr.ui.login.debug', function() {
             screen.setArcTransition(3);
             screen.setManagementEntity('');
             screen.setUIStep('progress');
-          }
+          },
         },
         {
           id: 'error-supervision',
           trigger: (screen) => {
             screen.setArcTransition(1);
             screen.setUIStep('error');
-          }
+          },
         },
         {
           id: 'error-management',
           trigger: (screen) => {
             screen.setArcTransition(3);
             screen.setUIStep('error');
-          }
+          },
         },
       ],
     },
@@ -940,7 +926,7 @@ cr.define('cr.ui.login.debug', function() {
         id: 'skip-revealed',
         trigger: (screen) => {
           screen.showSkipButton();
-        }
+        },
       }],
     },
     {
@@ -991,8 +977,8 @@ cr.define('cr.ui.login.debug', function() {
             isChildAccount: false,
             isArcRestricted: true,
           },
-        }
-      ]
+        },
+      ],
     },
     {
       id: 'consolidated-consent',
@@ -1137,7 +1123,7 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
 
-      ]
+      ],
     },
     {
       id: 'guest-tos',
@@ -1186,7 +1172,7 @@ cr.define('cr.ui.login.debug', function() {
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
           },
         },
-      ]
+      ],
     },
     {
       id: 'hw-data-collection',
@@ -1235,23 +1221,23 @@ cr.define('cr.ui.login.debug', function() {
           id: 'clear-error',
           trigger: (screen) => {
             (screen.$).pinKeyboard.hideProblem_();
-          }
+          },
         },
         {
           id: 'error-warning',
           trigger: (screen) => {
             (screen.$).pinKeyboard.showProblem_(
                 MessageType.TOO_WEAK, ProblemType.WARNING);
-          }
+          },
         },
         {
           id: 'error-error',
           trigger: (screen) => {
             (screen.$).pinKeyboard.showProblem_(
                 MessageType.TOO_LONG, ProblemType.ERROR);
-          }
-        }
-      ]
+          },
+        },
+      ],
     },
     {
       id: 'arc-tos',
@@ -1274,6 +1260,7 @@ cr.define('cr.ui.login.debug', function() {
       ],
     },
     {
+      // TODO(https://crbug.com/1261902): update debug overlay
       id: 'recommend-apps',
       kind: ScreenKind.NORMAL,
       handledSteps: 'list',
@@ -1284,7 +1271,7 @@ cr.define('cr.ui.login.debug', function() {
           id: '2-apps',
           trigger: (screen) => {
             screen.reset();
-            screen.setWebview(RECOMMENDED_APPS_OLD_CONTENT);
+            screen.setWebview(RECOMMENDED_APPS_CONTENT);
             screen.loadAppList([
               {
                 name: 'Test app 1',
@@ -1302,7 +1289,7 @@ cr.define('cr.ui.login.debug', function() {
           trigger: (screen) => {
             // There can be up to 21 apps: see recommend_apps_fetcher_impl
             screen.reset();
-            screen.setWebview(RECOMMENDED_APPS_OLD_CONTENT);
+            screen.setWebview(RECOMMENDED_APPS_CONTENT);
             const apps = [];
             for (let i = 1; i <= 21; i++) {
               apps.push({
@@ -1496,6 +1483,7 @@ cr.define('cr.ui.login.debug', function() {
             optInVisibility: true,
             optInDefaultState: true,
             legalFooterVisibility: false,
+            cloudGamingDevice: false,
           },
           trigger: (screen) => {
             screen.setUIStep('overview');
@@ -1508,6 +1496,7 @@ cr.define('cr.ui.login.debug', function() {
             optInVisibility: false,
             optInDefaultState: false,
             legalFooterVisibility: false,
+            cloudGamingDevice: false,
           },
           trigger: (screen) => {
             screen.setUIStep('overview');
@@ -1520,6 +1509,7 @@ cr.define('cr.ui.login.debug', function() {
             optInVisibility: true,
             optInDefaultState: true,
             legalFooterVisibility: true,
+            cloudGamingDevice: false,
           },
           trigger: (screen) => {
             screen.setUIStep('overview');
@@ -1532,6 +1522,7 @@ cr.define('cr.ui.login.debug', function() {
             optInVisibility: true,
             optInDefaultState: true,
             legalFooterVisibility: true,
+            cloudGamingDevice: false,
           },
           trigger: (screen) => {
             screen.setUIStep('overview');
@@ -1687,7 +1678,7 @@ cr.define('cr.ui.login.debug', function() {
         () => {
           this.debuggerButton_.setAttribute('hidden', true);
         },
-        BUTTON_COMMAND_DELAY
+        BUTTON_COMMAND_DELAY,
       ];
     }
 
@@ -1696,7 +1687,7 @@ cr.define('cr.ui.login.debug', function() {
         () => {
           this.debuggerButton_.removeAttribute('hidden');
         },
-        BUTTON_COMMAND_DELAY
+        BUTTON_COMMAND_DELAY,
       ];
     }
 
@@ -1707,7 +1698,7 @@ cr.define('cr.ui.login.debug', function() {
         () => {
           this.triggerScreenState(screenId, stateId);
         },
-        SCREEN_LOADING_DELAY
+        SCREEN_LOADING_DELAY,
       ];
     }
 
@@ -1719,7 +1710,7 @@ cr.define('cr.ui.login.debug', function() {
           console.info('Making screenshot for ' + id);
           chrome.send('debug.captureScreenshot', [id]);
         },
-        SCREENSHOT_CAPTURE_DELAY
+        SCREENSHOT_CAPTURE_DELAY,
       ];
     }
 
@@ -1812,6 +1803,20 @@ cr.define('cr.ui.login.debug', function() {
       });
     }
 
+    toggleGameMode() {
+      KNOWN_SCREENS.forEach((screen, index) => {
+        if (screen.id == 'marketing-opt-in') {
+          for (const state of screen.states) {
+            if (state.data) {
+              state.data.cloudGamingDevice = !state.data.cloudGamingDevice;
+            }
+          }
+        }
+      });
+
+      this.triggerScreenState(this.currentScreenId_, this.lastScreenState_);
+    }
+
     createLanguagePanel(parent) {
       const langPanel = new ToolPanel(
           this.debuggerOverlay_, 'Language', 'DebuggerPanelLanguage');
@@ -1845,6 +1850,10 @@ cr.define('cr.ui.login.debug', function() {
       new DebugButton(panel.content, 'Toggle color mode', function() {
         chrome.send('debug.toggleColorMode');
       });
+      var button = new DebugButton(
+          panel.content, 'Toggle gaming mode', this.toggleGameMode.bind(this));
+
+      button.element.classList.add('gametoggle-button');
     }
 
     createScreensPanel(parent) {
@@ -1989,6 +1998,14 @@ cr.define('cr.ui.login.debug', function() {
         if (state.id == this.lastScreenState_) {
           button.element.classList.add('debug-button-selected');
         }
+      }
+
+      if (this.currentScreenId_ == 'marketing-opt-in') {
+        document.getElementsByClassName('gametoggle-button')[0].removeAttribute(
+            'hidden');
+      } else {
+        document.getElementsByClassName('gametoggle-button')[0].setAttribute(
+            'hidden', true);
       }
 
       this.statesPanel.show();

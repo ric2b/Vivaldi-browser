@@ -15,16 +15,18 @@
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
+#include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/country_names.h"
+#include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/cud_condition.pb.h"
 #include "components/autofill_assistant/browser/field_formatter.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/mock_personal_data_manager.h"
-#include "components/autofill_assistant/browser/mock_website_login_manager.h"
+#include "components/autofill_assistant/browser/public/password_change/mock_website_login_manager.h"
 #include "components/autofill_assistant/browser/test_util.h"
 #include "components/autofill_assistant/browser/ukm_test_util.h"
 #include "components/autofill_assistant/browser/user_data_util.h"
@@ -50,15 +52,28 @@ const char kFakePassword[] = "example_password";
 
 const char kMemoryLocation[] = "address";
 
-class TimeTicksOverride {
+// AutofillClock override that guarantees increasing time.
+class ScopedAutofillClockOverride : public autofill::TestAutofillClock {
  public:
-  static base::TimeTicks Now() { return now_ticks_; }
+  ScopedAutofillClockOverride()
+      : autofill::TestAutofillClock(std::make_unique<IncreasingClock>()) {}
 
-  static base::TimeTicks now_ticks_;
+ private:
+  class IncreasingClock : public base::SimpleTestClock {
+   public:
+    IncreasingClock() { SetNow(base::Time::Now()); }
+
+    IncreasingClock(const IncreasingClock&) = delete;
+    IncreasingClock& operator=(const IncreasingClock&) = delete;
+
+    base::Time Now() const override {
+      return base::SimpleTestClock::Now() + base::Milliseconds(delta_++);
+    }
+
+   private:
+    mutable int delta_ = 0;
+  };
 };
-
-// static
-base::TimeTicks TimeTicksOverride::now_ticks_ = base::TimeTicks::Now();
 
 MATCHER_P(MatchingAutofillVariant, guid, "") {
   if (absl::holds_alternative<const autofill::AutofillProfile*>(arg)) {
@@ -155,6 +170,15 @@ class CollectUserDataActionTest : public testing::Test {
     ukm::InitializeSourceUrlRecorderForWebContents(web_contents_.get());
     source_id_ = web_contents_->GetPrimaryMainFrame()->GetPageUkmSourceId();
 
+    if (!base::TimeTicks::IsHighResolution()) {
+      // AutofillClock is used to initialize |use_date| for user data created in
+      // tests. |use_date| is expected to be different in each case as clock
+      // time is running. On machines with low resolution clock, we need to
+      // provide a custom autofill clock that ensures always increasing time.
+      autofill_clock_override_ =
+          std::make_unique<ScopedAutofillClockOverride>();
+    }
+
     ON_CALL(mock_action_delegate_, GetPersonalDataManager)
         .WillByDefault(Return(&mock_personal_data_manager_));
     ON_CALL(mock_action_delegate_, GetWebsiteLoginManager)
@@ -225,6 +249,7 @@ class CollectUserDataActionTest : public testing::Test {
   content::RenderViewHostTestEnabler rvh_test_enabler_;
   content::TestBrowserContext browser_context_;
   std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<ScopedAutofillClockOverride> autofill_clock_override_;
   base::MockCallback<Action::ProcessActionCallback> callback_;
   NiceMock<MockPersonalDataManager> mock_personal_data_manager_;
   NiceMock<MockWebsiteLoginManager> mock_website_login_manager_;
@@ -2941,11 +2966,6 @@ TEST_F(CollectUserDataActionTest, RawDataFromProtoDoesNotGetFormatted) {
             mappings,
             IsSupersetOf({Pair(field_formatter::Key(7), "John Doe"),
                           Pair(field_formatter::Key(14), "+11234567890")}));
-        // Note: Phone number is still getting split, even if it's added with
-        // "raw=true".
-        EXPECT_THAT(mappings,
-                    Not(AnyOf(Contains(Key(field_formatter::Key(3))),
-                              Contains(Key(field_formatter::Key(5))))));
 
         std::move(collect_user_data_options->confirm_callback)
             .Run(&user_data_, &user_model_);
@@ -3807,6 +3827,136 @@ TEST_F(CollectUserDataActionTest, LogUkmDataFromBackend) {
                   static_cast<int64_t>(Metrics::UserDataSource::BACKEND))}));
 }
 
+TEST_F(CollectUserDataActionTest, LogUkmDataFallbackBackendData) {
+  ActionProto action_proto;
+  auto* collect_user_data_proto = action_proto.mutable_collect_user_data();
+  collect_user_data_proto->set_privacy_notice_text("privacy");
+  collect_user_data_proto->set_request_terms_and_conditions(true);
+  collect_user_data_proto->set_accept_terms_and_conditions_text(
+      "terms and conditions");
+  collect_user_data_proto->set_show_terms_as_checkbox(false);
+  collect_user_data_proto->set_terms_require_review_text("terms review");
+  collect_user_data_proto->mutable_data_source()
+      ->set_allow_fallback_on_missing_data(true);
+
+  ON_CALL(mock_personal_data_manager_, IsAutofillProfileEnabled)
+      .WillByDefault(Return(true));
+  ON_CALL(mock_action_delegate_, MustUseBackendData)
+      .WillByDefault(Return(false));
+
+  GetUserDataResponseProto user_data_response;
+  user_data_response.set_locale("en-US");
+  auto* profile = user_data_response.add_available_contacts();
+  (*profile->mutable_values())[7] = MakeAutofillEntry("John Doe");
+  (*profile->mutable_values())[14] = MakeAutofillEntry("+1 123-456-7890");
+  *user_data_response.add_available_phone_numbers()->mutable_value() =
+      MakeAutofillEntry("+1 187-654-3210");
+  auto* address_1 = user_data_response.add_available_addresses();
+  AddCompleteAddressEntriesToMap("John Doe", address_1->mutable_values());
+  auto* payment_instrument_1 =
+      user_data_response.add_available_payment_instruments();
+  AddCompleteCardEntriesToMap("John Doe",
+                              payment_instrument_1->mutable_card_values());
+
+  EXPECT_CALL(mock_action_delegate_, RequestUserData)
+      .WillRepeatedly(RunOnceCallback<2>(true, user_data_response));
+
+  ON_CALL(mock_action_delegate_, CollectUserData(_))
+      .WillByDefault([&](CollectUserDataOptions* collect_user_data_options) {
+        user_data_.terms_and_conditions_ = ACCEPTED;
+
+        std::move(collect_user_data_options->confirm_callback)
+            .Run(&user_data_, &user_model_);
+      });
+
+  EXPECT_CALL(
+      callback_,
+      Run(Pointee(Property(&ProcessedActionProto::status, ACTION_APPLIED))));
+  CollectUserDataAction fallback_action(&mock_action_delegate_, action_proto);
+  fallback_action.ProcessAction(callback_.Get());
+  EXPECT_THAT(
+      GetUkmCollectUserDataResult(ukm_recorder_),
+      ElementsAreArray({ToHumanReadableEntry(
+          source_id_, kResult,
+          static_cast<int64_t>(Metrics::CollectUserDataResult::SUCCESS))}));
+  EXPECT_THAT(
+      GetUkmUserDataSource(ukm_recorder_),
+      ElementsAreArray({ToHumanReadableEntry(
+          source_id_, kUserDataSource,
+          static_cast<int64_t>(Metrics::UserDataSource::FALLBACK_BACKEND))}));
+}
+
+TEST_F(CollectUserDataActionTest, LogUkmFallbackChromeAutofillDataFromBackend) {
+  GetUserDataResponseProto user_data_response;
+  user_data_response.set_locale("en-US");
+  auto* response_profile = user_data_response.add_available_contacts();
+  (*response_profile->mutable_values())[7] = MakeAutofillEntry("John Doe");
+  autofill::CountryNames::SetLocaleString("en-US");
+  EXPECT_CALL(mock_action_delegate_, RequestUserData)
+      .WillRepeatedly(RunOnceCallback<2>(true, user_data_response));
+
+  ON_CALL(mock_personal_data_manager_, IsAutofillProfileEnabled)
+      .WillByDefault(Return(true));
+
+  autofill::AutofillProfile profile;
+  autofill::test::SetProfileInfo(
+      &profile, "Adam", "", "West", "adam.west@gmail.com", "", "Main St. 18",
+      "", "abc", "New York", "NY", "10001", "us", "+1 123-456-7890");
+
+  ON_CALL(mock_personal_data_manager_, GetProfiles)
+      .WillByDefault(
+          Return(std::vector<autofill::AutofillProfile*>({&profile})));
+  ON_CALL(mock_action_delegate_, MustUseBackendData)
+      .WillByDefault(Return(false));
+
+  ActionProto action_proto;
+  auto* collect_user_data = action_proto.mutable_collect_user_data();
+  collect_user_data->set_request_terms_and_conditions(false);
+  collect_user_data->set_request_payment_method(false);
+  collect_user_data->set_billing_address_name("billing");
+  collect_user_data->mutable_data_origin_notice()->set_link_text("Link");
+  collect_user_data->mutable_data_origin_notice()->set_dialog_title("Title");
+  collect_user_data->mutable_data_origin_notice()->set_dialog_text("Text");
+  collect_user_data->mutable_data_origin_notice()->set_dialog_button_text(
+      "Button");
+  collect_user_data->mutable_data_source()->set_allow_fallback_on_missing_data(
+      true);
+
+  auto* contact_details = collect_user_data->mutable_contact_details();
+  contact_details->set_request_payer_name(true);
+  contact_details->set_request_payer_email(true);
+  contact_details->set_contact_details_name("contact");
+  collect_user_data->set_shipping_address_name("shipping-address");
+  collect_user_data->mutable_data_source();
+
+  ON_CALL(mock_action_delegate_, CollectUserData(_))
+      .WillByDefault([&](CollectUserDataOptions* collect_user_data_options) {
+        ExpectSelectedProfileMatches("contact", &profile);
+        ExpectSelectedProfileMatches("shipping-address", &profile);
+        user_data_.terms_and_conditions_ = ACCEPTED;
+        std::move(collect_user_data_options->confirm_callback)
+            .Run(&user_data_, &user_model_);
+      });
+
+  EXPECT_CALL(
+      callback_,
+      Run(Pointee(Property(&ProcessedActionProto::status, ACTION_APPLIED))));
+  CollectUserDataAction action(&mock_action_delegate_, action_proto);
+  action.ProcessAction(callback_.Get());
+
+  EXPECT_THAT(
+      GetUkmCollectUserDataResult(ukm_recorder_),
+      ElementsAreArray({ToHumanReadableEntry(
+          source_id_, kResult,
+          static_cast<int64_t>(Metrics::CollectUserDataResult::SUCCESS))}));
+  EXPECT_THAT(GetUkmUserDataSource(ukm_recorder_),
+              ElementsAreArray({ToHumanReadableEntry(
+                  source_id_, kUserDataSource,
+                  static_cast<int64_t>(
+                      Metrics::UserDataSource::
+                          FALLBACK_CHROME_AUTOFILL_ON_MISSING_DATA))}));
+}
+
 TEST_F(CollectUserDataActionTest, LogsUkmInitialSelectionFieldBitArray) {
   ON_CALL(mock_personal_data_manager_, IsAutofillProfileEnabled)
       .WillByDefault(Return(true));
@@ -3815,8 +3965,9 @@ TEST_F(CollectUserDataActionTest, LogsUkmInitialSelectionFieldBitArray) {
   ON_CALL(mock_personal_data_manager_, ShouldSuggestServerCards)
       .WillByDefault(Return(true));
 
-  // We add artificial constraints on the fields in the CUD proto below to make
-  // sure that we get a different profile as default for each kind of entry.
+  // We add artificial constraints on the fields in the CUD proto below to
+  // make sure that we get a different profile as default for each kind of
+  // entry.
   autofill::AutofillProfile default_contact;
   autofill::test::SetProfileInfo(&default_contact, "Adam", "", "",
                                  "adam.west@gmail.com", "", "Baker Street 221b",
@@ -4132,7 +4283,7 @@ TEST_F(CollectUserDataActionTest, FallBackToChromeDataOnFailedRequest) {
   *collect_user_data->mutable_contact_details()
        ->add_phone_number_required_data_piece() =
       MakeRequiredDataPiece(autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER);
-  collect_user_data->mutable_data_source()->set_allow_fallback(true);
+  collect_user_data->mutable_data_source()->set_allow_fallback_on_failure(true);
   collect_user_data->mutable_data_origin_notice()->set_link_text("Link");
   collect_user_data->mutable_data_origin_notice()->set_dialog_title("Title");
   collect_user_data->mutable_data_origin_notice()->set_dialog_text("Text");
@@ -4145,11 +4296,12 @@ TEST_F(CollectUserDataActionTest, FallBackToChromeDataOnFailedRequest) {
   CollectUserDataAction action(&mock_action_delegate_, action_proto);
   action.ProcessAction(callback_.Get());
 
-  EXPECT_THAT(
-      GetUkmUserDataSource(ukm_recorder_),
-      ElementsAreArray({ToHumanReadableEntry(
-          source_id_, kUserDataSource,
-          static_cast<int64_t>(Metrics::UserDataSource::CHROME_AUTOFILL))}));
+  EXPECT_THAT(GetUkmUserDataSource(ukm_recorder_),
+              ElementsAreArray({ToHumanReadableEntry(
+                  source_id_, kUserDataSource,
+                  static_cast<int64_t>(
+                      Metrics::UserDataSource::
+                          FALLBACK_CHROME_AUTOFILL_ON_FAILED_REQUEST))}));
 }
 
 TEST_F(CollectUserDataActionTest, FailActionIfFallbackIsNotPossible) {
@@ -4166,7 +4318,7 @@ TEST_F(CollectUserDataActionTest, FailActionIfFallbackIsNotPossible) {
   collect_user_data->mutable_contact_details()->set_request_payer_name(true);
   collect_user_data->mutable_contact_details()->set_contact_details_name(
       kMemoryLocation);
-  collect_user_data->mutable_data_source()->set_allow_fallback(true);
+  collect_user_data->mutable_data_source()->set_allow_fallback_on_failure(true);
 
   EXPECT_CALL(callback_, Run(Pointee(Property(&ProcessedActionProto::status,
                                               USER_DATA_REQUEST_FAILED))));
@@ -4194,7 +4346,7 @@ TEST_F(CollectUserDataActionTest, FailActionIfReloadFails) {
   collect_user_data->mutable_contact_details()->set_request_payer_name(true);
   collect_user_data->mutable_contact_details()->set_contact_details_name(
       kMemoryLocation);
-  collect_user_data->mutable_data_source()->set_allow_fallback(true);
+  collect_user_data->mutable_data_source()->set_allow_fallback_on_failure(true);
 
   EXPECT_CALL(callback_, Run(Pointee(Property(&ProcessedActionProto::status,
                                               USER_DATA_REQUEST_FAILED))));

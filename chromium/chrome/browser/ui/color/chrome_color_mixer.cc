@@ -212,6 +212,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorCapturedTabContentsBorder] = {ui::kColorAccent};
   mixer[kColorDesktopMediaTabListBorder] = {ui::kColorMidground};
   mixer[kColorDesktopMediaTabListPreviewBackground] = {ui::kColorMidground};
+  mixer[kColorDownloadBubbleInfoBackground] = {
+      ui::kColorSubtleEmphasisBackground};
+  mixer[kColorDownloadBubbleInfoIcon] = {ui::kColorIcon};
   mixer[kColorDownloadItemForeground] = {kColorDownloadShelfForeground};
   mixer[kColorDownloadItemForegroundDangerous] =
       ui::PickGoogleColor(ui::kColorAlertHighSeverity, kColorToolbar,
@@ -238,7 +241,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       kColorToolbarButtonIcon, kColorDownloadShelfBackground, 0x3A);
   mixer[kColorDownloadShelfForeground] = {kColorToolbarText};
   mixer[kColorDownloadStartedAnimationForeground] = {ui::kColorAccent};
-  mixer[kColorDownloadToolbarButtonActive] = {ui::kColorThrobber};
+  mixer[kColorDownloadToolbarButtonActive] =
+      ui::PickGoogleColor(ui::kColorThrobber, kColorToolbar,
+                          color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorDownloadToolbarButtonInactive] = {kColorToolbarButtonIcon};
   mixer[kColorDownloadToolbarButtonRingBackground] = {
       SkColorSetA(kColorDownloadToolbarButtonInactive, 0x33)};
@@ -254,6 +259,8 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorExtensionMenuPinButtonIcon] = {ui::kColorAccent};
   mixer[kColorExtensionMenuPinButtonIconDisabled] = ui::SetAlpha(
       kColorExtensionMenuPinButtonIcon, gfx::kDisabledControlAlpha);
+  mixer[kColorExtensionsToolbarControlsBackground] = {
+      kColorToolbarBackgroundSubtleEmphasis};
   mixer[kColorEyedropperBoundary] = {SK_ColorDKGRAY};
   mixer[kColorEyedropperCentralPixelInnerRing] = {SK_ColorBLACK};
   mixer[kColorEyedropperCentralPixelOuterRing] = {SK_ColorWHITE};
@@ -268,6 +275,10 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorFeaturePromoBubbleDefaultButtonForeground] = {
       kColorFeaturePromoBubbleBackground};
   mixer[kColorFeaturePromoBubbleForeground] = {SK_ColorWHITE};
+  mixer[kColorFeatureLensPromoBubbleBackground] = {
+      kColorFeaturePromoBubbleBackground};
+  mixer[kColorFeatureLensPromoBubbleForeground] = {
+      kColorFeaturePromoBubbleForeground};
   mixer[kColorFindBarBackground] = {ui::kColorTextfieldBackground};
   mixer[kColorFindBarButtonIcon] =
       ui::DeriveDefaultIconColor(ui::kColorTextfieldForeground);
@@ -291,10 +302,12 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorInfoBarForeground] = {kColorToolbarText};
   mixer[kColorIntentPickerItemBackgroundHovered] = ui::SetAlpha(
       ui::GetColorWithMaxContrast(ui::kColorDialogBackground), 0x0F);  // 6%.
-  // TODO(crbug.com/1330183): Improve selection color.
   mixer[kColorIntentPickerItemBackgroundSelected] = ui::BlendForMinContrast(
       ui::kColorDialogBackground, ui::kColorDialogBackground, ui::kColorAccent,
       1.2);
+  mixer[kColorLocationBarBackground] = {kColorToolbarBackgroundSubtleEmphasis};
+  mixer[kColorLocationBarBackgroundHovered] = {
+      kColorToolbarBackgroundSubtleEmphasisHovered};
   mixer[kColorLocationBarBorder] = {SkColorSetA(SK_ColorBLACK, 0x4D)};
   mixer[kColorLocationBarBorderOpaque] =
       ui::GetResultingPaintColor(kColorLocationBarBorder, kColorToolbar);
@@ -342,6 +355,10 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       gfx::kGoogleGrey100};
   mixer[kColorNewTabPageSectionBorder] =
       ui::SetAlpha(kColorNewTabPageHeader, 0x50);
+  mixer[kColorNewTabPageSearchBoxBackground] = {
+      kColorToolbarBackgroundSubtleEmphasis};
+  mixer[kColorNewTabPageSearchBoxBackgroundHovered] = {
+      kColorToolbarBackgroundSubtleEmphasisHovered};
   mixer[kColorNewTabPageText] = {dark_mode ? gfx::kGoogleGrey200
                                            : SK_ColorBLACK};
   mixer[kColorNewTabPageTextUnthemed] = {gfx::kGoogleGrey050};
@@ -409,8 +426,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorScreenshotCapturedImageBackground] = {ui::kColorBubbleBackground};
   mixer[kColorScreenshotCapturedImageBorder] = {ui::kColorMidground};
   mixer[kColorSidePanelBackground] = {kColorToolbar};
-  mixer[kColorSidePanelContentAreaSeparator] = {
-      kColorToolbarContentAreaSeparator};
+  mixer[kColorSidePanelContentAreaSeparator] = {ui::kColorSeparator};
   mixer[kColorStatusBubbleBackgroundFrameActive] = {
       kColorTabBackgroundInactiveFrameActive};
   mixer[kColorStatusBubbleBackgroundFrameInactive] = {
@@ -706,6 +722,8 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorWindowControlButtonBackgroundActive] = {ui::kColorFrameActive};
   mixer[kColorWindowControlButtonBackgroundInactive] = {
       ui::kColorFrameInactive};
+  mixer[kColorPwaScrollButtonBackground] =
+      ui::SetAlpha(ui::kColorButtonBackground, gfx::kGoogleGreyAlpha700);
 
   // Apply high contrast recipes if necessary.
   if (!ShouldApplyHighContrastColors(key))

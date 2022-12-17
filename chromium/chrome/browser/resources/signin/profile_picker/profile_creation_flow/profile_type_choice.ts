@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import './profile_creation_shared.css.js';
 
-import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
@@ -77,17 +77,6 @@ export class ProfileTypeChoiceElement extends ProfileTypeChoiceElementBase {
         value: false,
       },
       // </if>
-
-      /**
-       * If true, it is possible to create local profiles without sign-in.
-       */
-      localProfileCreationFlowSupported_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('localProfileCreationFlowSupported');
-        },
-      },
-
     };
   }
 
@@ -104,7 +93,7 @@ export class ProfileTypeChoiceElement extends ProfileTypeChoiceElementBase {
     super.connectedCallback();
     this.addWebUIListener(
         'available-accounts-changed',
-        (accounts: Array<AvailableAccount>) =>
+        (accounts: AvailableAccount[]) =>
             this.handleAvailableAccountsChanged_(accounts));
     this.manageProfilesBrowserProxy_.getAvailableAccounts();
   }
@@ -164,7 +153,7 @@ export class ProfileTypeChoiceElement extends ProfileTypeChoiceElementBase {
 
   // <if expr="chromeos_lacros">
   private handleAvailableAccountsChanged_(availableAccounts:
-                                              Array<AvailableAccount>) {
+                                              AvailableAccount[]) {
     this.hasAvailableAccounts_ = availableAccounts.length > 0;
   }
   // </if>

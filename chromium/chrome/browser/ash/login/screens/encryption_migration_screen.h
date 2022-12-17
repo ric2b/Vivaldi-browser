@@ -8,25 +8,25 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/login/auth/user_context.h"
+#include "ash/components/login/auth/public/user_context.h"
 #include "base/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/screens/encryption_migration_mode.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "chrome/browser/ash/login/ui/login_feedback.h"
 #include "chrome/browser/ui/webui/chromeos/login/encryption_migration_screen_handler.h"
-#include "chromeos/dbus/cryptohome/rpc.pb.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/cryptohome/dbus-constants.h"
 
 namespace ash {
 
+class LoginFeedback;
 class UserContext;
 
 class EncryptionMigrationScreen : public BaseScreen,
@@ -45,17 +45,14 @@ class EncryptionMigrationScreen : public BaseScreen,
     virtual int64_t GetFreeSpace() const = 0;
   };
 
-  explicit EncryptionMigrationScreen(EncryptionMigrationScreenView* view);
+  explicit EncryptionMigrationScreen(
+      base::WeakPtr<EncryptionMigrationScreenView> view);
 
   EncryptionMigrationScreen(const EncryptionMigrationScreen&) = delete;
   EncryptionMigrationScreen& operator=(const EncryptionMigrationScreen&) =
       delete;
 
   ~EncryptionMigrationScreen() override;
-
-  // This method is called, when view is being destroyed. Note, if Delegate is
-  // destroyed earlier then it has to call SetDelegate(NULL).
-  void OnViewDestroyed(EncryptionMigrationScreenView* view);
 
   // Sets the UserContext for a user whose cryptohome should be migrated.
   void SetUserContext(const UserContext& user_context);
@@ -82,7 +79,7 @@ class EncryptionMigrationScreen : public BaseScreen,
   // BaseScreen:
   void ShowImpl() override;
   void HideImpl() override;
-  void OnUserActionDeprecated(const std::string& action_id) override;
+  void OnUserAction(const base::Value::List& args) override;
 
   // PowerManagerClient::Observer implementation:
   void PowerChanged(const power_manager::PowerSupplyProperties& proto) override;
@@ -132,7 +129,7 @@ class EncryptionMigrationScreen : public BaseScreen,
   // Stop forcing migration if it was forced by policy.
   void MaybeStopForcingMigration();
 
-  EncryptionMigrationScreenView* view_;
+  base::WeakPtr<EncryptionMigrationScreenView> view_;
 
   // The current UI state which should be refrected in the web UI.
   EncryptionMigrationScreenView::UIState current_ui_state_ =

@@ -26,7 +26,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
-#include "chromeos/services/assistant/public/cpp/assistant_enums.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest-param-test.h"
@@ -65,12 +65,11 @@ class AssistantOverlayTest : public AshTestBase,
 
     // Enable Assistant
     Shell::Get()->session_controller()->GetPrimaryUserPrefService()->SetBoolean(
-        chromeos::assistant::prefs::kAssistantEnabled, true);
+        assistant::prefs::kAssistantEnabled, true);
     AssistantState* assistant_state = AssistantState::Get();
     assistant_state->NotifyFeatureAllowed(
-        chromeos::assistant::AssistantAllowedState::ALLOWED);
-    assistant_state->NotifyStatusChanged(
-        chromeos::assistant::AssistantStatus::READY);
+        assistant::AssistantAllowedState::ALLOWED);
+    assistant_state->NotifyStatusChanged(assistant::AssistantStatus::READY);
 
     const TestVariant test_variant = GetParam();
     switch (test_variant) {

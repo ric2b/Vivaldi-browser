@@ -21,7 +21,7 @@
 #include "chrome/browser/ash/attestation/enrollment_id_upload_manager.h"
 #include "chrome/browser/ash/attestation/mock_enrollment_certificate_uploader.h"
 #include "chrome/browser/ash/settings/device_settings_test_helper.h"
-#include "chromeos/dbus/attestation/fake_attestation_client.h"
+#include "chromeos/ash/components/dbus/attestation/fake_attestation_client.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -211,7 +211,7 @@ TEST_F(EnrollmentIdUploadManagerTest, UnregisteredPolicyClient) {
   policy_client_.SetDMToken("");
   SetUpDevicePolicy(/*enrollment_id_needed=*/true);
   SetUpEnrollmentIdUploadManager();
-  ExpectUploadEnrollmentCertificate(CertificateStatus::kFailedToFetch,
+  ExpectUploadEnrollmentCertificate(CertificateStatus::kInvalidClient,
                                     /*times=*/1);
   PropagateDevicePolicy();
   RunUntilIdle();
@@ -273,7 +273,7 @@ TEST_F(EnrollmentIdUploadManagerTest, ObtainAndUploadSendsEnrollmentId) {
 TEST_F(EnrollmentIdUploadManagerTest, ObtainAndUploadUnregisteredPolicyClient) {
   policy_client_.SetDMToken("");
   SetUpEnrollmentIdUploadManager();
-  ExpectUploadEnrollmentCertificate(CertificateStatus::kFailedToFetch,
+  ExpectUploadEnrollmentCertificate(CertificateStatus::kInvalidClient,
                                     /*times=*/1);
   TestObtainAndUploadEnrollmentId(/*expect_success=*/false);
 }

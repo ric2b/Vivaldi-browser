@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <signal.h>
 #include <cstdio>
 #include <iostream>
 #include <memory>
@@ -10,14 +11,14 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/power_monitor/iopm_power_source_sampling_event_source.h"
+#include "base/power_monitor/timer_sampling_event_source.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/time/time.h"
-#include "components/power_metrics/iopm_power_source_sampling_event_source.h"
-#include "components/power_metrics/timer_sampling_event_source.h"
 #include "tools/mac/power/power_sampler/battery_sampler.h"
 #include "tools/mac/power/power_sampler/csv_exporter.h"
 #include "tools/mac/power/power_sampler/json_exporter.h"
@@ -116,6 +117,11 @@ bool ConsumeSamplerName(const std::string& sampler_name,
   return false;
 }
 
+std::atomic<bool> should_quit_{false};
+void quit_signal_handler(int signal) {
+  should_quit_ = true;
+}
+
 int main(int argc, char** argv) {
   // Initialize infrastructure from base.
   base::CommandLine::Init(argc, argv);
@@ -205,13 +211,12 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::unique_ptr<power_metrics::SamplingEventSource> event_source;
+  std::unique_ptr<base::SamplingEventSource> event_source;
   if (command_line.HasSwitch(kSwitchSampleOnNotification)) {
-    event_source =
-        std::make_unique<power_metrics::IOPMPowerSourceSamplingEventSource>();
+    event_source = std::make_unique<base::IOPMPowerSourceSamplingEventSource>();
   } else {
-    event_source = std::make_unique<power_metrics::TimerSamplingEventSource>(
-        sampling_interval);
+    event_source =
+        std::make_unique<base::TimerSamplingEventSource>(sampling_interval);
   }
 
   base::SingleThreadTaskExecutor executor(base::MessagePumpType::NS_RUNLOOP);
@@ -330,6 +335,23 @@ int main(int argc, char** argv) {
                                             timeout);
   }
 
+  // Install signal handler for on-demand quitting.
+  struct sigaction new_action;
+  new_action.sa_handler = quit_signal_handler;
+  sigemptyset(&new_action.sa_mask);
+  new_action.sa_flags = 0;
+  sigaction(SIGTERM, &new_action, NULL);
+  sigaction(SIGINT, &new_action, NULL);
+
+  base::RepeatingTimer quit_timer;
+  quit_timer.Start(FROM_HERE, base::Seconds(1),
+                   BindRepeating(
+                       [](base::OnceClosure quit_closure) {
+                         if (should_quit_.load())
+                           std::move(quit_closure).Run();
+                       },
+                       run_loop.QuitClosure()));
+
   if (!event_source->Start(BindRepeating(
           [](power_sampler::SamplingController* controller,
              base::OnceClosure quit_closure) {
@@ -344,6 +366,8 @@ int main(int argc, char** argv) {
   controller.StartSession();
 
   run_loop.Run();
+
+  quit_timer.Stop();
 
   controller.EndSession();
 

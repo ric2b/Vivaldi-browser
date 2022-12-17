@@ -4,6 +4,7 @@
 
 #include "components/feature_engagement/public/feature_constants.h"
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 
 namespace feature_engagement {
@@ -46,6 +47,8 @@ const base::Feature kIPHReadingListInSidePanelFeature{
     "IPH_ReadingListInSidePanel", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHReopenTabFeature{"IPH_ReopenTab",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHSideSearchAutoTriggeringFeature{
+    "IPH_SideSearchAutoTriggering", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHSideSearchFeature{"IPH_SideSearch",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHTabSearchFeature{"IPH_TabSearch",
@@ -60,6 +63,9 @@ const base::Feature kIPHProfileSwitchFeature{"IPH_ProfileSwitch",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHIntentChipFeature{"IPH_IntentChip",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHWebUiHelpBubbleTestFeature(
+    "IPH_WebUiHelpBubbleTest",
+    base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
@@ -76,8 +82,6 @@ const base::Feature
         base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHAddToHomescreenMessageFeature{
     "IPH_AddToHomescreenMessage", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kIPHAddToHomescreenTextBubbleFeature{
-    "IPH_AddToHomescreenTextBubble", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHAutoDarkOptOutFeature{"IPH_AutoDarkOptOut",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHAutoDarkUserEducationMessageFeature{
@@ -86,6 +90,9 @@ const base::Feature kIPHAutoDarkUserEducationMessageOptInFeature{
     "IPH_AutoDarkUserEducationMessageOptIn", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHContextualPageActionsPriceTrackingFeature{
     "IPH_ContextualPageActions_PriceTracking",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHContextualPageActionsPriceTrackingActionChipFeature{
+    "IPH_ContextualPageActions_PriceTrackingActionChip",
     base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHCrowFeature{"IPH_Crow",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -107,21 +114,6 @@ const base::Feature kIPHChromeHomeExpandFeature{
     "IPH_ChromeHomeExpand", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHChromeHomePullToRefreshFeature{
     "IPH_ChromeHomePullToRefresh", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchTranslationEnableFeature{
-    "IPH_ContextualSearchTranslationEnable", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchWebSearchFeature{
-    "IPH_ContextualSearchWebSearch", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchPromoteTapFeature{
-    "IPH_ContextualSearchPromoteTap", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchPromotePanelOpenFeature{
-    "IPH_ContextualSearchPromotePanelOpen", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchOptInFeature{
-    "IPH_ContextualSearchOptIn", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchTappedButShouldLongpressFeature{
-    "IPH_ContextualSearchTappedButShouldLongpress",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHContextualSearchInPanelHelpFeature{
-    "IPH_ContextualSearchInPanelHelp", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadSettingsFeature{
     "IPH_DownloadSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadInfoBarDownloadContinuingFeature{
@@ -138,6 +130,8 @@ const base::Feature kIPHReadLaterAppMenuBookmarksFeature{
     "IPH_ReadLaterAppMenuBookmarks", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHReadLaterBottomSheetFeature{
     "IPH_ReadLaterBottomSheet", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHRequestDesktopSiteAppMenuFeature{
+    "IPH_RequestDesktopSiteAppMenu", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHShoppingListSaveFlowFeature{
     "IPH_ShoppingListSaveFlow", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHEphemeralTabFeature{"IPH_EphemeralTab",
@@ -213,6 +207,8 @@ const base::Feature kIPHPageInfoStoreInfoFeature{
     "IPH_PageInfoStoreInfo", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPreviewsOmniboxUIFeature{
     "IPH_PreviewsOmniboxUI", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHPriceDropNTPFeature{"IPH_PriceDropNTP",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHShoppingListMenuItemFeature{
     "IPH_ShoppingListMenuItem", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHTabGroupsQuicklyComparePagesFeature{
@@ -267,8 +263,6 @@ const base::Feature kIPHSharedHighlightingBuilder{
     "IPH_SharedHighlightingBuilder", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHSharedHighlightingReceiverFeature{
     "IPH_SharedHighlightingReceiver", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHStartSurfaceTabSwitcherHomeButton{
-    "IPH_StartSurfaceTabSwitcherHomeButton", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHSharingHubWebnotesStylizeFeature{
     "IPH_SharingHubWebnotesStylize", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -296,6 +290,8 @@ const base::Feature kIPHPasswordSuggestionsFeature{
     "IPH_PasswordSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFollowWhileBrowsingFeature{
     "IPH_FollowWhileBrowsing", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHOverflowMenuTipFeature{
+    "IPH_OverflowMenuTip", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \

@@ -53,6 +53,7 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kKeyboardSubpagePath,
       chromeos::settings::mojom::kStylusSubpagePath,
       chromeos::settings::mojom::kDisplaySubpagePath,
+      chromeos::settings::mojom::kAudioSubpagePath,
       chromeos::settings::mojom::kStorageSubpagePath,
       chromeos::settings::mojom::kExternalStorageSubpagePath,
       chromeos::settings::mojom::kPowerSubpagePath,
@@ -60,7 +61,6 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       // Personalization section.
       chromeos::settings::mojom::kPersonalizationSectionPath,
       chromeos::settings::mojom::kChangePictureSubpagePath,
-      chromeos::settings::mojom::kAmbientModeSubpagePath,
 
       // Search and Assistant section.
       chromeos::settings::mojom::kSearchAndAssistantSectionPath,
@@ -118,6 +118,11 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       // Accessibility section.
       chromeos::settings::mojom::kAccessibilitySectionPath,
       chromeos::settings::mojom::kManageAccessibilitySubpagePath,
+      chromeos::settings::mojom::kTextToSpeechPagePath,
+      chromeos::settings::mojom::kDisplayAndMagnificationSubpagePath,
+      chromeos::settings::mojom::kKeyboardAndTextInputSubpagePath,
+      chromeos::settings::mojom::kCursorAndTouchpadSubpagePath,
+      chromeos::settings::mojom::kAudioAndCaptionsSubpagePath,
       chromeos::settings::mojom::kTextToSpeechSubpagePath,
       chromeos::settings::mojom::kSwitchAccessOptionsSubpagePath,
       chromeos::settings::mojom::kCaptionsSubpagePath,

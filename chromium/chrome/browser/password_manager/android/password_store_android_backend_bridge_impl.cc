@@ -10,11 +10,16 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/feature_list.h"
 #include "chrome/browser/password_manager/android/jni_headers/PasswordStoreAndroidBackendBridgeImpl_jni.h"
+#include "chrome/browser/password_manager/android/password_store_android_backend_api_error_codes.h"
 #include "components/password_manager/core/browser/android_backend_error.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/protos/list_passwords_result.pb.h"
+#include "components/password_manager/core/browser/protos/password_with_local_data.pb.h"
 #include "components/password_manager/core/browser/sync/password_proto_utils.h"
-#include "components/sync/protocol/list_passwords_result.pb.h"
+#include "components/password_manager/core/browser/unified_password_manager_proto_utils.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 using JobId = PasswordStoreAndroidBackendBridgeImpl::JobId;
 
@@ -25,7 +30,7 @@ std::vector<password_manager::PasswordForm> CreateFormsVector(
   std::vector<uint8_t> serialized_result;
   base::android::JavaByteArrayToByteVector(base::android::AttachCurrentThread(),
                                            passwords, &serialized_result);
-  sync_pb::ListPasswordsResult list_passwords_result;
+  password_manager::ListPasswordsResult list_passwords_result;
   bool parsing_succeeds = list_passwords_result.ParseFromArray(
       serialized_result.data(), serialized_result.size());
   DCHECK(parsing_succeeds);
@@ -91,10 +96,13 @@ void PasswordStoreAndroidBackendBridgeImpl::OnCompleteWithLogins(
   consumer_->OnCompleteWithLogins(JobId(job_id), CreateFormsVector(passwords));
 }
 
-void PasswordStoreAndroidBackendBridgeImpl::OnError(JNIEnv* env,
-                                                    jint job_id,
-                                                    jint error_type,
-                                                    jint api_error_code) {
+void PasswordStoreAndroidBackendBridgeImpl::OnError(
+    JNIEnv* env,
+    jint job_id,
+    jint error_type,
+    jint api_error_code,
+    jboolean has_connection_result,
+    jint connection_result_code) {
   DCHECK(consumer_);
   // Posting the tasks to the same sequence prevents that synchronous responses
   // try to finish tasks before their registration was completed.
@@ -103,6 +111,10 @@ void PasswordStoreAndroidBackendBridgeImpl::OnError(JNIEnv* env,
 
   if (error.type == password_manager::AndroidBackendErrorType::kExternalError) {
     error.api_error_code = static_cast<int>(api_error_code);
+  }
+
+  if (has_connection_result) {
+    error.connection_result_code = static_cast<int>(connection_result_code);
   }
 
   base::SequencedTaskRunnerHandle::Get()->PostTask(
@@ -144,7 +156,8 @@ JobId PasswordStoreAndroidBackendBridgeImpl::AddLogin(
     const password_manager::PasswordForm& form,
     Account account) {
   JobId job_id = GetNextJobId();
-  sync_pb::PasswordWithLocalData data = PasswordWithLocalDataFromPassword(form);
+  password_manager::PasswordWithLocalData data =
+      PasswordWithLocalDataFromPassword(form);
   Java_PasswordStoreAndroidBackendBridgeImpl_addLogin(
       base::android::AttachCurrentThread(), java_object_, job_id.value(),
       base::android::ToJavaByteArray(base::android::AttachCurrentThread(),
@@ -157,7 +170,8 @@ JobId PasswordStoreAndroidBackendBridgeImpl::UpdateLogin(
     const password_manager::PasswordForm& form,
     Account account) {
   JobId job_id = GetNextJobId();
-  sync_pb::PasswordWithLocalData data = PasswordWithLocalDataFromPassword(form);
+  password_manager::PasswordWithLocalData data =
+      PasswordWithLocalDataFromPassword(form);
   Java_PasswordStoreAndroidBackendBridgeImpl_updateLogin(
       base::android::AttachCurrentThread(), java_object_, job_id.value(),
       base::android::ToJavaByteArray(base::android::AttachCurrentThread(),
@@ -191,4 +205,9 @@ void PasswordStoreAndroidBackendBridgeImpl::OnLoginChanged(JNIEnv* env,
 JobId PasswordStoreAndroidBackendBridgeImpl::GetNextJobId() {
   last_job_id_ = JobId(last_job_id_.value() + 1);
   return last_job_id_;
+}
+
+void PasswordStoreAndroidBackendBridgeImpl::ShowErrorNotification() {
+  Java_PasswordStoreAndroidBackendBridgeImpl_showErrorUi(
+      base::android::AttachCurrentThread(), java_object_);
 }

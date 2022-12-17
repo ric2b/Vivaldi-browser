@@ -17,8 +17,8 @@
 #include "chrome/browser/net/secure_dns_config.h"
 #include "chrome/browser/net/secure_dns_util.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/network/network_configuration_handler.h"
-#include "chromeos/network/network_handler.h"
+#include "chromeos/ash/components/network/network_configuration_handler.h"
+#include "chromeos/ash/components/network/network_handler.h"
 #include "components/country_codes/country_codes.h"
 #include "net/dns/public/doh_provider_entry.h"
 #include "net/dns/public/secure_dns_mode.h"
@@ -94,9 +94,8 @@ void SecureDnsManager::OnPrefChanged() {
       registrar_.prefs()->GetString(prefs::kDnsOverHttpsMode),
       registrar_.prefs()->GetString(prefs::kDnsOverHttpsTemplates));
 
-  chromeos::NetworkHandler::Get()
-      ->network_configuration_handler()
-      ->SetManagerProperty(shill::kDNSProxyDOHProvidersProperty, doh_providers);
+  NetworkHandler::Get()->network_configuration_handler()->SetManagerProperty(
+      shill::kDNSProxyDOHProvidersProperty, doh_providers);
 }
 
 }  // namespace ash

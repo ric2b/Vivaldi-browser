@@ -48,7 +48,6 @@ class DisplayManager;
 }  // namespace display
 
 namespace gfx {
-class Insets;
 class Point;
 }  // namespace gfx
 
@@ -96,6 +95,7 @@ class AshFocusRules;
 class AshTouchTransformController;
 class AssistantControllerImpl;
 class AutoclickController;
+class AutozoomControllerImpl;
 class BackGestureEventHandler;
 class BacklightsForcedOffSetter;
 class BluetoothDeviceStatusUiHandler;
@@ -106,7 +106,7 @@ class CalendarController;
 class CaptureModeController;
 class ControlVHistogramRecorder;
 class CrosDisplayConfig;
-class DarkModeController;
+class DarkLightModeControllerImpl;
 class DesksController;
 class DetachableBaseHandler;
 class DetachableBaseNotificationController;
@@ -132,6 +132,7 @@ class FocusCycler;
 class FrameThrottlingController;
 class FullscreenMagnifierController;
 class GeolocationController;
+class GlanceablesController;
 class HighContrastController;
 class HighlighterController;
 class HoldingSpaceController;
@@ -177,10 +178,12 @@ class PolicyRecommendationRestorer;
 class PowerButtonController;
 class PowerEventObserver;
 class PowerPrefs;
+class PrivacyHubController;
 class PrivacyScreenController;
 class ProjectingObserver;
 class ProjectorControllerImpl;
 class RgbKeyboardManager;
+class RefreshRateThrottleController;
 class ResizeShadowController;
 class ResolutionNotificationController;
 class RootWindowController;
@@ -220,6 +223,7 @@ class WindowCycleController;
 class WindowPositioner;
 class WindowTreeHostManager;
 class ArcInputMethodBoundsTracker;
+class MultiCaptureServiceClient;
 
 enum class LoginStatus;
 
@@ -313,18 +317,14 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<views::NonClientFrameView> CreateDefaultNonClientFrameView(
       views::Widget* widget);
 
-  // Please note: this is deprecated. Please use
-  // `WorkAreaInsets::UpdateWorkAreaInsetsForTest()` for test purpose.
-  // Sets work area insets of the display containing |window|, pings observers.
-  // TODO(yongshun): Get rid of this API and update existing test cases.
-  void SetDisplayWorkAreaInsets(aura::Window* window,
-                                const gfx::Insets& insets);
-
   // Called when a casting session is started or stopped.
   void OnCastingSessionStartedOrStopped(bool started);
 
   // Called when a root window is created.
   void OnRootWindowAdded(aura::Window* root_window);
+
+  // Called when a root window is about to shutdown.
+  void OnRootWindowWillShutdown(aura::Window* root_window);
 
   // Called when dictation is activated.
   void OnDictationStarted();
@@ -369,6 +369,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   AutoclickController* autoclick_controller() {
     return autoclick_controller_.get();
   }
+  AutozoomControllerImpl* autozoom_controller() {
+    return autozoom_controller_.get();
+  }
   BacklightsForcedOffSetter* backlights_forced_off_setter() {
     return backlights_forced_off_setter_.get();
   }
@@ -386,8 +389,8 @@ class ASH_EXPORT Shell : public SessionObserver,
     return cros_display_config_.get();
   }
   ::wm::CursorManager* cursor_manager() { return cursor_manager_.get(); }
-  DarkModeController* dark_mode_controller() {
-    return dark_mode_controller_.get();
+  DarkLightModeControllerImpl* dark_light_mode_controller() {
+    return dark_light_mode_controller_.get();
   }
   DesksController* desks_controller() { return desks_controller_.get(); }
   PersistentDesksBarController* persistent_desks_bar_controller() {
@@ -406,6 +409,10 @@ class ASH_EXPORT Shell : public SessionObserver,
     return display_configuration_controller_.get();
   }
 
+  RefreshRateThrottleController* refresh_rate_throttle_controller() {
+    return refresh_rate_throttle_controller_.get();
+  }
+
   DisplayAlignmentController* display_alignment_controller() {
     return display_alignment_controller_.get();
   }
@@ -417,6 +424,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   DisplayErrorObserver* display_error_observer() {
     return display_error_observer_.get();
+  }
+
+  ProjectingObserver* projecting_observer() {
+    return projecting_observer_.get();
   }
 
   DisplayHighlightController* display_highlight_controller() {
@@ -449,6 +460,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   GeolocationController* geolocation_controller() {
     return geolocation_controller_.get();
+  }
+  GlanceablesController* glanceables_controller() {
+    return glanceables_controller_.get();
   }
   HighlighterController* highlighter_controller() {
     return highlighter_controller_.get();
@@ -494,6 +508,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return logout_confirmation_controller_.get();
   }
   MediaControllerImpl* media_controller() { return media_controller_.get(); }
+  MediaNotificationProviderImpl* media_notification_provider() {
+    return media_notification_provider_.get();
+  }
   MessageCenterAshImpl* message_center_ash_impl() {
     return message_center_ash_impl_.get();
   }
@@ -535,11 +552,17 @@ class ASH_EXPORT Shell : public SessionObserver,
   PowerEventObserver* power_event_observer() {
     return power_event_observer_.get();
   }
+  PrivacyHubController* privacy_hub_controller() {
+    return privacy_hub_controller_.get();
+  }
   PrivacyScreenController* privacy_screen_controller() {
     return privacy_screen_controller_.get();
   }
   quick_pair::Mediator* quick_pair_mediator() {
     return quick_pair_mediator_.get();
+  }
+  MultiCaptureServiceClient* multi_capture_service_client() {
+    return multi_capture_service_client_.get();
   }
   ResizeShadowController* resize_shadow_controller() {
     return resize_shadow_controller_.get();
@@ -783,11 +806,12 @@ class ASH_EXPORT Shell : public SessionObserver,
   scoped_refptr<dbus::Bus> dbus_bus_;
   std::unique_ptr<AshDBusServices> ash_dbus_services_;
   std::unique_ptr<AssistantControllerImpl> assistant_controller_;
+  std::unique_ptr<AutozoomControllerImpl> autozoom_controller_;
   std::unique_ptr<BacklightsForcedOffSetter> backlights_forced_off_setter_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CalendarController> calendar_controller_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
-  std::unique_ptr<DarkModeController> dark_mode_controller_;
+  std::unique_ptr<DarkLightModeControllerImpl> dark_light_mode_controller_;
   std::unique_ptr<DesksController> desks_controller_;
   std::unique_ptr<DesksTemplatesDelegate> desks_templates_delegate_;
   std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
@@ -803,6 +827,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<FocusCycler> focus_cycler_;
   std::unique_ptr<FloatController> float_controller_;
   std::unique_ptr<GeolocationController> geolocation_controller_;
+  std::unique_ptr<GlanceablesController> glanceables_controller_;
   std::unique_ptr<HoldingSpaceController> holding_space_controller_;
   std::unique_ptr<PowerPrefs> power_prefs_;
   std::unique_ptr<SnoopingProtectionController> snooping_protection_controller_;
@@ -835,6 +860,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ParentAccessController> parent_access_controller_;
   std::unique_ptr<PciePeripheralNotificationController>
       pcie_peripheral_notification_controller_;
+  std::unique_ptr<PrivacyHubController> privacy_hub_controller_;
   std::unique_ptr<UsbPeripheralNotificationController>
       usb_peripheral_notification_controller_;
   std::unique_ptr<PersistentDesksBarController>
@@ -917,6 +943,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DisplayConfigurationController>
       display_configuration_controller_;
   std::unique_ptr<DisplayConfigurationObserver> display_configuration_observer_;
+  std::unique_ptr<RefreshRateThrottleController>
+      refresh_rate_throttle_controller_;
 
   std::unique_ptr<ScreenPinningController> screen_pinning_controller_;
 
@@ -992,6 +1020,8 @@ class ASH_EXPORT Shell : public SessionObserver,
       login_unlock_throughput_recorder_;
 
   std::unique_ptr<OcclusionTrackerPauser> occlusion_tracker_pauser_;
+
+  std::unique_ptr<MultiCaptureServiceClient> multi_capture_service_client_;
 
   std::unique_ptr<quick_pair::Mediator> quick_pair_mediator_;
 

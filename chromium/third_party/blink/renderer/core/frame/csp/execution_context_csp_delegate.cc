@@ -233,6 +233,11 @@ void ExecutionContextCSPDelegate::DisableEval(const String& error_message) {
   execution_context_->DisableEval(error_message);
 }
 
+void ExecutionContextCSPDelegate::SetWasmEvalErrorMessage(
+    const String& error_message) {
+  execution_context_->SetWasmEvalErrorMessage(error_message);
+}
+
 void ExecutionContextCSPDelegate::ReportBlockedScriptExecutionToInspector(
     const String& directive_text) {
   probe::ScriptExecutionBlockedByCSP(execution_context_, directive_text);
@@ -259,9 +264,6 @@ void ExecutionContextCSPDelegate::DidAddContentSecurityPolicies(
           break;
         case network::mojom::ContentSecurityPolicySource::kMeta:
           Count(WebFeature::kMainFrameCSPViaMeta);
-          break;
-        case network::mojom::ContentSecurityPolicySource::kOriginPolicy:
-          Count(WebFeature::kMainFrameCSPViaOriginPolicy);
           break;
       }
     }

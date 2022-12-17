@@ -4,14 +4,14 @@
 
 #include "chrome/browser/ash/attestation/soft_bind_attestation_flow.h"
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "base/bind.h"
 #include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/attestation/attestation_ca_client.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
-#include "chromeos/dbus/attestation/attestation_client.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/attestation/attestation_client.h"
 #include "chromeos/dbus/constants/attestation_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/openssl_util.h"
@@ -139,13 +139,13 @@ void SoftBindAttestationFlow::Session::ReportFailure(
     LOG(ERROR) << "Attestation session failure callback in null.";
     return;
   }
-  std::move(callback_).Run(
-      std::vector<std::string>{"INVALID:" + error_message});
+  std::move(callback_).Run(std::vector<std::string>{"INVALID:" + error_message},
+                           /*valid=*/false);
 }
 
 void SoftBindAttestationFlow::Session::ReportSuccess(
     const std::vector<std::string>& certificate_chain) {
-  std::move(callback_).Run(certificate_chain);
+  std::move(callback_).Run(certificate_chain, /*valid=*/true);
 }
 
 SoftBindAttestationFlow::SoftBindAttestationFlow()
@@ -169,7 +169,8 @@ void SoftBindAttestationFlow::GetCertificate(Callback callback,
   if (!IsAttestationAllowedByPolicy()) {
     LOG(ERROR) << "Attestation not allowed by device policy";
     std::move(callback).Run(
-        std::vector<std::string>{"INVALID:attestationNotAllowed"});
+        std::vector<std::string>{"INVALID:attestationNotAllowed"},
+        /*valid=*/false);
     return;
   }
   GetCertificateInternal(

@@ -37,6 +37,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -44,6 +46,9 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -56,12 +61,12 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/manifest/capture_links.mojom-shared.h"
-#include "third_party/blink/public/mojom/manifest/handle_links.mojom-shared.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -317,7 +322,8 @@ std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
 }
 
 std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
-                                           const uint32_t seed) {
+                                           const uint32_t seed,
+                                           bool allow_system_source) {
   RandomHelper random(seed);
 
   const std::string seed_str = base::NumberToString(seed);
@@ -339,7 +345,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   std::vector<WebAppManagement::Type> management_types;
 
   // Generate all possible permutations of field values in a random way:
-  if (AreSystemWebAppsSupported() && random.next_bool()) {
+  if (allow_system_source && random.next_bool()) {
     app->AddSource(WebAppManagement::kSystem);
     management_types.push_back(WebAppManagement::kSystem);
   }
@@ -517,7 +523,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   if (random.next_bool()) {
     app->SetLaunchHandler(
-        LaunchHandler{random.next_enum<LaunchHandler::RouteTo>()});
+        LaunchHandler{random.next_enum<LaunchHandler::ClientMode>()});
   }
 
   const base::Time manifest_update_time =
@@ -526,8 +532,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   if (random.next_bool())
     app->SetParentAppId(base::NumberToString(random.next_uint()));
-
-  app->SetHandleLinks(random.next_enum<blink::mojom::HandleLinks>());
 
   if (random.next_bool())
     app->SetPermissionsPolicy(CreateRandomPermissionsPolicy(random));
@@ -547,11 +551,13 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
     chromeos_data->show_in_management = cros_random.next_bool();
     chromeos_data->is_disabled = cros_random.next_bool();
     chromeos_data->oem_installed = cros_random.next_bool();
+    // Comply with DCHECK that system apps cannot be OEM installed.
+    if (app->IsSystemApp())
+      chromeos_data->oem_installed = false;
     app->SetWebAppChromeOsData(std::move(chromeos_data));
   }
 
-  base::flat_map<WebAppManagement::Type, WebApp::ExternalManagementConfig>
-      management_to_external_config;
+  WebApp::ExternalConfigMap management_to_external_config;
   for (WebAppManagement::Type type : management_types) {
     if (type == WebAppManagement::kSync)
       continue;
@@ -570,6 +576,47 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   app->SetAppSizeInBytes(random.next_uint());
   app->SetDataSizeInBytes(random.next_uint());
+
+  if (random.next_bool()) {
+    blink::Manifest::TabStrip tab_strip;
+    tab_strip.home_tab =
+        random.next_enum<blink::mojom::TabStripMemberVisibility>();
+    if (random.next_bool()) {
+      blink::Manifest::NewTabButtonParams new_tab_button_params;
+      if (random.next_bool()) {
+        new_tab_button_params.url = scope.Resolve(
+            "new_tab_button_url" + base::NumberToString(random.next_uint()));
+      }
+      tab_strip.new_tab_button = new_tab_button_params;
+    } else {
+      tab_strip.new_tab_button =
+          random.next_enum<blink::mojom::TabStripMemberVisibility>();
+    }
+    app->SetTabStrip(std::move(tab_strip));
+  }
+
+  app->SetAlwaysShowToolbarInFullscreen(random.next_bool());
+
+  if (random.next_bool()) {
+    proto::WebAppOsIntegrationState state;
+    app->SetCurrentOsIntegrationStates(state);
+  }
+
+  if (random.next_bool()) {
+    using IsolationDataContent = decltype(WebApp::IsolationData::content);
+    constexpr size_t kNumContentTypes =
+        absl::variant_size<IsolationDataContent>::value;
+    IsolationDataContent content_types[] = {
+        WebApp::IsolationData::InstalledBundle{.path = seed_str},
+        WebApp::IsolationData::DevModeBundle{.path = seed_str},
+        WebApp::IsolationData::DevModeProxy{.proxy_url = seed_str},
+    };
+    static_assert(std::size(content_types) == kNumContentTypes);
+
+    WebApp::IsolationData isolation_data(
+        content_types[random.next_uint(kNumContentTypes)]);
+    app->SetIsolationData(isolation_data);
+  }
 
   return app;
 }
@@ -622,11 +669,52 @@ void CheckServiceWorkerStatus(const GURL& url,
 }
 
 void SetWebAppSettingsListPref(Profile* profile, const base::StringPiece pref) {
-  base::JSONReader::ValueWithError result =
-      base::JSONReader::ReadAndReturnValueWithError(
-          pref, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
-  DCHECK(result.value && result.value->is_list()) << result.error_message;
-  profile->GetPrefs()->Set(prefs::kWebAppSettings, std::move(*result.value));
+  auto result = base::JSONReader::ReadAndReturnValueWithError(
+      pref, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
+  DCHECK(result.has_value()) << result.error().message;
+  DCHECK(result->is_list());
+  profile->GetPrefs()->Set(prefs::kWebAppSettings, std::move(*result));
+}
+
+void AddInstallUrlData(PrefService* pref_service,
+                       WebAppSyncBridge* sync_bridge,
+                       const AppId& app_id,
+                       const GURL& url,
+                       const ExternalInstallSource& source) {
+  ScopedRegistryUpdate update(sync_bridge);
+  WebApp* app_to_update = update->UpdateApp(app_id);
+  DCHECK(app_to_update);
+
+  // Adding external app data (source and URL) to web_app DB.
+  app_to_update->AddInstallURLToManagementExternalConfigMap(
+      ConvertExternalInstallSourceToSource(source), url);
+
+  // Add to legacy external pref storage.
+  // TODO(crbug.com/1339965): Clean up after external pref migration is
+  // complete.
+  ExternallyInstalledWebAppPrefs(pref_service).Insert(url, app_id, source);
+}
+
+void AddInstallUrlAndPlaceholderData(PrefService* pref_service,
+                                     WebAppSyncBridge* sync_bridge,
+                                     const AppId& app_id,
+                                     const GURL& url,
+                                     const ExternalInstallSource& source,
+                                     bool is_placeholder) {
+  ScopedRegistryUpdate update(sync_bridge);
+  ExternallyInstalledWebAppPrefs prefs(pref_service);
+  WebApp* app_to_update = update->UpdateApp(app_id);
+  DCHECK(app_to_update);
+
+  // Adding install_url, source and placeholder information to the web_app DB.
+  app_to_update->AddExternalSourceInformation(
+      ConvertExternalInstallSourceToSource(source), url, is_placeholder);
+
+  // Add to legacy external pref storage.
+  // TODO(crbug.com/1339965): Clean up after external pref migration is
+  // complete.
+  prefs.Insert(url, app_id, source);
+  prefs.SetIsPlaceholder(url, is_placeholder);
 }
 
 }  // namespace test

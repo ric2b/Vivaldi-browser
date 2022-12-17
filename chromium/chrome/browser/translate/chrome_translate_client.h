@@ -137,17 +137,13 @@ class ChromeTranslateClient
   void WebContentsDestroyed() override;
 
 #if !BUILDFLAG(IS_ANDROID)
-  // Shows the translate bubble.
+  // Shows the Full Page Translate bubble.
   ShowTranslateBubbleResult ShowBubble(
       translate::TranslateStep step,
       const std::string& source_language,
       const std::string& target_language,
       translate::TranslateErrors::Type error_type,
       bool is_user_gesture);
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-  void OnTranslateMessageDismissed();
 #endif
 
   std::unique_ptr<translate::ContentTranslateDriver> translate_driver_;

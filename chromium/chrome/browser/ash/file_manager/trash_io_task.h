@@ -24,8 +24,7 @@
 
 class Profile;
 
-namespace file_manager {
-namespace io_task {
+namespace file_manager::io_task {
 
 namespace {
 
@@ -36,9 +35,13 @@ struct TrashEntry {
   TrashEntry(TrashEntry&& other);
   TrashEntry& operator=(TrashEntry&& other);
 
-  // The final location for the trashed file, this may not be the same as the
-  // `url` in the case of naming conflicts.
-  base::FilePath trash_path;
+  // The relative path (to `trash_mount_path`) where the final location of the
+  // trashed file.
+  base::FilePath relative_trash_path;
+
+  // An absolute location which contains the `relative_trash_path` and combined
+  // represents the final location of the trashed file.
+  base::FilePath trash_mount_path;
 
   // The date of deletion, stored in the metadata file to help scheduled
   // cleanup.
@@ -92,24 +95,25 @@ class TrashIOTask : public IOTask {
       const base::FilePath& path);
   void SetCurrentOperationID(
       storage::FileSystemOperationRunner::OperationID id);
-  void ValidateAndDecrementFreeSpace(size_t source_idx,
-                                     const TrashPathsMap::reverse_iterator& it);
+  void ValidateAndDecrementFreeSpace(
+      size_t source_idx,
+      const trash::TrashPathsMap::reverse_iterator& it);
   // Get the free disk space for `trash_parent_path` to know whether the
   // metadata can be written. The `folder_name` is used to differentiate between
   // .Trash and .Trash-1000 folder names on various file systems (both are valid
   // in the XDG spec).
   void GetFreeDiskSpace(size_t source_idx,
-                        const TrashPathsMap::reverse_iterator& it);
+                        const trash::TrashPathsMap::reverse_iterator& it);
   void GotFreeDiskSpace(size_t source_idx,
-                        const TrashPathsMap::reverse_iterator& it,
+                        const trash::TrashPathsMap::reverse_iterator& it,
                         int64_t free_space);
 
   // Sets up the .Trash/files and .Trash/info subdirectories specified by the
   // `trash_subdirectory` parameter. Will create the parent directories as well
   // in the instance .Trash folder does not exist.
-  void SetupSubDirectory(TrashPathsMap::const_iterator& it,
+  void SetupSubDirectory(trash::TrashPathsMap::const_iterator& it,
                          const storage::FileSystemURL trash_subdirectory);
-  void OnSetupSubDirectory(TrashPathsMap::const_iterator& it,
+  void OnSetupSubDirectory(trash::TrashPathsMap::const_iterator& it,
                            const storage::FileSystemURL trash_subdirectory,
                            base::File::Error error);
   base::FilePath MakeRelativeFromBasePath(const base::FilePath& absolute_path);
@@ -156,7 +160,7 @@ class TrashIOTask : public IOTask {
 
   // Maintains the free space required to write all the metadata files along
   // with the underlying locations of the .Trash/{files,info} directories.
-  TrashPathsMap free_space_map_;
+  trash::TrashPathsMap free_space_map_;
 
   // Stores the size reported by the last progress update so we can compute the
   // delta on the next progress update.
@@ -185,7 +189,6 @@ class TrashIOTask : public IOTask {
   base::WeakPtrFactory<TrashIOTask> weak_ptr_factory_{this};
 };
 
-}  // namespace io_task
-}  // namespace file_manager
+}  // namespace file_manager::io_task
 
 #endif  // CHROME_BROWSER_ASH_FILE_MANAGER_TRASH_IO_TASK_H_

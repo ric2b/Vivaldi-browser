@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "base/time/time.h"
-#include "net/cert/internal/parse_certificate.h"
-#include "net/cert/internal/parse_name.h"
+#include "net/cert/pki/parse_certificate.h"
+#include "net/cert/pki/parse_name.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 
@@ -34,6 +34,8 @@ class X509CertificateModel {
   // nickname for the certificate, if available.
   X509CertificateModel(bssl::UniquePtr<CRYPTO_BUFFER> cert_data,
                        std::string nickname);
+  X509CertificateModel(X509CertificateModel&& other);
+  X509CertificateModel& operator=(X509CertificateModel&& other) = default;
   ~X509CertificateModel();
 
   // ---------------------------------------------------------------------------
@@ -139,20 +141,6 @@ class X509CertificateModel {
 // return a string suitable for display that contains both the original and the
 // decoded U-label form.  Otherwise, the string will be returned as is.
 std::string ProcessIDN(const std::string& input);
-
-// Format a buffer as |hex_separator| separated string, with 16 bytes on each
-// line separated using |line_separator|.
-std::string ProcessRawBytesWithSeparators(const unsigned char* data,
-                                          size_t data_length,
-                                          char hex_separator,
-                                          char line_separator);
-
-// Format a buffer as a space separated string, with 16 bytes on each line.
-std::string ProcessRawBytes(const unsigned char* data, size_t data_length);
-
-// Format a buffer as a space separated string, with 16 bytes on each line.
-// |data_length| is the length in bits.
-std::string ProcessRawBits(const unsigned char* data, size_t data_length);
 
 // Parses |public_key_spki_der| as a DER-encoded X.509 SubjectPublicKeyInfo,
 // then formats the public key as a string for displaying. Returns an empty

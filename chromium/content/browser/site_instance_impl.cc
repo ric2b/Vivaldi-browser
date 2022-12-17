@@ -132,6 +132,8 @@ scoped_refptr<SiteInstanceImpl> SiteInstanceImpl::CreateForUrlInfo(
     BrowserContext* browser_context,
     const UrlInfo& url_info,
     bool is_guest) {
+  DCHECK(url_info.is_sandboxed ||
+         url_info.unique_sandbox_id == UrlInfo::kInvalidUniqueSandboxId);
   CHECK(!is_guest || url_info.storage_partition_config.has_value());
 
   if (is_guest && !SiteIsolationPolicy::IsSiteIsolationForGuestsEnabled()) {
@@ -460,7 +462,7 @@ void SiteInstanceImpl::SetSiteInfoToDefault(
   default_site_instance_state_ = std::make_unique<DefaultSiteInstanceState>();
   original_url_ = GetDefaultSiteURL();
   SetSiteInfoInternal(SiteInfo::CreateForDefaultSiteInstance(
-      GetBrowserContext(), storage_partition_config,
+      GetIsolationContext(), storage_partition_config,
       browsing_instance_->web_exposed_isolation_info()));
 }
 
@@ -495,15 +497,14 @@ void SiteInstanceImpl::SetSiteInfoInternal(const SiteInfo& site_info) {
     url::Origin origin(url::Origin::Create(site_info_.process_lock_url()));
     // This is one of two places that origins can be marked as opted-in, the
     // other is
-    // NavigationRequest::AddSameProcessOriginAgentClusterOptInIfNecessary().
+    // NavigationRequest::AddSameProcessOriginAgentClusterStateIfNecessary().
     // This site handles the case where OAC isolation gets a separate process.
     // In future, when SiteInstance Groups are complete, this may revert to
     // being the only call site.
-    policy->AddIsolatedOriginForBrowsingInstance(
+    policy->AddOriginIsolationStateForBrowsingInstance(
         browsing_instance_->isolation_context(), origin,
         true /* is_origin_agent_cluster */,
-        true /* requires_origin_keyed_process */,
-        ChildProcessSecurityPolicy::IsolatedOriginSource::WEB_TRIGGERED);
+        true /* requires_origin_keyed_process */);
   }
 
   if (site_info_.does_site_request_dedicated_process_for_coop()) {
@@ -520,10 +521,8 @@ void SiteInstanceImpl::SetSiteInfoInternal(const SiteInfo& site_info) {
     GURL site(SiteInfo::GetSiteForOrigin(origin));
     ChildProcessSecurityPolicyImpl* policy =
         ChildProcessSecurityPolicyImpl::GetInstance();
-    policy->AddIsolatedOriginForBrowsingInstance(
+    policy->AddCoopIsolatedOriginForBrowsingInstance(
         browsing_instance_->isolation_context(), url::Origin::Create(site),
-        false /* is_origin_agent_cluster */,
-        false /* requires_origin_keyed_process */,
         ChildProcessSecurityPolicy::IsolatedOriginSource::WEB_TRIGGERED);
   }
 
@@ -678,6 +677,16 @@ size_t SiteInstanceImpl::GetRelatedActiveContentsCount() {
   return browsing_instance_->active_contents_count();
 }
 
+namespace {
+
+bool SandboxConfigurationsMatch(const SiteInfo& site_info,
+                                const UrlInfo& url_info) {
+  return site_info.is_sandboxed() == url_info.is_sandboxed &&
+         site_info.unique_sandbox_id() == url_info.unique_sandbox_id;
+}
+
+}  // namespace
+
 bool SiteInstanceImpl::IsSuitableForUrlInfo(const UrlInfo& url_info) {
   const GURL& url = url_info.url;
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -697,8 +706,9 @@ bool SiteInstanceImpl::IsSuitableForUrlInfo(const UrlInfo& url_info) {
   if (url.IsAboutBlank() && !site_info_.is_error_page())
     return true;
 
-  // The is_sandboxed flags must match for this to be a suitable SiteInstance.
-  if (GetSiteInfo().is_sandboxed() != url_info.is_sandboxed)
+  // The is_sandboxed flags and unique_sandbox_ids must match for this to be a
+  // suitable SiteInstance.
+  if (!SandboxConfigurationsMatch(GetSiteInfo(), url_info))
     return false;
 
   // If the site URL is an extension (e.g., for hosted apps or WebUI) but the
@@ -930,7 +940,9 @@ bool SiteInstanceImpl::IsNavigationSameSite(
     const url::Origin& last_committed_origin,
     bool for_outermost_main_frame,
     const UrlInfo& dest_url_info) {
-  if (GetSiteInfo().is_sandboxed() != dest_url_info.is_sandboxed)
+  // The is_sandboxed flags and unique_sandbox_ids must match for this to be a
+  // same-site navigation.
+  if (!SandboxConfigurationsMatch(GetSiteInfo(), dest_url_info))
     return false;
 
   const GURL& dest_url = dest_url_info.url;
@@ -1077,8 +1089,17 @@ bool SiteInstanceImpl::IsSameSite(const IsolationContext& isolation_context,
   if (src_origin.scheme() != dest_origin.scheme())
     return false;
 
-  if (SiteIsolationPolicy::IsStrictOriginIsolationEnabled())
+  // Rely on an origin comparison if StrictOriginIsolation is enabled for all
+  // URLs, or if we're comparing against a sandboxed iframe in a per-origin
+  // mode. Due to an earlier check, at this point
+  // `real_src_url_info.is_sandboxed` and `real_dest_url_info.is_sandboxed` are
+  // known to have the same value.
+  if (SiteIsolationPolicy::IsStrictOriginIsolationEnabled() ||
+      (real_src_url_info.is_sandboxed &&
+       features::kIsolateSandboxedIframesGroupingParam.Get() ==
+           features::IsolateSandboxedIframesGrouping::kPerOrigin)) {
     return src_origin == dest_origin;
+  }
 
   if (!net::registry_controlled_domains::SameDomainOrHost(
           src_origin, dest_origin,
@@ -1135,17 +1156,17 @@ bool SiteInstanceImpl::DoesSiteInfoForURLMatch(const UrlInfo& url_info) {
       CanBePlacedInDefaultSiteInstance(GetIsolationContext(), url_info.url,
                                        site_info)) {
     site_info = SiteInfo::CreateForDefaultSiteInstance(
-        GetBrowserContext(), site_info.storage_partition_config(),
+        GetIsolationContext(), site_info.storage_partition_config(),
         GetWebExposedIsolationInfo());
   }
 
   return site_info_.IsExactMatch(site_info);
 }
 
-void SiteInstanceImpl::PreventOptInOriginIsolation(
+void SiteInstanceImpl::RegisterAsDefaultOriginIsolation(
     const url::Origin& previously_visited_origin) {
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  policy->AddNonIsolatedOriginIfNeeded(
+  policy->AddDefaultIsolatedOriginIfNeeded(
       GetIsolationContext(), previously_visited_origin,
       true /* is_global_walk_or_frame_removal */);
 }
@@ -1371,16 +1392,32 @@ int SiteInstanceImpl::EstimateOriginAgentClusterOverheadForMetrics() {
 }
 
 scoped_refptr<SiteInstanceImpl>
-SiteInstanceImpl::GetCompatibleSandboxedSiteInstance() {
+SiteInstanceImpl::GetCompatibleSandboxedSiteInstance(int unique_sandbox_id) {
   DCHECK(!IsDefaultSiteInstance());
   DCHECK(has_site_);
   const SiteInfo& site_info = GetSiteInfo();
   DCHECK(!site_info.is_sandboxed());
 
   auto result = browsing_instance_->GetSiteInstanceForSiteInfo(
-      site_info.SandboxedClone());
+      site_info.SandboxedClone(unique_sandbox_id));
   result->original_url_ = original_url_;
   return result;
+}
+
+RenderProcessHost* SiteInstanceImpl::GetDefaultProcessForBrowsingInstance() {
+  if (SiteInstanceImpl* default_instance =
+          browsing_instance_->default_site_instance()) {
+    DCHECK(base::FeatureList::IsEnabled(
+        features::kProcessSharingWithDefaultSiteInstances));
+    return default_instance->HasProcess() ? default_instance->GetProcess()
+                                          : nullptr;
+  }
+  if (browsing_instance_->site_instance_group_manager().default_process()) {
+    DCHECK(base::FeatureList::IsEnabled(
+        features::kProcessSharingWithStrictSiteInstances));
+    return browsing_instance_->site_instance_group_manager().default_process();
+  }
+  return nullptr;
 }
 
 }  // namespace content

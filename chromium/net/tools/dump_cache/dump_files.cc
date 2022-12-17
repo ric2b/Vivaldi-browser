@@ -82,7 +82,7 @@ void DumpStats(const base::FilePath& path, disk_cache::CacheAddr addr) {
   size_t offset = address.start_block() * address.BlockSize() +
                   disk_cache::kBlockHeaderSize;
 
-  std::unique_ptr<int32_t[]> buffer(new int32_t[length]);
+  auto buffer = std::make_unique<int32_t[]>(length);
   if (!file->Read(buffer.get(), length, offset))
     return;
 
@@ -109,7 +109,7 @@ void DumpIndexHeader(const base::FilePath& name,
   printf("magic: %x\n", header.magic);
   printf("version: %d.%d\n", header.version >> 16, header.version & 0xffff);
   printf("entries: %d\n", header.num_entries);
-  printf("total bytes: %d\n", header.num_bytes);
+  printf("total bytes: %" PRId64 "\n", header.num_bytes);
   printf("last file number: %d\n", header.last_file);
   printf("current id: %d\n", header.this_id);
   printf("table length: %d\n", header.table_len);
@@ -196,7 +196,7 @@ bool CacheDumper::Init() {
   }
 
   base::FilePath index_name(path_.Append(kIndexName));
-  index_file_ = new disk_cache::MappedFile;
+  index_file_ = base::MakeRefCounted<disk_cache::MappedFile>();
   index_ = reinterpret_cast<disk_cache::Index*>(
       index_file_->Init(index_name, 0));
   if (!index_) {
@@ -294,7 +294,7 @@ bool CacheDumper::HexDump(disk_cache::CacheAddr addr, std::string* out) {
     return false;
 
   size_t size = address.num_blocks() * address.BlockSize();
-  std::unique_ptr<char[]> buffer(new char[size]);
+  auto buffer = std::make_unique<char[]>(size);
 
   size_t offset = address.start_block() * address.BlockSize() +
                   disk_cache::kBlockHeaderSize;
@@ -574,9 +574,9 @@ int DumpEntryAt(const base::FilePath& input_path, const std::string& at) {
     if (entry.long_key && CanDump(entry.long_key))
       dumper.HexDump(entry.long_key, &hex_dump);
 
-    for (int i = 0; i < 4; i++) {
-      if (entry.data_addr[i] && CanDump(entry.data_addr[i]))
-        dumper.HexDump(entry.data_addr[i], &hex_dump);
+    for (disk_cache::CacheAddr data_addr : entry.data_addr) {
+      if (data_addr && CanDump(data_addr))
+        dumper.HexDump(data_addr, &hex_dump);
     }
   }
 

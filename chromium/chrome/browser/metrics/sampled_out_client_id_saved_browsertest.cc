@@ -19,6 +19,10 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_WIN)
+#include "base/test/test_reg_util_win.h"
+#endif  // BUILDFLAG(IS_WIN)
+
 namespace {
 
 // Callback from changing whether reporting is enabled.
@@ -55,6 +59,17 @@ class SampledOutClientIdSavedBrowserTest : public PlatformBrowserTest {
   ~SampledOutClientIdSavedBrowserTest() override = default;
 
   void SetUp() override {
+#if BUILDFLAG(IS_WIN)
+    // Override HKCU to prevent writing to real keys. On Windows, the metrics
+    // reporting consent is stored in the registry, and it is used to determine
+    // the metrics reporting state when it is unset (e.g. during tests, which
+    // start with fresh user data dirs). Otherwise, this may cause flakiness
+    // since tests will sometimes start with metrics reporting enabled and
+    // sometimes disabled.
+    ASSERT_NO_FATAL_FAILURE(
+        override_manager_.OverrideRegistry(HKEY_CURRENT_USER));
+#endif  // BUILDFLAG(IS_WIN)
+
     // Because metrics reporting is disabled in non-Chrome-branded builds,
     // IsMetricsReportingEnabled() always returns false. Enable it here for
     // test consistency between Chromium and Chrome builds, otherwise
@@ -85,6 +100,10 @@ class SampledOutClientIdSavedBrowserTest : public PlatformBrowserTest {
   PrefService* local_state() { return g_browser_process->local_state(); }
 
  private:
+#if BUILDFLAG(IS_WIN)
+  registry_util::RegistryOverrideManager override_manager_;
+#endif  // BUILDFLAG(IS_WIN)
+
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -95,9 +114,7 @@ class SampledOutClientIdSavedBrowserTest : public PlatformBrowserTest {
 // 1) On start up, we determined that they had not consented to metrics
 //    reporting (including first run users), or,
 // 2) They disabled metrics reporting.
-// TODO(crbug.com/1324877): Re-enable this test
-IN_PROC_BROWSER_TEST_F(SampledOutClientIdSavedBrowserTest,
-                       DISABLED_ClientIdSaved) {
+IN_PROC_BROWSER_TEST_F(SampledOutClientIdSavedBrowserTest, ClientIdSaved) {
   // Verify that the client ID is initially empty.
   ASSERT_TRUE(metrics_service()->GetClientId().empty());
   ASSERT_TRUE(

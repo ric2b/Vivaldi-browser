@@ -34,6 +34,7 @@
 #include "ash/login/ui/views_utils.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "ash/public/cpp/login_types.h"
+#include "ash/public/cpp/reauth_reason.h"
 #include "ash/public/mojom/tray_action.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
@@ -56,6 +57,7 @@
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/known_user.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -122,8 +124,8 @@ AuthDisabledData GetTestDisabledAuthData() {
 using LockContentsViewKeyboardUnitTest = LoginKeyboardTestBase;
 
 class LockContentsViewUnitTest : public LoginTestBase {
- protected:
-  LockContentsViewUnitTest() = default;
+ public:
+  LockContentsViewUnitTest() { set_start_session(true); }
   LockContentsViewUnitTest(LockContentsViewUnitTest&) = delete;
   LockContentsViewUnitTest& operator=(LockContentsViewUnitTest&) = delete;
   ~LockContentsViewUnitTest() override = default;
@@ -1169,7 +1171,7 @@ TEST_F(LockContentsViewUnitTest, ShowErrorBubbleOnAuthFailure) {
   EXPECT_FALSE(test_api.auth_error_bubble()->GetVisible());
 }
 
-TEST_F(LockContentsViewUnitTest, AuthErrorButtonClickable) {
+TEST_F(LockContentsViewUnitTest, AuthErrorLockscreenLearnMoreButton) {
   // Build lock screen with a single user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
@@ -1199,8 +1201,18 @@ TEST_F(LockContentsViewUnitTest, AuthErrorButtonClickable) {
   EXPECT_TRUE(test_api.auth_error_bubble()->GetVisible());
 
   // Find button in auth_error_bubble children.
-  views::View* button = FindTopButton(test_api.auth_error_bubble());
-  ASSERT_TRUE(button);
+  views::View* learn_more_button = nullptr;
+  for (views::View* child :
+       test_api.auth_error_bubble()->GetContent()->children()) {
+    if (views::Button::AsButton(child)) {
+      // The bubble should only have one button ("learn more") on the lock
+      // screen.
+      EXPECT_FALSE(learn_more_button);
+      learn_more_button = child;
+    }
+  }
+
+  EXPECT_TRUE(learn_more_button);
 
   // Expect ShowAccountAccessHelp() to be called due to button click.
   EXPECT_CALL(*client, ShowAccountAccessHelpApp(widget()->GetNativeWindow()))
@@ -1209,11 +1221,78 @@ TEST_F(LockContentsViewUnitTest, AuthErrorButtonClickable) {
   // Move mouse to AuthError's ShowAccountAccessHelp button and click it.
   // Should result in ShowAccountAccessHelpApp().
   ui::test::EventGenerator* generator = GetEventGenerator();
-  generator->MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+  generator->MoveMouseTo(learn_more_button->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
 
-  // AuthErrorButton should go away after button press.
+  // The error bubble should go away after button press.
   EXPECT_FALSE(test_api.auth_error_bubble()->GetVisible());
+}
+
+TEST_F(LockContentsViewUnitTest, AuthErrorLoginScreenForgotPasswordButton) {
+  // Enable the "forgot password" button.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kCryptohomeRecoveryFlowUI, features::kCryptohomeRecoveryFlow},
+      {});
+
+  auto* contents = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLogin,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  SetUserCount(1);
+
+  SetWidget(CreateWidgetWithContent(contents));
+
+  LockContentsView::TestApi test_api(contents);
+
+  // Password submit runs mojo.
+  auto client = std::make_unique<MockLoginScreenClient>();
+  client->set_authenticate_user_callback_result(false);
+  EXPECT_CALL(*client, AuthenticateUserWithPasswordOrPin_(
+                           users()[0].basic_user_info.account_id, _, false, _));
+
+  // AuthErrorButton should not be visible yet.
+  EXPECT_FALSE(test_api.auth_error_bubble()->GetVisible());
+
+  // Submit password.
+  PressAndReleaseKey(ui::KeyboardCode::VKEY_A);
+  PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
+  base::RunLoop().RunUntilIdle();
+
+  // Auth Error button should be visible as an incorrect password was given.
+  EXPECT_TRUE(test_api.auth_error_bubble()->GetVisible());
+
+  // There should be two buttons in the error bubble: The "learn more" button
+  // and the "forgot password" button, in that order.
+  std::vector<views::Button*> buttons;
+  for (views::View* child :
+       test_api.auth_error_bubble()->GetContent()->children()) {
+    if (views::Button* button = views::Button::AsButton(child)) {
+      buttons.push_back(button);
+    }
+  }
+  EXPECT_EQ(2u, buttons.size());
+  views::Button* forgot_password_button = buttons[1];
+
+  // Expect the ShowGaiaSignin to be called due to button click.
+  EXPECT_CALL(*client, ShowGaiaSignin(users()[0].basic_user_info.account_id))
+      .Times(1);
+
+  // Move mouse to the "Forgot password" button and click it.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->MoveMouseTo(
+      forgot_password_button->GetBoundsInScreen().CenterPoint());
+  generator->ClickLeftButton();
+
+  // The error bubble should be hidden because of the button press.
+  EXPECT_FALSE(test_api.auth_error_bubble()->GetVisible());
+
+  absl::optional<int> reauth_reason =
+      user_manager::KnownUser(Shell::Get()->local_state())
+          .FindReauthReason(users()[0].basic_user_info.account_id);
+  EXPECT_TRUE(reauth_reason.has_value());
+  EXPECT_EQ(reauth_reason.value(),
+            static_cast<int>(ReauthReason::FORGOT_PASSWORD));
 }
 
 // Gaia is never shown on lock, no mater how many times auth fails.
@@ -1239,6 +1318,50 @@ TEST_F(LockContentsViewUnitTest, GaiaNeverShownOnLockAfterFailedAuth) {
   EXPECT_CALL(*client, ShowGaiaSignin(_)).Times(0);
   for (int i = 0; i < LockContentsView::kLoginAttemptsBeforeGaiaDialog + 1; ++i)
     submit_password();
+}
+
+// Gaia should not be shown after first failed login attempt for a user, even if
+// there are many failed login attempts made by other users on the same device.
+TEST_F(LockContentsViewUnitTest, GaiaNeverShownAfterFirstFailedLoginAttempt) {
+  // Build lock screen with two users.
+  auto* contents = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLogin,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  SetUserCount(2);
+  SetWidget(CreateWidgetWithContent(contents));
+
+  auto client = std::make_unique<MockLoginScreenClient>();
+  client->set_authenticate_user_callback_result(false);
+
+  auto submit_password = [&]() {
+    PressAndReleaseKey(ui::KeyboardCode::VKEY_A);
+    PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
+    base::RunLoop().RunUntilIdle();
+  };
+
+  // ShowGaiaSignin is never triggered.
+  EXPECT_CALL(*client, ShowGaiaSignin(_)).Times(0);
+  for (int i = 0; i < LockContentsView::kLoginAttemptsBeforeGaiaDialog - 1; ++i)
+    submit_password();
+  Mock::VerifyAndClearExpectations(client.get());
+
+  // Simulate a button click on the secondary UserView.
+  LoginAuthUserView::TestApi secondary_user(LockContentsView::TestApi(contents)
+                                                .opt_secondary_big_view()
+                                                ->auth_user());
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->MoveMouseTo(
+      secondary_user.user_view()->GetBoundsInScreen().CenterPoint());
+  generator->ClickLeftButton();
+  EXPECT_TRUE(LoginPasswordView::TestApi(secondary_user.password_view())
+                  .textfield()
+                  ->HasFocus());
+
+  // Verify ShowGaiaSignin is not triggered for other users.
+  EXPECT_CALL(*client, ShowGaiaSignin(_)).Times(0);
+  submit_password();
+  Mock::VerifyAndClearExpectations(client.get());
 }
 
 // Gaia is shown in login on the 4th bad password attempt.
@@ -3241,7 +3364,7 @@ class LockContentsViewWithKioskLicenseTest : public LoginTestBase {
  protected:
   LockContentsViewWithKioskLicenseTest() {
     scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kEnableKioskLoginScreen);
+        ash::features::kCryptohomeRecoveryFlowUI);
   }
   LockContentsViewWithKioskLicenseTest(LockContentsViewWithKioskLicenseTest&) =
       delete;
@@ -3250,9 +3373,8 @@ class LockContentsViewWithKioskLicenseTest : public LoginTestBase {
   ~LockContentsViewWithKioskLicenseTest() override = default;
 
   void SetUp() override {
-    set_start_session(false);
     LoginTestBase::SetUp();
-    login_shelf_view_ = GetPrimaryShelf()->shelf_widget()->login_shelf_view();
+    login_shelf_view_ = GetPrimaryShelf()->shelf_widget()->GetLoginShelfView();
     // Set initial states.
     NotifySessionStateChanged(session_manager::SessionState::OOBE);
   }
@@ -3293,7 +3415,7 @@ TEST_F(LockContentsViewWithKioskLicenseTest,
   SetNumberOfKioskApps(1);
 
   EXPECT_TRUE(test_api.kiosk_default_message());
-  EXPECT_FALSE(test_api.kiosk_default_message()->GetWidget()->IsVisible());
+  EXPECT_FALSE(test_api.kiosk_default_message()->GetVisible());
 }
 
 // Checks default message hidden if device is not with kiosk license and has
@@ -3339,7 +3461,7 @@ TEST_F(LockContentsViewWithKioskLicenseTest,
   SetNumberOfKioskApps(0);
 
   EXPECT_TRUE(test_api.kiosk_default_message());
-  EXPECT_TRUE(test_api.kiosk_default_message()->GetWidget()->IsVisible());
+  EXPECT_TRUE(test_api.kiosk_default_message()->GetVisible());
 }
 
 // Checks default message appeared if device is with kiosk license, no
@@ -3363,7 +3485,7 @@ TEST_F(LockContentsViewWithKioskLicenseTest,
   SetNumberOfKioskApps(0);
 
   EXPECT_TRUE(test_api.kiosk_default_message());
-  EXPECT_TRUE(test_api.kiosk_default_message()->GetWidget()->IsVisible());
+  EXPECT_TRUE(test_api.kiosk_default_message()->GetVisible());
 }
 
 // Checks default message appeared if device is with kiosk license and no
@@ -3388,12 +3510,12 @@ TEST_F(LockContentsViewWithKioskLicenseTest,
   SetNumberOfKioskApps(0);
 
   EXPECT_TRUE(test_api.kiosk_default_message());
-  EXPECT_TRUE(test_api.kiosk_default_message()->GetWidget()->IsVisible());
+  EXPECT_TRUE(test_api.kiosk_default_message()->GetVisible());
 
   SetNumberOfKioskApps(1);
 
   EXPECT_TRUE(test_api.kiosk_default_message());
-  EXPECT_FALSE(test_api.kiosk_default_message()->GetWidget()->IsVisible());
+  EXPECT_FALSE(test_api.kiosk_default_message()->GetVisible());
 }
 
 }  // namespace ash

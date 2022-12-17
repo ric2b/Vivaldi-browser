@@ -35,6 +35,7 @@ import java.util.stream.Stream;
 /**
  * Utility class for holding a Tab and relevant objects for media notification tests.
  */
+@SuppressWarnings("DoNotMock") // Mocks GURL
 public class MediaNotificationTestTabHolder {
     @Mock
     UrlFormatter.Natives mUrlFormatterJniMock;
@@ -95,8 +96,8 @@ public class MediaNotificationTestTabHolder {
         mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver.titleWasSet(title);
     }
 
-    public void simulateFaviconUpdated(Bitmap icon) {
-        mMediaSessionTabHelper.mTabObserver.onFaviconUpdated(mTab, icon);
+    public void simulateFaviconUpdated(Bitmap icon, GURL iconUrl) {
+        mMediaSessionTabHelper.mTabObserver.onFaviconUpdated(mTab, icon, iconUrl);
     }
 
     public void simulateMediaSessionStateChanged(boolean isControllable, boolean isSuspended) {
@@ -130,13 +131,13 @@ public class MediaNotificationTestTabHolder {
                 null /* initiatorOrigin */, 0 /* pageTransition */, false /* isPost */,
                 false /* hasUserGesture */, false /* isRedirect */, false /* isExternalProtocol */,
                 0 /* navigationId */, false /* isPageActivation */, false /* isReload */);
-        mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver.didStartNavigation(
-                navigation);
+        mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver
+                .didStartNavigationInPrimaryMainFrame(navigation);
 
         navigation.didFinish(gurl, false /* isErrorPage */, true /* hasCommitted */,
                 false /* isFragmentNavigation */, false /* isDownload */,
                 false /* isValidSearchFormUrl */, 0 /* pageTransition */, 0 /* errorCode */,
-                200 /* httpStatusCode */);
+                200 /* httpStatusCode */, false /* isExternalProtocol */);
         mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver.didFinishNavigation(
                 navigation);
     }

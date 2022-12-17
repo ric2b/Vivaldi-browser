@@ -9,8 +9,8 @@
 #include "base/bind.h"
 #include "base/synchronization/waitable_event.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
-#include "gpu/ipc/scheduler_sequence.h"
-#include "gpu/ipc/shared_image_interface_in_process.h"
+#include "gpu/command_buffer/service/scheduler_sequence.h"
+#include "gpu/command_buffer/service/shared_image_interface_in_process.h"
 
 namespace viz {
 
@@ -49,9 +49,6 @@ DisplayCompositorMemoryAndTaskController::
       base::Unretained(this), task_executor, image_factory, &event);
   gpu_task_scheduler_->GetTaskSequence()->ScheduleTask(std::move(callback), {});
   event.Wait();
-
-  // TODO(weiliangc): Move VizProcessContextProvider initialization here to take
-  // ownership of the shared image interface.
 }
 
 DisplayCompositorMemoryAndTaskController::

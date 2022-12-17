@@ -6,7 +6,8 @@
  * @fileoverview 'settings-device-page' is the settings page for device and
  * peripheral settings.
  */
-import '//resources/cr_elements/cr_link_row/cr_link_row.js';
+import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
+import './audio.js';
 import './display.js';
 import './keyboard.js';
 import './pointers.js';
@@ -17,12 +18,12 @@ import './stylus.js';
 import '../../prefs/prefs.js';
 import '../../settings_page/settings_animated_pages.js';
 import '../../settings_page/settings_subpage.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 
-import {I18nBehavior, I18nBehaviorInterface} from '//resources/js/i18n_behavior.m.js';
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
-import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from '//resources/js/web_ui_listener_behavior.m.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Router} from '../../router.js';
 import {routes} from '../os_route.js';
@@ -93,6 +94,18 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
       },
 
       /**
+       * Whether audio management info should be shown.
+       * @protected
+       */
+      showAudioInfo_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableAudioSettingsPage');
+        },
+        readOnly: true,
+      },
+
+      /**
        * Whether storage management info should be hidden.
        * @private
        */
@@ -122,6 +135,9 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
           }
           if (routes.DISPLAY) {
             map.set(routes.DISPLAY.path, '#displayRow');
+          }
+          if (routes.AUDIO) {
+            map.set(routes.AUDIO.path, '#audioRow');
           }
           if (routes.STORAGE) {
             map.set(routes.STORAGE.path, '#storageRow');
@@ -236,6 +252,14 @@ class SettingsDevicePageElement extends SettingsDevicePageElementBase {
    */
   onDisplayTap_() {
     Router.getInstance().navigateTo(routes.DISPLAY);
+  }
+
+  /**
+   * Handler for tapping the Audio settings menu item.
+   * @private
+   */
+  onAudioTap_() {
+    Router.getInstance().navigateTo(routes.AUDIO);
   }
 
   /**

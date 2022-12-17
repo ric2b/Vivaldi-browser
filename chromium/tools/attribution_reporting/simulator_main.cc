@@ -16,6 +16,7 @@
 #include "base/values.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/attribution_reporting.h"
+#include "content/public/test/attribution_config.h"
 #include "content/public/test/attribution_simulator.h"
 #include "content/public/test/attribution_simulator_environment.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
@@ -189,21 +190,20 @@ int ProcessJsonString(const std::string& json_input,
                       const content::AttributionSimulationOptions& options,
                       bool copy_input_to_output,
                       int json_write_options) {
-  base::JSONReader::ValueWithError result =
-      base::JSONReader::ReadAndReturnValueWithError(
-          json_input, base::JSONParserOptions::JSON_PARSE_RFC);
-  if (!result.value) {
-    std::cerr << "failed to deserialize input: " << result.error_message
+  auto result = base::JSONReader::ReadAndReturnValueWithError(
+      json_input, base::JSONParserOptions::JSON_PARSE_RFC);
+  if (!result.has_value()) {
+    std::cerr << "failed to deserialize input: " << result.error().message
               << std::endl;
     return 1;
   }
 
   base::Value input_copy;
   if (copy_input_to_output)
-    input_copy = result.value->Clone();
+    input_copy = result->Clone();
 
-  base::Value output = content::RunAttributionSimulation(
-      std::move(*result.value), options, std::cerr);
+  base::Value output =
+      content::RunAttributionSimulation(std::move(*result), options, std::cerr);
   if (output.type() == base::Value::Type::NONE)
     return 1;
 
@@ -309,18 +309,18 @@ int main(int argc, char* argv[]) {
     noise_seed = value;
   }
 
-  auto randomized_response_rates =
-      content::AttributionRandomizedResponseRates::kDefault;
+  auto config = content::AttributionConfig::kDefault;
 
   if (!ParseRandomizedResponseRateSwitch(
           command_line, kSwitchRandomizedResponseRateNavigation,
-          &randomized_response_rates.navigation)) {
+          &config.event_level_limit
+               .navigation_source_randomized_response_rate)) {
     return 1;
   }
 
-  if (!ParseRandomizedResponseRateSwitch(command_line,
-                                         kSwitchRandomizedResponseRateEvent,
-                                         &randomized_response_rates.event)) {
+  if (!ParseRandomizedResponseRateSwitch(
+          command_line, kSwitchRandomizedResponseRateEvent,
+          &config.event_level_limit.event_source_randomized_response_rate)) {
     return 1;
   }
 
@@ -369,7 +369,7 @@ int main(int argc, char* argv[]) {
   content::AttributionSimulationOptions options({
       .noise_mode = noise_mode,
       .noise_seed = noise_seed,
-      .randomized_response_rates = randomized_response_rates,
+      .config = config,
       .delay_mode = delay_mode,
       .remove_report_ids = command_line.HasSwitch(kSwitchRemoveReportIds),
       .report_time_format = report_time_format,

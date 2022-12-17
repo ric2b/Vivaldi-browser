@@ -83,7 +83,7 @@ void VivaldiWebSource::ExtractRequestTypeAndData(const GURL& url,
   }
 }
 
-std::string VivaldiWebSource::GetMimeType(const std::string&) {
+std::string VivaldiWebSource::GetMimeType(const GURL&) {
   return "text/html";
 }
 

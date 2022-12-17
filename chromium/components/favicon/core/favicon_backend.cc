@@ -17,6 +17,13 @@
 #include "components/favicon_base/select_favicon_frames.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "url/origin.h"
+
+#include "base/base64.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
+#include "app/vivaldi_apptools.h"
 
 namespace favicon {
 
@@ -50,6 +57,12 @@ bool AreIconTypesEquivalent(favicon_base::IconType type_a,
   return false;
 }
 
+struct VivaldiPreloadedFavicon {
+  base::StringPiece page_url;
+  base::StringPiece favicon_url;
+  base::StringPiece favicon_png_base64;
+};
+#include "components/favicon/vivaldi_preloaded_favicons.inc"
 }  // namespace
 
 // static
@@ -211,20 +224,31 @@ UpdateFaviconMappingsResult FaviconBackend::UpdateFaviconMappingsAndFetch(
     favicon_base::IconType icon_type,
     const std::vector<int>& desired_sizes) {
   UpdateFaviconMappingsResult result;
-  const favicon_base::FaviconID favicon_id =
-      db_->GetFaviconIDForFaviconURL(icon_url, icon_type);
+  const auto favicon_id = db_->GetFaviconIDForFaviconURL(icon_url, icon_type);
   if (!favicon_id)
     return result;
+  bool per_origin_favicon_id_found = false;
 
   for (const GURL& page_url : page_urls) {
-    bool mappings_updated =
-        SetFaviconMappingsForPageAndRedirects(page_url, icon_type, favicon_id);
+    // We check per-origin so that we don't cross-origin load from the cache.
+    // See crbug.com/1300214 for more context.
+    const auto per_origin_favicon_id = db_->GetFaviconIDForFaviconURL(
+        icon_url, icon_type, url::Origin::Create(page_url));
+    if (!per_origin_favicon_id)
+      continue;
+    per_origin_favicon_id_found = true;
+    bool mappings_updated = SetFaviconMappingsForPageAndRedirects(
+        page_url, icon_type, per_origin_favicon_id);
     if (mappings_updated)
       result.updated_page_urls.insert(page_url);
   }
 
-  result.bitmap_results =
-      GetFaviconBitmapResultsForBestMatch({favicon_id}, desired_sizes);
+  // We add the favicon if at least one origin saw it *or* if this was loaded
+  // without linking the favicon to any page url (used by history service).
+  if (per_origin_favicon_id_found || page_urls.empty()) {
+    result.bitmap_results =
+        GetFaviconBitmapResultsForBestMatch({favicon_id}, desired_sizes);
+  }
   return result;
 }
 
@@ -529,6 +553,7 @@ FaviconBackend::FaviconBackend(std::unique_ptr<FaviconDatabase> db,
   DCHECK(delegate);
   DCHECK(db_);
   db_->BeginTransaction();
+  SetVivaldiPreloadedFavicons();
 }
 
 bool FaviconBackend::SetFaviconBitmaps(favicon_base::FaviconID icon_id,
@@ -795,5 +820,35 @@ bool FaviconBackend::ClearAllExcept(const std::vector<GURL>& kept_page_urls) {
   db_->Vacuum();
   db_->BeginTransaction();
   return true;
+}
+
+void FaviconBackend::SetVivaldiPreloadedFavicons() {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+  db_->DeleteVivaldiPreloadedFavicons();
+
+  for (size_t i = 0; i < std::size(kPreloadedFavicons); i++) {
+    std::string png;
+    if (!base::Base64Decode(kPreloadedFavicons[i].favicon_png_base64, &png)) {
+      NOTREACHED();
+    }
+    gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(
+            reinterpret_cast<const unsigned char*>(png.c_str()), png.length());
+    gfx::ImageSkia image_skia = image.AsImageSkia();
+    image_skia.EnsureRepsForSupportedScales();
+    std::vector<SkBitmap> bitmaps;
+    const std::vector<float> favicon_scales = favicon_base::GetFaviconScales();
+    for (const gfx::ImageSkiaRep& rep : image_skia.image_reps()) {
+      // Only save images with a supported sale.
+      if (base::Contains(favicon_scales, rep.scale()))
+        bitmaps.push_back(rep.GetBitmap());
+    }
+    SetFavicons(
+        {GURL(kPreloadedFavicons[i].page_url)},
+        favicon_base::IconType::kFavicon,
+        GURL(kPreloadedFavicons[i].favicon_url),
+        bitmaps,
+        FaviconBitmapType::VIVALDI_PRELOADED);
+  }
 }
 }  // namespace favicon

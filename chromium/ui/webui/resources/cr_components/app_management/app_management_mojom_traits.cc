@@ -129,6 +129,8 @@ PermissionType EnumTraits<PermissionType, apps::PermissionType>::ToMojom(
       return PermissionType::kStorage;
     case apps::PermissionType::kPrinting:
       return PermissionType::kPrinting;
+    case apps::PermissionType::kFileHandling:
+      return PermissionType::kFileHandling;
   }
 }
 
@@ -159,6 +161,9 @@ bool EnumTraits<PermissionType, apps::PermissionType>::FromMojom(
       return true;
     case PermissionType::kPrinting:
       *output = apps::PermissionType::kPrinting;
+      return true;
+    case PermissionType::kFileHandling:
+      *output = apps::PermissionType::kFileHandling;
       return true;
   }
 }
@@ -192,9 +197,9 @@ bool EnumTraits<TriState, apps::TriState>::FromMojom(TriState input,
 PermissionValueDataView::Tag
 UnionTraits<PermissionValueDataView, apps::PermissionValuePtr>::GetTag(
     const apps::PermissionValuePtr& r) {
-  if (r->bool_value.has_value()) {
+  if (absl::holds_alternative<bool>(r->value)) {
     return PermissionValueDataView::Tag::kBoolValue;
-  } else if (r->tristate_value.has_value()) {
+  } else if (absl::holds_alternative<apps::TriState>(r->value)) {
     return PermissionValueDataView::Tag::kTristateValue;
   }
   NOTREACHED();

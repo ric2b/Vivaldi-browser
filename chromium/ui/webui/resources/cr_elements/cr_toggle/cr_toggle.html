@@ -1,10 +1,3 @@
-<link rel="import" href="../../html/polymer.html">
-
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-behaviors/paper-ripple-behavior.html">
-<link rel="import" href="../shared_vars_css.html">
-
-<dom-module id="cr-toggle">
-  <template>
     <style>
       :host {
         --cr-toggle-checked-bar-color: var(--google-blue-600);
@@ -22,6 +15,18 @@
         outline: none;
         position: relative;
         width: 34px;
+      }
+
+      @media (forced-colors: active) {
+        :host {
+          /* TODO(crbug.com/1176612): cr-toggle heavily relies on
+             background-color to convey various states (on/off,
+             enabled/disabled). Until proper specs for HCM exist, turn off
+             forced-colors automatic adjustments so that the cr-toggle is at
+             least visible. Replace with a HCM compliant implementation once
+             specs exist.*/
+          forced-color-adjust: none;
+        }
       }
 
       @media (prefers-color-scheme: dark) {
@@ -118,6 +123,3 @@
     </style>
     <span id="bar"></span>
     <span id="knob"></span>
-  </template>
-  <script src="cr_toggle.js"></script>
-</dom-module>

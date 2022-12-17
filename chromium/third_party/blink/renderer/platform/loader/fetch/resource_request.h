@@ -193,6 +193,11 @@ class PLATFORM_EXPORT ResourceRequestHead {
     SetHttpHeaderField(http_names::kContentType, http_content_type);
   }
 
+  bool IsFormSubmission() const { return is_form_submission_; }
+  void SetFormSubmission(bool is_form_submission) {
+    is_form_submission_ = is_form_submission;
+  }
+
   void SetReferrerPolicy(network::mojom::ReferrerPolicy referrer_policy) {
     referrer_policy_ = referrer_policy;
   }
@@ -307,6 +312,14 @@ class PLATFORM_EXPORT ResourceRequestHead {
 
   network::mojom::RequestMode GetMode() const { return mode_; }
   void SetMode(network::mojom::RequestMode mode) { mode_ = mode; }
+
+  network::mojom::IPAddressSpace GetTargetAddressSpace() const {
+    return target_address_space_;
+  }
+  void SetTargetAddressSpace(
+      network::mojom::IPAddressSpace target_address_space) {
+    target_address_space_ = target_address_space;
+  }
 
   // A resource request's fetch_priority_hint_ is a developer-set priority
   // hint that differs from priority_. It is used in
@@ -458,11 +471,6 @@ class PLATFORM_EXPORT ResourceRequestHead {
   void SetInspectorId(uint64_t inspector_id) { inspector_id_ = inspector_id; }
   uint64_t InspectorId() const { return inspector_id_; }
 
-  // Temporary for metrics. True if the request was initiated by a stylesheet
-  // that is not origin-clean:
-  // https://drafts.csswg.org/cssom-1/#concept-css-style-sheet-origin-clean-flag
-  //
-  // TODO(crbug.com/898497): Remove this when there is enough data.
   bool IsFromOriginDirtyStyleSheet() const {
     return is_from_origin_dirty_style_sheet_;
   }
@@ -506,13 +514,6 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // Whether either RequestorOrigin or IsolatedWorldOrigin can display the
   // |url|,
   bool CanDisplay(const KURL&) const;
-
-  void SetAllowHTTP1ForStreamingUpload(bool allow) {
-    allowHTTP1ForStreamingUpload_ = allow;
-  }
-  bool AllowHTTP1ForStreamingUpload() const {
-    return allowHTTP1ForStreamingUpload_;
-  }
 
   // The original destination of a request passed through by a service worker.
   network::mojom::RequestDestination GetOriginalDestination() const {
@@ -569,6 +570,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool skip_service_worker_ : 1;
   bool download_to_cache_only_ : 1;
   bool site_for_cookies_set_ : 1;
+  bool is_form_submission_ : 1;
   ResourceLoadPriority initial_priority_;
   ResourceLoadPriority priority_;
   int intra_priority_value_;
@@ -585,6 +587,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   network::mojom::CorsPreflightPolicy cors_preflight_policy_;
   absl::optional<RedirectInfo> redirect_info_;
   absl::optional<network::mojom::blink::TrustTokenParams> trust_token_params_;
+  network::mojom::IPAddressSpace target_address_space_;
 
   absl::optional<String> suggested_filename_;
 
@@ -629,8 +632,6 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // the request under the cross-origin's partition. Furthermore, its reuse from
   // the prefetch cache will be restricted to top-level-navigations.
   bool prefetch_maybe_for_top_level_navigation_ = false;
-
-  bool allowHTTP1ForStreamingUpload_ = false;
 
   // This is used when fetching preload header requests from cross-origin
   // prefetch responses. The browser process uses this token to ensure the

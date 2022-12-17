@@ -23,15 +23,6 @@ constexpr int kRulesListFormatVersion = 5;
 // adblock_rules_index.fbs
 constexpr int kIndexFormatVersion = 4;
 
-const base::FilePath::CharType kParsedRulesFolder[] =
-    FILE_PATH_LITERAL("AdBlockRules");
-
-const base::FilePath::CharType kTrackingRulesFolder[] =
-    FILE_PATH_LITERAL("TrackerBlocking");
-
-const base::FilePath::CharType kAdBlockingRulesFolder[] =
-    FILE_PATH_LITERAL("AdBlocking");
-
 enum RulePriorities {
   kBlockPriority = 0,
   kRedirectPriority,
@@ -48,19 +39,6 @@ std::string GetIndexVersionHeader() {
 
 std::string GetRulesListVersionHeader() {
   return base::StringPrintf("---------Version=%d", kRulesListFormatVersion);
-}
-
-base::FilePath::StringType GetRulesFolderName() {
-  return kParsedRulesFolder;
-}
-
-base::FilePath::StringType GetGroupFolderName(RuleGroup group) {
-  switch (group) {
-    case RuleGroup::kTrackingRules:
-      return kTrackingRulesFolder;
-    case RuleGroup::kAdBlockingRules:
-      return kAdBlockingRulesFolder;
-  }
 }
 
 std::string CalculateBufferChecksum(base::span<const uint8_t> data) {

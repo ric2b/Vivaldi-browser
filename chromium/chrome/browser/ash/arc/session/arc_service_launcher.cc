@@ -15,7 +15,6 @@
 #include "ash/components/arc/clipboard/arc_clipboard_bridge.h"
 #include "ash/components/arc/compat_mode/arc_resize_lock_manager.h"
 #include "ash/components/arc/crash_collector/arc_crash_collector_bridge.h"
-#include "ash/components/arc/dark_theme/arc_dark_theme_bridge.h"
 #include "ash/components/arc/disk_quota/arc_disk_quota_bridge.h"
 #include "ash/components/arc/ime/arc_ime_service.h"
 #include "ash/components/arc/keyboard_shortcut/arc_keyboard_shortcut_bridge.h"
@@ -37,6 +36,7 @@
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/arc_session_runner.h"
 #include "ash/components/arc/storage_manager/arc_storage_manager.h"
+#include "ash/components/arc/system_ui/arc_system_ui_bridge.h"
 #include "ash/components/arc/timer/arc_timer_bridge.h"
 #include "ash/components/arc/usb/usb_host_bridge.h"
 #include "ash/components/arc/volume_mounter/arc_volume_mounter_bridge.h"
@@ -79,6 +79,7 @@
 #include "chrome/browser/ash/arc/process/arc_process_service.h"
 #include "chrome/browser/ash/arc/screen_capture/arc_screen_capture_bridge.h"
 #include "chrome/browser/ash/arc/session/arc_demo_mode_preference_handler.h"
+#include "chrome/browser/ash/arc/session/arc_disk_space_monitor.h"
 #include "chrome/browser/ash/arc/session/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/sharesheet/arc_sharesheet_bridge.h"
@@ -104,7 +105,7 @@
 #if BUILDFLAG(USE_ARC_PROTECTED_MEDIA)
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
-#include "chromeos/dbus/cdm_factory_daemon/cdm_factory_daemon_client.h"
+#include "chromeos/ash/components/dbus/cdm_factory_daemon/cdm_factory_daemon_client.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 
 // Delay for repeatedly checking if the TPM is owned or not.
@@ -150,6 +151,9 @@ ArcServiceLauncher::ArcServiceLauncher(
     arc_demo_mode_preference_handler_ =
         ArcDemoModePreferenceHandler::Create(arc_session_manager_.get());
   }
+
+  if (base::FeatureList::IsEnabled(kEnableVirtioBlkForData))
+    arc_disk_space_monitor_ = std::make_unique<ArcDiskSpaceMonitor>();
 }
 
 ArcServiceLauncher::~ArcServiceLauncher() {
@@ -167,7 +171,7 @@ void ArcServiceLauncher::Initialize() {
   // If we have ARC HWDRM then we need to wait for the CdmFactoryDaemon service
   // to advertise avalability so that arc-prepare-host-generated-dir can query
   // it via D-Bus for the CDM client information.
-  chromeos::CdmFactoryDaemonClient::Get()->WaitForServiceToBeAvailable(
+  ash::CdmFactoryDaemonClient::Get()->WaitForServiceToBeAvailable(
       base::BindOnce(&ArcServiceLauncher::OnCdmFactoryDaemonAvailable,
                      weak_factory_.GetWeakPtr(), /*from_timeout=*/false));
 
@@ -211,6 +215,9 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
     return;
   }
 
+  std::string user_id_hash =
+      ash::ProfileHelper::GetUserIdHashFromProfile(profile);
+
   // Instantiate ARC related BrowserContextKeyedService classes which need
   // to be running at the beginning of the container run.
   // Note that, to keep this list as small as possible, services which don't
@@ -228,7 +235,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcCameraBridge::GetForBrowserContext(profile);
   ArcClipboardBridge::GetForBrowserContext(profile);
   ArcCrashCollectorBridge::GetForBrowserContext(profile);
-  ArcDarkThemeBridge::GetForBrowserContext(profile);
   ArcDigitalGoodsBridge::GetForBrowserContext(profile);
   ArcDiskQuotaBridge::GetForBrowserContext(profile)->SetAccountId(
       multi_user_util::GetAccountIdFromProfile(profile));
@@ -255,10 +261,14 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcKioskBridge::GetForBrowserContext(profile);
   ArcLockScreenBridge::GetForBrowserContext(profile);
   ArcMediaSessionBridge::GetForBrowserContext(profile);
-  ArcMetricsService::GetForBrowserContext(profile)->SetHistogramNamer(
-      base::BindRepeating([](const std::string& base_name) {
-        return GetHistogramNameByUserTypeForPrimaryProfile(base_name);
-      }));
+  {
+    auto* metrics_service = ArcMetricsService::GetForBrowserContext(profile);
+    metrics_service->SetHistogramNamer(
+        base::BindRepeating([](const std::string& base_name) {
+          return GetHistogramNameByUserTypeForPrimaryProfile(base_name);
+        }));
+    metrics_service->set_user_id_hash(user_id_hash);
+  }
   ArcMetricsServiceProxy::GetForBrowserContext(profile);
   ArcMidisBridge::GetForBrowserContext(profile);
   ArcNearbyShareBridge::GetForBrowserContext(profile);
@@ -272,8 +282,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcPaymentAppBridge::GetForBrowserContext(profile);
   ArcPipBridge::GetForBrowserContext(profile);
   ArcPolicyBridge::GetForBrowserContext(profile);
-  ArcPowerBridge::GetForBrowserContext(profile)->SetUserIdHash(
-      ash::ProfileHelper::GetUserIdHashFromProfile(profile));
+  ArcPowerBridge::GetForBrowserContext(profile)->SetUserIdHash(user_id_hash);
   ArcPrintSpoolerBridge::GetForBrowserContext(profile);
   ArcPrivacyItemsBridge::GetForBrowserContext(profile);
   ArcProcessService::GetForBrowserContext(profile);
@@ -286,6 +295,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcSettingsService::GetForBrowserContext(profile);
   ArcSharesheetBridge::GetForBrowserContext(profile);
   ArcSurveyService::GetForBrowserContext(profile);
+  ArcSystemUIBridge::GetForBrowserContext(profile);
   ArcTimerBridge::GetForBrowserContext(profile);
   ArcTracingBridge::GetForBrowserContext(profile);
   ArcTtsService::GetForBrowserContext(profile);

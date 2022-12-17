@@ -5,6 +5,8 @@
 package org.chromium.ui.dragdrop;
 
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.content.ClipData;
 import android.content.ClipDescription;
@@ -29,7 +31,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
@@ -37,7 +41,8 @@ import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowAccessibilityManager;
 
 import org.chromium.base.compat.ApiHelperForN;
-import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.ui.dragdrop.DragAndDropDelegateImpl.DragTargetType;
 import org.chromium.url.JUnitTestGURLs;
@@ -46,13 +51,18 @@ import org.chromium.url.JUnitTestGURLs;
  * Unit tests for {@link DragAndDropDelegateImpl}.
  */
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(shadows = {ShadowRecordHistogram.class})
 public class DragAndDropDelegateImplUnitTest {
     /** Using a window size of 1000*600 for the ease of dp / pixel calculation. */
     private static final int WINDOW_WIDTH = 1000;
     private static final int WINDOW_HEIGHT = 600;
 
+    private static final float DRAG_START_X_DP = 1.0f;
+    private static final float DRAG_START_Y_DP = 1.0f;
+
     private static final String IMAGE_FILENAME = "image.png";
+
+    @Mock
+    private DragAndDropPermissions mDragAndDropPermissions;
 
     /** Helper shadow class to make sure #startDragAndDrop is accepted by Android. */
     @Implements(ApiHelperForN.class)
@@ -73,6 +83,8 @@ public class DragAndDropDelegateImplUnitTest {
 
     @Before
     public void setup() {
+        MockitoAnnotations.initMocks(this);
+
         mContext = ApplicationProvider.getApplicationContext();
         mDragAndDropDelegateImpl = new DragAndDropDelegateImpl();
 
@@ -86,7 +98,7 @@ public class DragAndDropDelegateImplUnitTest {
     @After
     public void tearDown() {
         DropDataContentProvider.onDragEnd(false);
-        ShadowRecordHistogram.reset();
+        UmaRecorderHolder.resetForTesting();
         ShadowApiHelperForN.sLastDragShadowBuilder = null;
     }
 
@@ -188,6 +200,14 @@ public class DragAndDropDelegateImplUnitTest {
     }
 
     @Test
+    public void testStartDragAndDrop_InvalidDropData() {
+        final DropDataAndroid dropData = DropDataAndroid.create(null, null, null, null, null);
+
+        Assert.assertFalse("Drag and drop should not start.",
+                mDragAndDropDelegateImpl.startDragAndDrop(mContainerView, null, dropData));
+    }
+
+    @Test
     @Config(shadows = {ShadowApiHelperForN.class})
     public void testDragImage_ShadowPlaceholder() {
         final Bitmap shadowImage = Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8);
@@ -251,6 +271,21 @@ public class DragAndDropDelegateImplUnitTest {
                 "Only tracking drag started by mDragAndDropDelegateImpl#startDragAndDrop.");
         assertHistogramRecorded("Android.DragDrop.FromWebContent.DropInWebContent.DistanceDip",
                 false, "Only tracking drag started by mDragAndDropDelegateImpl#startDragAndDrop.");
+    }
+
+    @Test
+    public void testDragStartedFromContainerView() {
+        final Bitmap shadowImage = Bitmap.createBitmap(100, 200, Bitmap.Config.ALPHA_8);
+        final DropDataAndroid imageDropData =
+                DropDataAndroid.create("", null, new byte[] {1, 2, 3, 4}, "png", IMAGE_FILENAME);
+        mDragAndDropDelegateImpl.startDragAndDrop(mContainerView, shadowImage, imageDropData);
+
+        mDragAndDropDelegateImpl.onDrag(
+                mContainerView, mockDragEvent(DragEvent.ACTION_DRAG_STARTED));
+        Assert.assertEquals("Recorded drag start X dp should match.", DRAG_START_X_DP,
+                mDragAndDropDelegateImpl.getDragStartXDp(), 0.0f);
+        Assert.assertEquals("Recorded drag start Y dp should match.", DRAG_START_Y_DP,
+                mDragAndDropDelegateImpl.getDragStartYDp(), 0.0f);
     }
 
     @Test
@@ -330,7 +365,7 @@ public class DragAndDropDelegateImplUnitTest {
 
     @Test
     @Config(sdk = VERSION_CODES.O)
-    public void testClipData_ImageWithUrl() {
+    public void testClipData_ImageWithUrl_PostO() {
         final DropDataAndroid dropData =
                 DropDataAndroid.create("", JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL),
                         new byte[] {1, 2, 3, 4}, "png", IMAGE_FILENAME);
@@ -343,25 +378,23 @@ public class DragAndDropDelegateImplUnitTest {
     }
 
     @Test
-    public void testClipData_TextLink() {
+    @Config(sdk = VERSION_CODES.N_MR1)
+    public void testClipData_ImageWithUrl_PreO() {
+        final DropDataAndroid dropData =
+                DropDataAndroid.create("", JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL),
+                        new byte[] {1, 2, 3, 4}, "png", IMAGE_FILENAME);
+
+        ClipData clipData = mDragAndDropDelegateImpl.buildClipData(dropData);
+        Assert.assertEquals(
+                "Image ClipData should include only image info.", 1, clipData.getItemCount());
+    }
+
+    @Test
+    public void testClipData_TextLink_NonNullIntent() {
         final DropDataAndroid dropData = DropDataAndroid.create(
                 "", JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL), null, null, null);
-        mDragAndDropDelegateImpl.setDragAndDropBrowserDelegate(new DragAndDropBrowserDelegate() {
-            @Override
-            public boolean getSupportDropInChrome() {
-                return false;
-            }
-
-            @Override
-            public DragAndDropPermissions getDragAndDropPermissions(DragEvent dropEvent) {
-                return null;
-            }
-
-            @Override
-            public Intent createLinkIntent(String urlString) {
-                return new Intent();
-            }
-        });
+        mDragAndDropDelegateImpl.setDragAndDropBrowserDelegate(
+                createDragAndDropBrowserDelegate(false, null, new Intent()));
         ClipData clipData = mDragAndDropDelegateImpl.buildClipData(dropData);
         Assert.assertTrue("Link ClipData should include plaintext MIME type.",
                 clipData.getDescription().hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN));
@@ -371,6 +404,30 @@ public class DragAndDropDelegateImplUnitTest {
                 clipData.getItemAt(0).getText());
         Assert.assertNotNull(
                 "ClipData intent should not be null.", clipData.getItemAt(0).getIntent());
+    }
+
+    @Test
+    public void testClipData_TextLink_NullIntent() {
+        final DropDataAndroid dropData = DropDataAndroid.create(
+                "", JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL), null, null, null);
+        mDragAndDropDelegateImpl.setDragAndDropBrowserDelegate(
+                createDragAndDropBrowserDelegate(false, null, null));
+        ClipData clipData = mDragAndDropDelegateImpl.buildClipData(dropData);
+        Assert.assertTrue("Link ClipData should include plaintext MIME type.",
+                clipData.getDescription().hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN));
+        Assert.assertFalse("Link ClipData should not include intent MIME type.",
+                clipData.getDescription().hasMimeType(ClipDescription.MIMETYPE_TEXT_INTENT));
+        Assert.assertEquals("Dragged link text should match.", JUnitTestGURLs.EXAMPLE_URL,
+                clipData.getItemAt(0).getText());
+    }
+
+    @Test
+    public void testDropInChromeFromOutside() {
+        mDragAndDropDelegateImpl.setDragAndDropBrowserDelegate(
+                createDragAndDropBrowserDelegate(true, mDragAndDropPermissions, null));
+        // Assume that data is dragged from outside Chrome.
+        mDragAndDropDelegateImpl.onDrag(mContainerView, mockDragEvent(DragEvent.ACTION_DROP));
+        verify(mDragAndDropPermissions).release();
     }
 
     private void doTestResizeShadowImage(
@@ -392,6 +449,8 @@ public class DragAndDropDelegateImplUnitTest {
 
     private DragEvent mockDragEvent(int action) {
         DragEvent event = Mockito.mock(DragEvent.class);
+        when(event.getX()).thenReturn(DRAG_START_X_DP);
+        when(event.getY()).thenReturn(DRAG_START_Y_DP);
         doReturn(action).when(event).getAction();
         return event;
     }
@@ -403,8 +462,8 @@ public class DragAndDropDelegateImplUnitTest {
     private void assertDragTypeRecorded(@DragTargetType int type) {
         final String histogram = "Android.DragDrop.FromWebContent.TargetType";
         final String errorMsg = "<" + histogram + "> is not recorded correctly.";
-        Assert.assertEquals(errorMsg, 1,
-                ShadowRecordHistogram.getHistogramValueCountForTesting(histogram, type));
+        Assert.assertEquals(
+                errorMsg, 1, RecordHistogram.getHistogramValueCountForTesting(histogram, type));
     }
 
     private void assertDragOutsideWebContentHistogramsRecorded(boolean dropResult) {
@@ -437,7 +496,26 @@ public class DragAndDropDelegateImplUnitTest {
     private void assertHistogramRecorded(String histogram, boolean recorded, String reason) {
         Assert.assertEquals(
                 String.format("<%s> is not recorded correctly. Reason: %s", histogram, reason),
-                recorded ? 1 : 0,
-                ShadowRecordHistogram.getHistogramTotalCountForTesting(histogram));
+                recorded ? 1 : 0, RecordHistogram.getHistogramTotalCountForTesting(histogram));
+    }
+
+    private DragAndDropBrowserDelegate createDragAndDropBrowserDelegate(
+            boolean supportDropInChrome, DragAndDropPermissions permissions, Intent intent) {
+        return new DragAndDropBrowserDelegate() {
+            @Override
+            public boolean getSupportDropInChrome() {
+                return supportDropInChrome;
+            }
+
+            @Override
+            public DragAndDropPermissions getDragAndDropPermissions(DragEvent dropEvent) {
+                return permissions;
+            }
+
+            @Override
+            public Intent createLinkIntent(String urlString) {
+                return intent;
+            }
+        };
     }
 }

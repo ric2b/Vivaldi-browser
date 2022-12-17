@@ -39,12 +39,10 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/icon_loader.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_test_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -104,22 +102,6 @@ class FakeIconLoader : public apps::IconLoader {
 
     std::move(callback).Run(std::move(iv));
     return nullptr;
-  }
-
-  std::unique_ptr<apps::IconLoader::Releaser> LoadIconFromIconKey(
-      apps::mojom::AppType app_type,
-      const std::string& app_id,
-      apps::mojom::IconKeyPtr mojom_icon_key,
-      apps::mojom::IconType icon_type,
-      int32_t size_hint_in_dip,
-      bool allow_placeholder_icon,
-      apps::mojom::Publisher::LoadIconCallback callback) override {
-    auto icon_key = apps::ConvertMojomIconKeyToIconKey(mojom_icon_key);
-    return LoadIconFromIconKey(
-        apps::ConvertMojomAppTypToAppType(app_type), app_id, *icon_key,
-        apps::ConvertMojomIconTypeToIconType(icon_type), size_hint_in_dip,
-        allow_placeholder_icon,
-        apps::IconValueToMojomIconValueCallback(std::move(callback)));
   }
 };
 
@@ -203,21 +185,11 @@ class IntentPickerBubbleViewBrowserTestChromeOS : public InProcessBrowserTest {
     auto app = std::make_unique<apps::App>(apps::AppType::kArc, app_id);
     app->name = app_name;
     app->intent_filters.push_back(apps_util::MakeIntentFilterForUrlScope(url));
-    if (base::FeatureList::IsEnabled(
-            apps::kAppServiceOnAppUpdateWithoutMojom)) {
-      std::vector<apps::AppPtr> apps;
-      apps.push_back(std::move(app));
-      app_service_proxy_->AppRegistryCache().OnApps(
-          std::move(apps), apps::AppType::kArc,
-          false /* should_notify_initialized */);
-    } else {
-      std::vector<apps::mojom::AppPtr> mojom_apps;
-      mojom_apps.push_back(apps::ConvertAppToMojomApp(app));
-      app_service_proxy_->AppRegistryCache().OnApps(
-          std::move(mojom_apps), apps::mojom::AppType::kArc,
-          false /* should_notify_initialized */);
-      WaitForAppService();
-    }
+    std::vector<apps::AppPtr> apps;
+    apps.push_back(std::move(app));
+    app_service_proxy_->AppRegistryCache().OnApps(
+        std::move(apps), apps::AppType::kArc,
+        false /* should_notify_initialized */);
     return app_id;
   }
 
@@ -342,11 +314,11 @@ class IntentPickerBubbleViewBrowserTestChromeOS : public InProcessBrowserTest {
   }
 
   GURL InScopeAppUrl() {
-    return embedded_test_server()->GetURL("/web_apps/site_a/basic.html");
+    return embedded_test_server()->GetURL("/web_apps/standalone/basic.html");
   }
 
   GURL OutOfScopeAppUrl() {
-    return embedded_test_server()->GetURL("/web_apps/site_b/basic.html");
+    return embedded_test_server()->GetURL("/web_apps/minimal_ui/basic.html");
   }
 
  private:
@@ -927,26 +899,26 @@ IN_PROC_BROWSER_TEST_F(IntentPickerBubbleViewBrowserTestChromeOS,
 
   // WebApp histogram.
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent.WebApp",
+      "ChromeOS.Intents.LinkCapturingEvent2.WebApp",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kEntryPointShown, 1);
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent.WebApp",
+      "ChromeOS.Intents.LinkCapturingEvent2.WebApp",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kAppOpened, 1);
 
   // ArcApp histogram.
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent.ArcApp",
+      "ChromeOS.Intents.LinkCapturingEvent2.ArcApp",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kEntryPointShown, 1);
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent.ArcApp",
+      "ChromeOS.Intents.LinkCapturingEvent2.ArcApp",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kAppOpened, 0);
 
   // General histogram.
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent",
+      "ChromeOS.Intents.LinkCapturingEvent2",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kEntryPointShown, 1);
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent",
+      "ChromeOS.Intents.LinkCapturingEvent2",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kAppOpened, 1);
 }
 
@@ -1224,13 +1196,13 @@ IN_PROC_BROWSER_TEST_F(IntentPickerBubbleViewBrowserTestChromeOS,
   // Check that the correct histograms are incremented for recording that
   // settings were changed.
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent.WebApp",
+      "ChromeOS.Intents.LinkCapturingEvent2.WebApp",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kSettingsChanged, 1);
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent.ArcApp",
+      "ChromeOS.Intents.LinkCapturingEvent2.ArcApp",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kSettingsChanged, 0);
   histogram_tester.ExpectBucketCount(
-      "ChromeOS.Intents.LinkCapturingEvent",
+      "ChromeOS.Intents.LinkCapturingEvent2",
       apps::IntentHandlingMetrics::LinkCapturingEvent::kSettingsChanged, 1);
 }
 

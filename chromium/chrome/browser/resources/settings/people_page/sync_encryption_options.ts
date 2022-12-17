@@ -2,17 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/cr_elements/cr_button/cr_button.m.js';
-import '//resources/cr_elements/cr_input/cr_input.m.js';
-import '//resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
-import '//resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import '//resources/cr_elements/cr_button/cr_button.js';
+import '//resources/cr_elements/cr_input/cr_input.js';
+import '//resources/cr_elements/cr_radio_button/cr_radio_button.js';
+import '//resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import '//resources/cr_elements/shared_style_css.m.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../settings_vars.css.js';
 
-import {CrInputElement} from '//resources/cr_elements/cr_input/cr_input.m.js';
+import {CrInputElement} from '//resources/cr_elements/cr_input/cr_input.js';
 // <if expr="chromeos_ash">
-import {CrRadioGroupElement} from '//resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import {CrRadioGroupElement} from '//resources/cr_elements/cr_radio_group/cr_radio_group.js';
 // </if>
 
 import {assert} from '//resources/js/assert_ts.js';
@@ -188,7 +188,7 @@ export class SettingsSyncEncryptionOptionsElement extends PolymerElement {
           this.dispatchEvent(new CustomEvent('passphrase-changed', {
             bubbles: true,
             composed: true,
-            detail: {didChange: successfullySet}
+            detail: {didChange: successfullySet},
           }));
           this.isSettingEncryptionPassphrase_ = false;
         });

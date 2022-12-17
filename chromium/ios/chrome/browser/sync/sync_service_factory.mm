@@ -32,6 +32,7 @@
 #include "ios/chrome/browser/signin/about_signin_internals_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/trusted_vault_client_backend_factory.h"
 #include "ios/chrome/browser/sync/consent_auditor_factory.h"
 #include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_sync_client.h"
@@ -47,12 +48,19 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ios/sync/vivaldi_sync_service_factory.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 // static
 SyncServiceFactory* SyncServiceFactory::GetInstance() {
+#if defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning())
+    return vivaldi::VivaldiSyncServiceFactory::GetInstance();
+#endif
   static base::NoDestructor<SyncServiceFactory> instance;
   return instance.get();
 }
@@ -79,18 +87,10 @@ syncer::SyncService* SyncServiceFactory::GetForBrowserStateIfExists(
 
 // static
 syncer::SyncServiceImpl*
-SyncServiceFactory::GetAsSyncServiceImplForBrowserState(
+SyncServiceFactory::GetAsSyncServiceImplForBrowserStateForTesting(
     ChromeBrowserState* browser_state) {
   return static_cast<syncer::SyncServiceImpl*>(
       GetForBrowserState(browser_state));
-}
-
-// static
-syncer::SyncServiceImpl*
-SyncServiceFactory::GetAsSyncServiceImplForBrowserStateIfExists(
-    ChromeBrowserState* browser_state) {
-  return static_cast<syncer::SyncServiceImpl*>(
-      GetForBrowserStateIfExists(browser_state));
 }
 
 SyncServiceFactory::SyncServiceFactory()
@@ -120,6 +120,7 @@ SyncServiceFactory::SyncServiceFactory()
   DependsOn(ReadingListModelFactory::GetInstance());
   DependsOn(SessionSyncServiceFactory::GetInstance());
   DependsOn(SyncInvalidationsServiceFactory::GetInstance());
+  DependsOn(TrustedVaultClientBackendFactory::GetInstance());
 }
 
 SyncServiceFactory::~SyncServiceFactory() {}

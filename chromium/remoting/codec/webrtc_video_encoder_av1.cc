@@ -10,6 +10,7 @@
 #include "base/system/sys_info.h"
 #include "remoting/base/cpu_utils.h"
 #include "remoting/base/util.h"
+#include "third_party/libaom/source/libaom/aom/aomcx.h"
 #include "third_party/libyuv/include/libyuv/convert_from_argb.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
@@ -51,9 +52,16 @@ void WebrtcVideoEncoderAV1::SetLosslessColor(bool want_lossless) {
 }
 
 bool WebrtcVideoEncoderAV1::InitializeCodec(const webrtc::DesktopSize& size) {
-  // Set the config's width and height now that it's known.
+  // Set the width, height, and thread count now that the frame size is known.
   config_.g_w = size.width();
   config_.g_h = size.height();
+  // Determine the number of threads to use for encoding by choosing the larger
+  // of the two dimensions. If we only checked the width, the performance for
+  // displays in portrait mode will be degraded due to a lower thread count.
+  // Since AV1 supports dividing the image into both rows and cols, we set the
+  // maximum number of threads here and then set the tile_row and tile_column
+  // values based on the frame dimensions later on.
+  config_.g_threads = GetEncoderThreadCount(std::max(config_.g_w, config_.g_h));
 
   // Initialize an encoder instance.
   scoped_aom_codec codec(new aom_codec_ctx_t, DestroyAomCodecContext);
@@ -67,6 +75,10 @@ bool WebrtcVideoEncoderAV1::InitializeCodec(const webrtc::DesktopSize& size) {
   }
   DCHECK_NE(codec->name, nullptr);
 
+  if (use_active_map_) {
+    active_map_.Initialize(size);
+  }
+
   error = aom_codec_control(codec.get(), AOME_SET_CPUUSED, 10);
   DCHECK_EQ(error, AOM_CODEC_OK) << "Failed to set AOME_SET_CPUUSED";
 
@@ -78,15 +90,23 @@ bool WebrtcVideoEncoderAV1::InitializeCodec(const webrtc::DesktopSize& size) {
     DCHECK_EQ(error, AOM_CODEC_OK) << "Failed to set AV1E_SET_ROW_MT";
   }
 
-  // The param for the tile column control is a log2 value so 0 is ok.
-  error = aom_codec_control(codec.get(), AV1E_SET_TILE_COLUMNS,
-                            static_cast<int>(std::log2(config_.g_threads)));
+  // The param used to set the tile columns and tile rows is in log2 so 0 is ok.
+  int log2_threads = static_cast<int>(std::log2(config_.g_threads));
+  // Split the cols/rows as evenly as possible, favoring columns for widescreen.
+  int log2_cols = (log2_threads + 1) / 2;
+  int log2_rows = log2_threads - log2_cols;
+  if (size.height() > size.width()) {
+    // Swap for portrait mode since we want more rows than columns.
+    std::swap(log2_cols, log2_rows);
+  }
+
+  error = aom_codec_control(codec.get(), AV1E_SET_TILE_COLUMNS, log2_cols);
   DCHECK_EQ(error, AOM_CODEC_OK) << "Failed to set AV1E_SET_TILE_COLUMNS";
 
-  // TODO(joedow): Experiment with AV1E_SET_TILE_ROWS. Note that the total
-  // number of COLUMNS and ROWS should add up to, at most, config_.g_threads.
+  error = aom_codec_control(codec.get(), AV1E_SET_TILE_ROWS, log2_rows);
+  DCHECK_EQ(error, AOM_CODEC_OK) << "Failed to set AV1E_SET_TILE_ROWS";
 
-  // These make realtime encoder faster.
+  // These make realtime encoding faster.
   error =
       aom_codec_control(codec.get(), AV1E_SET_TUNE_CONTENT, AOM_CONTENT_SCREEN);
   DCHECK_EQ(error, AOM_CODEC_OK) << "Failed to set AOM_CONTENT_SCREEN";
@@ -156,12 +176,14 @@ bool WebrtcVideoEncoderAV1::InitializeCodec(const webrtc::DesktopSize& size) {
   return true;
 }
 
-void WebrtcVideoEncoderAV1::PrepareImage(const webrtc::DesktopFrame* frame) {
+void WebrtcVideoEncoderAV1::PrepareImage(
+    const webrtc::DesktopFrame* frame,
+    webrtc::DesktopRegion& updated_region) {
+  updated_region.Clear();
   if (!frame) {
     return;
   }
 
-  webrtc::DesktopRegion updated_region;
   if (image_) {
     DCHECK_EQ(frame->size().width(), static_cast<int>(image_->d_w));
     DCHECK_EQ(frame->size().height(), static_cast<int>(image_->d_h));
@@ -219,17 +241,17 @@ void WebrtcVideoEncoderAV1::ConfigureCodecParams() {
   // Encoder config values are defined in:
   // //third_party/libaom/source/libaom/aom/aom_encoder.h
   config_.g_profile = 0;
-  // Width and height are reset once the frame size is known.
+  // Width, height, and thread count are set once the frame size is known.
   config_.g_w = 0;
   config_.g_h = 0;
+  config_.g_threads = 0;
+
   config_.g_input_bit_depth = 8;
   config_.g_pass = AOM_RC_ONE_PASS;
   config_.g_lag_in_frames = 0;
   config_.g_error_resilient = 0;
   config_.g_timebase.num = 1;
   config_.g_timebase.den = base::Time::kMicrosecondsPerSecond;
-  config_.g_threads =
-      std::min(((base::SysInfo::NumberOfProcessors() + 1) / 2), 8);
 
   config_.kf_mode = AOM_KF_DISABLED;
 
@@ -314,7 +336,27 @@ void WebrtcVideoEncoderAV1::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
 
   // Transfer the frame data to the image buffer for encoding.
   // TODO(joedow): Look into using aom_img_wrap instead of our own buffer.
-  PrepareImage(frame.get());
+  webrtc::DesktopRegion updated_region;
+  PrepareImage(frame.get(), updated_region);
+
+  aom_active_map_t act_map;
+  if (use_active_map_) {
+    if (params.clear_active_map)
+      active_map_.Clear();
+
+    if (params.key_frame)
+      updated_region.SetRect(webrtc::DesktopRect::MakeSize(frame_size));
+
+    active_map_.Update(updated_region);
+
+    // Apply active map to the encoder.
+    act_map.rows = active_map_.height();
+    act_map.cols = active_map_.width();
+    act_map.active_map = active_map_.data();
+    if (aom_codec_control(codec_.get(), AOME_SET_ACTIVEMAP, &act_map)) {
+      LOG(ERROR) << "Unable to apply active map";
+    }
+  }
 
   auto duration_us = params.duration.InMicroseconds();
   DCHECK_GT(duration_us, 0);
@@ -331,12 +373,20 @@ void WebrtcVideoEncoderAV1::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
     return;
   }
 
+  if (use_active_map_) {
+    // Update our active map based on the internal map in the encoder.
+    ret = aom_codec_control(codec_.get(), AV1E_GET_ACTIVEMAP, &act_map);
+    DCHECK_EQ(ret, AOM_CODEC_OK)
+        << "Failed to fetch active map: " << aom_codec_err_to_string(ret)
+        << "\n";
+  }
+
   // Read the encoded data.
   aom_codec_iter_t iter = nullptr;
   bool got_data = false;
 
   auto encoded_frame = std::make_unique<EncodedFrame>();
-  encoded_frame->size = frame_size;
+  encoded_frame->dimensions = frame_size;
   encoded_frame->codec = webrtc::kVideoCodecAV1;
 
   while (!got_data) {
@@ -348,8 +398,8 @@ void WebrtcVideoEncoderAV1::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
     switch (aom_packet->kind) {
       case AOM_CODEC_CX_FRAME_PKT: {
         got_data = true;
-        encoded_frame->data.assign(
-            reinterpret_cast<const char*>(aom_packet->data.frame.buf),
+        encoded_frame->data = webrtc::EncodedImageBuffer::Create(
+            reinterpret_cast<const uint8_t*>(aom_packet->data.frame.buf),
             aom_packet->data.frame.sz);
         encoded_frame->key_frame =
             aom_packet->data.frame.flags & AOM_FRAME_IS_KEY;

@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 import {assert, assertInstanceof, assertNotReached} from 'chrome://resources/js/assert.m.js';
-import {Command} from 'chrome://resources/js/cr/ui/command.m.js';
+import {Command} from 'chrome://resources/js/cr/ui/command.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {startIOTask} from '../../common/js/api.js';
 import {DialogType} from '../../common/js/dialog_type.js';
+import {metrics} from '../../common/js/metrics.js';
 import {strf, util} from '../../common/js/util.js';
+import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {Crostini} from '../../externs/background/crostini.js';
 import {ProgressCenter} from '../../externs/background/progress_center.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
@@ -173,7 +175,7 @@ export class TaskController {
     this.taskHistory_.addEventListener(
         TaskHistory.EventType.UPDATE, this.updateTasks_.bind(this));
     chrome.fileManagerPrivate.onAppsUpdated.addListener(
-        this.updateTasks_.bind(this));
+        this.clearCacheAndUpdateTasks_.bind(this));
   }
 
   /**
@@ -368,31 +370,54 @@ export class TaskController {
   }
 
   /**
+   * Explicitly removes the cached tasks first and and re-calculates the current
+   * tasks.
+   * @private
+   */
+  clearCacheAndUpdateTasks_() {
+    this.tasks_ = null;
+    this.updateTasks_();
+  }
+
+  /**
    * Updates available tasks opened from context menu or the open button.
    * @private
    */
-  updateTasks_() {
+  async updateTasks_() {
     const selection = this.selectionHandler_.selection;
-    if (this.dialogType_ === DialogType.FULL_PAGE &&
-        (selection.directoryCount > 0 || selection.fileCount > 0)) {
-      this.getFileTasks()
-          .then(tasks => {
-            tasks.display(this.ui_.taskMenuButton);
-            this.updateContextMenuTaskItems_(tasks.getOpenTaskItems());
-            if (window.IN_TEST) {
-              this.ui_.taskMenuButton.toggleAttribute(
-                  'get-tasks-completed', true);
-            }
-          })
-          .catch(error => {
-            if (error) {
-              console.warn(error.stack || error);
-            }
-          });
-    } else {
+    const shouldDisableTasks = (
+        // File Picker/Save As doesn't show the "Open" button.
+        this.dialogType_ !== DialogType.FULL_PAGE ||
+        // The list of available tasks should not be available to trashed items.
+        this.directoryModel_.getCurrentRootType() ==
+            VolumeManagerCommon.RootType.TRASH ||
+        // Nothing selected, so no "Open" button.
+        selection.totalCount === 0);
+
+    if (shouldDisableTasks) {
       this.ui_.taskMenuButton.hidden = true;
       if (window.IN_TEST) {
         this.ui_.taskMenuButton.toggleAttribute('get-tasks-completed', true);
+      }
+      return;
+    }
+
+    try {
+      const metricName = 'UpdateAvailableApps';
+      metrics.startInterval(metricName);
+      const tasks = await this.getFileTasks();
+      // Update the DOM.
+      tasks.display(this.ui_.taskMenuButton);
+      const openTaskItems = tasks.getOpenTaskItems();
+      this.updateContextMenuTaskItems_(openTaskItems);
+      if (window.IN_TEST) {
+        this.ui_.taskMenuButton.toggleAttribute('get-tasks-completed', true);
+      }
+      metrics.recordDirectoryListLoadWithTolerance(
+          metricName, openTaskItems.length, [10, 100], /*tolerance=*/ 0.8);
+    } catch (error) {
+      if (error) {
+        console.warn(error.stack || error);
       }
     }
   }

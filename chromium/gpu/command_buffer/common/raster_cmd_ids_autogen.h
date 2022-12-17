@@ -27,8 +27,8 @@
   OP(CreateTransferCacheEntryINTERNAL)            /* 268 */ \
   OP(DeleteTransferCacheEntryINTERNAL)            /* 269 */ \
   OP(UnlockTransferCacheEntryINTERNAL)            /* 270 */ \
-  OP(DeletePaintCacheTextBlobsINTERNALImmediate)  /* 271 */ \
-  OP(DeletePaintCachePathsINTERNALImmediate)      /* 272 */ \
+  OP(DeletePaintCachePathsINTERNALImmediate)      /* 271 */ \
+  OP(DeletePaintCachePathsINTERNAL)               /* 272 */ \
   OP(ClearPaintCacheINTERNAL)                     /* 273 */ \
   OP(CopySubTextureINTERNALImmediate)             /* 274 */ \
   OP(WritePixelsINTERNALImmediate)                /* 275 */ \

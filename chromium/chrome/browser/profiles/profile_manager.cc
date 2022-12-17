@@ -130,7 +130,6 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/accessibility/live_caption_controller_factory.h"
-#include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -167,7 +166,7 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
 #include "chrome/browser/ui/startup/lacros_first_run_service.h"
-#include "chromeos/startup/browser_init_params.h"
+#include "chromeos/startup/browser_params_proxy.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #endif
 
@@ -370,7 +369,7 @@ void NukeProfileFromDisk(const base::FilePath& profile_path,
 void ProfileCleanedUp(base::Value profile_path_value) {
   ListPrefUpdate deleted_profiles(g_browser_process->local_state(),
                                   prefs::kProfilesDeleted);
-  deleted_profiles->EraseListValue(profile_path_value);
+  deleted_profiles->GetList().EraseValue(profile_path_value);
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -382,8 +381,7 @@ size_t GetEnabledAppCount(Profile* profile) {
   const extensions::ExtensionSet& extensions =
       extensions::ExtensionRegistry::Get(profile)->enabled_extensions();
   for (extensions::ExtensionSet::const_iterator iter = extensions.begin();
-       iter != extensions.end();
-       ++iter) {
+       iter != extensions.end(); ++iter) {
     if ((*iter)->is_app() &&
         (*iter)->location() !=
             extensions::mojom::ManifestLocation::kComponent) {
@@ -437,9 +435,9 @@ void RemoveFromLastActiveProfilesPrefList(base::FilePath path) {
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
   ListPrefUpdate update(local_state, prefs::kProfilesLastActive);
-  base::Value* profile_list = update.Get();
+  base::Value::List& profile_list = update->GetList();
   base::Value entry_value = base::Value(path.BaseName().AsUTF8Unsafe());
-  profile_list->EraseListValue(entry_value);
+  profile_list.EraseValue(entry_value);
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -505,7 +503,20 @@ void UpdateSupervisedUserPref(Profile* profile, bool is_child) {
     profile->GetPrefs()->ClearPref(prefs::kSupervisedUserId);
   }
 }
+
+absl::optional<bool> IsUserChild(Profile* profile) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  const user_manager::User* user =
+      ash::ProfileHelper::Get()->GetUserByProfile(profile);
+  return user ? absl::make_optional(user->GetType() ==
+                                    user_manager::USER_TYPE_CHILD)
+              : absl::nullopt;
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::BrowserParamsProxy::Get()->SessionType() ==
+         crosapi::mojom::SessionType::kChildSession;
 #endif
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
 
@@ -551,6 +562,9 @@ ProfileManager::~ProfileManager() {
       }
     }
   }
+
+  profiles_info_.clear();
+  ProfileDestroyer::DestroyPendingProfilesForShutdown();
 }
 
 // static
@@ -673,12 +687,11 @@ std::vector<Profile*> ProfileManager::GetLastOpenedProfiles() {
   DCHECK(local_state);
 
   std::vector<Profile*> to_return;
-  if (local_state->HasPrefPath(prefs::kProfilesLastActive) &&
-      local_state->GetList(prefs::kProfilesLastActive)) {
+  if (local_state->HasPrefPath(prefs::kProfilesLastActive)) {
     // Make a copy because the list might change in the calls to GetProfile.
-    const base::Value profile_list =
-        local_state->GetList(prefs::kProfilesLastActive)->Clone();
-    for (const auto& entry : profile_list.GetListDeprecated()) {
+    const base::Value::List profile_list =
+        local_state->GetValueList(prefs::kProfilesLastActive).Clone();
+    for (const auto& entry : profile_list) {
       const std::string* profile_base_name = entry.GetIfString();
       if (!profile_base_name || profile_base_name->empty() ||
           *profile_base_name ==
@@ -834,10 +847,8 @@ bool ProfileManager::LoadProfileByPath(const base::FilePath& profile_path,
 void ProfileManager::CreateProfileAsync(const base::FilePath& profile_path,
                                         const CreateCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TRACE_EVENT1("browser,startup",
-               "ProfileManager::CreateProfileAsync",
-               "profile_path",
-               profile_path.AsUTF8Unsafe());
+  TRACE_EVENT1("browser,startup", "ProfileManager::CreateProfileAsync",
+               "profile_path", profile_path.AsUTF8Unsafe());
 
   if (!CanCreateProfileAtPath(profile_path)) {
     if (!callback.is_null())
@@ -1059,7 +1070,7 @@ base::FilePath ProfileManager::GetGuestProfilePath() {
   return guest_path.Append(chrome::kGuestProfileDir);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
 // static
 base::FilePath ProfileManager::GetSystemProfilePath() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -1069,7 +1080,7 @@ base::FilePath ProfileManager::GetSystemProfilePath() {
   base::FilePath system_path = profile_manager->user_data_dir();
   return system_path.Append(chrome::kSystemProfileDir);
 }
-#endif
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 // static
@@ -1267,11 +1278,10 @@ void ProfileManager::CleanUpEphemeralProfiles() {
 void ProfileManager::CleanUpDeletedProfiles() {
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
-  const base::Value* deleted_profiles =
-      local_state->GetList(prefs::kProfilesDeleted);
-  DCHECK(deleted_profiles);
+  const base::Value::List& deleted_profiles =
+      local_state->GetValueList(prefs::kProfilesDeleted);
 
-  for (const base::Value& value : deleted_profiles->GetListDeprecated()) {
+  for (const base::Value& value : deleted_profiles) {
     absl::optional<base::FilePath> profile_path = base::ValueToFilePath(value);
     // Although it should never happen, make sure this is a valid path in the
     // user_data_dir, so we don't accidentally delete something else.
@@ -1308,28 +1318,36 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
     return;
   }
 
+  // User type can change during online sign in on Chrome OS. Propagate the
+  // change to the profile in both Ash and LaCrOS and remove stored profile
+  // attributes so they can be re-initialized later.
+#if BUILDFLAG(IS_CHROMEOS)
+  const absl::optional<bool> user_is_child = IsUserChild(profile);
+  const bool profile_is_new = profile->IsNewProfile();
+  const bool profile_is_child = profile->IsChild();
+  const bool did_supervised_status_change =
+      !profile_is_new && user_is_child.has_value() &&
+      profile_is_child != user_is_child.value();
+
+  if (user_is_child.has_value()) {
+    if (did_supervised_status_change) {
+      ProfileAttributesEntry* entry =
+          storage.GetProfileAttributesWithPath(profile->GetPath());
+      if (entry)
+        storage.RemoveProfile(profile->GetPath());
+    }
+    UpdateSupervisedUserPref(profile, user_is_child.value());
+  }
+#endif
+
+  // Additionally to propagation of the user type change to profile on Chrome
+  // OS, Ash needs to propagate it to ARC++ and update secondary accounts.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // User object may already have changed user type, so we apply that
-  // type to profile.
-  // If profile type has changed, remove ProfileAttributesEntry for it to make
-  // sure it is fully re-initialized later.
-  const user_manager::User* user =
-      ash::ProfileHelper::Get()->GetUserByProfile(profile);
-  if (user) {
-    const bool user_is_child =
-        (user->GetType() == user_manager::USER_TYPE_CHILD);
-    const bool profile_is_child = profile->IsChild();
-    const bool profile_is_new = profile->IsNewProfile();
+  if (user_is_child.has_value()) {
     const bool profile_is_managed = !profile->IsOffTheRecord() &&
                                     arc::policy_util::IsAccountManaged(profile);
 
-    if (!profile_is_new && profile_is_child != user_is_child) {
-      ProfileAttributesEntry* entry =
-          storage.GetProfileAttributesWithPath(profile->GetPath());
-      if (entry) {
-        LOG(WARNING) << "Profile child status has changed.";
-        storage.RemoveProfile(profile->GetPath());
-      }
+    if (did_supervised_status_change) {
       ash::ChildAccountTypeChangedUserData::GetForProfile(profile)->SetValue(
           true);
     } else {
@@ -1351,8 +1369,8 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
       if (!arc_signed_in) {
         // No transition is necessary if user never enabled ARC.
         transition = arc::ArcManagementTransition::NO_TRANSITION;
-      } else if (profile_is_child != user_is_child) {
-        transition = user_is_child
+      } else if (profile_is_child != user_is_child.value()) {
+        transition = user_is_child.value()
                          ? arc::ArcManagementTransition::REGULAR_TO_CHILD
                          : arc::ArcManagementTransition::CHILD_TO_REGULAR;
       } else if (profile_is_managed && arc_is_managed_set && !arc_is_managed) {
@@ -1365,15 +1383,8 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
       profile->GetPrefs()->SetInteger(arc::prefs::kArcManagementTransition,
                                       static_cast<int>(transition));
     }
-    UpdateSupervisedUserPref(profile, user_is_child);
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  const bool user_is_child = chromeos::BrowserInitParams::Get()->session_type ==
-                             crosapi::mojom::SessionType::kChildSession;
-  UpdateSupervisedUserPref(profile, user_is_child);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   size_t avatar_index;
   std::string profile_name;
@@ -1432,11 +1443,7 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
                                    supervised_user_id);
   }
 #if !BUILDFLAG(IS_ANDROID)
-  // TODO(pmonette): Fix IsNewProfile() to handle the case where the profile is
-  // new even if the "Preferences" file already existed. (For example: The
-  // master_preferences file is dumped into the default profile on first run,
-  // before profile creation.)
-  if (profile->IsNewProfile() || first_run::IsChromeFirstRun()) {
+  if (profile->IsNewProfile()) {
     profile->GetPrefs()->SetBoolean(prefs::kHasSeenWelcomePage, false);
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -1631,8 +1638,7 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
     observer.OnProfileAdded(profile);
 
   content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_PROFILE_ADDED,
-      content::Source<Profile>(profile),
+      chrome::NOTIFICATION_PROFILE_ADDED, content::Source<Profile>(profile),
       content::NotificationService::NoDetails());
 
   // At this point, the user policy service and the child account service
@@ -2042,8 +2048,7 @@ void ProfileManager::EnsureActiveProfileExistsBeforeDeletion(
   for (ProfileAttributesEntry* entry : entries) {
     base::FilePath cur_path = entry->GetPath();
     // Make sure that this profile is not pending deletion.
-    if (cur_path != profile_dir &&
-        cur_path != guest_profile_path &&
+    if (cur_path != profile_dir && cur_path != guest_profile_path &&
         !IsProfileDirectoryMarkedForDeletion(cur_path)) {
       fallback_profile_path = cur_path;
       break;
@@ -2359,9 +2364,9 @@ void ProfileManager::SaveActiveProfiles() {
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
   ListPrefUpdate update(local_state, prefs::kProfilesLastActive);
-  base::Value* profile_list = update.Get();
+  base::Value::List& profile_list = update->GetList();
 
-  profile_list->ClearList();
+  profile_list.clear();
 
   // crbug.com/120112 -> several non-off-the-record profiles might have the same
   // GetBaseName(). In that case, we cannot restore both
@@ -2388,7 +2393,7 @@ void ProfileManager::SaveActiveProfiles() {
         profile_paths.find(profile_path) == profile_paths.end() &&
         profile_path != base::FilePath(chrome::kSystemProfileDir)) {
       profile_paths.insert(profile_path);
-      profile_list->Append(profile_path.AsUTF8Unsafe());
+      profile_list.Append(profile_path.AsUTF8Unsafe());
     }
   }
 }
@@ -2506,8 +2511,7 @@ void ProfileManager::BrowserListObserver::OnBrowserAdded(Browser* browser) {
   profile_manager_->OnBrowserOpened(browser);
 }
 
-void ProfileManager::BrowserListObserver::OnBrowserRemoved(
-    Browser* browser) {
+void ProfileManager::BrowserListObserver::OnBrowserRemoved(Browser* browser) {
   profile_manager_->OnBrowserClosed(browser);
 }
 
@@ -2566,6 +2570,7 @@ void ProfileManager::OnClosingAllBrowsersChanged(bool closing) {
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 ProfileManagerWithoutInit::ProfileManagerWithoutInit(
-    const base::FilePath& user_data_dir) : ProfileManager(user_data_dir) {
+    const base::FilePath& user_data_dir)
+    : ProfileManager(user_data_dir) {
   set_do_final_services_init(false);
 }

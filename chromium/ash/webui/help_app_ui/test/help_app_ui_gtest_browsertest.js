@@ -10,7 +10,7 @@
 GEN('#include "ash/webui/help_app_ui/test/help_app_ui_browsertest.h"');
 
 GEN('#include "ash/constants/ash_features.h"');
-GEN('#include "ash/public/cpp/style/color_provider.h"');
+GEN('#include "ash/public/cpp/style/dark_light_mode_controller.h"');
 GEN('#include "chromeos/constants/chromeos_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
@@ -34,8 +34,7 @@ var HelpAppUIGtestBrowserTest = class extends testing.Test {
     return {
       enabled: [
         'ash::features::kHelpAppLauncherSearch',
-        'ash::features::kHelpAppSearchServiceIntegration',
-      ]
+      ],
     };
   }
 
@@ -55,7 +54,7 @@ var HelpAppUIWithDarkLightModeGtestBrowserTest =
       enabled: [
         ...super.featureList.enabled,
         'chromeos::features::kDarkLightMode',
-      ]
+      ],
     };
   }
 
@@ -63,7 +62,7 @@ var HelpAppUIWithDarkLightModeGtestBrowserTest =
   get testGenPreamble() {
     return () => {
       // Switch to dark mode.
-      GEN('ash::ColorProvider::Get()->SetDarkModeEnabledForTest(true);');
+      GEN('ash::DarkLightModeController::Get()->SetDarkModeEnabledForTest(true);');
     };
   }
 };
@@ -179,6 +178,10 @@ TEST_F(
 
 TEST_F('HelpAppUIGtestBrowserTest', 'GuestHasLang', () => {
   runHelpAppTestInGuest('GuestHasLang');
+});
+
+TEST_F('HelpAppUIGtestBrowserTest', 'GuestLoadsLoadTimeData', () => {
+  runHelpAppTestInGuest('GuestLoadsLoadTimeData');
 });
 
 TEST_F('HelpAppUIGtestBrowserTest', 'GuestCanSearchWithHeadings', () => {

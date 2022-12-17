@@ -9,9 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/network/policy_certificate_provider.h"
+#include "chromeos/ash/components/network/policy_certificate_provider.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class Profile;
@@ -37,17 +38,16 @@ namespace policy {
 // This service / its factory keep track of which Profile has used a
 // policy-provided trust anchor.
 class PolicyCertService : public KeyedService,
-                          public chromeos::PolicyCertificateProvider::Observer {
+                          public ash::PolicyCertificateProvider::Observer {
  public:
   // Constructs a PolicyCertService for |profile| using
   // |policy_certificate_provider| as the source of certificates.
   // If |may_use_profile_wide_trust_anchors| is true, certificates from
   // |policy_certificate_provider| that have requested "Web" trust and have
   // profile-wide scope will be used for |profile|.
-  PolicyCertService(
-      Profile* profile,
-      chromeos::PolicyCertificateProvider* policy_certificate_provider,
-      bool may_use_profile_wide_trust_anchors);
+  PolicyCertService(Profile* profile,
+                    ash::PolicyCertificateProvider* policy_certificate_provider,
+                    bool may_use_profile_wide_trust_anchors);
 
   PolicyCertService(const PolicyCertService&) = delete;
   PolicyCertService& operator=(const PolicyCertService&) = delete;
@@ -100,10 +100,10 @@ class PolicyCertService : public KeyedService,
   // is false, always returns an empty list.
   net::CertificateList GetAllowedProfileWideTrustAnchors();
 
-  Profile* const profile_;
+  const raw_ptr<Profile> profile_;
 
   // The source of certificates for this PolicyCertService.
-  chromeos::PolicyCertificateProvider* const policy_certificate_provider_;
+  const raw_ptr<ash::PolicyCertificateProvider> policy_certificate_provider_;
 
   // If true, CA certificates |policy_certificate_provider_| that have requested
   // "Web" trust and have profile-wide scope may be used for |profile_|.

@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/in_memory_url_index_types.h"
+#include "components/omnibox/browser/suggestion_group.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 
 class AutocompleteInput;
@@ -171,6 +172,7 @@ class AutocompleteProvider
     TYPE_VOICE_SUGGEST = 1 << 15,
     TYPE_HISTORY_FUZZY = 1 << 16,
     TYPE_OPEN_TAB = 1 << 17,
+    TYPE_HISTORY_CLUSTER_PROVIDER = 1 << 18,
   };
 
   explicit AutocompleteProvider(Type type);
@@ -187,6 +189,21 @@ class AutocompleteProvider
   // `NotifyListeners().`
   void AddListener(AutocompleteProviderListener* listener);
   void NotifyListeners(bool updated_matches) const;
+
+  // Called on page load. Used start a prefetch request to warm up the
+  // provider's underlying service(s) and/or optionally cache the provider's
+  // otherwise async response. A prefetch request must conform to the following:
+  // - It must be posted on a sequence to minimize contention on page load.
+  // - It must *not* depend on or affect the provider's state.
+  // - It must *not* stop the provider.
+  // - It need *not* stop when the provider is stopped.
+  // - It must *not* call NotifyListeners() after completing a prefetch request.
+  // - It must make prefetched response accessible to other instances of the
+  //   provider, e.g., via user prefs or a keyed service, if applicable.
+  // The default implementation DCHECKs whether async requests are allowed.
+  // Overridden functions must call `AutocompleteProvider::StartPrefetch()` with
+  // the same arguments passed to the function.
+  virtual void StartPrefetch(const AutocompleteInput& input);
 
   // Called to start an autocomplete query.  The provider is responsible for
   // tracking its matches for this query and whether it is done processing the
@@ -209,25 +226,24 @@ class AutocompleteProvider
   // AutocompleteController::Start().
   virtual void Start(const AutocompleteInput& input, bool minimal_changes) = 0;
 
-  // Similar to Start(), but used to perform prefetch requests. Providers can
-  // override this method and perform a prefetch request in order to cache the
-  // response. Providers should *not* call NotifyListeners() after completing a
-  // prefetch request.
-  virtual void StartPrefetch(const AutocompleteInput& input) {}
-
   // Advises the provider to stop processing.  This may be called even if the
   // provider is already done.  If the provider caches any results, it should
-  // clear the cache based on the value of |clear_cached_results|.  Normally,
+  // clear the cache based on the value of `clear_cached_results`.  Normally,
   // once this is called, the provider should not send more notifications to
   // the controller.
   //
-  // If |user_inactivity_timer| is true, Stop() is being called because it's
+  // If `user_inactivity_timer` is true, Stop() is being called because it's
   // been a long time since the user started the current query, and returning
   // further asynchronous results would normally just be disruptive.  Most
   // providers should still stop processing in this case, but continuing is
   // legal if there's a good reason the user is likely to want even long-
   // delayed asynchronous results, e.g. the user has explicitly invoked a
   // keyword extension and the extension is still processing the request.
+  //
+  // The default implementation sets `done_` to true and clears `matches_` if
+  // `clear_cached_results` is true. Overridden functions must call
+  // `AutocompleteProvider::Stop()` with the same arguments passed to the
+  // function.
   virtual void Stop(bool clear_cached_results, bool due_to_user_inactivity);
 
   // Returns the enum equivalent to the name of this provider.
@@ -269,14 +285,33 @@ class AutocompleteProvider
   // method and include the response in their estimate.
   virtual size_t EstimateMemoryUsage() const;
 
+  // Returns a map of suggestion group IDs to suggestion group information
+  // corresponding to |matches_|.
+  const SuggestionGroupsMap& suggestion_groups_map() const {
+    return suggestion_groups_map_;
+  }
+
   // Returns a suggested upper bound for how many matches this provider should
   // return.
   size_t provider_max_matches() const { return provider_max_matches_; }
 
+  // Returns a suggested upper bound for how many matches this provider should
+  // return while in keyword mode.
+  size_t provider_max_matches_in_keyword_mode() const {
+    return provider_max_matches_in_keyword_mode_;
+  }
+
   // Returns the set of matches for the current query.
   const ACMatches& matches() const { return matches_; }
 
-  // Returns whether the provider is done processing the query.
+  // Returns whether the provider is done processing the last `Start()` request.
+  // Should not be set true for `StartPrefetch()` requests in order to remain
+  // consistent with `AutocompleteController::done()`; i.e., if `done_` is false
+  // for any provider, then the `AutocompleteController::done_` must also be
+  // false. This ensures the controller can determine when each provider
+  // finishes processing async requests. Should be true after either `Stop()` or
+  // `Start()` with `AutocompleteInput.omit_asynchronous_matches_` set to true
+  // are called.
   bool done() const { return done_; }
 
   // Returns this provider's type.
@@ -327,6 +362,10 @@ class AutocompleteProvider
       const bool text_is_search_query,
       const ACMatchClassifications& original_class = ACMatchClassifications());
 
+  // Uses the keyword entry mode in `input` to decide if the user is currently
+  // in keyword mode.
+  static bool InKeywordMode(const AutocompleteInput& input);
+
   // Used to determine if we're in keyword mode, if experimental keyword
   // mode is enabled, and if we're confident that the user is intentionally
   // (not accidentally) in keyword mode. Combined, this method returns
@@ -334,11 +373,11 @@ class AutocompleteProvider
   static bool InExplicitExperimentalKeywordMode(const AutocompleteInput& input,
                                                 const std::u16string& keyword);
 
-  // Uses the keyword entry mode in |input| (and possibly compare the length
-  // of the user input vs |keyword|) to decide if the user intentionally
+  // Uses the keyword entry mode in `input` (and possibly compare the length
+  // of the user input vs `keyword`) to decide if the user intentionally
   // entered keyword mode.
-  static bool IsExplicitlyInKeywordMode(const AutocompleteInput& input,
-                                        const std::u16string& keyword);
+  static bool InExplicitKeywordMode(const AutocompleteInput& input,
+                                    const std::u16string& keyword);
 
   // Trims "http:" or "https:" and up to two subsequent slashes from |url|. If
   // |trim_https| is true, trims "https:", otherwise trims "http:". Returns the
@@ -349,6 +388,7 @@ class AutocompleteProvider
 
  protected:
   friend class base::RefCountedThreadSafe<AutocompleteProvider>;
+  friend class FakeAutocompleteProvider;
   FRIEND_TEST_ALL_PREFIXES(BookmarkProviderTest, InlineAutocompletion);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteResultTest,
                            DemoteOnDeviceSearchSuggestions);
@@ -376,9 +416,13 @@ class AutocompleteProvider
   std::vector<AutocompleteProviderListener*> listeners_;
 
   const size_t provider_max_matches_;
+  const size_t provider_max_matches_in_keyword_mode_{7};
 
   ACMatches matches_;
-  bool done_;
+  // A map of suggestion group IDs to suggestion group information corresponding
+  // to |matches_|.
+  SuggestionGroupsMap suggestion_groups_map_{};
+  bool done_{true};
 
   Type type_;
 };

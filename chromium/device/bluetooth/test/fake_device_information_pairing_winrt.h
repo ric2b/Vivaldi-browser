@@ -5,11 +5,13 @@
 #ifndef DEVICE_BLUETOOTH_TEST_FAKE_DEVICE_INFORMATION_PAIRING_WINRT_H_
 #define DEVICE_BLUETOOTH_TEST_FAKE_DEVICE_INFORMATION_PAIRING_WINRT_H_
 
-#include <windows.devices.enumeration.h>
+#include <Windows.Devices.Enumeration.h>
 #include <wrl/client.h>
 #include <wrl/implements.h>
 
 #include <string>
+
+#include "base/strings/string_piece_forward.h"
 
 namespace device {
 
@@ -22,6 +24,11 @@ class FakeDeviceInformationPairingWinrt
  public:
   explicit FakeDeviceInformationPairingWinrt(bool is_paired);
   explicit FakeDeviceInformationPairingWinrt(std::string pin);
+  explicit FakeDeviceInformationPairingWinrt(
+      ABI::Windows::Devices::Enumeration::DevicePairingKinds pairing_kind);
+  explicit FakeDeviceInformationPairingWinrt(
+      ABI::Windows::Devices::Enumeration::DevicePairingKinds pairing_kind,
+      base::StringPiece display_pin);
 
   FakeDeviceInformationPairingWinrt(const FakeDeviceInformationPairingWinrt&) =
       delete;

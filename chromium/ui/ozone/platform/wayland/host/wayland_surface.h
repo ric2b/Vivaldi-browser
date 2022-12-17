@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
+#include "base/memory/raw_ptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
@@ -159,7 +160,7 @@ class WaylandSurface {
   // Sets the background color for this surface, which will be blended with the
   // wl_buffer contents during the compositing step on the Wayland compositor
   // side.
-  void SetBackgroundColor(absl::optional<SkColor> background_color);
+  void SetBackgroundColor(absl::optional<SkColor4f> background_color);
 
   // Validates the |pending_state_| and generates the corresponding requests.
   // Then copy |pending_states_| to |states_|.
@@ -196,7 +197,7 @@ class WaylandSurface {
 
     wl::Object<zwp_linux_buffer_release_v1> linux_buffer_release;
     // The buffer associated with this explicit release.
-    wl_buffer* buffer;
+    raw_ptr<wl_buffer> buffer;
   };
 
   struct State {
@@ -217,7 +218,7 @@ class WaylandSurface {
     // buffer_handle owning this wl_buffer is destroyed. Accessing this field
     // should ensure wl_buffer exists by calling
     // WaylandBufferManagerHost::EnsureBufferHandle(buffer_id).
-    wl_buffer* buffer = nullptr;
+    raw_ptr<wl_buffer> buffer = nullptr;
     gfx::Size buffer_size_px;
 
     // Current scale factor of a next attached buffer used by the GPU process.
@@ -252,7 +253,7 @@ class WaylandSurface {
     // Optional background color for this surface. This information
     // can be used by Wayland compositor to correctly display delegated textures
     // which require background color applied.
-    absl::optional<SkColor> background_color;
+    absl::optional<SkColor4f> background_color;
   };
 
   // Tracks the last sent src and dst values across wayland protocol s.t. we
@@ -282,8 +283,8 @@ class WaylandSurface {
   zwp_linux_surface_synchronization_v1* GetSurfaceSync();
   augmented_surface* GetAugmentedSurface();
 
-  WaylandConnection* const connection_;
-  WaylandWindow* root_window_ = nullptr;
+  const raw_ptr<WaylandConnection> connection_;
+  raw_ptr<WaylandWindow> root_window_ = nullptr;
   bool apply_state_immediately_ = false;
   wl::Object<wl_surface> surface_;
   wl::Object<wp_viewport> viewport_;

@@ -4,15 +4,18 @@ This document describes PartitionAlloc at a high level, with some architectural
 details. For implementation details, see the comments in
 `partition_alloc_constants.h`.
 
+## Quick Links
+
+* [Glossary](./glossary.md): Definitions of terms commonly used in
+  PartitionAlloc. The present document largely avoids defining terms.
+
+* [Build Config](./build_config.md): Pertinent GN args, buildflags, and
+  macros.
+
 ## Overview
 
 PartitionAlloc is a memory allocator optimized for space efficiency,
 allocation latency, and security.
-
-*** note
-This document largely avoids defining terms; consult the
-[glossary](./glossary.md) for a complete reference.
-***
 
 ### Performance
 
@@ -20,6 +23,8 @@ PartitionAlloc is designed to be extremely fast in its fast paths. The fast
 paths of allocation and deallocation require very few (reasonably predictable)
 branches. The number of operations in the fast paths is minimal, leading to the
 possibility of inlining.
+
+![general architecture](./dot/layers.png)
 
 However, even the fast path isn't the fastest, because it requires taking
 a per-partition lock. Although we optimized the lock, there was still room for
@@ -102,6 +107,13 @@ partition page that holds metadata (32B struct per partition page).
       diagram).
 * Gray fill denotes guard pages (one partition page each at the head and tail
   of each super page).
+* In some configurations, PartitionAlloc stores more metadata than can
+  fit in the one system page at the front. These are the bitmaps for
+  StarScan and `MTECheckedPtr<T>`, and they are relegated to the head of
+  what would otherwise be usable space for slot spans. One, both, or
+  none of these bitmaps may be present, depending on build
+  configuration, runtime configuration, and type of allocation.
+  See [`SuperPagePayloadBegin()`][payload-start] for details.
 
 As allocation requests arrive, there is eventually a need to allocate a new slot
 span.
@@ -178,3 +190,4 @@ list.
 [PartitionPage]: https://source.chromium.org/chromium/chromium/src/+/main:base/allocator/partition_allocator/partition_page.h;l=314;drc=e5b03e85ea180d1d1ab0dec471c7fd5d1706a9e4
 [SlotSpanMetadata]: https://source.chromium.org/chromium/chromium/src/+/main:base/allocator/partition_allocator/partition_page.h;l=120;drc=e5b03e85ea180d1d1ab0dec471c7fd5d1706a9e4
 [SubsequentPageMetadata]: https://source.chromium.org/chromium/chromium/src/+/main:base/allocator/partition_allocator/partition_page.h;l=295;drc=e5b03e85ea180d1d1ab0dec471c7fd5d1706a9e4
+[payload-start]: https://source.chromium.org/chromium/chromium/src/+/35b2deed603dedd4abb37f204d516ed62aa2b85c:base/allocator/partition_allocator/partition_page.h;l=454

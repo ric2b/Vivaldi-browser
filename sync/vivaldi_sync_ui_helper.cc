@@ -2,8 +2,9 @@
 
 #include "sync/vivaldi_sync_ui_helper.h"
 
+#include <tuple>
+
 #include "base/base64.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/syncer_error.h"
@@ -14,9 +15,9 @@
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 namespace vivaldi {
-VivaldiSyncUIHelper::VivaldiSyncUIHelper(Profile* profile,
-                                         VivaldiSyncServiceImpl* sync_service)
-    : profile_(profile), sync_service_(sync_service) {}
+VivaldiSyncUIHelper::VivaldiSyncUIHelper(VivaldiSyncServiceImpl* sync_service,
+                                         VivaldiAccountManager* account_manager)
+    : sync_service_(sync_service), account_manager_(account_manager) {}
 
 void VivaldiSyncUIHelper::RegisterObserver() {
   sync_service_->AddObserver(this);
@@ -122,27 +123,10 @@ bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {
 
   if (!password.empty()) {
     sync_service_->GetUserSettings()->SetEncryptionPassphrase(password);
-    profile_->GetPrefs()->SetInteger(
-        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
-        static_cast<int>(
-            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kYes));
     return true;
   }
 
-  std::string login_password =
-      VivaldiAccountManagerFactory::GetForProfile(profile_)
-          ->password_handler()
-          ->password();
-
-  if (login_password.empty())
-    return false;
-
-  profile_->GetPrefs()->SetInteger(
-      vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
-      static_cast<int>(
-          vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kNo));
-  sync_service_->GetUserSettings()->SetEncryptionPassphrase(login_password);
-  return true;
+  return false;
 }
 
 void VivaldiSyncUIHelper::OnStateChanged(syncer::SyncService* sync) {
@@ -157,21 +141,16 @@ void VivaldiSyncUIHelper::OnStateChanged(syncer::SyncService* sync) {
 
   tried_decrypt_ = true;
 
-  std::string password = VivaldiAccountManagerFactory::GetForProfile(profile_)
-                             ->password_handler()
-                             ->password();
+  std::string password = account_manager_->password_handler()->password();
 
-  if (!password.empty() &&
-      sync_service_->GetUserSettings()->SetDecryptionPassphrase(password)) {
-    profile_->GetPrefs()->SetInteger(
-        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
-        static_cast<int>(
-            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kNo));
-  } else {
-    profile_->GetPrefs()->SetInteger(
-        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
-        static_cast<int>(
-            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kYes));
+  if (!password.empty()) {
+    // See if the user is using the same encryption and login password. If yes,
+    // this will cause the engine to proceed to the next step, and cause the
+    // encryption password prompt UI to be skipped.
+    // Otherwise, the UI will just stick to showing the password prompt, so we
+    // can silently drop informing the UI about it.
+    std::ignore =
+        sync_service_->GetUserSettings()->SetDecryptionPassphrase(password);
   }
 }
 

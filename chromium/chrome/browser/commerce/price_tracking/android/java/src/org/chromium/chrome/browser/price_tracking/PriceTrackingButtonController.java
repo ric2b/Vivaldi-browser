@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.price_tracking;
 
 import android.app.Activity;
+import android.content.res.Resources;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
@@ -21,6 +22,8 @@ import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
+import org.chromium.components.feature_engagement.FeatureConstants;
 
 /**
  * Responsible for providing UI resources for showing price tracking action on optional toolbar
@@ -40,10 +43,11 @@ public class PriceTrackingButtonController implements ButtonDataProvider {
 
         // TODO(shaktisahu): Provide accurate icon and string.
         mButtonData = new ButtonDataImpl(/*canShow=*/true,
-                AppCompatResources.getDrawable(mActivity, R.drawable.ic_toolbar_share_offset_24dp),
+                AppCompatResources.getDrawable(mActivity, R.drawable.price_tracking_disabled),
                 view
                 -> onPriceTrackingClicked(tabSupplier.get()),
-                R.string.share, /*supportsTinting=*/true, /*iphCommandBuilder*/ null,
+                R.string.enable_price_tracking_menu_item, /*supportsTinting=*/true,
+                /*iphCommandBuilder*/ null,
                 /*isEnabled=*/true, AdaptiveToolbarButtonVariant.PRICE_TRACKING);
     }
 
@@ -60,7 +64,18 @@ public class PriceTrackingButtonController implements ButtonDataProvider {
     @Override
     public ButtonData get(@Nullable Tab tab) {
         maybeSetIphCommandBuilder(tab);
+        maybeSetActionChipResourceId();
         return mButtonData;
+    }
+
+    private void maybeSetActionChipResourceId() {
+        if (FeatureList.isInitialized() && AdaptiveToolbarFeatures.shouldShowActionChip()) {
+            // OptionalButtonCoordinator may choose to not show this action chip. It uses feature
+            // engagement to rate limit this animation.
+            mButtonData.updateActionChipResourceId(R.string.enable_price_tracking_menu_item);
+        } else {
+            mButtonData.updateActionChipResourceId(Resources.ID_NULL);
+        }
     }
 
     @Override
@@ -78,6 +93,10 @@ public class PriceTrackingButtonController implements ButtonDataProvider {
             return;
         }
 
-        // TODO(shaktisahu): Implement IPH and update button data.
+        IPHCommandBuilder iphCommandBuilder = new IPHCommandBuilder(tab.getContext().getResources(),
+                FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING,
+                /* stringId = */ R.string.iph_price_tracking_menu_item,
+                /* accessibilityStringId = */ R.string.iph_price_tracking_menu_item);
+        mButtonData.updateIPHCommandBuilder(iphCommandBuilder);
     }
 }

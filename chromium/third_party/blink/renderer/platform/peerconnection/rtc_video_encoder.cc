@@ -23,6 +23,7 @@
 #include "base/thread_annotations.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "media/base/bind_to_current_loop.h"
@@ -140,6 +141,28 @@ class ScopedSignaledValue {
   SignaledValue sv;
 };
 
+class EncodedDataWrapper : public webrtc::EncodedImageBufferInterface {
+ public:
+  EncodedDataWrapper(uint8_t* data,
+                     size_t size,
+                     base::OnceClosure reuse_buffer_callback)
+      : data_(data),
+        size_(size),
+        reuse_buffer_callback_(std::move(reuse_buffer_callback)) {}
+  ~EncodedDataWrapper() override {
+    DCHECK(reuse_buffer_callback_);
+    std::move(reuse_buffer_callback_).Run();
+  }
+  const uint8_t* data() const override { return data_; }
+  uint8_t* data() override { return data_; }
+  size_t size() const override { return size_; }
+
+ private:
+  uint8_t* const data_;
+  const size_t size_;
+  base::OnceClosure reuse_buffer_callback_;
+};
+
 bool ConvertKbpsToBps(uint32_t bitrate_kbps, uint32_t* bitrate_bps) {
   if (!base::IsValueInRangeForNumericType<uint32_t>(bitrate_kbps *
                                                     UINT64_C(1000))) {
@@ -245,30 +268,8 @@ bool CreateSpatialLayersConfig(
         spatial_layers,
     media::VideoEncodeAccelerator::Config::InterLayerPredMode*
         inter_layer_pred) {
-  if (codec_settings.codecType == webrtc::kVideoCodecH264 &&
-      codec_settings.H264().numberOfTemporalLayers > 1 &&
-      !RTCVideoEncoder::H264HwSupportForTemporalLayers()) {
-    DVLOG(1) << "H264 temporal layers not yet supported by HW codecs, but use"
-             << " HW codecs and leave the fallback decision to a webrtc client"
-             << " by seeing metadata in webrtc::CodecSpecificInfo";
-
-    return true;
-  }
-
-  if (codec_settings.codecType == webrtc::kVideoCodecVP8 &&
-      codec_settings.mode == webrtc::VideoCodecMode::kScreensharing &&
-      codec_settings.VP8().numberOfTemporalLayers > 1) {
-    // This is a VP8 stream with screensharing using temporal layers for
-    // temporal scalability. Since this implementation does not yet implement
-    // temporal layers, fall back to software codec, if cfm and board is known
-    // to have a CPU that can handle it.
-    if (base::FeatureList::IsEnabled(features::kWebRtcScreenshareSwEncoding)) {
-      // TODO(sprang): Add support for temporal layers so we don't need
-      // fallback. See eg http://crbug.com/702017
-      DVLOG(1) << "Falling back to software encoder.";
-      return false;
-    }
-  }
+  absl::optional<webrtc::ScalabilityMode> scalability_mode =
+      codec_settings.GetScalabilityMode();
 
   if (codec_settings.codecType == webrtc::kVideoCodecVP9 &&
       codec_settings.VP9().numberOfSpatialLayers > 1 &&
@@ -281,23 +282,48 @@ bool CreateSpatialLayersConfig(
   // We fill SpatialLayer only in temporal layer or spatial layer encoding.
   switch (codec_settings.codecType) {
     case webrtc::kVideoCodecH264:
-      if (codec_settings.H264().numberOfTemporalLayers > 1) {
-        // Though we don't support H264 SVC. We allocate 1 element in
-        // spatial_layers for temporal layer encoding.
-        spatial_layers->resize(1u);
-        auto& sl = (*spatial_layers)[0];
-        sl.width = codec_settings.width;
-        sl.height = codec_settings.height;
-        if (!ConvertKbpsToBps(codec_settings.startBitrate, &sl.bitrate_bps))
-          return false;
-        sl.framerate = codec_settings.maxFramerate;
-        sl.max_qp = base::saturated_cast<uint8_t>(codec_settings.qpMax);
-        sl.num_of_temporal_layers = base::saturated_cast<uint8_t>(
-            codec_settings.H264().numberOfTemporalLayers);
+      if (scalability_mode.has_value() &&
+          *scalability_mode != webrtc::ScalabilityMode::kL1T1) {
+        DVLOG(1)
+            << "H264 temporal layers not yet supported by HW codecs, but use"
+            << " HW codecs and leave the fallback decision to a webrtc client"
+            << " by seeing metadata in webrtc::CodecSpecificInfo";
+
+        return true;
       }
       break;
-    case webrtc::kVideoCodecVP8:
-      if (codec_settings.VP8().numberOfTemporalLayers > 1) {
+    case webrtc::kVideoCodecVP8: {
+      int number_of_temporal_layers = 1;
+      if (scalability_mode.has_value()) {
+        switch (*scalability_mode) {
+          case webrtc::ScalabilityMode::kL1T1:
+            number_of_temporal_layers = 1;
+            break;
+          case webrtc::ScalabilityMode::kL1T2:
+            number_of_temporal_layers = 2;
+            break;
+          case webrtc::ScalabilityMode::kL1T3:
+            number_of_temporal_layers = 3;
+            break;
+          default:
+            // Other modes not supported.
+            return false;
+        }
+      }
+      if (number_of_temporal_layers > 1) {
+        if (codec_settings.mode == webrtc::VideoCodecMode::kScreensharing) {
+          // This is a VP8 stream with screensharing using temporal layers for
+          // temporal scalability. Since this implementation does not yet
+          // implement temporal layers, fall back to software codec, if cfm and
+          // board is known to have a CPU that can handle it.
+          if (base::FeatureList::IsEnabled(
+                  features::kWebRtcScreenshareSwEncoding)) {
+            // TODO(sprang): Add support for temporal layers so we don't need
+            // fallback. See eg http://crbug.com/702017
+            DVLOG(1) << "Falling back to software encoder.";
+            return false;
+          }
+        }
         // Though there is no SVC in VP8 spec. We allocate 1 element in
         // spatial_layers for temporal layer encoding.
         spatial_layers->resize(1u);
@@ -308,10 +334,11 @@ bool CreateSpatialLayersConfig(
           return false;
         sl.framerate = codec_settings.maxFramerate;
         sl.max_qp = base::saturated_cast<uint8_t>(codec_settings.qpMax);
-        sl.num_of_temporal_layers = base::saturated_cast<uint8_t>(
-            codec_settings.VP8().numberOfTemporalLayers);
+        sl.num_of_temporal_layers =
+            base::saturated_cast<uint8_t>(number_of_temporal_layers);
       }
       break;
+    }
     case webrtc::kVideoCodecVP9:
       // Since one TL and one SL can be regarded as one simple stream,
       // SpatialLayer is not filled.
@@ -495,9 +522,6 @@ class RTCVideoEncoder::Impl
   // Impl is a base::RefCountedThreadSafe.
   void Destroy(SignaledValue event);
 
-  // Return the status of Impl. One of WEBRTC_VIDEO_CODEC_XXX value.
-  int32_t GetStatus() const;
-
   webrtc::VideoCodecType video_codec_type() const { return video_codec_type_; }
 
   // media::VideoEncodeAccelerator::Client implementation.
@@ -550,8 +574,6 @@ class RTCVideoEncoder::Impl
   void ReturnEncodedImage(const webrtc::EncodedImage& image,
                           const webrtc::CodecSpecificInfo& info,
                           int32_t bitstream_buffer_id);
-
-  void SetStatus(int32_t status);
 
   // Records |failed_timestamp_match_| value after a session.
   void RecordTimestampMatchUMA() const;
@@ -631,7 +653,6 @@ class RTCVideoEncoder::Impl
   // The content type, as reported to WebRTC (screenshare vs realtime video).
   const webrtc::VideoContentType video_content_type_;
 
-  webrtc::VideoEncoder::EncoderInfo encoder_info_ GUARDED_BY(lock_);
   // This has the same information as |encoder_info_.preferred_pixel_formats|
   // but can be used on |sequence_checker_| without acquiring the lock.
   absl::InlinedVector<webrtc::VideoFrameBuffer::Type,
@@ -646,16 +667,19 @@ class RTCVideoEncoder::Impl
   // Index of the highest spatial layer with bandwidth allocated for it.
   size_t highest_active_spatial_index_{0};
 
-  // Protect |status_| and |encoder_info_|. |status_| is read or written on
+  // We cannot immediately return error conditions to the WebRTC user of this
+  // class, as there is no error callback in the webrtc::VideoEncoder interface.
+  // Instead, we cache an error status here and return it the next time an
+  // interface entry point is called.
+  int32_t status_ GUARDED_BY_CONTEXT(sequence_checker_){
+      WEBRTC_VIDEO_CODEC_UNINITIALIZED};
+
+  // Protect |encoder_info_|. |encoder_info_| is read or written on
   // |gpu_task_runner_| in Impl. It can be read in RTCVideoEncoder on other
   // threads.
   mutable base::Lock lock_;
 
-  // We cannot immediately return error conditions to the WebRTC user of this
-  // class, as there is no error callback in the webrtc::VideoEncoder interface.
-  // Instead, we cache an error status here and return it the next time an
-  // interface entry point is called. This is protected by |lock_|.
-  int32_t status_ GUARDED_BY(lock_){WEBRTC_VIDEO_CODEC_UNINITIALIZED};
+  webrtc::VideoEncoder::EncoderInfo encoder_info_ GUARDED_BY(lock_);
 };
 
 RTCVideoEncoder::Impl::Impl(media::GpuVideoAcceleratorFactories* gpu_factories,
@@ -703,7 +727,7 @@ void RTCVideoEncoder::Impl::CreateAndInitializeVEA(
   DVLOG(3) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  SetStatus(WEBRTC_VIDEO_CODEC_UNINITIALIZED);
+  status_ = WEBRTC_VIDEO_CODEC_UNINITIALIZED;
   async_init_event_ = ScopedSignaledValue(std::move(init_event));
   async_encode_event_.reset();
 
@@ -764,8 +788,8 @@ void RTCVideoEncoder::Impl::CreateAndInitializeVEA(
         media::VideoEncodeAccelerator::Config::StorageType::kGpuMemoryBuffer;
     use_native_input_ = true;
 
-    base::AutoLock lock(lock_);
     preferred_pixel_formats_ = {webrtc::VideoFrameBuffer::Type::kNV12};
+    base::AutoLock lock(lock_);
     encoder_info_.preferred_pixel_formats = preferred_pixel_formats_;
   }
   const media::VideoEncodeAccelerator::Config config(
@@ -812,9 +836,8 @@ void RTCVideoEncoder::Impl::Enqueue(const webrtc::VideoFrame* input_frame,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!input_next_frame_);
 
-  int32_t retval = GetStatus();
-  if (retval != WEBRTC_VIDEO_CODEC_OK) {
-    encode_event.Set(retval);
+  if (status_ != WEBRTC_VIDEO_CODEC_OK) {
+    encode_event.Set(status_);
     encode_event.Signal();
     return;
   }
@@ -829,7 +852,7 @@ void RTCVideoEncoder::Impl::Enqueue(const webrtc::VideoFrame* input_frame,
   // (1) Encode() is waiting for the frame to be encoded in EncodeOneFrame().
   // (2) There are no free input buffers and they cannot be freed because
   //     the encoder has no output buffers.
-  // (3) Output buffers cannot be freed because ReturnEncodedImage is queued
+  // (3) Output buffers cannot be freed because OnEncodedImage() is queued
   //     on libjingle worker thread to be run. But the worker thread is waiting
   //     for the same webrtc lock held by the caller of Encode().
   //
@@ -877,6 +900,9 @@ void RTCVideoEncoder::Impl::RequestEncodingParametersChange(
   DVLOG(3) << __func__ << " bitrate=" << parameters.bitrate.ToString()
            << ", framerate=" << parameters.framerate_fps;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (status_ != WEBRTC_VIDEO_CODEC_OK)
+    return;
 
   // Destroy() against this has been called. Don't proceed the change request.
   if (!video_encoder_)
@@ -926,7 +952,7 @@ void RTCVideoEncoder::Impl::Destroy(SignaledValue event) {
   RecordTimestampMatchUMA();
   if (video_encoder_) {
     video_encoder_.reset();
-    SetStatus(WEBRTC_VIDEO_CODEC_UNINITIALIZED);
+    status_ = WEBRTC_VIDEO_CODEC_UNINITIALIZED;
     RecordEncoderShutdownReasonUMA(
         RTCVideoEncoderShutdownReason::kSuccessfulRelease, video_codec_type_);
   }
@@ -934,16 +960,6 @@ void RTCVideoEncoder::Impl::Destroy(SignaledValue event) {
   async_init_event_.reset();
   async_encode_event_.reset();
   event.Signal();
-}
-
-int32_t RTCVideoEncoder::Impl::GetStatus() const {
-  base::AutoLock lock(lock_);
-  return status_;
-}
-
-void RTCVideoEncoder::Impl::SetStatus(int32_t status) {
-  base::AutoLock lock(lock_);
-  status_ = status;
 }
 
 void RTCVideoEncoder::Impl::RecordTimestampMatchUMA() const {
@@ -1022,8 +1038,8 @@ void RTCVideoEncoder::Impl::RequireBitstreamBuffers(
                                output_buffers_[i].first.GetSize()));
     output_buffers_free_count_++;
   }
-  DCHECK_EQ(GetStatus(), WEBRTC_VIDEO_CODEC_UNINITIALIZED);
-  SetStatus(WEBRTC_VIDEO_CODEC_OK);
+  DCHECK_EQ(status_, WEBRTC_VIDEO_CODEC_UNINITIALIZED);
+  status_ = WEBRTC_VIDEO_CODEC_OK;
 
   scoped_event.SetAndReset(WEBRTC_VIDEO_CODEC_OK);
 }
@@ -1111,9 +1127,11 @@ void RTCVideoEncoder::Impl::BitstreamBufferReady(
   }
 
   webrtc::EncodedImage image;
-  image.SetEncodedData(webrtc::EncodedImageBuffer::Create(
-      static_cast<const uint8_t*>(output_mapping_memory),
-      metadata.payload_size_bytes));
+  image.SetEncodedData(rtc::make_ref_counted<EncodedDataWrapper>(
+      static_cast<uint8_t*>(output_mapping_memory), metadata.payload_size_bytes,
+      media::BindToCurrentLoop(
+          base::BindOnce(&RTCVideoEncoder::Impl::UseOutputBitstreamBufferId,
+                         WrapRefCounted(this), bitstream_buffer_id))));
   image._encodedWidth = input_visible_size_.width();
   image._encodedHeight = input_visible_size_.height();
   image.SetTimestamp(rtp_timestamp.value());
@@ -1224,7 +1242,15 @@ void RTCVideoEncoder::Impl::BitstreamBufferReady(
       break;
   }
 
-  ReturnEncodedImage(image, info, bitstream_buffer_id);
+  if (!encoded_image_callback_)
+    return;
+
+  const auto result = encoded_image_callback_->OnEncodedImage(image, &info);
+  if (result.error != webrtc::EncodedImageCallback::Result::OK) {
+    DVLOG(2)
+        << "ReturnEncodedImage(): webrtc::EncodedImageCallback::Result.error = "
+        << result.error;
+  }
 }
 
 void RTCVideoEncoder::Impl::NotifyError(
@@ -1254,7 +1280,7 @@ void RTCVideoEncoder::Impl::NotifyError(
   }
   video_encoder_.reset();
 
-  SetStatus(retval);
+  status_ = retval;
 
   async_init_event_.SetAndReset(retval);
   async_encode_event_.SetAndReset(retval);
@@ -1278,6 +1304,7 @@ void RTCVideoEncoder::Impl::LogAndNotifyError(
 }
 
 void RTCVideoEncoder::Impl::EncodeOneFrame() {
+  TRACE_EVENT0("webrtc", "RTCVideoEncoder::Impl::EncodeOneFrame");
   DVLOG(3) << "Impl::EncodeOneFrame()";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(input_next_frame_);
@@ -1321,6 +1348,8 @@ void RTCVideoEncoder::Impl::EncodeOneFrame() {
   }
 
   if (requires_copy_or_scale) {
+    TRACE_EVENT0("webrtc",
+                 "RTCVideoEncoder::Impl::EncodeOneFrame::CopyOrScale");
     const base::TimeDelta timestamp =
         frame ? frame->timestamp()
               : base::Milliseconds(next_frame->ntp_time_ms());
@@ -1426,6 +1455,8 @@ void RTCVideoEncoder::Impl::EncodeOneFrame() {
 }
 
 void RTCVideoEncoder::Impl::EncodeOneFrameWithNativeInput() {
+  TRACE_EVENT0("webrtc",
+               "RTCVideoEncoder::Impl::EncodeOneFrameWithNativeInput");
   DVLOG(3) << "Impl::EncodeOneFrameWithNativeInput()";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(input_buffers_.IsEmpty() && input_buffers_free_.IsEmpty());
@@ -1552,31 +1583,11 @@ void RTCVideoEncoder::Impl::RegisterEncodeCompleteCallback(
     webrtc::EncodedImageCallback* callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(3) << __func__;
-  int32_t retval = GetStatus();
-  if (retval == WEBRTC_VIDEO_CODEC_OK)
+
+  if (status_ == WEBRTC_VIDEO_CODEC_OK)
     encoded_image_callback_ = callback;
-  event.Set(retval);
+  event.Set(status_);
   event.Signal();
-}
-
-void RTCVideoEncoder::Impl::ReturnEncodedImage(
-    const webrtc::EncodedImage& image,
-    const webrtc::CodecSpecificInfo& info,
-    int32_t bitstream_buffer_id) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DVLOG(3) << __func__ << " bitstream_buffer_id=" << bitstream_buffer_id;
-
-  if (!encoded_image_callback_)
-    return;
-
-  const auto result = encoded_image_callback_->OnEncodedImage(image, &info);
-  if (result.error != webrtc::EncodedImageCallback::Result::OK) {
-    DVLOG(2)
-        << "ReturnEncodedImage(): webrtc::EncodedImageCallback::Result.error = "
-        << result.error;
-  }
-
-  UseOutputBitstreamBufferId(bitstream_buffer_id);
 }
 
 RTCVideoEncoder::RTCVideoEncoder(
@@ -1737,12 +1748,6 @@ void RTCVideoEncoder::SetRates(
     return;
   }
 
-  const int32_t retval = impl_->GetStatus();
-  if (retval != WEBRTC_VIDEO_CODEC_OK) {
-    DVLOG(3) << __func__ << " returning " << retval;
-    return;
-  }
-
   PostCrossThreadTask(
       *gpu_task_runner_.get(), FROM_HERE,
       CrossThreadBindOnce(
@@ -1764,12 +1769,6 @@ webrtc::VideoEncoder::EncoderInfo RTCVideoEncoder::GetEncoderInfo() const {
   if (impl_)
     info = impl_->GetEncoderInfo();
   return info;
-}
-
-// static
-bool RTCVideoEncoder::H264HwSupportForTemporalLayers() {
-  // Temporal layers are not supported by hardware encoders.
-  return false;
 }
 
 // static

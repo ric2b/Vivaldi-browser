@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -134,9 +134,11 @@ def main():
            'specified, the script tries to guess it. Will not proceed if not '
            'found.')
   parser.add_argument(
-      '--limit', default=5,
+      '--limit',
+      default=5,
+      type=int,
       help='Limit for the maximum number of returned errors and warnings. '
-           'Default value is 5, use 0 for unlimited.')
+      'Default value is 5, use 0 for unlimited.')
   parser.add_argument(
       '--complete', action='store_true',
       help='Run the test on the complete repository. Otherwise only the '

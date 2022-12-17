@@ -2,22 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/test/app_list_test_api.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/ash/assistant/assistant_test_mixin.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chromeos/ash/components/assistant/test_support/expect_utils.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/assistant/public/cpp/switches.h"
 #include "chromeos/ash/services/assistant/service.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
-#include "chromeos/services/assistant/public/cpp/switches.h"
 #include "content/public/test/browser_test.h"
 
 namespace chromeos {
@@ -33,6 +34,12 @@ constexpr int kVersion = 1;
 
 constexpr int kStartBrightnessPercent = 50;
 
+inline constexpr char kDlcInstallResultHistogram[] =
+    "Assistant.Libassistant.DlcInstallResult";
+
+inline constexpr char kDlcLoadStatusHistogram[] =
+    "Assistant.Libassistant.DlcLoadStatus";
+
 // Ensures that |value_| is within the range {min_, max_}. If it isn't, this
 // will print a nice error message.
 #define EXPECT_WITHIN_RANGE(min_, value_, max_)                \
@@ -46,12 +53,14 @@ constexpr int kStartBrightnessPercent = 50;
 
 using ::ash::assistant::test::ExpectResult;
 
-class AssistantBrowserTest : public MixinBasedInProcessBrowserTest {
+class AssistantBrowserTest : public MixinBasedInProcessBrowserTest,
+                             public testing::WithParamInterface<bool> {
  public:
   AssistantBrowserTest() {
-    // TODO(b/190633242): enable sandbox in browser tests.
-    feature_list_.InitAndDisableFeature(
-        chromeos::assistant::features::kEnableLibAssistantSandbox);
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(
+          chromeos::assistant::features::kEnableLibAssistantDlc);
+    }
 
     // Do not log to file in test. Otherwise multiple tests may create/delete
     // the log file at the same time. See http://crbug.com/1307868.
@@ -136,13 +145,16 @@ class AssistantBrowserTest : public MixinBasedInProcessBrowserTest {
         }));
   }
 
+  base::HistogramTester* histogram_tester() { return &histogram_tester_; }
+
  private:
   base::test::ScopedFeatureList feature_list_;
+  base::HistogramTester histogram_tester_;
   AssistantTestMixin tester_{&mixin_host_, this, embedded_test_server(), kMode,
                              kVersion};
 };
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest,
                        ShouldOpenAssistantUiWhenPressingAssistantKey) {
   tester()->StartAssistantAndWaitForReady();
 
@@ -157,9 +169,13 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
   }
 
   EXPECT_TRUE(tester()->IsVisible());
+  if (chromeos::assistant::features::IsLibAssistantDlcEnabled()) {
+    histogram_tester()->ExpectTotalCount(kDlcInstallResultHistogram, 1);
+    histogram_tester()->ExpectTotalCount(kDlcLoadStatusHistogram, 1);
+  }
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldDisplayTextResponse) {
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest, ShouldDisplayTextResponse) {
   tester()->StartAssistantAndWaitForReady();
 
   ShowAssistantUi();
@@ -174,7 +190,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldDisplayTextResponse) {
   });
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest,
                        ShouldDisplayTextResponseWithTwoContiniousQueries) {
   tester()->StartAssistantAndWaitForReady();
 
@@ -191,7 +207,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
   });
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldDisplayCardResponse) {
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest, ShouldDisplayCardResponse) {
   tester()->StartAssistantAndWaitForReady();
 
   ShowAssistantUi();
@@ -202,7 +218,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldDisplayCardResponse) {
   tester()->ExpectCardResponse("Mount Everest");
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnUpVolume) {
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest, ShouldTurnUpVolume) {
   tester()->StartAssistantAndWaitForReady();
 
   ShowAssistantUi();
@@ -224,7 +240,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnUpVolume) {
                          cras));
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnDownVolume) {
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest, ShouldTurnDownVolume) {
   tester()->StartAssistantAndWaitForReady();
 
   ShowAssistantUi();
@@ -246,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnDownVolume) {
                          cras));
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnUpBrightness) {
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest, ShouldTurnUpBrightness) {
   tester()->StartAssistantAndWaitForReady();
 
   ShowAssistantUi();
@@ -260,7 +276,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnUpBrightness) {
   ExpectBrightnessUp();
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnDownBrightness) {
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest, ShouldTurnDownBrightness) {
   tester()->StartAssistantAndWaitForReady();
 
   ShowAssistantUi();
@@ -274,7 +290,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest, ShouldTurnDownBrightness) {
   ExpectBrightnessDown();
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest,
                        ShouldPuntWhenChangingUnsupportedSetting) {
   tester()->StartAssistantAndWaitForReady();
 
@@ -288,7 +304,7 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
 }
 
 // TODO(crbug.com/1112278): Disabled because it's flaky.
-IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
+IN_PROC_BROWSER_TEST_P(AssistantBrowserTest,
                        DISABLED_ShouldShowSingleErrorOnNetworkDown) {
   tester()->StartAssistantAndWaitForReady();
 
@@ -313,6 +329,10 @@ IN_PROC_BROWSER_TEST_F(AssistantBrowserTest,
   // the interaction.
   CloseAssistantUi();
 }
+
+INSTANTIATE_TEST_SUITE_P(/* no label */,
+                         AssistantBrowserTest,
+                         /*values=*/testing::Bool());
 
 }  // namespace assistant
 }  // namespace chromeos

@@ -5,16 +5,16 @@
 import './accelerator_edit_dialog.js';
 import './shortcut_input.js';
 import './shortcuts_page.js';
-import './shortcut_customization_fonts_css.js';
+import './shortcut_customization_fonts.css.js';
 import 'chrome://resources/ash/common/navigation_view_panel.js';
 import 'chrome://resources/ash/common/page_toolbar.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {getShortcutProvider} from './mojo_interface_provider.js';
-import {AcceleratorConfig, AcceleratorSource, AcceleratorState, AcceleratorType, LayoutInfoList, ShortcutProviderInterface} from './shortcut_types.js';
-import {AcceleratorInfo} from './shortcut_types.js';
+import {getTemplate} from './shortcut_customization_app.html.js';
+import {AcceleratorConfig, AcceleratorInfo, AcceleratorSource, AcceleratorState, AcceleratorType, LayoutInfoList, ShortcutProviderInterface} from './shortcut_types.js';
 
 /**
  * @fileoverview
@@ -24,10 +24,6 @@ import {AcceleratorInfo} from './shortcut_types.js';
 export class ShortcutCustomizationAppElement extends PolymerElement {
   static get is() {
     return 'shortcut-customization-app';
-  }
-
-  static get template() {
-    return html`{__html_template__}`;
   }
 
   static get properties() {
@@ -217,6 +213,10 @@ export class ShortcutCustomizationAppElement extends PolymerElement {
   /** @protected */
   closeRestoreAllDialog_() {
     this.showRestoreAllDialog_ = false;
+  }
+
+  static get template() {
+    return getTemplate();
   }
 }
 

@@ -15,6 +15,7 @@ preprocessed_files = [
   "profile_card_menu_test.ts",
   "profile_picker_app_test.ts",
   "profile_picker_main_view_test.ts",
+  "sync_confirmation_test.ts",
   "test_manage_profiles_browser_proxy.ts",
 ]
 
@@ -27,7 +28,6 @@ non_preprocessed_files = [
   "profile_customization_test.ts",
   "profile_switch_test.ts",
   "profile_type_choice_test.ts",
-  "sync_confirmation_test.ts",
   "test_enterprise_profile_welcome_browser_proxy.ts",
   "test_profile_customization_browser_proxy.ts",
   "test_sync_confirmation_browser_proxy.ts",
@@ -57,14 +57,6 @@ preprocess_if_expr("preprocess") {
 copy("copy") {
   sources = non_preprocessed_files
   outputs = [ "$preprocessed_folder/{{source_target_relative}}" ]
-}
-
-generate_grd("build_grdp") {
-  grd_prefix = "webui_signin"
-  out_grd = "$target_gen_dir/resources.grdp"
-  deps = [ ":build_ts" ]
-  manifest_files = [ "$target_gen_dir/tsconfig.manifest" ]
-  resource_path_prefix = "signin"
 }
 
 ts_library("build_ts") {
@@ -104,4 +96,13 @@ ts_library("build_ts") {
     ":preprocess",
     "..:generate_definitions",
   ]
+}
+
+generate_grd("build_grdp") {
+  grd_prefix = "webui_signin"
+  out_grd = "$target_gen_dir/resources.grdp"
+  deps = [ ":build_ts" ]
+  manifest_files =
+      filter_include(get_target_outputs(":build_ts"), [ "*.manifest" ])
+  resource_path_prefix = "signin"
 }

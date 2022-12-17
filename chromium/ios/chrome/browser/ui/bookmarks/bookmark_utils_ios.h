@@ -62,6 +62,7 @@ MDCSnackbarMessage* CreateOrUpdateBookmarkWithUndoToast(
     const bookmarks::BookmarkNode* node,
     NSString* title,
     const GURL& url,
+    NSString* description, // Vivaldi
     const bookmarks::BookmarkNode* folder,
     bookmarks::BookmarkModel* bookmark_model,
     ChromeBrowserState* browser_state);
@@ -82,7 +83,7 @@ MDCSnackbarMessage* CreateBookmarkAtPositionWithUndoToast(
 MDCSnackbarMessage* UpdateBookmarkPositionWithUndoToast(
     const bookmarks::BookmarkNode* node,
     const bookmarks::BookmarkNode* folder,
-    int position,
+    size_t position,
     bookmarks::BookmarkModel* bookmark_model,
     ChromeBrowserState* browser_state);
 

@@ -105,6 +105,9 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   SettingsTableViewController* controller = [[SettingsTableViewController alloc]
       initWithBrowser:browser
            dispatcher:[delegate handlerForSettings]];
+  controller.applicationCommandsHandler =
+      [delegate handlerForApplicationCommands];
+  controller.snackbarCommandsHandler = [delegate handlerForSnackbarCommands];
   SettingsNavigationController* nc = [[SettingsNavigationController alloc]
       initWithRootViewController:controller
                          browser:browser
@@ -121,7 +124,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   AccountsTableViewController* controller =
       [[AccountsTableViewController alloc] initWithBrowser:browser
                                  closeSettingsOnAddAccount:YES];
-  controller.dispatcher = [delegate handlerForSettings];
+  controller.applicationCommandsHandler =
+      [delegate handlerForApplicationCommands];
   SettingsNavigationController* nc = [[SettingsNavigationController alloc]
       initWithRootViewController:controller
                          browser:browser
@@ -415,6 +419,12 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 #pragma mark - Public
 
 - (UIBarButtonItem*)doneButton {
+  if (self.presentingViewController == nil) {
+    // This can be called while being dismissed. In that case, return nil. See
+    // crbug.com/1346604.
+    return nil;
+  }
+
   UIBarButtonItem* item = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                            target:self
@@ -740,7 +750,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   AccountsTableViewController* controller =
       [[AccountsTableViewController alloc] initWithBrowser:self.browser
                                  closeSettingsOnAddAccount:NO];
-  controller.dispatcher = [self.settingsNavigationDelegate handlerForSettings];
+  controller.applicationCommandsHandler =
+      [self.settingsNavigationDelegate handlerForApplicationCommands];
   [self pushViewController:controller animated:YES];
 }
 

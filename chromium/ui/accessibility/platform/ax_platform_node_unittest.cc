@@ -7,6 +7,7 @@
 #include "ui/accessibility/ax_constants.mojom.h"
 #include "ui/accessibility/platform/ax_platform_node_base.h"
 #include "ui/accessibility/platform/test_ax_node_wrapper.h"
+#include "ui/accessibility/platform/test_ax_tree_update.h"
 
 namespace ui {
 
@@ -74,6 +75,12 @@ void AXPlatformNodeTest::Init(
   Init(update);
 }
 
+AXTree* AXPlatformNodeTest::Init(const TestAXTreeUpdateNode& root) {
+  TestAXTreeUpdate update(root);
+  Init(update);
+  return GetTree();
+}
+
 AXTreeUpdate AXPlatformNodeTest::BuildTextField() {
   AXNodeData text_field_node;
   text_field_node.id = 1;
@@ -81,6 +88,8 @@ AXTreeUpdate AXPlatformNodeTest::BuildTextField() {
   text_field_node.AddState(ax::mojom::State::kEditable);
   text_field_node.AddStringAttribute(ax::mojom::StringAttribute::kHtmlTag,
                                      "input");
+  text_field_node.AddStringAttribute(ax::mojom::StringAttribute::kInputType,
+                                     "text");
   text_field_node.SetValue("How now brown cow.");
 
   AXTreeUpdate update;
@@ -98,6 +107,8 @@ AXTreeUpdate AXPlatformNodeTest::BuildTextFieldWithSelectionRange(
   text_field_node.AddState(ax::mojom::State::kEditable);
   text_field_node.AddStringAttribute(ax::mojom::StringAttribute::kHtmlTag,
                                      "input");
+  text_field_node.AddStringAttribute(ax::mojom::StringAttribute::kInputType,
+                                     "text");
   text_field_node.AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, true);
   text_field_node.AddIntAttribute(ax::mojom::IntAttribute::kTextSelStart,
                                   start);

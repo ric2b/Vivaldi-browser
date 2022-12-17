@@ -172,7 +172,7 @@ import org.chromium.url.Origin;
                     ? params.getIntentReceivedTimestamp()
                     : params.getInputStartTimestamp();
             RecordHistogram.recordTimesHistogram("Android.Omnibox.InputToNavigationControllerStart",
-                    SystemClock.elapsedRealtime() - inputStart);
+                    SystemClock.uptimeMillis() - inputStart);
             NavigationControllerImplJni.get().loadUrl(mNativeNavigationControllerAndroid,
                     NavigationControllerImpl.this, params.getUrl(), params.getLoadUrlType(),
                     params.getTransitionType(),
@@ -183,7 +183,10 @@ import org.chromium.url.Origin;
                     params.getDataUrlAsString(), params.getCanLoadLocalResources(),
                     params.getIsRendererInitiated(), params.getShouldReplaceCurrentEntry(),
                     params.getInitiatorOrigin(), params.getHasUserGesture(),
-                    params.getShouldClearHistoryList(), inputStart);
+                    params.getShouldClearHistoryList(), inputStart,
+                    params.getNavigationUIDataSupplier() == null
+                            ? 0
+                            : params.getNavigationUIDataSupplier().get());
         }
     }
 
@@ -231,16 +234,16 @@ import org.chromium.url.Origin;
     }
 
     @Override
-    public void setUseDesktopUserAgent(boolean override, boolean reloadOnChange) {
+    public void setUseDesktopUserAgent(boolean override, boolean reloadOnChange, int caller) {
         if (mNativeNavigationControllerAndroid != 0) {
             Log.i(TAG,
                     "Thread dump for debugging, override: " + override
-                            + " reloadOnChange: " + reloadOnChange);
+                            + " reloadOnChange: " + reloadOnChange + " caller: " + caller);
             Thread.dumpStack();
 
             NavigationControllerImplJni.get().setUseDesktopUserAgent(
                     mNativeNavigationControllerAndroid, NavigationControllerImpl.this, override,
-                    reloadOnChange);
+                    reloadOnChange, caller);
         }
     }
 
@@ -368,7 +371,7 @@ import org.chromium.url.Origin;
                 ResourceRequestBody postData, String baseUrlForDataUrl, String virtualUrlForDataUrl,
                 String dataUrlAsString, boolean canLoadLocalResources, boolean isRendererInitiated,
                 boolean shouldReplaceCurrentEntry, Origin initiatorOrigin, boolean hasUserGesture,
-                boolean shouldClearHistoryList, long inputStart);
+                boolean shouldClearHistoryList, long inputStart, long navigationUIDataPtr);
         void clearHistory(long nativeNavigationControllerAndroid, NavigationControllerImpl caller);
         int getNavigationHistory(long nativeNavigationControllerAndroid,
                 NavigationControllerImpl caller, Object history);
@@ -380,7 +383,8 @@ import org.chromium.url.Origin;
         boolean getUseDesktopUserAgent(
                 long nativeNavigationControllerAndroid, NavigationControllerImpl caller);
         void setUseDesktopUserAgent(long nativeNavigationControllerAndroid,
-                NavigationControllerImpl caller, boolean override, boolean reloadOnChange);
+                NavigationControllerImpl caller, boolean override, boolean reloadOnChange,
+                int source);
         NavigationEntry getEntryAtIndex(
                 long nativeNavigationControllerAndroid, NavigationControllerImpl caller, int index);
         NavigationEntry getVisibleEntry(

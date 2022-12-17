@@ -67,7 +67,7 @@ GURL GetVivaldiNewTabURL() {
 bool LaunchVivaldi(const base::CommandLine& command_line,
                    const base::FilePath& cur_dir,
                    StartupProfileInfo profile_info) {
-  if (!(IsVivaldiRunning(command_line) && !IsDebuggingVivaldi(command_line)))
+  if (!IsVivaldiRunning(command_line))
     return false;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Default is now launching the Vivaldi App.
@@ -83,9 +83,9 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   apps::AppLaunchParams params(
-      extension->name(), apps::mojom::LaunchContainer::kLaunchContainerNone,
+      extension->name(), apps::LaunchContainer::kLaunchContainerNone,
       WindowOpenDisposition::NEW_WINDOW,
-      apps::mojom::LaunchSource::kFromChromeInternal);
+      apps::LaunchSource::kFromChromeInternal);
   params.command_line = command_line;
   params.current_directory = cur_dir;
 

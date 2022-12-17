@@ -17,24 +17,19 @@
 
 namespace blink {
 
-void WebViewImpl::SetPluginsEnabled(const bool plugins_enabled) {
-  web_settings_->SetPluginsEnabled(plugins_enabled);
-  PluginData::RefreshBrowserSidePluginCache();
+void WebViewImpl::UpdateVivaldiRendererPreferences() {
+    SetServeResourceFromCacheOnly(
+        renderer_preferences_.serve_resources_only_from_cache);
+    SetAllowTabCycleIntoUI(
+        renderer_preferences_.allow_tab_cycle_from_webpage_into_ui);
 }
 
 void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
-
   auto* main_local_frame = DynamicTo<LocalFrame>(GetPage()->MainFrame());
-  if (!main_local_frame)
+  if (!main_local_frame) {
     return;
-
+  }
   Document* document = main_local_frame->GetDocument();
-
-  if (document && document->GetSettings()->GetImagesEnabled() == images_enabled)
-    return;
-
-  // Visibility, boxes are not collapsed.
-  web_settings_->SetImagesEnabled(images_enabled);
 
   if (document) {
     document->Fetcher()->SetImagesEnabled(images_enabled);
@@ -73,10 +68,6 @@ void WebViewImpl::SetServeResourceFromCacheOnly(
 void WebViewImpl::SetAllowTabCycleIntoUI(
     bool allow_tab_cycle_from_webpage_into_ui) {
   web_settings_->SetAllowTabCycleIntoUI(allow_tab_cycle_from_webpage_into_ui);
-}
-
-void WebViewImpl::SetAllowAccessKeys(const bool allow_access_keys) {
-  web_settings_->SetAllowAccessKeys(allow_access_keys);
 }
 
 void WebViewImpl::LoadImageAt(const gfx::Point& point) {

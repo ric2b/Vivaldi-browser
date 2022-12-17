@@ -172,7 +172,7 @@ constexpr int kChromeMessagePumpIndices[] = {1, 2, -1};
 constexpr MessageInfo kChromeMessagePump = {kChromeMessagePumpIndices, nullptr};
 
 // Proto Message: ChromeMojoEventInfo
-constexpr int kChromeMojoEventInfoIndices[] = {1, 2, 3, -1};
+constexpr int kChromeMojoEventInfoIndices[] = {1, 2, 3, 4, -1};
 constexpr MessageInfo kChromeMojoEventInfo = {kChromeMojoEventInfoIndices,
                                               nullptr};
 
@@ -336,14 +336,18 @@ constexpr MessageInfo kEventLatency = {kEventLatencyIndices, nullptr};
 constexpr int kProcessSingletonIndices[] = {1, 2, -1};
 constexpr MessageInfo kProcessSingleton = {kProcessSingletonIndices, nullptr};
 
+// Proto Message: AndroidIPC
+constexpr int kAndroidIPCIndices[] = {1, 2, -1};
+constexpr MessageInfo kAndroidIPC = {kAndroidIPCIndices, nullptr};
+
 // Proto Message: TrackEvent
 constexpr int kTrackEventIndices[] = {
     1,    2,    3,    5,    6,    9,    10,   11,   12,   16,   17,
     22,   23,   24,   25,   26,   27,   28,   29,   30,   31,   32,
-    33,   34,   35,   36,   38,   39,   40,   41,   42,   43,   1001,
-    1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012,
-    1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1023, 1024,
-    1025, 1031, 1032, 1033, 1034, 1036, -1};
+    33,   34,   35,   36,   38,   39,   40,   41,   42,   43,   47,
+    48,   1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010,
+    1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021,
+    1023, 1024, 1025, 1031, 1032, 1033, 1034, 1036, 1038, -1};
 constexpr MessageInfo const* kTrackEventComplexMessages[] = {
     nullptr,
     nullptr,
@@ -377,6 +381,8 @@ constexpr MessageInfo const* kTrackEventComplexMessages[] = {
     &kChromeWindowHandleEventInfo,
     nullptr,
     &kChromeContentSettingsEventInfo,
+    nullptr,
+    nullptr,
     &kChromeMemoryPressureNotification,
     &kChromeTaskAnnotator,
     &kChromeBrowserContext,
@@ -405,7 +411,8 @@ constexpr MessageInfo const* kTrackEventComplexMessages[] = {
     &kEventLatency,
     &kProcessSingleton,
     &kSiteInstanceGroup,
-    nullptr};
+    nullptr,
+    &kAndroidIPC};
 constexpr MessageInfo kTrackEvent = {kTrackEventIndices,
                                      kTrackEventComplexMessages};
 
@@ -438,11 +445,23 @@ constexpr MessageInfo kInternedMappingPath = {kInternedMappingPathIndices,
 constexpr int kMappingIndices[] = {1, 2, 3, 4, 5, 7, -1};
 constexpr MessageInfo kMapping = {kMappingIndices, nullptr};
 
+// Proto Message: UnsymbolizedSourceLocation
+constexpr int kUnsymbolizedSourceLocationIndices[] = {1, 2, 3, -1};
+constexpr MessageInfo kUnsymbolizedSourceLocation = {
+    kUnsymbolizedSourceLocationIndices, nullptr};
+
 // Proto Message: InternedData
-constexpr int kInternedDataIndices[] = {1, 2, 4, 6, 7, 16, 17, 19, -1};
+constexpr int kInternedDataIndices[] = {1, 2, 4, 6, 7, 16, 17, 19, 28, -1};
 constexpr MessageInfo const* kInternedDataComplexMessages[] = {
-    &kEventCategory, &kEventName,       &kSourceLocation,      &kFrame,
-    &kCallstack,     &kInternedBuildId, &kInternedMappingPath, &kMapping};
+    &kEventCategory,
+    &kEventName,
+    &kSourceLocation,
+    &kFrame,
+    &kCallstack,
+    &kInternedBuildId,
+    &kInternedMappingPath,
+    &kMapping,
+    &kUnsymbolizedSourceLocation};
 constexpr MessageInfo kInternedData = {kInternedDataIndices,
                                        kInternedDataComplexMessages};
 

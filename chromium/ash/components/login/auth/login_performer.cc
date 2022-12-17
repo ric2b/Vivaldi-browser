@@ -5,13 +5,14 @@
 #include "ash/components/login/auth/login_performer.h"
 
 #include "ash/components/login/auth/metrics_recorder.h"
+#include "ash/components/login/auth/public/auth_failure.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/metrics/login_event_recorder.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
@@ -25,7 +26,7 @@ LoginPerformer::LoginPerformer(Delegate* delegate,
                                MetricsRecorder* metrics_recorder)
     : delegate_(delegate),
       metrics_recorder_(metrics_recorder),
-      last_login_failure_(AuthFailure::AuthFailureNone()) {
+      last_login_failure_(AuthFailure(AuthFailure::NONE)) {
   DCHECK(metrics_recorder_);
 }
 

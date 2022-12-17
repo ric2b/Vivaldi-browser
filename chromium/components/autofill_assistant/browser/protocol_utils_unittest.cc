@@ -42,6 +42,8 @@ class ProtocolUtilsTest : public testing::Test {
         ClientContextProto::UNKNOWN);
     client_context_proto_.set_country("US");
     client_context_proto_.set_locale("en-US");
+    client_context_proto_.set_platform_type(
+        ClientContextProto::PLATFORM_TYPE_ANDROID);
   }
   ~ProtocolUtilsTest() override {}
 
@@ -128,6 +130,7 @@ TEST_F(ProtocolUtilsTest, CreateNextScriptActionsRequest) {
   processed_actions.emplace_back(ProcessedActionProto());
 
   RoundtripNetworkStats network_stats;
+  network_stats.set_num_roundtrips(1);
   network_stats.set_roundtrip_encoded_body_size_bytes(12345);
   network_stats.set_roundtrip_decoded_body_size_bytes(23456);
   auto* action_stats = network_stats.add_action_stats();
@@ -174,6 +177,7 @@ TEST_F(ProtocolUtilsTest, CreateCapabilitiesByHashRequest) {
   client_context.set_country(client_context_proto_.country());
   client_context.mutable_chrome()->set_chrome_version(
       client_context_proto_.chrome().chrome_version());
+  client_context.set_platform_type(ClientContextProto::PLATFORM_TYPE_ANDROID);
   EXPECT_EQ(client_context, request.client_context());
 
   EXPECT_EQ(request.hash_prefix_length(), 16U);
@@ -231,11 +235,13 @@ TEST_F(ProtocolUtilsTest, ParseActionsParseError) {
   std::vector<std::unique_ptr<Action>> unused_actions;
   std::vector<std::unique_ptr<Script>> unused_scripts;
   std::string unused_js_flow_library;
+  std::string unused_report_token;
   EXPECT_FALSE(ProtocolUtils::ParseActions(
       /* delegate= */ nullptr, /* response= */ "invalid", /* run_id= */ nullptr,
       /* return_global_payload= */ nullptr,
       /* return_script_payload= */ nullptr, &unused_actions, &unused_scripts,
-      /* should_update_scripts= */ &unused, &unused_js_flow_library));
+      /* should_update_scripts= */ &unused, &unused_js_flow_library,
+      &unused_report_token));
 }
 
 TEST_F(ProtocolUtilsTest, ParseActionParseError) {
@@ -247,6 +253,7 @@ TEST_F(ProtocolUtilsTest, ParseActionsValid) {
   proto.set_run_id(1);
   proto.set_global_payload("global_payload");
   proto.set_script_payload("script_payload");
+  proto.set_report_token("token");
   proto.add_actions()->mutable_tell();
   proto.add_actions()->mutable_stop();
 
@@ -260,13 +267,16 @@ TEST_F(ProtocolUtilsTest, ParseActionsValid) {
   std::vector<std::unique_ptr<Action>> actions;
   std::vector<std::unique_ptr<Script>> scripts;
   std::string unused_js_flow_library;
+  std::string report_token;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
       nullptr, proto_str, &run_id, &global_payload, &script_payload, &actions,
-      &scripts, &should_update_scripts, &unused_js_flow_library));
+      &scripts, &should_update_scripts, &unused_js_flow_library,
+      &report_token));
   EXPECT_EQ(1u, run_id);
   EXPECT_EQ("global_payload", global_payload);
   EXPECT_EQ("script_payload", script_payload);
+  EXPECT_EQ("token", report_token);
   EXPECT_THAT(actions, SizeIs(2));
   EXPECT_FALSE(should_update_scripts);
   EXPECT_TRUE(scripts.empty());
@@ -291,11 +301,12 @@ TEST_F(ProtocolUtilsTest, ParseActionsEmptyUpdateScriptList) {
   std::vector<std::unique_ptr<Script>> scripts;
   std::vector<std::unique_ptr<Action>> unused_actions;
   std::string unused_js_flow_library;
+  std::string unused_report_token;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
       nullptr, proto_str, /* run_id= */ nullptr, /* global_payload= */ nullptr,
       /* script_payload */ nullptr, &unused_actions, &scripts,
-      &should_update_scripts, &unused_js_flow_library));
+      &should_update_scripts, &unused_js_flow_library, &unused_report_token));
   EXPECT_TRUE(should_update_scripts);
   EXPECT_TRUE(scripts.empty());
 }
@@ -317,12 +328,13 @@ TEST_F(ProtocolUtilsTest, ParseActionsUpdateScriptListFullFeatured) {
   std::vector<std::unique_ptr<Script>> scripts;
   std::vector<std::unique_ptr<Action>> unused_actions;
   std::string unused_js_flow_library;
+  std::string unused_report_token;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
       nullptr, proto_str, /* run_id= */ nullptr,
       /* return_global_payload= */ nullptr,
       /* return_script_payload= */ nullptr, &unused_actions, &scripts,
-      &should_update_scripts, &unused_js_flow_library));
+      &should_update_scripts, &unused_js_flow_library, &unused_report_token));
   EXPECT_TRUE(should_update_scripts);
   EXPECT_THAT(scripts, SizeIs(1));
   EXPECT_THAT("a", Eq(scripts[0]->handle.path));
@@ -665,6 +677,7 @@ TEST_F(ProtocolUtilsTest, ComputeNetworkStats) {
   response_info.encoded_body_length = 20;
 
   RoundtripNetworkStats expected_stats;
+  expected_stats.set_num_roundtrips(1);
   expected_stats.set_roundtrip_encoded_body_size_bytes(20);
   expected_stats.set_roundtrip_decoded_body_size_bytes(28);
   auto* action_stats = expected_stats.add_action_stats();
@@ -678,6 +691,15 @@ TEST_F(ProtocolUtilsTest, ComputeNetworkStats) {
                 /* response = */ "This string is 28 bytes long", response_info,
                 actions),
             expected_stats);
+}
+
+TEST_F(ProtocolUtilsTest, CreateReportProgressRequest) {
+  ReportProgressRequestProto request;
+  EXPECT_TRUE(request.ParseFromString(
+      ProtocolUtils::CreateReportProgressRequest("token", "payload")));
+
+  EXPECT_EQ("token", request.token());
+  EXPECT_EQ("payload", request.payload());
 }
 
 }  // namespace autofill_assistant

@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
-#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -24,12 +23,12 @@
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/signin/core/browser/account_reconcilor_delegate.h"
 #include "components/signin/public/base/account_consistency_method.h"
 #include "components/signin/public/base/signin_client.h"
 #include "components/signin/public/base/signin_metrics.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
@@ -47,6 +46,13 @@ using signin::ConsentLevel;
 using signin_metrics::AccountReconcilorState;
 
 namespace {
+
+#if BUILDFLAG(ENABLE_MIRROR)
+// Number of seconds to wait before trying to force another reconciliation
+// cycle. The value roughly represents the 95 percentile success rate of
+// `Signin.Reconciler.Duration.UpTo3mins.Success` histogram.
+const int kForcedReconciliationWaitTimeInSeconds = 15;
+#endif  // BUILDFLAG(ENABLE_MIRROR)
 
 // Returns a copy of |accounts| without the unverified accounts.
 std::vector<gaia::ListedAccount> FilterUnverifiedAccounts(
@@ -135,10 +141,8 @@ AccountReconcilor::AccountReconcilor(
   timeout_ = delegate_->GetReconcileTimeout();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles)) {
-    consistency_cookie_manager_ =
-        std::make_unique<signin::ConsistencyCookieManager>(client_, this);
-  }
+  consistency_cookie_manager_ =
+      std::make_unique<signin::ConsistencyCookieManager>(client_, this);
 #endif
 }
 
@@ -385,8 +389,21 @@ void AccountReconcilor::StartReconcile(Trigger trigger) {
     return;
   }
 
+  // In the case of a forced reconciliation, we will not rely on ListAccounts,
+  // and consider the cookie jar to be empty.
+  if (trigger_ == Trigger::kForcedReconcile) {
+    OnAccountsInCookieUpdated(
+        /*accounts_in_cookie_jar_info=*/signin::AccountsInCookieJarInfo(
+            /*accounts_are_fresh_param=*/true,
+            /*signed_in_accounts_param=*/{},
+            /*signed_out_accounts_param=*/{}),
+        /*error=*/GoogleServiceAuthError(GoogleServiceAuthError::NONE));
+    return;
+  }
+
   // Rely on the IdentityManager to manage calls to and responses from
-  // ListAccounts.
+  // ListAccounts - except when a forced reconciliation is requested (handled
+  // above).
   signin::AccountsInCookieJarInfo accounts_in_cookie_jar =
       identity_manager_->GetAccountsInCookieJar();
   if (accounts_in_cookie_jar.accounts_are_fresh) {
@@ -624,6 +641,38 @@ void AccountReconcilor::ScheduleStartReconcileIfChromeAccountsChanged() {
     SetState(AccountReconcilorState::ACCOUNT_RECONCILOR_ERROR);
   }
 }
+
+#if BUILDFLAG(ENABLE_MIRROR)
+void AccountReconcilor::ForceReconcile() {
+  if (state_ ==
+      signin_metrics::AccountReconcilorState::ACCOUNT_RECONCILOR_INACTIVE) {
+    VLOG(1) << "Ignoring ForceReconcile request because AccountReconcilor is "
+               "inactive";
+    return;
+  }
+
+  if (!is_reconcile_started_ &&
+      (state_ ==
+           signin_metrics::AccountReconcilorState::ACCOUNT_RECONCILOR_OK ||
+       state_ ==
+           signin_metrics::AccountReconcilorState::ACCOUNT_RECONCILOR_ERROR)) {
+    // Reconcilor is not running. Force start it.
+    StartReconcile(Trigger::kForcedReconcile);
+    return;
+  }
+
+  // For all other cases, wait for some time and retry forcing a reconciliation.
+  // Note that we cannot simply rely on the current reconciliation cycle because
+  // `kForcedReconcile` is handled differently by `StartReconcile` - it leads to
+  // ListAccounts being ignored - something that doesn't happen in a regular
+  // reconciliation cycle.
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&AccountReconcilor::ForceReconcile,
+                     weak_factory_.GetWeakPtr()),
+      base::Seconds(kForcedReconciliationWaitTimeInSeconds));
+}
+#endif  // BUILDFLAG(ENABLE_MIRROR)
 
 bool AccountReconcilor::IsIdentityManagerReady() {
   return identity_manager_->AreRefreshTokensLoaded();

@@ -5,6 +5,8 @@
 #ifndef UI_GFX_X_XPROTO_INTERNAL_H_
 #define UI_GFX_X_XPROTO_INTERNAL_H_
 
+#include "base/memory/raw_ptr.h"
+
 #ifndef IS_X11_IMPL
 #error "This file should only be included by //ui/gfx/x:xprotos"
 #endif
@@ -53,9 +55,16 @@ class COMPONENT_EXPORT(X11) MallocedRefCountedMemory
   size_t size() const override;
 
  private:
+  struct deleter {
+    void operator()(uint8_t* data) {
+      if (data) {
+        free(data);
+      }
+    }
+  };
   ~MallocedRefCountedMemory() override;
 
-  uint8_t* const data_;
+  std::unique_ptr<uint8_t, deleter> data_;
 };
 
 // Wraps another RefCountedMemory, giving a view into it.  Similar to

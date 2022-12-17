@@ -1260,7 +1260,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(AddNote(1, folder1, 2, "nOTE 2", GURL(kGenericURL)) != NULL);
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1288,7 +1288,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   }
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1312,7 +1312,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_MergeSimpleNotesHierarchy) {
   }
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1331,7 +1331,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   }
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1355,7 +1355,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     ASSERT_TRUE(AddNote(1, folder1, i, content1, url1) != NULL);
   }
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1397,7 +1397,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     ASSERT_TRUE(AddNote(1, content, url) != NULL);
   }
 
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1423,7 +1423,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     }
   }
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1447,7 +1447,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   }
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1479,7 +1479,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
                       GURL(IndexedURL(1))) != NULL);
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1511,7 +1511,7 @@ IN_PROC_BROWSER_TEST_F(
                       GURL(IndexedURL(8))) != NULL);
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1563,7 +1563,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   }
 
   // Commit sequentially to make sure there is no race condition.
-  SetupSyncOneClientAfterAnother();
+  ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AwaitQuiescence());
 
   for (int i = 1; i < 5; ++i) {

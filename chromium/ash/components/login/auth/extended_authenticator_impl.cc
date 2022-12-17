@@ -6,18 +6,19 @@
 
 #include <stddef.h>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "ash/components/cryptohome/cryptohome_util.h"
-#include "ash/components/cryptohome/system_salt_getter.h"
-#include "ash/components/cryptohome/userdataauth_util.h"
 #include "ash/components/login/auth/auth_status_consumer.h"
 #include "ash/components/login/auth/cryptohome_parameter_utils.h"
-#include "ash/components/login/auth/key.h"
-#include "ash/components/login/auth/user_context.h"
+#include "ash/components/login/auth/public/auth_failure.h"
+#include "ash/components/login/auth/public/key.h"
+#include "ash/components/login/auth/public/user_context.h"
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_util.h"
+#include "chromeos/ash/components/cryptohome/system_salt_getter.h"
+#include "chromeos/ash/components/cryptohome/userdataauth_util.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/metrics/login_event_recorder.h"
 #include "components/account_id/account_id.h"
 #include "crypto/sha2.h"
@@ -172,7 +173,7 @@ void ExtendedAuthenticatorImpl::DoAuthenticateToCheck(
           cryptohome_parameter_utils::CreateAuthorizationKeyDefFromUserContext(
               user_context));
   request.set_unlock_webauthn_secret(unlock_webauthn_secret);
-  chromeos::UserDataAuthClient::Get()->CheckKey(
+  UserDataAuthClient::Get()->CheckKey(
       request, base::BindOnce(&ExtendedAuthenticatorImpl::OnOperationComplete<
                                   ::user_data_auth::CheckKeyReply>,
                               this, "Cryptohome-CheckKeyEx-End", user_context,

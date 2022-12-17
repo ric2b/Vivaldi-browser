@@ -60,6 +60,7 @@ class SigninInterceptFirstRunExperienceDialog::InterceptTurnSyncOnHelperDelegate
   void ShowSyncConfirmation(
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override;
+  bool ShouldAbortBeforeShowSyncDisabledConfirmation() override;
   void ShowSyncDisabledConfirmation(
       bool is_managed_account,
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
@@ -112,9 +113,8 @@ void SigninInterceptFirstRunExperienceDialog::
         const AccountInfo& account_info,
         signin::SigninChoiceCallback callback) {
   // This is a brand new profile. Skip the enterprise confirmation.
-  // TODO(crbug.com/1282157): Do not show the sync promo if either
-  // - PromotionalTabsEnabled policy is set to False, or
-  // - the user went through the Profile Separation dialog.
+  // TODO(crbug.com/1282157): Do not show the sync promo if
+  // PromotionalTabsEnabled policy is set to False
   std::move(callback).Run(signin::SIGNIN_CHOICE_CONTINUE);
 }
 
@@ -127,6 +127,14 @@ void SigninInterceptFirstRunExperienceDialog::
     return;
   }
 
+  if (dialog_->is_forced_intercept_) {
+    // Don't show the sync promo to users who went through the forced
+    // interception.
+    dialog_->DoNextStep(Step::kTurnOnSync, Step::kProfileCustomization);
+    std::move(callback).Run(LoginUIService::ABORT_SYNC);
+    return;
+  }
+
   scoped_login_ui_service_observation_.Observe(
       LoginUIServiceFactory::GetForProfile(browser_->profile()));
   DCHECK(!sync_confirmation_callback_);
@@ -134,19 +142,25 @@ void SigninInterceptFirstRunExperienceDialog::
   dialog_->DoNextStep(Step::kTurnOnSync, Step::kSyncConfirmation);
 }
 
-void SigninInterceptFirstRunExperienceDialog::
-    InterceptTurnSyncOnHelperDelegate::ShowSyncDisabledConfirmation(
-        bool is_managed_account,
-        base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
-            callback) {
+bool SigninInterceptFirstRunExperienceDialog::
+    InterceptTurnSyncOnHelperDelegate::
+        ShouldAbortBeforeShowSyncDisabledConfirmation() {
   // Abort the sync flow and proceed to profile customization.
   if (dialog_) {
     dialog_->DoNextStep(Step::kTurnOnSync, Step::kProfileCustomization);
   }
 
-  // `SYNC_WITH_DEFAULT_SETTINGS` for the sync disable confirmation means "stay
-  // signed in". See https://crbug.com/1141341.
-  std::move(callback).Run(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
+  return true;
+}
+
+void SigninInterceptFirstRunExperienceDialog::
+    InterceptTurnSyncOnHelperDelegate::ShowSyncDisabledConfirmation(
+        bool is_managed_account,
+        base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
+            callback) {
+  // If Sync is disabled, the `TurnSyncOnHelper` should quit earlier due to
+  // `ShouldAbortBeforeShowSyncDisabledConfirmation()`.
+  NOTREACHED();
 }
 
 void SigninInterceptFirstRunExperienceDialog::
@@ -214,11 +228,7 @@ SigninInterceptFirstRunExperienceDialog::
 
 void SigninInterceptFirstRunExperienceDialog::Show() {
   RecordDialogEvent(DialogEvent::kStart);
-  // Don't show the sync promo to the users who went through the forced
-  // interception.
-  Step first_step =
-      is_forced_intercept_ ? Step::kProfileCustomization : Step::kTurnOnSync;
-  DoNextStep(Step::kStart, first_step);
+  DoNextStep(Step::kStart, Step::kTurnOnSync);
 }
 
 SigninInterceptFirstRunExperienceDialog::
@@ -287,8 +297,7 @@ void SigninInterceptFirstRunExperienceDialog::DoTurnOnSync() {
   const signin_metrics::PromoAction promo_action =
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO;
   signin_metrics::LogSigninAccessPointStarted(access_point, promo_action);
-  signin_metrics::RecordSigninUserActionForAccessPoint(access_point,
-                                                       promo_action);
+  signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
 
   // TurnSyncOnHelper deletes itself once done.
   new TurnSyncOnHelper(browser_->profile(), access_point, promo_action,
@@ -303,7 +312,8 @@ void SigninInterceptFirstRunExperienceDialog::DoTurnOnSync() {
 void SigninInterceptFirstRunExperienceDialog::DoSyncConfirmation() {
   RecordDialogEvent(DialogEvent::kShowSyncConfirmation);
   SetDialogDelegate(
-      SigninViewControllerDelegate::CreateSyncConfirmationDelegate(browser_));
+      SigninViewControllerDelegate::CreateSyncConfirmationDelegate(
+          browser_, /*is_signin_intercept=*/true));
   PreloadProfileCustomizationUI();
 }
 
@@ -374,7 +384,7 @@ void SigninInterceptFirstRunExperienceDialog::PreloadProfileCustomizationUI() {
   DCHECK(web_ui);
   web_ui->Initialize(
       base::BindOnce(&SigninInterceptFirstRunExperienceDialog::
-                         OnProfileCustomizationDoneButtonClicked,
+                         ProfileCustomizationCloseOnCompletion,
                      // Unretained is fine because `this` owns the web contents.
                      base::Unretained(this)));
 }
@@ -398,7 +408,15 @@ void SigninInterceptFirstRunExperienceDialog::OnSyncedThemeReady(
 }
 
 void SigninInterceptFirstRunExperienceDialog::
-    OnProfileCustomizationDoneButtonClicked() {
-  RecordDialogEvent(DialogEvent::kProfileCustomizationClickDone);
+    ProfileCustomizationCloseOnCompletion(
+        ProfileCustomizationHandler::CustomizationResult customization_result) {
+  switch (customization_result) {
+    case ProfileCustomizationHandler::CustomizationResult::kDone:
+      RecordDialogEvent(DialogEvent::kProfileCustomizationClickDone);
+      break;
+    case ProfileCustomizationHandler::CustomizationResult::kSkip:
+      RecordDialogEvent(DialogEvent::kProfileCustomizationClickSkip);
+      break;
+  }
   DoNextStep(Step::kProfileCustomization, Step::kProfileSwitchIPHAndCloseModal);
 }

@@ -35,6 +35,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.COMMERCE_COUPONS;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.START_SURFACE_ANDROID;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.STORE_HOURS;
@@ -90,7 +91,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FeatureList;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.build.BuildConfig;
@@ -134,6 +135,7 @@ import org.chromium.chrome.browser.tasks.tab_management.PriceMessageService.Pric
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabListFaviconProvider.TabFavicon;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.ShoppingPersistedTabDataFetcher;
+import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.ThumbnailFetcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.tab_ui.R;
@@ -167,13 +169,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 /**
  * Tests for {@link TabListMediator}.
  */
 @SuppressWarnings(
         {"ArraysAsListWithZeroOrOneArgument", "ResultOfMethodCallIgnored", "ConstantConditions"})
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, shadows = {ShadowRecordHistogram.class},
+@Config(manifest = Config.NONE,
         instrumentedPackages =
                 {
                         "androidx.recyclerview.widget.RecyclerView" // required to mock final
@@ -251,6 +254,8 @@ public class TabListMediatorUnitTest {
     @Mock
     RecyclerView mRecyclerView;
     @Mock
+    TabListRecyclerView mTabListRecyclerView;
+    @Mock
     RecyclerView.Adapter mAdapter;
     @Mock
     TabGroupModelFilter mTabGroupModelFilter;
@@ -303,6 +308,8 @@ public class TabListMediatorUnitTest {
     ArgumentCaptor<ComponentCallbacks> mComponentCallbacksCaptor;
     @Captor
     ArgumentCaptor<TemplateUrlService.TemplateUrlServiceObserver> mTemplateUrlServiceObserver;
+    @Captor
+    ArgumentCaptor<RecyclerView.OnScrollListener> mOnScrollListenerCaptor;
     @Mock
     EndpointFetcher.Natives mEndpointFetcherJniMock;
     @Mock
@@ -326,6 +333,7 @@ public class TabListMediatorUnitTest {
     private String mTab2Domain;
     private String mTab3Domain;
     private String mNewDomain;
+    private GURL mFaviconUrl;
 
     @Before
     public void setUp() {
@@ -345,6 +353,7 @@ public class TabListMediatorUnitTest {
         mTab2Domain = TAB2_URL.getHost().replace("www.", "");
         mTab3Domain = TAB3_URL.getHost().replace("www.", "");
         mNewDomain = JUnitTestGURLs.getGURL(NEW_URL).getHost().replace("www.", "");
+        mFaviconUrl = JUnitTestGURLs.getGURL(JUnitTestGURLs.RED_1);
 
         TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.setForTesting(true);
         mTab1 = prepareTab(TAB1_ID, TAB1_TITLE, TAB1_URL);
@@ -361,12 +370,17 @@ public class TabListMediatorUnitTest {
 
         doNothing()
                 .when(mTabContentManager)
-                .getTabThumbnailWithCallback(anyInt(), any(), anyBoolean(), anyBoolean());
+                .getTabThumbnailWithCallback(anyInt(), any(), any(), anyBoolean(), anyBoolean());
         doReturn(mTabModel).when(mTabModelSelector).getCurrentModel();
         doReturn(tabModelList).when(mTabModelSelector).getModels();
 
         doReturn(mTabModelFilterProvider).when(mTabModelSelector).getTabModelFilterProvider();
         doReturn(mTabModelFilter).when(mTabModelFilterProvider).getCurrentTabModelFilter();
+        doReturn(2).when(mTabModelFilter).getCount();
+        doReturn(mTab1).when(mTabModelFilter).getTabAt(POSITION1);
+        doReturn(mTab2).when(mTabModelFilter).getTabAt(POSITION2);
+        doReturn(tabs1).when(mTabModelFilter).getRelatedTabList(TAB1_ID);
+        doReturn(tabs2).when(mTabModelFilter).getRelatedTabList(TAB2_ID);
         doReturn(mTab1).when(mTabModelSelector).getCurrentTab();
         doReturn(TAB1_ID).when(mTabModelSelector).getCurrentTabId();
         doNothing()
@@ -382,7 +396,9 @@ public class TabListMediatorUnitTest {
         doNothing()
                 .when(mTabListFaviconProvider)
                 .getFaviconForUrlAsync(anyObject(), anyBoolean(), mCallbackCaptor.capture());
-        doReturn(mFavicon).when(mTabListFaviconProvider).getFaviconFromBitmap(any(Bitmap.class));
+        doReturn(mFavicon)
+                .when(mTabListFaviconProvider)
+                .getFaviconFromBitmap(any(Bitmap.class), any(GURL.class));
         doReturn(mTab1).when(mTabModelSelector).getTabById(TAB1_ID);
         doReturn(mTab2).when(mTabModelSelector).getTabById(TAB2_ID);
         doReturn(tabs1).when(mTabGroupModelFilter).getRelatedTabList(TAB1_ID);
@@ -498,7 +514,7 @@ public class TabListMediatorUnitTest {
         mModel.get(0).model.set(TabProperties.FAVICON, null);
         assertNull(mModel.get(0).model.get(TabProperties.FAVICON));
 
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap, mFaviconUrl);
 
         assertNotNull(mModel.get(0).model.get(TabProperties.FAVICON));
     }
@@ -510,7 +526,7 @@ public class TabListMediatorUnitTest {
         mModel.get(0).model.set(TabProperties.FAVICON, null);
         assertNull(mModel.get(0).model.get(TabProperties.FAVICON));
 
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap, mFaviconUrl);
 
         assertNotNull(mModel.get(0).model.get(TabProperties.FAVICON));
     }
@@ -525,7 +541,7 @@ public class TabListMediatorUnitTest {
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(Arrays.asList(mTab1, newTab)).when(mTabModelFilter).getRelatedTabList(eq(TAB1_ID));
 
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap, mFaviconUrl);
 
         assertNull(mModel.get(0).model.get(TabProperties.FAVICON));
     }
@@ -536,7 +552,7 @@ public class TabListMediatorUnitTest {
         mModel.get(0).model.set(TabProperties.FAVICON, null);
         mModel.get(1).model.set(TabProperties.FAVICON, null);
 
-        mMediator.updateFaviconForTab(PseudoTab.fromTab(mTab2), null);
+        mMediator.updateFaviconForTab(PseudoTab.fromTab(mTab2), null, null);
         assertThat(mModel.indexFromId(TAB2_ID), equalTo(1));
         // Before executing callback, there is a deletion in tab list model which makes the index
         // stale.
@@ -673,7 +689,7 @@ public class TabListMediatorUnitTest {
 
         assertThat(mModel.size(), equalTo(2));
 
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab2, false);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab2, false, true);
 
         assertThat(mModel.size(), equalTo(1));
         assertThat(mModel.get(0).model.get(TabProperties.TAB_ID), equalTo(TAB1_ID));
@@ -684,7 +700,7 @@ public class TabListMediatorUnitTest {
         initAndAssertAllProperties();
 
         mTabModelObserverCaptor.getValue().willCloseTab(
-                prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL), false);
+                prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL), false, true);
 
         assertThat(mModel.size(), equalTo(2));
     }
@@ -906,12 +922,43 @@ public class TabListMediatorUnitTest {
     public void tabSelection() {
         initAndAssertAllProperties();
 
+        ThumbnailFetcher tab1Fetcher = mModel.get(0).model.get(TabProperties.THUMBNAIL_FETCHER);
+        ThumbnailFetcher tab2Fetcher = mModel.get(1).model.get(TabProperties.THUMBNAIL_FETCHER);
+
         mTabModelObserverCaptor.getValue().didSelectTab(
                 mTab2, TabLaunchType.FROM_CHROME_UI, TAB1_ID);
 
         assertThat(mModel.size(), equalTo(2));
         assertThat(mModel.get(0).model.get(TabProperties.IS_SELECTED), equalTo(false));
+        assertThat(mModel.get(0).model.get(TabProperties.THUMBNAIL_FETCHER), equalTo(tab1Fetcher));
         assertThat(mModel.get(1).model.get(TabProperties.IS_SELECTED), equalTo(true));
+        assertNotEquals(tab2Fetcher, mModel.get(1).model.get(TabProperties.THUMBNAIL_FETCHER));
+    }
+
+    @Test
+    public void tabSelection_updatePreviousSelectedTabThumbnailFetcher() {
+        mMediator = new TabListMediator(mActivity, mModel, TabListMode.GRID, mTabModelSelector,
+                mTabContentManager::getTabThumbnailWithCallback, mTitleProvider,
+                mTabListFaviconProvider, true, null, mGridCardOnClickListenerProvider, null, null,
+                getClass().getSimpleName(), UiType.CLOSABLE);
+        mMediator.initWithNative(mProfile);
+        // mTabModelObserverCaptor captures on every initWithNative calls. There is one
+        // initWithNative call in the setup already.
+        verify(mTabModelFilterProvider, times(2))
+                .addTabModelFilterObserver(mTabModelObserverCaptor.capture());
+        initAndAssertAllProperties();
+
+        ThumbnailFetcher tab1Fetcher = mModel.get(0).model.get(TabProperties.THUMBNAIL_FETCHER);
+        ThumbnailFetcher tab2Fetcher = mModel.get(1).model.get(TabProperties.THUMBNAIL_FETCHER);
+
+        mTabModelObserverCaptor.getValue().didSelectTab(
+                mTab2, TabLaunchType.FROM_CHROME_UI, TAB1_ID);
+
+        assertThat(mModel.size(), equalTo(2));
+        assertThat(mModel.get(0).model.get(TabProperties.IS_SELECTED), equalTo(false));
+        assertNotEquals(tab1Fetcher, mModel.get(0).model.get(TabProperties.THUMBNAIL_FETCHER));
+        assertThat(mModel.get(1).model.get(TabProperties.IS_SELECTED), equalTo(true));
+        assertNotEquals(tab2Fetcher, mModel.get(1).model.get(TabProperties.THUMBNAIL_FETCHER));
     }
 
     @Test
@@ -1126,6 +1173,70 @@ public class TabListMediatorUnitTest {
      */
     private void prepareForPriceDrop() {
         setPriceTrackingEnabledForTesting(true);
+        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
+        PersistedTabDataConfiguration.setUseTestConfig(true);
+        initAndAssertAllProperties();
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
+    }
+
+    @Test
+    public void testCouponFetcherActiveForForUngroupedTabs() {
+        prepareForCoupon();
+        resetWithRegularTabs(false);
+
+        assertThat(mModel.size(), equalTo(2));
+        assertThat(mModel.get(0).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER),
+                instanceOf(TabListMediator.CouponPersistedTabDataFetcher.class));
+        assertThat(mModel.get(1).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER),
+                instanceOf(TabListMediator.CouponPersistedTabDataFetcher.class));
+    }
+
+    @Test
+    public void testCouponFetcherInactiveForForGroupedTabs() {
+        prepareForCoupon();
+        resetWithRegularTabs(true);
+
+        assertThat(mModel.size(), equalTo(2));
+        assertNull(mModel.get(0).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER));
+        assertNull(mModel.get(1).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER));
+    }
+
+    @Test
+    public void testCouponFetcherGroupedThenUngrouped() {
+        prepareForCoupon();
+        resetWithRegularTabs(true);
+        assertThat(mModel.size(), equalTo(2));
+        assertNull(mModel.get(0).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER));
+        assertNull(mModel.get(1).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER));
+        resetWithRegularTabs(false);
+        assertThat(mModel.size(), equalTo(2));
+        assertThat(mModel.get(0).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER),
+                instanceOf(TabListMediator.CouponPersistedTabDataFetcher.class));
+        assertThat(mModel.get(1).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER),
+                instanceOf(TabListMediator.CouponPersistedTabDataFetcher.class));
+    }
+
+    @Test
+    public void testCouponFetcherUngroupedThenGrouped() {
+        prepareForCoupon();
+        resetWithRegularTabs(false);
+
+        assertThat(mModel.size(), equalTo(2));
+        assertThat(mModel.get(0).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER),
+                instanceOf(TabListMediator.CouponPersistedTabDataFetcher.class));
+        assertThat(mModel.get(1).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER),
+                instanceOf(TabListMediator.CouponPersistedTabDataFetcher.class));
+        resetWithRegularTabs(true);
+        assertThat(mModel.size(), equalTo(2));
+        assertNull(mModel.get(0).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER));
+        assertNull(mModel.get(1).model.get(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER));
+    }
+
+    /**
+     * Set flags and initialize for verifying coupon annotations behavior
+     */
+    private void prepareForCoupon() {
+        CachedFeatureFlags.setForTesting(COMMERCE_COUPONS, true);
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
         PersistedTabDataConfiguration.setUseTestConfig(true);
         initAndAssertAllProperties();
@@ -2208,7 +2319,7 @@ public class TabListMediatorUnitTest {
         mMediator.setActionOnAllRelatedTabsForTesting(true);
 
         assertThat(mModel.size(), equalTo(2));
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab2, false);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab2, false, true);
         verify(mTab2).removeObserver(mTabObserverCaptor.getValue());
         assertThat(mModel.size(), equalTo(1));
         assertThat(mModel.get(0).model.get(TabProperties.TAB_ID), equalTo(TAB1_ID));
@@ -2220,7 +2331,7 @@ public class TabListMediatorUnitTest {
         mMediator.setActionOnAllRelatedTabsForTesting(true);
 
         assertThat(mModel.size(), equalTo(2));
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab2, false);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab2, false, true);
         assertThat(mModel.size(), equalTo(1));
 
         // Assume that TabModelFilter is already updated to reflect closed tab is undone.
@@ -2250,11 +2361,9 @@ public class TabListMediatorUnitTest {
         assertThat(showQuickly, equalTo(true));
 
         // Create a PropertyModel that is not a tab and add it to the existing TabListModel.
-        PropertyModel propertyModel = new PropertyModel.Builder(NewTabTileViewProperties.ALL_KEYS)
-                                              .with(CARD_TYPE, OTHERS)
-                                              .build();
-        mMediator.addSpecialItemToModel(
-                mModel.size(), TabProperties.UiType.NEW_TAB_TILE, propertyModel);
+        PropertyModel propertyModel = mock(PropertyModel.class);
+        when(propertyModel.get(CARD_TYPE)).thenReturn(OTHERS);
+        mMediator.addSpecialItemToModel(mModel.size(), TabProperties.UiType.MESSAGE, propertyModel);
         assertThat(mModel.size(), equalTo(tabs.size() + 1));
 
         // TabListModel unchange check should ignore the non-Tab item.
@@ -2836,7 +2945,7 @@ public class TabListMediatorUnitTest {
         TabImpl tab3 = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         List<Tab> tabs = new ArrayList<>(Arrays.asList(mTab1, mTab2, tab3));
         createTabGroup(tabs, TAB1_ID);
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab1, mFaviconBitmap, mFaviconUrl);
         List<GURL> urls = new ArrayList<>(Arrays.asList(TAB1_URL, TAB2_URL, TAB3_URL));
         verify(mTabListFaviconProvider).getComposedFaviconImageAsync(eq(urls), anyBoolean(), any());
         mCallbackCaptor.getValue().onResult(mFavicon);
@@ -2848,7 +2957,7 @@ public class TabListMediatorUnitTest {
         TabImpl tab5 = prepareTab(1, "tab 5", JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL));
         tabs.addAll(Arrays.asList(tab4, tab5));
         createTabGroup(tabs, TAB2_ID);
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap, mFaviconUrl);
         urls = new ArrayList<>(Arrays.asList(TAB2_URL, TAB1_URL, TAB3_URL, TAB2_URL));
 
         verify(mTabListFaviconProvider).getComposedFaviconImageAsync(eq(urls), anyBoolean(), any());
@@ -2872,7 +2981,7 @@ public class TabListMediatorUnitTest {
         createTabGroup(group1, TAB2_ID);
         assertEquals(1, mModel.indexFromId(TAB2_ID));
 
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap, mFaviconUrl);
 
         // Simulate selecting another Tab within TabGroup before callback in
         // getComposedFaviconImageAsync triggers
@@ -2899,7 +3008,7 @@ public class TabListMediatorUnitTest {
         createTabGroup(group1, TAB2_ID);
         assertEquals(1, mModel.indexFromId(TAB2_ID));
 
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap, mFaviconUrl);
 
         // Simulate closing mTab1 at index 0 before callback in getComposedFaviconImageAsync
         // triggers.
@@ -2926,7 +3035,7 @@ public class TabListMediatorUnitTest {
         createTabGroup(group1, TAB2_ID);
         assertEquals(1, mModel.indexFromId(TAB2_ID));
 
-        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap);
+        mTabObserverCaptor.getValue().onFaviconUpdated(mTab2, mFaviconBitmap, mFaviconUrl);
 
         // Simulate TabListMediator reset with null before callback in getComposedFaviconImageAsync
         // triggers.
@@ -3018,7 +3127,7 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void testRecordPriceAnnotationsEnabledMetrics() {
-        ShadowRecordHistogram.reset();
+        UmaRecorderHolder.resetForTesting();
         setPriceTrackingEnabledForTesting(true);
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
         mMediator.setActionOnAllRelatedTabsForTesting(true);
@@ -3043,6 +3152,31 @@ public class TabListMediatorUnitTest {
                 preferencesManager.readLong(
                         ChromePreferenceKeys.PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
                         -1));
+    }
+
+    @Test
+    public void testPriceDropSeen() throws TimeoutException {
+        setPriceTrackingEnabledForTesting(true);
+        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
+        PriceTrackingUtilities.SHARED_PREFERENCES_MANAGER.writeBoolean(
+                PriceTrackingUtilities.TRACK_PRICES_ON_TABS, true);
+
+        doReturn(false).when(mTab1).isIncognito();
+        doReturn(false).when(mTab2).isIncognito();
+
+        List<Tab> tabs = new ArrayList<>();
+        tabs.add(mTabModel.getTabAt(0));
+        tabs.add(mTabModel.getTabAt(1));
+
+        mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs),
+                /*quickMode =*/false, /*mruMode =*/false);
+
+        prepareRecyclerViewForScroll();
+        mMediator.registerOnScrolledListener(mRecyclerView);
+        verify(mRecyclerView).addOnScrollListener(mOnScrollListenerCaptor.capture());
+        mOnScrollListenerCaptor.getValue().onScrolled(
+                mRecyclerView, /*dx =*/mTabModel.getCount(), /*dy =*/0);
+        assertEquals(2, mMediator.getViewedTabIdsForTesting().size());
     }
 
     private void setUpCloseButtonDescriptionString(boolean isGroup) {
@@ -3300,11 +3434,23 @@ public class TabListMediatorUnitTest {
         doReturn(mPriceDrop).when(mShoppingPersistedTabData).getPriceDrop();
     }
 
+    private void prepareRecyclerViewForScroll() {
+        View seenView = mock(View.class);
+        for (int i = 0; i < mTabModel.getCount(); i++) {
+            when(mRecyclerView.getChildAt(i)).thenReturn(seenView);
+        }
+
+        doReturn(true).when(mGridLayoutManager).isViewPartiallyVisible(seenView, false, true);
+        doReturn(mTabModel.getCount()).when(mRecyclerView).getChildCount();
+    }
+
     private static void setPriceTrackingEnabledForTesting(boolean value) {
         FeatureList.TestValues testValues = new FeatureList.TestValues();
         testValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
         testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
                 PriceTrackingFeatures.PRICE_TRACKING_PARAM, String.valueOf(value));
+        testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
+                PriceTrackingFeatures.PRICE_DROP_IPH_ENABLED_PARAM, String.valueOf(value));
         FeatureList.setTestValues(testValues);
     }
 }

@@ -44,7 +44,7 @@ void SelectToSpeakSpeedBubbleController::Show(views::View* anchor_view,
   DCHECK(anchor_view);
   if (!bubble_widget_) {
     TrayBubbleView::InitParams init_params;
-    init_params.delegate = this;
+    init_params.delegate = GetWeakPtr();
     init_params.parent_window =
         Shell::GetContainer(Shell::GetPrimaryRootWindow(),
                             kShellWindowId_AccessibilityBubbleContainer);
@@ -62,8 +62,13 @@ void SelectToSpeakSpeedBubbleController::Show(views::View* anchor_view,
 
     speed_view_ = new SelectToSpeakSpeedView(this, speech_rate);
     bubble_view_->AddChildView(speed_view_);
-    speed_view_->SetPaintToLayer();
-    speed_view_->layer()->SetFillsBoundsOpaquely(false);
+
+    // In dark light mode, we switch TrayBubbleView to use a textured layer
+    // instead of solid color layer, so no need to create an extra layer here.
+    if (!features::IsDarkLightModeEnabled()) {
+      speed_view_->SetPaintToLayer();
+      speed_view_->layer()->SetFillsBoundsOpaquely(false);
+    }
 
     bubble_widget_ =
         views::BubbleDialogDelegateView::CreateBubble(bubble_view_);

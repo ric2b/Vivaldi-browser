@@ -11,8 +11,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/themes/browser_theme_pack.h"
@@ -51,11 +49,14 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/resize_utils.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/apps/icon_standardizer.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #endif
 
@@ -185,27 +186,40 @@ bool AppBrowserController::has_tab_strip() const {
 }
 
 bool AppBrowserController::HasTitlebarMenuButton() const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Hide for system apps.
   return !system_app();
+#else
+  return true;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 bool AppBrowserController::HasTitlebarAppOriginText() const {
+  bool hide = base::FeatureList::IsEnabled(features::kHideWebAppOriginText);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Do not show origin text for System Apps.
-  bool hide = system_app() ||
-              base::FeatureList::IsEnabled(features::kHideWebAppOriginText);
+  if (system_app())
+    hide = true;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return !hide;
 }
 
 bool AppBrowserController::HasTitlebarContentSettings() const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Do not show content settings for System Apps.
   return !system_app();
+#else
+  return true;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 std::vector<PageActionIconType> AppBrowserController::GetTitleBarPageActions()
     const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (system_app()) {
     return {PageActionIconType::kFind, PageActionIconType::kZoom};
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   std::vector<PageActionIconType> types_enabled;
   types_enabled.push_back(PageActionIconType::kFind);
@@ -233,6 +247,10 @@ bool AppBrowserController::AppUsesWindowControlsOverlay() const {
   return false;
 }
 
+bool AppBrowserController::AppUsesBorderlessMode() const {
+  return false;
+}
+
 bool AppBrowserController::IsWindowControlsOverlayEnabled() const {
   return false;
 }
@@ -247,9 +265,11 @@ bool AppBrowserController::HasReloadButton() const {
   return true;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const ash::SystemWebAppDelegate* AppBrowserController::system_app() const {
   return nullptr;
 }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 std::u16string AppBrowserController::GetLaunchFlashText() const {
   return GetFormattedUrlOrigin();
@@ -292,6 +312,12 @@ void AppBrowserController::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInPrimaryMainFrame() ||
       navigation_handle->IsSameDocument())
+    return;
+
+  // For borderless mode when we navigate out of scope and then back to scope,
+  // the draggable regions stay same and nothing triggers to re-initialize them.
+  // So if they are cleared, they don't work anymore when coming back to scope.
+  if (AppUsesBorderlessMode())
     return;
 
   // Reset the draggable regions so they are not cached on navigation.
@@ -350,9 +376,25 @@ std::u16string AppBrowserController::GetTitle() const {
 }
 
 std::string AppBrowserController::GetTitleForMediaControls() const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Only return the app name if we're a System Web App.
-  return system_app() ? base::UTF16ToUTF8(GetAppShortName()) : std::string();
+  if (system_app())
+    return base::UTF16ToUTF8(GetAppShortName());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  return std::string();
 }
+
+GURL AppBrowserController::GetAppNewTabUrl() const {
+  return GetAppStartUrl();
+}
+
+#if BUILDFLAG(IS_MAC)
+bool AppBrowserController::AlwaysShowToolbarInFullscreen() const {
+  return true;
+}
+
+void AppBrowserController::ToggleAlwaysShowToolbarInFullscreen() {}
+#endif
 
 void AppBrowserController::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
@@ -361,10 +403,11 @@ void AppBrowserController::OnTabStripModelChanged(
   if (selection.active_tab_changed()) {
     content::WebContentsObserver::Observe(selection.new_contents);
     // Update themes when we switch tabs, or create the first tab, but not
-    // when we create 2nd or subsequent tabs. They should keep current theme
-    // until page loads. See |DOMContentLoaded|.
+    // when we create 2nd or subsequent tabs. Don't update the theme if the
+    // tab has not finished loading to avoid using uninitialized colors,
+    // wait for |DOMContentLoaded| before updating.
     if (change.type() != TabStripModelChange::kInserted ||
-        tab_strip_model->count() == 1) {
+        tab_strip_model->count() == 1 || !selection.new_contents->IsLoading()) {
       UpdateThemePack();
     }
   }
@@ -393,12 +436,7 @@ bool AppBrowserController::ShouldUseSystemTheme() const {
 }
 
 bool AppBrowserController::ShouldUseCustomFrame() const {
-#if BUILDFLAG(IS_LINUX)
-  return browser_->profile()->GetPrefs()->GetBoolean(
-      prefs::kUseCustomChromeFrame);
-#else
   return true;
-#endif
 }
 
 void AppBrowserController::AddColorMixers(
@@ -451,6 +489,9 @@ void AppBrowserController::AddColorMixers(
       ui::SetAlpha(kColorPwaToolbarButtonIcon, gfx::kDisabledControlAlpha);
   if (bg_color)
     mixer[kColorWebContentsBackground] = {kColorPwaBackground};
+
+  mixer[kColorInfoBarBackground] = {kColorPwaToolbarBackground};
+  mixer[kColorInfoBarForeground] = {kColorPwaToolbarButtonIcon};
 }
 
 void AppBrowserController::OnReceivedInitialURL() {
@@ -542,10 +583,14 @@ void AppBrowserController::UpdateThemePack() {
     return;
   }
 
-  if (!theme_color)
+  if (!theme_color) {
     theme_color = GetAltColor(*background_color);
-  else if (!background_color)
-    background_color = GetAltColor(*theme_color);
+  } else if (!background_color) {
+    background_color =
+        ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()
+            ? gfx::kGoogleGrey900
+            : SK_ColorWHITE;
+  }
 
   // For regular web apps, frame gets theme color and active tab gets
   // background color.

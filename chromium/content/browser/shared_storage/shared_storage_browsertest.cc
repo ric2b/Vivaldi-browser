@@ -3,16 +3,22 @@
 // found in the LICENSE file.
 
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "content/browser/private_aggregation/private_aggregation_manager_impl.h"
+#include "content/browser/private_aggregation/private_aggregation_test_utils.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/shared_storage/shared_storage_worklet_driver.h"
 #include "content/browser/shared_storage/shared_storage_worklet_host.h"
 #include "content/browser/shared_storage/shared_storage_worklet_host_manager.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/private_aggregation_features.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -24,6 +30,7 @@
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/fenced_frame_test_utils.h"
@@ -32,8 +39,11 @@
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
+#include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 
 namespace content {
 
@@ -49,6 +59,15 @@ const char kFencedFramePath[] = "/fenced_frames/title0.html";
 
 const char kPageWithBlankIframePath[] = "/page_with_blank_iframe.html";
 
+const char kDestroyedStatusHistogram[] =
+    "Storage.SharedStorage.Worklet.DestroyedStatus";
+
+const char kTimingKeepAliveDurationHistogram[] =
+    "Storage.SharedStorage.Worklet.Timing."
+    "KeepAliveEndedDueToOperationsFinished.KeepAliveDuration";
+
+const char kErrorTypeHistogram[] = "Storage.SharedStorage.Worklet.Error.Type";
+
 const double kBudgetAllowed = 5.0;
 
 const char kSelectFrom8URLsScript[] = R"(
@@ -63,6 +82,27 @@ const char kSelectFrom8URLsScript[] = R"(
     sharedStorage.selectURL(
         'test-url-selection-operation', urls, {data: {'mockResult': 1}});
   )";
+
+void WaitForHistogram(const std::string& histogram_name) {
+  // Continue if histogram was already recorded.
+  if (base::StatisticsRecorder::FindHistogram(histogram_name))
+    return;
+
+  // Else, wait until the histogram is recorded.
+  base::RunLoop run_loop;
+  auto histogram_observer =
+      std::make_unique<base::StatisticsRecorder::ScopedHistogramSampleObserver>(
+          histogram_name,
+          base::BindLambdaForTesting(
+              [&](const char* histogram_name, uint64_t name_hash,
+                  base::HistogramBase::Sample sample) { run_loop.Quit(); }));
+  run_loop.Run();
+}
+
+void WaitForHistograms(const std::vector<std::string>& histogram_names) {
+  for (const auto& name : histogram_names)
+    WaitForHistogram(name);
+}
 
 }  // namespace
 
@@ -431,12 +471,19 @@ class SharedStorageBrowserTest : public ContentBrowserTest {
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+  base::HistogramTester histogram_tester_;
 
-  raw_ptr<TestSharedStorageWorkletHostManager> test_worklet_host_manager_ =
-      nullptr;
+  raw_ptr<TestSharedStorageWorkletHostManager, DanglingUntriaged>
+      test_worklet_host_manager_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, AddModule_Success) {
+  // The test assumes pages get deleted after navigation. To ensure this,
+  // disable back/forward cache.
+  content::DisableBackForwardCacheForTesting(
+      shell()->web_contents(),
+      content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
+
   EXPECT_TRUE(NavigateToURL(shell(),
                             https_server()->GetURL("a.test", kSimplePagePath)));
 
@@ -453,6 +500,14 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, AddModule_Success) {
             base::UTF16ToUTF8(console_observer.messages()[0].message));
   EXPECT_EQ("Finish executing simple_module.js",
             base::UTF16ToUTF8(console_observer.messages()[1].message));
+
+  // Navigate again to record histograms.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  WaitForHistograms({kDestroyedStatusHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kDidNotEnterKeepAlive, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, AddModule_ScriptNotFound) {
@@ -534,6 +589,12 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
                        AddModule_MultipleAddModuleFailure) {
+  // The test assumes pages get deleted after navigation. To ensure this,
+  // disable back/forward cache.
+  content::DisableBackForwardCacheForTesting(
+      shell()->web_contents(),
+      content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
+
   EXPECT_TRUE(NavigateToURL(shell(),
                             https_server()->GetURL("a.test", kSimplePagePath)));
 
@@ -559,6 +620,14 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
             base::UTF16ToUTF8(console_observer.messages()[0].message));
   EXPECT_EQ("Finish executing simple_module.js",
             base::UTF16ToUTF8(console_observer.messages()[1].message));
+
+  // Navigate again to record histograms.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  WaitForHistograms({kDestroyedStatusHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kDidNotEnterKeepAlive, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, RunOperation_Success) {
@@ -600,6 +669,12 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, RunOperation_Success) {
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
                        RunOperation_Failure_RunOperationBeforeAddModule) {
+  // The test assumes pages get deleted after navigation. To ensure this,
+  // disable back/forward cache.
+  content::DisableBackForwardCacheForTesting(
+      shell()->web_contents(),
+      content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
+
   EXPECT_TRUE(NavigateToURL(shell(),
                             https_server()->GetURL("a.test", kSimplePagePath)));
 
@@ -633,6 +708,18 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
             base::UTF16ToUTF8(console_observer.messages()[1].message));
   EXPECT_EQ("Finish executing simple_module.js",
             base::UTF16ToUTF8(console_observer.messages()[2].message));
+
+  // Navigate again to record histograms.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  WaitForHistograms({kDestroyedStatusHistogram, kErrorTypeHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kDidNotEnterKeepAlive, 1);
+
+  histogram_tester_.ExpectUniqueSample(
+      kErrorTypeHistogram,
+      blink::SharedStorageWorkletErrorType::kRunNonWebVisible, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
@@ -726,6 +813,12 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, WorkletDestroyed) {
 
   EXPECT_EQ(0u, test_worklet_host_manager().GetAttachedWorkletHostsCount());
   EXPECT_EQ(0u, test_worklet_host_manager().GetKeepAliveWorkletHostsCount());
+
+  WaitForHistograms({kDestroyedStatusHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kDidNotEnterKeepAlive, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, TwoWorklets) {
@@ -774,6 +867,14 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, TwoWorklets) {
             base::UTF16ToUTF8(console_observer.messages()[1].message));
   EXPECT_EQ("Finish executing simple_module.js",
             base::UTF16ToUTF8(console_observer.messages()[2].message));
+
+  // Navigate again to record histograms.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  WaitForHistograms({kDestroyedStatusHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kDidNotEnterKeepAlive, 2);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -825,6 +926,16 @@ IN_PROC_BROWSER_TEST_F(
   // Expect no console logging, as messages logged during keep-alive are
   // dropped.
   EXPECT_EQ(0u, console_observer.messages().size());
+
+  WaitForHistograms(
+      {kDestroyedStatusHistogram, kTimingKeepAliveDurationHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::
+          kKeepAliveEndedDueToOperationsFinished,
+      1);
+  histogram_tester_.ExpectTotalCount(kTimingKeepAliveDurationHistogram, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
@@ -871,6 +982,14 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
 
   EXPECT_EQ(0u, test_worklet_host_manager().GetAttachedWorkletHostsCount());
   EXPECT_EQ(0u, test_worklet_host_manager().GetKeepAliveWorkletHostsCount());
+
+  WaitForHistograms({kDestroyedStatusHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kKeepAliveEndedDueToTimeout,
+      1);
+  histogram_tester_.ExpectTotalCount(kTimingKeepAliveDurationHistogram, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -931,6 +1050,16 @@ IN_PROC_BROWSER_TEST_F(
   // Expect no more console logging, as messages logged during keep-alive was
   // dropped.
   EXPECT_EQ(2u, console_observer.messages().size());
+
+  WaitForHistograms(
+      {kDestroyedStatusHistogram, kTimingKeepAliveDurationHistogram});
+
+  histogram_tester_.ExpectUniqueSample(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::
+          kKeepAliveEndedDueToOperationsFinished,
+      1);
+  histogram_tester_.ExpectTotalCount(kTimingKeepAliveDurationHistogram, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, KeepAlive_SubframeWorklet) {
@@ -1004,6 +1133,21 @@ IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest, KeepAlive_SubframeWorklet) {
   EXPECT_EQ(1u, console_observer.messages().size());
   EXPECT_EQ("Executing simple_module2.js",
             base::UTF16ToUTF8(console_observer.messages()[0].message));
+
+  // Navigate again to record histograms.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  WaitForHistograms(
+      {kDestroyedStatusHistogram, kTimingKeepAliveDurationHistogram});
+
+  histogram_tester_.ExpectBucketCount(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::
+          kKeepAliveEndedDueToOperationsFinished,
+      1);
+  histogram_tester_.ExpectBucketCount(
+      kDestroyedStatusHistogram,
+      blink::SharedStorageWorkletDestroyedStatus::kDidNotEnterKeepAlive, 1);
+  histogram_tester_.ExpectTotalCount(kTimingKeepAliveDurationHistogram, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SharedStorageBrowserTest,
@@ -1746,8 +1890,11 @@ IN_PROC_BROWSER_TEST_P(SharedStorageFencedFrameInteractionBrowserTest,
       fenced_frame_root_node->current_frame_host()->GetLastCommittedURL());
 }
 
+// Currently, Shared Storage is not allowed in Fenced Frames as Fenced Frames
+// disallow all permissions policies. This may change in the future.
+// https://github.com/WICG/fenced-frame/issues/44
 IN_PROC_BROWSER_TEST_P(SharedStorageFencedFrameInteractionBrowserTest,
-                       SelectURLNotAllowedInFencedFrame) {
+                       SharedStorageNotAllowedInFencedFrame) {
   GURL main_frame_url = https_server()->GetURL("a.test", kSimplePagePath);
 
   EXPECT_TRUE(NavigateToURL(shell(), main_frame_url));
@@ -1757,21 +1904,17 @@ IN_PROC_BROWSER_TEST_P(SharedStorageFencedFrameInteractionBrowserTest,
 
   FrameTreeNode* fenced_frame_node = CreateFencedFrame(fenced_frame_url);
 
-  EXPECT_TRUE(ExecJs(fenced_frame_node, R"(
-      sharedStorage.worklet.addModule('/shared_storage/simple_module.js');
-    )"));
-
-  EXPECT_EQ(1u, test_worklet_host_manager().GetAttachedWorkletHostsCount());
-  EXPECT_EQ(0u, test_worklet_host_manager().GetKeepAliveWorkletHostsCount());
-
   EvalJsResult result = EvalJs(fenced_frame_node, R"(
-      sharedStorage.selectURL(
-          'test-url-selection-operation',
-          [{url: "title0.html"}], {data: {'mockResult': 0}});
+      sharedStorage.worklet.addModule('/shared_storage/simple_module.js');
     )");
 
-  EXPECT_TRUE(result.error.find("sharedStorage.selectURL() is not allowed in "
-                                "fenced frame") != std::string::npos);
+  EXPECT_THAT(
+      result.error,
+      testing::HasSubstr("The \"shared-storage\" Permissions Policy denied the "
+                         "method on window.sharedStorage."));
+
+  EXPECT_EQ(0u, test_worklet_host_manager().GetAttachedWorkletHostsCount());
+  EXPECT_EQ(0u, test_worklet_host_manager().GetKeepAliveWorkletHostsCount());
 }
 
 IN_PROC_BROWSER_TEST_P(SharedStorageFencedFrameInteractionBrowserTest,
@@ -2299,50 +2442,6 @@ IN_PROC_BROWSER_TEST_P(
                    kBudgetAllowed - 3);
 }
 
-IN_PROC_BROWSER_TEST_P(
-    SharedStorageFencedFrameInteractionBrowserTest,
-    FencedFrameNavigateSelfToNewURNAndThenNavigateTop_BudgetWithdrawal) {
-  GURL main_url = https_server()->GetURL("a.test", kSimplePagePath);
-  EXPECT_TRUE(NavigateToURL(shell(), main_url));
-
-  url::Origin shared_storage_origin1 =
-      url::Origin::Create(https_server()->GetURL("b.test", kSimplePagePath));
-  url::Origin shared_storage_origin2 =
-      url::Origin::Create(https_server()->GetURL("c.test", kSimplePagePath));
-
-  GURL urn_uuid1 = SelectFrom8URLsInContext(shared_storage_origin1);
-  GURL urn_uuid2 = SelectFrom8URLsInContext(shared_storage_origin2);
-
-  FrameTreeNode* fenced_frame_root_node = CreateFencedFrame(urn_uuid1);
-
-  {
-    TestFrameNavigationObserver observer(
-        fenced_frame_root_node->current_frame_host());
-    EXPECT_TRUE(ExecJs(fenced_frame_root_node,
-                       JsReplace("window.location.href=$1", urn_uuid2.spec())));
-    observer.Wait();
-  }
-
-  EXPECT_DOUBLE_EQ(GetRemainingBudget(shared_storage_origin1), kBudgetAllowed);
-  EXPECT_DOUBLE_EQ(GetRemainingBudget(shared_storage_origin2), kBudgetAllowed);
-
-  {
-    GURL new_page_url = https_server()->GetURL("d.test", kSimplePagePath);
-
-    TestNavigationObserver top_navigation_observer(shell()->web_contents());
-    EXPECT_TRUE(ExecJs(
-        fenced_frame_root_node,
-        JsReplace("window.open($1, '_unfencedTop')", new_page_url.spec())));
-    top_navigation_observer.Wait();
-  }
-
-  // After the top navigation, log(8)=3 bits should have been withdrawn from the
-  // new shared storage origin. The original origin is unaffected.
-  EXPECT_DOUBLE_EQ(GetRemainingBudget(shared_storage_origin1), kBudgetAllowed);
-  EXPECT_DOUBLE_EQ(GetRemainingBudget(shared_storage_origin2),
-                   kBudgetAllowed - 3);
-}
-
 IN_PROC_BROWSER_TEST_P(SharedStorageFencedFrameInteractionBrowserTest,
                        NestedFencedFrameNavigateTop_BudgetWithdrawal) {
   GURL main_url = https_server()->GetURL("a.test", kSimplePagePath);
@@ -2644,5 +2743,223 @@ INSTANTIATE_TEST_SUITE_P(
         blink::features::FencedFramesImplementationType::kShadowDOM,
         blink::features::FencedFramesImplementationType::kMPArch),
     &SharedStorageReportEventBrowserTest::DescribeParams);
+
+class SharedStoragePrivateAggregationDisabledBrowserTest
+    : public SharedStorageBrowserTest {
+ public:
+  SharedStoragePrivateAggregationDisabledBrowserTest() {
+    scoped_feature_list_.InitAndDisableFeature(content::kPrivateAggregationApi);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(SharedStoragePrivateAggregationDisabledBrowserTest,
+                       PrivateAggregationNotDefined) {
+  EXPECT_TRUE(NavigateToURL(shell(),
+                            https_server()->GetURL("a.test", kSimplePagePath)));
+
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+
+  ExecuteScriptInWorklet(shell(), R"(
+      privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+    )");
+
+  ASSERT_EQ(1u, console_observer.messages().size());
+  EXPECT_EQ("ReferenceError: privateAggregation is not defined",
+            base::UTF16ToUTF8(console_observer.messages()[0].message));
+  EXPECT_EQ(blink::mojom::ConsoleMessageLevel::kError,
+            console_observer.messages()[0].log_level);
+}
+
+class SharedStoragePrivateAggregationEnabledBrowserTest
+    : public SharedStorageBrowserTest {
+ public:
+  // TODO(alexmt): Consider factoring out along with FLEDGE definition.
+  class TestPrivateAggregationManagerImpl
+      : public PrivateAggregationManagerImpl {
+   public:
+    TestPrivateAggregationManagerImpl(
+        std::unique_ptr<PrivateAggregationBudgeter> budgeter,
+        std::unique_ptr<PrivateAggregationHost> host)
+        : PrivateAggregationManagerImpl(std::move(budgeter),
+                                        std::move(host),
+                                        /*storage_partition=*/nullptr) {}
+  };
+
+  SharedStoragePrivateAggregationEnabledBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(content::kPrivateAggregationApi);
+  }
+
+  void SetUpOnMainThread() override {
+    SharedStorageBrowserTest::SetUpOnMainThread();
+
+    SetBrowserClientForTesting(&browser_client_);
+
+    a_test_origin_ = https_server()->GetOrigin("a.test");
+
+    auto* storage_partition_impl =
+        static_cast<StoragePartitionImpl*>(shell()
+                                               ->web_contents()
+                                               ->GetBrowserContext()
+                                               ->GetDefaultStoragePartition());
+
+    private_aggregation_host_ = new PrivateAggregationHost(
+        /*on_report_request_received=*/mock_callback_.Get(),
+        storage_partition_impl->browser_context());
+
+    storage_partition_impl->OverridePrivateAggregationManagerForTesting(
+        std::make_unique<TestPrivateAggregationManagerImpl>(
+            std::make_unique<MockPrivateAggregationBudgeter>(),
+            base::WrapUnique<PrivateAggregationHost>(
+                private_aggregation_host_)));
+
+    EXPECT_TRUE(NavigateToURL(
+        shell(), https_server()->GetURL("a.test", kSimplePagePath)));
+  }
+
+  const base::MockRepeatingCallback<void(AggregatableReportRequest,
+                                         PrivateAggregationBudgetKey)>&
+  mock_callback() {
+    return mock_callback_;
+  }
+
+  MockPrivateAggregationContentBrowserClient& browser_client() {
+    return browser_client_;
+  }
+
+ protected:
+  url::Origin a_test_origin_;
+
+ private:
+  PrivateAggregationHost* private_aggregation_host_;
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  base::MockRepeatingCallback<void(AggregatableReportRequest,
+                                   PrivateAggregationBudgetKey)>
+      mock_callback_;
+
+  MockPrivateAggregationContentBrowserClient browser_client_;
+};
+
+IN_PROC_BROWSER_TEST_F(SharedStoragePrivateAggregationEnabledBrowserTest,
+                       BasicTest) {
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+
+  base::RunLoop run_loop;
+
+  EXPECT_CALL(mock_callback(), Run)
+      .WillOnce(testing::Invoke([&](AggregatableReportRequest request,
+                                    PrivateAggregationBudgetKey budget_key) {
+        ASSERT_EQ(request.payload_contents().contributions.size(), 1u);
+        EXPECT_EQ(request.payload_contents().contributions[0].bucket, 1);
+        EXPECT_EQ(request.payload_contents().contributions[0].value, 2);
+        EXPECT_EQ(request.shared_info().reporting_origin, a_test_origin_);
+        EXPECT_EQ(budget_key.origin(), a_test_origin_);
+        EXPECT_EQ(budget_key.api(),
+                  PrivateAggregationBudgetKey::Api::kSharedStorage);
+        run_loop.Quit();
+      }));
+
+  EXPECT_CALL(browser_client(),
+              LogWebFeatureForCurrentPage(
+                  shell()->web_contents()->GetPrimaryMainFrame(),
+                  blink::mojom::WebFeature::kPrivateAggregationApiAll));
+  EXPECT_CALL(
+      browser_client(),
+      LogWebFeatureForCurrentPage(
+          shell()->web_contents()->GetPrimaryMainFrame(),
+          blink::mojom::WebFeature::kPrivateAggregationApiSharedStorage));
+  ON_CALL(browser_client(), IsPrivateAggregationAllowed)
+      .WillByDefault(testing::Return(true));
+
+  ExecuteScriptInWorklet(shell(), R"(
+      privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+    )");
+
+  EXPECT_TRUE(console_observer.messages().empty());
+
+  run_loop.Run();
+}
+
+IN_PROC_BROWSER_TEST_F(SharedStoragePrivateAggregationEnabledBrowserTest,
+                       RejectedTest) {
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+
+  EXPECT_CALL(browser_client(),
+              LogWebFeatureForCurrentPage(
+                  shell()->web_contents()->GetPrimaryMainFrame(),
+                  blink::mojom::WebFeature::kPrivateAggregationApiAll));
+  EXPECT_CALL(
+      browser_client(),
+      LogWebFeatureForCurrentPage(
+          shell()->web_contents()->GetPrimaryMainFrame(),
+          blink::mojom::WebFeature::kPrivateAggregationApiSharedStorage));
+  ON_CALL(browser_client(), IsPrivateAggregationAllowed)
+      .WillByDefault(testing::Return(true));
+
+  ExecuteScriptInWorklet(shell(), R"(
+      privateAggregation.sendHistogramReport({bucket: -1, value: 2});
+    )");
+
+  ASSERT_EQ(1u, console_observer.messages().size());
+  EXPECT_EQ("TypeError: Bucket must be either an integer Number or BigInt",
+            base::UTF16ToUTF8(console_observer.messages()[0].message));
+  EXPECT_EQ(blink::mojom::ConsoleMessageLevel::kError,
+            console_observer.messages()[0].log_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SharedStoragePrivateAggregationEnabledBrowserTest,
+                       MultipleRequests) {
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+
+  base::RunLoop run_loop;
+
+  EXPECT_CALL(mock_callback(), Run)
+      .WillOnce(testing::Invoke([&](AggregatableReportRequest request,
+                                    PrivateAggregationBudgetKey budget_key) {
+        ASSERT_EQ(request.payload_contents().contributions.size(), 1u);
+        EXPECT_EQ(request.payload_contents().contributions[0].bucket, 1);
+        EXPECT_EQ(request.payload_contents().contributions[0].value, 2);
+        EXPECT_EQ(request.shared_info().reporting_origin, a_test_origin_);
+        EXPECT_EQ(budget_key.origin(), a_test_origin_);
+        EXPECT_EQ(budget_key.api(),
+                  PrivateAggregationBudgetKey::Api::kSharedStorage);
+      }))
+      .WillOnce(testing::Invoke([&](AggregatableReportRequest request,
+                                    PrivateAggregationBudgetKey budget_key) {
+        ASSERT_EQ(request.payload_contents().contributions.size(), 1u);
+        EXPECT_EQ(request.payload_contents().contributions[0].bucket, 3);
+        EXPECT_EQ(request.payload_contents().contributions[0].value, 4);
+        EXPECT_EQ(request.shared_info().reporting_origin, a_test_origin_);
+        EXPECT_EQ(budget_key.origin(), a_test_origin_);
+        EXPECT_EQ(budget_key.api(),
+                  PrivateAggregationBudgetKey::Api::kSharedStorage);
+        run_loop.Quit();
+      }));
+
+  EXPECT_CALL(browser_client(),
+              LogWebFeatureForCurrentPage(
+                  shell()->web_contents()->GetPrimaryMainFrame(),
+                  blink::mojom::WebFeature::kPrivateAggregationApiAll));
+  EXPECT_CALL(
+      browser_client(),
+      LogWebFeatureForCurrentPage(
+          shell()->web_contents()->GetPrimaryMainFrame(),
+          blink::mojom::WebFeature::kPrivateAggregationApiSharedStorage));
+  ON_CALL(browser_client(), IsPrivateAggregationAllowed)
+      .WillByDefault(testing::Return(true));
+
+  ExecuteScriptInWorklet(shell(), R"(
+      privateAggregation.sendHistogramReport({bucket: 1, value: 2});
+      privateAggregation.sendHistogramReport({bucket: 3, value: 4});
+    )");
+
+  EXPECT_TRUE(console_observer.messages().empty());
+
+  run_loop.Run();
+}
 
 }  // namespace content

@@ -1003,6 +1003,10 @@ static int ffwmf_decode_frame(AVCodecContext* avctx,
   if (avpkt->size) {
     // Clear stalled drain status
     wmf->eof_drain = false;
+  } else if (!wmf->decoder) {
+    // We got EOF on the first packet before we initialized the decoder, just
+    // return.
+    goto cleanup;
   }
 
   if (wmf->after_successful_output) {
@@ -1095,7 +1099,7 @@ const FFCodec ffwmf_aac_decoder = {
     .p.wrapper_name = "wmf",
     .p.capabilities =
         AV_CODEC_CAP_CHANNEL_CONF | AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
-    .caps_internal = FF_CODEC_CAP_INIT_THREADSAFE | FF_CODEC_CAP_INIT_CLEANUP,
+    .caps_internal = FF_CODEC_CAP_INIT_CLEANUP,
     .flush = ffwmf_flush,
     .p.priv_class = &ffwmf_aac_decoder_class,
 };

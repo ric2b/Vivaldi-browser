@@ -87,8 +87,8 @@
 namespace vivaldi_update_notifier {
 
 using installer::GetLocalizedString;
-using installer::GetLocalizedStringF;
-using installer::GetLocalizedStringF2;
+using vivaldi_installer::GetLocalizedStringF;
+using vivaldi_installer::GetLocalizedStringF2;
 
 /*--------------------------------------------------------------------------*
                                   helpers

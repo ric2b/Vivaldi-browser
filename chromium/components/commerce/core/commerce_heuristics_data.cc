@@ -7,6 +7,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
+#include "base/time/time_delta_from_string.h"
 
 namespace commerce_heuristics {
 
@@ -24,10 +25,12 @@ constexpr char kRuleDiscountPartnerMerchantPatternType[] =
     "rule_discount_partner_merchant_regex";
 constexpr char kCouponDiscountPartnerMerchantPatternType[] =
     "coupon_discount_partner_merchant_regex";
+constexpr char kNoDiscountMerchantPatternType[] = "no_discount_merchant_regex";
 constexpr char kCartPagetURLPatternType[] = "cart_page_url_regex";
 constexpr char kCheckoutPageURLPatternType[] = "checkout_page_url_regex";
 constexpr char kPurchaseButtonTextPatternType[] = "purchase_button_text_regex";
 constexpr char kAddToCartRequestPatternType[] = "add_to_cart_request_regex";
+constexpr char kDiscountFetchDelayType[] = "discount_fetch_delay";
 
 }  // namespace
 
@@ -74,6 +77,8 @@ bool CommerceHeuristicsData::PopulateDataFromComponent(
       ConstructGlobalRegex(kRuleDiscountPartnerMerchantPatternType);
   coupon_discount_partner_merchant_pattern_ =
       ConstructGlobalRegex(kCouponDiscountPartnerMerchantPatternType);
+  no_discount_merchant_pattern_ =
+      ConstructGlobalRegex(kNoDiscountMerchantPatternType);
   cart_url_pattern_ = ConstructGlobalRegex(kCartPagetURLPatternType);
   checkout_url_pattern_ = ConstructGlobalRegex(kCheckoutPageURLPatternType);
   purchase_button_pattern_ =
@@ -134,6 +139,10 @@ CommerceHeuristicsData::GetCouponDiscountPartnerMerchantPattern() {
   return coupon_discount_partner_merchant_pattern_.get();
 }
 
+const re2::RE2* CommerceHeuristicsData::GetNoDiscountMerchantPattern() {
+  return no_discount_merchant_pattern_.get();
+}
+
 const re2::RE2* CommerceHeuristicsData::GetCartPageURLPattern() {
   return cart_url_pattern_.get();
 }
@@ -174,6 +183,16 @@ std::string CommerceHeuristicsData::GetProductIDExtractionJSON() {
 
 std::string CommerceHeuristicsData::GetCartProductExtractionScript() {
   return cart_extraction_script_;
+}
+
+absl::optional<base::TimeDelta>
+CommerceHeuristicsData::GetDiscountFetchDelay() {
+  auto delay_value_optional =
+      GetCommerceGlobalHeuristics(kDiscountFetchDelayType);
+  if (!delay_value_optional.has_value()) {
+    return absl::nullopt;
+  }
+  return base::TimeDeltaFromString(*delay_value_optional);
 }
 
 absl::optional<std::string> CommerceHeuristicsData::GetCommerceHintHeuristics(

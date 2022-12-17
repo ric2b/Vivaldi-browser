@@ -5,6 +5,7 @@
 #include "chrome/browser/apps/app_service/publishers/crostini_apps.h"
 
 #include <utility>
+#include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_menu_constants.h"
@@ -12,22 +13,27 @@
 #include "chrome/browser/apps/app_service/app_icon/dip_px_util.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_package_service.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_shelf_utils.h"
-#include "chrome/browser/ash/crostini/crostini_terminal.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
+#include "chrome/browser/ash/guest_os/guest_os_terminal.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
-#include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/intent.h"
+#include "components/services/app_service/public/cpp/intent_filter.h"
+#include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -56,12 +62,32 @@ bool ShouldShowDisplayDensityMenuItem(const std::string& app_id,
   return d.device_scale_factor() != 1.0;
 }
 
+// Create a file intent filter with mime type conditions for App Service.
+apps::IntentFilters CreateIntentFilterForCrostini(
+    const std::set<std::string>& mime_types) {
+  apps::IntentFilters intent_filters;
+
+  if (mime_types.empty()) {
+    return intent_filters;
+  }
+
+  std::vector<std::string> mime_types_vector(mime_types.begin(),
+                                             mime_types.end());
+  apps::IntentFilterPtr intent_filter = apps_util::CreateFileFilter(
+      {apps_util::kIntentActionView}, mime_types_vector, {},
+      // TODO(crbug/1349974): Remove activity_name when default file handling
+      // preferences for Files App are migrated.
+      /*activity_name=*/apps_util::kGuestOsActivityName);
+  intent_filters.push_back(std::move(intent_filter));
+  return intent_filters;
+}
+
 }  // namespace
 
 namespace apps {
 
 CrostiniApps::CrostiniApps(AppServiceProxy* proxy)
-    : AppPublisher(proxy), profile_(proxy->profile()), registry_(nullptr) {}
+    : AppPublisher(proxy), profile_(proxy->profile()) {}
 
 CrostiniApps::~CrostiniApps() {
   if (registry_) {
@@ -88,8 +114,7 @@ void CrostiniApps::Initialize() {
 
   std::vector<AppPtr> apps;
   for (const auto& pair :
-       registry_->GetRegisteredApps(guest_os::GuestOsRegistryService::VmType::
-                                        ApplicationList_VmType_TERMINA)) {
+       registry_->GetRegisteredApps(guest_os::VmType::TERMINA)) {
     const guest_os::GuestOsRegistryService::Registration& registration =
         pair.second;
     apps.push_back(CreateApp(registration, /*generate_new_icon_key=*/true));
@@ -109,21 +134,70 @@ void CrostiniApps::LoadIcon(const std::string& app_id,
                       std::move(callback));
 }
 
+void CrostiniApps::Launch(const std::string& app_id,
+                          int32_t event_flags,
+                          LaunchSource launch_source,
+                          WindowInfoPtr window_info) {
+  crostini::LaunchCrostiniApp(
+      profile_, app_id,
+      window_info ? window_info->display_id : display::kInvalidDisplayId);
+}
+
+void CrostiniApps::LaunchAppWithIntent(
+    const std::string& app_id,
+    int32_t event_flags,
+    IntentPtr intent,
+    LaunchSource launch_source,
+    WindowInfoPtr window_info,
+    base::OnceCallback<void(bool)> callback) {
+  // Retrieve URLs from the files in the intent.
+  std::vector<crostini::LaunchArg> args;
+  if (intent && intent->files.size() > 0) {
+    args.reserve(intent->files.size());
+    storage::FileSystemContext* file_system_context =
+        file_manager::util::GetFileManagerFileSystemContext(profile_);
+    for (auto& file : intent->files) {
+      args.emplace_back(
+          file_system_context->CrackURLInFirstPartyContext(file->url));
+    }
+  }
+  crostini::LaunchCrostiniAppWithIntent(
+      profile_, app_id,
+      window_info ? window_info->display_id : display::kInvalidDisplayId,
+      std::move(intent), args,
+      base::BindOnce(
+          [](LaunchAppWithIntentCallback callback, bool success,
+             const std::string& failure_reason) {
+            std::move(callback).Run(success);
+          },
+          std::move(callback)));
+}
+
 void CrostiniApps::LaunchAppWithParams(AppLaunchParams&& params,
                                        LaunchCallback callback) {
-  auto event_flags = apps::GetEventFlags(params.container, params.disposition,
+  auto event_flags = apps::GetEventFlags(params.disposition,
                                          /*prefer_container=*/false);
   auto window_info = apps::MakeWindowInfo(params.display_id);
   if (params.intent) {
-    LaunchAppWithIntent(params.app_id, event_flags, std::move(params.intent),
-                        params.launch_source, std::move(window_info),
-                        base::DoNothing());
+    LaunchAppWithIntent(
+        params.app_id, event_flags, ConvertIntentToMojomIntent(params.intent),
+        ConvertLaunchSourceToMojomLaunchSource(params.launch_source),
+        std::move(window_info), base::DoNothing());
   } else {
-    Launch(params.app_id, event_flags, params.launch_source,
+    Launch(params.app_id, event_flags,
+           ConvertLaunchSourceToMojomLaunchSource(params.launch_source),
            std::move(window_info));
   }
   // TODO(crbug.com/1244506): Add launch return value.
   std::move(callback).Run(LaunchResult());
+}
+
+void CrostiniApps::Uninstall(const std::string& app_id,
+                             UninstallSource uninstall_source,
+                             bool clear_site_data,
+                             bool report_abuse) {
+  crostini::CrostiniPackageService::GetForProfile(profile_)
+      ->QueueUninstallApplication(app_id);
 }
 
 void CrostiniApps::Connect(
@@ -132,8 +206,7 @@ void CrostiniApps::Connect(
   std::vector<apps::mojom::AppPtr> apps;
 
   for (const auto& pair :
-       registry_->GetRegisteredApps(guest_os::GuestOsRegistryService::VmType::
-                                        ApplicationList_VmType_TERMINA)) {
+       registry_->GetRegisteredApps(guest_os::VmType::TERMINA)) {
     const guest_os::GuestOsRegistryService::Registration& registration =
         pair.second;
     apps.push_back(Convert(registration, /*new_icon_key=*/true));
@@ -144,25 +217,6 @@ void CrostiniApps::Connect(
   subscriber->OnApps(std::move(apps), apps::mojom::AppType::kCrostini,
                      true /* should_notify_initialized */);
   subscribers_.Add(std::move(subscriber));
-}
-
-void CrostiniApps::LoadIcon(const std::string& app_id,
-                            apps::mojom::IconKeyPtr icon_key,
-                            apps::mojom::IconType icon_type,
-                            int32_t size_hint_in_dip,
-                            bool allow_placeholder_icon,
-                            LoadIconCallback callback) {
-  if (!icon_key) {
-    // On failure, we still run the callback, with an empty IconValue.
-    std::move(callback).Run(apps::mojom::IconValue::New());
-    return;
-  }
-
-  std::unique_ptr<IconKey> key = ConvertMojomIconKeyToIconKey(icon_key);
-  registry_->LoadIcon(app_id, *key, ConvertMojomIconTypeToIconType(icon_type),
-                      size_hint_in_dip, allow_placeholder_icon,
-                      IDR_LOGO_CROSTINI_DEFAULT,
-                      IconValueToMojomIconValueCallback(std::move(callback)));
 }
 
 void CrostiniApps::Launch(const std::string& app_id,
@@ -180,10 +234,21 @@ void CrostiniApps::LaunchAppWithIntent(const std::string& app_id,
                                        apps::mojom::LaunchSource launch_source,
                                        apps::mojom::WindowInfoPtr window_info,
                                        LaunchAppWithIntentCallback callback) {
+  // Retrieve URLs from the files in the intent.
+  std::vector<crostini::LaunchArg> args;
+  if (intent && intent->files.has_value()) {
+    storage::FileSystemContext* file_system_context =
+        file_manager::util::GetFileManagerFileSystemContext(profile_);
+    args.reserve(intent->files.value().size());
+    for (auto& file : intent->files.value()) {
+      args.emplace_back(
+          file_system_context->CrackURLInFirstPartyContext(file->url));
+    }
+  }
   crostini::LaunchCrostiniAppWithIntent(
       profile_, app_id,
       window_info ? window_info->display_id : display::kInvalidDisplayId,
-      std::move(intent), /*args=*/{},
+      ConvertMojomIntentToIntent(intent), args,
       base::BindOnce(
           [](LaunchAppWithIntentCallback callback, bool success,
              const std::string& failure_reason) {
@@ -207,7 +272,8 @@ void CrostiniApps::GetMenuModel(const std::string& app_id,
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
 
   if (menu_type == apps::mojom::MenuType::kShelf) {
-    AddCommandItem(ash::MENU_NEW_WINDOW, IDS_APP_LIST_NEW_WINDOW, &menu_items);
+    AddCommandItem(ash::APP_CONTEXT_MENU_NEW_WINDOW, IDS_APP_LIST_NEW_WINDOW,
+                   &menu_items);
   }
 
   if (crostini::IsUninstallable(profile_, app_id)) {
@@ -215,7 +281,7 @@ void CrostiniApps::GetMenuModel(const std::string& app_id,
   }
 
   if (ShouldAddOpenItem(app_id, menu_type, profile_)) {
-    AddCommandItem(ash::MENU_OPEN_NEW, IDS_APP_CONTEXT_MENU_ACTIVATE_ARC,
+    AddCommandItem(ash::LAUNCH_NEW, IDS_APP_CONTEXT_MENU_ACTIVATE_ARC,
                    &menu_items);
   }
 
@@ -246,12 +312,11 @@ void CrostiniApps::GetMenuModel(const std::string& app_id,
 
 void CrostiniApps::OnRegistryUpdated(
     guest_os::GuestOsRegistryService* registry_service,
-    guest_os::GuestOsRegistryService::VmType vm_type,
+    guest_os::VmType vm_type,
     const std::vector<std::string>& updated_apps,
     const std::vector<std::string>& removed_apps,
     const std::vector<std::string>& inserted_apps) {
-  if (vm_type != guest_os::GuestOsRegistryService::VmType::
-                     ApplicationList_VmType_TERMINA) {
+  if (vm_type != guest_os::VmType::TERMINA) {
     return;
   }
 
@@ -291,9 +356,7 @@ void CrostiniApps::OnRegistryUpdated(
 AppPtr CrostiniApps::CreateApp(
     const guest_os::GuestOsRegistryService::Registration& registration,
     bool generate_new_icon_key) {
-  DCHECK_EQ(
-      registration.VmType(),
-      guest_os::GuestOsRegistryService::VmType::ApplicationList_VmType_TERMINA);
+  DCHECK_EQ(registration.VmType(), guest_os::VmType::TERMINA);
 
   auto app = AppPublisher::MakeApp(
       AppType::kCrostini, registration.app_id(), Readiness::kReady,
@@ -326,6 +389,9 @@ AppPtr CrostiniApps::CreateApp(
   app->allow_uninstall =
       crostini::IsUninstallable(profile_, registration.app_id());
 
+  app->handles_intents = show;
+  app->intent_filters = CreateIntentFilterForCrostini(registration.MimeTypes());
+
   // TODO(crbug.com/1253250): Add other fields for the App struct.
   return app;
 }
@@ -333,9 +399,7 @@ AppPtr CrostiniApps::CreateApp(
 apps::mojom::AppPtr CrostiniApps::Convert(
     const guest_os::GuestOsRegistryService::Registration& registration,
     bool new_icon_key) {
-  DCHECK_EQ(
-      registration.VmType(),
-      guest_os::GuestOsRegistryService::VmType::ApplicationList_VmType_TERMINA);
+  DCHECK_EQ(registration.VmType(), guest_os::VmType::TERMINA);
 
   apps::mojom::AppPtr app = PublisherBase::MakeApp(
       apps::mojom::AppType::kCrostini, registration.app_id(),
@@ -372,6 +436,10 @@ apps::mojom::AppPtr CrostiniApps::Convert(
       crostini::IsUninstallable(profile_, registration.app_id())
           ? apps::mojom::OptionalBool::kTrue
           : apps::mojom::OptionalBool::kFalse;
+
+  app->handles_intents = show;
+  app->intent_filters = ConvertIntentFiltersToMojomIntentFilters(
+      CreateIntentFilterForCrostini(registration.MimeTypes()));
 
   return app;
 }

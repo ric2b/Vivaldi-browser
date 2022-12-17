@@ -4,24 +4,15 @@
 
 #include "chrome/browser/ash/guest_os/dbus_test_helper.h"
 
+#include "chromeos/ash/components/dbus/chunneld/fake_chunneld_client.h"
 #include "chromeos/ash/components/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/fake_seneschal_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
 
 namespace guest_os {
 
-BasicDBusHelper::BasicDBusHelper() {
-  chromeos::DBusThreadManager::Initialize();
-}
-
-BasicDBusHelper::~BasicDBusHelper() {
-  chromeos::DBusThreadManager::Shutdown();
-}
-
-FakeCiceroneHelper::FakeCiceroneHelper(BasicDBusHelper* basic_helper) {
-  DCHECK(basic_helper);
+FakeCiceroneHelper::FakeCiceroneHelper() {
   ash::CiceroneClient::InitializeFake();
 }
 
@@ -33,8 +24,7 @@ ash::FakeCiceroneClient* FakeCiceroneHelper::FakeCiceroneClient() {
   return ash::FakeCiceroneClient::Get();
 }
 
-FakeSeneschalHelper::FakeSeneschalHelper(BasicDBusHelper* basic_helper) {
-  DCHECK(basic_helper);
+FakeSeneschalHelper::FakeSeneschalHelper() {
   ash::SeneschalClient::InitializeFake();
 }
 
@@ -46,8 +36,7 @@ ash::FakeSeneschalClient* FakeSeneschalHelper::FakeSeneschalClient() {
   return ash::FakeSeneschalClient::Get();
 }
 
-FakeDlcserviceHelper::FakeDlcserviceHelper(BasicDBusHelper* basic_helper) {
-  DCHECK(basic_helper);
+FakeDlcserviceHelper::FakeDlcserviceHelper() {
   chromeos::DlcserviceClient::InitializeFake();
 }
 
@@ -73,10 +62,14 @@ ash::FakeConciergeClient* FakeConciergeHelper::FakeConciergeClient() {
   return ash::FakeConciergeClient::Get();
 }
 
-FakeVmServicesHelper::FakeVmServicesHelper()
-    : FakeCiceroneHelper(this),
-      FakeSeneschalHelper(this),
-      FakeDlcserviceHelper(this),
-      FakeConciergeHelper(this) {}
+FakeChunneldHelper::FakeChunneldHelper() {
+  ash::ChunneldClient::InitializeFake();
+}
+
+FakeChunneldHelper::~FakeChunneldHelper() {
+  ash::ChunneldClient::Shutdown();
+}
+
+FakeVmServicesHelper::FakeVmServicesHelper() : FakeConciergeHelper(this) {}
 
 }  // namespace guest_os

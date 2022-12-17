@@ -21,12 +21,13 @@ namespace content {
 class CONTENT_EXPORT NavigationThrottleRunner {
  public:
   // The different event types that can be processed by NavigationThrottles.
+  // These values are recorded in metrics and should not be renumbered.
   enum class Event {
-    WillStartRequest,
-    WillRedirectRequest,
-    WillFailRequest,
-    WillProcessResponse,
-    NoEvent,
+    NoEvent = 0,
+    WillStartRequest = 1,
+    WillRedirectRequest = 2,
+    WillFailRequest = 3,
+    WillProcessResponse = 4,
   };
 
   class Delegate {
@@ -39,7 +40,9 @@ class CONTENT_EXPORT NavigationThrottleRunner {
         NavigationThrottle::ThrottleCheckResult result) = 0;
   };
 
-  NavigationThrottleRunner(Delegate* delegate, int64_t navigation_id);
+  NavigationThrottleRunner(Delegate* delegate,
+                           int64_t navigation_id,
+                           bool is_primary_main_frame);
 
   NavigationThrottleRunner(const NavigationThrottleRunner&) = delete;
   NavigationThrottleRunner& operator=(const NavigationThrottleRunner&) = delete;
@@ -73,9 +76,16 @@ class CONTENT_EXPORT NavigationThrottleRunner {
   // |navigation_throttle|.
   void AddThrottle(std::unique_ptr<NavigationThrottle> navigation_throttle);
 
+  void set_first_deferral_callback_for_testing(base::OnceClosure callback) {
+    first_deferral_callback_for_testing_ = std::move(callback);
+  }
+
  private:
   void ProcessInternal();
   void InformDelegate(const NavigationThrottle::ThrottleCheckResult& result);
+
+  // Records UKM about the deferring throttle when the navigation is resumed.
+  void RecordDeferTimeUKM();
 
   const raw_ptr<Delegate> delegate_;
 
@@ -92,8 +102,16 @@ class CONTENT_EXPORT NavigationThrottleRunner {
   // The time a throttle started deferring the navigation.
   base::Time defer_start_time_;
 
+  // This test-only callback will be run the first time a NavigationThrottle
+  // defers this navigation.
+  base::OnceClosure first_deferral_callback_for_testing_;
+
   // The event currently being processed.
   Event current_event_ = Event::NoEvent;
+
+  // Whether the navigation is in the primary main frame.
+  bool is_primary_main_frame_ = false;
+
   base::WeakPtrFactory<NavigationThrottleRunner> weak_factory_{this};
 };
 

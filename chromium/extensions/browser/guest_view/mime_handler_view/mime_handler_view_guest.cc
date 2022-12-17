@@ -144,7 +144,8 @@ void MimeHandlerViewGuest::SetEmbedderFrame(
       owner_type == blink::FrameOwnerElementType::kObject;
   DCHECK_NE(MSG_ROUTING_NONE, embedder_widget_routing_id_);
   delegate_->RecordLoadMetric(
-      /* in_main_frame */ !GetEmbedderFrame()->GetParent(), mime_type_);
+      /*is_full_page=*/!GetEmbedderFrame()->GetParentOrOuterDocument(),
+      mime_type_);
 }
 
 void MimeHandlerViewGuest::SetBeforeUnloadController(
@@ -162,10 +163,10 @@ int MimeHandlerViewGuest::GetTaskPrefix() const {
 }
 
 void MimeHandlerViewGuest::CreateWebContents(
-    const base::DictionaryValue& create_params,
+    const base::Value::Dict& create_params,
     WebContentsCreatedCallback callback) {
   const std::string* stream_id =
-      create_params.FindStringKey(mime_handler_view::kStreamId);
+      create_params.FindString(mime_handler_view::kStreamId);
   if (!stream_id || stream_id->empty()) {
     std::move(callback).Run(nullptr);
     return;
@@ -244,7 +245,7 @@ void MimeHandlerViewGuest::DidAttachToEmbedder() {
 }
 
 void MimeHandlerViewGuest::DidInitialize(
-    const base::DictionaryValue& create_params) {
+    const base::Value::Dict& create_params) {
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
 }
 
@@ -258,10 +259,6 @@ void MimeHandlerViewGuest::EmbedderFullscreenToggled(bool entered_fullscreen) {
 
 bool MimeHandlerViewGuest::ZoomPropagatesFromEmbedderToGuest() const {
   return false;
-}
-
-bool MimeHandlerViewGuest::ShouldDestroyOnDetach() const {
-  return true;
 }
 
 WebContents* MimeHandlerViewGuest::OpenURLFromTab(
@@ -339,8 +336,8 @@ bool MimeHandlerViewGuest::PluginDoSave() {
   if (!attached() || !plugin_can_save_)
     return false;
 
-  base::ListValue::ListStorage args;
-  args.emplace_back(stream_->stream_url().spec());
+  base::ListValue::List args;
+  args.Append(stream_->stream_url().spec());
 
   auto event =
       std::make_unique<Event>(events::MIME_HANDLER_PRIVATE_SAVE,

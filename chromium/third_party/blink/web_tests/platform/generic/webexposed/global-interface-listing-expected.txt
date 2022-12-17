@@ -231,7 +231,6 @@ interface AnimationTimeline
     attribute @@toStringTag
     getter currentTime
     getter duration
-    getter phase
     method constructor
 interface Attr : Node
     attribute @@toStringTag
@@ -296,10 +295,11 @@ interface AudioData
     method close
     method constructor
     method copyTo
-interface AudioDecoder
+interface AudioDecoder : EventTarget
     static method isConfigSupported
     attribute @@toStringTag
     getter decodeQueueSize
+    getter ondequeue
     getter state
     method close
     method configure
@@ -307,14 +307,16 @@ interface AudioDecoder
     method decode
     method flush
     method reset
+    setter ondequeue
 interface AudioDestinationNode : AudioNode
     attribute @@toStringTag
     getter maxChannelCount
     method constructor
-interface AudioEncoder
+interface AudioEncoder : EventTarget
     static method isConfigSupported
     attribute @@toStringTag
     getter encodeQueueSize
+    getter ondequeue
     getter state
     method close
     method configure
@@ -322,6 +324,7 @@ interface AudioEncoder
     method encode
     method flush
     method reset
+    setter ondequeue
 interface AudioListener
     attribute @@toStringTag
     getter forwardX
@@ -441,6 +444,12 @@ interface AuthenticatorResponse
     attribute @@toStringTag
     getter clientDataJSON
     method constructor
+interface BackForwardCacheRestoration : PerformanceEntry
+    attribute @@toStringTag
+    getter pageshowEventEnd
+    getter pageshowEventStart
+    method constructor
+    method toJSON
 interface BackgroundFetchManager
     attribute @@toStringTag
     method constructor
@@ -974,6 +983,12 @@ interface CSSStyleValue
 interface CSSSupportsRule : CSSConditionRule
     attribute @@toStringTag
     method constructor
+interface CSSToggle
+    attribute @@toStringTag
+    method constructor
+interface CSSToggleMap
+    attribute @@toStringTag
+    method constructor
 interface CSSTransformComponent
     attribute @@toStringTag
     getter is2D
@@ -1258,14 +1273,6 @@ interface CompressionStream
     getter readable
     getter writable
     method constructor
-interface ComputePressureObserver
-    static getter supportedSources
-    attribute @@toStringTag
-    method constructor
-    method disconnect
-    method observe
-    method takeRecords
-    method unobserve
 interface ComputedAccessibleNode
     attribute @@toStringTag
     getter atomic
@@ -1323,6 +1330,10 @@ interface ContentIndex
     method constructor
     method delete
     method getAll
+interface ContentVisibilityAutoStateChangedEvent : Event
+    attribute @@toStringTag
+    getter skipped
+    method constructor
 interface ConvolverNode : AudioNode
     attribute @@toStringTag
     getter buffer
@@ -1701,6 +1712,7 @@ interface DelegatedInkTrailPresenter
     method constructor
     method updateInkTrailStartPoint
 interface DeviceMotionEvent : Event
+    static method requestPermission
     attribute @@toStringTag
     getter acceleration
     getter accelerationIncludingGravity
@@ -1720,6 +1732,7 @@ interface DeviceMotionEventRotationRate
     getter gamma
     method constructor
 interface DeviceOrientationEvent : Event
+    static method requestPermission
     attribute @@toStringTag
     getter absolute
     getter alpha
@@ -1790,6 +1803,7 @@ interface Document : Node
     getter onauxclick
     getter onbeforecopy
     getter onbeforecut
+    getter onbeforeinput
     getter onbeforematch
     getter onbeforepaste
     getter onbeforexrselect
@@ -1800,6 +1814,7 @@ interface Document : Node
     getter onchange
     getter onclick
     getter onclose
+    getter oncontentvisibilityautostatechanged
     getter oncontextlost
     getter oncontextmenu
     getter oncontextrestored
@@ -1858,6 +1873,7 @@ interface Document : Node
     getter onpointerover
     getter onpointerrawupdate
     getter onpointerup
+    getter onprerenderingchange
     getter onprogress
     getter onratechange
     getter onreadystatechange
@@ -1901,6 +1917,7 @@ interface Document : Node
     getter pictureInPictureEnabled
     getter plugins
     getter pointerLockElement
+    getter prerendering
     getter readyState
     getter referrer
     getter rootElement
@@ -1997,6 +2014,7 @@ interface Document : Node
     setter onauxclick
     setter onbeforecopy
     setter onbeforecut
+    setter onbeforeinput
     setter onbeforematch
     setter onbeforepaste
     setter onbeforexrselect
@@ -2007,6 +2025,7 @@ interface Document : Node
     setter onchange
     setter onclick
     setter onclose
+    setter oncontentvisibilityautostatechanged
     setter oncontextlost
     setter oncontextmenu
     setter oncontextrestored
@@ -2065,6 +2084,7 @@ interface Document : Node
     setter onpointerover
     setter onpointerrawupdate
     setter onpointerup
+    setter onprerenderingchange
     setter onprogress
     setter onratechange
     setter onreadystatechange
@@ -2235,7 +2255,6 @@ interface Element : Node
     getter ariaValueText
     getter ariaVirtualContent
     getter assignedSlot
-    getter attributeStyleMap
     getter attributes
     getter childElementCount
     getter children
@@ -2266,7 +2285,10 @@ interface Element : Node
     getter onwebkitfullscreenerror
     getter outerHTML
     getter part
-    getter popup
+    getter popUp
+    getter popUpHideTarget
+    getter popUpShowTarget
+    getter popUpToggleTarget
     getter prefix
     getter previousElementSibling
     getter role
@@ -2277,11 +2299,13 @@ interface Element : Node
     getter shadowRoot
     getter slot
     getter tagName
+    getter toggles
     method after
     method animate
     method append
     method attachShadow
     method before
+    method checkVisibility
     method closest
     method computedStyleMap
     method constructor
@@ -2301,11 +2325,10 @@ interface Element : Node
     method hasAttributeNS
     method hasAttributes
     method hasPointerCapture
-    method hidePopup
+    method hidePopUp
     method insertAdjacentElement
     method insertAdjacentHTML
     method insertAdjacentText
-    method isVisible
     method matches
     method prepend
     method querySelector
@@ -2330,7 +2353,7 @@ interface Element : Node
     method setAttributeNodeNS
     method setHTML
     method setPointerCapture
-    method showPopup
+    method showPopUp
     method toggleAttribute
     method webkitMatchesSelector
     method webkitRequestFullScreen
@@ -2399,7 +2422,10 @@ interface Element : Node
     setter onwebkitfullscreenerror
     setter outerHTML
     setter part
-    setter popup
+    setter popUp
+    setter popUpHideTarget
+    setter popUpShowTarget
+    setter popUpToggleTarget
     setter role
     setter scrollLeft
     setter scrollTop
@@ -2621,16 +2647,12 @@ interface FeaturePolicy
     method features
     method getAllowlistForFeature
 interface FederatedCredential : Credential
-    static method logoutRps
     attribute @@toStringTag
     getter iconURL
     getter name
     getter protocol
     getter provider
     method constructor
-    method login
-    method logout
-    method revoke
 interface File : Blob
     attribute @@toStringTag
     getter lastModified
@@ -2814,6 +2836,7 @@ interface GamepadEvent : Event
 interface GamepadHapticActuator
     attribute @@toStringTag
     getter type
+    method canPlay
     method constructor
     method playEffect
     method reset
@@ -3169,6 +3192,7 @@ interface HTMLDocument : Document
 interface HTMLElement : Element
     attribute @@toStringTag
     getter accessKey
+    getter attributeStyleMap
     getter autocapitalize
     getter autofocus
     getter contentEditable
@@ -3195,6 +3219,7 @@ interface HTMLElement : Element
     getter onanimationiteration
     getter onanimationstart
     getter onauxclick
+    getter onbeforeinput
     getter onbeforematch
     getter onbeforexrselect
     getter onblur
@@ -3204,6 +3229,7 @@ interface HTMLElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncontentvisibilityautostatechanged
     getter oncontextlost
     getter oncontextmenu
     getter oncontextrestored
@@ -3322,6 +3348,7 @@ interface HTMLElement : Element
     setter onanimationiteration
     setter onanimationstart
     setter onauxclick
+    setter onbeforeinput
     setter onbeforematch
     setter onbeforexrselect
     setter onblur
@@ -3331,6 +3358,7 @@ interface HTMLElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncontentvisibilityautostatechanged
     setter oncontextlost
     setter oncontextmenu
     setter oncontextrestored
@@ -3482,6 +3510,8 @@ interface HTMLFormElement : HTMLElement
     getter method
     getter name
     getter noValidate
+    getter rel
+    getter relList
     getter target
     method @@iterator
     method checkValidity
@@ -3498,6 +3528,8 @@ interface HTMLFormElement : HTMLElement
     setter method
     setter name
     setter noValidate
+    setter rel
+    setter relList
     setter target
 interface HTMLFrameElement : HTMLElement
     attribute @@toStringTag
@@ -4751,6 +4783,11 @@ interface IIRFilterNode : AudioNode
     attribute @@toStringTag
     method constructor
     method getFrequencyResponse
+interface IdentityCredential : Credential
+    static method logoutRPs
+    attribute @@toStringTag
+    getter token
+    method constructor
 interface IdleDeadline
     attribute @@toStringTag
     getter didTimeout
@@ -5112,6 +5149,7 @@ interface Magnetometer : Sensor
     method constructor
 interface MathMLElement : Element
     attribute @@toStringTag
+    getter attributeStyleMap
     getter autofocus
     getter dataset
     getter focusgroup
@@ -5121,6 +5159,7 @@ interface MathMLElement : Element
     getter onanimationiteration
     getter onanimationstart
     getter onauxclick
+    getter onbeforeinput
     getter onbeforematch
     getter onbeforexrselect
     getter onblur
@@ -5130,6 +5169,7 @@ interface MathMLElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncontentvisibilityautostatechanged
     getter oncontextlost
     getter oncontextmenu
     getter oncontextrestored
@@ -5229,6 +5269,7 @@ interface MathMLElement : Element
     setter onanimationiteration
     setter onanimationstart
     setter onauxclick
+    setter onbeforeinput
     setter onbeforematch
     setter onbeforexrselect
     setter onblur
@@ -5238,6 +5279,7 @@ interface MathMLElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncontentvisibilityautostatechanged
     setter oncontextlost
     setter oncontextmenu
     setter oncontextrestored
@@ -5492,6 +5534,7 @@ interface MediaSource : EventTarget
     attribute @@toStringTag
     getter activeSourceBuffers
     getter duration
+    getter handle
     getter onsourceclose
     getter onsourceended
     getter onsourceopen
@@ -5501,7 +5544,6 @@ interface MediaSource : EventTarget
     method clearLiveSeekableRange
     method constructor
     method endOfStream
-    method getHandle
     method removeSourceBuffer
     method setLiveSeekableRange
     setter duration
@@ -5800,6 +5842,7 @@ interface NativeIOFileManager
     method requestCapacity
 interface NavigateEvent : Event
     attribute @@toStringTag
+    getter canIntercept
     getter canTransition
     getter destination
     getter downloadRequest
@@ -5810,7 +5853,9 @@ interface NavigateEvent : Event
     getter signal
     getter userInitiated
     method constructor
+    method intercept
     method restoreScroll
+    method scroll
     method transitionWhile
 interface Navigation : EventTarget
     attribute @@toStringTag
@@ -6378,6 +6423,26 @@ interface PaymentResponse : EventTarget
     method retry
     method toJSON
     setter onpayerdetailchange
+interface PendingBeacon
+    attribute @@toStringTag
+    getter backgroundTimeout
+    getter method
+    getter pending
+    getter timeout
+    getter url
+    method constructor
+    method deactivate
+    method sendNow
+    setter backgroundTimeout
+    setter timeout
+interface PendingGetBeacon : PendingBeacon
+    attribute @@toStringTag
+    method constructor
+    method setURL
+interface PendingPostBeacon : PendingBeacon
+    attribute @@toStringTag
+    method constructor
+    method setData
 interface Performance : EventTarget
     attribute @@toStringTag
     getter eventCounts
@@ -6455,6 +6520,7 @@ interface PerformanceNavigation
     method toJSON
 interface PerformanceNavigationTiming : PerformanceResourceTiming
     attribute @@toStringTag
+    getter activationStart
     getter domComplete
     getter domContentLoadedEventEnd
     getter domContentLoadedEventStart
@@ -6496,6 +6562,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter nextHopProtocol
     getter redirectEnd
     getter redirectStart
+    getter renderBlockingStatus
     getter requestStart
     getter responseEnd
     getter responseStart
@@ -6503,7 +6570,6 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter serverTiming
     getter transferSize
     getter workerStart
-    getter workerTiming
     method constructor
     method toJSON
 interface PerformanceServerTiming
@@ -6669,6 +6735,14 @@ interface PresentationRequest : EventTarget
     method reconnect
     method start
     setter onconnectionavailable
+interface PressureObserver
+    static getter supportedSources
+    attribute @@toStringTag
+    method constructor
+    method disconnect
+    method observe
+    method takeRecords
+    method unobserve
 interface ProcessingInstruction : CharacterData
     attribute @@toStringTag
     getter sheet
@@ -6692,6 +6766,7 @@ interface PromiseRejectionEvent : Event
     getter reason
     method constructor
 interface PublicKeyCredential : Credential
+    static method isConditionalMediationAvailable
     static method isUserVerifyingPlatformAuthenticatorAvailable
     attribute @@toStringTag
     getter authenticatorAttachment
@@ -7322,6 +7397,7 @@ interface SVGDescElement : SVGElement
     method constructor
 interface SVGElement : Element
     attribute @@toStringTag
+    getter attributeStyleMap
     getter autofocus
     getter className
     getter dataset
@@ -7332,6 +7408,7 @@ interface SVGElement : Element
     getter onanimationiteration
     getter onanimationstart
     getter onauxclick
+    getter onbeforeinput
     getter onbeforematch
     getter onbeforexrselect
     getter onblur
@@ -7341,6 +7418,7 @@ interface SVGElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncontentvisibilityautostatechanged
     getter oncontextlost
     getter oncontextmenu
     getter oncontextrestored
@@ -7442,6 +7520,7 @@ interface SVGElement : Element
     setter onanimationiteration
     setter onanimationstart
     setter onauxclick
+    setter onbeforeinput
     setter onbeforematch
     setter onbeforexrselect
     setter onblur
@@ -7451,6 +7530,7 @@ interface SVGElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncontentvisibilityautostatechanged
     setter oncontextlost
     setter oncontextmenu
     setter oncontextrestored
@@ -8351,12 +8431,21 @@ interface Screen : EventTarget
     setter onchange
 interface ScreenDetailed : Screen
     attribute @@toStringTag
+    getter bluePrimaryX
+    getter bluePrimaryY
     getter devicePixelRatio
+    getter greenPrimaryX
+    getter greenPrimaryY
+    getter highDynamicRangeHeadroom
     getter isInternal
     getter isPrimary
     getter label
     getter left
+    getter redPrimaryX
+    getter redPrimaryY
     getter top
+    getter whitePointX
+    getter whitePointY
     method constructor
 interface ScreenDetails : EventTarget
     attribute @@toStringTag
@@ -8385,7 +8474,6 @@ interface ScriptProcessorNode : AudioNode
 interface ScrollTimeline : AnimationTimeline
     attribute @@toStringTag
     getter orientation
-    getter scrollOffsets
     getter source
     method constructor
 interface SecurityPolicyViolationEvent : Event
@@ -8656,6 +8744,8 @@ interface Storage
     method setItem
 interface StorageBucket
     attribute @@toStringTag
+    getter indexedDB
+    getter locks
     method constructor
     method durability
     method estimate
@@ -8973,6 +9063,13 @@ interface TransformStream
     getter readable
     getter writable
     method constructor
+interface TransformStreamDefaultController
+    attribute @@toStringTag
+    getter desiredSize
+    method constructor
+    method enqueue
+    method error
+    method terminate
 interface TransitionEvent : Event
     attribute @@toStringTag
     getter elapsedTime
@@ -9270,10 +9367,11 @@ interface VideoColorSpace
     getter transfer
     method constructor
     method toJSON
-interface VideoDecoder
+interface VideoDecoder : EventTarget
     static method isConfigSupported
     attribute @@toStringTag
     getter decodeQueueSize
+    getter ondequeue
     getter state
     method close
     method configure
@@ -9281,10 +9379,12 @@ interface VideoDecoder
     method decode
     method flush
     method reset
-interface VideoEncoder
+    setter ondequeue
+interface VideoEncoder : EventTarget
     static method isConfigSupported
     attribute @@toStringTag
     getter encodeQueueSize
+    getter ondequeue
     getter state
     method close
     method configure
@@ -9292,6 +9392,7 @@ interface VideoEncoder
     method encode
     method flush
     method reset
+    setter ondequeue
 interface VideoFrame
     attribute @@toStringTag
     getter codedHeight
@@ -9346,6 +9447,10 @@ interface VideoTrackList : EventTarget
     setter onaddtrack
     setter onchange
     setter onremovetrack
+interface ViewTimeline : ScrollTimeline
+    attribute @@toStringTag
+    getter subject
+    method constructor
 interface VirtualKeyboard : EventTarget
     attribute @@toStringTag
     getter boundingRect
@@ -11539,6 +11644,7 @@ namespace CSS
     attribute propertyNamesInGlobal
     attribute testRunner
     attribute textInputController
+    getter anonymouslyFramed
     getter caches
     getter clientInformation
     getter closed
@@ -11559,7 +11665,6 @@ namespace CSS
     getter indexedDB
     getter innerHeight
     getter innerWidth
-    getter isAnonymouslyFramed
     getter isSecureContext
     getter launchQueue
     getter length
@@ -11578,6 +11683,7 @@ namespace CSS
     getter onanimationstart
     getter onappinstalled
     getter onauxclick
+    getter onbeforeinput
     getter onbeforeinstallprompt
     getter onbeforematch
     getter onbeforeprint
@@ -11590,6 +11696,7 @@ namespace CSS
     getter onchange
     getter onclick
     getter onclose
+    getter oncontentvisibilityautostatechanged
     getter oncontextlost
     getter oncontextmenu
     getter oncontextrestored
@@ -11694,7 +11801,6 @@ namespace CSS
     getter opener
     getter origin
     getter originAgentCluster
-    getter originPolicyIds
     getter outerHeight
     getter outerWidth
     getter pageXOffset
@@ -11800,6 +11906,7 @@ namespace CSS
     setter onanimationstart
     setter onappinstalled
     setter onauxclick
+    setter onbeforeinput
     setter onbeforeinstallprompt
     setter onbeforematch
     setter onbeforeprint
@@ -11812,6 +11919,7 @@ namespace CSS
     setter onchange
     setter onclick
     setter onclose
+    setter oncontentvisibilityautostatechanged
     setter oncontextlost
     setter oncontextmenu
     setter oncontextrestored

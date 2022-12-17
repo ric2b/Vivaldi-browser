@@ -28,8 +28,6 @@
 extern "C" {
 CFTypeID SecKeyGetTypeID();
 #if !BUILDFLAG(IS_IOS)
-CFTypeID SecACLGetTypeID();
-CFTypeID SecTrustedApplicationGetTypeID();
 // The NSFont/CTFont toll-free bridging is broken before 10.15.
 // http://www.openradar.me/15341349 rdar://15341349
 //
@@ -222,6 +220,7 @@ TYPE_NAME_FOR_CF_TYPE_DEFN(CTFont)
 TYPE_NAME_FOR_CF_TYPE_DEFN(CTRun)
 
 #if !BUILDFLAG(IS_IOS)
+TYPE_NAME_FOR_CF_TYPE_DEFN(SecAccessControl)
 TYPE_NAME_FOR_CF_TYPE_DEFN(SecCertificate)
 TYPE_NAME_FOR_CF_TYPE_DEFN(SecKey)
 TYPE_NAME_FOR_CF_TYPE_DEFN(SecPolicy)
@@ -409,11 +408,10 @@ CFCastStrict<CTFontRef>(const CFTypeRef& cf_val) {
 #endif
 
 #if !BUILDFLAG(IS_IOS)
-CF_CAST_DEFN(SecACL)
+CF_CAST_DEFN(SecAccessControl)
 CF_CAST_DEFN(SecCertificate)
 CF_CAST_DEFN(SecKey)
 CF_CAST_DEFN(SecPolicy)
-CF_CAST_DEFN(SecTrustedApplication)
 #endif
 
 #undef CF_CAST_DEFN
@@ -464,7 +462,7 @@ base::ScopedCFTypeRef<CFURLRef> FilePathToCFURL(const FilePath& path) {
   const std::string& path_string = path.value();
   base::ScopedCFTypeRef<CFStringRef> path_cfstring(CFStringCreateWithBytes(
       kCFAllocatorDefault, reinterpret_cast<const UInt8*>(path_string.data()),
-      path_string.length(), kCFStringEncodingUTF8,
+      checked_cast<CFIndex>(path_string.length()), kCFStringEncodingUTF8,
       /*isExternalRepresentation=*/FALSE));
   if (!path_cfstring)
     return base::ScopedCFTypeRef<CFURLRef>();
@@ -475,14 +473,13 @@ base::ScopedCFTypeRef<CFURLRef> FilePathToCFURL(const FilePath& path) {
 }
 
 bool CFRangeToNSRange(CFRange range, NSRange* range_out) {
-  decltype(range_out->location) end;
-  if (base::IsValueInRangeForNumericType<decltype(range_out->location)>(
-          range.location) &&
-      base::IsValueInRangeForNumericType<decltype(range_out->length)>(
-          range.length) &&
+  NSUInteger end;
+  if (base::IsValueInRangeForNumericType<NSUInteger>(range.location) &&
+      base::IsValueInRangeForNumericType<NSUInteger>(range.length) &&
       base::CheckAdd(range.location, range.length).AssignIfValid(&end) &&
-      base::IsValueInRangeForNumericType<decltype(range_out->location)>(end)) {
-    *range_out = NSMakeRange(range.location, range.length);
+      base::IsValueInRangeForNumericType<NSUInteger>(end)) {
+    *range_out = NSMakeRange(static_cast<NSUInteger>(range.location),
+                             static_cast<NSUInteger>(range.length));
     return true;
   }
   return false;
@@ -512,7 +509,9 @@ std::ostream& operator<<(std::ostream& o, const CFErrorRef err) {
 }
 
 std::ostream& operator<<(std::ostream& o, CFRange range) {
-  return o << NSStringFromRange(NSMakeRange(range.location, range.length));
+  return o << NSStringFromRange(
+             NSMakeRange(static_cast<NSUInteger>(range.location),
+                         static_cast<NSUInteger>(range.length)));
 }
 
 std::ostream& operator<<(std::ostream& o, id obj) {

@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
+#include "third_party/blink/renderer/core/html/track/vtt/vtt_cue_box.h"
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_parser.h"
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_scanner.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
@@ -96,7 +97,7 @@ VTTRegion::VTTRegion()
       viewport_anchor_(gfx::PointF(kDefaultAnchorPointX, kDefaultAnchorPointY)),
       scroll_(kDefaultScroll),
       current_top_(0),
-      scroll_timer_(Thread::Current()->GetTaskRunner(),
+      scroll_timer_(Thread::Current()->GetDeprecatedTaskRunner(),
                     this,
                     &VTTRegion::ScrollTimerFired) {}
 

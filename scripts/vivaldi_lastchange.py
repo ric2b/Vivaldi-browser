@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import time
+import datetime
 
 class VersionInfo(object):
   def __init__(self, revision_id, full_revision_string, timestamp):
@@ -204,7 +205,13 @@ def main(argv=None):
   if args.print_only:
     print (revision_string)
   else:
-    contents = "LASTCHANGE%s=%s\n" % (args.name_suffix or "", revision_string)
+    lastchange_year = datetime.datetime.utcfromtimestamp(
+        version_info.timestamp).year
+    contents_lines = [
+        "LASTCHANGE%s=%s" % (args.name_suffix or "", revision_string),
+        "LASTCHANGE_YEAR=%s" % lastchange_year,
+    ]
+    contents = '\n'.join(contents_lines) + '\n'
     if not out_file and not args.header:
       sys.stdout.write(contents)
     else:

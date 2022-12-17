@@ -43,8 +43,8 @@ class MockNavigationHandle : public NavigationHandle {
                                   ukm::SourceIdObj::Type::NAVIGATION_ID);
   }
   const GURL& GetURL() override { return url_; }
-  const GURL& GetPreviousMainFrameURL() override {
-    return previous_main_frame_url_;
+  const GURL& GetPreviousPrimaryMainFrameURL() override {
+    return previous_primary_main_frame_url_;
   }
   SiteInstance* GetStartingSiteInstance() override {
     return starting_site_instance_;
@@ -211,13 +211,15 @@ class MockNavigationHandle : public NavigationHandle {
   base::SafeRef<NavigationHandle> GetSafeRef() override {
     return weak_factory_.GetSafeRef();
   }
+  MOCK_METHOD(bool, ExistingDocumentWasDiscarded, (), (const));
 
   CommitDeferringCondition* GetCommitDeferringConditionForTesting() override {
     return nullptr;
   }
   void set_url(const GURL& url) { url_ = url; }
-  void set_previous_main_frame_url(const GURL& previous_main_frame_url) {
-    previous_main_frame_url_ = previous_main_frame_url;
+  void set_previous_primary_main_frame_url(
+      const GURL& previous_primary_main_frame_url) {
+    previous_primary_main_frame_url_ = previous_primary_main_frame_url;
   }
   void set_starting_site_instance(SiteInstance* site_instance) {
     starting_site_instance_ = site_instance;
@@ -295,7 +297,7 @@ class MockNavigationHandle : public NavigationHandle {
  private:
   int64_t navigation_id_;
   GURL url_;
-  GURL previous_main_frame_url_;
+  GURL previous_primary_main_frame_url_;
   raw_ptr<SiteInstance> starting_site_instance_ = nullptr;
   raw_ptr<WebContents> web_contents_ = nullptr;
   GURL base_url_for_data_url_;

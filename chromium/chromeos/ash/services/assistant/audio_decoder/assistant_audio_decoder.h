@@ -9,7 +9,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
-#include "chromeos/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
+#include "chromeos/ash/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
 #include "media/filters/blocking_url_protocol.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -20,8 +20,7 @@ class AudioBus;
 class DataSource;
 }  // namespace media
 
-namespace chromeos {
-namespace assistant {
+namespace ash::assistant {
 
 class AssistantAudioDecoder : public mojom::AssistantAudioDecoder {
  public:
@@ -79,7 +78,11 @@ class AssistantAudioDecoder : public mojom::AssistantAudioDecoder {
   base::WeakPtrFactory<AssistantAudioDecoder> weak_factory_;
 };
 
-}  // namespace assistant
-}  // namespace chromeos
+}  // namespace ash::assistant
+
+// TODO(https://crbug.com/1164001): remove when the migration is finished.
+namespace chromeos::assistant {
+using ::ash::assistant::AssistantAudioDecoder;
+}
 
 #endif  // CHROMEOS_ASH_SERVICES_ASSISTANT_AUDIO_DECODER_ASSISTANT_AUDIO_DECODER_H_

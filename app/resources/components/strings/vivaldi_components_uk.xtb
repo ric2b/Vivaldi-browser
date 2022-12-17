@@ -29,5 +29,6 @@
           і зніміть прапорець біля опції "<ph name="NO_PREFETCH_DESCRIPTION" />".
           Якщо проблема не зникне, радимо знову вибрати цю опцію,
           щоб покращити стабільність.</translation>
+<translation id="7496505986576158197">Vivaldi створено на базі відкритого проєкту <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> та іншого <ph name="BEGIN_LINK_OSS" />відкритого програмного забезпечення<ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Перейдіть до Програми &gt; Системні налаштування &gt; Мережа &gt; Розширені &gt; Проксі-сервери і зніміть прапорці біля всіх вибраних проксі-серверів.</translation>
 </translationbundle>

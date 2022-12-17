@@ -7,16 +7,12 @@
  * and selections.
  */
 
-goog.provide('BrailleTextStyleSpan');
-goog.provide('ExtraCellsSpan');
-goog.provide('ValueSelectionSpan');
-goog.provide('ValueSpan');
+import {Spannable} from '../../common/spannable.js';
 
-goog.require('LibLouis.FormType');
-goog.require('Spannable');
+import {LibLouis} from './liblouis.js';
 
 /** Attached to the value region of a braille spannable. */
-ValueSpan = class {
+export class ValueSpan {
   /** @param {number} offset The offset of the span into the value. */
   constructor(offset) {
     /**
@@ -42,7 +38,7 @@ ValueSpan = class {
   toJson() {
     return this;
   }
-};
+}
 
 
 Spannable.registerSerializableSpan(
@@ -50,7 +46,7 @@ Spannable.registerSerializableSpan(
 
 
 /** Attached to the selected text within a value. */
-ValueSelectionSpan = class {};
+export class ValueSelectionSpan {}
 
 
 Spannable.registerStatelessSerializableSpan(
@@ -62,19 +58,19 @@ Spannable.registerStatelessSerializableSpan(
  * This is supported by the {@code ExpandingBrailleTranslator}
  * class.
  */
-ExtraCellsSpan = class {
+export class ExtraCellsSpan {
   constructor() {
     /** @type {ArrayBuffer} */
     this.cells = new Uint8Array(0).buffer;
   }
-};
+}
 
 
 /** Indicates a text form during translation in Liblouis. */
-BrailleTextStyleSpan = class {
+export class BrailleTextStyleSpan {
   /** @param {LibLouis.FormType} formType */
   constructor(formType) {
     /** @type {LibLouis.FormType} */
     this.formType = formType;
   }
-};
+}

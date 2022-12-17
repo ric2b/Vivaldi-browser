@@ -14,19 +14,14 @@
 #include "chromecast/metrics/cast_metrics_service_client.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/stability_metrics_helper.h"
-#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/child_process_termination_info.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
-#include "third_party/metrics_proto/system_profile.pb.h"
 
 namespace chromecast {
 namespace metrics {
-
 namespace {
 
 enum RendererType {
@@ -46,11 +41,6 @@ int MapCrashExitCodeForHistogram(int exit_code) {
 
 }  // namespace
 
-// static
-void CastStabilityMetricsProvider::RegisterPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(prefs::kStabilityRendererCrashCount, 0);
-}
-
 CastStabilityMetricsProvider::CastStabilityMetricsProvider(
     ::metrics::MetricsService* metrics_service,
     PrefService* pref_service)
@@ -58,29 +48,14 @@ CastStabilityMetricsProvider::CastStabilityMetricsProvider(
   DCHECK(pref_service_);
 }
 
+CastStabilityMetricsProvider::~CastStabilityMetricsProvider() {}
+
 void CastStabilityMetricsProvider::OnRecordingEnabled() {
-  registrar_.Add(this,
-                 content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this,
-                 content::NOTIFICATION_RENDER_WIDGET_HOST_HANG,
-                 content::NotificationService::AllSources());
+  logging_enabled_ = true;
 }
 
 void CastStabilityMetricsProvider::OnRecordingDisabled() {
-  registrar_.RemoveAll();
-}
-
-void CastStabilityMetricsProvider::ProvideStabilityMetrics(
-    ::metrics::SystemProfileProto* system_profile_proto) {
-  ::metrics::SystemProfileProto_Stability* stability_proto =
-      system_profile_proto->mutable_stability();
-
-  int count = pref_service_->GetInteger(prefs::kStabilityRendererCrashCount);
-  if (count) {
-    stability_proto->set_renderer_crash_count(count);
-    pref_service_->SetInteger(prefs::kStabilityRendererCrashCount, 0);
-  }
+  logging_enabled_ = false;
 }
 
 void CastStabilityMetricsProvider::LogExternalCrash(
@@ -99,37 +74,32 @@ void CastStabilityMetricsProvider::LogExternalCrash(
   metrics_service_->OnApplicationNotIdle();
 }
 
-void CastStabilityMetricsProvider::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  switch (type) {
-    case content::NOTIFICATION_RENDERER_PROCESS_CLOSED: {
-      content::ChildProcessTerminationInfo* termination_info =
-          content::Details<content::ChildProcessTerminationInfo>(details).ptr();
-      content::RenderProcessHost* host =
-          content::Source<content::RenderProcessHost>(source).ptr();
-      LogRendererCrash(host, termination_info->status,
-                       termination_info->exit_code);
-      break;
-    }
+void CastStabilityMetricsProvider::OnRenderProcessHostCreated(
+    content::RenderProcessHost* host) {
+  if (!scoped_observations_.IsObservingSource(host))
+    scoped_observations_.AddObservation(host);
+}
 
-    case content::NOTIFICATION_RENDER_WIDGET_HOST_HANG:
-      break;
+void CastStabilityMetricsProvider::RenderProcessExited(
+    content::RenderProcessHost* host,
+    const content::ChildProcessTerminationInfo& info) {
+  LogRendererCrash(host, info.status, info.exit_code);
+}
 
-    default:
-      NOTREACHED();
-      break;
-  }
+void CastStabilityMetricsProvider::RenderProcessHostDestroyed(
+    content::RenderProcessHost* host) {
+  scoped_observations_.RemoveObservation(host);
 }
 
 void CastStabilityMetricsProvider::LogRendererCrash(
     content::RenderProcessHost* host,
     base::TerminationStatus status,
     int exit_code) {
+  if (!logging_enabled_)
+    return;
+
   if (status == base::TERMINATION_STATUS_PROCESS_CRASHED ||
       status == base::TERMINATION_STATUS_ABNORMAL_TERMINATION) {
-    IncrementPrefValue(prefs::kStabilityRendererCrashCount);
     ::metrics::StabilityMetricsHelper::RecordStabilityEvent(
         ::metrics::StabilityEventType::kRendererCrash);
 

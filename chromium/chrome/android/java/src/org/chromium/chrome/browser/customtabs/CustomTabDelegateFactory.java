@@ -11,6 +11,7 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
@@ -58,6 +59,7 @@ import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.externalauth.ExternalAuthUtils;
@@ -66,6 +68,8 @@ import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
+
+import java.util.List;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -105,10 +109,12 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         }
 
         @Override
-        public boolean maybeSetTargetPackage(Intent intent) {
+        public boolean maybeSetTargetPackage(
+                Intent intent, Supplier<List<ResolveInfo>> resolveInfoSupplier) {
             // If the client app can handle the intent, set it as the receiver.
             if (!TextUtils.isEmpty(mClientPackageName)
-                    && isPackageSpecializedHandler(mClientPackageName, intent)) {
+                    && ExternalNavigationHandler.isPackageSpecializedHandler(
+                            mClientPackageName, resolveInfoSupplier.get())) {
                 intent.setSelector(null);
                 intent.setPackage(mClientPackageName);
                 return true;
@@ -123,11 +129,13 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         }
 
         @Override
-        public boolean isIntentForTrustedCallingApp(Intent intent) {
+        public boolean isIntentForTrustedCallingApp(
+                Intent intent, Supplier<List<ResolveInfo>> resolveInfoSupplier) {
             if (TextUtils.isEmpty(mClientPackageName)) return false;
             if (!mExternalAuthUtils.isGoogleSigned(mClientPackageName)) return false;
 
-            return isPackageSpecializedHandler(mClientPackageName, intent);
+            return ExternalNavigationHandler.isPackageSpecializedHandler(
+                    mClientPackageName, resolveInfoSupplier.get());
         }
 
         @Override
@@ -438,6 +446,11 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
 
     @Override
     public NativePage createNativePage(String url, NativePage candidatePage, Tab tab) {
+        // Navigation comes from user pressing "Back to safety" on an interstitial so close the tab.
+        // See crbug.com/1270695
+        if (UrlConstants.NTP_URL.equals(url) && tab.isShowingErrorPage()) {
+            mActivity.finish();
+        }
         // Custom tab does not create native pages.
         return null;
     }

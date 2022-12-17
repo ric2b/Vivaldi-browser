@@ -28,10 +28,11 @@ class AccountSelectionView {
     virtual ~Delegate() = default;
     // Informs the controller that the user has made a selection.
     virtual void OnAccountSelected(const Account& account) = 0;
-    // Informs the controller that the user has dismissed the sheet.
-    // |should_embargo| indicates whether the FedCM API should be embargoed due
-    // to the user explicitly dismissing the FedCM account picker.
-    virtual void OnDismiss(bool should_embargo) = 0;
+    // Informs the controller that the user has dismissed the sheet with reason
+    // `dismiss_reason`.
+    virtual void OnDismiss(
+        content::IdentityRequestDialogController::DismissReason
+            dismiss_reason) = 0;
     // The web page view containing the focused field.
     virtual gfx::NativeView GetNativeView() = 0;
     // The WebContents for the page.
@@ -40,10 +41,12 @@ class AccountSelectionView {
 
   static std::unique_ptr<AccountSelectionView> Create(Delegate* delegate);
 
-  // Returns the brand icon minimum size in dip.
+  // Returns the brand icon minimum size. This includes the size of the
+  // safe-zone defined in https://www.w3.org/TR/appmanifest/#icon-masks
   static int GetBrandIconMinimumSize();
 
-  // Returns the brand icon ideal size in dip.
+  // Returns the brand icon ideal size. This includes the size of the
+  // safe-zone defined in https://www.w3.org/TR/appmanifest/#icon-masks
   static int GetBrandIconIdealSize();
 
   explicit AccountSelectionView(Delegate* delegate) : delegate_(delegate) {}

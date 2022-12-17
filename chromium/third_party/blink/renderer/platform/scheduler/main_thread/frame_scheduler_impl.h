@@ -38,9 +38,6 @@ namespace base {
 namespace sequence_manager {
 class TaskQueue;
 }  // namespace sequence_manager
-namespace trace_event {
-class BlameContext;
-}  // namespace trace_event
 }  // namespace base
 
 namespace ukm {
@@ -76,7 +73,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
  public:
   FrameSchedulerImpl(PageSchedulerImpl* page_scheduler,
                      FrameScheduler::Delegate* delegate,
-                     base::trace_event::BlameContext* blame_context,
+                     bool is_in_embedded_frame_tree,
                      FrameScheduler::FrameType frame_type);
   FrameSchedulerImpl(const FrameSchedulerImpl&) = delete;
   FrameSchedulerImpl& operator=(const FrameSchedulerImpl&) = delete;
@@ -94,11 +91,13 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void SetPaused(bool frame_paused) override;
   void SetShouldReportPostedTasksWhenDisabled(bool should_report) override;
 
-  void SetCrossOriginToMainFrame(bool cross_origin) override;
-  bool IsCrossOriginToMainFrame() const override;
+  void SetCrossOriginToNearestMainFrame(bool cross_origin) override;
+  bool IsCrossOriginToNearestMainFrame() const override;
 
   void SetIsAdFrame(bool is_ad_frame) override;
   bool IsAdFrame() const override;
+
+  bool IsInEmbeddedFrameTree() const override;
 
   void TraceUrlChange(const String& url) override;
   void AddTaskTime(base::TimeDelta time) override;
@@ -116,12 +115,13 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   CreateResourceLoadingMaybeUnfreezableTaskRunnerHandle() override;
   WebAgentGroupScheduler* GetAgentGroupScheduler() override;
   PageScheduler* GetPageScheduler() const override;
-  void DidStartProvisionalLoad(bool is_main_frame) override;
+  void DidStartProvisionalLoad() override;
   void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
                                 NavigationType navigation_type) override;
   WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser(
       const WTF::String& name,
       WebScopedVirtualTimePauser::VirtualTaskDuration duration) override;
+  scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
 
   void OnFirstContentfulPaintInMainFrame() override;
   void OnDomContentLoaded() override;
@@ -205,7 +205,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   FrameSchedulerImpl(MainThreadSchedulerImpl* main_thread_scheduler,
                      PageSchedulerImpl* parent_page_scheduler,
                      FrameScheduler::Delegate* delegate,
-                     base::trace_event::BlameContext* blame_context,
+                     bool is_in_embedded_frame_tree,
                      FrameScheduler::FrameType frame_type);
 
   // This will construct a subframe that is not linked to any main thread or
@@ -306,7 +306,11 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   const FrameScheduler::FrameType frame_type_;
 
-  bool is_ad_frame_;
+  // Whether this scheduler is created for a frame that is contained
+  // inside an embedded frame tree. See /docs/frame_trees.md.
+  const bool is_in_embedded_frame_tree_;
+
+  bool is_ad_frame_ = false;
 
   // A running tally of (wall) time spent in tasks for this frame.
   // This is periodically forwarded and zeroed out.
@@ -326,7 +330,6 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   MainThreadSchedulerImpl* const main_thread_scheduler_;  // NOT OWNED
   PageSchedulerImpl* parent_page_scheduler_;              // NOT OWNED
   FrameScheduler::Delegate* delegate_;                    // NOT OWNED
-  base::trace_event::BlameContext* blame_context_;        // NOT OWNED
   SchedulingLifecycleState throttling_state_;
   TraceableState<bool, TracingCategory::kInfo> frame_visible_;
   TraceableState<bool, TracingCategory::kInfo> frame_paused_;

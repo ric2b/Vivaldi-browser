@@ -121,6 +121,11 @@ void FlexCodeInput::SetReadOnly(bool read_only) {
   NOTIMPLEMENTED();
 }
 
+bool FlexCodeInput::IsReadOnly() const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
 void FlexCodeInput::ClearInput() {
   code_field_->SetText(std::u16string());
   on_input_change_.Run(false);
@@ -300,8 +305,17 @@ absl::optional<std::string> FixedLengthCodeInput::GetCode() const {
 }
 
 void FixedLengthCodeInput::SetInputColor(SkColor color) {
+  const SkColor kErrorColor = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorAlert);
+
   for (auto* field : input_fields_) {
     field->SetTextColor(color);
+    // We don't update the underline color to red.
+    if (color != kErrorColor) {
+      field->SetBorder(views::CreateSolidSidedBorder(
+          gfx::Insets::TLBR(0, 0, kAccessCodeInputFieldUnderlineThicknessDp, 0),
+          color));
+    }
   }
 }
 
@@ -453,6 +467,17 @@ void FixedLengthCodeInput::SetReadOnly(bool read_only) {
     field->SetReadOnly(read_only);
     field->SetCursorEnabled(!read_only);
   }
+}
+
+bool FixedLengthCodeInput::IsReadOnly() const {
+  if (!input_fields_.empty()) {
+    // As SetReadOnly above propagates flag to all fields, just
+    // check the first field here instead of implementing complex
+    // combining logic.
+    return static_cast<views::SelectionControllerDelegate*>(input_fields_[0])
+        ->IsReadOnly();
+  }
+  return false;
 }
 
 void FixedLengthCodeInput::ClearInput() {

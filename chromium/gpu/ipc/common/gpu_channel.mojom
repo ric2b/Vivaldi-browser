@@ -25,7 +25,7 @@ import "ui/gl/mojom/gpu_preference.mojom";
 import "url/mojom/url.mojom";
 
 // Vivaldi addition
-[EnableIf=system_proprietary_codecs]
+[EnableIf=vivaldi_use_system_media_demuxer]
 import "mojo/public/mojom/base/generic_pending_receiver.mojom";
 
 // Maps to its namesake in gpu/command_buffer/common/context_creation_attribs.h.
@@ -242,7 +242,7 @@ interface GpuChannel {
 
   // Vivaldi-specific additions.
 
-  [EnableIf=system_proprietary_codecs]
+  [EnableIf=vivaldi_use_system_media_demuxer]
   VivaldiCreateMediaPipelineFactory(
       mojo_base.mojom.GenericPendingReceiver receiver);
 };

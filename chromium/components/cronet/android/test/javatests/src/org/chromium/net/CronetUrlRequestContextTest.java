@@ -42,6 +42,7 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestRule.CronetTestFramework;
 import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
+import org.chromium.net.CronetTestRule.RequiresMinAndroidApi;
 import org.chromium.net.CronetTestRule.RequiresMinApi;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.ConnectivityManagerDelegate;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
@@ -164,7 +165,8 @@ public class CronetUrlRequestContextTest {
         ExperimentalCronetEngine.Builder cronetEngineBuilder =
                 new ExperimentalCronetEngine.Builder(getContext());
         if (mTestRule.testingJavaImpl()) {
-            cronetEngineBuilder = mTestRule.createJavaEngineBuilder();
+            cronetEngineBuilder =
+                    CronetTestRule.createJavaEngineBuilder(CronetTestRule.getContext());
         }
         cronetEngineBuilder.setUserAgent(userAgentValue);
         final CronetEngine cronetEngine = cronetEngineBuilder.build();
@@ -366,12 +368,9 @@ public class CronetUrlRequestContextTest {
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet // Only chromium based Cronet supports the multi-network API
+    @RequiresMinAndroidApi(Build.VERSION_CODES.M) // Multi-network API is supported from Marshmallow
     public void testNetworkBoundContextLifetime() throws Exception {
         // Multi-network API is available starting from Android Lollipop.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return;
-        }
-
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         ConnectivityManagerDelegate delegate =
                 new ConnectivityManagerDelegate(InstrumentationRegistry.getTargetContext());
@@ -389,12 +388,14 @@ public class CronetUrlRequestContextTest {
         ExperimentalUrlRequest.Builder urlRequestBuilder =
                 (ExperimentalUrlRequest.Builder) testFramework.mCronetEngine.newUrlRequestBuilder(
                         mUrl, callback, callback.getExecutor());
-        urlRequestBuilder.bindToNetwork(defaultNetwork);
+        urlRequestBuilder.bindToNetwork(defaultNetwork.getNetworkHandle());
         UrlRequest urlRequest = urlRequestBuilder.build();
 
-        assertFalse(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertFalse(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
         urlRequest.start();
-        assertTrue(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertTrue(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
 
         // Resume callback execution.
         callback.waitForNextStep();
@@ -406,7 +407,8 @@ public class CronetUrlRequestContextTest {
 
         // The default network should still be active, hence the underlying network-bound context
         // should still be there.
-        assertTrue(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertTrue(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
 
         // Fake disconnect event for the default network, this should destroy the underlying
         // network-bound context.
@@ -419,7 +421,8 @@ public class CronetUrlRequestContextTest {
         });
         CronetLibraryLoader.postToInitThread(task);
         task.get();
-        assertFalse(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertFalse(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
         testFramework.mCronetEngine.shutdown();
     }
 
@@ -427,6 +430,7 @@ public class CronetUrlRequestContextTest {
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet // Only chromium based Cronet supports the multi-network API
+    @RequiresMinAndroidApi(Build.VERSION_CODES.M) // Multi-network API is supported from Marshmallow
     public void testNetworkBoundRequestCancel() throws Exception {
         // Upon a network disconnection, NCN posts a tasks onto the network thread that calls
         // CronetContext::NetworkTasks::OnNetworkDisconnected.
@@ -434,10 +438,6 @@ public class CronetUrlRequestContextTest {
         // network thread that calls CronetURLRequest::NetworkTasks::Destroy.
         // Depending on their implementation this can lead to UAF, this test is here to prevent that
         // from being introduced in the future.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return;
-        }
-
         final CronetTestFramework testFramework = mTestRule.startCronetTestFramework();
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
         callback.setAutoAdvance(false);
@@ -452,16 +452,19 @@ public class CronetUrlRequestContextTest {
             return;
         }
 
-        urlRequestBuilder.bindToNetwork(defaultNetwork);
+        urlRequestBuilder.bindToNetwork(defaultNetwork.getNetworkHandle());
         UrlRequest urlRequest = urlRequestBuilder.build();
 
-        assertFalse(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertFalse(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
         urlRequest.start();
-        assertTrue(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertTrue(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
 
         callback.waitForNextStep();
         assertEquals(ResponseStep.ON_RESPONSE_STARTED, callback.mResponseStep);
-        assertTrue(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertTrue(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
         // Cronet registers for NCN notifications on the init thread (see
         // CronetLibraryLoader#ensureInitializedOnInitThread), hence we need to trigger fake
         // notifications from there.
@@ -479,7 +482,8 @@ public class CronetUrlRequestContextTest {
         // mError should be null due to urlRequest.cancel().
         assertNull(callback.mError);
         // urlRequest.cancel(); should destroy the underlying network bound context.
-        assertFalse(doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
+        assertFalse(
+                ApiHelper.doesContextExistForNetwork(testFramework.mCronetEngine, defaultNetwork));
         testFramework.mCronetEngine.shutdown();
     }
 
@@ -1543,16 +1547,18 @@ public class CronetUrlRequestContextTest {
     /**
      * @returns the thread priority of {@code engine}'s network thread.
      */
-    private boolean doesContextExistForNetwork(CronetEngine engine, Network network)
-            throws Exception {
-        FutureTask<Boolean> task = new FutureTask<Boolean>(new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                return CronetTestUtil.doesURLRequestContextExistForTesting(engine, network);
-            }
-        });
-        postToNetworkThread(engine, task);
-        return task.get();
+    private static class ApiHelper {
+        public static boolean doesContextExistForNetwork(CronetEngine engine, Network network)
+                throws Exception {
+            FutureTask<Boolean> task = new FutureTask<Boolean>(new Callable<Boolean>() {
+                @Override
+                public Boolean call() {
+                    return CronetTestUtil.doesURLRequestContextExistForTesting(engine, network);
+                }
+            });
+            postToNetworkThread(engine, task);
+            return task.get();
+        }
     }
 
     /**

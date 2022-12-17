@@ -5,6 +5,7 @@
 #include "chrome/browser/enterprise/signals/signals_aggregator_factory.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/memory/singleton.h"
@@ -12,12 +13,12 @@
 #include "chrome/browser/enterprise/signals/system_signals_service_host_factory.h"
 #include "chrome/browser/enterprise/signals/user_permission_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/device_signals/core/browser/file_system_signals_collector.h"
 #include "components/device_signals/core/browser/signals_aggregator.h"
 #include "components/device_signals/core/browser/signals_aggregator_impl.h"
 #include "components/device_signals/core/browser/signals_collector.h"
 #include "components/device_signals/core/browser/system_signals_service_host.h"
 #include "components/device_signals/core/browser/user_permission_service.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/browser_context.h"
 
@@ -40,9 +41,7 @@ device_signals::SignalsAggregator* SignalsAggregatorFactory::GetForProfile(
 }
 
 SignalsAggregatorFactory::SignalsAggregatorFactory()
-    : BrowserContextKeyedServiceFactory(
-          "SignalsAggregator",
-          BrowserContextDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactory("SignalsAggregator") {
   DependsOn(SystemSignalsServiceHostFactory::GetInstance());
   DependsOn(UserPermissionServiceFactory::GetInstance());
 }
@@ -57,8 +56,11 @@ KeyedService* SignalsAggregatorFactory::BuildServiceInstanceFor(
       UserPermissionServiceFactory::GetForProfile(profile);
 
   std::vector<std::unique_ptr<device_signals::SignalsCollector>> collectors;
-#if BUILDFLAG(IS_WIN)
   auto* service_host = SystemSignalsServiceHostFactory::GetForProfile(profile);
+  collectors.push_back(
+      std::make_unique<device_signals::FileSystemSignalsCollector>(
+          service_host));
+#if BUILDFLAG(IS_WIN)
   collectors.push_back(
       std::make_unique<device_signals::WinSignalsCollector>(service_host));
 #endif  // BUILDFLAG(IS_WIN)

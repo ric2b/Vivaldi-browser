@@ -30,7 +30,7 @@
 #include "base/win/registry.h"
 #include "base/win/shortcut.h"
 #include "build/branding_buildflags.h"
-#include "chrome/chrome_elf/chrome_elf_constants.h"
+#include "chrome/chrome_elf/blocklist_constants.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
@@ -572,6 +572,16 @@ DeleteResult DeleteChromeDirectoriesIfEmpty(
   return result;
 }
 
+void DeleteWerRegistryKey(const installer::InstallerState& installer_state,
+                          const base::Version& version) {
+  // Delete WER runtime exception helper module dll registry entry.
+  std::wstring wer_helper_reg_path = GetWerHelperRegistryPath();
+  base::FilePath wer_path =
+      GetWerHelperPath(installer_state.target_path(), version);
+  DeleteRegistryValue(installer_state.root_key(), wer_helper_reg_path,
+                      WorkItem::kWow64Default, wer_path.value());
+}
+
 bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
                                   HKEY root,
                                   const std::wstring& browser_entry_suffix,
@@ -952,6 +962,8 @@ InstallStatus UninstallProduct(const ModifyParams& modify_params,
     DeleteChromeRegistrationKeys(installer_state, HKEY_LOCAL_MACHINE, suffix,
                                  &ret);
   }
+
+  DeleteWerRegistryKey(installer_state, product_state->version());
 
   ProcessChromeWorkItems(installer_state);
 

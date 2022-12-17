@@ -79,7 +79,7 @@ class MockGpuChannel : public mojom::GpuChannel {
                void(const base::UnguessableToken&));
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   MOCK_METHOD1(VivaldiCreateMediaPipelineFactory,
                void(mojo::GenericPendingReceiver));
 #endif

@@ -29,39 +29,19 @@
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+#include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_uchar.h"
-
-typedef uint32_t SkColor;
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace blink {
 
+// TODO(crbug.com/1308932): Blink classes should use SkColor4f directly,
+// ulitmately this class should be deleted.
 class Color;
 
 typedef unsigned RGBA32;  // RGBA quadruplet
 
-PLATFORM_EXPORT RGBA32 MakeRGB(int r, int g, int b);
-PLATFORM_EXPORT RGBA32 MakeRGBA(int r, int g, int b, int a);
-
-PLATFORM_EXPORT RGBA32 MakeRGBA32FromFloats(float r, float g, float b, float a);
-PLATFORM_EXPORT RGBA32 MakeRGBAFromHSLA(double h, double s, double l, double a);
-PLATFORM_EXPORT RGBA32 MakeRGBAFromHWBA(double h, double w, double b, double a);
-PLATFORM_EXPORT RGBA32
-MakeRGBAFromCMYKA(float c, float m, float y, float k, float a);
-
 PLATFORM_EXPORT int DifferenceSquared(const Color&, const Color&);
-
-inline int RedChannel(RGBA32 color) {
-  return (color >> 16) & 0xFF;
-}
-inline int GreenChannel(RGBA32 color) {
-  return (color >> 8) & 0xFF;
-}
-inline int BlueChannel(RGBA32 color) {
-  return color & 0xFF;
-}
-inline int AlphaChannel(RGBA32 color) {
-  return (color >> 24) & 0xFF;
-}
 
 struct NamedColor {
   DISALLOW_NEW();
@@ -75,26 +55,44 @@ class PLATFORM_EXPORT Color {
   DISALLOW_NEW();
 
  public:
-  constexpr Color() : color_(Color::kTransparent) {}
-  constexpr Color(RGBA32 color) : color_(color) {}
-  Color(int r, int g, int b) : color_(MakeRGB(r, g, b)) {}
-  Color(int r, int g, int b, int a) : color_(MakeRGBA(r, g, b, a)) {}
-  // Color is currently limited to 32bit RGBA. Perhaps some day we'll support
-  // better colors.
-  Color(float r, float g, float b, float a)
-      : color_(MakeRGBA32FromFloats(r, g, b, a)) {}
-  // Creates a new color from the specific CMYK and alpha values.
-  Color(float c, float m, float y, float k, float a)
-      : color_(MakeRGBAFromCMYKA(c, m, y, k, a)) {}
+  // The default constructor creates a transparent color.
+  constexpr Color() = default;
 
-  static constexpr Color CreateUnchecked(int r, int g, int b) {
-    RGBA32 color = 0xFF000000 | r << 16 | g << 8 | b;
-    return Color(color);
+  // TODO(crbug.com/1351544): Replace these constructors with explicit From
+  // functions below.
+  Color(int r, int g, int b);
+  Color(int r, int g, int b, int a);
+
+  // Create a color using rgb() syntax.
+  static constexpr Color FromRGB(int r, int g, int b) {
+    return Color(0xFF000000 | ClampInt(r) << 16 | ClampInt(g) << 8 |
+                 ClampInt(b));
   }
-  static constexpr Color CreateUnchecked(int r, int g, int b, int a) {
-    RGBA32 color = a << 24 | r << 16 | g << 8 | b;
-    return Color(color);
+
+  // Create a color using rgba() syntax.
+  static constexpr Color FromRGBA(int r, int g, int b, int a) {
+    return Color(ClampInt(a) << 24 | ClampInt(r) << 16 | ClampInt(g) << 8 |
+                 ClampInt(b));
   }
+
+  // Create a color using the rgba() syntax, with float arguments.
+  static Color FromRGBAFloat(float r, float g, float b, float a);
+
+  // Create a color using the hsl() syntax.
+  static Color FromHSLA(double h, double s, double l, double a);
+
+  // Create a color using the hwb() syntax.
+  static Color FromHWBA(double h, double w, double b, double a);
+
+  // TODO(crbug.com/1308932): These three functions are just helpers for while
+  // we're converting platform/graphics to float color.
+  static Color FromSkColor4f(SkColor4f fc);
+  static constexpr Color FromSkColor(SkColor color) { return Color(color); }
+  static constexpr Color FromRGBA32(RGBA32 color) { return Color(color); }
+
+  // Convert a Color to SkColor4f, for use in painting and compositing. Once a
+  // Color has been converted to SkColor4f it should not be converted back.
+  SkColor4f toSkColor4f() const;
 
   // Returns the color serialized according to HTML5:
   // http://www.whatwg.org/specs/web-apps/current-work/#serialization-of-a-color
@@ -109,24 +107,31 @@ class PLATFORM_EXPORT Color {
   bool SetFromString(const String&);
   bool SetNamedColor(const String&);
 
-  bool HasAlpha() const { return Alpha() < 255; }
+  // Return true if the color is not opaque.
+  bool HasAlpha() const;
 
-  int Red() const { return RedChannel(color_); }
-  int Green() const { return GreenChannel(color_); }
-  int Blue() const { return BlueChannel(color_); }
-  int Alpha() const { return AlphaChannel(color_); }
-
-  RGBA32 Rgb() const { return color_; }  // Preserve the alpha.
-  void SetRGB(int r, int g, int b) { color_ = MakeRGB(r, g, b); }
-  void SetRGB(RGBA32 rgb) { color_ = rgb; }
+  // Access the color as though it were created using rgba syntax. This will
+  // clamp all colors to an 8-bit sRGB representation. All callers of these
+  // functions should be audited. The function Rgb(), despite the name, does
+  // not drop the alpha value.
+  int Red() const;
+  int Green() const;
+  int Blue() const;
+  int Alpha() const;
+  RGBA32 Rgb() const;
   void GetRGBA(float& r, float& g, float& b, float& a) const;
   void GetRGBA(double& r, double& g, double& b, double& a) const;
+
+  // Access the color as though it were created using the hsl() syntax.
   void GetHSL(double& h, double& s, double& l) const;
+
+  // Access the color as though it were created using the hwb() syntax.
   void GetHWB(double& h, double& w, double& b) const;
 
+  // TODO(crbug.com/1308932): Remove this function, and replace its use with
+  // toSkColor4f.
   explicit operator SkColor() const;
 
-  Color Light() const;
   Color Dark() const;
 
   Color CombineWithAlpha(float other_alpha) const;
@@ -135,30 +140,43 @@ class PLATFORM_EXPORT Color {
   Color Blend(const Color&) const;
   Color BlendWithWhite() const;
 
-  static bool ParseHexColor(const StringView&, RGBA32&);
-  static bool ParseHexColor(const LChar*, unsigned, RGBA32&);
-  static bool ParseHexColor(const UChar*, unsigned, RGBA32&);
+  static bool ParseHexColor(const StringView&, Color&);
+  static bool ParseHexColor(const LChar*, unsigned, Color&);
+  static bool ParseHexColor(const UChar*, unsigned, Color&);
 
-  static const RGBA32 kBlack = 0xFF000000;
-  static const RGBA32 kWhite = 0xFFFFFFFF;
-  static const RGBA32 kDarkGray = 0xFF808080;
-  static const RGBA32 kGray = 0xFFA0A0A0;
-  static const RGBA32 kLightGray = 0xFFC0C0C0;
-  static const RGBA32 kTransparent = 0x00000000;
+  static const Color kBlack;
+  static const Color kWhite;
+  static const Color kDarkGray;
+  static const Color kGray;
+  static const Color kLightGray;
+  static const Color kTransparent;
+
+  inline bool operator==(const Color& other) const {
+    return param0_ == other.param0_ && param1_ == other.param1_ &&
+           param2_ == other.param2_ && alpha_ == other.alpha_;
+  }
+  inline bool operator!=(const Color& other) const { return !(*this == other); }
 
  private:
+  constexpr explicit Color(RGBA32 color)
+      : param0_(((color >> 16) & 0xFF) / 255.f),
+        param1_(((color >> 8) & 0xFF) / 255.f),
+        param2_(((color >> 0) & 0xFF) / 255.f),
+        alpha_(((color >> 24) & 0xFF) / 255.f) {}
+  static constexpr int ClampInt(int x) {
+    return x < 0 ? 0 : (x > 255 ? 255 : x);
+  }
   void GetHueMaxMin(double&, double&, double&) const;
 
-  RGBA32 color_;
+  // The parameters for the color. These are currently red, green, and blue sRGB
+  // values.
+  float param0_ = 0.f;
+  float param1_ = 0.f;
+  float param2_ = 0.f;
+
+  // The alpha value for the color is guaranteed to be in the interval [0, 1].
+  float alpha_ = 0.f;
 };
-
-inline bool operator==(const Color& a, const Color& b) {
-  return a.Rgb() == b.Rgb();
-}
-
-inline bool operator!=(const Color& a, const Color& b) {
-  return !(a == b);
-}
 
 PLATFORM_EXPORT Color ColorFromPremultipliedARGB(RGBA32);
 PLATFORM_EXPORT RGBA32 PremultipliedARGBFromColor(const Color&);

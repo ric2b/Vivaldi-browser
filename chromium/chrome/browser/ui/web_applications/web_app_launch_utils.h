@@ -10,7 +10,7 @@
 #include <string>
 
 #include "chrome/browser/web_applications/web_app_id.h"
-#include "components/services/app_service/public/mojom/types.mojom-shared.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "extensions/common/constants.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
@@ -60,6 +60,8 @@ void ClearAppPrefsForWebContents(content::WebContents* web_contents);
 std::unique_ptr<AppBrowserController> MaybeCreateAppBrowserController(
     Browser* browser);
 
+void MaybeAddPinnedHomeTab(Browser* browser, const std::string& app_id);
+
 Browser* CreateWebApplicationWindow(Profile* profile,
                                     const std::string& app_id,
                                     WindowOpenDisposition disposition,
@@ -81,7 +83,7 @@ content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
 void RecordAppWindowLaunch(Profile* profile, const std::string& app_id);
 
 void RecordMetrics(const AppId& app_id,
-                   apps::mojom::LaunchContainer container,
+                   apps::LaunchContainer container,
                    extensions::AppLaunchSource launch_source,
                    const GURL& launch_url,
                    content::WebContents* web_contents);

@@ -6,8 +6,13 @@
 
 #include "base/bind.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
+#include "content/browser/buckets/bucket_context.h"
 #include "content/browser/buckets/bucket_manager.h"
 #include "content/browser/buckets/bucket_manager_host.h"
+#include "content/browser/locks/lock_manager.h"
+#include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/browser_context.h"
 
 namespace content {
 
@@ -21,12 +26,9 @@ BucketHost::BucketHost(BucketManagerHost* bucket_manager_host,
 BucketHost::~BucketHost() = default;
 
 mojo::PendingRemote<blink::mojom::BucketHost>
-BucketHost::CreateStorageBucketBinding(
-    const PermissionDecisionCallback& permission_decision) {
+BucketHost::CreateStorageBucketBinding(const BucketContext& bucket_context) {
   mojo::PendingRemote<blink::mojom::BucketHost> remote;
-  permission_decider_map_.emplace(
-      receivers_.Add(this, remote.InitWithNewPipeAndPassReceiver()),
-      permission_decision);
+  receivers_.Add(this, remote.InitWithNewPipeAndPassReceiver(), bucket_context);
   return remote;
 }
 
@@ -36,13 +38,9 @@ void BucketHost::Persist(PersistCallback callback) {
     return;
   }
 
-  auto it = permission_decider_map_.find(receivers_.current_receiver());
-  if (it == permission_decider_map_.end()) {
-    NOTREACHED();
-    std::move(callback).Run(false, false);
-    return;
-  }
-  if (it->second.Run(blink::PermissionType::DURABLE_STORAGE) ==
+  if (receivers_.current_context().GetPermissionStatus(
+          blink::PermissionType::DURABLE_STORAGE,
+          bucket_info_.storage_key.origin()) ==
       blink::mojom::PermissionStatus::GRANTED) {
     GetQuotaManagerProxy()->UpdateBucketPersistence(
         bucket_info_.id, /*persistent=*/true,
@@ -84,8 +82,21 @@ void BucketHost::Expires(ExpiresCallback callback) {
   std::move(callback).Run(expires, true);
 }
 
+void BucketHost::GetIdbFactory(
+    mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) {
+  bucket_manager_host_->GetStoragePartition()
+      ->GetIndexedDBControl()
+      .BindIndexedDBForBucket(bucket_info_.ToBucketLocator(),
+                              std::move(receiver));
+}
+
+void BucketHost::GetLockManager(
+    mojo::PendingReceiver<blink::mojom::LockManager> receiver) {
+  bucket_manager_host_->GetStoragePartition()->GetLockManager()->BindReceiver(
+      bucket_info_.id, std::move(receiver));
+}
+
 void BucketHost::OnReceiverDisconnected() {
-  permission_decider_map_.erase(receivers_.current_receiver());
   if (!receivers_.empty())
     return;
   // Destroys `this`.

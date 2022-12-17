@@ -15,7 +15,7 @@
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3291688615589870984">{DAYS,plural, =1{1 dia} other {# dies}}</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{1 dia restant} other {# dies restants}}</translation>
-<translation id="3618849550573277856">Cerca “<ph name="LOOKUP_STRING" /> 1”</translation>
+<translation id="3618849550573277856">Cerca “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3889424535448813030">Fletxa dreta</translation>

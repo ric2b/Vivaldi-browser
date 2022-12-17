@@ -58,6 +58,13 @@ mediaApp.AbstractFile.prototype.fromClipboard;
  */
 mediaApp.AbstractFile.prototype.error;
 /**
+ * A function that queries the original file's path to see if it is in a
+ * filesystem that ARC is able to write to. Returns a promise that resolves once
+ * this has been determined.
+ * @type {function(): !Promise<boolean>|undefined}
+ */
+mediaApp.AbstractFile.prototype.isArcWritable;
+/**
  * A function that queries the original file's path to see if it is writable
  * according to Ash. Returns a promise that resolves once this has been
  * determined.
@@ -248,6 +255,12 @@ mediaApp.ClientApiDelegate.prototype.openUrlInBrowserTab = function(url) {};
  * @type {function()|undefined}
  */
 mediaApp.ClientApiDelegate.prototype.reloadMainFrame = function() {};
+/**
+ * Indicates to the WebUI Controller that a trigger for displaying the PDF HaTS
+ * survey has occurred.
+ * @type {function()|undefined}
+ */
+mediaApp.ClientApiDelegate.prototype.maybeTriggerPdfHats = function() {};
 
 /**
  * The client Api for interacting with the media app instance.

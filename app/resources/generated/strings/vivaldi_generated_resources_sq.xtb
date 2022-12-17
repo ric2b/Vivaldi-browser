@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Daljet nga pasiviteti</translation>
 <translation id="119944043368869598">Pastroj të gjitha</translation>
 <translation id="1221825588892235038">Vetëm përzgjedhjen</translation>
+<translation id="1234736487471201993">Krijoj kodin QR të imazhit</translation>
 <translation id="1244303850296295656">Gabim me shtesën</translation>
 <translation id="125220115284141797">Standard</translation>
 <translation id="1297175357211070620">Destinacioni</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Transmetoj skedën</translation>
 <translation id="2150139952286079145">Kërkoni destinacionet</translation>
 <translation id="215753907730220065">Mbyll ekranin e madh</translation>
+<translation id="2158475082070321257">Kopjoj lidhjen me tekstin e theksuar</translation>
 <translation id="2177950615300672361">Skeda private: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Moduli Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Ngjit si tekst të thjeshtë</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Uebsajtet mund të njohin aparatin që përdorni me anë të një identifikuesi</translation>
 <translation id="2445081178310039857">Duhet katalogu kryesor i shtesës.</translation>
 <translation id="2470702053775288986">Janë çaktivizuar shtesat jofunksionale</translation>
-<translation id="2476578072172137802">Parametrat e uebsajtit</translation>
+<translation id="2485422356828889247">Çinstaloj</translation>
 <translation id="2498539833203011245">Minimizoj</translation>
 <translation id="2509495747794740764">Vlera duhet të jetë një numër midis 10 dhe 200.</translation>
 <translation id="253557089021624350">Kërkesat Keep-Alive</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Sinjalizoj abuzimet</translation>
 <translation id="2941112035454246133">Ulët</translation>
 <translation id="2972581237482394796">&amp;Përsërit</translation>
+<translation id="2993517869960930405">Informacion për aplikacionin</translation>
 <translation id="3003623123441819449">Kashi i CSS-ve</translation>
 <translation id="3008272652534848354">Rikthej autorizimet</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Hap lidhjen si</translation>
 <translation id="3222066309010235055">Parainterpretimi vizual: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Përzgjidhni katalogun kryesor të shtesës që do të paketohet. Për ta përditësuar, zgjidhni edhe një çelës privat që ta përdorni sërish.</translation>
+<translation id="3275778913554317645">Hap si dritare</translation>
 <translation id="3280237271814976245">Regjistroj &amp;në...</translation>
 <translation id="3285322247471302225">&amp;Skedë të re</translation>
 <translation id="3288047731229977326">Shtesat që ekzekutohen në variantin e programuesit mund të rrezikojnë kompjuterin. Për arsye sigurie, këto lloje shtesash duhen çaktivizuar nëse nuk jeni programues.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">Hap PDF në Preview</translation>
 <translation id="3308134619352333507">Fsheh butonin</translation>
 <translation id="3317459757438853210">Nga të dyja anët</translation>
+<translation id="3331974543021145906">Informacion për aplikacionin</translation>
 <translation id="3341703758641437857">Autorizoj aksesin te skedarët lokalë</translation>
 <translation id="3347086966102161372">K&amp;opjoj adresën e imazhit</translation>
 <translation id="3360297538363969800">E pamundur të printohej. Lutemi të kontrolloni printerin dhe provojeni prapë.</translation>
 <translation id="3378572629723696641">Kjo shtesë mund të jetë dëmtuar.</translation>
 <translation id="3387614642886316601">Përdor korrektor drejtshkrimor të përmirësuar</translation>
+<translation id="3390013585654699824">Detaje për aplikacionin</translation>
 <translation id="3393582007140394275">Nuk transmetohet ekrani.</translation>
 <translation id="3432227430032737297">Heq të gjitha cookies e dukshme</translation>
 <translation id="345693547134384690">Hap &amp;imazhin në skedë të re</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504">&amp;Kërkoj për imazhin në <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Autorizoj uebsajtet të luajnë materiale të mbrojtura (rekomandohet)</translation>
 <translation id="3979395879372752341">U shtua një shtesë e re (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kopjoj lidhjen me tekstin e theksuar</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Shtoj në fjalor</translation>
 <translation id="407520071244661467">Shkalla</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Mbyll shfletuesin e internetit para importit</translation>
 <translation id="4130207949184424187">Kjo shtesë ka ndryshuar faqen që hapet kur kërkoni nga Omnibox-i.</translation>
 <translation id="4131410914670010031">Bardhezi</translation>
+<translation id="4165986682804962316">Parametrat e uebsajtit</translation>
 <translation id="4176463684765177261">Joaktiv</translation>
 <translation id="4200983522494130825">&amp;Skedë të re</translation>
 <translation id="4225397296022057997">Në të gjitha uebsajtet</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Rikthej parametrat</translation>
 <translation id="4726710629007580002">Pati disa vërejtje gjatë instalimit të shtesës:</translation>
 <translation id="479536056609751218">Faqe interneti, vetëm HTML</translation>
+<translation id="4827904420700932487">Krijoj kodin QR të imazhit</translation>
 <translation id="4839303808932127586">Regji&amp;stroj materialin filmik në...</translation>
 <translation id="4840096453115567876">Gjithsesi, do e mbyllni këndin privat?</translation>
 <translation id="488785315393301722">Tregoj detajet</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Pyes para aksesit (rekomandohet)</translation>
 <translation id="5677928146339483299">Është bllokuar</translation>
 <translation id="5707185214361380026">E pamundur të hapej shtesa nga:</translation>
+<translation id="5713171467967533494">Hap në shfletuesin Vivaldi</translation>
 <translation id="5715711091495208045">Konsulenti i fishës: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Regjistroj si PDF</translation>
 <translation id="5747809636523347288">Ngj&amp;it dhe shkoj te <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Opsionet</translation>
 <translation id="6579369886355986318">Tregoj të gjithë &amp;butonët interaktivë</translation>
 <translation id="6639554308659482635">Memoria SQLite</translation>
+<translation id="666731172850799929">Hap në <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Regjistroni fjalëkalimin</translation>
 <translation id="6691936601825168937">&amp;Përpara</translation>
 <translation id="6798954102094737107">Fisha: <ph name="PLUGIN_NAME" /></translation>
@@ -403,7 +414,7 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8512476990829870887">Përfundoj procesin</translation>
 <translation id="8523493869875972733">Ruaj ndryshimet</translation>
 <translation id="8546306075665861288">Kashi i imazheve</translation>
-<translation id="8569682776816196752">Nuk u gjet destinacioni</translation>
+<translation id="8569682776816196752">Nuk gjendet destinacioni</translation>
 <translation id="857943718398505171">Autorizohet (rekomandohet)</translation>
 <translation id="8584280235376696778">&amp;Hap materialin filmik në skedë të re</translation>
 <translation id="8605428685123651449">Memoria SQLite</translation>
@@ -431,6 +442,7 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="9003647077635673607">Autorizoj në të gjitha uebsajtet</translation>
 <translation id="9027459031423301635">Hap lidhjen në &amp;skedë të re</translation>
 <translation id="9056810968620647706">Nuk korrespondon.</translation>
+<translation id="9084064520949870008">Hap si dritare</translation>
 <translation id="9137916601698928395">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="91568222606626347">Krijoj shkurtoren…</translation>
 <translation id="916607977885256133">Figurë-më-figurë</translation>

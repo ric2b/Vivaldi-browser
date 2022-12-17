@@ -76,6 +76,7 @@ class MockPage : public new_tab_page::mojom::Page {
   MOCK_METHOD1(SetTheme, void(new_tab_page::mojom::ThemePtr));
   MOCK_METHOD2(SetDisabledModules, void(bool, const std::vector<std::string>&));
   MOCK_METHOD1(SetModulesFreVisibility, void(bool));
+  MOCK_METHOD1(CustomizeChromeSidePanelVisibilityChanged, void(bool));
 
   mojo::Receiver<new_tab_page::mojom::Page> receiver_{this};
 };
@@ -299,44 +300,32 @@ TEST_F(NewTabPageHandlerTest, SetTheme) {
       .WillByDefault(testing::Return(true));
   mock_color_provider_source_.SetColor(
       kColorNewTabPageMostVisitedTileBackground, SkColorSetRGB(0, 0, 4));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_BACKGROUND))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 5)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_ICON))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 6)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_ICON_SELECTED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 7)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_TEXT_DIMMED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 8)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_BG))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 9)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_BG_HOVERED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 10)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_BG_SELECTED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 11)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_TEXT_DIMMED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 12)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_TEXT_DIMMED_SELECTED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 13)));
-  ON_CALL(mock_theme_provider_, GetColor(ThemeProperties::COLOR_OMNIBOX_TEXT))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 14)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_TEXT_SELECTED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 15)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_URL))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 16)));
-  ON_CALL(mock_theme_provider_,
-          GetColor(ThemeProperties::COLOR_OMNIBOX_RESULTS_URL_SELECTED))
-      .WillByDefault(testing::Return(SkColorSetRGB(0, 0, 17)));
+  mock_color_provider_source_.SetColor(kColorNewTabPageSearchBoxBackground,
+                                       SkColorSetRGB(0, 0, 5));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsIcon,
+                                       SkColorSetRGB(0, 0, 6));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsIconSelected,
+                                       SkColorSetRGB(0, 0, 7));
+  mock_color_provider_source_.SetColor(kColorOmniboxTextDimmed,
+                                       SkColorSetRGB(0, 0, 8));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsBackground,
+                                       SkColorSetRGB(0, 0, 9));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsBackgroundHovered,
+                                       SkColorSetRGB(0, 0, 10));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsBackgroundSelected,
+                                       SkColorSetRGB(0, 0, 11));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsTextDimmed,
+                                       SkColorSetRGB(0, 0, 12));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsTextDimmedSelected,
+                                       SkColorSetRGB(0, 0, 13));
+  mock_color_provider_source_.SetColor(kColorOmniboxText,
+                                       SkColorSetRGB(0, 0, 14));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsTextSelected,
+                                       SkColorSetRGB(0, 0, 15));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsUrl,
+                                       SkColorSetRGB(0, 0, 16));
+  mock_color_provider_source_.SetColor(kColorOmniboxResultsUrlSelected,
+                                       SkColorSetRGB(0, 0, 17));
 
   theme_service_observer_->OnThemeChanged();
   mock_page_.FlushForTesting();
@@ -344,7 +333,6 @@ TEST_F(NewTabPageHandlerTest, SetTheme) {
   ASSERT_TRUE(theme);
   EXPECT_EQ(SkColorSetRGB(0, 0, 1), theme->background_color);
   EXPECT_EQ(SkColorSetRGB(0, 0, 2), theme->text_color);
-  EXPECT_FALSE(theme->is_default);
   EXPECT_FALSE(theme->is_custom_background);
   EXPECT_FALSE(theme->is_dark);
   EXPECT_EQ(SkColorSetRGB(0, 0, 3), theme->logo_color);
@@ -563,7 +551,6 @@ TEST_F(NewTabPageHandlerTest, GetInteractiveDoodle) {
 
 TEST_F(NewTabPageHandlerTest, GetPromo) {
   PromoData promo_data;
-  promo_data.promo_html = "<html/>";
   promo_data.middle_slot_json = R"({
     "part": [{
       "image": {

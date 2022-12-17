@@ -16,6 +16,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/bitstream_buffer.h"
@@ -45,18 +46,48 @@ uint32_t ComputeCheckedDefaultBitrate(const gfx::Size& frame_size) {
       std::numeric_limits<uint32_t>::max());
 }
 
+uint32_t ComputeCheckedPeakBitrate(uint32_t target_bitrate) {
+  // TODO(crbug.com/1342850): Reconsider whether this is good peak bps.
+  base::CheckedNumeric<uint32_t> checked_bitrate_product =
+      base::CheckMul<uint32_t>(target_bitrate, 10u);
+  return checked_bitrate_product.ValueOrDefault(
+      std::numeric_limits<uint32_t>::max());
+}
+
+Bitrate CreateBitrate(
+    const absl::optional<Bitrate>& requested_bitrate,
+    const gfx::Size& frame_size,
+    VideoEncodeAccelerator::SupportedRateControlMode supported_rc_modes) {
+  uint32_t default_bitrate = ComputeCheckedDefaultBitrate(frame_size);
+  if (supported_rc_modes & VideoEncodeAccelerator::kVariableMode) {
+    // VEA supports VBR. Use |requested_bitrate| or VBR if bitrate is not
+    // specified.
+    return requested_bitrate.value_or(Bitrate::VariableBitrate(
+        default_bitrate, ComputeCheckedPeakBitrate(default_bitrate)));
+  }
+  // VEA doesn't support VBR. The bitrate configured to VEA must be CBR. In
+  // other words, if |requested_bitrate| is CBR, bitrate mode fallbacks to VBR.
+  if (requested_bitrate &&
+      requested_bitrate->mode() == Bitrate::Mode::kConstant) {
+    return *requested_bitrate;
+  }
+
+  return Bitrate::ConstantBitrate(
+      requested_bitrate ? requested_bitrate->target_bps() : default_bitrate);
+}
+
 VideoEncodeAccelerator::Config SetUpVeaConfig(
     VideoCodecProfile profile,
     const VideoEncoder::Options& opts,
     VideoPixelFormat format,
-    VideoFrame::StorageType storage_type) {
+    VideoFrame::StorageType storage_type,
+    VideoEncodeAccelerator::SupportedRateControlMode supported_rc_modes) {
   absl::optional<uint32_t> initial_framerate;
   if (opts.framerate.has_value())
     initial_framerate = static_cast<uint32_t>(opts.framerate.value());
 
-  uint32_t default_bitrate = ComputeCheckedDefaultBitrate(opts.frame_size);
   Bitrate bitrate =
-      opts.bitrate.value_or(Bitrate::ConstantBitrate(default_bitrate));
+      CreateBitrate(opts.bitrate, opts.frame_size, supported_rc_modes);
   auto config =
       VideoEncodeAccelerator::Config(format, opts.frame_size, profile, bitrate,
                                      initial_framerate, opts.keyframe_interval);
@@ -198,7 +229,34 @@ void VideoEncodeAcceleratorAdapter::InitializeOnAcceleratorThread(
     return;
   }
 
+  auto supported_profiles =
+      gpu_factories_->GetVideoEncodeAcceleratorSupportedProfiles();
+  if (!supported_profiles) {
+    InitCompleted(
+        EncoderStatus(EncoderStatus::Codes::kEncoderInitializationError,
+                      "No profile is supported by video encode accelerator."));
+    return;
+  }
+
+  auto supported_rc_modes =
+      VideoEncodeAccelerator::SupportedRateControlMode::kNoMode;
+  for (const auto& supported_profile : *supported_profiles) {
+    if (supported_profile.profile == profile) {
+      supported_rc_modes = supported_profile.rate_control_modes;
+      break;
+    }
+  }
+
+  if (supported_rc_modes ==
+      VideoEncodeAccelerator::SupportedRateControlMode::kNoMode) {
+    std::move(done_cb).Run(EncoderStatus(
+        EncoderStatus::Codes::kEncoderInitializationError,
+        "The profile is not supported by video encode accelerator."));
+    return;
+  }
+
   profile_ = profile;
+  supported_rc_modes_ = supported_rc_modes;
   options_ = options;
   output_cb_ = std::move(output_cb);
   state_ = State::kWaitingForFirstFrame;
@@ -237,7 +295,8 @@ void VideoEncodeAcceleratorAdapter::InitializeInternalOnAcceleratorThread() {
   }
 
   auto vea_config =
-      SetUpVeaConfig(profile_, options_, format, first_frame->storage_type());
+      SetUpVeaConfig(profile_, options_, format, first_frame->storage_type(),
+                     supported_rc_modes_);
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   // Linux/ChromeOS require a special configuration to use dmabuf storage.
@@ -279,6 +338,9 @@ void VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread(
     scoped_refptr<VideoFrame> frame,
     bool key_frame,
     EncoderStatusCB done_cb) {
+  TRACE_EVENT1("media",
+               "VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread",
+               "timestamp", frame->timestamp());
   DCHECK_CALLED_ON_VALID_SEQUENCE(accelerator_sequence_checker_);
 
   if (state_ == State::kWaitingForFirstFrame ||
@@ -374,11 +436,16 @@ void VideoEncodeAcceleratorAdapter::ChangeOptionsOnAcceleratorThread(
     std::move(done_cb).Run(status);
     return;
   }
+  if (options.bitrate && options_.bitrate &&
+      options.bitrate->mode() != options_.bitrate->mode()) {
+    std::move(done_cb).Run(
+        EncoderStatus(EncoderStatus::Codes::kEncoderInitializationError,
+                      "Bitrate mode change is not supported."));
+    return;
+  }
 
-  uint32_t default_bitrate = ComputeCheckedDefaultBitrate(options.frame_size);
   Bitrate bitrate =
-      options.bitrate.value_or(Bitrate::ConstantBitrate(default_bitrate));
-
+      CreateBitrate(options.bitrate, options.frame_size, supported_rc_modes_);
   uint32_t framerate = base::ClampRound<uint32_t>(
       options.framerate.value_or(VideoEncodeAccelerator::kDefaultFramerate));
 
@@ -502,7 +569,7 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
       size_t dst_size = result.size;
       size_t actual_output_size = 0;
       bool config_changed = false;
-      std::unique_ptr<uint8_t[]> dst(new uint8_t[dst_size]);
+      auto dst = std::make_unique<uint8_t[]>(dst_size);
 
       auto status = h264_converter_->ConvertChunk(
           base::span<uint8_t>(src, result.size),
@@ -514,7 +581,7 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
         // http://www.itu.int/rec/T-REC-H.264. Retry the conversion if the
         // output buffer size is too small.
         dst_size = actual_output_size;
-        dst.reset(new uint8_t[dst_size]);
+        dst = std::make_unique<uint8_t[]>(dst_size);
         status = h264_converter_->ConvertChunk(
             base::span<uint8_t>(src, result.size),
             base::span<uint8_t>(dst.get(), dst_size), &config_changed,
@@ -539,7 +606,7 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
       }
     } else {
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
-      result.data.reset(new uint8_t[result.size]);
+      result.data = std::make_unique<uint8_t[]>(result.size);
       memcpy(result.data.get(), mapping.memory(), result.size);
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     }
@@ -667,6 +734,7 @@ EncoderStatus::Or<scoped_refptr<VideoFrame>>
 VideoEncodeAcceleratorAdapter::PrepareCpuFrame(
     const gfx::Size& size,
     scoped_refptr<VideoFrame> src_frame) {
+  TRACE_EVENT0("media", "VideoEncodeAcceleratorAdapter::PrepareCpuFrame");
   auto handle = input_pool_->MaybeAllocateBuffer(input_buffer_size_);
   if (!handle)
     return EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode);
@@ -706,6 +774,7 @@ EncoderStatus::Or<scoped_refptr<VideoFrame>>
 VideoEncodeAcceleratorAdapter::PrepareGpuFrame(
     const gfx::Size& size,
     scoped_refptr<VideoFrame> src_frame) {
+  TRACE_EVENT0("media", "VideoEncodeAcceleratorAdapter::PrepareGpuFrame");
   DCHECK_CALLED_ON_VALID_SEQUENCE(accelerator_sequence_checker_);
   DCHECK(src_frame);
   if (src_frame->HasGpuMemoryBuffer() &&

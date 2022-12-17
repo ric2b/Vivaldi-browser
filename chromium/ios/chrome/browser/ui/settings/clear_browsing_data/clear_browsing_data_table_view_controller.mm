@@ -10,14 +10,19 @@
 #include "base/metrics/user_metrics_action.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/prefs/pref_service.h"
+#import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/base/signin_switches.h"
+#import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_remove_mask.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/signout_action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/elements/chrome_activity_overlay_coordinator.h"
@@ -44,8 +49,10 @@
 #endif
 
 @interface ClearBrowsingDataTableViewController () <
-    TableViewLinkHeaderFooterItemDelegate,
     ClearBrowsingDataConsumer,
+    IdentityManagerObserverBridgeDelegate,
+    SignoutActionSheetCoordinatorDelegate,
+    TableViewLinkHeaderFooterItemDelegate,
     UIGestureRecognizerDelegate>
 
 // TODO(crbug.com/850699): remove direct dependency and replace with
@@ -79,17 +86,15 @@
 
 @end
 
-@implementation ClearBrowsingDataTableViewController
-@synthesize actionSheetCoordinator = _actionSheetCoordinator;
-@synthesize alertCoordinator = _alertCoordinator;
-@synthesize browserState = _browserState;
-@synthesize browser = _browser;
-@synthesize clearBrowsingDataBarButton = _clearBrowsingDataBarButton;
-@synthesize dataManager = _dataManager;
+@implementation ClearBrowsingDataTableViewController {
+  // Modal alert for sign out.
+  SignoutActionSheetCoordinator* _signoutCoordinator;
+  std::unique_ptr<signin::IdentityManagerObserverBridge>
+      _identityManagerObserverBridge;
+}
 @synthesize dispatcher = _dispatcher;
 @synthesize delegate = _delegate;
-@synthesize suppressTableViewUpdates = _suppressTableViewUpdates;
-
+@synthesize clearBrowsingDataBarButton = _clearBrowsingDataBarButton;
 #pragma mark - ViewController Lifecycle.
 
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -101,6 +106,9 @@
     _dataManager = [[ClearBrowsingDataManager alloc]
         initWithBrowserState:browser->GetBrowserState()];
     _dataManager.consumer = self;
+    _identityManagerObserverBridge.reset(
+        new signin::IdentityManagerObserverBridge(
+            IdentityManagerFactory::GetForBrowserState(_browserState), self));
   }
   return self;
 }
@@ -126,6 +134,15 @@
     _clearBrowsingDataBarButton.tintColor = [UIColor colorNamed:kRedColor];
   }
   return _clearBrowsingDataBarButton;
+}
+
+#pragma mark - IdentityManagerObserverBridgeDelegate
+
+// Update footer to take into account whether the user is signed-in or not.
+- (void)onPrimaryAccountChanged:
+    (const signin::PrimaryAccountChangeEvent&)event {
+  [self.dataManager updateModel:self.tableViewModel
+                  withTableView:self.tableView];
 }
 
 #pragma mark - UIViewController
@@ -201,6 +218,7 @@
     self.navigationController.interactivePopGestureRecognizer.delegate = nil;
     self.overlayCoordinator = nil;
   }
+  _identityManagerObserverBridge.reset();
   [self.dataManager disconnect];
 }
 
@@ -309,6 +327,14 @@
 #pragma mark - TableViewLinkHeaderFooterItemDelegate
 
 - (void)view:(TableViewLinkHeaderFooterView*)view didTapLinkURL:(CrURL*)url {
+  if (url.gurl == GURL(kCBDSignOutOfChromeURL)) {
+    DCHECK(base::FeatureList::IsEnabled(switches::kEnableCbdSignOut));
+    // TODO(crbug.com/1341654): Log a user action indicating that the user
+    // clicked on the sign out link from the footer. Remove the action
+    // indicating that this came from signin > signout.
+    [self showSignOutWithItemView:[view contentView]];
+    return;
+  }
   NSString* baseURL =
       [NSString stringWithCString:(url.gurl.host() + url.gurl.path()).c_str()
                          encoding:[NSString defaultCStringEncoding]];
@@ -453,6 +479,18 @@
   return !self.overlayCoordinator.started;
 }
 
+#pragma mark - SignoutActionSheetCoordinatorDelegate
+
+- (void)signoutActionSheetCoordinatorPreventUserInteraction:
+    (SignoutActionSheetCoordinator*)coordinator {
+  [self preventUserInteraction];
+}
+
+- (void)signoutActionSheetCoordinatorAllowUserInteraction:
+    (SignoutActionSheetCoordinator*)coordinator {
+  [self allowUserInteraction];
+}
+
 #pragma mark - Private Helpers
 
 - (void)showClearBrowsingDataAlertController:(id)sender {
@@ -489,6 +527,36 @@
     }
   }
   return NO;
+}
+
+// Offer the user to sign-out near itemView
+// If they sync, they can keep or delete their data.
+- (void)showSignOutWithItemView:(UIView*)itemView {
+  if (_signoutCoordinator) {
+    // An action is already in progress, ignore user's request.
+    return;
+  }
+  signin_metrics::ProfileSignout signout_source_metric =
+      signin_metrics::USER_CLICKED_SIGNOUT_FROM_CLEAR_BROWSING_DATA_PAGE;
+  _signoutCoordinator = [[SignoutActionSheetCoordinator alloc]
+      initWithBaseViewController:self
+                         browser:_browser
+                            rect:itemView.frame
+                            view:itemView
+                      withSource:signout_source_metric];
+  __weak ClearBrowsingDataTableViewController* weakSelf = self;
+  _signoutCoordinator.completion = ^(BOOL success) {
+    [weakSelf handleAuthenticationOperationDidFinish];
+  };
+  _signoutCoordinator.delegate = self;
+  [_signoutCoordinator start];
+}
+
+// Stops the signout coordinator.
+- (void)handleAuthenticationOperationDidFinish {
+  DCHECK(_signoutCoordinator);
+  [_signoutCoordinator stop];
+  _signoutCoordinator = nil;
 }
 
 @end

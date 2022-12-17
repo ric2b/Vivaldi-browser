@@ -103,7 +103,7 @@ void IdleSpellCheckController::Deactivate() {
   state_ = State::kInactive;
   if (cold_mode_timer_.IsActive())
     cold_mode_timer_.Cancel();
-  cold_mode_requester_->ClearProgress();
+  cold_mode_requester_->Deactivate();
   DisposeIdleCallback();
   spell_check_requeseter_->Deactivate();
 }
@@ -264,6 +264,11 @@ void IdleSpellCheckController::SkipColdModeTimerForTesting() {
 
 void IdleSpellCheckController::SetNeedsMoreColdModeInvocationForTesting() {
   cold_mode_requester_->SetNeedsMoreInvocationForTesting();
+}
+
+void IdleSpellCheckController::SetSpellCheckingDisabled(
+    const Element& element) {
+  cold_mode_requester_->RemoveFromFullyChecked(element);
 }
 
 }  // namespace blink

@@ -29,6 +29,16 @@ struct SchemeWithType {
   SchemeType type;
 };
 
+// A pair for representing a scheme and a custom protocol handler for it.
+//
+// This pair of strings must be normalized protocol handler parameters as
+// described in the Custom Handler specification.
+// https://html.spec.whatwg.org/multipage/system-state.html#normalize-protocol-handler-parameters
+struct SchemeWithHandler {
+  std::string scheme;
+  std::string handler;
+};
+
 // List of currently registered schemes and associated properties.
 struct SchemeRegistry {
   // Standard format schemes (see header for details).
@@ -100,6 +110,9 @@ struct SchemeRegistry {
   std::vector<std::string> empty_document_schemes = {
       kAboutScheme,
   };
+
+  // Schemes with a predefined default custom handler.
+  std::vector<SchemeWithHandler> predefined_handler_schemes;
 
   bool allow_non_standard_schemes = false;
 };
@@ -501,6 +514,21 @@ void DoSchemeModificationPreamble() {
       << "Trying to add a scheme after the lists have been locked.";
 }
 
+void DoAddSchemeWithHandler(const char* new_scheme,
+                            const char* handler,
+                            std::vector<SchemeWithHandler>* schemes) {
+  DoSchemeModificationPreamble();
+  DCHECK(schemes);
+  DCHECK(strlen(new_scheme) > 0);
+  DCHECK(strlen(handler) > 0);
+  DCHECK_EQ(base::ToLowerASCII(new_scheme), new_scheme);
+  DCHECK(std::find_if(schemes->begin(), schemes->end(),
+                      [&new_scheme](const SchemeWithHandler& scheme) {
+                        return scheme.scheme == new_scheme;
+                      }) == schemes->end());
+  schemes->push_back({new_scheme, handler});
+}
+
 void DoAddScheme(const char* new_scheme, std::vector<std::string>* schemes) {
   DoSchemeModificationPreamble();
   DCHECK(schemes);
@@ -647,6 +675,22 @@ void AddEmptyDocumentScheme(const char* new_scheme) {
 
 const std::vector<std::string>& GetEmptyDocumentSchemes() {
   return GetSchemeRegistry().empty_document_schemes;
+}
+
+void AddPredefinedHandlerScheme(const char* new_scheme, const char* handler) {
+  DoAddSchemeWithHandler(
+      new_scheme, handler,
+      &GetSchemeRegistryWithoutLocking()->predefined_handler_schemes);
+}
+
+std::vector<std::pair<std::string, std::string>> GetPredefinedHandlerSchemes() {
+  std::vector<std::pair<std::string, std::string>> result;
+  result.reserve(GetSchemeRegistry().predefined_handler_schemes.size());
+  for (const SchemeWithHandler& entry :
+       GetSchemeRegistry().predefined_handler_schemes) {
+    result.emplace_back(entry.scheme, entry.handler);
+  }
+  return result;
 }
 
 void LockSchemeRegistries() {
@@ -811,11 +855,15 @@ void DecodeURLEscapeSequences(const char* input,
                               int length,
                               DecodeURLMode mode,
                               CanonOutputW* output) {
+  if (length <= 0)
+    return;
+
   STACK_UNINITIALIZED RawCanonOutputT<char> unescaped_chars;
-  for (int i = 0; i < length; i++) {
+  size_t length_size_t = static_cast<size_t>(length);
+  for (size_t i = 0; i < length_size_t; i++) {
     if (input[i] == '%') {
       unsigned char ch;
-      if (DecodeEscaped(input, &i, length, &ch)) {
+      if (DecodeEscaped(input, &i, length_size_t, &ch)) {
         unescaped_chars.push_back(ch);
       } else {
         // Invalid escape sequence, copy the percent literal.
@@ -830,7 +878,8 @@ void DecodeURLEscapeSequences(const char* input,
   int output_initial_length = output->length();
   // Convert that 8-bit to UTF-16. It's not clear IE does this at all to
   // JavaScript URLs, but Firefox and Safari do.
-  for (int i = 0; i < unescaped_chars.length(); i++) {
+  size_t unescaped_length = unescaped_chars.length();
+  for (size_t i = 0; i < unescaped_length; i++) {
     unsigned char uch = static_cast<unsigned char>(unescaped_chars.at(i));
     if (uch < 0x80) {
       // Non-UTF-8, just append directly
@@ -838,10 +887,10 @@ void DecodeURLEscapeSequences(const char* input,
     } else {
       // next_ch will point to the last character of the decoded
       // character.
-      int next_character = i;
+      size_t next_character = i;
       base_icu::UChar32 code_point;
-      if (ReadUTFChar(unescaped_chars.data(), &next_character,
-                      unescaped_chars.length(), &code_point)) {
+      if (ReadUTFChar(unescaped_chars.data(), &next_character, unescaped_length,
+                      &code_point)) {
         // Valid UTF-8 character, convert to UTF-16.
         AppendUTF16Value(code_point, output);
         i = next_character;
@@ -855,7 +904,7 @@ void DecodeURLEscapeSequences(const char* input,
         // copy all characters from the beginning to the end of the
         // identified sequence.
         output->set_length(output_initial_length);
-        for (int j = 0; j < unescaped_chars.length(); ++j)
+        for (size_t j = 0; j < unescaped_chars.length(); ++j)
           output->push_back(static_cast<unsigned char>(unescaped_chars.at(j)));
         break;
       }

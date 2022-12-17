@@ -16,8 +16,8 @@
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "net/base/features.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 namespace {
@@ -210,7 +210,8 @@ StorageKey StorageKey::CreateFromStringForTesting(const std::string& origin) {
 
 // static
 bool StorageKey::IsThirdPartyStoragePartitioningEnabled() {
-  return base::FeatureList::IsEnabled(features::kThirdPartyStoragePartitioning);
+  return base::FeatureList::IsEnabled(
+      net::features::kThirdPartyStoragePartitioning);
 }
 
 // static
@@ -231,6 +232,18 @@ StorageKey StorageKey::CreateWithOptionalNonce(
     blink::mojom::AncestorChainBit ancestor_chain_bit) {
   DCHECK(!nonce || !nonce->is_empty());
   return StorageKey(origin, top_level_site, nonce, ancestor_chain_bit);
+}
+
+// static
+StorageKey StorageKey::CreateFromOriginAndIsolationInfo(
+    const url::Origin& origin,
+    const net::IsolationInfo& isolation_info) {
+  return CreateWithOptionalNonce(
+      origin, net::SchemefulSite(isolation_info.top_frame_origin().value()),
+      base::OptionalOrNullptr(isolation_info.nonce()),
+      isolation_info.site_for_cookies().IsNull()
+          ? blink::mojom::AncestorChainBit::kCrossSite
+          : blink::mojom::AncestorChainBit::kSameSite);
 }
 
 std::string StorageKey::Serialize() const {
@@ -343,14 +356,18 @@ std::string StorageKey::GetMemoryDumpString(size_t max_length) const {
 }
 
 const net::SiteForCookies StorageKey::ToNetSiteForCookies() const {
-  if (!nonce_ &&
-      ancestor_chain_bit_ == blink::mojom::AncestorChainBit::kSameSite &&
-      net::registry_controlled_domains::SameDomainOrHost(
-          origin_, url::Origin::Create(top_level_site_.GetURL()),
-          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
-    return net::SiteForCookies::FromUrl(top_level_site_.GetURL());
+  if (nonce_ ||
+      ancestor_chain_bit_ == blink::mojom::AncestorChainBit::kCrossSite) {
+    // If any of the ancestor frames are cross-site to `origin_` then the
+    // SiteForCookies should be null. The existence of `nonce_` means the same
+    // thing.
+    return net::SiteForCookies();
   }
-  return net::SiteForCookies();
+
+  // The `ancestor_chain_bit_` being kSameSite should already indicate that the
+  // `top_level_site_` and `origin_` are same-site.
+  DCHECK(top_level_site_ == net::SchemefulSite(origin_));
+  return net::SiteForCookies(top_level_site_);
 }
 
 // static

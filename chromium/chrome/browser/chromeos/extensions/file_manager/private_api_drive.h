@@ -97,7 +97,7 @@ class FileManagerPrivateSearchDriveFunction : public LoggedExtensionFunction {
   ResponseAction Run() override;
 
  private:
-  void OnSearchDriveFs(std::unique_ptr<base::ListValue> results);
+  void OnSearchDriveFs(absl::optional<base::Value::List> results);
 
   base::TimeTicks operation_start_;
   bool is_offline_;
@@ -126,7 +126,7 @@ class FileManagerPrivateSearchDriveMetadataFunction
 
  private:
   void OnSearchDriveFs(const std::string& query_text,
-                       std::unique_ptr<base::ListValue> results);
+                       absl::optional<base::Value::List> results);
 
   base::TimeTicks operation_start_;
   SearchType search_type_;
@@ -201,6 +201,19 @@ class FileManagerPrivatePollDriveHostedFilePinStatesFunction
 
  protected:
   ~FileManagerPrivatePollDriveHostedFilePinStatesFunction() override = default;
+
+  ResponseAction Run() override;
+};
+
+// Implements the chrome.fileManagerPrivate.openManageSyncSettings method.
+class FileManagerPrivateOpenManageSyncSettingsFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.openManageSyncSettings",
+                             FILEMANAGERPRIVATE_OPENMANAGESYNCSETTINGS)
+
+ protected:
+  ~FileManagerPrivateOpenManageSyncSettingsFunction() override = default;
 
   ResponseAction Run() override;
 };

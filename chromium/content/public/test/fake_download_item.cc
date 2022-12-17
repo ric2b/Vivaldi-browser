@@ -202,11 +202,6 @@ FakeDownloadItem::GetDownloadCreationType() const {
   return download::DownloadItem::DownloadCreationType::TYPE_ACTIVE_DOWNLOAD;
 }
 
-const absl::optional<download::DownloadSchedule>&
-FakeDownloadItem::GetDownloadSchedule() const {
-  return download_schedule_;
-}
-
 ::network::mojom::CredentialsMode FakeDownloadItem::GetCredentialsMode() const {
   return ::network::mojom::CredentialsMode::kInclude;
 }
@@ -331,11 +326,6 @@ void FakeDownloadItem::OnAsyncScanningCompleted(
   NOTREACHED();
 }
 
-void FakeDownloadItem::OnDownloadScheduleChanged(
-    absl::optional<download::DownloadSchedule> schedule) {
-  NOTREACHED();
-}
-
 bool FakeDownloadItem::IsPaused() const {
   return false;
 }
@@ -368,6 +358,11 @@ int64_t FakeDownloadItem::GetBytesWasted() const {
 int32_t FakeDownloadItem::GetAutoResumeCount() const {
   NOTREACHED();
   return 0;
+}
+
+bool FakeDownloadItem::IsOffTheRecord() const {
+  NOTREACHED();
+  return false;
 }
 
 const GURL& FakeDownloadItem::GetReferrerUrl() const {

@@ -32,7 +32,7 @@ class MockAddrInfoGetter : public AddrInfoGetter {
       const std::string& host,
       const addrinfo* hints,
       int* out_os_error,
-      NetworkChangeNotifier::NetworkHandle network) override;
+      handles::NetworkHandle network) override;
 
  private:
   struct IpAndPort {
@@ -132,7 +132,7 @@ std::unique_ptr<addrinfo, FreeAddrInfoFunc> MockAddrInfoGetter::getaddrinfo(
     const std::string& host,
     const addrinfo* /* hints */,
     int* out_os_error,
-    NetworkChangeNotifier::NetworkHandle) {
+    handles::NetworkHandle) {
   // Presume success
   *out_os_error = 0;
 
@@ -249,8 +249,9 @@ TEST(AddressInfoTest, Iteration) {
 
   {
     int count = 0;
-    for (auto aii = ai->begin(); aii != ai->end(); ++aii) {
-      const sockaddr_in* addr = reinterpret_cast<sockaddr_in*>(aii->ai_addr);
+    for (const auto& addr_info : *ai) {
+      const sockaddr_in* addr =
+          reinterpret_cast<sockaddr_in*>(addr_info.ai_addr);
       EXPECT_EQ(base::HostToNet16(addr->sin_port) % 10, count % 10);
       ++count;
     }

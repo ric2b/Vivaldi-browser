@@ -19,7 +19,8 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authenticator_selection_criteria.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_cable_authentication_data.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_cable_registration_data.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_federated_credential_logout_rps_request.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_identity_credential_logout_r_ps_request.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_identity_provider.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_creation_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_parameters.h"
@@ -49,6 +50,8 @@ using blink::mojom::blink::CableRegistrationPtr;
 using blink::mojom::blink::CredentialInfo;
 using blink::mojom::blink::CredentialInfoPtr;
 using blink::mojom::blink::CredentialType;
+using blink::mojom::blink::IdentityProvider;
+using blink::mojom::blink::IdentityProviderPtr;
 using blink::mojom::blink::LargeBlobSupport;
 using blink::mojom::blink::LogoutRpsRequest;
 using blink::mojom::blink::LogoutRpsRequestPtr;
@@ -177,8 +180,9 @@ TypeConverter<absl::optional<AuthenticatorTransport>, String>::Convert(
     return AuthenticatorTransport::NFC;
   if (transport == "ble")
     return AuthenticatorTransport::BLE;
-  if (transport == "cable")
-    return AuthenticatorTransport::CABLE;
+  // "cable" is the old name for "hybrid" and we accept either.
+  if (transport == "cable" || transport == "hybrid")
+    return AuthenticatorTransport::HYBRID;
   if (transport == "internal")
     return AuthenticatorTransport::INTERNAL;
   return absl::nullopt;
@@ -193,8 +197,8 @@ String TypeConverter<String, AuthenticatorTransport>::Convert(
     return "nfc";
   if (transport == AuthenticatorTransport::BLE)
     return "ble";
-  if (transport == AuthenticatorTransport::CABLE)
-    return "cable";
+  if (transport == AuthenticatorTransport::HYBRID)
+    return "hybrid";
   if (transport == AuthenticatorTransport::INTERNAL)
     return "internal";
   NOTREACHED();
@@ -232,8 +236,8 @@ TypeConverter<absl::optional<UserVerificationRequirement>, String>::Convert(
 }
 
 // static
-AttestationConveyancePreference
-TypeConverter<AttestationConveyancePreference, String>::Convert(
+absl::optional<AttestationConveyancePreference>
+TypeConverter<absl::optional<AttestationConveyancePreference>, String>::Convert(
     const String& preference) {
   if (preference == "none")
     return AttestationConveyancePreference::NONE;
@@ -243,22 +247,20 @@ TypeConverter<AttestationConveyancePreference, String>::Convert(
     return AttestationConveyancePreference::DIRECT;
   if (preference == "enterprise")
     return AttestationConveyancePreference::ENTERPRISE;
-  NOTREACHED();
-  return AttestationConveyancePreference::NONE;
+  return absl::nullopt;
 }
 
 // static
-AuthenticatorAttachment
-TypeConverter<AuthenticatorAttachment, absl::optional<String>>::Convert(
-    const absl::optional<String>& attachment) {
+absl::optional<AuthenticatorAttachment> TypeConverter<
+    absl::optional<AuthenticatorAttachment>,
+    absl::optional<String>>::Convert(const absl::optional<String>& attachment) {
   if (!attachment.has_value())
     return AuthenticatorAttachment::NO_PREFERENCE;
   if (attachment.value() == "platform")
     return AuthenticatorAttachment::PLATFORM;
   if (attachment.value() == "cross-platform")
     return AuthenticatorAttachment::CROSS_PLATFORM;
-  NOTREACHED();
-  return AuthenticatorAttachment::NO_PREFERENCE;
+  return absl::nullopt;
 }
 
 // static
@@ -283,11 +285,18 @@ TypeConverter<AuthenticatorSelectionCriteriaPtr,
     Convert(const blink::AuthenticatorSelectionCriteria& criteria) {
   auto mojo_criteria =
       blink::mojom::blink::AuthenticatorSelectionCriteria::New();
-  absl::optional<String> attachment;
-  if (criteria.hasAuthenticatorAttachment())
-    attachment = criteria.authenticatorAttachment();
+
   mojo_criteria->authenticator_attachment =
-      ConvertTo<AuthenticatorAttachment>(attachment);
+      AuthenticatorAttachment::NO_PREFERENCE;
+  if (criteria.hasAuthenticatorAttachment()) {
+    absl::optional<String> attachment = criteria.authenticatorAttachment();
+    auto maybe_attachment =
+        ConvertTo<absl::optional<AuthenticatorAttachment>>(attachment);
+    if (maybe_attachment) {
+      mojo_criteria->authenticator_attachment = *maybe_attachment;
+    }
+  }
+
   absl::optional<ResidentKeyRequirement> resident_key;
   if (criteria.hasResidentKey()) {
     resident_key = ConvertTo<absl::optional<ResidentKeyRequirement>>(
@@ -315,8 +324,8 @@ TypeConverter<AuthenticatorSelectionCriteriaPtr,
 
 // static
 LogoutRpsRequestPtr
-TypeConverter<LogoutRpsRequestPtr, blink::FederatedCredentialLogoutRpsRequest>::
-    Convert(const blink::FederatedCredentialLogoutRpsRequest& request) {
+TypeConverter<LogoutRpsRequestPtr, blink::IdentityCredentialLogoutRPsRequest>::
+    Convert(const blink::IdentityCredentialLogoutRPsRequest& request) {
   auto mojo_request = LogoutRpsRequest::New();
 
   mojo_request->url = blink::KURL(request.url());
@@ -390,7 +399,7 @@ TypeConverter<PublicKeyCredentialDescriptorPtr,
   } else {
     mojo_descriptor->transports = {
         AuthenticatorTransport::USB, AuthenticatorTransport::BLE,
-        AuthenticatorTransport::NFC, AuthenticatorTransport::CABLE,
+        AuthenticatorTransport::NFC, AuthenticatorTransport::HYBRID,
         AuthenticatorTransport::INTERNAL};
   }
   return mojo_descriptor;
@@ -464,23 +473,13 @@ TypeConverter<PublicKeyCredentialCreationOptionsPtr,
         AuthenticatorSelectionCriteria::From(*options.authenticatorSelection());
   }
 
-  mojo_options->attestation =
-      blink::mojom::AttestationConveyancePreference::NONE;
+  mojo_options->attestation = AttestationConveyancePreference::NONE;
   if (options.hasAttestation()) {
-    const auto& attestation = options.attestation();
-    if (attestation == "none") {
-      // Default value.
-    } else if (attestation == "indirect") {
-      mojo_options->attestation =
-          blink::mojom::AttestationConveyancePreference::INDIRECT;
-    } else if (attestation == "direct") {
-      mojo_options->attestation =
-          blink::mojom::AttestationConveyancePreference::DIRECT;
-    } else if (attestation == "enterprise") {
-      mojo_options->attestation =
-          blink::mojom::AttestationConveyancePreference::ENTERPRISE;
-    } else {
-      return nullptr;
+    absl::optional<AttestationConveyancePreference> attestation =
+        ConvertTo<absl::optional<AttestationConveyancePreference>>(
+            options.attestation());
+    if (attestation) {
+      mojo_options->attestation = *attestation;
     }
   }
 
@@ -694,6 +693,18 @@ TypeConverter<RemoteDesktopClientOverridePtr,
   return RemoteDesktopClientOverride::New(
       blink::SecurityOrigin::CreateFromString(blink_value.origin()),
       blink_value.sameOriginWithAncestors());
+}
+
+// static
+IdentityProviderPtr
+TypeConverter<IdentityProviderPtr, blink::IdentityProvider>::Convert(
+    const blink::IdentityProvider& provider) {
+  auto mojo_provider = IdentityProvider::New();
+
+  mojo_provider->config_url = blink::KURL(provider.configURL());
+  mojo_provider->client_id = provider.clientId();
+  mojo_provider->nonce = provider.getNonceOr("");
+  return mojo_provider;
 }
 
 }  // namespace mojo

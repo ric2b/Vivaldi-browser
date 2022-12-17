@@ -8,8 +8,8 @@
  * are not currently in the contacts of this user.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.m.js';
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js';
@@ -27,6 +27,7 @@ import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_be
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getDiscoveryManager} from './discovery_manager.js';
+import {getTemplate} from './nearby_confirmation_page.html.js';
 import {CloseReason} from './shared/types.js';
 
 /** @implements {nearbyShare.mojom.TransferUpdateListenerInterface} */
@@ -84,7 +85,7 @@ export class NearbyConfirmationPageElement extends
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -109,7 +110,7 @@ export class NearbyConfirmationPageElement extends
       transferUpdateListener: {
         type: Object,
         value: null,
-        observer: 'onTransferUpdateListenerChanged_'
+        observer: 'onTransferUpdateListenerChanged_',
       },
 
       /**

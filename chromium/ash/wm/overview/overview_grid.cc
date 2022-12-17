@@ -10,12 +10,12 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/metrics/histogram_macros.h"
 #include "ash/public/cpp/desks_templates_delegate.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/system/toast_catalog.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
@@ -331,6 +331,9 @@ float GetWantedDropTargetOpacity(
     case SplitViewDragIndicators::WindowDraggingState::kFromTop:
     case SplitViewDragIndicators::WindowDraggingState::kFromShelf:
       return 1.f;
+    case SplitViewDragIndicators::WindowDraggingState::kFromFloat:
+      NOTREACHED();
+      return 0.f;
   }
 }
 
@@ -1103,15 +1106,24 @@ void OverviewGrid::CalculateWindowListAnimationStates(
       NOTREACHED();
   }
 
-  auto is_always_on_top_item = [](OverviewItem* item) -> bool {
+  // On top items are items that are higher up on the z-order, or in the always
+  // on top or float containers.
+  auto is_on_top_item = [](OverviewItem* item) -> bool {
     DCHECK(item);
-    return item->GetWindow()->GetProperty(aura::client::kZOrderingKey) !=
-           ui::ZOrderLevel::kNormal;
+    if (item->GetWindow()->GetProperty(aura::client::kZOrderingKey) !=
+        ui::ZOrderLevel::kNormal) {
+      return true;
+    }
+
+    aura::Window* parent = item->GetWindow()->parent();
+    aura::Window* root = parent->GetRootWindow();
+    return parent == root->GetChildById(kShellWindowId_AlwaysOnTopContainer) ||
+           parent == root->GetChildById(kShellWindowId_FloatContainer);
   };
 
-  // Create a copy of `window_list_` which has the selected item and
-  // always on top windows in the front.
-  std::vector<OverviewItem*> always_on_top_items;
+  // Create a copy of `window_list_` which has the selected item and on top
+  // windows in the front.
+  std::vector<OverviewItem*> on_top_items;
   std::vector<OverviewItem*> regular_items;
   for (const std::unique_ptr<OverviewItem>& item : window_list_) {
     OverviewItem* item_ptr = item.get();
@@ -1120,24 +1132,23 @@ void OverviewGrid::CalculateWindowListAnimationStates(
     if (item_ptr == selected_item)
       continue;
 
-    if (is_always_on_top_item(item_ptr))
-      always_on_top_items.push_back(item_ptr);
+    if (is_on_top_item(item_ptr))
+      on_top_items.push_back(item_ptr);
     else
       regular_items.push_back(item_ptr);
   }
 
   // Construct `items` so they are ordered like so.
-  //   1) Always on top window that is selected.
-  //   2) Always on top window.
-  //   3) Selected window which is not always on top.
+  //   1) Selected window which is on top.
+  //   2) On top windows.
+  //   3) Selected window which is not on top.
   //   4) Regular window.
   // Windows in the same group maintain their ordering from `window_list`.
   std::vector<OverviewItem*> items;
-  if (selected_item && is_always_on_top_item(selected_item))
+  if (selected_item && is_on_top_item(selected_item))
     items.insert(items.begin(), selected_item);
-  items.insert(items.end(), always_on_top_items.begin(),
-               always_on_top_items.end());
-  if (selected_item && !is_always_on_top_item(selected_item))
+  items.insert(items.end(), on_top_items.begin(), on_top_items.end());
+  if (selected_item && !is_on_top_item(selected_item))
     items.insert(items.end(), selected_item);
   items.insert(items.end(), regular_items.begin(), regular_items.end());
 
@@ -1864,13 +1875,13 @@ void OverviewGrid::UpdateSaveDeskButtons() {
       window_list_.empty() ||
       (window_list_.size() == 1u && window_list_.front()->animating_to_close());
 
-  // Do not create or show the save desk as template button if there are no
-  // windows in this grid, during a window drag or in tablet mode, or the desks
-  // templates grid is visible.
+  // Do not create or show the save desk buttons if there are no
+  // windows in this grid, during a window drag or in tablet mode, the desks
+  // templates grid is visible, or if the desks bar hasn't been created yet.
   const bool target_visible =
       !no_items && !overview_session_->GetCurrentDraggedOverviewItem() &&
       !Shell::Get()->tablet_mode_controller()->InTabletMode() &&
-      !IsShowingDesksTemplatesGrid();
+      !IsShowingDesksTemplatesGrid() && desks_widget_;
 
   const bool visibility_changed =
       target_visible != IsSaveDeskButtonContainerVisible();
@@ -2124,6 +2135,8 @@ void OverviewGrid::MaybeInitDesksWidget() {
   // the container.
   auto* window = desks_widget_->GetNativeWindow();
   window->parent()->StackChildAtBottom(window);
+
+  UpdateSaveDeskButtons();
 }
 
 std::vector<gfx::RectF> OverviewGrid::GetWindowRects(
@@ -2385,25 +2398,25 @@ size_t OverviewGrid::GetOverviewItemIndex(OverviewItem* item) const {
 size_t OverviewGrid::FindInsertionIndex(const aura::Window* window) {
   const auto mru_windows =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
-  if (mru_windows.empty())
-    return 0u;
 
-  size_t index = 0u;
-  for (aura::Window* mru_window : mru_windows) {
-    if (index == size() ||
-        IsDropTargetWindow(window_list_[index]->GetWindow()) ||
-        mru_window == window) {
-      return index;
-    }
-    // As we iterate over the whole MRU window list, the windows in this grid
-    // will be encountered in the same order, but possibly with other windows in
-    // between. Ignore those other windows, and only increment |index| when we
-    // reach the next window in this grid.
-    if (mru_window == window_list_[index]->GetWindow())
-      ++index;
+  // As we iterate over the whole MRU window list, the windows in this grid
+  // will be encountered in the same order, but possibly with other windows in
+  // between. Ignore those other windows, and only increment `grid_item_index`
+  // when we reach the next window in this grid.
+  size_t grid_item_index = 0, mru_window_index = 0;
+  while (grid_item_index < size() && mru_window_index < mru_windows.size()) {
+    aura::Window* grid_item_window = window_list_[grid_item_index]->GetWindow();
+    aura::Window* mru_window = mru_windows[mru_window_index];
+    if (IsDropTargetWindow(grid_item_window) || mru_window == window)
+      return grid_item_index;
+    if (mru_window == grid_item_window)
+      grid_item_index++;
+    mru_window_index++;
   }
-  NOTREACHED();
-  return 0u;
+
+  // If there is no drop target window and `window` is not in the MRU window
+  // list, insert at the end.
+  return size();
 }
 
 void OverviewGrid::AddDraggedWindowIntoOverviewOnDragEnd(
@@ -2423,7 +2436,8 @@ void OverviewGrid::AddDraggedWindowIntoOverviewOnDragEnd(
     // its changed bounds.
     dragged_window->SetProperty(chromeos::kCanAttachToAnotherWindowKey, false);
     TabletModeWindowState::UpdateWindowPosition(
-        WindowState::Get(dragged_window), /*animate=*/false);
+        WindowState::Get(dragged_window),
+        WindowState::BoundsChangeAnimationType::kNone);
     const gfx::Rect new_bounds = dragged_window->bounds();
     if (old_bounds != new_bounds) {
       // It's for smoother animation.

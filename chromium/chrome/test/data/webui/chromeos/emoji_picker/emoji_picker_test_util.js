@@ -87,7 +87,8 @@ export function timeout(ms) {
 export function waitWithTimeout(promise, ms, message) {
   message = message || 'waiting for promise timed out after ' + ms + ' ms.';
   return Promise.race(
-      [promise, timeout(ms).then((resolve, reject) => reject(message))]);
+      [promise, timeout(ms).then(
+        () => Promise.reject(new Error(message)))]);
 }
 
 /**
@@ -119,7 +120,7 @@ export function dispatchMouseEvent(element, button, eventType = 'contextmenu') {
     button: button,
     buttons: 0,
     clientX: element.getBoundingClientRect().x,
-    clientY: element.getBoundingClientRect().y
+    clientY: element.getBoundingClientRect().y,
   }));
 }
 

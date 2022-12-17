@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_MEDIA_CAPTURE_DESKTOP_CAPTURER_LACROS_H_
 #define CONTENT_BROWSER_MEDIA_CAPTURE_DESKTOP_CAPTURER_LACROS_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "chromeos/crosapi/mojom/screen_manager.mojom.h"
@@ -66,10 +67,7 @@ class DesktopCapturerLacros : public webrtc::DesktopCapturer {
   // The current media capture implementation expects that the implementation of
   // CaptureFrame() synchronously invokes |callback_| in a re-entrant fashion.
   // Thus, we do not worry about thread safety when invoking callback_.
-  Callback* callback_ = nullptr;
-
-  // The remote connection to the screen manager.
-  mojo::Remote<crosapi::mojom::ScreenManager> screen_manager_;
+  raw_ptr<Callback> callback_ = nullptr;
 
   // A remote for an ash interface that is responsible for either capturing
   // screen snapshots or window snapshots.

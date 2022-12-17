@@ -88,6 +88,7 @@ namespace http://www.w3.org/1999/xhtml
     property baseURI
     property before
     property blur
+    property checkVisibility
     property childElementCount
     property childNodes
     property children
@@ -137,7 +138,7 @@ namespace http://www.w3.org/1999/xhtml
     property hasChildNodes
     property hasPointerCapture
     property hidden
-    property hidePopup
+    property hidePopUp
     property id
     property inert
     property innerHTML
@@ -152,7 +153,6 @@ namespace http://www.w3.org/1999/xhtml
     property isDefaultNamespace
     property isEqualNode
     property isSameNode
-    property isVisible
     property lang
     property lastChild
     property lastElementChild
@@ -180,6 +180,7 @@ namespace http://www.w3.org/1999/xhtml
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforeinput
     property onbeforematch
     property onbeforepaste
     property onbeforexrselect
@@ -190,6 +191,7 @@ namespace http://www.w3.org/1999/xhtml
     property onchange
     property onclick
     property onclose
+    property oncontentvisibilityautostatechanged
     property oncontextlost
     property oncontextmenu
     property oncontextrestored
@@ -287,7 +289,10 @@ namespace http://www.w3.org/1999/xhtml
     property parentElement
     property parentNode
     property part
-    property popup
+    property popUp
+    property popUpHideTarget
+    property popUpShowTarget
+    property popUpToggleTarget
     property prefix
     property prepend
     property previousElementSibling
@@ -323,7 +328,7 @@ namespace http://www.w3.org/1999/xhtml
     property setHTML
     property setPointerCapture
     property shadowRoot
-    property showPopup
+    property showPopUp
     property slot
     property spellcheck
     property style
@@ -333,6 +338,7 @@ namespace http://www.w3.org/1999/xhtml
     property title
     property toString
     property toggleAttribute
+    property toggles
     property translate
     property virtualKeyboardPolicy
     property webkitMatchesSelector
@@ -595,6 +601,8 @@ html element form
     property method
     property name
     property noValidate
+    property rel
+    property relList
     property reportValidity
     property requestSubmit
     property reset
@@ -1322,6 +1330,7 @@ namespace http://www.w3.org/2000/svg
     property baseURI
     property before
     property blur
+    property checkVisibility
     property childElementCount
     property childNodes
     property children
@@ -1364,7 +1373,7 @@ namespace http://www.w3.org/2000/svg
     property hasAttributes
     property hasChildNodes
     property hasPointerCapture
-    property hidePopup
+    property hidePopUp
     property id
     property innerHTML
     property insertAdjacentElement
@@ -1375,7 +1384,6 @@ namespace http://www.w3.org/2000/svg
     property isDefaultNamespace
     property isEqualNode
     property isSameNode
-    property isVisible
     property lastChild
     property lastElementChild
     property localName
@@ -1397,6 +1405,7 @@ namespace http://www.w3.org/2000/svg
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforeinput
     property onbeforematch
     property onbeforepaste
     property onbeforexrselect
@@ -1407,6 +1416,7 @@ namespace http://www.w3.org/2000/svg
     property onchange
     property onclick
     property onclose
+    property oncontentvisibilityautostatechanged
     property oncontextlost
     property oncontextmenu
     property oncontextrestored
@@ -1504,7 +1514,10 @@ namespace http://www.w3.org/2000/svg
     property parentElement
     property parentNode
     property part
-    property popup
+    property popUp
+    property popUpHideTarget
+    property popUpShowTarget
+    property popUpToggleTarget
     property prefix
     property prepend
     property previousElementSibling
@@ -1540,13 +1553,14 @@ namespace http://www.w3.org/2000/svg
     property setHTML
     property setPointerCapture
     property shadowRoot
-    property showPopup
+    property showPopUp
     property slot
     property style
     property tabIndex
     property tagName
     property textContent
     property toggleAttribute
+    property toggles
     property viewportElement
     property webkitMatchesSelector
     property webkitRequestFullScreen

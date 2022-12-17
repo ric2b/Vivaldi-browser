@@ -62,6 +62,14 @@ AX_BASE_EXPORT extern const base::Feature kAutoDisableAccessibility;
 // accessibility API usage in that time.
 AX_BASE_EXPORT bool IsAutoDisableAccessibilityEnabled();
 
+// Enables a setting that can turn on/off browser vocalization of 'descriptions'
+// tracks.
+AX_BASE_EXPORT extern const base::Feature kTextBasedAudioDescription;
+
+// Returns true if the setting to turn on text based audio descriptions is
+// enabled.
+AX_BASE_EXPORT bool IsTextBasedAudioDescriptionEnabled();
+
 #if BUILDFLAG(IS_WIN)
 // Enables an experimental Chrome-specific accessibility COM API
 AX_BASE_EXPORT extern const base::Feature kIChromeAccessible;
@@ -117,13 +125,6 @@ AX_BASE_EXPORT extern const base::Feature kEnhancedNetworkVoices;
 
 // Returns true if network-based voices are enabled in Select-to-speak.
 AX_BASE_EXPORT bool IsEnhancedNetworkVoicesEnabled();
-
-// Enables improved Accessibility OS Settings reorganization.
-AX_BASE_EXPORT extern const base::Feature
-    kAccessibilityOSSettingsReorganization;
-
-// Returns true if improved Accessibility OS Settings reorganization is enabled.
-AX_BASE_EXPORT bool IsAccessibilityOSSettingsReorganizationEnabled();
 
 // Enables improved Accessibility OS Settings visibility.
 AX_BASE_EXPORT extern const base::Feature kAccessibilityOSSettingsVisibility;

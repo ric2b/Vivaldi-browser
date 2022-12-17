@@ -261,24 +261,26 @@ def _CheckColorPaletteReferences(input_api, output_api):
 def _CheckSemanticColorsReferences(input_api, output_api):
   """
   Checks colors defined in semantic_colors_non_adaptive.xml only referencing
-  resources in color_palette.xml.
+  resources in self or color_palette.xml.
   """
   errors = []
-  color_palette = None
+  usable_colors = None
 
   for f in IncludedFiles(input_api):
     if not f.LocalPath().endswith('/semantic_colors_non_adaptive.xml'):
       continue
 
-    if color_palette is None:
+    if usable_colors is None:
       color_palette = _colorXml2Dict(
         input_api.ReadFile(helpers.COLOR_PALETTE_PATH))
+      self_palette = _colorXml2Dict(input_api.ReadFile(f.AbsoluteLocalPath()))
+      usable_colors = {**color_palette, **self_palette}
     for line_number, line in f.ChangedContents():
       r = helpers.COLOR_REFERENCE_PATTERN.search(line)
       if not r:
         continue
-      color = r.group()
-      if _removePrefix(color) not in color_palette:
+      color_ref = r.group()
+      if _removePrefix(color_ref) not in usable_colors:
         errors.append(
             '  %s:%d\n    \t%s' % (f.LocalPath(), line_number, line.strip()))
 
@@ -550,12 +552,14 @@ def _CheckStringResourceQuotesPunctuations(input_api, output_api):
   """Check whether inappropriate quotes are used"""
   warning = '''
   Android String Resources Check failed:
-    Your new string is using one or more of generic quotes(\u0022 \\u0022, \u0027 \\u0027,
+    Your new string is using one or more of generic quotes (\u0022 \\u0022, \u0027 \\u0027,
     \u0060 \\u0060, \u00B4 \\u00B4), which is not encouraged. Instead, quotations marks
-    (\u201C \\u201C, \u201D \\u201D, \u2018 \\u2018, \u2019 \\u2019) are usually preferred.
+    (\u201C \\u201C, \u201D \\u201D, \u2018 \\u2018, \u2019 \\u2019) are usually preferred (see
+    https://material.io/archive/guidelines/style/writing.html#writing-capitalization-punctuation).
 
     Use prime (\u2032 \\u2032) only in abbreviations for feet, arcminutes, and minutes.
-    Use Double-prime (\u2033 \\u2033) only in abbreviations for inches, arcminutes, and minutes.
+    Use double-prime (\u2033 \\u2033) only in abbreviations for inches, arcseconds, and seconds.
+    Use the right single quotation mark (\u2019 \\u2019) for apostrophes.
 
     Please reach out to the UX designer/writer in your team to double check
     which punctuation should be correctly used. Ignore this warning if UX has confirmed.

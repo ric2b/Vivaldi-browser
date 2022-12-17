@@ -15,7 +15,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chromeos/network/network_util.h"
+#include "chromeos/ash/components/network/network_util.h"
 #include "url/gurl.h"
 
 namespace network {
@@ -40,7 +40,7 @@ class SimpleGeolocationRequestTestMonitor;
 // Note: we need COMPONENT_EXPORT(ASH_GEOLOCATION) for tests.
 class COMPONENT_EXPORT(ASH_GEOLOCATION) SimpleGeolocationRequest {
  public:
-  // Called when a new geo geolocation information is available.
+  // Called when a new geolocation information is available.
   // The second argument indicates whether there was a server error or not.
   // It is true when there was a server or network error - either no response
   // or a 500 error code.

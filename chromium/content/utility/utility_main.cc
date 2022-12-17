@@ -77,7 +77,7 @@ sandbox::TargetServices* g_utility_target_services = nullptr;
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
-#include "platform_media/common/win/platform_media_init.h"
+#include "platform_media/sandbox/win/platform_media_init.h"
 #endif
 
 namespace content {
@@ -204,7 +204,7 @@ int UtilityMain(MainFunctionParams parameters) {
   g_utility_target_services = parameters.sandbox_info->target_services;
 #endif
 
-  ChildProcess utility_process(base::ThreadPriority::NORMAL);
+  ChildProcess utility_process(base::ThreadType::kDefault);
   GetContentClient()->utility()->PostIOThreadCreated(
       utility_process.io_task_runner());
   base::RunLoop run_loop;

@@ -67,7 +67,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/services/assistant/public/cpp/assistant_enums.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "extensions/common/constants.h"
@@ -83,8 +83,8 @@
 
 namespace ash {
 
-using chromeos::assistant::AssistantEntryPoint;
-using chromeos::assistant::AssistantExitPoint;
+using assistant::AssistantEntryPoint;
+using assistant::AssistantExitPoint;
 
 namespace {
 
@@ -340,6 +340,9 @@ void AppListControllerImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kLauncherContinueSectionHidden, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterTimePref(prefs::kLauncherLastContinueRequestTime,
+                             base::Time());
+  registry->RegisterBooleanPref(prefs::kLauncherUseLongContinueDelay, false);
   AppListNudgeController::RegisterProfilePrefs(registry);
 }
 
@@ -417,6 +420,11 @@ void AppListControllerImpl::GetAppInfoDialogBounds(
 }
 
 void AppListControllerImpl::ShowAppList() {
+  if (Shell::Get()->session_controller()->GetSessionState() !=
+      session_manager::SessionState::ACTIVE) {
+    return;
+  }
+
   if (IsKioskSession())
     return;
 
@@ -448,10 +456,6 @@ bool AppListControllerImpl::IsVisible() {
   return IsVisible(absl::nullopt);
 }
 
-void AppListControllerImpl::HideContinueSection() {
-  SetHideContinueSection(true);
-}
-
 void AppListControllerImpl::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
   if (IsKioskSession())
@@ -476,10 +480,14 @@ void AppListControllerImpl::OnSessionStateChanged(
   if (state == session_manager::SessionState::ACTIVE)
     has_session_started_ = true;
 
-  if (!IsTabletMode())
+  const bool in_clamshell = !IsTabletMode();
+  if (state != session_manager::SessionState::ACTIVE || IsKioskSession()) {
+    if (in_clamshell)
+      DismissAppList();
     return;
+  }
 
-  if (state != session_manager::SessionState::ACTIVE || IsKioskSession())
+  if (in_clamshell)
     return;
 
   // Show the app list after signing in in tablet mode. For metrics, the app
@@ -614,6 +622,11 @@ ShelfAction AppListControllerImpl::ToggleAppList(
     int64_t display_id,
     AppListShowSource show_source,
     base::TimeTicks event_time_stamp) {
+  if (Shell::Get()->session_controller()->GetSessionState() !=
+      session_manager::SessionState::ACTIVE) {
+    return SHELF_ACTION_APP_LIST_DISMISSED;
+  }
+
   if (IsKioskSession())
     return SHELF_ACTION_APP_LIST_DISMISSED;
 
@@ -969,7 +982,7 @@ void AppListControllerImpl::OnKeyboardVisibilityChanged(const bool is_visible) {
 }
 
 void AppListControllerImpl::OnAssistantStatusChanged(
-    chromeos::assistant::AssistantStatus status) {
+    assistant::AssistantStatus status) {
   UpdateAssistantVisibility();
 }
 
@@ -978,7 +991,7 @@ void AppListControllerImpl::OnAssistantSettingsEnabled(bool enabled) {
 }
 
 void AppListControllerImpl::OnAssistantFeatureAllowedChanged(
-    chromeos::assistant::AssistantAllowedState state) {
+    assistant::AssistantAllowedState state) {
   UpdateAssistantVisibility();
 }
 
@@ -1329,16 +1342,6 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
   // not record search result metrics for them.
   if (launched_from != AppListLaunchedFrom::kLaunchedFromSuggestionChip) {
     base::RecordAction(base::UserMetricsAction("AppList_OpenSearchResult"));
-
-    UMA_HISTOGRAM_COUNTS_100("Apps.AppListSearchQueryLength",
-                             GetLastQueryLength());
-    if (IsTabletMode()) {
-      UMA_HISTOGRAM_COUNTS_100("Apps.AppListSearchQueryLength.TabletMode",
-                               GetLastQueryLength());
-    } else {
-      UMA_HISTOGRAM_COUNTS_100("Apps.AppListSearchQueryLength.ClamshellMode",
-                               GetLastQueryLength());
-    }
   }
 
   if (client_) {
@@ -1509,17 +1512,6 @@ void AppListControllerImpl::OnSearchResultVisibilityChanged(
     client_->OnSearchResultVisibilityChanged(id, visibility);
 }
 
-void AppListControllerImpl::NotifySearchResultsForLogging(
-    const std::u16string& raw_query,
-    const SearchResultIdWithPositionIndices& results,
-    int position_index) {
-  if (client_) {
-    std::u16string query;
-    base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
-    client_->NotifySearchResultsForLogging(query, results, position_index);
-  }
-}
-
 void AppListControllerImpl::MaybeIncreaseSuggestedContentInfoShownCount() {
   if (ShouldShowSuggestedContentInfo()) {
     const int count = GetSuggestedContentInfoShownCount();
@@ -1533,10 +1525,8 @@ bool AppListControllerImpl::IsAssistantAllowedAndEnabled() const {
 
   auto* state = AssistantState::Get();
   return state->settings_enabled().value_or(false) &&
-         state->allowed_state() ==
-             chromeos::assistant::AssistantAllowedState::ALLOWED &&
-         state->assistant_status() !=
-             chromeos::assistant::AssistantStatus::NOT_READY;
+         state->allowed_state() == assistant::AssistantAllowedState::ALLOWED &&
+         state->assistant_status() != assistant::AssistantStatus::NOT_READY;
 }
 
 bool AppListControllerImpl::ShouldShowSuggestedContentInfo() const {
@@ -1654,6 +1644,9 @@ bool AppListControllerImpl::ShouldHideContinueSection() const {
 
 void AppListControllerImpl::SetHideContinueSection(bool hide) {
   PrefService* prefs = GetLastActiveUserPrefService();
+  bool is_hidden = prefs->GetBoolean(prefs::kLauncherContinueSectionHidden);
+  if (hide == is_hidden)
+    return;
   prefs->SetBoolean(prefs::kLauncherContinueSectionHidden, hide);
   fullscreen_presenter_->UpdateContinueSectionVisibility();
   bubble_presenter_->UpdateContinueSectionVisibility();
@@ -2065,13 +2058,6 @@ aura::Window* AppListControllerImpl::GetContainerForDisplayId(
 bool AppListControllerImpl::ShouldLauncherShowBehindApps() const {
   return IsTabletMode() &&
          app_list_page_ != AppListState::kStateEmbeddedAssistant;
-}
-
-int AppListControllerImpl::GetLastQueryLength() {
-  std::u16string query;
-  base::TrimWhitespace(GetSearchModel()->search_box()->text(), base::TRIM_ALL,
-                       &query);
-  return query.length();
 }
 
 void AppListControllerImpl::Shutdown() {

@@ -4,8 +4,6 @@
 
 package org.chromium.components.messages;
 
-import android.view.View;
-
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ActivityState;
@@ -14,12 +12,13 @@ import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.ActivityStateObserver;
+import org.chromium.url.GURL;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Observe the webContents to notify queue manager of proper scope changes of {@link
@@ -75,42 +74,38 @@ class ScopeChangeController {
             extends WebContentsObserver implements ScopeObserver {
         private final Delegate mDelegate;
         private final ScopeKey mScopeKey;
+        // TODO(crbug.com/1340572): Replace GURL with Origin.
+        private GURL mLastVisitedUrl;
 
         public NavigationWebContentsScopeObserver(Delegate delegate, ScopeKey scopeKey) {
             super(scopeKey.webContents);
             mDelegate = delegate;
             mScopeKey = scopeKey;
-            int changeType = ChangeType.INACTIVE;
             WebContents webContents = scopeKey.webContents;
-            if (webContents != null && webContents.getViewAndroidDelegate() != null
-                    && webContents.getVisibility() == Visibility.VISIBLE) {
-                ViewAndroidDelegate viewAndroidDelegate = webContents.getViewAndroidDelegate();
-                if (viewAndroidDelegate.getContainerView() != null
-                        && viewAndroidDelegate.getContainerView().getVisibility() == View.VISIBLE) {
-                    changeType = ChangeType.ACTIVE;
-                } else {
-                    changeType = ChangeType.INACTIVE;
-                }
-            }
+            int changeType =
+                    webContents != null && webContents.getVisibility() == Visibility.VISIBLE
+                    ? ChangeType.ACTIVE
+                    : ChangeType.INACTIVE;
             mDelegate.onScopeChange(
                     new MessageScopeChange(mScopeKey.scopeType, scopeKey, changeType));
         }
 
         @Override
-        public void onWebContentsFocused() {
+        public void wasShown() {
             mDelegate.onScopeChange(
                     new MessageScopeChange(mScopeKey.scopeType, mScopeKey, ChangeType.ACTIVE));
         }
 
         @Override
-        public void onWebContentsLostFocus() {
+        public void wasHidden() {
             mDelegate.onScopeChange(
                     new MessageScopeChange(mScopeKey.scopeType, mScopeKey, ChangeType.INACTIVE));
         }
 
         @Override
         public void didFinishNavigation(NavigationHandle navigationHandle) {
-            if (mScopeKey.scopeType != MessageScopeType.NAVIGATION) {
+            if (mScopeKey.scopeType != MessageScopeType.NAVIGATION
+                    && mScopeKey.scopeType != MessageScopeType.ORIGIN) {
                 return;
             }
 
@@ -119,6 +114,14 @@ class ScopeChangeController {
                 return;
             }
 
+            if (mScopeKey.scopeType == MessageScopeType.ORIGIN) {
+                if (mLastVisitedUrl == null
+                        || originEquals(mLastVisitedUrl, navigationHandle.getUrl())) {
+                    mLastVisitedUrl = navigationHandle.getUrl();
+                    return;
+                }
+                mLastVisitedUrl = navigationHandle.getUrl();
+            }
             destroy();
         }
 
@@ -137,6 +140,13 @@ class ScopeChangeController {
             // TODO(crbug.com/1205392): This is a temporary solution; remove this when
             // tab-reparent is fully supported.
             destroy();
+        }
+
+        private boolean originEquals(GURL url1, GURL url2) {
+            if (url1 == null || url2 == null) return false;
+            return Objects.equals(url1.getScheme(), url2.getScheme())
+                    && Objects.equals(url1.getHost(), url2.getHost())
+                    && Objects.equals(url1.getPort(), url2.getPort());
         }
     }
 

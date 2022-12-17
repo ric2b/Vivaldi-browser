@@ -4,30 +4,35 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 
-#include "base/check.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "ios/chrome/browser/application_context.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/discover_feed/discover_feed_service.h"
-#include "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
-#include "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "base/check.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/tracker.h"
+#import "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/follow/follow_action_state.h"
+#import "ios/chrome/browser/follow/follow_browser_agent.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
-#include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_mediator.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
+#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
+#import "ios/chrome/browser/ui/commands/page_info_commands.h"
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
+#import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_mediator.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
@@ -45,15 +50,13 @@
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/follow/follow_provider.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
-// Returns the corresponding command type for a Popup menu |type|.
+// Returns the corresponding command type for a Popup menu `type`.
 PopupMenuCommandType CommandTypeFromPopupType(PopupMenuType type) {
   if (type == PopupMenuTypeToolsMenu)
     return PopupMenuCommandTypeToolsMenu;
@@ -84,7 +87,7 @@ enum class IOSOverflowMenuActionType {
 @property(nonatomic, strong) PopupMenuMediator* mediator;
 // Mediator for the overflow menu
 @property(nonatomic, strong) OverflowMenuMediator* overflowMenuMediator;
-// Mediator to that alerts the main |mediator| when the web content area
+// Mediator to that alerts the main `mediator` when the web content area
 // is blocked by an overlay.
 @property(nonatomic, strong) BrowserContainerMediator* contentBlockerMediator;
 // ViewController for this mediator.
@@ -96,8 +99,10 @@ enum class IOSOverflowMenuActionType {
 
 // Time when the tools menu opened.
 @property(nonatomic, assign) NSTimeInterval toolsMenuOpenTime;
-// Whether the tools menu was scrolled while it was open.
-@property(nonatomic, assign) BOOL toolsMenuWasScrolled;
+// Whether the tools menu was scrolled vertically while it was open.
+@property(nonatomic, assign) BOOL toolsMenuWasScrolledVertically;
+// Whether the tools menu was scrolled horizontally while it was open.
+@property(nonatomic, assign) BOOL toolsMenuWasScrolledHorizontally;
 // Whether the user took an action on the tools menu while it was open.
 @property(nonatomic, assign) BOOL toolsMenuUserTookAction;
 
@@ -111,6 +116,12 @@ enum class IOSOverflowMenuActionType {
 @synthesize UIUpdater = _UIUpdater;
 @synthesize bubblePresenter = _bubblePresenter;
 @synthesize viewController = _viewController;
+@synthesize baseViewController = _baseViewController;
+
+- (instancetype)initWithBrowser:(Browser*)browser {
+  DCHECK(browser);
+  return [super initWithBaseViewController:nil browser:browser];
+}
 
 #pragma mark - ChromeCoordinator
 
@@ -186,7 +197,7 @@ enum class IOSOverflowMenuActionType {
     self.toolsMenuOpenTime = 0;
 
     IOSOverflowMenuActionType actionType;
-    if (self.toolsMenuWasScrolled) {
+    if (self.toolsMenuWasScrolledVertically) {
       if (self.toolsMenuUserTookAction) {
         actionType = IOSOverflowMenuActionType::kScrollAction;
       } else {
@@ -200,7 +211,13 @@ enum class IOSOverflowMenuActionType {
       }
     }
     base::UmaHistogramEnumeration("IOS.OverflowMenu.ActionType", actionType);
-    self.toolsMenuWasScrolled = NO;
+
+    if (!self.toolsMenuWasScrolledHorizontally &&
+        !self.toolsMenuUserTookAction) {
+      [self trackToolsMenuNoHorizontalScrollOrAction];
+    }
+    self.toolsMenuWasScrolledVertically = NO;
+    self.toolsMenuWasScrolledHorizontally = NO;
     self.toolsMenuUserTookAction = NO;
   }
 
@@ -251,6 +268,16 @@ enum class IOSOverflowMenuActionType {
 
 #pragma mark - UIAdaptivePresentationControllerDelegate
 
+- (void)presentationControllerWillDismiss:
+    (UIPresentationController*)presentationController {
+  // Update the UI before dismissal starts. Technically, on iPhone, the user
+  // could be interactively dismissing a sheet, which they could then cancel
+  // (leading to state mismatch: visible menu, but UIUpdater with menu
+  // dismissed). However, the UIUpdater only modifies the toolbar, which is
+  // hidden behind the sheet anyway.
+  [self.UIUpdater updateUIForMenuDismissed];
+}
+
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
   [self dismissPopupMenuAnimated:NO];
@@ -261,13 +288,17 @@ enum class IOSOverflowMenuActionType {
 - (void)sheetPresentationControllerDidChangeSelectedDetentIdentifier:
     (UISheetPresentationController*)sheetPresentationController
     API_AVAILABLE(ios(15)) {
-  [self popupMenuScrolled];
+  [self popupMenuScrolledVertically];
 }
 
 #pragma mark - PopupMenuMetricsHandler
 
-- (void)popupMenuScrolled {
-  self.toolsMenuWasScrolled = YES;
+- (void)popupMenuScrolledVertically {
+  self.toolsMenuWasScrolledVertically = YES;
+}
+
+- (void)popupMenuScrolledHorizontally {
+  self.toolsMenuWasScrolledHorizontally = YES;
 }
 
 - (void)popupMenuTookAction {
@@ -282,8 +313,8 @@ enum class IOSOverflowMenuActionType {
 
 #pragma mark - Private
 
-// Presents a popup menu of type |type| with an animation starting from
-// |guideName|.
+// Presents a popup menu of type `type` with an animation starting from
+// `guideName`.
 - (void)presentPopupOfType:(PopupMenuType)type
             fromNamedGuide:(GuideName*)guideName {
   if (self.presenter || self.overflowMenuMediator)
@@ -322,12 +353,6 @@ enum class IOSOverflowMenuActionType {
             .triggerFollowUpAction;
     self.bubblePresenter.incognitoTabTipBubblePresenter.triggerFollowUpAction =
         NO;
-    if (IsWebChannelsEnabled() &&
-        !self.browser->GetBrowserState()->IsOffTheRecord()) {
-      ios::GetChromeBrowserProvider()
-          .GetFollowProvider()
-          ->SetFollowEventDelegate(self.browser);
-    }
   }
 
   OverlayPresenter* overlayPresenter = OverlayPresenter::FromBrowser(
@@ -340,15 +365,23 @@ enum class IOSOverflowMenuActionType {
   // if not needed.
   if (type == PopupMenuTypeToolsMenu) {
     self.toolsMenuOpenTime = [NSDate timeIntervalSinceReferenceDate];
-    self.toolsMenuWasScrolled = NO;
+    self.toolsMenuWasScrolledVertically = NO;
+    self.toolsMenuWasScrolledHorizontally = NO;
     self.toolsMenuUserTookAction = NO;
     if (IsNewOverflowMenuEnabled()) {
       if (@available(iOS 15, *)) {
         self.overflowMenuMediator = [[OverflowMenuMediator alloc] init];
         self.overflowMenuMediator.dispatcher =
-            static_cast<id<ApplicationCommands, BrowserCommands,
+            static_cast<id<ActivityServiceCommands, ApplicationCommands,
+                           BrowserCommands, BrowserCoordinatorCommands,
                            FindInPageCommands, TextZoomCommands>>(
                 self.browser->GetCommandDispatcher());
+        self.overflowMenuMediator.bookmarksCommandsHandler = HandlerForProtocol(
+            self.browser->GetCommandDispatcher(), BookmarksCommands);
+        self.overflowMenuMediator.pageInfoCommandsHandler = HandlerForProtocol(
+            self.browser->GetCommandDispatcher(), PageInfoCommands);
+        self.overflowMenuMediator.popupMenuCommandsHandler = HandlerForProtocol(
+            self.browser->GetCommandDispatcher(), PopupMenuCommands);
         self.overflowMenuMediator.webStateList =
             self.browser->GetWebStateList();
         self.overflowMenuMediator.navigationAgent =
@@ -371,20 +404,25 @@ enum class IOSOverflowMenuActionType {
         self.overflowMenuMediator.browserPolicyConnector =
             GetApplicationContext()->GetBrowserPolicyConnector();
 
-        if (IsWebChannelsEnabled() &&
-            DiscoverFeedServiceFactory::GetForBrowserState(
-                self.browser->GetBrowserState())) {
-          self.overflowMenuMediator.feedMetricsRecorder =
-              DiscoverFeedServiceFactory::GetForBrowserState(
-                  self.browser->GetBrowserState())
-                  ->GetFeedMetricsRecorder();
+        if (IsWebChannelsEnabled()) {
+          self.overflowMenuMediator.followBrowserAgent =
+              FollowBrowserAgent::FromBrowser(self.browser);
         }
 
         self.contentBlockerMediator.consumer = self.overflowMenuMediator;
 
+        OverflowMenuUIConfiguration* uiConfiguration =
+            [[OverflowMenuUIConfiguration alloc]
+                initWithPresentingViewControllerHorizontalSizeClass:
+                    self.baseViewController.traitCollection.horizontalSizeClass
+                          presentingViewControllerVerticalSizeClass:
+                              self.baseViewController.traitCollection
+                                  .verticalSizeClass];
+
         UIViewController* menu = [OverflowMenuViewProvider
             makeViewControllerWithModel:self.overflowMenuMediator
                                             .overflowMenuModel
+                        uiConfiguration:uiConfiguration
                          metricsHandler:self
                 carouselMetricsDelegate:self.overflowMenuMediator];
 
@@ -455,12 +493,9 @@ enum class IOSOverflowMenuActionType {
   self.mediator.webContentAreaOverlayPresenter = overlayPresenter;
   self.mediator.URLLoadingBrowserAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
-  if (IsWebChannelsEnabled() && DiscoverFeedServiceFactory::GetForBrowserState(
-                                    self.browser->GetBrowserState())) {
-    self.mediator.feedMetricsRecorder =
-        DiscoverFeedServiceFactory::GetForBrowserState(
-            self.browser->GetBrowserState())
-            ->GetFeedMetricsRecorder();
+  if (IsWebChannelsEnabled()) {
+    self.mediator.followBrowserAgent =
+        FollowBrowserAgent::FromBrowser(self.browser);
   }
 
   self.contentBlockerMediator.consumer = self.mediator;
@@ -471,6 +506,16 @@ enum class IOSOverflowMenuActionType {
       static_cast<id<ApplicationCommands, BrowserCommands, FindInPageCommands,
                      LoadQueryCommands, TextZoomCommands>>(
           self.browser->GetCommandDispatcher());
+  self.actionHandler.bookmarksCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), BookmarksCommands);
+  self.actionHandler.browserCoordinatorCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
+  self.actionHandler.pageInfoCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PageInfoCommands);
+  self.actionHandler.popupMenuCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PopupMenuCommands);
+  self.actionHandler.qrScannerCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), QRScannerCommands);
   self.actionHandler.delegate = self.mediator;
   self.actionHandler.navigationAgent =
       WebNavigationBrowserAgent::FromBrowser(self.browser);
@@ -492,6 +537,21 @@ enum class IOSOverflowMenuActionType {
   if (type == PopupMenuTypeToolsMenu) {
     tableViewController.metricsHandler = self;
   }
+}
+
+- (void)trackToolsMenuNoHorizontalScrollOrAction {
+  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  if (!browserState) {
+    return;
+  }
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(browserState);
+  if (!tracker) {
+    return;
+  }
+
+  tracker->NotifyEvent(
+      feature_engagement::events::kOverflowMenuNoHorizontalScrollOrAction);
 }
 
 @end

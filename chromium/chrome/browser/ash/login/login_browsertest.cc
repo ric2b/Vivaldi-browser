@@ -47,7 +47,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chromeos/dbus/userdataauth/fake_userdataauth_client.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/user_manager/known_user.h"
@@ -146,7 +147,7 @@ IN_PROC_BROWSER_TEST_F(LoginOnlineCryptohomeError, FatalScreenShown) {
   EXPECT_TRUE(LoginScreenTestApi::FocusUser(account_id));
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
   EXPECT_TRUE(LoginScreenTestApi::IsOobeDialogVisible());
-  chromeos::FakeUserDataAuthClient::Get()->set_cryptohome_error(
+  FakeUserDataAuthClient::Get()->set_cryptohome_error(
       user_data_auth::CRYPTOHOME_ERROR_MOUNT_FATAL);
 
   LoginDisplayHost::default_host()
@@ -163,7 +164,7 @@ IN_PROC_BROWSER_TEST_F(LoginOnlineCryptohomeError, FatalScreenShown) {
 
 IN_PROC_BROWSER_TEST_P(LoginOfflineTest, FatalScreenShown) {
   EXPECT_FALSE(LoginScreenTestApi::IsOobeDialogVisible());
-  chromeos::FakeUserDataAuthClient::Get()->set_cryptohome_error(
+  FakeUserDataAuthClient::Get()->set_cryptohome_error(
       user_data_auth::CRYPTOHOME_ERROR_TPM_UPDATE_REQUIRED);
   LoginScreenTestApi::SubmitPassword(test_account_id_, "password",
                                      /*check_if_submittable=*/false);
@@ -173,7 +174,7 @@ IN_PROC_BROWSER_TEST_P(LoginOfflineTest, FatalScreenShown) {
 
 IN_PROC_BROWSER_TEST_P(LoginOfflineTest, FatalScreenNotShown) {
   EXPECT_FALSE(LoginScreenTestApi::IsOobeDialogVisible());
-  chromeos::FakeUserDataAuthClient::Get()->set_cryptohome_error(
+  FakeUserDataAuthClient::Get()->set_cryptohome_error(
       user_data_auth::CRYPTOHOME_ERROR_AUTHORIZATION_KEY_FAILED);
   LoginScreenTestApi::SubmitPassword(test_account_id_, "password",
                                      /*check_if_submittable=*/false);
@@ -280,9 +281,9 @@ void TestSystemTrayIsVisible() {
 // This profile should NOT be an OTR profile.
 IN_PROC_BROWSER_TEST_F(LoginUserTest, UserPassed) {
   Profile* profile = browser()->profile();
-  std::string profile_base_path("hash");
-  profile_base_path.insert(0, chrome::kProfileDirPrefix);
-  EXPECT_EQ(profile_base_path, profile->GetBaseName().value());
+  std::string profile_base_name =
+      ash::BrowserContextHelper::GetUserBrowserContextDirName("hash");
+  EXPECT_EQ(profile_base_name, profile->GetBaseName().value());
   EXPECT_FALSE(profile->IsOffTheRecord());
 
   TestSystemTrayIsVisible();

@@ -22,11 +22,10 @@
 #include "gpu/command_buffer/client/transfer_buffer.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/constants.h"
+#include "gpu/command_buffer/service/gpu_task_scheduler_helper.h"
 #include "gpu/config/gpu_feature_info.h"
-#include "gpu/ipc/gpu_task_scheduler_helper.h"
 #include "gpu/skia_bindings/gles2_implementation_with_grcontext_support.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gl/gl_image.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "ui/gl/android/surface_texture.h"

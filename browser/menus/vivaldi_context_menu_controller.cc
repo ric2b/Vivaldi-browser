@@ -248,7 +248,7 @@ void ContextMenuController::PopulateModel(const Element& child,
     } else if (rv_context_menu_ && item.action) {
       ui::ImageModel img = rv_context_menu_->GetImageForAction(*item.action);
       if (!img.IsEmpty()) {
-        menu_model->SetIcon(menu_model->GetIndexOfCommandId(id), img);
+        menu_model->SetIcon(menu_model->GetIndexOfCommandId(id).value(), img);
       }
     }
   } else if (child.container) {
@@ -354,7 +354,7 @@ void ContextMenuController::SetIcon(int command_id,
             bitmap, skia::ImageOperations::RESIZE_GOOD, width, height));
       }
 
-      menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id),
+      menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id).value(),
                           ui::ImageModel::FromImage(img));
     }
   }
@@ -393,16 +393,16 @@ void ContextMenuController::OnFaviconDataAvailable(
     menu_->SetIcon(image_result.image, command_id);
     // We have to update the model as well so that if a menu reloads utself
     // due to a dynamic update the model can provide the state at that point.
-    int index = root_menu_model_->GetIndexOfCommandId(command_id);
-    if (index != -1) {
-      root_menu_model_->SetIcon(index,
+    auto index = root_menu_model_->GetIndexOfCommandId(command_id);
+    if (index.has_value()) {
+      root_menu_model_->SetIcon(index.value(),
         ui::ImageModel::FromImage(image_result.image));
     } else {
       for (unsigned i = 0; i < models_.size(); i++ ) {
         ui::SimpleMenuModel* model = models_[i].get();
         index = model->GetIndexOfCommandId(command_id);
-        if (index != -1) {
-          model->SetIcon(index, ui::ImageModel::FromImage(image_result.image));
+        if (index.has_value()) {
+          model->SetIcon(index.value(), ui::ImageModel::FromImage(image_result.image));
           break;
         }
       }

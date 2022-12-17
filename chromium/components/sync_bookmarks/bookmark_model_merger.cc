@@ -1066,7 +1066,7 @@ BookmarkModelMerger::GenerateUniquePositionForLocalCreation(
     if (predecessor_entity != nullptr) {
       return syncer::UniquePosition::After(
           syncer::UniquePosition::FromProto(
-              predecessor_entity->metadata()->unique_position()),
+              predecessor_entity->metadata().unique_position()),
           suffix);
     }
     DCHECK(FindMatchingRemoteNodeByGUID(parent->children()[i - 1].get()));

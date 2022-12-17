@@ -19,11 +19,6 @@ void AddBaseSwitches(base::CommandLine& command_line) {
     vivaldi::CommandLineAppendSwitchNoDup(&command_line,
                                           switches::kDisableVivaldi);
   }
-
-  if (vivaldi::IsDebuggingVivaldi()) {
-    vivaldi::CommandLineAppendSwitchNoDup(&command_line,
-                                          switches::kDebugVivaldi);
-  }
 }
 
 }  // namespace
@@ -32,10 +27,9 @@ void VivaldiAddRendererProcessFlags(content::BrowserContext* browser_context,
                                     base::CommandLine& renderer_command_line) {
   AddBaseSwitches(renderer_command_line);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   static const char* const kSwitchesToCopy[] = {
       switches::kVivaldiEnableIPCDemuxer,
-      switches::kVivaldiOldPlatformAudio,
   };
   renderer_command_line.CopySwitchesFrom(
       *base::CommandLine::ForCurrentProcess(), kSwitchesToCopy,
@@ -45,26 +39,8 @@ void VivaldiAddRendererProcessFlags(content::BrowserContext* browser_context,
 
 void VivaldiAddGpuProcessFlags(base::CommandLine& gpu_command_line) {
   AddBaseSwitches(gpu_command_line);
-
-#if BUILDFLAG(IS_MAC)
-  static const char* const kSwitchesToCopy[] = {
-      switches::kVivaldiPlatformMedia,
-  };
-  gpu_command_line.CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
-                                    kSwitchesToCopy,
-                                    std::size(kSwitchesToCopy));
-#endif
 }
 
 void VivaldiAddUtilityProcessFlags(base::CommandLine& utility_command_line) {
   AddBaseSwitches(utility_command_line);
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  static const char* const kSwitchesToCopy[] = {
-      switches::kVivaldiOldPlatformAudio,
-  };
-  utility_command_line.CopySwitchesFrom(
-      *base::CommandLine::ForCurrentProcess(), kSwitchesToCopy,
-      std::size(kSwitchesToCopy));
-#endif
 }

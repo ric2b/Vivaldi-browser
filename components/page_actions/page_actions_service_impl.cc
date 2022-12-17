@@ -197,7 +197,8 @@ bool ServiceImpl::DoSetScriptOverrideForTab(content::WebContents* tab_contents,
                      old_override->second;
   if (!was_enabled && script_override == Service::kEnabledOverride) {
     if (script_path.MatchesExtension(kJSExtension)) {
-      ChangeStaticInjectionForFrame(tab_contents, tab_contents->GetMainFrame(),
+      ChangeStaticInjectionForFrame(
+          tab_contents, tab_contents->GetPrimaryMainFrame(),
                                     script_path, true);
     } else {
       tab_contents->ForEachRenderFrameHost(base::BindRepeating(

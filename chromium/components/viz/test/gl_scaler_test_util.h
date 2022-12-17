@@ -25,13 +25,12 @@ class Rect;
 
 namespace viz {
 
-// A collection of utility functions used in the GLScaler and GLRenderer-related
-// pixel tests.
+// A collection of utility functions used in pixel tests.
 class GLScalerTestUtil {
  public:
   struct ColorBar {
     SkIRect rect;
-    SkColor color;
+    SkColor4f color;
   };
 
   // The patterns that can be created by CreateCyclicalTestImage().
@@ -68,14 +67,14 @@ class GLScalerTestUtil {
                                       const gfx::Size& src_size,
                                       const gfx::Rect& src_rect,
                                       int fuzzy_pixels,
-                                      int* max_color_diff);
+                                      float* max_color_diff);
 
   // Returns an image of the given |size| with the colors in |cycle| used to
   // generate a striped or staggered |pattern|. |rotation| specifies which index
   // in the |cycle| to start with.
   static SkBitmap CreateCyclicalTestImage(const gfx::Size& size,
                                           CyclicalPattern pattern,
-                                          const std::vector<SkColor>& cycle,
+                                          const std::vector<SkColor4f>& cycle,
                                           size_t rotation);
 
   // Returns the RGB/YUV color spaces used by default when color space
@@ -88,11 +87,6 @@ class GLScalerTestUtil {
   // one alpha) remain interleaved (i.e., no pixel blending or format transform
   // is being done).
   static void ConvertRGBABitmapToYUV(SkBitmap* image);
-
-  // Performs a transform of the given |color| from DefaultRGBColorSpace() to
-  // DefaultYUVColorSpace(). The color channels (plus one alpha) remain
-  // interleaved (i.e., no pixel blending or format transform is being done).
-  static SkColor ConvertRGBAColorToYUV(SkColor color);
 
   static SkBitmap CopyAndConvertToRGBA(const SkBitmap& bitmap);
 

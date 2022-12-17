@@ -10,12 +10,14 @@
 #include <vector>
 
 #include "ash/ambient/ambient_weather_controller.h"
+#include "ash/ambient/metrics/ambient_multi_screen_metrics_recorder.h"
 #include "ash/ambient/model/ambient_animation_photo_config.h"
 #include "ash/ambient/model/ambient_backend_model_observer.h"
 #include "ash/ambient/model/ambient_slideshow_photo_config.h"
 #include "ash/ambient/model/ambient_topic_queue_animation_delegate.h"
 #include "ash/ambient/model/ambient_topic_queue_slideshow_delegate.h"
 #include "ash/ambient/resources/ambient_animation_static_resources.h"
+#include "ash/ambient/ui/ambient_animation_progress_tracker.h"
 #include "ash/ambient/ui/ambient_container_view.h"
 #include "ash/ambient/ui/ambient_view_delegate.h"
 #include "ash/ambient/util/ambient_util.h"
@@ -46,10 +48,10 @@
 #include "build/buildflag.h"
 #include "cc/paint/skottie_wrapper.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -213,6 +215,10 @@ void AmbientController::OnAmbientUiVisibilityChanged(
       DCHECK(!start_time_);
       start_time_ = base::Time::Now();
 
+      multi_screen_metrics_recorder_ =
+          std::make_unique<AmbientMultiScreenMetricsRecorder>(
+              GetCurrentTheme());
+
       // Cancels the timer upon shown.
       inactivity_timer_.Stop();
 
@@ -255,6 +261,8 @@ void AmbientController::OnAmbientUiVisibilityChanged(
       // not shown.
       AssistantInteractionController::Get()->GetModel()->RemoveObserver(this);
 
+      multi_screen_metrics_recorder_.reset();
+
       // |start_time_| may be empty in case of |AmbientUiVisibility::kHidden| if
       // ambient mode has just started.
       if (start_time_) {
@@ -287,7 +295,6 @@ void AmbientController::OnAmbientUiVisibilityChanged(
         }
       } else {
         DCHECK(visibility == AmbientUiVisibility::kClosed);
-        GetAmbientBackendModel()->ResetImageFailures();
         inactivity_timer_.Stop();
         user_activity_observer_.Reset();
         power_status_observer_.Reset();
@@ -412,6 +419,7 @@ void AmbientController::ScreenIdleStateChanged(
     // Do not show UI if loading images was unsuccessful.
     if (GetAmbientBackendModel()->ImageLoadingFailed()) {
       VLOG(1) << "Skipping ambient mode activation due to prior failure";
+      GetAmbientBackendModel()->ResetImageFailures();
       return;
     }
 
@@ -631,10 +639,14 @@ void AmbientController::OnEnabledPrefChanged() {
     fingerprint_->AddFingerprintObserver(
         fingerprint_observer_receiver_.BindNewPipeAndPassRemote());
 
+    ambient_animation_progress_tracker_ =
+        std::make_unique<AmbientAnimationProgressTracker>();
   } else {
     DVLOG(1) << "Ambient mode disabled";
 
     CloseUi();
+
+    ambient_animation_progress_tracker_.reset();
 
     for (const auto* pref_name :
          {ambient::prefs::kAmbientModeLockScreenBackgroundTimeoutSeconds,
@@ -790,8 +802,10 @@ std::unique_ptr<views::Widget> AmbientController::CreateWidget(
     aura::Window* container) {
   AmbientAnimationTheme current_theme = GetCurrentTheme();
   auto container_view = std::make_unique<AmbientContainerView>(
-      &delegate_, AmbientAnimationStaticResources::Create(
-                      current_theme, /*serializable=*/true));
+      &delegate_, ambient_animation_progress_tracker_.get(),
+      AmbientAnimationStaticResources::Create(current_theme,
+                                              /*serializable=*/true),
+      multi_screen_metrics_recorder_.get());
   auto* widget_delegate = new AmbientWidgetDelegate();
   widget_delegate->SetInitiallyFocusedView(container_view.get());
 

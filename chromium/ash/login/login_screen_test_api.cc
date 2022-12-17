@@ -56,7 +56,7 @@ LoginShelfView* GetLoginShelfView() {
 
   return Shelf::ForWindow(Shell::GetPrimaryRootWindow())
       ->shelf_widget()
-      ->login_shelf_view();
+      ->GetLoginShelfView();
 }
 
 bool IsLoginShelfViewButtonShown(int button_view_id) {
@@ -281,8 +281,7 @@ bool LoginScreenTestApi::IsKioskDefaultMessageShown() {
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
   LockContentsView::TestApi test_api(lock_screen_test.contents_view());
   return test_api.kiosk_default_message() &&
-         test_api.kiosk_default_message()->GetWidget() &&
-         test_api.kiosk_default_message()->GetWidget()->IsVisible();
+         test_api.kiosk_default_message()->GetVisible();
 }
 
 // static
@@ -361,8 +360,10 @@ bool LoginScreenTestApi::IsManagedMessageInDialogShown(
   LoginUserView::TestApi user_test(big_user_view->GetUserView());
   LoginRemoveAccountDialog::TestApi user_dialog_test(
       user_test.remove_account_dialog());
-  auto* managed_user_data = user_dialog_test.managed_user_data();
-  return managed_user_data && managed_user_data->GetVisible();
+  auto* management_disclosure_label =
+      user_dialog_test.management_disclosure_label();
+  return management_disclosure_label &&
+         management_disclosure_label->GetVisible();
 }
 
 // static
@@ -550,6 +551,21 @@ int LoginScreenTestApi::GetUsersCount() {
   LockContentsView::TestApi lock_contents_test(
       lock_screen_test.contents_view());
   return lock_contents_test.users().size();
+}
+
+// static
+bool LoginScreenTestApi::FocusKioskDefaultMessage() {
+  if (!IsKioskDefaultMessageShown()) {
+    ADD_FAILURE() << "Kiosk default message is not visible.";
+    return false;
+  }
+  LockScreen::TestApi lock_screen_test(LockScreen::Get());
+  LockContentsView::TestApi test_api(lock_screen_test.contents_view());
+  auto event_generator = MakeAshEventGenerator();
+  event_generator->MoveMouseTo(
+      test_api.kiosk_default_message()->GetBoundsInScreen().CenterPoint());
+  event_generator->ClickLeftButton();
+  return true;
 }
 
 // static

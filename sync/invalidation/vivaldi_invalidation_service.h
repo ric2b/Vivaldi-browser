@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
 #include "base/timer/timer.h"
 #include "components/invalidation/impl/invalidator_registrar_with_memory.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -13,7 +14,7 @@
 #include "sync/invalidation/invalidation_service_stomp_websocket.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 
-class Profile;
+class PrefService;
 
 namespace invalidation {
 class InvalidationLogger;
@@ -21,13 +22,19 @@ class InvalidationLogger;
 
 namespace vivaldi {
 
+using NetworkContextProvider =
+    base::RepeatingCallback<network::mojom::NetworkContext*()>;
+
 class VivaldiInvalidationService
     : public invalidation::InvalidationService,
       public VivaldiAccountManager::Observer,
       public InvalidationServiceStompWebsocket::Client,
       public KeyedService {
  public:
-  explicit VivaldiInvalidationService(Profile* profile);
+  VivaldiInvalidationService(PrefService* prefs,
+                             const std::string& notification_server_url,
+                             VivaldiAccountManager* account_manager,
+                             NetworkContextProvider network_context_provider);
   ~VivaldiInvalidationService() override;
   VivaldiInvalidationService(const VivaldiInvalidationService&) = delete;
   VivaldiInvalidationService& operator=(const VivaldiInvalidationService&) =
@@ -46,7 +53,7 @@ class VivaldiInvalidationService
   std::string GetInvalidatorClientId() const override;
   invalidation::InvalidationLogger* GetInvalidationLogger() override;
   void RequestDetailedStatus(
-      base::RepeatingCallback<void(const base::DictionaryValue&)> post_caller)
+      base::RepeatingCallback<void(base::Value::Dict)> post_caller)
       const override;
 
   // Implementing VivaldiAccountManager::Observer
@@ -71,8 +78,9 @@ class VivaldiInvalidationService
   void PerformInvalidation(const invalidation::TopicInvalidationMap&);
   void UpdateInvalidatorState(invalidation::InvalidatorState state);
 
-  Profile* profile_;
+  GURL notification_server_url_;
   VivaldiAccountManager* account_manager_;
+  NetworkContextProvider network_context_provider_;
 
   net::BackoffEntry websocket_backoff_;
   base::OneShotTimer websocket_backoff_timer_;

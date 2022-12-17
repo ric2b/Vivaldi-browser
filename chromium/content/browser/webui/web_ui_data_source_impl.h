@@ -78,7 +78,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   virtual const base::Value::Dict* GetLocalizedStrings() const;
 
   // Protected for testing.
-  int PathToIdrOrDefault(const std::string& path) const;
+  int URLToIdrOrDefault(const GURL& url) const;
 
  private:
   class InternalDataSource;
@@ -88,7 +88,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
 
   // Methods that match URLDataSource which are called by
   // InternalDataSource.
-  std::string GetMimeType(const std::string& path) const;
+  std::string GetMimeType(const GURL& url) const;
   void StartDataRequest(const GURL& url,
                         const WebContents::Getter& wc_getter,
                         URLDataSource::GotDataCallback callback);
@@ -114,7 +114,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   // The |replacements_| is intended to replace |localized_strings_|.
   // TODO(dschuyler): phase out |localized_strings_| in Q1 2017. (Or rename
   // to |load_time_flags_| if the usage is reduced to storing flags only).
-  base::Value localized_strings_{base::Value::Type::DICT};
+  base::Value::Dict localized_strings_;
   WebUIDataSource::HandleRequestCallback filter_callback_;
   WebUIDataSource::ShouldHandleRequestCallback should_handle_request_callback_;
 

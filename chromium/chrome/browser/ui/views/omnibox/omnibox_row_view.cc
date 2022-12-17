@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -16,6 +17,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/browser/suggestion_group.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -24,6 +26,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -84,7 +87,8 @@ class OmniboxRowView::HeaderView : public views::View {
     }
   }
 
-  void SetHeader(int suggestion_group_id, const std::u16string& header_text) {
+  void SetHeader(SuggestionGroupId suggestion_group_id,
+                 const std::u16string& header_text) {
     suggestion_group_id_ = suggestion_group_id;
     header_text_ = header_text;
 
@@ -95,7 +99,7 @@ class OmniboxRowView::HeaderView : public views::View {
 
     if (row_view_->pref_service_) {
       suggestion_group_hidden_ =
-          row_view_->model_->result().IsSuggestionGroupIdHidden(
+          row_view_->model_->result().IsSuggestionGroupHidden(
               row_view_->pref_service_, suggestion_group_id_);
 
       header_toggle_button_->SetToggled(suggestion_group_hidden_);
@@ -154,12 +158,17 @@ class OmniboxRowView::HeaderView : public views::View {
       part_state = OmniboxPartState::HOVERED;
     }
 
-    SkColor text_color = GetOmniboxColor(
-        GetThemeProvider(), OmniboxPart::RESULTS_TEXT_DIMMED, part_state);
+    const auto* const color_provider = GetColorProvider();
+    const SkColor text_color =
+        color_provider->GetColor((part_state == OmniboxPartState::SELECTED)
+                                     ? kColorOmniboxResultsTextDimmedSelected
+                                     : kColorOmniboxResultsTextDimmed);
     header_label_->SetEnabledColor(text_color);
 
-    SkColor icon_color = GetOmniboxColor(GetThemeProvider(),
-                                         OmniboxPart::RESULTS_ICON, part_state);
+    const SkColor icon_color =
+        color_provider->GetColor((part_state == OmniboxPartState::SELECTED)
+                                     ? kColorOmniboxResultsIconSelected
+                                     : kColorOmniboxResultsIcon);
     views::InkDrop::Get(header_toggle_button_)->SetBaseColor(icon_color);
 
     int dip_size = GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
@@ -205,21 +214,16 @@ class OmniboxRowView::HeaderView : public views::View {
   // Updates the hide button's toggle state.
   void OnPrefChanged() {
     DCHECK(row_view_->pref_service_);
-    bool was_hidden = suggestion_group_hidden_;
-    suggestion_group_hidden_ =
-        row_view_->model_->result().IsSuggestionGroupIdHidden(
-            row_view_->pref_service_, suggestion_group_id_);
+    suggestion_group_hidden_ = !suggestion_group_hidden_;
 
-    if (was_hidden != suggestion_group_hidden_) {
-      NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
+    NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
 
-      // Because this view doesn't have true focus (it stays on the textfield),
-      // we also need to manually announce state changes.
-      GetViewAccessibility().AnnounceText(l10n_util::GetStringFUTF16(
-          suggestion_group_hidden_ ? IDS_ACC_HEADER_SECTION_HIDDEN
-                                   : IDS_ACC_HEADER_SECTION_SHOWN,
-          header_text_));
-    }
+    // Because this view doesn't have true focus (it stays on the textfield),
+    // we also need to manually announce state changes.
+    GetViewAccessibility().AnnounceText(l10n_util::GetStringFUTF16(
+        suggestion_group_hidden_ ? IDS_ACC_HEADER_SECTION_HIDDEN
+                                 : IDS_ACC_HEADER_SECTION_SHOWN,
+        header_text_));
 
     header_toggle_button_->SetToggled(suggestion_group_hidden_);
   }
@@ -241,7 +245,7 @@ class OmniboxRowView::HeaderView : public views::View {
   raw_ptr<views::ToggleImageButton> header_toggle_button_;
 
   // The group ID associated with this header.
-  int suggestion_group_id_ = 0;
+  SuggestionGroupId suggestion_group_id_ = SuggestionGroupId::kInvalid;
 
   // The unmodified header text for this header.
   std::u16string header_text_;
@@ -325,7 +329,7 @@ OmniboxRowView::OmniboxRowView(size_t line,
   result_view_ = AddChildView(std::move(result_view));
 }
 
-void OmniboxRowView::ShowHeader(int suggestion_group_id,
+void OmniboxRowView::ShowHeader(SuggestionGroupId suggestion_group_id,
                                 const std::u16string& header_text) {
   // Create the header (at index 0) if it doesn't exist.
   if (header_view_ == nullptr)

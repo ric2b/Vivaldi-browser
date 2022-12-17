@@ -4,9 +4,9 @@
 
 import './cluster.js';
 import './history_clusters_shared_style.css.js';
-import '../../cr_elements/cr_button/cr_button.m.js';
-import '../../cr_elements/cr_dialog/cr_dialog.m.js';
-import '../../cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import '../../cr_elements/cr_button/cr_button.js';
+import '../../cr_elements/cr_dialog/cr_dialog.js';
+import '../../cr_elements/cr_lazy_render/cr_lazy_render.js';
 import '../../cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
@@ -17,8 +17,8 @@ import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-li
 import {IronScrollThresholdElement} from 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {CrDialogElement} from '../../cr_elements/cr_dialog/cr_dialog.m.js';
-import {CrLazyRenderElement} from '../../cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import {CrDialogElement} from '../../cr_elements/cr_dialog/cr_dialog.js';
+import {CrLazyRenderElement} from '../../cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {CrToastElement} from '../../cr_elements/cr_toast/cr_toast.js';
 import {assert} from '../../js/assert_ts.js';
 import {FocusOutlineManager} from '../../js/cr/ui/focus_outline_manager.m.js';
@@ -72,8 +72,8 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
        */
       inSidePanel: {
         type: Boolean,
+        value: () => loadTimeData.getBoolean('inSidePanel'),
         reflectToAttribute: true,
-        value: false,
       },
 
       /**
@@ -133,7 +133,7 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
   private placeholderText_: string;
   private result_: QueryResult;
   private showSpinner_: boolean;
-  private visitsToBeRemoved_: Array<URLVisit>;
+  private visitsToBeRemoved_: URLVisit[];
 
   //============================================================================
   // Overridden methods
@@ -222,7 +222,7 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
    * Called with `event` received from a visit requesting to be removed. `event`
    * may contain the related visits of the said visit, if applicable.
    */
-  private onRemoveVisits_(event: CustomEvent<Array<URLVisit>>) {
+  private onRemoveVisits_(event: CustomEvent<URLVisit[]>) {
     // Return early if there is a pending remove request.
     if (this.visitsToBeRemoved_.length) {
       return;
@@ -234,16 +234,6 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     } else {
       // Bypass the confirmation dialog if removing one visit only.
       this.onRemoveButtonClick_();
-    }
-  }
-
-  /**
-   * Called when the value of the search field changes.
-   */
-  private onSearchChanged_(event: CustomEvent<string>) {
-    // Update the query based on the value of the search field, if necessary.
-    if (event.detail !== this.query) {
-      this.query = event.detail;
     }
   }
 
@@ -287,7 +277,7 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
    * loaded before the user ever gets a chance to see this button.
    */
   private getLoadMoreButtonHidden_(
-      _result: QueryResult, _resultClusters: Array<Cluster>,
+      _result: QueryResult, _resultClusters: Cluster[],
       _resultCanLoadMore: Time): boolean {
     return !this.result_ || this.result_.clusters.length === 0 ||
         !this.result_.canLoadMore;
@@ -337,7 +327,7 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     });
     this.showSpinner_ = false;
 
-    if (this.inSidePanel) {
+    if (loadTimeData.getBoolean('inSidePanel')) {
       this.pageHandler_.showSidePanelUI();
     }
   }
@@ -352,7 +342,9 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
         // Prevent sending further load-more requests until this one finishes.
         this.set('result_.canLoadMore', false);
       }
-      this.pageHandler_.startQueryClusters(this.query.trim());
+      this.pageHandler_.startQueryClusters(
+          this.query.trim(),
+          new URLSearchParams(window.location.search).has('recluster'));
     });
   }
 
@@ -360,7 +352,7 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
    * Called with the original remove params when the last accepted request to
    * browser to remove visits succeeds.
    */
-  private onVisitsRemoved_(removedVisits: Array<URLVisit>) {
+  private onVisitsRemoved_(removedVisits: URLVisit[]) {
     // Show the confirmation toast once done removing one visit only; since a
     // confirmation dialog was not shown prior to the action.
     if (removedVisits.length === 1) {

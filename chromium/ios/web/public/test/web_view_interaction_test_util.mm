@@ -102,6 +102,9 @@ std::unique_ptr<base::Value> CallJavaScriptFunctionForFeature(
                   << "JavaScriptFeature does not appear to be configured.";
       return nullptr;
     }
+  } else {
+    world = JavaScriptFeatureManager::GetPageContentWorldForBrowserState(
+        web_state->GetBrowserState());
   }
 
   WebFrameImpl* frame = static_cast<WebFrameImpl*>(GetMainFrame(web_state));
@@ -194,7 +197,7 @@ CGRect GetBoundingRectOfElement(web::WebState* web_state,
       "    };"
       "})();";
 
-  __block base::DictionaryValue const* rect = nullptr;
+  __block std::unique_ptr<base::DictionaryValue> rect;
 
   bool found = WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, ^{
     std::unique_ptr<base::Value> value =
@@ -205,7 +208,8 @@ CGRect GetBoundingRectOfElement(web::WebState* web_state,
       if (dictionary->GetString("error", &error)) {
         DLOG(ERROR) << "Error getting rect: " << error << ", retrying..";
       } else {
-        rect = dictionary->DeepCopy();
+        rect = base::DictionaryValue::From(
+            base::Value::ToUniquePtrValue(dictionary->Clone()));
         return true;
       }
     }

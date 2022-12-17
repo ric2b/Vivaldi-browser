@@ -68,7 +68,8 @@ TEST(ScriptParametersTest, TriggerScriptAllowList) {
                                   {"FALLBACK_BUNDLE_ID", "fallback_id"},
                                   {"key_b", "value_b"},
                                   {"FALLBACK_BUNDLE_VERSION", "fallback_ver"},
-                                  {"INTENT", "FAKE_INTENT"}}};
+                                  {"INTENT", "FAKE_INTENT"},
+                                  {"CAPABILITIES_REQUEST_ID", "123456789"}}};
 
   EXPECT_THAT(
       parameters.ToProto(/* only_non_sensitive_allowlisted = */ false),
@@ -80,7 +81,8 @@ TEST(ScriptParametersTest, TriggerScriptAllowList) {
            {"FALLBACK_BUNDLE_ID", "fallback_id"},
            {"key_b", "value_b"},
            {"FALLBACK_BUNDLE_VERSION", "fallback_ver"},
-           {"INTENT", "FAKE_INTENT"}})));
+           {"INTENT", "FAKE_INTENT"},
+           {"CAPABILITIES_REQUEST_ID", "123456789"}})));
 
   EXPECT_THAT(
       parameters.ToProto(/* only_non_sensitive_allowlisted = */ true),
@@ -90,7 +92,8 @@ TEST(ScriptParametersTest, TriggerScriptAllowList) {
            {"DEBUG_SOCKET_ID", "678"},
            {"FALLBACK_BUNDLE_ID", "fallback_id"},
            {"FALLBACK_BUNDLE_VERSION", "fallback_ver"},
-           {"INTENT", "FAKE_INTENT"}})));
+           {"INTENT", "FAKE_INTENT"},
+           {"CAPABILITIES_REQUEST_ID", "123456789"}})));
 }
 
 TEST(ScriptParametersTest, SpecialScriptParameters) {
@@ -101,7 +104,6 @@ TEST(ScriptParametersTest, SpecialScriptParameters) {
        {"TRIGGER_SCRIPT_EXPERIMENT", "true"},
        {"START_IMMEDIATELY", "false"},
        {"REQUEST_TRIGGER_SCRIPT", "true"},
-       {"TRIGGER_SCRIPTS_BASE64", "abc123"},
        {"PASSWORD_CHANGE_USERNAME", "fake_username"},
        {"OVERLAY_COLORS", "#123456"},
        {"ENABLE_TTS", "true"},
@@ -126,7 +128,6 @@ TEST(ScriptParametersTest, SpecialScriptParameters) {
   EXPECT_THAT(parameters.GetTriggerScriptExperiment(), Eq(true));
   EXPECT_THAT(parameters.GetStartImmediately(), Eq(false));
   EXPECT_THAT(parameters.GetRequestsTriggerScript(), Eq(true));
-  EXPECT_THAT(parameters.GetBase64TriggerScriptsResponseProto(), Eq("abc123"));
   EXPECT_THAT(parameters.GetPasswordChangeUsername(), Eq("fake_username"));
   EXPECT_THAT(parameters.GetOverlayColors(), Eq("#123456"));
   EXPECT_THAT(parameters.GetEnableTts(), Eq(true));

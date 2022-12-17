@@ -32,6 +32,7 @@
 #include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/privacy_container_view.h"
 #include "ash/app_list/views/productivity_launcher_search_view.h"
+#include "ash/app_list/views/recent_apps_view.h"
 #include "ash/app_list/views/remove_query_confirmation_dialog.h"
 #include "ash/app_list/views/scrollable_apps_grid_view.h"
 #include "ash/app_list/views/search_box_view.h"
@@ -395,9 +396,9 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
 
   void OnReorderAnimationDone(base::OnceClosure closure,
                               bool aborted,
-                              AppListReorderAnimationStatus status) {
+                              AppListGridAnimationStatus status) {
     EXPECT_FALSE(aborted);
-    EXPECT_EQ(AppListReorderAnimationStatus::kFadeInAnimation, status);
+    EXPECT_EQ(AppListGridAnimationStatus::kReorderFadeIn, status);
     std::move(closure).Run();
   }
 
@@ -562,19 +563,31 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
     GetEventGenerator()->Dispatch(&long_press);
   }
 
-  void EnsureLauncherShown() {
+  void EnsureBubbleLauncherShown() {
+    Shell::Get()->app_list_controller()->bubble_presenter_for_test()->Show(
+        GetPrimaryDisplay().id());
+  }
+
+  void EnsureFullscreenLauncherShown() {
     auto* helper = GetAppListTestHelper();
-    if (should_show_bubble_launcher()) {
-      Shell::Get()->app_list_controller()->bubble_presenter_for_test()->Show(
-          GetPrimaryDisplay().id());
-    } else if (tablet_mode_param()) {
-      // App list is always visible in tablet mode so we do not need to show it.
-    } else {
-      // Show fullscreen so folders are available.
-      helper->ShowAndRunLoop(GetPrimaryDisplayId());
-      helper->GetAppListView()->SetState(AppListViewState::kFullscreenAllApps);
+    helper->ShowAndRunLoop(GetPrimaryDisplayId());
+    helper->GetAppListView()->SetState(AppListViewState::kFullscreenAllApps);
+  }
+
+  void EnsureLauncherShown() {
+    const bool in_tablet_mode = Shell::Get()->IsInTabletMode();
+
+    // App list always visible in tablet mode, so launcher needs to explicitly
+    // be shown only when in clamshell mode.
+    if (!in_tablet_mode) {
+      if (productivity_launcher_param())
+        EnsureBubbleLauncherShown();
+      else
+        EnsureFullscreenLauncherShown();
     }
-    if (should_show_bubble_launcher()) {
+
+    auto* helper = GetAppListTestHelper();
+    if (!in_tablet_mode && productivity_launcher_param()) {
       apps_grid_view_ = helper->GetScrollableAppsGridView();
     } else {
       apps_grid_view_ = helper->GetRootPagedAppsGridView();
@@ -888,7 +901,7 @@ TEST_P(ProductivityLauncherTest, FolderItemViewNotAnimatingAfterClosingFolder) {
   EXPECT_EQ(original_folder_item_bounds, folder_item_view->GetBoundsInScreen());
 
   // No item layers are expected to be created.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1003,7 +1016,7 @@ TEST_P(ProductivityLauncherTest,
             apps_grid_view_->GetItemViewAt(2)->GetBoundsInScreen());
 
   // Verify that item view layers have been deleted.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1122,7 +1135,7 @@ TEST_P(ProductivityLauncherTest,
             apps_grid_view_->GetItemViewAt(2)->GetBoundsInScreen());
 
   // Verify that item view layers have been deleted.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1241,7 +1254,7 @@ TEST_P(ProductivityLauncherTest,
             apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen());
 
   // Verify that item view layers have been deleted.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1324,7 +1337,7 @@ TEST_P(ProductivityLauncherTest, ReorderedFolderItemDeletionDuringFolderClose) {
             apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen());
 
   // Verify that item view layers have been deleted.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1422,7 +1435,7 @@ TEST_P(ProductivityLauncherTest,
             apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen());
 
   // Verify that item view layers have been deleted.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1519,7 +1532,7 @@ TEST_P(ProductivityLauncherTest,
             apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen());
 
   // Verify that item view layers have been deleted.
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -1656,6 +1669,68 @@ TEST_P(AppListBubbleAndTabletTest, LauncherSearchZeroState) {
   // Delete the character in the textfield and check visibility.
   generator->PressKey(ui::VKEY_BACK, 0);
   EXPECT_EQ(should_show_zero_state_search(), AppListSearchResultPageVisible());
+}
+
+// Verifies that changes in launcher search box do not cause duplicate search
+// requests if both clamshell and tablet app list views exist (and one of them
+// is hidden).
+TEST_P(AppListBubbleAndTabletTest, NoDuplicateSearchRequests) {
+  // Toggle tablet mode to ensure the app list view for tablet mode state
+  // opposite to the one used in test is created.
+  EnableTabletMode(!tablet_mode_param());
+  EnsureLauncherShown();
+  EnableTabletMode(tablet_mode_param());
+
+  EnsureLauncherShown();
+
+  // Type a character into the textfield and verify this issues a single search
+  // request.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->PressKey(ui::VKEY_A, 0);
+  EXPECT_TRUE(AppListSearchResultPageVisible());
+
+  TestAppListClient* const client = GetAppListTestHelper()->app_list_client();
+  EXPECT_EQ(std::vector<std::u16string>({u"a"}),
+            client->GetAndResetPastSearchQueries());
+  generator->PressKey(ui::VKEY_B, 0);
+  EXPECT_EQ(std::vector<std::u16string>({u"ab"}),
+            client->GetAndResetPastSearchQueries());
+  generator->PressKey(ui::VKEY_BACK, 0);
+  EXPECT_EQ(std::vector<std::u16string>({u"a"}),
+            client->GetAndResetPastSearchQueries());
+  generator->PressKey(ui::VKEY_BACK, 0);
+  EXPECT_EQ(std::vector<std::u16string>({u""}),
+            client->GetAndResetPastSearchQueries());
+}
+
+TEST_P(AppListBubbleAndTabletTest, ClearSearchButtonClearsSearch) {
+  // Toggle tablet mode to ensure the app list view for tablet mode state
+  // opposite to the one used in test is created.
+  EnableTabletMode(!tablet_mode_param());
+  EnsureLauncherShown();
+  EnableTabletMode(tablet_mode_param());
+
+  EnsureLauncherShown();
+
+  // Type a character into the textfield and verify this issues a single search
+  // request.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->PressKey(ui::VKEY_A, 0);
+  EXPECT_TRUE(AppListSearchResultPageVisible());
+
+  TestAppListClient* const client = GetAppListTestHelper()->app_list_client();
+  EXPECT_EQ(std::vector<std::u16string>({u"a"}),
+            client->GetAndResetPastSearchQueries());
+  generator->PressKey(ui::VKEY_B, 0);
+  EXPECT_EQ(std::vector<std::u16string>({u"ab"}),
+            client->GetAndResetPastSearchQueries());
+
+  SearchBoxView* search_box_view = GetSearchBoxView();
+  EXPECT_TRUE(search_box_view->close_button()->GetVisible());
+  LeftClickOn(search_box_view->close_button());
+
+  EXPECT_EQ(std::vector<std::u16string>({u""}),
+            client->GetAndResetPastSearchQueries());
 }
 
 // Regression test for b/204482740.
@@ -1990,7 +2065,7 @@ TEST_P(AppListBubbleAndTabletTest, RemoveSuggestionShowsConfirmDialog) {
 
   EXPECT_TRUE(GetAppListTestHelper()
                   ->app_list_client()
-                  ->GetAndClearInvokedResultActions()
+                  ->GetAndResetInvokedResultActions()
                   .empty());
   ASSERT_TRUE(GetSearchResultPageDialog());
 
@@ -2003,7 +2078,7 @@ TEST_P(AppListBubbleAndTabletTest, RemoveSuggestionShowsConfirmDialog) {
   EXPECT_FALSE(GetSearchResultPageDialog());
   EXPECT_TRUE(GetAppListTestHelper()
                   ->app_list_client()
-                  ->GetAndClearInvokedResultActions()
+                  ->GetAndResetInvokedResultActions()
                   .empty());
 
   // The result selection should be at the same position.
@@ -2032,7 +2107,7 @@ TEST_P(AppListBubbleAndTabletTest, RemoveSuggestionShowsConfirmDialog) {
   std::vector<TestAppListClient::SearchResultActionId> invoked_actions =
       GetAppListTestHelper()
           ->app_list_client()
-          ->GetAndClearInvokedResultActions();
+          ->GetAndResetInvokedResultActions();
   EXPECT_EQ(expected_actions, invoked_actions);
 }
 
@@ -2080,7 +2155,7 @@ TEST_P(AppListBubbleAndTabletTest, RemoveSuggestionUsingLongTap) {
 
   EXPECT_TRUE(GetAppListTestHelper()
                   ->app_list_client()
-                  ->GetAndClearInvokedResultActions()
+                  ->GetAndResetInvokedResultActions()
                   .empty());
   ASSERT_TRUE(GetSearchResultPageDialog());
 
@@ -2094,7 +2169,7 @@ TEST_P(AppListBubbleAndTabletTest, RemoveSuggestionUsingLongTap) {
 
   EXPECT_TRUE(GetAppListTestHelper()
                   ->app_list_client()
-                  ->GetAndClearInvokedResultActions()
+                  ->GetAndResetInvokedResultActions()
                   .empty());
   EXPECT_FALSE(result_view->selected());
 
@@ -2123,7 +2198,7 @@ TEST_P(AppListBubbleAndTabletTest, RemoveSuggestionUsingLongTap) {
   std::vector<TestAppListClient::SearchResultActionId> invoked_actions =
       GetAppListTestHelper()
           ->app_list_client()
-          ->GetAndClearInvokedResultActions();
+          ->GetAndResetInvokedResultActions();
   EXPECT_EQ(expected_actions, invoked_actions);
 }
 
@@ -2665,8 +2740,14 @@ TEST_P(PopulatedAppListTest,
     EXPECT_TRUE(item_view->layer()) << "at " << i;
   }
 
-  // Layers should be destroyed once the bounds animation completes.
-  apps_grid_view_->CancelAnimationsForTest();
+  // Wait for each item's layer animation to complete.
+  LayerAnimationStoppedWaiter animation_waiter;
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); i++) {
+    if (apps_grid_view_->view_model()->view_at(i)->layer())
+      animation_waiter.Wait(apps_grid_view_->view_model()->view_at(i)->layer());
+  }
+
+  // Layers should be destroyed once the item animations complete.
   for (int i = 0; i < kItemCount; ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
@@ -2969,7 +3050,7 @@ TEST_P(PopulatedAppListTest, RemoveFolderItemAfterFolderCreation) {
   // Verify that item layers have been destroyed after the drag operation ended.
   apps_grid_test_api_->WaitForItemMoveAnimationDone();
 
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -2984,7 +3065,7 @@ TEST_P(PopulatedAppListTest, RemoveFolderItemAfterFolderCreation) {
   EXPECT_EQ(expected_folder_item_view_bounds,
             folder_item_view->GetBoundsInScreen());
   EXPECT_TRUE(AppListIsInFolderView());
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -3043,7 +3124,7 @@ TEST_P(PopulatedAppListTest, ReparentLastFolderItemAfterFolderCreation) {
   // Verify that item layers have been destroyed after the drag operation ended.
   apps_grid_test_api_->WaitForItemMoveAnimationDone();
 
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -3065,7 +3146,7 @@ TEST_P(PopulatedAppListTest, ReparentLastFolderItemAfterFolderCreation) {
   // Verify that item views have no layers after the folder has been opened.
   apps_grid_test_api_->WaitForItemMoveAnimationDone();
   EXPECT_TRUE(AppListIsInFolderView());
-  for (int i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view_->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view_->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }
@@ -5965,7 +6046,7 @@ TEST_P(AppListPresenterHomeLauncherTest, LayerOnSecondPage) {
   // of the layers, including items on the second page.
   generator->MoveMouseTo(start_point.x(), 0);
   generator->ReleaseLeftButton();
-  for (int i = 0; i < apps_grid_view->view_model()->view_size(); ++i) {
+  for (size_t i = 0; i < apps_grid_view->view_model()->view_size(); ++i) {
     views::View* item_view = apps_grid_view->view_model()->view_at(i);
     EXPECT_FALSE(item_view->layer()) << "at " << i;
   }

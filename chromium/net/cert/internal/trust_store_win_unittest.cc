@@ -13,9 +13,9 @@
 #include "base/win/wincrypt_shim.h"
 #include "crypto/scoped_capi_types.h"
 #include "net/cert/cert_net_fetcher.h"
-#include "net/cert/internal/cert_errors.h"
-#include "net/cert/internal/parsed_certificate.h"
-#include "net/cert/internal/test_helpers.h"
+#include "net/cert/pki/cert_errors.h"
+#include "net/cert/pki/parsed_certificate.h"
+#include "net/cert/pki/test_helpers.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/cert/x509_util_win.h"
@@ -65,7 +65,7 @@ bool AddToStore(HCERTSTORE store, const std::string file_name) {
       X509_ASN_ENCODING, CRYPTO_BUFFER_data(cert->cert_buffer()),
       CRYPTO_BUFFER_len(cert->cert_buffer())));
   return CertAddCertificateContextToStore(store, os_cert.get(),
-                                          CERT_STORE_ADD_ALWAYS, NULL);
+                                          CERT_STORE_ADD_ALWAYS, nullptr);
 }
 
 // Returns true if cert at file_name successfully added to store with
@@ -93,7 +93,7 @@ bool AddToStoreWithEKURestriction(HCERTSTORE store,
     }
   }
   return !!CertAddCertificateContextToStore(store, os_cert.get(),
-                                            CERT_STORE_ADD_ALWAYS, NULL);
+                                            CERT_STORE_ADD_ALWAYS, nullptr);
 }
 
 // TrustStoreWin isset up as follows:

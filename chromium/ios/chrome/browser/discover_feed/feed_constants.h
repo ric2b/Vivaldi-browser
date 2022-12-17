@@ -23,4 +23,10 @@ typedef NS_ENUM(NSInteger, FollowingFeedSortType) {
   FollowingFeedSortTypeByLatest
 };
 
+// The identifier used to register and schedule background feed refresh tasks.
+extern NSString* const kFeedBackgroundRefreshTaskIdentifier;
+
+// The user defaults key indicating if the user has ever engaged with a feed.
+extern NSString* const kEngagedWithFeedKey;
+
 #endif  // IOS_CHROME_BROWSER_DISCOVER_FEED_FEED_CONSTANTS_H_

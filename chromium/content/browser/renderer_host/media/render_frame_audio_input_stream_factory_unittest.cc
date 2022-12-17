@@ -66,8 +66,7 @@ class MAYBE_RenderFrameAudioInputStreamFactoryTest
                        &log_factory_),
         audio_system_(media::AudioSystemImpl::CreateInstance()),
         media_stream_manager_(
-            std::make_unique<MediaStreamManager>(audio_system_.get(),
-                                                 GetUIThreadTaskRunner({}))) {}
+            std::make_unique<MediaStreamManager>(audio_system_.get())) {}
 
   ~MAYBE_RenderFrameAudioInputStreamFactoryTest() override {}
 
@@ -236,7 +235,7 @@ TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest,
       factory_remote.BindNewPipeAndPassReceiver(), media_stream_manager_.get(),
       main_rfh());
 
-  RenderFrameHost* main_frame = source_contents->GetMainFrame();
+  RenderFrameHost* main_frame = source_contents->GetPrimaryMainFrame();
   WebContentsMediaCaptureId capture_id(main_frame->GetProcess()->GetID(),
                                        main_frame->GetRoutingID());
   base::UnguessableToken session_id =
@@ -264,7 +263,7 @@ TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest,
       factory_remote.BindNewPipeAndPassReceiver(), media_stream_manager_.get(),
       main_rfh());
 
-  RenderFrameHost* main_frame = source_contents->GetMainFrame();
+  RenderFrameHost* main_frame = source_contents->GetPrimaryMainFrame();
   WebContentsMediaCaptureId capture_id(main_frame->GetProcess()->GetID(),
                                        main_frame->GetRoutingID());
   base::UnguessableToken session_id =

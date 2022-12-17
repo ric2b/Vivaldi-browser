@@ -52,7 +52,6 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
 
 @dynamic view;
 @synthesize buttonFactory = _buttonFactory;
-@synthesize dispatcher = _dispatcher;
 @synthesize longPressDelegate = _longPressDelegate;
 @synthesize loading = _loading;
 @synthesize isNTP = _isNTP;
@@ -86,12 +85,14 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
            object:nil];
   [self makeViewAccessibilityTraitsContainer];
 
-  // Adds the layout guide to the buttons.
+  // Add the layout guide names to the buttons.
   self.view.toolsMenuButton.guideName = kToolsMenuGuide;
   self.view.tabGridButton.guideName = kTabSwitcherGuide;
   self.view.openNewTabButton.guideName = kNewTabButtonGuide;
   self.view.forwardButton.guideName = kForwardButtonGuide;
   self.view.backButton.guideName = kBackButtonGuide;
+
+  [self addLayoutGuideCenterToButtons];
 
   // Add navigation popup menu triggers.
   if (UseSymbols()) {
@@ -135,6 +136,14 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
 
 - (ToolbarToolsMenuButton*)toolsMenuButton {
   return self.view.toolsMenuButton;
+}
+
+- (void)setLayoutGuideCenter:(LayoutGuideCenter*)layoutGuideCenter {
+  _layoutGuideCenter = layoutGuideCenter;
+
+  if (self.isViewLoaded) {
+    [self addLayoutGuideCenterToButtons];
+  }
 }
 
 #pragma mark - ToolbarConsumer
@@ -350,7 +359,7 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
   for (ToolbarButton* button in self.view.allButtons) {
     if (button != self.view.toolsMenuButton &&
         button != self.view.openNewTabButton) {
-      [button addTarget:self.dispatcher
+      [button addTarget:self.omniboxCommandsHandler
                     action:@selector(cancelOmniboxEdit)
           forControlEvents:UIControlEventTouchUpInside];
     }
@@ -386,7 +395,7 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
   }
 }
 
-// Adds a LongPressGesture to the |view|, with target on -|handleLongPress:|.
+// Adds a LongPressGesture to the `view`, with target on -`handleLongPress:`.
 - (void)addLongPressGestureToView:(UIView*)view {
   ForceTouchLongPressGestureRecognizer* gestureRecognizer =
       [[ForceTouchLongPressGestureRecognizer alloc]
@@ -399,19 +408,17 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
 // Handles the gseture recognizer on the views.
 - (void)handleGestureRecognizer:(UILongPressGestureRecognizer*)gesture {
   if (gesture.state == UIGestureRecognizerStateBegan) {
-    // TODO(crbug.com/1323764): All of these calls on |self.dispatcher| need to
-    // go to a dedicated PopupMenyCommands handler.
     if (gesture.view == self.view.backButton) {
-      [self.dispatcher showNavigationHistoryBackPopupMenu];
+      [self.popupMenuCommandsHandler showNavigationHistoryBackPopupMenu];
     } else if (gesture.view == self.view.forwardButton) {
-      [self.dispatcher showNavigationHistoryForwardPopupMenu];
+      [self.popupMenuCommandsHandler showNavigationHistoryForwardPopupMenu];
     } else if (gesture.view == self.view.openNewTabButton) {
-      [self.dispatcher showNewTabButtonPopup];
+      [self.popupMenuCommandsHandler showNewTabButtonPopup];
     } else if (gesture.view == self.view.tabGridButton) {
-      [self.dispatcher showTabGridButtonPopup];
+      [self.popupMenuCommandsHandler showTabGridButtonPopup];
     } else if (gesture.view == self.view.toolsMenuButton) {
       base::RecordAction(base::UserMetricsAction("MobileToolbarShowMenu"));
-      [self.dispatcher showToolsMenuPopup];
+      [self.popupMenuCommandsHandler showToolsMenuPopup];
     }
     TriggerHapticFeedbackForImpact(UIImpactFeedbackStyleHeavy);
   } else if (gesture.state == UIGestureRecognizerStateEnded) {
@@ -432,8 +439,8 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
   }
 }
 
-// Configures |button| with the menu provider, making sure that the items are
-// updated when the menu is presented. The |buttonType| is passed to the menu
+// Configures `button` with the menu provider, making sure that the items are
+// updated when the menu is presented. The `buttonType` is passed to the menu
 // provider.
 - (void)configureMenuProviderForButton:(UIButton*)button
                             buttonType:(AdaptiveToolbarButtonType)buttonType {
@@ -457,6 +464,14 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
                     [weakSelf.menuProvider menuForButtonOfType:buttonType];
               }];
   [button addAction:action forControlEvents:UIControlEventMenuActionTriggered];
+}
+
+- (void)addLayoutGuideCenterToButtons {
+  self.view.toolsMenuButton.layoutGuideCenter = self.layoutGuideCenter;
+  self.view.tabGridButton.layoutGuideCenter = self.layoutGuideCenter;
+  self.view.openNewTabButton.layoutGuideCenter = self.layoutGuideCenter;
+  self.view.forwardButton.layoutGuideCenter = self.layoutGuideCenter;
+  self.view.backButton.layoutGuideCenter = self.layoutGuideCenter;
 }
 
 @end

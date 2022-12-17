@@ -56,10 +56,8 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordHistogramJni;
-import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.device_reauth.ReauthenticatorBridge;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_check.PasswordCheckProperties.ItemType;
@@ -81,7 +79,8 @@ import org.chromium.url.GURL;
  * properly.
  */
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, shadows = {ShadowRecordHistogram.class})
+@Config(manifest = Config.NONE)
+@SuppressWarnings("DoNotMock") // Mocks GURL.
 public class PasswordCheckControllerTest {
     private static final CompromisedCredential ANA =
             new CompromisedCredential("https://m.a.xyz/signin", mock(GURL.class), "Ana", "m.a.xyz",
@@ -104,9 +103,7 @@ public class PasswordCheckControllerTest {
             "PasswordManager.BulkCheck.PasswordCheckReferrerAndroid2";
     private static final String PASSWORD_CHECK_USER_ACTION_HISTOGRAM =
             "PasswordManager.BulkCheck.UserActionAndroid";
-
-    @Rule
-    public final JniMocker mJniMocker = new JniMocker();
+    private static final boolean USE_LAST_VALID_AUTH = true;
 
     @Rule
     public Features.JUnitProcessor mFeaturesProcessor = new Features.JUnitProcessor();
@@ -125,8 +122,6 @@ public class PasswordCheckControllerTest {
     private SettingsLauncher mSettingsLauncher;
     @Mock
     private PasswordCheckIconHelper mIconHelper;
-    @Mock
-    private RecordHistogram.Natives mRecordHistogramBridge;
     @Captor
     private ArgumentCaptor<Callback<Boolean>> mCallbackCaptor;
 
@@ -136,9 +131,8 @@ public class PasswordCheckControllerTest {
 
     @Before
     public void setUp() {
-        ShadowRecordHistogram.reset();
+        UmaRecorderHolder.resetForTesting();
         MockitoAnnotations.initMocks(this);
-        mJniMocker.mock(RecordHistogramJni.TEST_HOOKS, mRecordHistogramBridge);
         mModel = PasswordCheckProperties.createDefaultModel();
         mMediator = new PasswordCheckMediator(mChangePasswordDelegate, mReauthenticationHelper,
                 mReauthenticatorBridge, mSettingsLauncher, mIconHelper);
@@ -645,7 +639,7 @@ public class PasswordCheckControllerTest {
             return true;
         })
                 .when(mReauthenticatorBridge)
-                .reauthenticate(notNull());
+                .reauthenticate(notNull(), eq(USE_LAST_VALID_AUTH));
         // There is a auto change button, a user clicks it.
         mMediator.onChangePasswordWithScriptButtonClick(BOB);
         verify(mDelegate, never()).onAutomatedPasswordChangeStarted(eq(BOB));
@@ -679,7 +673,7 @@ public class PasswordCheckControllerTest {
             return true;
         })
                 .when(mReauthenticatorBridge)
-                .reauthenticate(notNull());
+                .reauthenticate(notNull(), eq(USE_LAST_VALID_AUTH));
         // There is a auto change button, a user clicks it.
         mMediator.onChangePasswordWithScriptButtonClick(BOB);
         verify(mDelegate).onAutomatedPasswordChangeStarted(eq(BOB));

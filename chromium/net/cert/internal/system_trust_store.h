@@ -10,7 +10,7 @@
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "net/base/net_export.h"
-#include "net/cert/internal/parsed_certificate.h"
+#include "net/cert/pki/parsed_certificate.h"
 #include "net/net_buildflags.h"
 
 namespace net {
@@ -99,7 +99,8 @@ CreateSystemTrustStoreChromeForTesting(
 NET_EXPORT std::unique_ptr<SystemTrustStore> CreateEmptySystemTrustStore();
 
 #if BUILDFLAG(IS_MAC)
-// Initializes trust cache on a worker thread.
+// Initializes trust cache on a worker thread, if the builtin verifier is
+// enabled.
 NET_EXPORT void InitializeTrustStoreMacCache();
 #endif
 

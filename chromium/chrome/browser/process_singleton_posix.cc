@@ -65,6 +65,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -550,7 +551,7 @@ class ProcessSingleton::LinuxWatcher
         fd_watch_controller_;
 
     // The ProcessSingleton::LinuxWatcher that owns us.
-    ProcessSingleton::LinuxWatcher* const parent_;
+    const raw_ptr<ProcessSingleton::LinuxWatcher> parent_;
 
     // A reference to the UI task runner.
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
@@ -606,7 +607,7 @@ class ProcessSingleton::LinuxWatcher
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
 
   // The ProcessSingleton that owns us.
-  ProcessSingleton* const parent_;
+  const raw_ptr<ProcessSingleton> parent_;
 
   std::set<std::unique_ptr<SocketReader>, base::UniquePtrComparator> readers_;
 };
@@ -756,8 +757,7 @@ ProcessSingleton::ProcessSingleton(
     const base::FilePath& user_data_dir,
     const NotificationCallback& notification_callback)
     : notification_callback_(notification_callback),
-      current_pid_(base::GetCurrentProcId()),
-      watcher_(new LinuxWatcher(this)) {
+      current_pid_(base::GetCurrentProcId()) {
   socket_path_ = user_data_dir.Append(chrome::kSingletonSocketFilename);
   lock_path_ = user_data_dir.Append(chrome::kSingletonLockFilename);
   cookie_path_ = user_data_dir.Append(chrome::kSingletonCookieFilename);
@@ -1050,10 +1050,9 @@ bool ProcessSingleton::Create() {
   // leaving a dangling symlink.
   base::FilePath socket_target_path =
       socket_dir_.GetPath().Append(chrome::kSingletonSocketFilename);
-  int sock;
   SockaddrUn addr;
   socklen_t socklen;
-  SetupSocket(socket_target_path.value(), &sock, &addr, &socklen);
+  SetupSocket(socket_target_path.value(), &sock_, &addr, &socklen);
 
   // Setup the socket symlink and the two cookies.
   base::FilePath cookie(GenerateCookie());
@@ -1072,21 +1071,26 @@ bool ProcessSingleton::Create() {
     return false;
   }
 
-  if (bind(sock, reinterpret_cast<sockaddr*>(&addr), socklen) < 0) {
+  if (bind(sock_, reinterpret_cast<sockaddr*>(&addr), socklen) < 0) {
     PLOG(ERROR) << "Failed to bind() " << socket_target_path.value();
-    CloseSocket(sock);
+    CloseSocket(sock_);
     return false;
   }
 
-  if (listen(sock, 5) < 0)
+  if (listen(sock_, 5) < 0)
     NOTREACHED() << "listen failed: " << base::safe_strerror(errno);
 
+  return true;
+}
+
+void ProcessSingleton::StartWatching() {
+  DCHECK_GE(sock_, 0);
+  DCHECK(!watcher_);
+  watcher_ = new LinuxWatcher(this);
   DCHECK(BrowserThread::IsThreadInitialized(BrowserThread::IO));
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&ProcessSingleton::LinuxWatcher::StartListening,
-                                watcher_, sock));
-
-  return true;
+                                watcher_, sock_));
 }
 
 void ProcessSingleton::Cleanup() {

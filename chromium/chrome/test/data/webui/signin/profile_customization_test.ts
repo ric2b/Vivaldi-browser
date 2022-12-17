@@ -6,9 +6,9 @@ import 'chrome://profile-customization/profile_customization_app.js';
 
 import {ProfileCustomizationAppElement} from 'chrome://profile-customization/profile_customization_app.js';
 import {ProfileCustomizationBrowserProxyImpl} from 'chrome://profile-customization/profile_customization_browser_proxy.js';
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible} from 'chrome://webui-test/test_util.js';
 
@@ -31,6 +31,7 @@ import {TestProfileCustomizationBrowserProxy} from './test_profile_customization
       loadTimeData.overrideValues({
         profileName: 'TestName',
         profileCustomizationInDialogDesign: inDialogDesign,
+        isLocalProfileCreation: false,
       });
       browserProxy = new TestProfileCustomizationBrowserProxy();
       browserProxy.setProfileInfo({
@@ -103,10 +104,12 @@ import {TestProfileCustomizationBrowserProxy} from './test_profile_customization
         assertTrue(app.$.title.innerText.match(STATIC_TITLE_PATTERN) != null);
       } else {
         assertEquals(app.$.title.innerText, WELCOME_TEXT_1);
+        assertEquals(
+            'rgb(0, 255, 0)', getComputedStyle(header).backgroundColor);
       }
-      assertEquals('rgb(0, 255, 0)', getComputedStyle(header).backgroundColor);
       checkImageUrl('#avatar', AVATAR_URL_1);
-      assertFalse(isChildVisible(app, '#badge'));
+      assertFalse(isChildVisible(app, '#workBadge'));
+      assertFalse(isChildVisible(app, '#customizeAvatarIcon'));
       // Update the info.
       const color2 = 'rgb(4, 5, 6)';
       webUIListenerCallback('on-profile-info-changed', {
@@ -119,10 +122,11 @@ import {TestProfileCustomizationBrowserProxy} from './test_profile_customization
         assertTrue(app.$.title.innerText.match(STATIC_TITLE_PATTERN) != null);
       } else {
         assertEquals(app.$.title.innerText, WELCOME_TEXT_2);
+        assertEquals(color2, getComputedStyle(header).backgroundColor);
       }
-      assertEquals(color2, getComputedStyle(header).backgroundColor);
       checkImageUrl('#avatar', AVATAR_URL_2);
-      assertTrue(isChildVisible(app, '#badge'));
+      assertTrue(isChildVisible(app, '#workBadge'));
+      assertFalse(isChildVisible(app, '#customizeAvatarIcon'));
     });
 
     test('ThemeSelector', function() {
@@ -130,9 +134,57 @@ import {TestProfileCustomizationBrowserProxy} from './test_profile_customization
     });
 
     // Checks that the Skip button is present when the page is displayed in a
-    // dialog in Sync Promo
+    // dialog
     test('HasSkipButton', function() {
       assertEquals(inDialogDesign, isChildVisible(app, '#skipButton'));
     });
+
+    // Checks that clicking the Skip button triggers the correct browser proxy
+    // method.
+    if (inDialogDesign) {
+      test('ClickSkip', function() {
+        const skipButton =
+            app.shadowRoot!.querySelector<CrButtonElement>('#skipButton')!;
+        skipButton.click();
+        return browserProxy.whenCalled('skip');
+      });
+    }
+  });
+});
+
+suite(`LocalProfileCreationTest`, function() {
+  let app: ProfileCustomizationAppElement;
+  let browserProxy: TestProfileCustomizationBrowserProxy;
+
+  const AVATAR_URL_1 = 'chrome://theme/IDR_PROFILE_AVATAR_1';
+  const WELCOME_TITLE = 'Welcome!';
+
+  setup(function() {
+    loadTimeData.overrideValues({
+      profileName: 'TestName',
+      profileCustomizationInDialogDesign: true,
+      isLocalProfileCreation: true,
+    });
+    browserProxy = new TestProfileCustomizationBrowserProxy();
+    browserProxy.setProfileInfo({
+      backgroundColor: 'rgb(0, 255, 0)',
+      pictureUrl: AVATAR_URL_1,
+      isManaged: false,
+      welcomeTitle: '',
+    });
+    ProfileCustomizationBrowserProxyImpl.setInstance(browserProxy);
+    document.body.innerHTML = '';
+    app = document.createElement('profile-customization-app');
+    document.body.append(app);
+    return browserProxy.whenCalled('initialized');
+  });
+
+  test('LocalProfileCreationDialog', function() {
+    assertEquals(app.$.title.innerText, WELCOME_TITLE);
+    assertFalse(isChildVisible(app, '#workBadge'));
+    assertTrue(isChildVisible(app, '#customizeAvatarIcon'));
+    assertFalse(isChildVisible(app, '#skipButton'));
+    // TODO(https://crbug.com/1282157): Verify that the avatar selector is
+    // displayed on customizeAvatarIcon click once implemented.
   });
 });

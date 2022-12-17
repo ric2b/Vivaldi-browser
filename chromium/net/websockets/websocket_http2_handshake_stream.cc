@@ -235,7 +235,8 @@ void WebSocketHttp2HandshakeStream::SetPriority(RequestPriority priority) {
     stream_->SetPriority(priority_);
 }
 
-HttpStream* WebSocketHttp2HandshakeStream::RenewStreamForAuth() {
+std::unique_ptr<HttpStream>
+WebSocketHttp2HandshakeStream::RenewStreamForAuth() {
   // Renewing the stream is not supported.
   return nullptr;
 }
@@ -296,8 +297,6 @@ void WebSocketHttp2HandshakeStream::OnHeadersReceived(
   http_response_info_->alpn_negotiated_protocol =
       HttpResponseInfo::ConnectionInfoToString(
           http_response_info_->connection_info);
-  http_response_info_->vary_data.Init(*request_info_,
-                                      *http_response_info_->headers.get());
 
   if (callback_)
     std::move(callback_).Run(ValidateResponse());

@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "media/audio/audio_device_description.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -30,14 +31,18 @@
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/modules/mediastream/web_media_stream_device_observer.h"
 #include "third_party/blink/public/web/web_heap.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_content.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_track_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_constraint_factory.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_media_stream_video_source.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_mojo_media_stream_dispatcher_host.h"
+#include "third_party/blink/renderer/modules/mediastream/transferred_media_stream_track.h"
+#include "third_party/blink/renderer/modules/mediastream/user_media_request.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_processor_options.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
@@ -129,8 +134,7 @@ void CheckVideoSourceAndTrack(blink::MediaStreamVideoSource* source,
                               double expected_track_frame_rate) {
   CheckVideoSource(source, expected_source_width, expected_source_height,
                    expected_source_frame_rate);
-  EXPECT_EQ(component->Source()->GetReadyState(),
-            MediaStreamSource::kReadyStateLive);
+  EXPECT_EQ(component->GetReadyState(), MediaStreamSource::kReadyStateLive);
   MediaStreamVideoTrack* track = MediaStreamVideoTrack::From(component);
   EXPECT_EQ(track->source(), source);
 
@@ -174,6 +178,68 @@ const char kFakeAudioInputDeviceId1[] = "fake_audio_input 1";
 const char kFakeAudioInputDeviceId2[] = "fake_audio_input 2";
 const char kFakeVideoInputDeviceId1[] = "fake_video_input 1";
 const char kFakeVideoInputDeviceId2[] = "fake_video_input 2";
+
+class MediaDevicesDispatcherHostMock
+    : public mojom::blink::MediaDevicesDispatcherHost {
+ public:
+  explicit MediaDevicesDispatcherHostMock() {}
+  void EnumerateDevices(bool request_audio_input,
+                        bool request_video_input,
+                        bool request_audio_output,
+                        bool request_video_input_capabilities,
+                        bool request_audio_input_capabilities,
+                        EnumerateDevicesCallback callback) override {
+    NOTREACHED();
+  }
+
+  void GetVideoInputCapabilities(
+      GetVideoInputCapabilitiesCallback client_callback) override {
+    NOTREACHED();
+  }
+
+  void GetAudioInputCapabilities(
+      GetAudioInputCapabilitiesCallback client_callback) override {
+    NOTREACHED();
+  }
+
+  void AddMediaDevicesListener(
+      bool subscribe_audio_input,
+      bool subscribe_video_input,
+      bool subscribe_audio_output,
+      mojo::PendingRemote<blink::mojom::blink::MediaDevicesListener> listener)
+      override {
+    NOTREACHED();
+  }
+
+  void SetCaptureHandleConfig(mojom::blink::CaptureHandleConfigPtr) override {
+    NOTREACHED();
+  }
+
+#if !BUILDFLAG(IS_ANDROID)
+  void CloseFocusWindowOfOpportunity(const String& label) override {
+    NOTREACHED();
+  }
+
+  void ProduceCropId(ProduceCropIdCallback callback) override { NOTREACHED(); }
+#endif
+
+  void GetAllVideoInputDeviceFormats(
+      const String& device_id,
+      GetAllVideoInputDeviceFormatsCallback callback) override {
+    devices_count_++;
+  }
+
+  void GetAvailableVideoInputDeviceFormats(
+      const String& device_id,
+      GetAvailableVideoInputDeviceFormatsCallback callback) override {
+    devices_count_++;
+  }
+
+  size_t devices_count() const { return devices_count_; }
+
+ private:
+  size_t devices_count_ = 0;
+};
 
 class MockMediaDevicesDispatcherHost
     : public mojom::blink::MediaDevicesDispatcherHost {
@@ -487,6 +553,18 @@ class UserMediaClientUnderTest : public UserMediaClient {
     RequestUserMediaForTest(user_media_request);
   }
 
+  void CallGetOpenDevice(
+      const base::UnguessableToken& session_id,
+      const base::UnguessableToken& transfer_id,
+      TransferredMediaStreamTrack* transferred_media_stream_track) {
+    UserMediaRequest* user_media_request = UserMediaRequest::CreateForTesting(
+        CreateDefaultConstraints(), CreateDefaultConstraints());
+
+    user_media_request->SetTransferData(session_id, transfer_id,
+                                        transferred_media_stream_track);
+    RequestUserMediaForTest(user_media_request);
+  }
+
  private:
   RequestState* state_;
 };
@@ -563,7 +641,7 @@ class UserMediaClientTest : public ::testing::Test {
     return desc;
   }
 
-  MediaStreamComponent* RequestLocalVideoTrack() {
+  MediaStreamTrack* RequestLocalVideoTrack() {
     UserMediaRequest* user_media_request = UserMediaRequest::CreateForTesting(
         MediaConstraints(), CreateDefaultConstraints());
     user_media_client_impl_->RequestUserMediaForTest(user_media_request);
@@ -578,7 +656,8 @@ class UserMediaClientTest : public ::testing::Test {
     EXPECT_EQ(audio_components.size(), 0U);
     EXPECT_EQ(video_components.size(), 1U);
 
-    return video_components[0];
+    return MakeGarbageCollected<MediaStreamTrackImpl>(
+        /*execution_context=*/nullptr, video_components[0]);
   }
 
   MediaStreamComponent* RequestLocalAudioTrackWithAssociatedSink(
@@ -644,7 +723,7 @@ class UserMediaClientTest : public ::testing::Test {
   }
 
   void ApplyConstraintsVideoMode(
-      MediaStreamComponent* component,
+      MediaStreamTrack* track,
       int width,
       int height,
       const absl::optional<double>& frame_rate = absl::optional<double>()) {
@@ -656,7 +735,7 @@ class UserMediaClientTest : public ::testing::Test {
 
     auto* apply_constraints_request =
         MakeGarbageCollected<ApplyConstraintsRequest>(
-            component, factory.CreateMediaConstraints(), nullptr);
+            track, factory.CreateMediaConstraints(), nullptr);
     user_media_client_impl_->ApplyConstraints(apply_constraints_request);
     base::RunLoop().RunUntilIdle();
   }
@@ -683,6 +762,71 @@ TEST_F(UserMediaClientTest, GenerateMediaStream) {
   // Generate a stream with both audio and video.
   MediaStreamDescriptor* mixed_desc = RequestLocalMediaStream();
   EXPECT_TRUE(mixed_desc);
+}
+
+TEST_F(UserMediaClientTest, GetOpenDeviceVideo) {
+  V8TestingScope scope;
+  MediaStreamTrack::TransferredValues data{
+      .session_id = base::UnguessableToken::Create(),
+      .transfer_id = base::UnguessableToken::Create(),
+      .kind = "video",
+      .id = "transferred_id",
+      .label = "label",
+      .enabled = true,
+      .muted = false,
+      .content_hint = WebMediaStreamTrack::ContentHintType::kNone,
+      .ready_state = MediaStreamSource::kReadyStateLive};
+  TransferredMediaStreamTrack* transferred_media_stream_track =
+      MakeGarbageCollected<TransferredMediaStreamTrack>(
+          scope.GetExecutionContext(), data);
+
+  blink::mojom::blink::StreamDevices stream_devices;
+  stream_devices.video_device =
+      MediaStreamDevice(mojom::blink::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
+                        data.session_id.ToString(), "usb video camera");
+  stream_devices.video_device.value().set_session_id(data.session_id);
+  mock_dispatcher_host_.SetStreamDevices(stream_devices);
+
+  user_media_client_impl_->CallGetOpenDevice(data.session_id, data.transfer_id,
+                                             transferred_media_stream_track);
+  StartMockedVideoSource();
+
+  EXPECT_EQ(kRequestSucceeded, request_state());
+  EXPECT_EQ("usb video camera",
+            transferred_media_stream_track->Component()->GetSourceName());
+}
+
+TEST_F(UserMediaClientTest, GetOpenDeviceAudio) {
+  EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
+
+  V8TestingScope scope;
+  MediaStreamTrack::TransferredValues data{
+      .session_id = base::UnguessableToken::Create(),
+      .transfer_id = base::UnguessableToken::Create(),
+      .kind = "audio",
+      .id = "transferred_id",
+      .label = "label",
+      .enabled = true,
+      .muted = false,
+      .content_hint = WebMediaStreamTrack::ContentHintType::kNone,
+      .ready_state = MediaStreamSource::kReadyStateLive};
+  TransferredMediaStreamTrack* transferred_media_stream_track =
+      MakeGarbageCollected<TransferredMediaStreamTrack>(
+          scope.GetExecutionContext(), data);
+
+  blink::mojom::blink::StreamDevices stream_devices;
+  stream_devices.audio_device =
+      MediaStreamDevice(mojom::blink::MediaStreamType::DISPLAY_AUDIO_CAPTURE,
+                        data.session_id.ToString(), "microphone");
+  stream_devices.audio_device.value().set_session_id(data.session_id);
+  mock_dispatcher_host_.SetStreamDevices(stream_devices);
+
+  user_media_client_impl_->CallGetOpenDevice(data.session_id, data.transfer_id,
+                                             transferred_media_stream_track);
+
+  EXPECT_EQ(kRequestSucceeded, request_state());
+  EXPECT_EQ("microphone",
+            transferred_media_stream_track->Component()->GetSourceName());
 }
 
 // Test that the same source object is used if two MediaStreams are generated
@@ -1202,52 +1346,56 @@ TEST_F(UserMediaClientTest, CreateWithFacingModeEnvironment) {
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceSingleTrack) {
   EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  MediaStreamComponent* component = RequestLocalVideoTrack();
-  MediaStreamVideoTrack* track = MediaStreamVideoTrack::From(component);
-  blink::MediaStreamVideoSource* source = track->source();
+  MediaStreamTrack* track = RequestLocalVideoTrack();
+  MediaStreamComponent* component = track->Component();
+  MediaStreamVideoTrack* platform_track =
+      MediaStreamVideoTrack::From(component);
+  blink::MediaStreamVideoSource* source = platform_track->source();
   CheckVideoSource(source, 0, 0, 0.0);
 
   media_devices_dispatcher_.SetVideoSource(source);
 
   // The following applyConstraint() request should force a source restart and
   // produce a video mode with 1024x768.
-  ApplyConstraintsVideoMode(component, 1024, 768);
+  ApplyConstraintsVideoMode(track, 1024, 768);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 1024, 768, 20.0);
 
   // The following applyConstraints() requests should not result in a source
   // restart since the only format supported by the mock MDDH that supports
   // 801x600 is the existing 1024x768 mode with downscaling.
-  ApplyConstraintsVideoMode(component, 801, 600);
+  ApplyConstraintsVideoMode(track, 801, 600);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 801, 600, 20.0);
 
   // The following applyConstraints() requests should result in a source restart
   // since there is a native mode of 800x600 supported by the mock MDDH.
-  ApplyConstraintsVideoMode(component, 800, 600);
+  ApplyConstraintsVideoMode(track, 800, 600);
   CheckVideoSourceAndTrack(source, 800, 600, 30.0, component, 800, 600, 30.0);
 
   // The following applyConstraints() requests should fail since the mock MDDH
   // does not have any mode that can produce 2000x2000.
-  ApplyConstraintsVideoMode(component, 2000, 2000);
+  ApplyConstraintsVideoMode(track, 2000, 2000);
   CheckVideoSourceAndTrack(source, 800, 600, 30.0, component, 800, 600, 30.0);
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
   EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  MediaStreamComponent* component = RequestLocalVideoTrack();
+  MediaStreamTrack* track = RequestLocalVideoTrack();
+  MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
       user_media_processor_->last_created_video_source();
   CheckVideoSource(source, 0, 0, 0.0);
   media_devices_dispatcher_.SetVideoSource(source);
 
   // Switch the source and track to 1024x768@20Hz.
-  ApplyConstraintsVideoMode(component, 1024, 768);
+  ApplyConstraintsVideoMode(track, 1024, 768);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 1024, 768, 20.0);
 
   // Create a new track and verify that it uses the same source and that the
   // source's format did not change. The new track uses the same format as the
   // source by default.
   EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  MediaStreamComponent* component2 = RequestLocalVideoTrack();
+  MediaStreamTrack* track2 = RequestLocalVideoTrack();
+  MediaStreamComponent* component2 = track2->Component();
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component2, 1024, 768,
                            20.0);
 
@@ -1255,7 +1403,7 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
   // that the source is not reconfigured. Downscaling is used instead because
   // there is more than one track using the source. The second track is left
   // unmodified.
-  ApplyConstraintsVideoMode(component, 800, 600);
+  ApplyConstraintsVideoMode(track, 800, 600);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 800, 600, 20.0);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component2, 1024, 768,
                            20.0);
@@ -1265,7 +1413,7 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
   // support reconfiguration when more than one track is connected.
   // TODO(guidou): Allow reconfiguring sources with more than one track.
   // https://crbug.com/768205.
-  ApplyConstraintsVideoMode(component, 800, 600, 30.0);
+  ApplyConstraintsVideoMode(track, 800, 600, 30.0);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 800, 600, 20.0);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component2, 1024, 768,
                            20.0);
@@ -1275,86 +1423,86 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
   // single track and it supports reconfiguration to the requested mode.
   blink::MediaStreamTrackPlatform::GetTrack(WebMediaStreamTrack(component2))
       ->Stop();
-  ApplyConstraintsVideoMode(component, 800, 600, 30.0);
+  ApplyConstraintsVideoMode(track, 800, 600, 30.0);
   CheckVideoSourceAndTrack(source, 800, 600, 30.0, component, 800, 600, 30.0);
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceFailsToStopForRestart) {
   EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  MediaStreamComponent* component = RequestLocalVideoTrack();
+  MediaStreamTrack* track = RequestLocalVideoTrack();
+  MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
       user_media_processor_->last_created_video_source();
   CheckVideoSource(source, 0, 0, 0.0);
   media_devices_dispatcher_.SetVideoSource(source);
 
   // Switch the source and track to 1024x768@20Hz.
-  ApplyConstraintsVideoMode(component, 1024, 768);
+  ApplyConstraintsVideoMode(track, 1024, 768);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 1024, 768, 20.0);
 
   // Try to switch the source and track to 640x480. Since the source cannot
   // stop for restart, downscaling is used for the track.
   source->DisableStopForRestart();
-  ApplyConstraintsVideoMode(component, 640, 480);
+  ApplyConstraintsVideoMode(track, 640, 480);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 640, 480, 20.0);
 }
 
 TEST_F(UserMediaClientTest,
        ApplyConstraintsVideoDeviceFailsToRestartAfterStop) {
   EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  MediaStreamComponent* component = RequestLocalVideoTrack();
+  MediaStreamTrack* track = RequestLocalVideoTrack();
+  MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
       user_media_processor_->last_created_video_source();
   CheckVideoSource(source, 0, 0, 0.0);
   media_devices_dispatcher_.SetVideoSource(source);
 
   // Switch the source and track to 1024x768.
-  ApplyConstraintsVideoMode(component, 1024, 768);
+  ApplyConstraintsVideoMode(track, 1024, 768);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 1024, 768, 20.0);
 
   // Try to switch the source and track to 640x480. Since the source cannot
   // restart, source and track are stopped.
   source->DisableRestart();
-  ApplyConstraintsVideoMode(component, 640, 480);
+  ApplyConstraintsVideoMode(track, 640, 480);
 
-  EXPECT_EQ(component->Source()->GetReadyState(),
-            MediaStreamSource::kReadyStateEnded);
+  EXPECT_EQ(component->GetReadyState(), MediaStreamSource::kReadyStateEnded);
   EXPECT_FALSE(source->IsRunning());
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceStopped) {
   EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  MediaStreamComponent* component = RequestLocalVideoTrack();
+  MediaStreamTrack* track = RequestLocalVideoTrack();
+  MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
       user_media_processor_->last_created_video_source();
   CheckVideoSource(source, 0, 0, 0.0);
   media_devices_dispatcher_.SetVideoSource(source);
 
   // Switch the source and track to 1024x768.
-  ApplyConstraintsVideoMode(component, 1024, 768);
+  ApplyConstraintsVideoMode(track, 1024, 768);
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component, 1024, 768, 20.0);
 
   // Try to switch the source and track to 640x480 after stopping the track.
-  MediaStreamTrackPlatform* track =
+  MediaStreamTrackPlatform* platform_track =
       MediaStreamTrackPlatform::GetTrack(WebMediaStreamTrack(component));
-  track->Stop();
-  EXPECT_EQ(component->Source()->GetReadyState(),
-            MediaStreamSource::kReadyStateEnded);
+  platform_track->Stop();
+  EXPECT_EQ(component->GetReadyState(), MediaStreamSource::kReadyStateEnded);
   EXPECT_FALSE(source->IsRunning());
   {
     MediaStreamTrackPlatform::Settings settings;
-    track->GetSettings(settings);
+    platform_track->GetSettings(settings);
     EXPECT_EQ(settings.width, -1);
     EXPECT_EQ(settings.height, -1);
     EXPECT_EQ(settings.frame_rate, -1.0);
   }
 
-  ApplyConstraintsVideoMode(component, 640, 480);
-  EXPECT_EQ(component->Source()->GetReadyState(),
-            MediaStreamSource::kReadyStateEnded);
+  ApplyConstraintsVideoMode(track, 640, 480);
+  EXPECT_EQ(component->GetReadyState(), MediaStreamSource::kReadyStateEnded);
   EXPECT_FALSE(source->IsRunning());
   {
     MediaStreamTrackPlatform::Settings settings;
-    track->GetSettings(settings);
+    platform_track->GetSettings(settings);
     EXPECT_EQ(settings.width, -1);
     EXPECT_EQ(settings.height, -1);
     EXPECT_EQ(settings.frame_rate, -1.0);
@@ -1509,6 +1657,38 @@ TEST_F(UserMediaClientTest, ZoomConstraintRequestPanTiltZoomPermission) {
   exact_advanced.zoom.SetIsPresent(true);
   EXPECT_TRUE(UserMediaProcessor::IsPanTiltZoomPermissionRequested(
       advanced_factory.CreateMediaConstraints()));
+}
+
+TEST_F(UserMediaClientTest, MultiDeviceOnStreamGenerated) {
+  const size_t devices_count = 5u;
+  const int32_t request_id = 0;
+  std::unique_ptr<blink::MediaDevicesDispatcherHostMock>
+      media_devices_dispatcher_host_mock =
+          std::make_unique<blink::MediaDevicesDispatcherHostMock>();
+  blink::Member<blink::UserMediaRequest> user_media_request =
+      blink::UserMediaRequest::CreateForTesting(CreateDefaultConstraints(),
+                                                CreateDefaultConstraints());
+  user_media_request->set_request_id(request_id);
+  user_media_processor_->ProcessRequest(user_media_request, base::DoNothing());
+  user_media_processor_->media_devices_dispatcher_cb_ =
+      base::BindLambdaForTesting(
+          [&media_devices_dispatcher_host_mock]()
+              -> blink::mojom::blink::MediaDevicesDispatcherHost* {
+            return media_devices_dispatcher_host_mock.get();
+          });
+
+  blink::mojom::blink::StreamDevicesSetPtr stream_devices_set =
+      blink::mojom::blink::StreamDevicesSet::New();
+  for (size_t stream_index = 0; stream_index < devices_count; ++stream_index) {
+    stream_devices_set->stream_devices.emplace_back(
+        blink::mojom::blink::StreamDevices::New(absl::nullopt,
+                                                blink::MediaStreamDevice()));
+  }
+  user_media_processor_->OnStreamGenerated(
+      request_id, blink::mojom::MediaStreamRequestResult::OK, "",
+      std::move(stream_devices_set), /*pan_tilt_zoom_allowed=*/false);
+  base::RunLoop run_loop;
+  DCHECK_EQ(devices_count, media_devices_dispatcher_host_mock->devices_count());
 }
 
 }  // namespace blink

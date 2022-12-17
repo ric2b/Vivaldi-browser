@@ -6,16 +6,29 @@
 
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
 #include "third_party/blink/renderer/core/layout/deferred_shaping.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+
+namespace {
+
+const char kForcedRendering[] =
+    "Rendering was performed in a subtree hidden by content-visibility:hidden.";
+const char kForcedRenderingMax[] =
+    "Rendering was performed in a subtree hidden by content-visibility:hidden. "
+    "Further messages will be suppressed.";
+constexpr unsigned kMaxConsoleMessages = 500;
+
+}  // namespace
 
 namespace blink {
 
@@ -235,6 +248,45 @@ bool DisplayLockDocumentState::MarkAncestorContextsHaveTopLayerElement(
     }
   }
   return had_locked_ancestor;
+}
+
+void DisplayLockDocumentState::NotifySharedElementPseudoTreeChanged() {
+  // Note that this function doesn't use
+  // DisplayLockContext::DetermineIfInSharedElementTransitionChain, since that
+  // would mean we have to call UpdateSharedElementAncestorLocks for each lock.
+  // This function only calls it once by hoisting it out of the context calls.
+
+  // Reset the flag and determine if the ancestor is shared element.
+  for (auto context : display_lock_contexts_)
+    context->ResetAndDetermineIfAncestorIsSharedElement();
+
+  // Also process the shared elements to check if the shared element's ancestors
+  // are locks. These two parts give us the full chain (either locks are
+  // ancestors of shared or shared are ancestor of locks).
+  UpdateSharedElementAncestorLocks();
+}
+
+void DisplayLockDocumentState::UpdateSharedElementAncestorLocks() {
+  auto* supplement = DocumentTransitionSupplement::FromIfExists(*document_);
+  if (!supplement)
+    return;
+
+  const auto& shared_elements =
+      supplement->GetTransition()->GetTransitioningElements();
+  for (auto element : shared_elements) {
+    auto* ancestor = element.Get();
+    // When the element which has c-v:auto is itself a shared element, marking
+    // it as such could go in either walk (from the function naming) but it
+    // happens in the ancestor chain check and skipped here. This DCHECK
+    // verifies this.
+    DCHECK(!element->GetDisplayLockContext() ||
+           element->GetDisplayLockContext()->IsInSharedElementAncestorChain());
+
+    while ((ancestor = FlatTreeTraversal::ParentElement(*ancestor))) {
+      if (auto* context = ancestor->GetDisplayLockContext())
+        context->SetInSharedElementTransitionChain();
+    }
+  }
 }
 
 void DisplayLockDocumentState::NotifySelectionRemoved() {
@@ -602,6 +654,23 @@ void DisplayLockDocumentState::UnlockShapingDeferredInclusiveDescendants(
     DEFERRED_SHAPING_VLOG(1)
         << "Partially unlocked " << count << " elements ==> remaining="
         << (LockedDisplayLockCount() - DisplayLockBlockingAllActivationCount());
+  }
+}
+
+void DisplayLockDocumentState::IssueForcedRenderWarning(Element* element) {
+  // Note that this is a verbose level message, since it can happen
+  // frequently and is not necessarily a problem if the developer is
+  // accessing content-visibility: hidden subtrees intentionally.
+  if (forced_render_warnings_ < kMaxConsoleMessages) {
+    forced_render_warnings_++;
+    auto* console_message = MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kJavaScript,
+        mojom::blink::ConsoleMessageLevel::kVerbose,
+        forced_render_warnings_ == kMaxConsoleMessages ? kForcedRenderingMax
+                                                       : kForcedRendering);
+    console_message->SetNodes(document_->GetFrame(),
+                              {DOMNodeIds::IdForNode(element)});
+    document_->AddConsoleMessage(console_message);
   }
 }
 

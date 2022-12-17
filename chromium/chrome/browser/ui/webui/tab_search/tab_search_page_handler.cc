@@ -57,6 +57,21 @@ std::string GetLastActiveElapsedText(const base::Time& last_active_time) {
       ui::TimeFormat::FORMAT_ELAPSED, ui::TimeFormat::LENGTH_SHORT, elapsed));
 }
 
+// If Tab Group has no timestamp, we find the tab in the tab group with
+// the most recent navigation last active time.
+base::Time GetTabGroupTimeStamp(
+    const std::vector<std::unique_ptr<sessions::TabRestoreService::Tab>>&
+        tabs) {
+  base::Time last_active_time;
+  for (const auto& tab : tabs) {
+    const sessions::SerializedNavigationEntry& entry =
+        tab->navigations[tab->current_navigation_index];
+    if (entry.timestamp() > last_active_time)
+      last_active_time = entry.timestamp();
+  }
+  return last_active_time;
+}
+
 // If a recently closed tab is associated to a group that is no longer
 // open we create a TabGroup entry with the required fields to support
 // rendering the tab's associated group information in the UI.
@@ -125,7 +140,7 @@ void TabSearchPageHandler::CloseTab(int32_t tab_id) {
   auto* tab_strip_model = optional_details->tab_strip_model;
   const int tab_index = optional_details->index;
   tab_strip_model->CloseWebContentsAt(
-      tab_index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
+      tab_index, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
   // Do not add code past this point.
 }
 
@@ -369,12 +384,15 @@ void TabSearchPageHandler::AddRecentlyClosedEntries(
       recently_closed_tab_group->title =
           base::UTF16ToUTF8(tab_group_visual_data->title());
       recently_closed_tab_group->tab_count = group->tabs.size();
-      recently_closed_tab_group->last_active_time = entry->timestamp;
+      const base::Time last_active_time =
+          (entry->timestamp).is_null() ? GetTabGroupTimeStamp(group->tabs)
+                                       : entry->timestamp;
+      recently_closed_tab_group->last_active_time = last_active_time;
       recently_closed_tab_group->last_active_elapsed_text =
-          GetLastActiveElapsedText(entry->timestamp);
+          GetLastActiveElapsedText(last_active_time);
 
       for (auto& tab : group->tabs) {
-        if (AddRecentlyClosedTab(tab.get(), entry->timestamp,
+        if (AddRecentlyClosedTab(tab.get(), last_active_time,
                                  recently_closed_tabs, tab_dedup_keys,
                                  tab_group_ids, tab_groups)) {
           recently_closed_tab_count += 1;

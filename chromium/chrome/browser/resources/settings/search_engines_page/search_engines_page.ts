@@ -6,7 +6,7 @@
  * @fileoverview 'settings-search-engines-page' is the settings page
  * containing search engines settings.
  */
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/js/cr.m.js';
@@ -17,7 +17,7 @@ import './search_engine_delete_confirmation_dialog.js';
 import './search_engine_edit_dialog.js';
 import './search_engines_list.js';
 import './omnibox_extension_entry.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../settings_vars.css.js';
 
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
@@ -27,7 +27,6 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {SettingsRadioGroupElement} from '../controls/settings_radio_group.js';
 import {GlobalScrollTargetMixin} from '../global_scroll_target_mixin.js';
-import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
 
 import {SearchEngine, SearchEnginesBrowserProxy, SearchEnginesBrowserProxyImpl, SearchEnginesInfo, SearchEnginesInteractions} from './search_engines_browser_proxy.js';
@@ -140,12 +139,6 @@ export class SettingsSearchEnginesPageElement extends
         type: Boolean,
         value: false,
       },
-
-      isActiveSearchEnginesFlagEnabled_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('isActiveSearchEnginesFlagEnabled'),
-      },
     };
   }
 
@@ -153,23 +146,22 @@ export class SettingsSearchEnginesPageElement extends
     return ['extensionsChanged_(extensions, showExtensionsList_)'];
   }
 
-  defaultEngines: Array<SearchEngine>;
-  activeEngines: Array<SearchEngine>;
-  otherEngines: Array<SearchEngine>;
-  extensions: Array<SearchEngine>;
+  defaultEngines: SearchEngine[];
+  activeEngines: SearchEngine[];
+  otherEngines: SearchEngine[];
+  extensions: SearchEngine[];
   private showExtensionsList_: boolean;
   filter: string;
-  private matchingDefaultEngines_: Array<SearchEngine>;
-  private matchingActiveEngines_: Array<SearchEngine>;
-  private matchingOtherEngines_: Array<SearchEngine>;
-  private matchingExtensions_: Array<SearchEngine>;
+  private matchingDefaultEngines_: SearchEngine[];
+  private matchingActiveEngines_: SearchEngine[];
+  private matchingOtherEngines_: SearchEngine[];
+  private matchingExtensions_: SearchEngine[];
   private omniboxExtensionlastFocused_: HTMLElement;
   private omniboxExtensionListBlurred_: boolean;
   private dialogModel_: SearchEngine|null;
   private dialogAnchorElement_: HTMLElement|null;
   private showEditDialog_: boolean;
   private showDeleteConfirmationDialog_: boolean;
-  private isActiveSearchEnginesFlagEnabled_: boolean;
   private browserProxy_: SearchEnginesBrowserProxy =
       SearchEnginesBrowserProxyImpl.getInstance();
 
@@ -258,8 +250,7 @@ export class SettingsSearchEnginesPageElement extends
   /**
    * Filters the given list based on the currently existing filter string.
    */
-  private computeMatchingEngines_(list: Array<SearchEngine>):
-      Array<SearchEngine> {
+  private computeMatchingEngines_(list: SearchEngine[]): SearchEngine[] {
     if (this.filter === '') {
       return list;
     }
@@ -277,7 +268,7 @@ export class SettingsSearchEnginesPageElement extends
    * @return Whether to show the "no results" message.
    */
   private showNoResultsMessage_(
-      list: Array<SearchEngine>, filteredList: Array<SearchEngine>): boolean {
+      list: SearchEngine[], filteredList: SearchEngine[]): boolean {
     return list.length > 0 && filteredList.length === 0;
   }
 

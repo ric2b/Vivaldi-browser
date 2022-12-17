@@ -14,7 +14,6 @@ import * as dom from '../../dom.js';
 import {I18nString} from '../../i18n_string.js';
 import * as localStorage from '../../models/local_storage.js';
 import * as nav from '../../nav.js';
-import * as newFeatureToast from '../../new_feature_toast.js';
 import * as state from '../../state.js';
 import {Facing, LocalStorageKey, Mode, ViewName} from '../../type.js';
 import * as util from '../../util.js';
@@ -234,36 +233,6 @@ export class Options implements CameraUI {
                  vidPid: this.cameraManager.getVidPid(),
                  resetPTZ: () => this.cameraManager.resetPTZ(),
                }));
-      highlight(false);
-    });
-
-    // Highlight effect for PTZ button.
-    let toastShown = false;
-    const highlight = (enabled: boolean) => {
-      if (!enabled) {
-        if (toastShown) {
-          newFeatureToast.hide();
-          toastShown = false;
-        }
-        return;
-      }
-      toastShown = true;
-      newFeatureToast.show(this.openPTZPanel);
-      newFeatureToast.focus();
-    };
-
-    this.cameraManager.registerCameraUI({
-      onUpdateConfig: () => {
-        if (!state.get(state.State.ENABLE_PTZ) ||
-            state.get(state.State.IS_NEW_FEATURE_TOAST_SHOWN) ||
-            localStorage.getBool(LocalStorageKey.PTZ_TOAST_SHOWN)) {
-          highlight(false);
-          return;
-        }
-        localStorage.set(LocalStorageKey.PTZ_TOAST_SHOWN, true);
-        state.set(state.State.IS_NEW_FEATURE_TOAST_SHOWN, true);
-        highlight(true);
-      },
     });
   }
 

@@ -14,7 +14,7 @@ var ParentAccessAppTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     return 'chrome://parent-access/test_loader.html?module=' +
-        'chromeos/parent_access/parent_access_app_test.js';
+        'chromeos/parent_access/parent_access_app_test.js&host=test';
   }
 
   /** @param {string} testName The name of the test to run. */
@@ -31,7 +31,7 @@ var ParentAccessControllerTest = class extends testing.Test {
   /** @override */
   get browsePreload() {
     return 'chrome://parent-access/test_loader.html?module=' +
-        'chromeos/parent_access/parent_access_controller_test.js';
+        'chromeos/parent_access/parent_access_controller_test.js&host=test';
   }
 
   /** @override */
@@ -45,16 +45,18 @@ var ParentAccessControllerTest = class extends testing.Test {
   }
 };
 
-TEST_F('ParentAccessControllerTest', 'ParentAccessResultFnCalled', function() {
-  this.runMochaTest(
-      parent_access_controller_tests.TestNames.ParentAccessResultFnCalled);
-});
+TEST_F(
+    'ParentAccessControllerTest', 'ParentAccessCallbackReceivedFnCalled',
+    function() {
+      this.runMochaTest(parent_access_controller_tests.TestNames
+                            .ParentAccessCallbackReceivedFnCalled);
+    });
 
 var ParentAccessUITest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     return 'chrome://parent-access/test_loader.html?module=' +
-        'chromeos/parent_access/parent_access_ui_test.js';
+        'chromeos/parent_access/parent_access_ui_test.js&host=test';
   }
 
   /** @override */
@@ -87,7 +89,7 @@ var ParentAccessUIHandlerTest = class extends testing.Test {
   /** @override */
   get browsePreload() {
     return 'chrome://parent-access/test_loader.html?module=' +
-        'chromeos/parent_access/parent_access_ui_handler_test.js';
+        'chromeos/parent_access/parent_access_ui_handler_test.js&host=test';
   }
 
   /** @override */
@@ -101,7 +103,9 @@ var ParentAccessUIHandlerTest = class extends testing.Test {
   }
 };
 
-TEST_F('ParentAccessUIHandlerTest', 'TestOnParentAccessResult', function() {
-  this.runMochaTest(
-      parent_access_ui_handler_tests.TestNames.TestOnParentAccessResult);
-});
+TEST_F(
+    'ParentAccessUIHandlerTest', 'TestOnParentAccessCallbackReceived',
+    function() {
+      this.runMochaTest(parent_access_ui_handler_tests.TestNames
+                            .TestOnParentAccessCallbackReceived);
+    });

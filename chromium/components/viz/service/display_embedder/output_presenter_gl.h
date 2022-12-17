@@ -13,7 +13,7 @@
 #include "components/viz/service/display_embedder/output_presenter.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/shared_image_factory.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "ui/gfx/ca_layer_result.h"
 
 namespace gl {
@@ -64,10 +64,10 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane,
       Image* image,
       bool is_submitted) final;
-  void ScheduleOneOverlay(const OverlayCandidate& overlay,
-                          ScopedOverlayAccess* access) final;
-  void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays,
-                        std::vector<ScopedOverlayAccess*> accesses) final;
+  void ScheduleOverlayPlane(
+      const OutputPresenter::OverlayPlaneCandidate& overlay_plane_candidate,
+      ScopedOverlayAccess* access,
+      std::unique_ptr<gfx::GpuFence> acquire_fence) final;
 
 #if BUILDFLAG(IS_MAC)
   void SetCALayerErrorCode(gfx::CALayerResult ca_layer_error_code) final;

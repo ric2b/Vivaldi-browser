@@ -7,8 +7,13 @@
  * when the current range is over an editable; restores sticky mode when not on
  * an editable.
  */
-import {ChromeVoxState, ChromeVoxStateObserver} from '/chromevox/background/chromevox_state.js';
-import {ChromeVoxBackground} from '/chromevox/background/classic_background.js';
+import {AutomationUtil} from '../../common/automation_util.js';
+import {CursorRange} from '../../common/cursors/range.js';
+import {Earcon} from '../common/abstract_earcons.js';
+
+import {ChromeVox} from './chromevox.js';
+import {ChromeVoxState, ChromeVoxStateObserver} from './chromevox_state.js';
+import {ChromeVoxBackground} from './classic_background.js';
 
 /** @implements {ChromeVoxStateObserver} */
 export class SmartStickyMode {
@@ -29,7 +34,7 @@ export class SmartStickyMode {
   }
 
   /**
-   * @param {?cursors.Range} newRange
+   * @param {?CursorRange} newRange
    * @param {boolean=} opt_fromEditing
    * @override
    */
@@ -113,7 +118,7 @@ export class SmartStickyMode {
   /**
    * Called whenever a user toggles sticky mode. In this case, we need to ensure
    * we reset our internal state appropriately.
-   * @param {!cursors.Range} range The range when the sticky mode command was
+   * @param {!CursorRange} range The range when the sticky mode command was
    *     received.
    */
   onStickyModeCommand(range) {

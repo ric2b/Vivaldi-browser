@@ -49,8 +49,6 @@ void DownloadDialogBridge::ShowDialog(
     net::NetworkChangeNotifier::ConnectionType connection_type,
     DownloadLocationDialogType dialog_type,
     const base::FilePath& suggested_path,
-    bool supports_later_dialog,
-    bool show_date_time_picker,
     bool is_incognito,
     DialogCallback dialog_callback) {
   if (!native_window)
@@ -88,7 +86,7 @@ void DownloadDialogBridge::ShowDialog(
       static_cast<int>(dialog_type),
       base::android::ConvertUTF8ToJavaString(env,
                                              suggested_path.AsUTF8Unsafe()),
-      supports_later_dialog, is_incognito);
+      false /*supports_later_dialog*/, is_incognito);
 }
 
 void DownloadDialogBridge::OnComplete(
@@ -101,15 +99,6 @@ void DownloadDialogBridge::OnComplete(
   dialog_result.location_result = DownloadLocationDialogResult::USER_CONFIRMED;
   dialog_result.file_path = base::FilePath(
       base::android::ConvertJavaStringToUTF8(env, returned_path));
-
-  if (on_wifi) {
-    dialog_result.download_schedule =
-        download::DownloadSchedule(true /*only_on_wifi*/, absl::nullopt);
-  }
-  if (start_time > 0) {
-    dialog_result.download_schedule = download::DownloadSchedule(
-        false /*only_on_wifi*/, base::Time::FromJavaTime(start_time));
-  }
 
   CompleteSelection(std::move(dialog_result));
   is_dialog_showing_ = false;

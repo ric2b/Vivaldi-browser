@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
 <translation id="1397811292916898096">Søg med <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tryk for Søgning er en funktion, der kun er tilgængelig når Google er indstillet som standardsøemaskine i Vivaldi. Det sender det valgte ord og den nuværende side som kontekst til Google Søgning. Du kan slå det fra i <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Skift mellem normale/private faner</translation>
 <translation id="1644574205037202324">Historik</translation>
 <translation id="17513872634828108">Åbne faner</translation>
@@ -31,6 +32,9 @@ other {<ph name="BOOKMARKS_COUNT_MANY" /> bogmærker}}</translation>
 <translation id="4167670741834902166">Ny privat fane</translation>
 <translation id="4243710787042215766">Åbn i privat fane</translation>
 <translation id="4526803704855831732">Private faner</translation>
+<translation id="4719086422742491124">Lær om emner på websider uden at forlade siden. Vælg et eller flere ord på siden, for at søge på dem.
+
+Tryk for Søgning er en funktion, der kun er tilgængelig, når Google er indstillet som standardsøgemaskine i Vivaldi.</translation>
 <translation id="4759238208242260848">Downloads</translation>
 <translation id="4883379392681899581">Forlad privat tilstand</translation>
 <translation id="4943872375798546930">Ingen resultater</translation>
@@ -39,10 +43,10 @@ other {<ph name="BOOKMARKS_COUNT_MANY" /> bogmærker}}</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" />-lagerplads</translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Ny fane</translation>
-<translation id="572328651809341494">Seneste faner</translation>
-<translation id="5840488417521835756">Få oplysninger om emner på websider uden at forlade siden. "Tryk for at søge" er en funktion, der kun er tilgængelig når Google er valgt som standardsøgemaskine i Vivaldi. Den sender et ord dets nærværende kontekst til Google Søgning, og returnerer definitioner, billeder, søgeresultater og andre detaljer.
+<translation id="5375131951310889874">Lær om emner på websider uden at forlade siden. Tryk for Søgning er en funktion, der kun er tilgængelig når Google er valgt som standardsøgemaskine i Vivaldi. Det sender et ord or det omkringliggede kontekst til Google Søgning, og returnerer definitioner, billeder, søgeresultater og andre detaljer.
 
-Tryk længe på din søgeterm for at vælge og tilpasse den. Du kan afgrænse din søgning ved at trække panelet helt op og trykke i søgefeltet.</translation>
+Hold fingeren nede, for at tilpasse dine søgetermer. Stryg panelet hele vejen op, og tryk på søgeboksen, for at udpensle din søgning.</translation>
+<translation id="572328651809341494">Seneste faner</translation>
 <translation id="6150320133806434356">Bogmærke gemt</translation>
 <translation id="6336451774241870485">Ny privat fane</translation>
 <translation id="6585139692466700358">Tilbyd at oversætte sider på andre sprog, ved brug af Vivaldi's oversættelsestjeneste</translation>
@@ -53,7 +57,6 @@ Tryk længe på din søgeterm for at vælge og tilpasse den. Du kan afgrænse di
 <translation id="732145680195464316">Bogmærke gemt i <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
 <translation id="7465104139234185284">Luk alle private faner</translation>
-<translation id="7519434535192513364">Funktionen "Tryk for at søge" er kun tilgængelig når Google er valgt som standardsøgemaskines i Vivaldi. Den sender det markerede ord og den aktuelle side som kontekst til Google Søgning. Du kan deaktivere funktionen i <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Servicevilkår</translation>
 <translation id="85991616550051997">Gå til startside</translation>
 <translation id="8820817407110198400">Bogmærker</translation>

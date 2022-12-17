@@ -24,6 +24,11 @@ if (is_win) {
     inputs = []
   }
 }
+if (is_ios) {
+#  update_target("//ios/chrome/app:chrome") {
+#    deps = []
+#  }
+}
 
 group("signings") {
   deps = []
@@ -34,5 +39,8 @@ group("signings") {
   }
   if (is_mac) {
     deps += [ "//vivaldi/installer/mac" ]
+  }
+  if (is_ios) {
+    deps += [ "//vivaldi/installer/ios:sign_ios" ]
   }
 }

@@ -7,7 +7,7 @@ import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_se
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
 import {ReimagingProvisioningPage} from 'chrome://shimless-rma/reimaging_provisioning_page.js';
 import {ShimlessRma} from 'chrome://shimless-rma/shimless_rma.js';
-import {ProvisioningError, ProvisioningStatus} from 'chrome://shimless-rma/shimless_rma_types.js';
+import {ProvisioningError, ProvisioningStatus, RmadErrorCode} from 'chrome://shimless-rma/shimless_rma_types.js';
 
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 import {flushTasks} from '../../test_util.js';
@@ -26,13 +26,10 @@ export function reimagingProvisioningPageTest() {
   /** @type {?FakeShimlessRmaService} */
   let service = null;
 
-  suiteSetup(() => {
-    service = new FakeShimlessRmaService();
-    setShimlessRmaServiceForTesting(service);
-  });
-
   setup(() => {
     document.body.innerHTML = '';
+    service = new FakeShimlessRmaService();
+    setShimlessRmaServiceForTesting(service);
   });
 
   teardown(() => {
@@ -114,6 +111,14 @@ export function reimagingProvisioningPageTest() {
   test('ProvisioningFailedNonWpError', async () => {
     await initializeWaitForProvisioningPage();
 
+    let hardwareErrorEventFired = false;
+
+    const eventHandler = (event) => {
+      hardwareErrorEventFired = true;
+      assertEquals(RmadErrorCode.kProvisioningFailed, event.detail);
+    };
+    component.addEventListener('fatal-hardware-error', eventHandler);
+
     const wpEnabledDialog =
         component.shadowRoot.querySelector('#wpEnabledDialog');
     assertTrue(!!wpEnabledDialog);
@@ -125,5 +130,8 @@ export function reimagingProvisioningPageTest() {
     await flushTasks();
 
     assertFalse(wpEnabledDialog.open);
+    assertTrue(hardwareErrorEventFired);
+
+    component.removeEventListener('fatal-hardware-error', eventHandler);
   });
 }

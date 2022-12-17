@@ -4,6 +4,7 @@
 
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {AuthFactorConfig, AuthFactorConfigInterface, RecoveryFactorEditor, RecoveryFactorEditorInterface} from 'chrome://resources/mojo/chromeos/ash/services/auth_factor_config/public/mojom/auth_factor_config.mojom-webui.js';
 
 /**
  * @fileoverview
@@ -15,7 +16,7 @@ import {WebUIListenerBehavior, WebUIListenerBehaviorInterface} from 'chrome://re
 export const LockScreenUnlockType = {
   VALUE_PENDING: 'value_pending',
   PASSWORD: 'password',
-  PIN_PASSWORD: 'pin+password'
+  PIN_PASSWORD: 'pin+password',
 };
 
 /**
@@ -62,6 +63,21 @@ export const LockStateBehaviorImpl = {
      * @type {QuickUnlockPrivate}
      */
     quickUnlockPrivate: {type: Object, value: chrome.quickUnlockPrivate},
+
+    /**
+     * Interface for calls to the ash AuthFactorConfig service. May be
+     * overridden by tests.
+     * @type {AuthFactorConfigInterface}
+     */
+    authFactorConfig: {type: Object, value: AuthFactorConfig.getRemote()},
+
+    /**
+     * Interface for calls to the ash RecoveryFactorEditor service.  May be
+     * overridden by tests.
+     * @type {RecoveryFactorEditorInterface}
+     */
+    recoveryFactorEditor:
+        {type: Object, value: RecoveryFactorEditor.getRemote()},
   },
 
   /** @override */
@@ -131,10 +147,21 @@ export const LockStateBehaviorImpl = {
    * @param {string} authToken The token returned by
    *                           QuickUnlockPrivate.getAuthToken
    * @param {boolean} enabled
+   * @param {function(boolean): void} onComplete
    * @see quickUnlockPrivate.setLockScreenEnabled
    */
-  setLockScreenEnabled(authToken, enabled) {
-    this.quickUnlockPrivate.setLockScreenEnabled(authToken, enabled);
+  setLockScreenEnabled(authToken, enabled, onComplete) {
+    this.quickUnlockPrivate.setLockScreenEnabled(authToken, enabled, () => {
+      let success = true;
+      if (chrome.runtime.lastError) {
+        console.warn(
+            'setLockScreenEnabled failed: ' + chrome.runtime.lastError.message);
+        success = false;
+      }
+      if (onComplete) {
+        onComplete(success);
+      }
+    });
   },
 
   /**
@@ -181,6 +208,20 @@ export class LockStateBehaviorInterface {
      * @type {QuickUnlockPrivate}
      */
     this.quickUnlockPrivate;
+
+    /**
+     * Interface for calls to the ash AuthFactorConfig service. May be
+     * overridden by tests.
+     * @type {AuthFactorConfigInterface}
+     */
+    this.authFactorConfig;
+
+    /**
+     * Interface for calls to the ash RecoveryFactorEditor service.  May be
+     * overridden by tests.
+     * @type {RecoveryFactorEditorInterface}
+     */
+    this.recoveryFactorEditor;
   }
 
   /**
@@ -198,9 +239,10 @@ export class LockStateBehaviorInterface {
    * @param {string} authToken The token returned by
    *                           QuickUnlockPrivate.getAuthToken
    * @param {boolean} enabled
+   * @param {function(boolean): void} onComplete
    * @see quickUnlockPrivate.setLockScreenEnabled
    */
-  setLockScreenEnabled(authToken, enabled) {}
+  setLockScreenEnabled(authToken, enabled, onComplete) {}
 }
 
 /** @polymerBehavior */

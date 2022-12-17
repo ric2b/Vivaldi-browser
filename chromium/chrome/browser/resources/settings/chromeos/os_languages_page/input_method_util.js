@@ -39,7 +39,7 @@ const KeyboardLayout = {
   SET3_YET: '3 Set (Old Hangul) / 세벌식 (옛글)',
   XKB_US: 'US',
   XKB_DVORAK: 'Dvorak',
-  XKB_COLEMAK: 'Colemak'
+  XKB_COLEMAK: 'Colemak',
 };
 
 /**
@@ -60,6 +60,8 @@ export const OptionType = {
       'physicalKeyboardEnableCapitalization',
   PHYSICAL_KEYBOARD_ENABLE_PREDICTIVE_WRITING:
       'physicalKeyboardEnablePredictiveWriting',
+  PHYSICAL_KEYBOARD_ENABLE_DIACRITICS_ON_LONGPRESS:
+      'physicalKeyboardEnableDiacriticsOnLongpress',
   VIRTUAL_KEYBOARD_AUTO_CORRECTION_LEVEL: 'virtualKeyboardAutoCorrectionLevel',
   VIRTUAL_KEYBOARD_ENABLE_CAPITALIZATION: 'virtualKeyboardEnableCapitalization',
   XKB_LAYOUT: 'xkbLayout',
@@ -109,6 +111,7 @@ export const OPTION_DEFAULT = {
   [OptionType.PHYSICAL_KEYBOARD_AUTO_CORRECTION_LEVEL]: 0,
   [OptionType.PHYSICAL_KEYBOARD_ENABLE_CAPITALIZATION]: true,
   [OptionType.PHYSICAL_KEYBOARD_ENABLE_PREDICTIVE_WRITING]: true,
+  [OptionType.PHYSICAL_KEYBOARD_ENABLE_DIACRITICS_ON_LONGPRESS]: true,
   [OptionType.VIRTUAL_KEYBOARD_AUTO_CORRECTION_LEVEL]: 1,
   [OptionType.VIRTUAL_KEYBOARD_ENABLE_CAPITALIZATION]: true,
   [OptionType.XKB_LAYOUT]: 'US',
@@ -134,7 +137,7 @@ export const OPTION_DEFAULT = {
     r_l: undefined,
     s_sh: undefined,
     uan_uang: undefined,
-    z_zh: undefined
+    z_zh: undefined,
   },
   // Options for zhuyin input method.
   [OptionType.ZHUYIN_KEYBOARD_LAYOUT]: KeyboardLayout.STANDARD,
@@ -153,38 +156,69 @@ export const UiType = {
   LINK: 'link',
 };
 
+/**
+ * All possible Settings headers
+ *
+ * @enum {string}
+ */
+const SettingsHeaders = {
+  BASIC: 'basic',
+  ADVANCED: 'advanced',
+  PHYSICAL_KEYBOARD: 'physicalKeyboard',
+  VIRTUAL_KEYBOARD: 'virtualKeyboard',
+  SUGGESTIONS: 'suggestions',
+};
+
+/**
+ * Contents of the settings page for different settings types.
+ * These should be in the order they are expected to appear in
+ * the actual settings pages.
+ *
+ * @type {Object<SettingsType, !Array<!{title: SettingsHeaders, optionNames:
+ * !Array<OptionType>}>>}
+ */
 const Settings = {
-  [SettingsType.LATIN_SETTINGS]: {
-    physicalKeyboard: [{
-      name: OptionType.PHYSICAL_KEYBOARD_AUTO_CORRECTION_LEVEL,
-    }],
-    virtualKeyboard: [
-      {name: OptionType.ENABLE_SOUND_ON_KEYPRESS}, {
-        name: OptionType.VIRTUAL_KEYBOARD_AUTO_CORRECTION_LEVEL,
-        dependentOptions: [
-          OptionType.VIRTUAL_KEYBOARD_ENABLE_CAPITALIZATION,
-        ]
-      },
-      {name: OptionType.ENABLE_GESTURE_TYPING},
-      {name: OptionType.ENABLE_DOUBLE_SPACE_PERIOD},
-      {name: OptionType.EDIT_USER_DICT}
-    ],
-  },
-  [SettingsType.ZHUYIN_SETTINGS]: {
-    physicalKeyboard: [
+  [SettingsType.LATIN_SETTINGS]: [
+    {
+      title: SettingsHeaders.PHYSICAL_KEYBOARD,
+      optionNames: [{
+        name: OptionType.PHYSICAL_KEYBOARD_AUTO_CORRECTION_LEVEL,
+      }],
+    },
+    {
+      title: SettingsHeaders.VIRTUAL_KEYBOARD,
+      optionNames: [
+        {name: OptionType.ENABLE_SOUND_ON_KEYPRESS},
+        {
+          name: OptionType.VIRTUAL_KEYBOARD_AUTO_CORRECTION_LEVEL,
+          dependentOptions: [
+            OptionType.VIRTUAL_KEYBOARD_ENABLE_CAPITALIZATION,
+          ],
+        },
+        {name: OptionType.ENABLE_GESTURE_TYPING},
+        {name: OptionType.ENABLE_DOUBLE_SPACE_PERIOD},
+        {name: OptionType.EDIT_USER_DICT},
+      ],
+    },
+  ],
+  [SettingsType.ZHUYIN_SETTINGS]: [{
+    title: SettingsHeaders.PHYSICAL_KEYBOARD,
+    optionNames: [
       {name: OptionType.ZHUYIN_KEYBOARD_LAYOUT},
       {name: OptionType.ZHUYIN_SELECT_KEYS},
       {name: OptionType.ZHUYIN_PAGE_SIZE},
     ],
-  },
-  [SettingsType.KOREAN_SETTINGS]: {
-    basic: [
+  }],
+  [SettingsType.KOREAN_SETTINGS]: [{
+    title: SettingsHeaders.BASIC,
+    optionNames: [
       {name: OptionType.KOREAN_KEYBOARD_LAYOUT},
       {name: OptionType.KOREAN_ENABLE_SYLLABLE_INPUT},
     ],
-  },
-  [SettingsType.PINYIN_FUZZY_SETTINGS]: {
-    advanced: [{
+  }],
+  [SettingsType.PINYIN_FUZZY_SETTINGS]: [{
+    title: SettingsHeaders.ADVANCED,
+    optionNames: [{
       name: OptionType.PINYIN_ENABLE_FUZZY,
       dependentOptions: [
         OptionType.PINYIN_AN_ANG,
@@ -199,36 +233,51 @@ const Settings = {
         OptionType.PINYIN_L_N,
         OptionType.PINYIN_S_SH,
         OptionType.PINYIN_Z_ZH,
-      ]
+      ],
     }],
-  },
-  [SettingsType.PINYIN_SETTINGS]: {
-    physicalKeyboard: [
-      {name: OptionType.XKB_LAYOUT},
-      {name: OptionType.PINYIN_ENABLE_UPPER_PAGING},
-      {name: OptionType.PINYIN_ENABLE_LOWER_PAGING},
-      {name: OptionType.PINYIN_DEFAULT_CHINESE},
-      {name: OptionType.PINYIN_FULL_WIDTH_CHARACTER},
-      {name: OptionType.PINYIN_CHINESE_PUNCTUATION},
-    ],
-    advanced: [{name: OptionType.EDIT_USER_DICT}],
-  },
-  [SettingsType.BASIC_SETTINGS]: {
-    virtualKeyboard: [
+  }],
+  [SettingsType.PINYIN_SETTINGS]: [
+    {
+      title: SettingsHeaders.ADVANCED,
+      optionNames: [{name: OptionType.EDIT_USER_DICT}],
+    },
+    {
+      title: SettingsHeaders.PHYSICAL_KEYBOARD,
+      optionNames: [
+        {name: OptionType.XKB_LAYOUT},
+        {name: OptionType.PINYIN_ENABLE_UPPER_PAGING},
+        {name: OptionType.PINYIN_ENABLE_LOWER_PAGING},
+        {name: OptionType.PINYIN_DEFAULT_CHINESE},
+        {name: OptionType.PINYIN_FULL_WIDTH_CHARACTER},
+        {name: OptionType.PINYIN_CHINESE_PUNCTUATION},
+      ],
+    },
+  ],
+  [SettingsType.BASIC_SETTINGS]: [{
+    title: SettingsHeaders.VIRTUAL_KEYBOARD,
+    optionNames: [
       {name: OptionType.ENABLE_SOUND_ON_KEYPRESS},
     ],
-  },
-  [SettingsType.ENGLISH_SOUTH_AFRICA_SETTINGS]: {
-    virtualKeyboard: [
+  }],
+  [SettingsType.ENGLISH_SOUTH_AFRICA_SETTINGS]: [{
+    title: SettingsHeaders.VIRTUAL_KEYBOARD,
+    optionNames: [
       {name: OptionType.ENABLE_SOUND_ON_KEYPRESS},
       {name: OptionType.VIRTUAL_KEYBOARD_ENABLE_CAPITALIZATION},
     ],
-  },
-  [SettingsType.SUGGESTION_SETTINGS]: {
-    suggestions:
+  }],
+  [SettingsType.SUGGESTION_SETTINGS]: [{
+    title: SettingsHeaders.SUGGESTIONS,
+    optionNames:
         [{name: OptionType.PHYSICAL_KEYBOARD_ENABLE_PREDICTIVE_WRITING}],
-  },
+  }],
+  [SettingsType.PK_DIACRITICS_SETTINGS]: [{
+    title: SettingsHeaders.PHYSICAL_KEYBOARD,
+    optionNames:
+        [{name: OptionType.PHYSICAL_KEYBOARD_ENABLE_DIACRITICS_ON_LONGPRESS}],
+  }],
 };
+
 /**
  * @param {string} id Input method ID.
  * @return {string} The corresponding engind ID of the input method.
@@ -241,15 +290,18 @@ export function getFirstPartyInputMethodEngineId(id) {
 /**
  * @param {string} id Input method ID.
  * @param {boolean} predictiveWritingEnabled .
+ * @param {boolean} physicalKeyboardDiacriticsEnabled .
  * @return {boolean} true if the input method's options page is implemented.
  */
-export function hasOptionsPageInSettings(id, predictiveWritingEnabled) {
+export function hasOptionsPageInSettings(
+    id, predictiveWritingEnabled, physicalKeyboardDiacriticsEnabled) {
   if (!isFirstPartyInputMethodId_(id)) {
     return false;
   }
   const engineId = getFirstPartyInputMethodEngineId(id);
 
-  const inputMethodSettings = getInputMethodSettings(predictiveWritingEnabled);
+  const inputMethodSettings = getInputMethodSettings(
+      predictiveWritingEnabled, physicalKeyboardDiacriticsEnabled);
   return !!inputMethodSettings[engineId];
 }
 
@@ -257,54 +309,40 @@ export function hasOptionsPageInSettings(id, predictiveWritingEnabled) {
  * Generates options to be displayed in the options page, grouped by sections.
  * @param {string} engineId Input method engine ID.
  * @param {boolean} predictiveWritingEnabled .
+ * @param {boolean} physicalKeyboardDiacriticsEnabled .
  * @return {!Array<!{title: string, optionNames:
  *     !Array<OptionType>}>} the options to be
  *     displayed.
  */
-export function generateOptions(engineId, predictiveWritingEnabled) {
-  const options = {
-    basic: [],
-    advanced: [],
-    physicalKeyboard: [],
-    virtualKeyboard: [],
-    suggestions: []
-  };
+export function generateOptions(
+    engineId, predictiveWritingEnabled, physicalKeyboardDiacriticsEnabled) {
+  const options = [];
 
-  const inputMethodSettings = getInputMethodSettings(predictiveWritingEnabled);
+  const inputMethodSettings = getInputMethodSettings(
+      predictiveWritingEnabled, physicalKeyboardDiacriticsEnabled);
   const engineSettings = inputMethodSettings[engineId];
   if (engineSettings) {
+    const pushedOptions = {};
+
     engineSettings.forEach((settingType) => {
       const settings = Settings[settingType];
-      options.basic.push(...(settings.basic || []));
-      options.advanced.push(...(settings.advanced || []));
-      options.physicalKeyboard.push(...(settings.physicalKeyboard || []));
-      options.virtualKeyboard.push(...(settings.virtualKeyboard || []));
-      options.suggestions.push(...(settings.suggestions || []));
+      for (const {title, optionNames} of settings) {
+        if (optionNames) {
+          if (pushedOptions[title] === undefined) {
+            pushedOptions[title] = options.length;
+            options.push({
+              title,
+              optionNames: [...optionNames],
+            });
+          } else {
+            options[pushedOptions[title]].optionNames.push(...optionNames);
+          }
+        }
+      }
     });
   }
 
-  return [
-    {
-      title: 'basic',
-      optionNames: options.basic,
-    },
-    {
-      title: 'advanced',
-      optionNames: options.advanced,
-    },
-    {
-      title: 'physicalKeyboard',
-      optionNames: options.physicalKeyboard,
-    },
-    {
-      title: 'virtualKeyboard',
-      optionNames: options.virtualKeyboard,
-    },
-    {
-      title: 'suggestions',
-      optionNames: options.suggestions,
-    },
-  ];
+  return options;
 }
 
 /**
@@ -321,6 +359,7 @@ export function getOptionUiType(option) {
     case OptionType.ENABLE_SOUND_ON_KEYPRESS:
     case OptionType.PHYSICAL_KEYBOARD_ENABLE_CAPITALIZATION:
     case OptionType.PHYSICAL_KEYBOARD_ENABLE_PREDICTIVE_WRITING:
+    case OptionType.PHYSICAL_KEYBOARD_ENABLE_DIACRITICS_ON_LONGPRESS:
     case OptionType.VIRTUAL_KEYBOARD_ENABLE_CAPITALIZATION:
     case OptionType.KOREAN_ENABLE_SYLLABLE_INPUT:
     case OptionType.PINYIN_CHINESE_PUNCTUATION:
@@ -396,6 +435,8 @@ export function getOptionLabelName(option) {
       return 'inputMethodOptionsEnableCapitalization';
     case OptionType.PHYSICAL_KEYBOARD_ENABLE_PREDICTIVE_WRITING:
       return 'inputMethodOptionsPredictiveWriting';
+    case OptionType.PHYSICAL_KEYBOARD_ENABLE_DIACRITICS_ON_LONGPRESS:
+      return 'inputMethodOptionsDiacriticsOnPhysicalKeyboardLongpress';
     case OptionType.PINYIN_CHINESE_PUNCTUATION:
       return 'inputMethodOptionsPinyinChinesePunctuation';
     case OptionType.PINYIN_DEFAULT_CHINESE:
@@ -472,13 +513,13 @@ export function getOptionMenuItems(option) {
       return [
         {value: 0, name: 'inputMethodOptionsAutoCorrectionOff'},
         {value: 1, name: 'inputMethodOptionsAutoCorrectionModest'},
-        {value: 2, name: 'inputMethodOptionsAutoCorrectionAggressive'}
+        {value: 2, name: 'inputMethodOptionsAutoCorrectionAggressive'},
       ];
     case OptionType.XKB_LAYOUT:
       return [
         {value: 'US', name: 'inputMethodOptionsUsKeyboard'},
         {value: 'Dvorak', name: 'inputMethodOptionsDvorakKeyboard'},
-        {value: 'Colemak', name: 'inputMethodOptionsColemakKeyboard'}
+        {value: 'Colemak', name: 'inputMethodOptionsColemakKeyboard'},
       ];
     case OptionType.ZHUYIN_KEYBOARD_LAYOUT:
       return [
@@ -540,11 +581,11 @@ export function getOptionUrl(option) {
   return undefined;
 }
 
-  /**
-   * @param {string} id Input method ID.
-   * @return {boolean} true if |id| is a first party input method ID.
-   * @private
-   */
-  function isFirstPartyInputMethodId_(id) {
-    return id.startsWith(FIRST_PARTY_INPUT_METHOD_ID_PREFIX);
-  }
+/**
+ * @param {string} id Input method ID.
+ * @return {boolean} true if |id| is a first party input method ID.
+ * @private
+ */
+function isFirstPartyInputMethodId_(id) {
+  return id.startsWith(FIRST_PARTY_INPUT_METHOD_ID_PREFIX);
+}

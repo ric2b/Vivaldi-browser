@@ -158,6 +158,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
       password_manager::PasswordAccessAuthenticator::AuthResultCallback
           callback);
 
+  void TimeoutCall();
+
   content::BrowserContext* browser_context_;
 
   // BrowserContextKeyedAPI implementation.

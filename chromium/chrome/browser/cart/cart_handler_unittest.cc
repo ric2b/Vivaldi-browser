@@ -7,16 +7,16 @@
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "chrome/browser/cart/cart_db_content.pb.h"
 #include "chrome/browser/cart/cart_service.h"
 #include "chrome/browser/cart/cart_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/persisted_state_db/profile_proto_db.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/proto/cart_db_content.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
+#include "components/session_proto_db/session_proto_db.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_contents_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -79,15 +79,13 @@ const cart_db::ChromeCartContentProto kFakeProto =
     BuildProto(kFakeMerchantKey, kFakeMerchant, kFakeMerchantURL);
 const cart_db::ChromeCartContentProto kMockProtoB =
     BuildProto(kMockMerchantBKey, kMockMerchantB, kMockMerchantURLB);
-const std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
+const std::vector<SessionProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
     kExpectedFake = {{kFakeMerchant, kFakeProto}};
-const std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
+const std::vector<SessionProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
     kExpectedAllData = {
         {kFakeMerchant, kFakeProto},
         {kMockMerchantB, kMockProtoB},
 };
-const std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
-    kEmptyExpected = {};
 }  // namespace
 
 class CartHandlerTest : public testing::Test {
@@ -126,7 +124,7 @@ class CartHandlerTest : public testing::Test {
       base::OnceClosure closure,
       bool isHidden,
       bool result,
-      std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
+      std::vector<SessionProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
           found) {
     EXPECT_EQ(1U, found.size());
     EXPECT_EQ(isHidden, found[0].second.is_hidden());
@@ -137,7 +135,7 @@ class CartHandlerTest : public testing::Test {
       base::OnceClosure closure,
       bool isRemoved,
       bool result,
-      std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
+      std::vector<SessionProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
           found) {
     EXPECT_EQ(1U, found.size());
     EXPECT_EQ(isRemoved, found[0].second.is_removed());

@@ -46,10 +46,10 @@
 #include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/update_engine/fake_update_engine_client.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
-#include "chromeos/dbus/update_engine/fake_update_engine_client.h"
 #include "chromeos/login/login_state/login_state.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "components/account_id/account_id.h"
@@ -74,6 +74,8 @@ namespace {
 namespace em = ::enterprise_management;
 
 using ::base::Time;
+using ::testing::IsEmpty;
+using ::testing::Not;
 using ::testing::Return;
 
 // Time delta representing midnight 00:00.
@@ -173,8 +175,7 @@ class ChildStatusCollectorTest : public testing::Test {
   ChildStatusCollectorTest()
       : user_manager_(new ash::MockUserManager()),
         user_manager_enabler_(base::WrapUnique(user_manager_)),
-        user_data_dir_override_(chrome::DIR_USER_DATA),
-        update_engine_client_(new chromeos::FakeUpdateEngineClient) {
+        user_data_dir_override_(chrome::DIR_USER_DATA) {
     scoped_stub_install_attributes_.Get()->SetCloudManaged("managed.com",
                                                            "device_id");
     EXPECT_CALL(*user_manager_, Shutdown()).Times(1);
@@ -200,10 +201,7 @@ class ChildStatusCollectorTest : public testing::Test {
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
 
     // Use FakeUpdateEngineClient.
-    chromeos::DBusThreadManager::Initialize();
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetUpdateEngineClient(
-        base::WrapUnique<chromeos::UpdateEngineClient>(update_engine_client_));
-
+    ash::UpdateEngineClient::InitializeFakeForTest();
     ash::CiceroneClient::InitializeFake();
     ash::ConciergeClient::InitializeFake();
     ash::SeneschalClient::InitializeFake();
@@ -221,6 +219,7 @@ class ChildStatusCollectorTest : public testing::Test {
     testing_profile_.reset();
     ash::ConciergeClient::Shutdown();
     ash::CiceroneClient::Shutdown();
+    ash::UpdateEngineClient::Shutdown();
     TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
 
     // Finish pending tasks.
@@ -434,7 +433,6 @@ class ChildStatusCollectorTest : public testing::Test {
   em::ChildStatusReportRequest child_status_;
   std::unique_ptr<TestingChildStatusCollector> status_collector_;
   base::ScopedPathOverride user_data_dir_override_;
-  chromeos::FakeUpdateEngineClient* const update_engine_client_;
   std::unique_ptr<base::RunLoop> run_loop_;
 
   // This property is required to instantiate the session manager, a singleton
@@ -549,8 +547,8 @@ TEST_F(ChildStatusCollectorTest, ReportingActivityTimesIdleTransitions) {
 }
 
 TEST_F(ChildStatusCollectorTest, ActivityKeptInPref) {
-  EXPECT_TRUE(
-      pref_service()->GetDictionary(prefs::kUserActivityTimes)->DictEmpty());
+  EXPECT_THAT(pref_service()->GetValueDict(prefs::kUserActivityTimes),
+              IsEmpty());
   task_environment_.AdvanceClock(kHour);
 
   DeviceStateTransitions test_states[] = {
@@ -566,8 +564,8 @@ TEST_F(ChildStatusCollectorTest, ActivityKeptInPref) {
       DeviceStateTransitions::kLeaveSessionActive};
   SimulateStateChanges(test_states,
                        sizeof(test_states) / sizeof(DeviceStateTransitions));
-  EXPECT_FALSE(
-      pref_service()->GetDictionary(prefs::kUserActivityTimes)->DictEmpty());
+  EXPECT_THAT(pref_service()->GetValueDict(prefs::kUserActivityTimes),
+              Not(IsEmpty()));
 
   // Process the list a second time after restarting the collector. It should be
   // able to count the active periods found by the original collector, because
@@ -617,8 +615,8 @@ TEST_F(ChildStatusCollectorTest, BeforeDayStart) {
   Time initial_time =
       Time::Now().LocalMidnight() + base::Days(1) + base::Hours(4);
   FastForwardTo(initial_time);
-  EXPECT_TRUE(
-      pref_service()->GetDictionary(prefs::kUserActivityTimes)->DictEmpty());
+  EXPECT_THAT(pref_service()->GetValueDict(prefs::kUserActivityTimes),
+              IsEmpty());
 
   DeviceStateTransitions test_states[] = {
       DeviceStateTransitions::kEnterSessionActive,

@@ -8,8 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/attestation/fake_certificate.h"
-#include "ash/components/attestation/mock_attestation_flow.h"
 #include "ash/components/settings/cros_settings_names.h"
 #include "base/bind.h"
 #include "chrome/browser/ash/attestation/soft_bind_attestation_flow.h"
@@ -17,9 +15,11 @@
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/dbus/attestation/attestation.pb.h"
-#include "chromeos/dbus/attestation/fake_attestation_client.h"
-#include "chromeos/dbus/attestation/interface.pb.h"
+#include "chromeos/ash/components/attestation/fake_certificate.h"
+#include "chromeos/ash/components/attestation/mock_attestation_flow.h"
+#include "chromeos/ash/components/dbus/attestation/attestation.pb.h"
+#include "chromeos/ash/components/dbus/attestation/fake_attestation_client.h"
+#include "chromeos/ash/components/dbus/attestation/interface.pb.h"
 #include "content/public/test/browser_task_environment.h"
 #include "crypto/rsa_private_key.h"
 #include "net/cert/x509_certificate.h"
@@ -55,12 +55,10 @@ class SoftBindAttestationFlowTest : public ::testing::Test {
         fake_cert_chains_({}),
         fake_cert_chain_read_index_(0),
         result_cert_chain_({}) {
-    ::chromeos::AttestationClient::InitializeFake();
+    AttestationClient::InitializeFake();
   }
 
-  ~SoftBindAttestationFlowTest() override {
-    ::chromeos::AttestationClient::Shutdown();
-  }
+  ~SoftBindAttestationFlowTest() override { AttestationClient::Shutdown(); }
 
   void SetUp() override {
     auto mock_attestation_flow =
@@ -89,8 +87,10 @@ class SoftBindAttestationFlowTest : public ::testing::Test {
     return generic_public_key->SerializeAsString();
   }
 
-  void OnAttestationCertificates(const std::vector<std::string>& cert_chain) {
+  void OnAttestationCertificates(const std::vector<std::string>& cert_chain,
+                                 bool valid) {
     result_cert_chain_ = cert_chain;
+    result_validity_ = valid;
   }
 
   void ExpectMockAttestationFlowGetCertificate() {
@@ -150,6 +150,7 @@ class SoftBindAttestationFlowTest : public ::testing::Test {
   int fake_cert_chain_read_index_;
 
   std::vector<std::string> result_cert_chain_;
+  bool result_validity_;
 };
 
 TEST_F(SoftBindAttestationFlowTest, Success) {
@@ -160,6 +161,7 @@ TEST_F(SoftBindAttestationFlowTest, Success) {
                                               user_key);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2, result_cert_chain_.size());
+  EXPECT_TRUE(result_validity_);
 }
 
 TEST_F(SoftBindAttestationFlowTest, FeatureDisabledByPolicy) {
@@ -170,6 +172,7 @@ TEST_F(SoftBindAttestationFlowTest, FeatureDisabledByPolicy) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, result_cert_chain_.size());
   EXPECT_EQ("INVALID:attestationNotAllowed", result_cert_chain_[0]);
+  EXPECT_FALSE(result_validity_);
 }
 
 TEST_F(SoftBindAttestationFlowTest, NotVerifiedDueToUnspecifiedFailure) {
@@ -182,6 +185,7 @@ TEST_F(SoftBindAttestationFlowTest, NotVerifiedDueToUnspecifiedFailure) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, result_cert_chain_.size());
   EXPECT_EQ("INVALID:notVerified", result_cert_chain_[0]);
+  EXPECT_FALSE(result_validity_);
 }
 
 TEST_F(SoftBindAttestationFlowTest, NotVerifiedDueToBadRequestFailure) {
@@ -194,6 +198,7 @@ TEST_F(SoftBindAttestationFlowTest, NotVerifiedDueToBadRequestFailure) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, result_cert_chain_.size());
   EXPECT_EQ("INVALID:notVerified", result_cert_chain_[0]);
+  EXPECT_FALSE(result_validity_);
 }
 
 TEST_F(SoftBindAttestationFlowTest, Timeout) {
@@ -204,6 +209,7 @@ TEST_F(SoftBindAttestationFlowTest, Timeout) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, result_cert_chain_.size());
   EXPECT_EQ("INVALID:timeout", result_cert_chain_[0]);
+  EXPECT_FALSE(result_validity_);
 }
 
 TEST_F(SoftBindAttestationFlowTest, NearlyExpiredCert) {
@@ -215,6 +221,7 @@ TEST_F(SoftBindAttestationFlowTest, NearlyExpiredCert) {
                                               user_key);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2, result_cert_chain_.size());
+  EXPECT_TRUE(result_validity_);
   EXPECT_EQ(2, fake_cert_chain_read_index_);
 }
 
@@ -227,6 +234,7 @@ TEST_F(SoftBindAttestationFlowTest, ExpiredCertRenewed) {
                                               user_key);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2, result_cert_chain_.size());
+  EXPECT_TRUE(result_validity_);
   EXPECT_EQ(2, fake_cert_chain_read_index_);
 }
 
@@ -243,6 +251,7 @@ TEST_F(SoftBindAttestationFlowTest, MultipleRenewalsExceedsMaxRetries) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, result_cert_chain_.size());
   EXPECT_EQ("INVALID:tooManyRetries", result_cert_chain_[0]);
+  EXPECT_FALSE(result_validity_);
   EXPECT_EQ(4, fake_cert_chain_read_index_);
 }
 
@@ -260,6 +269,7 @@ TEST_F(SoftBindAttestationFlowTest, MultipleSuccessesSimultaneously) {
                                               user_key);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2, result_cert_chain_.size());
+  EXPECT_TRUE(result_validity_);
   EXPECT_EQ(3, fake_cert_chain_read_index_);
 }
 

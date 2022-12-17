@@ -29,6 +29,7 @@
 #include <memory>
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -57,6 +58,7 @@ class BackgroundHTMLScanner;
 class Document;
 class DocumentFragment;
 class Element;
+class FetchBatchScope;
 class HTMLDocument;
 class HTMLParserMetrics;
 class HTMLParserScriptRunner;
@@ -80,6 +82,8 @@ size_t CORE_EXPORT GetDiscardedTokenCountForTesting();
 
 class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
                                        private HTMLParserScriptRunnerHost {
+  friend FetchBatchScope;
+
  public:
   HTMLDocumentParser(HTMLDocument&,
                      ParserSynchronizationPolicy,
@@ -147,14 +151,20 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   void CheckIfBlockingStylesheetAdded();
   void DocumentElementAvailable() override;
   void CommitPreloadedData() override;
+  void FlushPendingPreloads() override;
 
   // HTMLParserScriptRunnerHost
   void NotifyScriptLoaded() final;
   HTMLInputStream& InputStream() final { return input_; }
-  bool HasPreloadScanner() const final { return preload_scanner_.get(); }
+  bool HasPreloadScanner() const final {
+    return preload_scanner_.get() || background_scanner_;
+  }
   void AppendCurrentInputStreamToPreloadScannerAndScan() final;
 
-  NextTokenStatus CanTakeNextToken();
+  // This function may end up running script. If it does,
+  // `time_executing_script` is incremented by the amount of time it takes to
+  // execute script.
+  NextTokenStatus CanTakeNextToken(base::TimeDelta& time_executing_script);
   bool PumpTokenizer();
   void PumpTokenizerIfPossible();
   void DeferredPumpTokenizerIfPossible();
@@ -186,14 +196,25 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   // Let the given HTMLPreloadScanner scan the input it has, and then preload
   // resources using the resulting PreloadRequests and |preloader_|.
   void ScanAndPreload(HTMLPreloadScanner*);
+  void ProcessPreloadData(std::unique_ptr<PendingPreloadData> preload_data);
   void FetchQueuedPreloads();
   std::string GetPreloadHistogramSuffix();
   void FinishAppend();
   void ScanInBackground(const String& source);
 
+  // Called on the background thread by |background_scanner_|.
+  void AddPreloadDataOnBackgroundThread(
+      scoped_refptr<base::SequencedTaskRunner> task_runner,
+      std::unique_ptr<PendingPreloadData> preload_data);
+
+  bool HasPendingPreloads() {
+    base::AutoLock lock(pending_preload_lock_);
+    return !pending_preload_data_.IsEmpty();
+  }
+
   HTMLToken& Token() { return *token_; }
 
-  HTMLParserOptions options_;
+  const HTMLParserOptions options_;
   HTMLInputStream input_;
   Member<HTMLParserReentryPermit> reentry_permit_ =
       MakeGarbageCollected<HTMLParserReentryPermit>();
@@ -206,7 +227,8 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   std::unique_ptr<HTMLPreloadScanner> preload_scanner_;
   // A scanner used only for input provided to the insert() method.
   std::unique_ptr<HTMLPreloadScanner> insertion_preload_scanner_;
-  WTF::SequenceBound<BackgroundHTMLScanner> background_scanner_;
+  WTF::SequenceBound<BackgroundHTMLScanner> background_script_scanner_;
+  WTF::SequenceBound<HTMLPreloadScanner> background_scanner_;
 
   scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner_;
 
@@ -219,10 +241,28 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   // A timer for how long we are inactive after yielding
   std::unique_ptr<base::ElapsedTimer> yield_timer_;
 
-  const bool timed_parser_budget_enabled_ =
-      base::FeatureList::IsEnabled(features::kTimedHTMLParserBudget);
+  // If ThreadedPreloadScanner is enabled, preload data will be added to this
+  // vector from a background thread. The main thread will take this preload
+  // data and send out the requests.
+  base::Lock pending_preload_lock_;
+  Vector<std::unique_ptr<PendingPreloadData>> pending_preload_data_
+      GUARDED_BY(pending_preload_lock_);
 
   ThreadScheduler* scheduler_;
+
+  // Handle the ref counting of nested batch fetches. Usually the batching is
+  // handled by a scope-lock for the duration of the batch (and can be nested
+  // within other batches).
+  //
+  // When the parser gets detached from the document, if it happens during a
+  // scope-locked batch operation, the scope-based batching will not be able
+  // to end the batches properly. By keeping track of how deep the request
+  // batching is, the outstanding batches can be cleared outside of the scope
+  // lock at the time that the document is detached from the parser.
+  void StartFetchBatch();
+  void EndFetchBatch();
+  void FlushFetchBatch();
+  uint32_t pending_batch_operations_ = 0u;
 };
 
 }  // namespace blink

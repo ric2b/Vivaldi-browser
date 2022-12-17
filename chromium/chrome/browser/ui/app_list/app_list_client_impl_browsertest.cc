@@ -47,12 +47,12 @@
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "chrome/browser/ui/app_list/search/search_controller.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_paths.h"
@@ -118,10 +118,8 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, IsExtensionAppOpen) {
         content::NotificationService::AllSources());
     apps::AppServiceProxyFactory::GetForProfile(profile())->Launch(
         extension_app->id(),
-        apps::GetEventFlags(
-            apps::mojom::LaunchContainer::kLaunchContainerWindow,
-            WindowOpenDisposition::NEW_WINDOW,
-            false /* preferred_containner */),
+        apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
+                            false /* preferred_containner */),
         apps::mojom::LaunchSource::kFromTest,
         apps::MakeWindowInfo(
             display::Screen::GetScreen()->GetPrimaryDisplay().id()));
@@ -196,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowAppInfo) {
 
   // The above DoShowAppInfoFlow() should trigger an asynchronous call to launch
   // OS Settings SWA. Flush Mojo calls so the browser window is created.
-  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   Browser* settings_app =
       chrome::SettingsWindowManager::GetInstance()->FindBrowserForProfile(
@@ -359,10 +357,10 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowContextMenu) {
   run_loop.Run();
   EXPECT_TRUE(menu_model);
 
-  int num_items = menu_model->GetItemCount();
-  EXPECT_LT(0, num_items);
+  size_t num_items = menu_model->GetItemCount();
+  EXPECT_GT(num_items, 0u);
 
-  for (int i = 0; i < num_items; i++) {
+  for (size_t i = 0; i < num_items; i++) {
     if (menu_model->GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR)
       continue;
 
@@ -385,6 +383,10 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, OpenSearchResult) {
 
   // Show the launcher.
   client->ShowAppList();
+  if (ash::features::IsProductivityLauncherEnabled()) {
+    ash::AppListTestApi().WaitForBubbleWindow(
+        /*wait_for_opening_animation=*/false);
+  }
 
   AppListModelUpdater* model_updater = test::GetModelUpdater(client);
   ASSERT_TRUE(model_updater);
@@ -403,8 +405,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, OpenSearchResult) {
       "chrome-extension://mgndgikekgjfcpckkfioiadnlibdjbkf/";
 
   // Search by title and the app must present in the results.
-  model_updater->UpdateSearchBox(base::ASCIIToUTF16(app_title),
-                                 true /* initiated_by_user */);
+  ash::AppListTestApi().SimulateSearch(base::UTF8ToUTF16(app_title));
   ASSERT_TRUE(search_controller->FindSearchResult(app_result_id));
 
   // Expect that the browser window is not minimized.
@@ -593,8 +594,8 @@ IN_PROC_BROWSER_TEST_F(AppListClientSearchResultsBrowserTest,
   EXPECT_FALSE(search_controller->GetResultByTitleForTest(title));
 
   // Now a search finds the extension.
-  model_updater->UpdateSearchBox(base::ASCIIToUTF16(title),
-                                 true /* initiated_by_user */);
+  ash::AppListTestApi().SimulateSearch(base::UTF8ToUTF16(title));
+
   EXPECT_TRUE(search_controller->GetResultByTitleForTest(title));
 
   // Uninstall the extension.

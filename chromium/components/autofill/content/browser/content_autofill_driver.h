@@ -18,7 +18,7 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/common/form_data_predictions.h"
-#include "components/webauthn/core/browser/internal_authenticator.h"
+#include "components/autofill_assistant/core/public/autofill_assistant_intent.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -134,15 +134,14 @@ class ContentAutofillDriver : public AutofillDriver,
 
   // AutofillDriver:
   bool IsIncognito() const override;
+  bool IsInActiveFrame() const override;
   bool IsInAnyMainFrame() const override;
   bool IsPrerendering() const override;
   bool CanShowAutofillUi() const override;
   ui::AXTreeID GetAxTreeId() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
-  webauthn::InternalAuthenticator* GetOrCreateCreditCardInternalAuthenticator()
-      override;
-  void HandleParsedForms(const std::vector<const FormData*>& forms) override;
+  void HandleParsedForms(const std::vector<FormData>& forms) override {}
   void PopupHidden() override;
   net::IsolationInfo IsolationInfo() override;
 
@@ -222,10 +221,10 @@ class ContentAutofillDriver : public AutofillDriver,
   void SelectControlDidChange(const FormData& form,
                               const FormFieldData& field,
                               const gfx::RectF& bounding_box) override;
-  void AskForValuesToFill(int32_t query_id,
-                          const FormData& form,
+  void AskForValuesToFill(const FormData& form,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box,
+                          int32_t query_id,
                           bool autoselect_first_suggestion,
                           TouchToFillEligible touch_to_fill_eligible) override;
   void HidePopup() override;
@@ -261,10 +260,10 @@ class ContentAutofillDriver : public AutofillDriver,
   void SelectControlDidChangeImpl(const FormData& form,
                                   const FormFieldData& field,
                                   const gfx::RectF& bounding_box);
-  void AskForValuesToFillImpl(int32_t query_id,
-                              const FormData& form,
+  void AskForValuesToFillImpl(const FormData& form,
                               const FormFieldData& field,
                               const gfx::RectF& bounding_box,
+                              int32_t query_id,
                               bool autoselect_first_suggestion,
                               TouchToFillEligible touch_to_fill_eligible);
   void HidePopupImpl();
@@ -289,14 +288,16 @@ class ContentAutofillDriver : public AutofillDriver,
   // FillFormForAssistant() is located in ContentAutofillDriver so that
   // |raw_form| and |raw_field| get their meta data set analogous to
   // AskForValuesToFill().
-  // TODO(crbug/1224094): Migrate Autofill Assistant to the standard Autofill
-  // flow.
-  void FillFormForAssistant(const AutofillableData& fill_data,
-                            const FormData& raw_form,
-                            const FormFieldData& raw_field);
-  void FillFormForAssistantImpl(const AutofillableData& fill_data,
-                                const FormData& form,
-                                const FormFieldData& field);
+  void FillFormForAssistant(
+      const AutofillableData& fill_data,
+      const FormData& raw_form,
+      const FormFieldData& raw_field,
+      const autofill_assistant::AutofillAssistantIntent intent);
+  void FillFormForAssistantImpl(
+      const AutofillableData& fill_data,
+      const FormData& form,
+      const FormFieldData& fiel,
+      const autofill_assistant::AutofillAssistantIntent intent);
 
   // Transform bounding box coordinates to real viewport coordinates. In the
   // case of a page spanning multiple renderer processes, subframe renderers
@@ -394,9 +395,6 @@ class ContentAutofillDriver : public AutofillDriver,
   // AutofillManager instance via which this object drives the shared Autofill
   // code.
   std::unique_ptr<AutofillManager> autofill_manager_ = nullptr;
-
-  // Pointer to an implementation of InternalAuthenticator.
-  std::unique_ptr<webauthn::InternalAuthenticator> authenticator_impl_;
 
   content::RenderWidgetHost::KeyPressEventCallback key_press_handler_;
 

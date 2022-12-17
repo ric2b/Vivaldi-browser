@@ -46,7 +46,7 @@ function assertHasClass(element, className) {
 function getFromElement(selector) {
   let childElement = testElement.shadowRoot.querySelector(selector);
   if (!childElement && testElement.$.pinKeyboard) {
-    childElement = testElement.$.pinKeyboard.$$(selector);
+    childElement = testElement.$.pinKeyboard.shadowRoot.querySelector(selector);
   }
 
   assertTrue(!!childElement);
@@ -278,18 +278,18 @@ function registerLockScreenTests() {
         {
           key: ENABLE_LOCK_SCREEN_PREF,
           type: chrome.settingsPrivate.PrefType.BOOLEAN,
-          value: true
+          value: true,
         },
         {
           key: 'ash.message_center.lock_screen_mode',
           type: chrome.settingsPrivate.PrefType.STRING,
-          value: 'hide'
+          value: 'hide',
         },
         {
           key: ENABLE_PIN_AUTOSUBMIT_PREF,
           type: chrome.settingsPrivate.PrefType.BOOLEAN,
-          value: false
-        }
+          value: false,
+        },
       ];
       fakeSettings = new FakeSettingsPrivate(fakePrefs);
       fakeUma = new FakeQuickUnlockUma();
@@ -840,14 +840,15 @@ function registerSetupPinDialogTests() {
     // Verify that the backspace button is disabled when there is nothing
     // entered.
     test('BackspaceDisabledWhenNothingEntered', function() {
-      const backspaceButton = pinKeyboard.$$('#backspaceButton');
+      const backspaceButton =
+          pinKeyboard.shadowRoot.querySelector('#backspaceButton');
       assertTrue(!!backspaceButton);
       assertTrue(backspaceButton.disabled);
 
-      pinKeyboard.$$('cr-input').value = '11';
+      pinKeyboard.shadowRoot.querySelector('cr-input').value = '11';
       assertFalse(backspaceButton.disabled);
 
-      pinKeyboard.$$('cr-input').value = '';
+      pinKeyboard.shadowRoot.querySelector('cr-input').value = '';
       assertTrue(backspaceButton.disabled);
     });
   });

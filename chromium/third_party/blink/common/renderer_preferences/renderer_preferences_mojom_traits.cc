@@ -111,16 +111,13 @@ bool StructTraits<blink::mojom::RendererPreferencesDataView,
     return false;
   }
 
-// Vivaldi additions below ?
+// Vivaldi additions below
   out->allow_tab_cycle_from_webpage_into_ui =
       data.allow_tab_cycle_from_webpage_into_ui();
-  out->should_show_images = data.should_show_images();
-  out->should_ask_plugin_content = data.should_ask_plugin_content();
-  out->should_enable_plugin_content = data.should_enable_plugin_content();
   out->serve_resources_only_from_cache =
       data.serve_resources_only_from_cache();
   out->allow_access_keys = data.allow_access_keys();
-  // Vivaldi additions above ?
+  // Vivaldi additions above ^
 
   return true;
 }

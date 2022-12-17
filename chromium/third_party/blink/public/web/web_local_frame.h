@@ -36,6 +36,7 @@
 #include "third_party/blink/public/mojom/page/widget.mojom-shared.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-shared.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-shared.h"
+#include "third_party/blink/public/mojom/script/script_evaluation_params.mojom-shared.h"
 #include "third_party/blink/public/mojom/selection_menu/selection_menu_behavior.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
@@ -48,6 +49,7 @@
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/base/ime/ime_text_span.h"
 #include "ui/gfx/range/range.h"
@@ -82,12 +84,12 @@ class WebContentSettingsClient;
 class WebLocalFrameClient;
 class WebFrameWidget;
 class WebHistoryItem;
+class WebHitTestResult;
 class WebInputMethodController;
 class WebPerformance;
 class WebPlugin;
 class WebPrintClient;
 class WebRange;
-class WebScriptExecutionCallback;
 class WebSpellCheckPanelHostClient;
 class WebString;
 class WebTextCheckClient;
@@ -411,37 +413,19 @@ class WebLocalFrame : public WebFrame {
                                         v8::Local<v8::Value> receiver,
                                         int argc,
                                         v8::Local<v8::Value> argv[],
-                                        WebScriptExecutionCallback*) = 0;
-
-  enum ScriptExecutionType {
-    // Execute script synchronously, unless the page is suspended.
-    kSynchronous,
-    // Execute script asynchronously.
-    kAsynchronous,
-    // Execute script asynchronously, blocking the window.onload event.
-    kAsynchronousBlockingOnload
-  };
-
-  enum class PromiseBehavior {
-    // If the result of the executed script is a promise or other then-able,
-    // wait for it to settle and pass the result of the promise to the caller.
-    // If the promise (and any subsequent thenables) resolves, this passes the
-    // value. If the promise rejects, the corresponding value will be empty.
-    kAwait,
-    // Don't wait for any promise to settle.
-    kDontWait,
-  };
+                                        WebScriptExecutionCallback) = 0;
 
   // Executes the script in the main world of the page.
   // Use kMainDOMWorldId to execute in the main world; otherwise,
   // `world_id` must be a positive integer and less than kEmbedderWorldIdLimit.
   virtual void RequestExecuteScript(int32_t world_id,
                                     base::span<const WebScriptSource> sources,
-                                    bool user_gesture,
-                                    ScriptExecutionType,
-                                    WebScriptExecutionCallback*,
+                                    mojom::UserActivationOption,
+                                    mojom::EvaluationTiming,
+                                    mojom::LoadEventBlockingOption,
+                                    WebScriptExecutionCallback,
                                     BackForwardCacheAware,
-                                    PromiseBehavior) = 0;
+                                    mojom::PromiseResultOption) = 0;
 
   // Logs to the console associated with this frame. If |discard_duplicates| is
   // set, the message will only be added if it is unique (i.e. has not been
@@ -474,8 +458,8 @@ class WebLocalFrame : public WebFrame {
   virtual WebRange MarkedRange() const = 0;
 
   // Returns the text range rectangle in the viepwort coordinate space.
-  virtual bool FirstRectForCharacterRange(unsigned location,
-                                          unsigned length,
+  virtual bool FirstRectForCharacterRange(uint32_t location,
+                                          uint32_t length,
                                           gfx::Rect&) const = 0;
 
   // Supports commands like Undo, Redo, Cut, Copy, Paste, SelectAll,
@@ -802,7 +786,7 @@ class WebLocalFrame : public WebFrame {
 
   // True if the frame is thought (heuristically) to be created for
   // advertising purposes.
-  bool IsAdSubframe() const override = 0;
+  bool IsAdFrame() const override = 0;
 
   // See blink::LocalFrame::SetAdEvidence()
   virtual void SetAdEvidence(const blink::FrameAdEvidence& ad_evidence) = 0;
@@ -816,9 +800,9 @@ class WebLocalFrame : public WebFrame {
   virtual bool IsAdScriptInStack() const = 0;
 
   // True iff a script tagged as an ad was on the v8 stack when the frame was
-  // created and the frame is a subframe. This is not currently propagated when
-  // a frame navigates cross-origin.
-  virtual bool IsSubframeCreatedByAdScript() = 0;
+  // created. This is not currently propagated when a frame navigates
+  // cross-origin.
+  virtual bool IsFrameCreatedByAdScript() = 0;
 
   // User activation -----------------------------------------------------------
 
@@ -902,6 +886,14 @@ class WebLocalFrame : public WebFrame {
   virtual void SetSessionStorageArea(
       CrossVariantMojoRemote<mojom::StorageAreaInterfaceBase>
           session_storage_area) = 0;
+
+  // Android WebView requires notification of hit tests from blink. It requires
+  // hit tests on touchstart. So this method installs a passive event listener
+  // on touchstart and does a GestureTap hit test providing the results to the
+  // callback.
+  virtual void AddHitTestOnTouchStartCallback(
+      base::RepeatingCallback<void(const blink::WebHitTestResult&)>
+          callback) = 0;
 
  protected:
   explicit WebLocalFrame(mojom::TreeScopeType scope,

@@ -1022,6 +1022,64 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_Translations) {
   EXPECT_FALSE(web_app_info.translations["language 3"].description);
 }
 
+TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_TabStrip) {
+  blink::mojom::Manifest manifest;
+  WebAppInstallInfo web_app_info;
+
+  {
+    TabStrip tab_strip;
+    tab_strip.home_tab = TabStrip::Visibility::kAbsent;
+    tab_strip.new_tab_button = TabStrip::Visibility::kAuto;
+    manifest.tab_strip = std::move(tab_strip);
+
+    const GURL kAppManifestUrl("http://www.chromium.org/manifest.json");
+    UpdateWebAppInfoFromManifest(manifest, kAppManifestUrl, &web_app_info);
+
+    EXPECT_TRUE(web_app_info.tab_strip.has_value());
+    EXPECT_EQ(absl::get<TabStrip::Visibility>(
+                  web_app_info.tab_strip.value().home_tab),
+              TabStrip::Visibility::kAbsent);
+    EXPECT_EQ(absl::get<TabStrip::Visibility>(
+                  web_app_info.tab_strip.value().new_tab_button),
+              TabStrip::Visibility::kAuto);
+  }
+
+  {
+    blink::Manifest::ImageResource icon;
+    const GURL kAppIcon("fav1.png");
+    icon.purpose = {Purpose::ANY};
+    icon.src = kAppIcon;
+
+    TabStrip tab_strip;
+    blink::Manifest::HomeTabParams home_tab_params;
+    home_tab_params.icons.push_back(icon);
+    tab_strip.home_tab = home_tab_params;
+
+    blink::Manifest::NewTabButtonParams new_tab_button_params;
+    new_tab_button_params.url = GURL("https://www.example.com/");
+    tab_strip.new_tab_button = new_tab_button_params;
+    manifest.tab_strip = std::move(tab_strip);
+
+    const GURL kAppManifestUrl("http://www.chromium.org/manifest.json");
+    UpdateWebAppInfoFromManifest(manifest, kAppManifestUrl, &web_app_info);
+
+    EXPECT_TRUE(web_app_info.tab_strip.has_value());
+    EXPECT_EQ(absl::get<blink::Manifest::HomeTabParams>(
+                  web_app_info.tab_strip.value().home_tab)
+                  .icons.size(),
+              1u);
+    EXPECT_EQ(absl::get<blink::Manifest::HomeTabParams>(
+                  web_app_info.tab_strip.value().home_tab)
+                  .icons[0]
+                  .src,
+              kAppIcon);
+    EXPECT_EQ(absl::get<blink::Manifest::NewTabButtonParams>(
+                  web_app_info.tab_strip.value().new_tab_button)
+                  .url,
+              GURL("https://www.example.com/"));
+  }
+}
+
 class FileHandlersFromManifestTest : public ::testing::TestWithParam<bool> {
  public:
   FileHandlersFromManifestTest() {
@@ -1205,23 +1263,146 @@ TEST_P(FileHandlersFromManifestTest, PopulateFileHandlerIcons) {
   }
 }
 
+// Test duplicate icon download urls that from the manifest.
+TEST(WebAppInstallUtils, DuplicateIconDownloadURLs) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({blink::features::kFileHandlingIcons}, {});
+
+  WebAppInstallInfo web_app_info;
+
+  // manifest icons
+  {
+    apps::IconInfo info;
+    info.url = GURL("http://www.chromium.org/image/icon1.png");
+    web_app_info.manifest_icons.push_back(info);
+  }
+  {
+    apps::IconInfo info;
+    info.url = GURL("http://www.chromium.org/image/icon2.png");
+    web_app_info.manifest_icons.push_back(info);
+  }
+
+  // shortcut icons
+  {
+    WebAppShortcutsMenuItemInfo shortcut_item;
+    {
+      std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_manifest_icons;
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon2.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon3.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      shortcut_item.SetShortcutIconInfosForPurpose(
+          IconPurpose::ANY, std::move(shortcut_manifest_icons));
+    }
+    {
+      std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_manifest_icons;
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon3.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon4.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      shortcut_item.SetShortcutIconInfosForPurpose(
+          IconPurpose::MONOCHROME, std::move(shortcut_manifest_icons));
+    }
+    web_app_info.shortcuts_menu_item_infos.push_back(std::move(shortcut_item));
+  }
+  {
+    WebAppShortcutsMenuItemInfo shortcut_item;
+    {
+      std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_manifest_icons;
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon4.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon5.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      shortcut_item.SetShortcutIconInfosForPurpose(
+          IconPurpose::ANY, std::move(shortcut_manifest_icons));
+    }
+    {
+      std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_manifest_icons;
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon5.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      {
+        WebAppShortcutsMenuItemInfo::Icon icon;
+        icon.url = GURL("http://www.chromium.org/image/icon6.png");
+        shortcut_manifest_icons.push_back(icon);
+      }
+      shortcut_item.SetShortcutIconInfosForPurpose(
+          IconPurpose::MASKABLE, std::move(shortcut_manifest_icons));
+    }
+    web_app_info.shortcuts_menu_item_infos.push_back(std::move(shortcut_item));
+  }
+
+  // file handler icons
+  {
+    apps::FileHandler file_handler;
+    std::vector<apps::IconInfo> downloaded_icons;
+    {
+      apps::IconInfo info;
+      info.url = GURL("http://www.chromium.org/image/icon6.png");
+      web_app_info.manifest_icons.push_back(info);
+    }
+    {
+      apps::IconInfo info;
+      info.url = GURL("http://www.chromium.org/image/icon7.png");
+      web_app_info.manifest_icons.push_back(info);
+    }
+    web_app_info.file_handlers.push_back(file_handler);
+  }
+  {
+    apps::FileHandler file_handler;
+    std::vector<apps::IconInfo> downloaded_icons;
+    {
+      apps::IconInfo info;
+      info.url = GURL("http://www.chromium.org/image/icon7.png");
+      web_app_info.manifest_icons.push_back(info);
+    }
+    {
+      apps::IconInfo info;
+      info.url = GURL("http://www.chromium.org/image/icon8.png");
+      web_app_info.manifest_icons.push_back(info);
+    }
+    web_app_info.file_handlers.push_back(file_handler);
+  }
+
+  base::flat_set<GURL> download_urls = GetValidIconUrlsToDownload(web_app_info);
+
+  const size_t download_urls_size = 8;
+  EXPECT_EQ(download_urls_size, download_urls.size());
+  for (size_t i = 0; i < download_urls_size; i++) {
+    std::string url_str = "http://www.chromium.org/image/icon" +
+                          base::NumberToString(i + 1) + ".png";
+    EXPECT_EQ(1u, download_urls.count(GURL(url_str)));
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(, FileHandlersFromManifestTest, testing::Bool());
 
 #if BUILDFLAG(IS_WIN)
-class RegisterOsSettingsTest : public testing::Test {
- public:
-  RegisterOsSettingsTest() {
-    feature_list_.InitAndEnableFeature(
-        features::kEnableWebAppUninstallFromOsSettings);
-  }
-  ~RegisterOsSettingsTest() override = default;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-  content::BrowserTaskEnvironment browser_task_environment_;
-};
+using RegisterOsSettingsTest = testing::Test;
 
 TEST_F(RegisterOsSettingsTest, MaybeRegisterOsUninstall) {
+  content::BrowserTaskEnvironment task_environment;
+
   // MaybeRegisterOsUninstall
   // Scenario 1.
   // web app sources: kDefault, kPolicy
@@ -1293,6 +1474,8 @@ TEST_F(RegisterOsSettingsTest, MaybeRegisterOsSettings_NoRegistration) {
 }
 
 TEST_F(RegisterOsSettingsTest, MaybeUnregisterOsUninstall) {
+  content::BrowserTaskEnvironment task_environment;
+
   // MaybeUnregisterOsUninstall
   // Scenario 1.
   // web app sources: kDefault

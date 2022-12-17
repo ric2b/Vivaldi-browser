@@ -22,6 +22,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "net/base/filename_util.h"
 #include "third_party/blink/public/common/custom_handlers/protocol_handler_utils.h"
 
@@ -219,13 +220,12 @@ void WebAppShimManagerDelegate::LaunchApp(
                                            ->registrar()
                                            .GetAppEffectiveDisplayMode(app_id);
 
-  apps::mojom::LaunchContainer launch_container =
+  apps::LaunchContainer launch_container =
       web_app::ConvertDisplayModeToAppLaunchContainer(effective_display_mode);
-  apps::mojom::LaunchSource launch_source =
-      apps::mojom::LaunchSource::kFromCommandLine;
+  apps::LaunchSource launch_source = apps::LaunchSource::kFromCommandLine;
   if (login_item_restore_state !=
       chrome::mojom::AppShimLoginItemRestoreState::kNone) {
-    launch_source = apps::mojom::LaunchSource::kFromOsLogin;
+    launch_source = apps::LaunchSource::kFromOsLogin;
   }
 
   apps::AppLaunchParams params(app_id, launch_container,
@@ -269,7 +269,7 @@ void WebAppShimManagerDelegate::LaunchApp(
     }
 
     params.protocol_handler_launch_url = url;
-    params.launch_source = apps::mojom::LaunchSource::kFromProtocolHandler;
+    params.launch_source = apps::LaunchSource::kFromProtocolHandler;
   }
 
   WebAppProvider* const provider = WebAppProvider::GetForWebApps(profile);

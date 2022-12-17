@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "ash/components/login/auth/extended_authenticator.h"
-#include "ash/components/login/auth/user_context.h"
+#include "ash/components/login/auth/public/user_context.h"
 #include "ash/components/proximity_auth/screenlock_bridge.h"
 #include "ash/constants/ash_switches.h"
 #include "base/callback.h"
@@ -20,6 +20,7 @@
 #include "chrome/browser/ash/login/profile_auth_data.h"
 #include "chrome/browser/ash/login/saml/in_session_password_change_manager.h"
 #include "chrome/browser/ash/login/saml/password_sync_token_fetcher.h"
+#include "chrome/browser/ash/login/screens/network_error.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
@@ -193,9 +194,10 @@ void InSessionPasswordSyncManager::CheckCredentials(
     PasswordChangedCallback callback) {
   user_context_ = user_context;
   password_changed_callback_ = std::move(callback);
-  content::StoragePartition* signin_partition = login::GetSigninPartition();
-  if (!signin_partition) {
-    LOG(ERROR) << "The sign-in partition is not available yet";
+  content::StoragePartition* lock_screen_partition =
+      login::GetLockScreenPartition();
+  if (!lock_screen_partition) {
+    LOG(ERROR) << "The lock screen partition is not available yet";
     OnCookiesTransfered();
     return;
   }
@@ -210,7 +212,7 @@ void InSessionPasswordSyncManager::CheckCredentials(
   }
 
   ProfileAuthData::Transfer(
-      signin_partition, primary_profile_->GetDefaultStoragePartition(),
+      lock_screen_partition, primary_profile_->GetDefaultStoragePartition(),
       false /*transfer_auth_cookies_on_first_login*/,
       transfer_saml_auth_cookies_on_subsequent_login,
       base::BindOnce(&InSessionPasswordSyncManager::OnCookiesTransfered,
@@ -280,12 +282,19 @@ void InSessionPasswordSyncManager::DismissDialog() {
 void InSessionPasswordSyncManager::ResetDialog() {
   DCHECK(lock_screen_start_reauth_dialog_);
   lock_screen_start_reauth_dialog_.reset();
+  OnReauthDialogClosedForTesting();  // IN-TEST
 }
 
 int InSessionPasswordSyncManager::GetDialogWidth() {
   if (!lock_screen_start_reauth_dialog_)
     return 0;
   return lock_screen_start_reauth_dialog_->GetDialogWidth();
+}
+
+content::WebContents* InSessionPasswordSyncManager::GetDialogWebContents() {
+  if (!lock_screen_start_reauth_dialog_)
+    return nullptr;
+  return lock_screen_start_reauth_dialog_->GetWebContents();
 }
 
 bool InSessionPasswordSyncManager::IsReauthDialogLoadedForTesting(
@@ -297,12 +306,37 @@ bool InSessionPasswordSyncManager::IsReauthDialogLoadedForTesting(
   return false;
 }
 
+bool InSessionPasswordSyncManager::IsReauthDialogClosedForTesting(
+    base::OnceClosure callback) {
+  if (!is_dialog_loaded_for_testing_)
+    return true;
+  DCHECK(!on_dialog_closed_callback_for_testing_);
+  on_dialog_closed_callback_for_testing_ = std::move(callback);
+  return false;
+}
+
 void InSessionPasswordSyncManager::OnReauthDialogReadyForTesting() {
   if (is_dialog_loaded_for_testing_)
     return;
   is_dialog_loaded_for_testing_ = true;
   if (on_dialog_loaded_callback_for_testing_) {
     std::move(on_dialog_loaded_callback_for_testing_).Run();
+  }
+}
+
+void InSessionPasswordSyncManager::OnReauthDialogClosedForTesting() {
+  if (!is_dialog_loaded_for_testing_)
+    return;
+  is_dialog_loaded_for_testing_ = false;
+  if (on_dialog_closed_callback_for_testing_) {
+    std::move(on_dialog_closed_callback_for_testing_).Run();
+  }
+}
+
+void InSessionPasswordSyncManager::OnWebviewLoadAborted() {
+  if (lock_screen_start_reauth_dialog_) {
+    lock_screen_start_reauth_dialog_->UpdateState(
+        NetworkError::ERROR_REASON_FRAME_ERROR);
   }
 }
 

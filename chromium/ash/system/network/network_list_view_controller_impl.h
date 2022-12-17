@@ -18,6 +18,7 @@
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tray_utils.h"
 #include "ash/system/tray/tri_view.h"
+#include "base/timer/timer.h"
 #include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -95,7 +96,7 @@ class ASH_EXPORT NetworkListViewControllerImpl
 
   // Adds a warning indicator if connected to a VPN or if the default network
   // has a proxy installed.
-  int ShowConnectionWarningIfVpnOrProxy(int index);
+  size_t ShowConnectionWarningIfVpnOrProxy(size_t index);
 
   // Returns true if mobile data section should be added to view.
   bool ShouldMobileDataSectionBeShown();
@@ -103,8 +104,8 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // Creates if missing and adds a Mobile or Wifi separator to the view.
   // Also reorders separator view in network list. A reference to the
   // separator is captured in |*separator_view|.
-  int CreateSeparatorIfMissingAndReorder(int index,
-                                         views::Separator** separator_view);
+  size_t CreateSeparatorIfMissingAndReorder(size_t index,
+                                            views::Separator** separator_view);
 
   // Updates Mobile data section, updates add eSIM button states and
   // calls UpdateMobileToggleAndSetStatusMessage().
@@ -125,9 +126,9 @@ class ASH_EXPORT NetworkListViewControllerImpl
 
   // Creates a NetworkListNetworkItem if it does not exist else uses the
   // existing view, also reorders it in NetworkDetailedNetworkView scroll list.
-  int CreateItemViewsIfMissingAndReorder(
+  size_t CreateItemViewsIfMissingAndReorder(
       chromeos::network_config::mojom::NetworkType type,
-      int index,
+      size_t index,
       std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>&
           networks,
       NetworkIdToViewMap* previous_views);
@@ -135,6 +136,17 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // Creates a view that indicates connections might be monitored if
   // connected to a VPN or if the default network has a proxy installed.
   void ShowConnectionWarning();
+
+  // Determines whether a scan for WiFi and Tether networks should be requested
+  // and updates the scanning bar accordingly.
+  void UpdateScanningBarAndTimer();
+
+  // Calls RequestScan() and starts a timer that will repeatedly call
+  // RequestScan() after a delay.
+  void ScanAndStartTimer();
+
+  // Immediately request a WiFi and Tether network scan.
+  void RequestScan();
 
   // Focuses on last selected view in NetworkDetailedNetworkView scroll list.
   void FocusLastSelectedView();
@@ -167,6 +179,10 @@ class ASH_EXPORT NetworkListViewControllerImpl
 
   NetworkDetailedNetworkView* network_detailed_network_view_;
   NetworkIdToViewMap network_id_to_view_map_;
+
+  // Timer for repeatedly requesting network scans with a delay between
+  // requests.
+  base::RepeatingTimer network_scan_repeating_timer_;
 
   base::WeakPtrFactory<NetworkListViewControllerImpl> weak_ptr_factory_{this};
 };

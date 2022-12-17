@@ -38,7 +38,7 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
           infobar->delegate()->AsConfirmInfoBarDelegate();
       DCHECK(delegate);
       if (delegate) {
-        std::vector<base::Value> args(
+        base::Value::List args(
             extensions::vivaldi::infobars::OnInfobarRemoved::Create(
                 tab_id, delegate->GetIdentifier()));
         ::vivaldi::BroadcastEvent(

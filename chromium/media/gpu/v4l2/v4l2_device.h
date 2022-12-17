@@ -179,10 +179,13 @@ class MEDIA_GPU_EXPORT V4L2WritableBufferRef {
   // removed. See crbug/879971
   size_t BufferId() const;
 
+  // ConfigStore is ChromeOS-specific legacy stuff
+#if BUILDFLAG(IS_CHROMEOS)
   // Set the passed config store to this buffer.
   // This method is only used for backward compatibility until the config
   // store is deprecated and should not be called by new code.
   void SetConfigStore(uint32_t config_store);
+#endif
 
   V4L2WritableBufferRef(const V4L2WritableBufferRef&) = delete;
   V4L2WritableBufferRef& operator=(const V4L2WritableBufferRef&) = delete;
@@ -347,11 +350,19 @@ class MEDIA_GPU_EXPORT V4L2Queue
   // or zero if an error occurred, or if references to any previously allocated
   // buffers are still held by any clients.
   //
+  // Setting the |incoherent| flag will allocate the buffers with the
+  // V4L2_MEMORY_FLAG_NON_COHERENT flag set. This allows caching, which is a
+  // potential performance improvement when reading from CPU, but may not be
+  // safe for all V4L2 hardware. In particular, the MDP won't work with
+  // incoherent memory.
+  //
   // The number of allocated buffers may be larger than the number requested, so
   // callers must always check the return value.
   //
   // Calling this method while buffers are still allocated results in an error.
-  [[nodiscard]] size_t AllocateBuffers(size_t count, enum v4l2_memory memory);
+  [[nodiscard]] size_t AllocateBuffers(size_t count,
+                                       enum v4l2_memory memory,
+                                       bool incoherent);
 
   // Deallocate all buffers previously allocated by |AllocateBuffers|. Any
   // references to buffers previously allocated held by the client must be
@@ -482,6 +493,8 @@ class MEDIA_GPU_EXPORT V4L2Queue
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<V4L2Queue> weak_this_factory_;
+
+  bool incoherent_ = false;
 };
 
 class V4L2Request;
@@ -727,6 +740,11 @@ class MEDIA_GPU_EXPORT V4L2Device
   void GetSupportedResolution(uint32_t pixelformat,
                               gfx::Size* min_resolution,
                               gfx::Size* max_resolution);
+
+  // Get the supported bitrate control modes. This function should be called
+  // when V4L2Device opens an encoder driver node.
+  VideoEncodeAccelerator::SupportedRateControlMode
+  GetSupportedRateControlMode();
 
   std::vector<uint32_t> EnumerateSupportedPixelformats(v4l2_buf_type buf_type);
 

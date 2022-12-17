@@ -619,6 +619,7 @@ component("platform") {
     "fonts/generic_font_family_settings.h",
     "fonts/glyph_metrics_map.h",
     "fonts/lock_for_parallel_text_shaping.h",
+    "fonts/ng_text_fragment_paint_info.cc",
     "fonts/ng_text_fragment_paint_info.h",
     "fonts/opentype/font_format_check.cc",
     "fonts/opentype/font_format_check.h",
@@ -781,6 +782,8 @@ component("platform") {
     "graphics/color_space_gamut.h",
     "graphics/color_space_profile_data.cc",
     "graphics/color_space_profile_data.h",
+    "graphics/compositing/adjust_mask_layer_geometry.cc",
+    "graphics/compositing/adjust_mask_layer_geometry.h",
     "graphics/compositing/chunk_to_layer_mapper.cc",
     "graphics/compositing/chunk_to_layer_mapper.h",
     "graphics/compositing/content_layer_client_impl.cc",
@@ -1006,6 +1009,7 @@ component("platform") {
     "graphics/paint/paint_canvas.h",
     "graphics/paint/paint_chunk.cc",
     "graphics/paint/paint_chunk.h",
+    "graphics/paint/paint_chunk_subset.cc",
     "graphics/paint/paint_chunk_subset.h",
     "graphics/paint/paint_chunker.cc",
     "graphics/paint/paint_chunker.h",
@@ -1079,6 +1083,7 @@ component("platform") {
     "graphics/scoped_interpolation_quality.h",
     "graphics/scrollbar_theme_settings.cc",
     "graphics/scrollbar_theme_settings.h",
+    "graphics/skia/sk_image_info_hash.h",
     "graphics/skia/sk_size_hash.h",
     "graphics/skia/skia_utils.cc",
     "graphics/skia/skia_utils.h",
@@ -1177,6 +1182,8 @@ component("platform") {
     "mediastream/media_stream_audio_track.h",
     "mediastream/media_stream_component.cc",
     "mediastream/media_stream_component.h",
+    "mediastream/media_stream_component_impl.cc",
+    "mediastream/media_stream_component_impl.h",
     "mediastream/media_stream_descriptor.cc",
     "mediastream/media_stream_descriptor.h",
     "mediastream/media_stream_source.cc",
@@ -1185,6 +1192,8 @@ component("platform") {
     "mediastream/media_stream_track_platform.h",
     "mediastream/media_stream_web_audio_source.cc",
     "mediastream/media_stream_web_audio_source.h",
+    "mediastream/transferred_media_stream_component.cc",
+    "mediastream/transferred_media_stream_component.h",
     "mediastream/webaudio_destination_consumer.h",
     "mediastream/webaudio_media_stream_source.cc",
     "mediastream/webaudio_media_stream_source.h",
@@ -1364,6 +1373,8 @@ component("platform") {
     "text/mathml_operator_dictionary.h",
     "text/platform_locale.cc",
     "text/platform_locale.h",
+    "text/quotes_data.cc",
+    "text/quotes_data.h",
     "text/segmented_string.cc",
     "text/segmented_string.h",
     "text/suffix_tree.h",
@@ -1460,6 +1471,8 @@ component("platform") {
     "webrtc/webrtc_video_frame_adapter.h",
     "webrtc/webrtc_video_utils.cc",
     "webrtc/webrtc_video_utils.h",
+    "widget/compositing/categorized_worker_pool.cc",
+    "widget/compositing/categorized_worker_pool.h",
     "widget/compositing/layer_tree_settings.cc",
     "widget/compositing/layer_tree_settings.h",
     "widget/compositing/layer_tree_view.cc",
@@ -1854,6 +1867,8 @@ static_library("test_support") {
     "testing/paint_test_configurations.h",
     "testing/picture_matchers.cc",
     "testing/picture_matchers.h",
+    "testing/scoped_fake_ukm_recorder.cc",
+    "testing/scoped_fake_ukm_recorder.h",
     "testing/scoped_main_thread_overrider.cc",
     "testing/scoped_main_thread_overrider.h",
     "testing/scoped_mocked_url.cc",
@@ -1912,6 +1927,7 @@ static_library("test_support") {
 
   deps = [
     "//base/test:test_support",
+    "//components/ukm:test_support",
     "//gin",
     "//media:test_support",
     "//mojo/core/embedder",
@@ -1933,21 +1949,24 @@ test("blink_platform_unittests") {
   deps = [ ":blink_platform_unittests_sources" ]
 
   if (is_fuchsia) {
+    use_cfv1 = false
+    additional_manifest_fragments =
+        [ "//build/config/fuchsia/test/test_fonts.shard.test-cml" ]
+
     # Oilpan reuses V8's v8::PageAllocator which generally requires JIT
     # permissions.
-    # TODO(https://crbug.com/1287051): Requires fuchsia.sys.Launcher.
-    use_cfv2 = false
-    additional_manifest_fragments =
-        [ "//build/config/fuchsia/test/jit_capabilities.test-cmx" ]
-
-    # Use the following when switching to CFv2:
-    # test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
+    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
   }
 
   if (is_android) {
-    # Required because of an indirect dependency on //media/base/android via
-    # platform/media:unit_tests.
-    deps += [ "//media/base/android:media_java" ]
+    deps += [
+      # Required because of an indirect dependency on //media/base/android via
+      # platform/media:unit_tests.
+      "//media/base/android:media_java",
+
+      # Required to disable broken tests.
+      "//testing/buildbot/filters:blink_platform_unittests",
+    ]
   }
 }
 
@@ -2086,6 +2105,7 @@ source_set("blink_platform_unittests_sources") {
     "mediastream/media_stream_audio_processor_options_test.cc",
     "mediastream/media_stream_audio_test.cc",
     "mediastream/media_stream_source_test.cc",
+    "mediastream/transferred_media_stream_component_test.cc",
     "mediastream/webrtc_uma_histograms_test.cc",
     "mhtml/mhtml_parser_test.cc",
     "mojo/big_string_mojom_traits_test.cc",
@@ -2104,8 +2124,8 @@ source_set("blink_platform_unittests_sources") {
     "p2p/ipc_network_manager_test.cc",
     "peerconnection/coalesced_tasks_test.cc",
     "peerconnection/linear_histogram_test.cc",
+    "peerconnection/low_precision_timer_test.cc",
     "peerconnection/metronome_source_test.cc",
-    "peerconnection/metronome_task_queue_factory_test.cc",
     "peerconnection/rtc_encoded_audio_stream_transformer_test.cc",
     "peerconnection/rtc_encoded_video_stream_transformer_test.cc",
     "peerconnection/rtc_rtp_source_test.cc",
@@ -2122,7 +2142,6 @@ source_set("blink_platform_unittests_sources") {
     "peerconnection/webrtc_audio_sink_test.cc",
     "peerconnection/webrtc_decoding_info_handler_test.cc",
     "peerconnection/webrtc_encoding_info_handler_test.cc",
-    "peerconnection/webrtc_timer_test.cc",
     "peerconnection/webrtc_video_track_source_test.cc",
     "region_capture_crop_id_test.cc",
     "runtime_enabled_features_test.cc",
@@ -2162,6 +2181,7 @@ source_set("blink_platform_unittests_sources") {
     "weborigin/security_policy_test.cc",
     "webrtc/convert_to_webrtc_video_frame_buffer_test.cc",
     "webrtc/webrtc_video_frame_adapter_test.cc",
+    "widget/compositing/categorized_worker_pool_unittest.cc",
     "widget/compositing/layer_tree_settings_unittest.cc",
     "widget/compositing/layer_tree_view_unittest.cc",
     "widget/compositing/render_frame_metadata_observer_impl_unittest.cc",
@@ -2229,7 +2249,6 @@ source_set("blink_platform_unittests_sources") {
     "//services/viz/public/mojom",
     "//skia",
     "//skia:skcms",
-    "//skia:test_fonts",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party:freetype_harfbuzz",
@@ -2265,6 +2284,12 @@ source_set("blink_platform_unittests_sources") {
   defines = [ "INSIDE_BLINK" ]
   if (use_minikin_hyphenation) {
     defines += [ "USE_MINIKIN_HYPHENATION" ]
+  }
+
+  if (is_fuchsia) {
+    deps += [ "//skia:test_fonts_cfv2" ]
+  } else {
+    deps += [ "//skia:test_fonts" ]
   }
 }
 
@@ -2379,7 +2404,6 @@ test("blink_fuzzer_unittests") {
     ":test_support",
     "//base/test:test_support",
     "//mojo/core/embedder:embedder",
-    "//skia:test_fonts",
     "//third_party/blink/public:test_support",
   ]
 
@@ -2392,9 +2416,13 @@ test("blink_fuzzer_unittests") {
   }
 
   if (is_fuchsia) {
-    use_cfv2 = false
+    use_cfv1 = false
+    deps += [ "//skia:test_fonts_cfv2" ]
+    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
     additional_manifest_fragments =
-        [ "//build/config/fuchsia/test/jit_capabilities.test-cmx" ]
+        [ "//build/config/fuchsia/test/test_fonts.shard.test-cml" ]
+  } else {
+    deps += [ "//skia:test_fonts" ]
   }
 }
 
@@ -2413,6 +2441,54 @@ source_set("blink_fuzzer_test_support") {
     ":platform",
     "//base/test:test_config",
     "//content/test:test_support",
+  ]
+}
+
+# Fuzzer for WTF::unicode::MathVariant.
+fuzzer_test("math_transform_fuzzer") {
+  sources = [ "math_transform_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  libfuzzer_options = [ "max_len=10" ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/math_transform.dict"
+}
+
+# Fuzzer for blink::FindCategory.
+fuzzer_test("mathml_operator_dictionary_fuzzer") {
+  sources = [ "text/mathml_operator_dictionary_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  libfuzzer_options = [ "max_len=10" ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/mathml_operator_dictionary.dict"
+}
+
+# Fuzzer for blink::OpenTypeMathSupportTest.
+fuzzer_test("open_type_math_support_fuzzer") {
+  sources = [ "fonts/opentype/open_type_math_support_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [
+    "//third_party/blink/web_tests/external/wpt/fonts/math",
+    "//testing/libfuzzer/fuzzers/woff2_corpus",
+  ]
+}
+
+# Fuzzer for blink::StretchyOperatorShaper
+fuzzer_test("stretchy_operator_shaper_fuzzer") {
+  sources = [ "fonts/shaping/stretchy_operator_shaper_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [
+    "//third_party/blink/web_tests/external/wpt/fonts/math",
+    "//testing/libfuzzer/fuzzers/woff2_corpus",
   ]
 }
 
@@ -2550,6 +2626,7 @@ source_set("unit_tests") {
     "graphics/gpu/drawing_buffer_software_rendering_test.cc",
     "graphics/image_decoding_store_test.cc",
     "graphics/image_frame_generator_test.cc",
+    "graphics/offscreen_canvas_placeholder_test.cc",
     "graphics/paint_worklet_paint_dispatcher_test.cc",
     "graphics/test/stub_image.h",
 

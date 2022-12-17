@@ -98,11 +98,15 @@ class SizeF;
 namespace blink {
 
 class AdTracker;
-class AttributionSrcLoader;
 class AssociatedInterfaceProvider;
+class AttributionSrcLoader;
+class BackgroundColorPaintImageGenerator;
+class BoxShadowPaintImageGenerator;
 class BrowserInterfaceBrokerProxy;
+class ClipPathPaintImageGenerator;
 class Color;
 class ContentCaptureManager;
+class CoreProbeSink;
 class Document;
 class Editor;
 class Element;
@@ -112,29 +116,26 @@ class FrameConsole;
 class FrameOverlay;
 class FrameSelection;
 class FrameWidget;
+class IdlenessDetector;
 class InputMethodController;
 class InspectorIssueReporter;
-class InspectorTraceEvents;
-class CoreProbeSink;
-class IdlenessDetector;
 class InspectorTaskRunner;
+class InspectorTraceEvents;
 class InterfaceRegistry;
 class LayoutView;
 class LocalDOMWindow;
-class LocalWindowProxy;
 class LocalFrameClient;
 class LocalFrameMojoHandler;
-class BackgroundColorPaintImageGenerator;
-class BoxShadowPaintImageGenerator;
-class ClipPathPaintImageGenerator;
+class LocalWindowProxy;
 class Node;
 class NodeTraversal;
 class PerformanceMonitor;
-class PolicyContainer;
 class PluginData;
-class SystemClipboard;
+class PolicyContainer;
 class SmoothScrollSequencer;
 class SpellChecker;
+class StorageKey;
+class SystemClipboard;
 class TextFragmentHandler;
 class TextSuggestionController;
 class VirtualKeyboardOverlayChangedObserver;
@@ -184,16 +185,24 @@ class CORE_EXPORT LocalFrame final
       InterfaceRegistry*,
       const base::TickClock* clock = base::DefaultTickClock::GetInstance());
 
-  // Initialize the LocalFrame, creating and initializing its LocalDOMWindow.
-  // |policy_container| is used to set the PolicyContainer of the new
-  // LocalDOMWindow. Usually, it is inherited from the parent or the opener: the
-  // inheritance operation is taken care of by the browser (if this LocalFrame
-  // was just created in response to the creation of a RenderFrameHost) or by
-  // blink if this is a synchronously created LocalFrame child. If you pass a
-  // null |policy_container|, it will be initialized to an empty, default one,
-  // which has no PolicyContainerHost counterpart. This is usually safe to do if
-  // this LocalFrame has no corresponding RenderFrameHost.
-  void Init(Frame* opener, std::unique_ptr<PolicyContainer> policy_container);
+  // Initialize the LocalFrame, creating and initializing its LocalDOMWindow. It
+  // starts from the initial empty document.
+  // - |policy_container| is used to set the PolicyContainer of the new
+  //   LocalDOMWindow. If you pass a null |policy_container|, it will be
+  //   initialized to an empty, default one, which has no PolicyContainerHost
+  //   counterpart. This is usually safe to do if this LocalFrame has no
+  //   corresponding RenderFrameHost.
+  // - |storage_key| is the key used to partition access to storage API like DOM
+  //   storage, IndexedDB, BroadcastChannel, etc...
+  //
+  // Note: Usually, the initial empty document inherits its |policy_container|
+  // and |storage_key| from the parent or the opener. The inheritance operation
+  // is taken care of by the browser (if this LocalFrame was just created in
+  // response to the creation of a RenderFrameHost) or by blink if this is a
+  // synchronously created LocalFrame child.
+  void Init(Frame* opener,
+            std::unique_ptr<PolicyContainer> policy_container,
+            const blink::StorageKey& storage_key);
   void SetView(LocalFrameView*);
   void CreateView(const gfx::Size&, const Color&);
 
@@ -215,12 +224,8 @@ class CORE_EXPORT LocalFrame final
   // subtree, updating the inert bit on all descendant frames.
   void SetIsInert(bool) override;
   void SetInheritedEffectiveTouchAction(TouchAction) override;
-  bool BubbleLogicalScrollFromChildFrame(
-      mojom::blink::ScrollDirection direction,
-      ui::ScrollGranularity granularity,
-      Frame* child) override;
   void DidFocus() override;
-  bool IsAdSubframe() const override;
+  bool IsAdFrame() const override;
 
   // BackForwardCacheLoaderHelperImpl::Delegate:
   void EvictFromBackForwardCache(
@@ -250,6 +255,7 @@ class CORE_EXPORT LocalFrame final
   Document* GetDocument() const;
   void SetPagePopupOwner(Element&);
   Element* PagePopupOwner() const { return page_popup_owner_.Get(); }
+  bool HasPagePopupOwner() const { return page_popup_owner_; }
 
   // Root of the layout tree for the document contained in this frame.
   LayoutView* ContentLayoutObject() const;
@@ -314,6 +320,22 @@ class CORE_EXPORT LocalFrame final
   // rect has changed.
   void NotifyVirtualKeyboardOverlayRectObservers(const gfx::Rect&) const;
 
+  // Bubbles a logical scroll to the parent frame, if one exists. For a local
+  // frame, this will continue the scroll synchronously. For remote frames and
+  // frame tree boundaries, this will IPC the scroll via the browser process.
+  // Returns true if the scroll is locally consumed, false otherwise.
+  bool BubbleLogicalScrollInParentFrame(mojom::blink::ScrollDirection direction,
+                                        ui::ScrollGranularity granularity);
+
+  // Receives and continues a bubbled logical scroll from the child frame (sent
+  // via the method above). This can either be called synchronously by the
+  // method above or from the RemoteFrame child after being sent via IPC.
+  // Returns true if the scroll is locally consumed, false otherwise.
+  bool BubbleLogicalScrollFromChildFrame(
+      mojom::blink::ScrollDirection direction,
+      ui::ScrollGranularity granularity,
+      Frame* child);
+
   // =========================================================================
   // All public functions below this point are candidates to move out of
   // LocalFrame into another class.
@@ -357,7 +379,6 @@ class CORE_EXPORT LocalFrame final
   void SetPageAndTextZoomFactors(float page_zoom_factor,
                                  float text_zoom_factor);
 
-  void DeviceScaleFactorChanged();
   double DevicePixelRatio() const;
 
   // Informs the local root's document and its local descendant subtree that a
@@ -524,7 +545,7 @@ class CORE_EXPORT LocalFrame final
   // be removed.
   bool IsProvisional() const;
 
-  // Whether the frame is considered to be a root ad subframe by Ad Tagging.
+  // Whether the frame is considered to be a root ad frame by Ad Tagging.
   bool IsAdRoot() const;
 
   // Called by the embedder on creation of the initial empty document and, for
@@ -536,14 +557,14 @@ class CORE_EXPORT LocalFrame final
   bool IsAdScriptInStack() const;
 
   // The evidence for or against a frame being an ad. `absl::nullopt` if not yet
-  // set or if the frame is a top-level frame as only subframes can be tagged as
-  // ads.
+  // set or if the frame is a subfiltering root frame (outermost main frame or
+  // portal) as only child frames can be tagged as ads.
   const absl::optional<blink::FrameAdEvidence>& AdEvidence() const {
     return ad_evidence_;
   }
 
-  bool IsSubframeCreatedByAdScript() const {
-    return is_subframe_created_by_ad_script_;
+  bool IsFrameCreatedByAdScript() const {
+    return is_frame_created_by_ad_script_;
   }
 
   // Updates the frame color overlay to match the highlight ad setting.
@@ -575,6 +596,12 @@ class CORE_EXPORT LocalFrame final
   // by an associated interface with the legacy Chrome IPC channel.
   mojom::blink::BackForwardCacheControllerHost&
   GetBackForwardCacheControllerHostRemote();
+
+  const AtomicString& GetReducedAcceptLanguage() const {
+    return reduced_accept_language_;
+  }
+
+  void SetReducedAcceptLanguage(const AtomicString& reduced_accept_language);
 
   // Overlays a color on top of this LocalFrameView if it is associated with
   // the main frame. Should not have multiple consumers.
@@ -673,7 +700,16 @@ class CORE_EXPORT LocalFrame final
   void UpdateWindowControlsOverlay(const gfx::Rect& bounding_rect_in_dips);
   void RegisterWindowControlsOverlayChangedDelegate(
       WindowControlsOverlayChangedDelegate*);
-#endif
+  // For PWAs with display_overrides, these getters are information about the
+  // titlebar bounds sent over from the browser via UpdateWindowControlsOverlay
+  // in LocalMainFrame that are needed to persist the lifetime of the frame.
+  const gfx::Rect& GetWindowControlsOverlayRect() const {
+    return window_controls_overlay_rect_;
+  }
+  bool IsWindowControlsOverlayVisible() const {
+    return is_window_controls_overlay_visible_;
+  }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   SystemClipboard* GetSystemClipboard();
 
@@ -701,18 +737,6 @@ class CORE_EXPORT LocalFrame final
   // of subframes, `Owner()->frame()`, or in the case of the main frame,
   // `GetPage()->Frame()`). Must only be called on provisional frames.
   bool SwapIn();
-
-#if !BUILDFLAG(IS_ANDROID)
-  // For PWAs with display_overrides, these getters are information about the
-  // titlebar bounds sent over from the browser via UpdateWindowControlsOverlay
-  // in LocalMainFrame that are needed to persist the lifetime of the frame.
-  bool IsWindowControlsOverlayVisible() const {
-    return is_window_controls_overlay_visible_;
-  }
-  const gfx::Rect& GetWindowControlsOverlayRect() const {
-    return window_controls_overlay_rect_;
-  }
-#endif
 
   void LoadJavaScriptURL(const KURL& url);
 
@@ -746,6 +770,14 @@ class CORE_EXPORT LocalFrame final
 #endif
 
   void WriteIntoTrace(perfetto::TracedValue ctx) const;
+
+  bool AncestorOrSelfHasCSPEE() const { return ancestor_or_self_has_cspee_; }
+  void SetAncestorOrSelfHasCSPEE(bool has_policy) {
+    ancestor_or_self_has_cspee_ = has_policy;
+  }
+
+  void SetBackgroundColorPaintImageGeneratorForTesting(
+      BackgroundColorPaintImageGenerator* generator);
 
  private:
   friend class FrameNavigationDisabler;
@@ -820,6 +852,11 @@ class CORE_EXPORT LocalFrame final
                                     String& clip_text,
                                     String& clip_html,
                                     gfx::Rect& clip_rect);
+
+#if !BUILDFLAG(IS_ANDROID)
+  void SetTitlebarAreaDocumentStyleEnvironmentVariables() const;
+  void MaybeUpdateWindowControlsOverlayWithNewZoomLevel();
+#endif
 
   std::unique_ptr<FrameScheduler> frame_scheduler_;
 
@@ -941,28 +978,34 @@ class CORE_EXPORT LocalFrame final
 
 #if !BUILDFLAG(IS_ANDROID)
   bool is_window_controls_overlay_visible_ = false;
+  // |page_zoom_factor_| is asynchronously set sometimes (most prominently seen
+  // on mac) in |LocalFrame| via |PropagatePageZoomToNewlyAttachedFrame| on
+  // navigation. We need to store the window_controls_overlay_rect sent from the
+  // browser in dips so we can convert the rect to blink space coordinates when
+  // |page_zoom_factor_| gets updated this way.
+  gfx::Rect window_controls_overlay_rect_in_dips_;
   gfx::Rect window_controls_overlay_rect_;
   WeakMember<WindowControlsOverlayChangedDelegate>
       window_controls_overlay_changed_delegate_;
 #endif
 
   // The evidence for or against a frame being an ad frame. `absl::nullopt` if
-  // not yet set or if the frame is a top-level frame. (Only subframes can be
-  // tagged as ad frames.) This is per-frame (as opposed to per-document) as we
-  // want to decide whether a frame is an ad or not before commit, while the
-  // document has not yet been created.
+  // not yet set or if the frame is a subfiltering root frame. (Only non-root
+  // frames can be tagged as ad frames.) This is per-frame (as opposed to
+  // per-document) as we want to decide whether a frame is an ad or not before
+  // commit, while the document has not yet been created.
   //
   // This is constructed directly in the renderer in the case of an initial
   // synchronous commit and otherwise is signaled from the browser process at
   // ready-to-commit time.
   absl::optional<blink::FrameAdEvidence> ad_evidence_;
 
-  // True if this frame is a subframe that had a script tagged as an ad on the
-  // v8 stack at the time of creation. This is updated in `SetAdEvidence()`,
+  // True if this frame is a frame that had a script tagged as an ad on the v8
+  // stack at the time of creation. This is updated in `SetAdEvidence()`,
   // allowing the bit to be propagated when a frame navigates cross-origin.
   // Fenced frames do not set this bit for the initial empty document, see
   // SubresourceFilterAgent::Initialize.
-  bool is_subframe_created_by_ad_script_ = false;
+  bool is_frame_created_by_ad_script_ = false;
 
   bool evict_cached_session_storage_on_freeze_or_unload_ = false;
 
@@ -971,6 +1014,14 @@ class CORE_EXPORT LocalFrame final
   // Tracks the number of times this document has been retrieved from the
   // bfcache.
   uint32_t navigation_id_ = 1;
+
+  // Stores whether this frame is affected by a CSPEE policy (from any ancestor
+  // frame). Calculated browser-side and used to help determine if this frame
+  // is allowed to load a new child opaque-ads fenced frame.
+  bool ancestor_or_self_has_cspee_ = false;
+
+  // Reduced accept language for top-level frame.
+  AtomicString reduced_accept_language_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {
@@ -1023,42 +1074,6 @@ class FrameNavigationDisabler {
   ~FrameNavigationDisabler();
 
  private:
-  LocalFrame* frame_;
-};
-
-// A helper class for attributing cost inside a scope to a LocalFrame, with
-// output written to the trace log. The class is irrelevant to the core logic
-// of LocalFrame.  Sample usage:
-//
-// void foo(LocalFrame* frame)
-// {
-//     ScopedFrameBlamer frameBlamer(frame);
-//     TRACE_EVENT0("blink", "foo");
-//     // Do some real work...
-// }
-//
-// In Trace Viewer, we can find the cost of slice |foo| attributed to |frame|.
-// Design doc:
-// https://docs.google.com/document/d/15BB-suCb9j-nFt55yCFJBJCGzLg2qUm3WaSOPb8APtI/edit?usp=sharing
-//
-// This class is used in performance-sensitive code (like V8 entry), so care
-// should be taken to ensure that it has an efficient fast path (for the common
-// case where we are not tracking this).
-class ScopedFrameBlamer {
-  STACK_ALLOCATED();
-
- public:
-  explicit ScopedFrameBlamer(LocalFrame*);
-  ScopedFrameBlamer(const ScopedFrameBlamer&) = delete;
-  ScopedFrameBlamer& operator=(const ScopedFrameBlamer&) = delete;
-  ~ScopedFrameBlamer() {
-    if (UNLIKELY(frame_))
-      LeaveContext();
-  }
-
- private:
-  void LeaveContext();
-
   LocalFrame* frame_;
 };
 

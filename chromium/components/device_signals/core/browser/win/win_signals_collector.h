@@ -5,24 +5,21 @@
 #ifndef COMPONENTS_DEVICE_SIGNALS_CORE_BROWSER_WIN_WIN_SIGNALS_COLLECTOR_H_
 #define COMPONENTS_DEVICE_SIGNALS_CORE_BROWSER_WIN_WIN_SIGNALS_COLLECTOR_H_
 
-#include <map>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
-#include "components/device_signals/core/browser/signals_collector.h"
-#include "components/device_signals/core/common/win/win_types.h"
-
-namespace base {
-class Value;
-}  // namespace base
+#include "base/sequence_checker.h"
+#include "components/device_signals/core/browser/base_signals_collector.h"
 
 namespace device_signals {
 
+struct AvProduct;
+struct InstalledHotfix;
 class SystemSignalsServiceHost;
 
 // Collector in charge of collecting device signals that are either specific to
 // Windows, or require a specific Windows-only implementation.
-class WinSignalsCollector : public SignalsCollector {
+class WinSignalsCollector : public BaseSignalsCollector {
  public:
   explicit WinSignalsCollector(SystemSignalsServiceHost* system_service_host);
 
@@ -31,45 +28,43 @@ class WinSignalsCollector : public SignalsCollector {
   WinSignalsCollector(const WinSignalsCollector&) = delete;
   WinSignalsCollector& operator=(const WinSignalsCollector&) = delete;
 
-  // SignalsCollector:
-  const std::unordered_set<std::string> GetSupportedSignalNames() override;
-  void GetSignal(const std::string& signal_name,
-                 const base::Value& params,
-                 GetSignalCallback callback) override;
-
  private:
-  // Collection function for the AV signal. `params` is ignored since AV signal
-  // does not require parameters. `callback` will be invoked when the signal
-  // values are available, or when something went wrong.
-  void GetAntiVirusSignal(const base::Value& params,
-                          GetSignalCallback callback);
+  // Collection function for the Antivirus signal. `request` is ignored since AV
+  // signal does not require parameters. `response` will be passed along and the
+  // signal values will be set on it when available. `done_closure` will be
+  // invoked when signal collection is complete.
+  void GetAntiVirusSignal(const SignalsAggregationRequest& request,
+                          SignalsAggregationResponse& response,
+                          base::OnceClosure done_closure);
 
   // Invoked when the SystemSignalsService returns the collected AV signals as
-  // `av_products`. Will convert the structs to base::Value and invoke
-  // `callback`.
-  void OnAntiVirusSignalCollected(GetSignalCallback callback,
+  // `av_products`. Will update `response` with the signal collection outcome,
+  // and invoke `done_closure` to asynchronously notify the caller of the
+  // completion of this request.
+  void OnAntiVirusSignalCollected(SignalsAggregationResponse& response,
+                                  base::OnceClosure done_closure,
                                   const std::vector<AvProduct>& av_products);
 
-  // Collection function for the Hotfix signal. `params` is ignored since Hotfix
-  // signal does not require parameters. `callback` will be invoked when the
-  // signal values are available, or when something went wrong.
-  void GetHotfixSignal(const base::Value& params, GetSignalCallback callback);
+  // Collection function for the Hotfix signal. `request` is ignored since
+  // Hotfix signal does not require parameters. `response` will be passed along
+  // and the signal values will be set on it when available. `done_closure` will
+  // be invoked when signal collection is complete.
+  void GetHotfixSignal(const SignalsAggregationRequest& request,
+                       SignalsAggregationResponse& response,
+                       base::OnceClosure done_closure);
 
   // Invoked when the SystemSignalsService returns the collected Hotfix signals
-  // as `hotfixes`. Will convert the structs to base::Value and invoke
-  // `callback`.
-  void OnHotfixSignalCollected(GetSignalCallback callback,
+  // as `hotfixes`. Will update `response` with the signal collection outcome,
+  // and invoke `done_closure` to asynchronously notify the caller of the
+  // completion of this request.
+  void OnHotfixSignalCollected(SignalsAggregationResponse& response,
+                               base::OnceClosure done_closure,
                                const std::vector<InstalledHotfix>& hotfixes);
 
   // Instance used to retrieve a pointer to a SystemSignalsService instance.
   base::raw_ptr<SystemSignalsServiceHost> system_service_host_;
 
-  // Map used to forward signal collection requests to the right function keyed
-  // from a given signal name.
-  std::map<const std::string,
-           base::RepeatingCallback<void(const base::Value&, GetSignalCallback)>>
-      signals_collection_map_;
-
+  SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<WinSignalsCollector> weak_factory_{this};
 };
 

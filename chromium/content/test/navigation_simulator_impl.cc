@@ -248,7 +248,7 @@ NavigationSimulatorImpl::CreateHistoryNavigation(int offset,
   std::unique_ptr<NavigationSimulatorImpl> simulator = nullptr;
   if (is_renderer_initiated) {
     simulator = NavigationSimulatorImpl::CreateRendererInitiated(
-        GURL(), web_contents->GetMainFrame());
+        GURL(), web_contents->GetPrimaryMainFrame());
   } else {
     simulator =
         NavigationSimulatorImpl::CreateBrowserInitiated(GURL(), web_contents);
@@ -342,9 +342,10 @@ NavigationSimulatorImpl::NavigationSimulatorImpl(
     : WebContentsObserver(web_contents),
       web_contents_(web_contents),
       render_frame_host_(render_frame_host),
-      frame_tree_node_(render_frame_host
-                           ? render_frame_host->frame_tree_node()
-                           : web_contents->GetMainFrame()->frame_tree_node()),
+      frame_tree_node_(
+          render_frame_host
+              ? render_frame_host->frame_tree_node()
+              : web_contents->GetPrimaryMainFrame()->frame_tree_node()),
       request_(nullptr),
       navigation_url_(original_url),
       initial_method_("GET"),
@@ -766,11 +767,15 @@ void NavigationSimulatorImpl::AbortFromRenderer() {
          "NavigationSimulatorImpl::Commit or  "
          "NavigationSimulatorImpl::CommitErrorPage.";
 
-  if (state_ < READY_TO_COMMIT)
+  if (state_ < READY_TO_COMMIT) {
     was_aborted_prior_to_ready_to_commit_ = true;
-
-  request_->RendererAbortedNavigationForTesting();
-  state_ = FINISHED;
+    request_->RendererRequestedNavigationCancellationForTesting();
+    state_ = FINISHED;
+  } else {
+    // Calling RendererRequestedNavigationCancellationForTesting() after the
+    // READY_TO_COMMIT stage will get ignored, so call AbortCommit() instead.
+    AbortCommit();
+  }
 
   CHECK_EQ(1, num_did_finish_navigation_called_);
 }
@@ -1261,26 +1266,28 @@ bool NavigationSimulatorImpl::SimulateBrowserInitiatedStart() {
   // Note: WillStartRequest checks can destroy the request synchronously, or
   // this can be a navigation that doesn't need a network request and that was
   // passed directly to a RenderFrameHost for commit.
-  request =
-      web_contents_->GetMainFrame()->frame_tree_node()->navigation_request();
+  request = web_contents_->GetPrimaryMainFrame()
+                ->frame_tree_node()
+                ->navigation_request();
   if (!request) {
     if (blink::IsRendererDebugURL(navigation_url_)) {
       // We don't create NavigationRequests nor NavigationHandles for a
       // navigation to a renderer-debug URL. Instead, the URL is passed to the
       // current RenderFrameHost so that the renderer process can handle it.
       CHECK(!request_);
-      CHECK(web_contents_->GetMainFrame()->is_loading());
+      CHECK(web_contents_->GetPrimaryMainFrame()->is_loading());
 
       // A navigation to a renderer-debug URL cannot commit. Simulate the
       // renderer process aborting it.
-      render_frame_host_ =
-          static_cast<TestRenderFrameHost*>(web_contents_->GetMainFrame());
+      render_frame_host_ = static_cast<TestRenderFrameHost*>(
+          web_contents_->GetPrimaryMainFrame());
       StopLoading();
       state_ = FAILED;
       return false;
     } else if (request_ &&
-               web_contents_->GetMainFrame()->GetSameDocumentNavigationRequest(
-                   request_->commit_params().navigation_token)) {
+               web_contents_->GetPrimaryMainFrame()
+                   ->GetSameDocumentNavigationRequest(
+                       request_->commit_params().navigation_token)) {
       CHECK(request_->IsSameDocument());
       same_document_ = true;
       return true;
@@ -1339,7 +1346,8 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
       navigation_client_remote.InitWithNewEndpointAndPassReceiver();
   render_frame_host_->frame_host_receiver_for_testing().impl()->BeginNavigation(
       std::move(common_params), std::move(begin_params), mojo::NullRemote(),
-      std::move(navigation_client_remote), mojo::NullRemote());
+      std::move(navigation_client_remote), mojo::NullRemote(),
+      mojo::NullReceiver());
 
   NavigationRequest* request =
       render_frame_host_->frame_tree_node()->navigation_request();
@@ -1659,7 +1667,7 @@ void NavigationSimulatorImpl::AddBeforeUnloadHandlerIfNecessary() {
         target_frame_tree_node->current_frame_host();
   } else {
     target_frame_render_frame_host_impl =
-        static_cast<RenderFrameHostImpl*>(web_contents_->GetMainFrame());
+        static_cast<RenderFrameHostImpl*>(web_contents_->GetPrimaryMainFrame());
   }
   if (target_frame_render_frame_host_impl &&
       !target_frame_render_frame_host_impl->GetSuddenTerminationDisablerState(

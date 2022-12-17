@@ -235,7 +235,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends BaseActivi
         // Avoid relying on explicit intents, bypassing LaunchIntentDispatcher, created by null
         // startIntent launch behavior.
         Assert.assertNotNull(startIntent);
-        Features.ensureCommandLineIsUpToDate();
+        Features.getInstance().ensureCommandLineIsUpToDate();
         super.launchActivity(startIntent);
     }
 
@@ -435,6 +435,14 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends BaseActivi
      */
     public void assertWaitForPageScaleFactorMatch(float expectedScale) {
         ChromeApplicationTestUtils.assertWaitForPageScaleFactorMatch(getActivity(), expectedScale);
+    }
+
+    /**
+     * Waits till the WebContents receives a page scale factor different
+     * from the specified value and asserts that this happens.
+     */
+    public void assertWaitForPageScaleFactorChange(float initialScale) {
+        ChromeApplicationTestUtils.assertWaitForPageScaleFactorChange(getActivity(), initialScale);
     }
 
     public String getName() {

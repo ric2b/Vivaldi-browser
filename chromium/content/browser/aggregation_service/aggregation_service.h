@@ -5,9 +5,13 @@
 #ifndef CONTENT_BROWSER_AGGREGATION_SERVICE_AGGREGATION_SERVICE_H_
 #define CONTENT_BROWSER_AGGREGATION_SERVICE_AGGREGATION_SERVICE_H_
 
+#include <vector>
+
+#include "base/callback_forward.h"
 #include "content/browser/aggregation_service/aggregatable_report_assembler.h"
 #include "content/browser/aggregation_service/aggregatable_report_sender.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "content/browser/aggregation_service/aggregation_service_storage.h"
+#include "content/public/browser/storage_partition.h"
 
 class GURL;
 
@@ -18,6 +22,7 @@ class Value;
 
 namespace content {
 
+class AggregationServiceObserver;
 class AggregatableReport;
 class AggregatableReportRequest;
 class BrowserContext;
@@ -30,6 +35,11 @@ class AggregationService {
 
   using SendStatus = AggregatableReportSender::RequestStatus;
   using SendCallback = AggregatableReportSender::ReportSentCallback;
+
+  // No more report requests can be scheduled and not yet sent than this. Any
+  // additional requests will silently be dropped until there is more capacity.
+  // This ensures malicious actors cannot use unbounded memory or disk space.
+  static constexpr int kMaxStoredReportsPerReportingOrigin = 1000;
 
   virtual ~AggregationService() = default;
 
@@ -56,12 +66,38 @@ class AggregationService {
                           const base::Value& contents,
                           SendCallback callback) = 0;
 
-  // Deletes all data in storage that were fetched between `delete_begin` and
-  // `delete_end` time (inclusive). Null times are treated as unbounded lower or
-  // upper range.
+  // Deletes all data in storage that were fetched/stored between `delete_begin`
+  // and `delete_end` time (inclusive). Null times are treated as unbounded
+  // lower or upper range. If `!filter.is_null()`, requests with a reporting
+  // origin that does *not* match the `filter` are retained (i.e. not cleared);
+  // `filter` does not affect public key deletion.
   virtual void ClearData(base::Time delete_begin,
                          base::Time delete_end,
+                         StoragePartition::StorageKeyMatcherFunction filter,
                          base::OnceClosure done) = 0;
+
+  // Schedules `report_request` to be assembled and sent at its scheduled report
+  // time. It is stored on disk (unless in incognito) until then. See the
+  // `AggregatableReportScheduler` for details.
+  virtual void ScheduleReport(AggregatableReportRequest report_request) = 0;
+
+  // Gets all pending report requests that are currently stored. Used for
+  // populating WebUI.
+  // TODO(linnan): Consider enforcing a limit on the number of requests
+  // returned.
+  virtual void GetPendingReportRequestsForWebUI(
+      base::OnceCallback<void(
+          std::vector<AggregationServiceStorage::RequestAndId>)> callback) = 0;
+
+  // Sends the given reports immediately, and runs `reports_sent_callback` once
+  // they have all been sent.
+  virtual void SendReportsForWebUI(
+      const std::vector<AggregationServiceStorage::RequestId>& ids,
+      base::OnceClosure reports_sent_callback) = 0;
+
+  virtual void AddObserver(AggregationServiceObserver* observer) = 0;
+
+  virtual void RemoveObserver(AggregationServiceObserver* observer) = 0;
 };
 
 }  // namespace content

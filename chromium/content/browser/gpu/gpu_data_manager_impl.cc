@@ -253,10 +253,17 @@ void GpuDataManagerImpl::UpdateGpuExtraInfo(
   private_->UpdateGpuExtraInfo(gpu_extra_info);
 }
 
-void GpuDataManagerImpl::UpdateMojoMediaVideoCapabilities(
+void GpuDataManagerImpl::UpdateMojoMediaVideoDecoderCapabilities(
     const media::SupportedVideoDecoderConfigs& configs) {
   base::AutoLock auto_lock(lock_);
-  private_->UpdateMojoMediaVideoCapabilities(configs);
+  private_->UpdateMojoMediaVideoDecoderCapabilities(configs);
+}
+
+void GpuDataManagerImpl::UpdateMojoMediaVideoEncoderCapabilities(
+    const media::VideoEncodeAccelerator::SupportedProfiles&
+        supported_profiles) {
+  base::AutoLock auto_lock(lock_);
+  private_->UpdateMojoMediaVideoEncoderCapabilities(supported_profiles);
 }
 
 gpu::GpuFeatureInfo GpuDataManagerImpl::GetGpuFeatureInfo() const {
@@ -324,7 +331,7 @@ void GpuDataManagerImpl::ProcessCrashed() {
   private_->ProcessCrashed();
 }
 
-std::unique_ptr<base::ListValue> GpuDataManagerImpl::GetLogMessages() const {
+base::Value::List GpuDataManagerImpl::GetLogMessages() const {
   base::AutoLock auto_lock(lock_);
   return private_->GetLogMessages();
 }
@@ -334,10 +341,10 @@ void GpuDataManagerImpl::HandleGpuSwitch() {
   private_->HandleGpuSwitch();
 }
 
-void GpuDataManagerImpl::BlockDomainFrom3DAPIs(const GURL& url,
-                                               gpu::DomainGuilt guilt) {
+void GpuDataManagerImpl::BlockDomainsFrom3DAPIs(const std::set<GURL>& urls,
+                                                gpu::DomainGuilt guilt) {
   base::AutoLock auto_lock(lock_);
-  private_->BlockDomainFrom3DAPIs(url, guilt);
+  private_->BlockDomainsFrom3DAPIs(urls, guilt);
 }
 
 bool GpuDataManagerImpl::Are3DAPIsBlocked(const GURL& top_origin_url,

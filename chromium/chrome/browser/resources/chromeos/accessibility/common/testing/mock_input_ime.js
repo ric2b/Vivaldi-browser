@@ -52,7 +52,7 @@ var MockInputIme = {
      * Adds a listener to onFocus.
      * @param {function<InputContext>} listener
      */
-    addListener: (listener) => {
+    addListener: listener => {
       MockInputIme.onFocusListener_ = listener;
     },
 
@@ -60,11 +60,11 @@ var MockInputIme = {
      * Removes the listener.
      * @param {function<InputContext>} listener
      */
-    removeListener: (listener) => {
+    removeListener: listener => {
       if (MockInputIme.onFocusListener_ === listener) {
         MockInputIme.onFocusListener_ = null;
       }
-    }
+    },
   },
 
   onBlur: {
@@ -72,7 +72,7 @@ var MockInputIme = {
      * Adds a listener to onBlur.
      * @param {function<number>} listener
      */
-    addListener: (listener) => {
+    addListener: listener => {
       MockInputIme.onBlurListener_ = listener;
     },
 
@@ -80,11 +80,11 @@ var MockInputIme = {
      * Removes the listener.
      * @param {function<number>} listener
      */
-    removeListener: (listener) => {
+    removeListener: listener => {
       if (MockInputIme.onBlurListener_ === listener) {
         MockInputIme.onBlurListener_ = null;
       }
-    }
+    },
   },
 
   /** @param {!MockImeCompositionParameters} composition */
@@ -165,5 +165,5 @@ var MockInputIme = {
     return new Promise(resolve => {
       this.waitForCommitResolve_ = resolve;
     });
-  }
+  },
 };

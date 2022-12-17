@@ -38,7 +38,7 @@
 <translation id="2501278716633472235">Kthehem</translation>
 <translation id="2539524384386349900">Diktoj</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ktheu përgjigje të pavlefshme.</translation>
-<translation id="2634124572758952069">Nuk u gjet adresa IP e serverit të <ph name="HOST_NAME" />.</translation>
+<translation id="2634124572758952069">Nuk gjendet adresa IP e serverit të <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">U refuzua aksesi në skedar</translation>
 <translation id="2705137772291741111">Kopja e regjistruar e uebsajtit (në kash) është e palexueshme.</translation>
@@ -46,7 +46,7 @@
 <translation id="2784949926578158345">Linja u kthye në gjendjen fillestare.</translation>
 <translation id="2826760142808435982">Linja mbrohet me shifrim dhe vërtetohet me <ph name="CIPHER" /> duke përdorur <ph name="KX" /> për shkëmbimin e algoritmeve kriptografike.</translation>
 <translation id="2856444702002559011">Piratët e internetit mund t'ju vjedhin informacionet nga <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (për shembull: fjalëkalimet, mesazhet ose kartat e kreditit). <ph name="BEGIN_LEARN_MORE_LINK" />Mësoni më shumë<ph name="END_LEARN_MORE_LINK" /></translation>
-<translation id="2909946352844186028">U diktua një ndryshim në rrjetin kompjuterik.</translation>
+<translation id="2909946352844186028">Rrjeti kompjuterik duket se ka ndryshuar.</translation>
 <translation id="2948083400971632585">Në faqen e parametrave mund të çaktivizoni proxy-t për çdo lidhje.</translation>
 <translation id="2953943267837858202">Nuk autorizoj që të luajë automatikisht videot</translation>
 <translation id="2991571918955627853">Uebsajti <ph name="SITE" /> nuk mund të vizitohet për momentin, sepse përdor HSTS. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
@@ -121,7 +121,7 @@
 <translation id="5287240709317226393">Tregoj cookies</translation>
 <translation id="5355557959165512791">Uebsajti <ph name="SITE" /> nuk mund të vizitohet për momentin, sepse përdor certifikatë të revokuar. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="5386426401304769735">Lista e certifikatave të uebsajtit është firmosur me standardin SHA-1.</translation>
-<translation id="5452270690849572955">Nuk u gjet faqja <ph name="HOST_NAME" /></translation>
+<translation id="5452270690849572955">Nuk gjendet faqja <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">E pavlefshme</translation>
 <translation id="5492298309214877701">Ku uebsajt i kompanisë, organizatës apo shkollës ka të njëjtën URL me një uebsajt të jashtëm.
     <ph name="LINE_BREAK" />
@@ -212,7 +212,7 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> u përgjigj shumë vonë.</translation>
 <translation id="8503813439785031346">Përdoruesi</translation>
 <translation id="8703575177326907206">Linja me <ph name="DOMAIN" /> është e pashifruar.</translation>
-<translation id="8740359287975076522">Nuk u gjet &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; e <ph name="HOST_NAME" />. Përcakton diagnozën e problemit...</translation>
+<translation id="8740359287975076522">Nuk gjendet &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; e <ph name="HOST_NAME" />. Përcakton diagnozën e problemit...</translation>
 <translation id="8774017153185436870">Uebsajtet mund të luajnë automatikisht videot</translation>
 <translation id="8820817407110198400">Faqet interesante</translation>
 <translation id="8940028675168378100">U bllokua nga <ph name="BLOCKER_NAME" /></translation>

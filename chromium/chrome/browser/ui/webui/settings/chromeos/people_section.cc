@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/people_section.h"
 
-#include "ash/components/account_manager/account_manager_factory.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
@@ -27,12 +27,12 @@
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/chromeos/sync/os_sync_handler.h"
+#include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/account_manager_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/fingerprint_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_features_util.h"
 #include "chrome/browser/ui/webui/settings/chromeos/parental_controls_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/quick_unlock_handler.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/people_handler.h"
 #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
@@ -41,6 +41,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/account_manager/account_manager_factory.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/account_manager_core/pref_names.h"
@@ -48,6 +49,7 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/base/features.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/user_manager/user.h"
@@ -313,6 +315,8 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_AUTOSUBMIT_ERROR_PIN_INCORRECT},
       {"passwordPromptEnterPasswordLoginLock",
        IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_ENTER_PASSWORD_LOGIN_LOCK},
+      {"recoveryToggleLabel", IDS_SETTINGS_PEOPLE_RECOVERY_TOGGLE_LABEL},
+      {"recoveryToggleSubLabel", IDS_SETTINGS_PEOPLE_RECOVERY_TOGGLE_SUB_LABEL},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -398,6 +402,14 @@ void AddFingerprintResources(content::WebUIDataSource* html_source,
           IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_LEFT_SIDE_ARIA_LABEL;
       aria_label_includes_device = true;
       break;
+    case FingerprintLocation::LEFT_OF_POWER_BUTTON_TOP_RIGHT:
+      DCHECK(ash::quick_unlock::IsLeftOfPowerButtonTopRightFingerprint());
+      instruction_id =
+          IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LEFT_OF_POWER_BUTTON_TOP_RIGHT;
+      // Use the dialog title as the aria-label, since this location does not
+      // require an aria-label.
+      aria_label_id = IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_TITLE;
+      break;
     case FingerprintLocation::UNKNOWN:
       instruction_id =
           IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
@@ -405,8 +417,14 @@ void AddFingerprintResources(content::WebUIDataSource* html_source,
           IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD;
       break;
   }
-  html_source->AddLocalizedString(
-      "configureFingerprintInstructionLocateScannerStep", instruction_id);
+  if (ash::quick_unlock::IsLeftOfPowerButtonTopRightFingerprint()) {
+    html_source->AddString("configureFingerprintInstructionLocateScannerStep",
+                           l10n_util::GetStringFUTF16(
+                               instruction_id, ui::GetChromeOSDeviceName()));
+  } else {
+    html_source->AddLocalizedString(
+        "configureFingerprintInstructionLocateScannerStep", instruction_id);
+  }
   if (aria_label_includes_device) {
     html_source->AddString(
         "configureFingerprintScannerStepAriaLabel",
@@ -472,6 +490,8 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
       {"osSyncWifiConfigurationsCheckboxLabel",
        IDS_OS_SETTINGS_WIFI_CONFIGURATIONS_CHECKBOX_LABEL},
       {"osSyncAppsCheckboxLabel", IDS_OS_SETTINGS_SYNC_APPS_CHECKBOX_LABEL},
+      {"osSyncAppsCheckboxSublabel",
+       IDS_OS_SETTINGS_SYNC_APPS_CHECKBOX_SUBLABEL},
       {"osSyncTurnOn", IDS_OS_SETTINGS_SYNC_TURN_ON},
       {"osSyncFeatureLabel", IDS_OS_SETTINGS_SYNC_FEATURE_LABEL},
   };
@@ -480,6 +500,10 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "syncSettingsCategorizationEnabled",
       chromeos::features::IsSyncSettingsCategorizationEnabled());
+  html_source->AddBoolean(
+      "appsToggleSharingEnabled",
+      base::FeatureList::IsEnabled(syncer::kSyncChromeOSAppsToggleSharing) &&
+          crosapi::browser_util::IsLacrosEnabled());
   html_source->AddString(
       "browserSettingsSyncSetupUrl",
       base::StrCat({chrome::kChromeUISettingsURL, chrome::kSyncSetupSubPage}));

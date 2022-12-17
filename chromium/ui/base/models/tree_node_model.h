@@ -97,7 +97,8 @@ class TreeNode : public TreeModelNode {
     DCHECK(!node->parent_);
     node->parent_ = static_cast<NodeType*>(this);
     NodeType* node_ptr = node.get();
-    children_.insert(children_.begin() + index, std::move(node));
+    children_.insert(children_.begin() + static_cast<ptrdiff_t>(index),
+                     std::move(node));
     return node_ptr;
   }
 
@@ -111,7 +112,7 @@ class TreeNode : public TreeModelNode {
     DCHECK_LT(index, children_.size());
     children_[index]->parent_ = nullptr;
     std::unique_ptr<NodeType> ptr = std::move(children_[index]);
-    children_.erase(children_.begin() + index);
+    children_.erase(children_.begin() + static_cast<ptrdiff_t>(index));
     return ptr;
   }
 
@@ -129,21 +130,23 @@ class TreeNode : public TreeModelNode {
 
   // Returns the number of all nodes in the subtree rooted at this node,
   // including this node.
-  int GetTotalNodeCount() const {
-    int count = 1;  // Start with one to include the node itself.
+  size_t GetTotalNodeCount() const {
+    size_t count = 1;  // Start with one to include the node itself.
     for (const auto& child : children_)
       count += child->GetTotalNodeCount();
     return count;
   }
 
-  // Returns the index of |node|, or -1 if |node| is not a child of this.
-  int GetIndexOf(const NodeType* node) const {
+  // Returns the index of |node|, or nullopt if |node| is not a child of this.
+  absl::optional<size_t> GetIndexOf(const NodeType* node) const {
     DCHECK(node);
     auto i = std::find_if(children_.begin(), children_.end(),
                           [node](const std::unique_ptr<NodeType>& ptr) {
                             return ptr.get() == node;
                           });
-    return i != children_.end() ? static_cast<int>(i - children_.begin()) : -1;
+    return i != children_.end()
+               ? absl::make_optional(static_cast<size_t>(i - children_.begin()))
+               : absl::nullopt;
   }
 
   // Sets the title of the node.
@@ -151,6 +154,15 @@ class TreeNode : public TreeModelNode {
 
   // TreeModelNode:
   const std::u16string& GetTitle() const override { return title_; }
+
+  const std::u16string& GetAccessibleTitle() const override {
+    return title_.empty() ? placeholder_accessible_title_ : title_;
+  }
+
+  void SetPlaceholderAccessibleTitle(
+      std::u16string placeholder_accessible_title) {
+    placeholder_accessible_title_ = placeholder_accessible_title;
+  }
 
   // Returns true if this == ancestor, or one of this nodes parents is
   // ancestor.
@@ -193,6 +205,10 @@ class TreeNode : public TreeModelNode {
 
   // Title displayed in the tree.
   std::u16string title_;
+
+  // If set, a placeholder accessible title to fall back to if there is no
+  // title.
+  std::u16string placeholder_accessible_title_;
 
   // This node's parent.
   raw_ptr<NodeType> parent_;
@@ -273,7 +289,7 @@ class TreeNodeModel : public TreeModel {
 
   std::unique_ptr<NodeType> Remove(NodeType* parent, NodeType* node) {
     DCHECK(parent);
-    return Remove(parent, static_cast<size_t>(parent->GetIndexOf(node)));
+    return Remove(parent, parent->GetIndexOf(node).value());
   }
 
   void NotifyObserverTreeNodesAdded(NodeType* parent,
@@ -320,7 +336,8 @@ class TreeNodeModel : public TreeModel {
     return nodes;
   }
 
-  int GetIndexOf(TreeModelNode* parent, TreeModelNode* child) const override {
+  absl::optional<size_t> GetIndexOf(TreeModelNode* parent,
+                                    TreeModelNode* child) const override {
     DCHECK(parent);
     return AsNode(parent)->GetIndexOf(AsNode(child));
   }

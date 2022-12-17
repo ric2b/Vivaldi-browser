@@ -25,11 +25,11 @@
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/clipboard/clipboard_history_controller_impl.h"
-#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/devicetype.h"
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_move_window_util.h"
@@ -45,7 +45,7 @@
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/new_window_delegate.h"
-#include "ash/public/cpp/system/toast_catalog.h"
+#include "ash/public/cpp/projector/projector_controller.h"
 #include "ash/public/cpp/system/toast_data.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/window_rotation.h"
@@ -72,6 +72,7 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/float/float_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_session.h"
@@ -93,11 +94,11 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/ui/base/display_util.h"
 #include "chromeos/ui/wm/desks/chromeos_desks_histogram_enums.h"
 #include "chromeos/ui/wm/features.h"
-#include "chromeos/ui/wm/window_util.h"
 #include "components/user_manager/user_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
@@ -181,48 +182,6 @@ void RecordWindowSnapAcceleratorAction(WindowSnapAcceleratorAction action) {
 
 void RecordTabletVolumeAdjustTypeHistogram(TabletModeVolumeAdjustType type) {
   UMA_HISTOGRAM_ENUMERATION(kTabletCountOfVolumeAdjustType, type);
-}
-
-// Returns the number of times the startup notification has been shown
-// from prefs.
-int GetStartupNotificationPrefCount(PrefService* pref_service) {
-  DCHECK(pref_service);
-  return pref_service->GetInteger(
-      prefs::kImprovedShortcutsNotificationShownCount);
-}
-
-bool ShouldShowStartupNotificationForCurrentUser() {
-  const absl::optional<user_manager::UserType> user_type =
-      Shell::Get()->session_controller()->GetUserType();
-  return user_type &&
-         (*user_type == user_manager::USER_TYPE_REGULAR ||
-          *user_type == user_manager::USER_TYPE_CHILD) &&
-         !Shell::Get()->session_controller()->IsUserFirstLogin();
-}
-
-// Increments the number of times the startup notification has been shown
-// in prefs.
-void IncrementStartupNotificationCount(PrefService* pref_service) {
-  DCHECK(pref_service);
-  int count = GetStartupNotificationPrefCount(pref_service);
-
-  // Increment the pref count.
-  pref_service->SetInteger(prefs::kImprovedShortcutsNotificationShownCount,
-                           count + 1);
-}
-
-// Shows a notification that accelerators/shortcuts have changed in this
-// release.
-// TODO(crbug.com/1179893): Remove this function in M97/M98.
-void NotifyShortcutChangesInRelease(PrefService* pref_service) {
-  DCHECK(::features::IsImprovedKeyboardShortcutsEnabled());
-  DCHECK(pref_service);
-
-  if (GetStartupNotificationPrefCount(pref_service) > 0)
-    return;
-
-  ShowShortcutsChangedNotification();
-  IncrementStartupNotificationCount(pref_service);
 }
 
 void ShowToast(std::string id,
@@ -473,8 +432,8 @@ bool CanHandleFocusCameraPreview() {
     return false;
 
   auto* camera_controller = controller->camera_controller();
-  auto* preview_widget =
-      camera_controller ? camera_controller->camera_preview_widget() : nullptr;
+  DCHECK(camera_controller);
+  auto* preview_widget = camera_controller->camera_preview_widget();
   return preview_widget && preview_widget->IsVisible();
 }
 
@@ -716,8 +675,10 @@ bool CanHandleToggleResizeLockMenu() {
 }
 
 bool CanHandleToggleFloatingWindow() {
-  return chromeos::wm::features::IsFloatWindowEnabled() &&
-         !Shell::Get()->tablet_mode_controller()->InTabletMode();
+  if (!chromeos::wm::features::IsFloatWindowEnabled())
+    return false;
+
+  return window_util::GetActiveWindow() != nullptr;
 }
 
 // Enters capture mode image type with |source|.
@@ -729,13 +690,21 @@ void EnterImageCaptureMode(CaptureModeSource source,
   capture_mode_controller->Start(entry_type);
 }
 
-void HandleTakeWindowScreenshot() {
+void MaybeHandleTakeWindowScreenshot() {
+  // If a capture mode session is already running, this shortcut will be treated
+  // as a no-op.
+  if (CaptureModeController::Get()->IsActive())
+    return;
   base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
   EnterImageCaptureMode(CaptureModeSource::kWindow,
                         CaptureModeEntryType::kAccelTakeWindowScreenshot);
 }
 
-void HandleTakePartialScreenshot() {
+void MaybeHandleTakePartialScreenshot() {
+  // If a capture mode session is already running, this shortcut will be treated
+  // as a no-op.
+  if (CaptureModeController::Get()->IsActive())
+    return;
   base::RecordAction(UserMetricsAction("Accel_Take_Partial_Screenshot"));
   EnterImageCaptureMode(CaptureModeSource::kRegion,
                         CaptureModeEntryType::kAccelTakePartialScreenshot);
@@ -854,12 +823,11 @@ void HandleToggleAppList(const ui::Accelerator& accelerator,
 
 void HandleToggleFloating() {
   DCHECK(chromeos::wm::features::IsFloatWindowEnabled());
-  // Floating is currently not supported for tablet mode, see timeline here:
-  // https://crbug.com/1240411
-  DCHECK(!Shell::Get()->tablet_mode_controller()->InTabletMode());
-  aura::Window* window = ash::window_util::GetActiveWindow();
-  if (window)
-    chromeos::ToggleFloating(window);
+  aura::Window* window = window_util::GetActiveWindow();
+  DCHECK(window);
+  // TODO(sammiequon|shidi): Add some UI like a bounce if a window cannot be
+  // floated.
+  Shell::Get()->float_controller()->ToggleFloat(window);
   base::RecordAction(UserMetricsAction("Accel_Toggle_Floating"));
 }
 
@@ -925,9 +893,9 @@ void HandleWindowSnap(AcceleratorAction action) {
     }
   }
 
-  const WMEvent event(action == WINDOW_CYCLE_SNAP_LEFT
-                          ? WM_EVENT_CYCLE_SNAP_PRIMARY
-                          : WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WindowSnapWMEvent event(action == WINDOW_CYCLE_SNAP_LEFT
+                                    ? WM_EVENT_CYCLE_SNAP_PRIMARY
+                                    : WM_EVENT_CYCLE_SNAP_SECONDARY);
   aura::Window* active_window = window_util::GetActiveWindow();
   DCHECK(active_window);
 
@@ -1034,7 +1002,7 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
         base::UserMetricsAction("VoiceInteraction.Started.Assistant"));
   }
 
-  using chromeos::assistant::AssistantAllowedState;
+  using assistant::AssistantAllowedState;
   switch (AssistantState::Get()->allowed_state().value_or(
       AssistantAllowedState::ALLOWED)) {
     case AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER:
@@ -1089,8 +1057,8 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
   }
 
   AssistantUiController::Get()->ToggleUi(
-      /*entry_point=*/chromeos::assistant::AssistantEntryPoint::kHotkey,
-      /*exit_point=*/chromeos::assistant::AssistantExitPoint::kHotkey);
+      /*entry_point=*/assistant::AssistantEntryPoint::kHotkey,
+      /*exit_point=*/assistant::AssistantExitPoint::kHotkey);
 }
 
 void HandleSuspend() {
@@ -1500,6 +1468,21 @@ void HandleTouchHudModeChange() {
   controller->touch_hud_debug()->ChangeToNextMode();
 }
 
+bool CanHandleToggleProjectorMarker() {
+  auto* projector_controller = ProjectorController::Get();
+  if (projector_controller) {
+    return projector_controller->GetAnnotatorAvailability();
+  }
+  return false;
+}
+
+void HandleToggleProjectorMarker() {
+  auto* projector_controller = ProjectorController::Get();
+  if (projector_controller) {
+    projector_controller->ToggleAnnotationTray();
+  }
+}
+
 }  // namespace
 
 constexpr const char* AcceleratorControllerImpl::kVolumeButtonRegion;
@@ -1513,8 +1496,6 @@ constexpr const char* AcceleratorControllerImpl::kVolumeButtonSideBottom;
 
 ////////////////////////////////////////////////////////////////////////////////
 // AcceleratorControllerImpl, public:
-
-bool AcceleratorControllerImpl::should_show_shortcut_notification_ = true;
 
 AcceleratorControllerImpl::TestApi::TestApi(
     AcceleratorControllerImpl* controller)
@@ -1584,9 +1565,6 @@ AcceleratorControllerImpl::AcceleratorControllerImpl()
     // shortcuts. Calling AddObserver will cause InputMethodChanged to be
     // called once even when the method does not change.
     InputMethodManager::Get()->AddObserver(this);
-
-    // Observe session changes.
-    Shell::Get()->session_controller()->AddObserver(this);
   }
 
   Init();
@@ -1602,25 +1580,12 @@ AcceleratorControllerImpl::AcceleratorControllerImpl()
 }
 
 AcceleratorControllerImpl::~AcceleratorControllerImpl() {
-  aura::Env::GetInstance()->RemovePreTargetHandler(accelerator_history_.get());
-}
-
-// static
-void AcceleratorControllerImpl::RegisterProfilePrefs(
-    PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(prefs::kImprovedShortcutsNotificationShownCount,
-                                0);
-}
-
-void AcceleratorControllerImpl::OnActiveUserPrefServiceChanged(
-    PrefService* pref_service) {
-  DCHECK(pref_service);
+  // |AcceleratorControllerImpl| is owned by the shell which always is
+  // deconstructed before |InputMethodManager|
   if (::features::IsImprovedKeyboardShortcutsEnabled()) {
-    if (should_show_shortcut_notification_ &&
-        ShouldShowStartupNotificationForCurrentUser()) {
-      NotifyShortcutChangesInRelease(pref_service);
-    }
+    InputMethodManager::Get()->RemoveObserver(this);
   }
+  aura::Env::GetInstance()->RemovePreTargetHandler(accelerator_history_.get());
 }
 
 void AcceleratorControllerImpl::InputMethodChanged(InputMethodManager* manager,
@@ -1990,6 +1955,8 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
       return CanHandleScreenshot(action);
+    case TOGGLE_PROJECTOR_MARKER:
+      return CanHandleToggleProjectorMarker();
     case TOGGLE_RESIZE_LOCK_MENU:
       return CanHandleToggleResizeLockMenu();
     case TOGGLE_FLOATING:
@@ -2376,6 +2343,9 @@ void AcceleratorControllerImpl::PerformAction(
     case TOGGLE_IME_MENU_BUBBLE:
       HandleToggleImeMenuBubble();
       break;
+    case TOGGLE_PROJECTOR_MARKER:
+      HandleToggleProjectorMarker();
+      break;
     case SHOW_SHORTCUT_VIEWER:
       HandleShowKeyboardShortcutViewer();
       break;
@@ -2413,13 +2383,13 @@ void AcceleratorControllerImpl::PerformAction(
       HandleCycleUser(CycleUserDirection::PREVIOUS);
       break;
     case TAKE_PARTIAL_SCREENSHOT:
-      HandleTakePartialScreenshot();
+      MaybeHandleTakePartialScreenshot();
       break;
     case TAKE_SCREENSHOT:
       HandleTakeScreenshot(accelerator.key_code());
       break;
     case TAKE_WINDOW_SCREENSHOT:
-      HandleTakeWindowScreenshot();
+      MaybeHandleTakeWindowScreenshot();
       break;
     case TOGGLE_APP_LIST:
       HandleToggleAppList(accelerator, kSearchKey);
@@ -2624,13 +2594,6 @@ void AcceleratorControllerImpl::MaybeShowConfirmationDialog(
   confirmation_dialog_ = dialog->GetWeakPtr();
 }
 
-void AcceleratorControllerImpl::Shutdown() {
-  if (::features::IsImprovedKeyboardShortcutsEnabled()) {
-    InputMethodManager::Get()->RemoveObserver(this);
-    Shell::Get()->session_controller()->RemoveObserver(this);
-  }
-}
-
 bool AcceleratorControllerImpl::IsInternalKeyboardOrUncategorizedDevice(
     int source_device_id) const {
   if (source_device_id == ui::ED_UNKNOWN_DEVICE)
@@ -2709,20 +2672,20 @@ void AcceleratorControllerImpl::ParseSideVolumeButtonLocationInfo() {
     return;
   }
 
-  std::unique_ptr<base::DictionaryValue> info_in_dict =
-      base::DictionaryValue::From(
-          base::JSONReader::ReadDeprecated(location_info));
-  if (!info_in_dict) {
+  absl::optional<base::Value> parsed_json =
+      base::JSONReader::Read(location_info);
+  if (!parsed_json || !parsed_json->is_dict()) {
     LOG(ERROR) << "JSONReader failed reading side volume button location info: "
                << location_info;
     return;
   }
 
-  const std::string* region = info_in_dict->FindStringKey(kVolumeButtonRegion);
+  const base::Value::Dict& info_in_dict = parsed_json->GetDict();
+  const std::string* region = info_in_dict.FindString(kVolumeButtonRegion);
   if (region)
     side_volume_button_location_.region = *region;
 
-  const std::string* side = info_in_dict->FindStringKey(kVolumeButtonSide);
+  const std::string* side = info_in_dict.FindString(kVolumeButtonSide);
   if (side)
     side_volume_button_location_.side = *side;
 }

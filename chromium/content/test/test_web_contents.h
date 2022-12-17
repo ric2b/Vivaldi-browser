@@ -54,7 +54,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   static TestWebContents* Create(const CreateParams& params);
 
   // WebContentsImpl overrides (returning the same values, but in Test* types)
-  TestRenderFrameHost* GetMainFrame() override;
+  TestRenderFrameHost* GetPrimaryMainFrame() override;
   TestRenderViewHost* GetRenderViewHost() override;
   // Overrides to avoid establishing Mojo connection with renderer process.
   int DownloadImage(const GURL& url,
@@ -131,6 +131,9 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void ResetPauseSubresourceLoadingCalled() override;
 
   void SetLastActiveTime(base::TimeTicks last_active_time) override;
+
+  void TestIncrementUsbActiveFrameCount() override;
+  void TestDecrementUsbActiveFrameCount() override;
 
   void TestIncrementBluetoothConnectedDeviceCount() override;
   void TestDecrementBluetoothConnectedDeviceCount() override;

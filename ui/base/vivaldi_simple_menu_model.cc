@@ -6,7 +6,7 @@ namespace ui {
 
 void SimpleMenuModel::Delegate::VivaldiCommandIdHighlighted(int command_id) {}
 
-void SimpleMenuModel::VivaldiHighlightChangedTo(int index) {
+void SimpleMenuModel::VivaldiHighlightChangedTo(size_t index) {
   if (delegate_)
     delegate_->VivaldiCommandIdHighlighted(GetCommandIdAt(index));
 }

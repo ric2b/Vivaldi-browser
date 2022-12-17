@@ -74,11 +74,7 @@ class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
     return gfx::SHARED_MEMORY_BUFFER;
   }
   gfx::GpuMemoryBufferHandle CloneHandle() const override {
-    NOTREACHED();
     return gfx::GpuMemoryBufferHandle();
-  }
-  ClientBuffer AsClientBuffer() override {
-    return reinterpret_cast<ClientBuffer>(this);
   }
   void OnMemoryDump(
       base::trace_event::ProcessMemoryDump* pmd,
@@ -122,8 +118,8 @@ MockGpuVideoAcceleratorFactories::CreateGpuMemoryBuffer(
   base::AutoLock guard(lock_);
   if (fail_to_allocate_gpu_memory_buffer_)
     return nullptr;
-  std::unique_ptr<gfx::GpuMemoryBuffer> ret(
-      new GpuMemoryBufferImpl(size, format, fail_to_map_gpu_memory_buffer_));
+  auto ret = std::make_unique<GpuMemoryBufferImpl>(
+      size, format, fail_to_map_gpu_memory_buffer_);
   created_memory_buffers_.push_back(ret.get());
   return ret;
 }

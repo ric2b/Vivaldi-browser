@@ -65,7 +65,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.DspHotwordDetection"
-    enum="DspHotwordDetectionStatus" expires_after="2022-10-16">
+    enum="DspHotwordDetectionStatus" expires_after="2022-12-18">
   <owner>xiaohuic@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -75,7 +75,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.EntryPoint" enum="AssistantEntryPoint"
-    expires_after="2022-10-09">
+    expires_after="2023-02-12">
   <owner>xiaohuic@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -85,7 +85,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.ExitPoint" enum="AssistantExitPoint"
-    expires_after="2022-10-09">
+    expires_after="2023-02-12">
   <owner>xiaohuic@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -115,6 +115,26 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Assistant.Libassistant.DlcInstallResult"
+    enum="Assistant.LibassistantDlcInstallResult" expires_after="2023-06-30">
+  <owner>wutao@chromium.org</owner>
+  <owner>assistive-eng@google.com</owner>
+  <summary>
+    The result of an attempt to install the libassistant DLC package. Emitted
+    when the Assistant service installs the DLC.
+  </summary>
+</histogram>
+
+<histogram name="Assistant.Libassistant.DlcLoadStatus"
+    enum="Assistant.LibassistantDlcLoadStatus" expires_after="2023-06-30">
+  <owner>wutao@chromium.org</owner>
+  <owner>assistive-eng@google.com</owner>
+  <summary>
+    Records if the libassistant DLC is loaded successfully. Emitted when the
+    libassistant service initializes.
+  </summary>
+</histogram>
+
 <histogram name="Assistant.OptInFlow.GetSettingsRequestTime" units="ms"
     expires_after="2022-11-06">
   <owner>updowndota@chromium.org</owner>
@@ -127,7 +147,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.OptInFlow.LoadingTimeoutCount" units="timeouts"
-    expires_after="2022-11-06">
+    expires_after="2023-01-15">
   <owner>updowndota@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>
@@ -152,7 +172,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.QueryResponseType" enum="AssistantQueryResponseType"
-    expires_after="2022-11-06">
+    expires_after="2023-01-15">
   <owner>xiaohuic@chromium.org</owner>
   <owner>croissant-eng@chromium.org</owner>
   <summary>The Assistant query response type.</summary>
@@ -190,8 +210,10 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.ServiceStartTime" units="ms"
-    expires_after="2022-08-29">
+    expires_after="2023-08-15">
   <owner>updowndota@chromium.org</owner>
+  <owner>xiaohuic@chromium.org</owner>
+  <owner>assistive-eng@google.com</owner>
   <summary>Amount of time spent in starting Assistant service.</summary>
 </histogram>
 
@@ -206,7 +228,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.VoiceSearch.AgsaVersion{Timing}" units="Version"
-    expires_after="2022-08-22">
+    expires_after="2022-10-23">
   <owner>wylieb@chromium.org</owner>
   <owner>fgorski@chromium.org</owner>
   <owner>jds@google.com</owner>
@@ -231,7 +253,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.VoiceSearch.UserEligibility.FailureReason{Timing}"
-    enum="EligibilityFailureReason" expires_after="2022-08-22">
+    enum="EligibilityFailureReason" expires_after="2022-10-23">
   <owner>wylieb@chromium.org</owner>
   <owner>fgorski@chromium.org</owner>
   <owner>jds@google.com</owner>
@@ -252,7 +274,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Assistant.VoiceSearch.UserEligibility{Timing}"
-    enum="BooleanEligible" expires_after="2022-08-22">
+    enum="BooleanEligible" expires_after="2022-10-23">
   <owner>wylieb@chromium.org</owner>
   <owner>fgorski@chromium.org</owner>
   <owner>jds@google.com</owner>

@@ -993,19 +993,18 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void UpdateLayout() override;
   void Paint(const PaintInfo&) const override;
 
-  virtual bool IsInSelfHitTestingPhase(HitTestAction hit_test_action) const {
+  virtual bool IsInSelfHitTestingPhase(HitTestPhase phase) const {
     NOT_DESTROYED();
-    return hit_test_action == kHitTestForeground;
+    return phase == HitTestPhase::kForeground;
   }
 
   bool HitTestAllPhases(HitTestResult&,
                         const HitTestLocation&,
-                        const PhysicalOffset& accumulated_offset,
-                        HitTestFilter = kHitTestAll) final;
+                        const PhysicalOffset& accumulated_offset) final;
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation&,
                    const PhysicalOffset& accumulated_offset,
-                   HitTestAction) override;
+                   HitTestPhase) override;
   // Fast check if |NodeAtPoint| may find a hit.
   bool MayIntersect(const HitTestResult& result,
                     const HitTestLocation& hit_test_location,
@@ -1920,13 +1919,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool CanRenderBorderImage() const;
 
-  void MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
-                          TransformState&,
-                          MapCoordinatesFlags) const override;
-  void MapAncestorToLocal(const LayoutBoxModelObject*,
-                          TransformState&,
-                          MapCoordinatesFlags) const override;
-
   LayoutBlock* PercentHeightContainer() const {
     NOT_DESTROYED();
     return rare_data_ ? rare_data_->percent_height_container_ : nullptr;
@@ -2132,6 +2124,33 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return false;
   }
 
+  // See StickyPositionScrollingConstraints::constraining_rect.
+  PhysicalRect ComputeStickyConstrainingRect() const;
+
+  // Returns the LayoutObject of the anchor element specified by the CSS
+  // 'anchor-scroll' property. Returns nullptr if the anchor query is invalid.
+  const LayoutObject* AnchorScrollObject() const;
+
+  // If the AnchorScrollObject() is non-null and in a different scroll
+  // container, returns that container, so that at paint time, we can apply an
+  // offset to this element when the returned scroll container is scrolled.
+  // Returns nullptr otherwise.
+  const LayoutBox* AnchorScrollContainer() const;
+
+  struct AnchorScrollData {
+    const PaintLayer* inner_most_scroll_container_layer = nullptr;
+    const PaintLayer* outer_most_scroll_container_layer = nullptr;
+    gfx::Vector2dF accumulated_scroll_offset;
+    gfx::Vector2d accumulated_scroll_origin;
+
+    STACK_ALLOCATED();
+  };
+  AnchorScrollData ComputeAnchorScrollData() const;
+
+  // Utility function that returns and rounds accumulated_scroll_offset of
+  // AnchorScrollData as a PhysicalOffset.
+  PhysicalOffset ComputeAnchorScrollOffset() const;
+
  protected:
   ~LayoutBox() override;
 
@@ -2177,7 +2196,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual bool HitTestChildren(HitTestResult&,
                                const HitTestLocation&,
                                const PhysicalOffset& accumulated_offset,
-                               HitTestAction);
+                               HitTestPhase);
 
   void InvalidatePaint(const PaintInvalidatorContext&) const override;
 

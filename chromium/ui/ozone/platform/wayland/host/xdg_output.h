@@ -25,6 +25,8 @@ class XDGOutput {
     return logical_position_;
   }
   gfx::Size logical_size() const { return logical_size_; }
+  const std::string& description() const { return description_; }
+  const std::string& name() const { return name_; }
 
  private:
   static void OutputHandleLogicalPosition(void* data,
@@ -47,6 +49,8 @@ class XDGOutput {
   wl::Object<zxdg_output_v1> xdg_output_;
   absl::optional<gfx::Point> logical_position_;
   gfx::Size logical_size_;
+  std::string description_;
+  std::string name_;
 };
 
 }  // namespace ui

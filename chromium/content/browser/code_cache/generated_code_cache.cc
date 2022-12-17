@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "components/services/storage/public/cpp/big_io_buffer.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "crypto/sha2.h"
 #include "net/base/completion_once_callback.h"
@@ -107,8 +108,14 @@ std::string GetCacheKey(const GURL& resource_url,
 
   if (base::FeatureList::IsEnabled(
           net::features::kSplitCacheByNetworkIsolationKey)) {
-    key.append(kSeparator);
-    key.append(nik.ToString());
+    // TODO(https://crbug.com/1346188):  Transient NIKs return nullopt when
+    // their ToCacheKeyString() method is invoked, as they generally shouldn't
+    // be written to disk. This code is currently reached for transient NIKs,
+    // which needs to be fixed.
+    if (!nik.IsTransient()) {
+      key.append(kSeparator);
+      key.append(*nik.ToCacheKeyString());
+    }
   }
   return key;
 }
@@ -199,8 +206,8 @@ bool GeneratedCodeCache::IsValidHeader(
 void GeneratedCodeCache::ReportPeriodicalHistograms() {
   DCHECK_EQ(cache_type_, CodeCacheType::kJavaScript);
   base::UmaHistogramCustomCounts(
-      "SiteIsolatedCodeCache.JS.PotentialMemoryBackedCodeCacheSize",
-      lru_cache_index_.GetSize(),
+      "SiteIsolatedCodeCache.JS.PotentialMemoryBackedCodeCacheSize2",
+      lru_cache_.GetSize(),
       /*min=*/0,
       /*exclusive_max=*/kLruCacheCapacity,
       /*buckets=*/50);
@@ -293,20 +300,22 @@ class GeneratedCodeCache::PendingOperation {
                        mojo_base::BigBuffer data) {
     if (code_cache->cache_type_ == CodeCacheType::kJavaScript) {
       const bool code_cache_hit = data.size() > 0;
-      const bool hypothetical_in_memory_code_cache_hit =
-          code_cache->lru_cache_index_.Get(key_);
-      if (code_cache_hit && !hypothetical_in_memory_code_cache_hit) {
-        code_cache->lru_cache_index_.Put(key_, data.size());
+      const bool in_memory_code_cache_hit = code_cache->lru_cache_.Has(key_);
+      if (code_cache_hit && !in_memory_code_cache_hit) {
+        code_cache->lru_cache_.Put(key_, response_time, base::make_span(data));
       }
-      if (code_cache_hit && hypothetical_in_memory_code_cache_hit) {
-        base::UmaHistogramTimes(
-            "SiteIsolatedCodeCache.JS.MemoryBackedCodeCachePotentialImpact",
-            base::TimeTicks::Now() - start_time_);
+      if (!base::FeatureList::IsEnabled(features::kInMemoryCodeCache)) {
+        if (code_cache_hit && in_memory_code_cache_hit) {
+          base::UmaHistogramTimes(
+              "SiteIsolatedCodeCache.JS.MemoryBackedCodeCachePotentialImpact",
+              base::TimeTicks::Now() - start_time_);
+        }
+        base::UmaHistogramBoolean("SiteIsolatedCodeCache.JS.Hit",
+                                  code_cache_hit);
+        base::UmaHistogramBoolean(
+            "SiteIsolatedCodeCache.JS.PotentialMemoryBackedCodeCacheHit",
+            in_memory_code_cache_hit);
       }
-      base::UmaHistogramBoolean("SiteIsolatedCodeCache.JS.Hit", code_cache_hit);
-      base::UmaHistogramBoolean(
-          "SiteIsolatedCodeCache.JS.PotentialMemoryBackedCodeCacheHit",
-          hypothetical_in_memory_code_cache_hit);
     }
     std::move(read_callback_).Run(response_time, std::move(data));
   }
@@ -368,7 +377,10 @@ GeneratedCodeCache::GeneratedCodeCache(const base::FilePath& path,
     : backend_state_(kInitializing),
       path_(path),
       max_size_bytes_(max_size_bytes),
-      cache_type_(cache_type) {
+      cache_type_(cache_type),
+      lru_cache_(max_size_bytes == 0
+                     ? kLruCacheCapacity
+                     : std::min<int64_t>(kLruCacheCapacity, max_size_bytes)) {
   CreateBackend();
   if (cache_type == CodeCacheType::kJavaScript) {
     histograms_timer_.Start(
@@ -410,9 +422,14 @@ void GeneratedCodeCache::WriteEntry(const GURL& url,
   if (data.size() >= std::numeric_limits<int32_t>::max())
     return;
 
+  const std::string key = GetCacheKey(url, origin_lock, nik, cache_type_);
+  if (cache_type_ == CodeCacheType::kJavaScript) {
+    lru_cache_.Put(key, response_time, base::make_span(data));
+  }
+
   scoped_refptr<net::IOBufferWithSize> small_buffer;
   scoped_refptr<BigIOBuffer> large_buffer;
-  uint32_t data_size = static_cast<uint32_t>(data.size());
+  const uint32_t data_size = static_cast<uint32_t>(data.size());
   // We have three different cache entry layouts, depending on data size.
   if (data_size <= kInlineDataLimit) {
     // 1. Inline
@@ -472,11 +489,9 @@ void GeneratedCodeCache::WriteEntry(const GURL& url,
   WriteCommonDataHeader(small_buffer, response_time, data_size);
 
   // Create the write operation.
-  std::string key = GetCacheKey(url, origin_lock, nik, cache_type_);
   auto op = std::make_unique<PendingOperation>(Operation::kWrite, key,
                                                small_buffer, large_buffer);
   EnqueueOperation(std::move(op));
-  lru_cache_index_.Put(key, data_size);
 }
 
 void GeneratedCodeCache::FetchEntry(const GURL& url,
@@ -509,38 +524,28 @@ void GeneratedCodeCache::DeleteEntry(const GURL& url,
   auto op = std::make_unique<PendingOperation>(Operation::kDelete, key);
   EnqueueOperation(std::move(op));
 
-  lru_cache_index_.Delete(key);
+  lru_cache_.Delete(key);
 }
 
 void GeneratedCodeCache::CreateBackend() {
-  // Create a new Backend pointer that cleans itself if the GeneratedCodeCache
-  // instance is not live when the CreateCacheBackend finishes.
-  scoped_refptr<base::RefCountedData<ScopedBackendPtr>> shared_backend_ptr =
-      new base::RefCountedData<ScopedBackendPtr>();
-
-  net::CompletionOnceCallback create_backend_complete =
-      base::BindOnce(&GeneratedCodeCache::DidCreateBackend,
-                     weak_ptr_factory_.GetWeakPtr(), shared_backend_ptr);
-
   // If the initialization of the existing cache fails, this call would delete
   // all the contents and recreates a new one.
-  int rv = disk_cache::CreateCacheBackend(
+  disk_cache::BackendResult result = disk_cache::CreateCacheBackend(
       CodeCacheTypeToNetCacheType(cache_type_), net::CACHE_BACKEND_SIMPLE,
       /*file_operations=*/nullptr, path_, max_size_bytes_,
-      disk_cache::ResetHandling::kResetOnError, nullptr,
-      &shared_backend_ptr->data, std::move(create_backend_complete));
-  if (rv != net::ERR_IO_PENDING) {
-    DidCreateBackend(shared_backend_ptr, rv);
+      disk_cache::ResetHandling::kResetOnError, /*net_log=*/nullptr,
+      base::BindOnce(&GeneratedCodeCache::DidCreateBackend,
+                     weak_ptr_factory_.GetWeakPtr()));
+  if (result.net_error != net::ERR_IO_PENDING) {
+    DidCreateBackend(std::move(result));
   }
 }
 
-void GeneratedCodeCache::DidCreateBackend(
-    scoped_refptr<base::RefCountedData<ScopedBackendPtr>> backend_ptr,
-    int rv) {
-  if (rv != net::OK) {
+void GeneratedCodeCache::DidCreateBackend(disk_cache::BackendResult result) {
+  if (result.net_error != net::OK) {
     backend_state_ = kFailed;
   } else {
-    backend_ = std::move(backend_ptr->data);
+    backend_ = std::move(result.backend);
     backend_state_ = kInitialized;
   }
   IssuePendingOperations();
@@ -706,6 +711,14 @@ void GeneratedCodeCache::WriteComplete(PendingOperation* op) {
 void GeneratedCodeCache::FetchEntryImpl(PendingOperation* op) {
   DCHECK(Operation::kFetch == op->operation() ||
          Operation::kFetchWithSHAKey == op->operation());
+  if (base::FeatureList::IsEnabled(features::kInMemoryCodeCache)) {
+    if (auto result = lru_cache_.Get(op->key())) {
+      op->RunReadCallback(this, result->response_time, std::move(result->data));
+      CloseOperationAndIssueNext(op);
+      return;
+    }
+  }
+
   if (backend_state_ != kInitialized) {
     op->RunReadCallback(this, base::Time(), mojo_base::BigBuffer());
     CloseOperationAndIssueNext(op);
@@ -958,6 +971,10 @@ void GeneratedCodeCache::SetLastUsedTimeForTest(
     OpenCompleteForSetLastUsedForTest(time, std::move(split.second),
                                       std::move(result));
   }
+}
+
+void GeneratedCodeCache::ClearInMemoryCache() {
+  lru_cache_.Clear();
 }
 
 void GeneratedCodeCache::OpenCompleteForSetLastUsedForTest(

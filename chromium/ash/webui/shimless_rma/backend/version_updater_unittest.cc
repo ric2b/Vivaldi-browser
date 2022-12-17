@@ -6,22 +6,22 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/dbus/update_engine/fake_update_engine_client.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine.pb.h"
+#include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/network/managed_network_configuration_handler.h"
+#include "chromeos/ash/components/network/network_cert_loader.h"
+#include "chromeos/ash/components/network/network_certificate_handler.h"
+#include "chromeos/ash/components/network/network_configuration_handler.h"
+#include "chromeos/ash/components/network/network_device_handler.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_profile_handler.h"
+#include "chromeos/ash/components/network/network_state_test_helper.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/update_engine/fake_update_engine_client.h"
-#include "chromeos/dbus/update_engine/update_engine.pb.h"
-#include "chromeos/dbus/update_engine/update_engine_client.h"
-#include "chromeos/network/managed_network_configuration_handler.h"
-#include "chromeos/network/network_cert_loader.h"
-#include "chromeos/network/network_certificate_handler.h"
-#include "chromeos/network/network_configuration_handler.h"
-#include "chromeos/network/network_device_handler.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_profile_handler.h"
-#include "chromeos/network/network_state_test_helper.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "chromeos/services/network_config/public/mojom/network_types.mojom-shared.h"
@@ -40,10 +40,7 @@ namespace {
 class VersionUpdaterTest : public testing::Test {
  public:
   VersionUpdaterTest() {
-    chromeos::DBusThreadManager::Initialize();
-    fake_update_engine_client_ = new FakeUpdateEngineClient();
-    DBusThreadManager::GetSetterForTesting()->SetUpdateEngineClient(
-        std::unique_ptr<UpdateEngineClient>(fake_update_engine_client_));
+    fake_update_engine_client_ = UpdateEngineClient::InitializeFakeForTest();
     cros_network_config_test_helper_ =
         std::make_unique<network_config::CrosNetworkConfigTestHelper>(false);
     InitializeManagedNetworkConfigurationHandler();
@@ -63,8 +60,7 @@ class VersionUpdaterTest : public testing::Test {
     network_configuration_handler_.reset();
     network_profile_handler_.reset();
     ui_proxy_config_service_.reset();
-    // This will delete `fake_update_engine_client_`.
-    chromeos::DBusThreadManager::Shutdown();
+    UpdateEngineClient::Shutdown();
   }
 
  protected:
@@ -97,7 +93,7 @@ class VersionUpdaterTest : public testing::Test {
     return *cros_network_config_test_helper_;
   }
 
-  chromeos::NetworkStateTestHelper& network_state_helper() {
+  NetworkStateTestHelper& network_state_helper() {
     return cros_network_config_test_helper_->network_state_helper();
   }
 
@@ -113,7 +109,7 @@ class VersionUpdaterTest : public testing::Test {
     ::onc::RegisterProfilePrefs(user_prefs_.registry());
     ::onc::RegisterPrefs(local_state_.registry());
 
-    ui_proxy_config_service_ = std::make_unique<chromeos::UIProxyConfigService>(
+    ui_proxy_config_service_ = std::make_unique<UIProxyConfigService>(
         &user_prefs_, &local_state_,
         network_state_helper().network_state_handler(),
         network_profile_handler_.get());
@@ -186,7 +182,7 @@ TEST_F(VersionUpdaterTest, IsIdleWhenUpdateEngineIdle) {
 
 TEST_F(VersionUpdaterTest, IsNotIdleWhenUpdateEngineNotIdle) {
   update_engine::StatusResult status;
-  status.set_current_operation(update_engine::Operation::CHECKING_FOR_UPDATE);
+  status.set_current_operation(update_engine::Operation::DOWNLOADING);
   fake_update_engine_client().set_default_status(status);
   EXPECT_FALSE(version_updater().IsUpdateEngineIdle());
 }
@@ -209,6 +205,10 @@ TEST_F(VersionUpdaterTest, WithMeteredNetworkUpdateOsFails) {
 }
 
 TEST_F(VersionUpdaterTest, CallbackFiresWhenUpdateEngineStatusChanges) {
+  if (!features::IsShimlessRMAOsUpdateEnabled()) {
+    return;
+  }
+
   SetCallback();
   SetupWiFiNetwork();
   update_engine::StatusResult status;

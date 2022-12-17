@@ -618,8 +618,10 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         timeout = None
 
       flags = [
-          f for f in self._test_instance.flags
-          if f not in ['--wait-for-debugger', '--wait-for-java-debugger']
+          f for f in self._test_instance.flags if f not in [
+              '--wait-for-debugger', '--wait-for-java-debugger',
+              '--gtest_also_run_disabled_tests'
+          ]
       ]
       flags.append('--gtest_list_tests')
 
@@ -763,7 +765,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
       if logmon:
         logmon.Close()
       if logcat_file and logcat_file.Link():
-        logging.info('Logcat saved to %s', logcat_file.Link())
+        logging.critical('Logcat saved to %s', logcat_file.Link())
 
   #override
   def _RunTest(self, device, test):

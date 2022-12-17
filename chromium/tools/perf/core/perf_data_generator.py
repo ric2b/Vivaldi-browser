@@ -220,7 +220,7 @@ FYI_BUILDERS = {
         'dimension': {
             'gpu': '10de',
             'id': 'build186-b7',
-            'os': 'Ubuntu-14.04',
+            'os': 'Ubuntu-18.04',
             'pool': 'chrome.tests.perf-fyi',
         },
     },
@@ -337,9 +337,6 @@ FYI_BUILDERS = {
             'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
             'chromium_builder_perf', 'base_perftests'
         ],
-    },
-    'fuchsia-builder-perf-x64': {
-        'additional_compile_targets': ['chrome_pkg', 'base_perftests'],
     },
 }
 
@@ -571,6 +568,15 @@ BUILDERS = {
         'perf_trigger':
         False,
     },
+    'fuchsia-builder-perf-arm64': {
+        'additional_compile_targets': [
+            'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
+            'chromium_builder_perf', 'base_perftests'
+        ],
+    },
+    'fuchsia-builder-perf-x64': {
+        'additional_compile_targets': ['chrome_pkg', 'base_perftests'],
+    },
     'linux-builder-perf': {
         'additional_compile_targets': ['chromedriver', 'chromium_builder_perf'],
         'tests': [{
@@ -667,7 +673,7 @@ BUILDERS = {
         }],
         'dimension': {
             'cpu': 'x86-64',
-            'os': 'Windows',
+            'os': 'Windows-10',
             'pool': 'chrome.tests',
         },
         'perf_trigger':
@@ -677,7 +683,7 @@ BUILDERS = {
         'additional_compile_targets': ['chromium_builder_perf'],
         'dimension': {
             'cpu': 'x86-64',
-            'os': 'Windows',
+            'os': 'Windows-10',
             'pool': 'chrome.tests',
         },
         'perf_trigger': False,
@@ -1176,6 +1182,44 @@ BUILDERS = {
             'synthetic_product_name': 'PowerEdge R230 (Dell Inc.)'
         },
     },
+    'fuchsia-perf-ast': {
+        'tests': [{
+            'isolate':
+            'performance_web_engine_test_suite',
+            'extra_args':
+            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
+            bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
+            'type':
+            TEST_TYPES.TELEMETRY,
+        }],
+        'platform':
+        'fuchsia-wes',
+        'dimension': {
+            'cpu': None,
+            'device_type': 'Astro',
+            'os': 'Fuchsia',
+            'pool': 'chrome.tests',
+        },
+    },
+    'fuchsia-perf-shk': {
+        'tests': [{
+            'isolate':
+            'performance_web_engine_test_suite',
+            'extra_args':
+            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
+            bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
+            'type':
+            TEST_TYPES.TELEMETRY,
+        }],
+        'platform':
+        'fuchsia-wes',
+        'dimension': {
+            'cpu': None,
+            'device_type': 'Sherlock',
+            'os': 'Fuchsia',
+            'pool': 'chrome.tests',
+        },
+    },
     'mac-laptop_high_end-perf': {
         'tests': [
             {
@@ -1277,7 +1321,7 @@ BUILDERS = {
         False,
     },
     'chromeos-amd64-generic-lacros-builder-perf': {
-        'additional_compile_targets': ['chrome', 'lacros_version_metadata'],
+        'additional_compile_targets': ['chrome'],
         'tests': [
             {
                 'name': 'resource_sizes_lacros_chrome',
@@ -1300,7 +1344,7 @@ BUILDERS = {
         False,
     },
     'chromeos-arm-generic-lacros-builder-perf': {
-        'additional_compile_targets': ['chrome', 'lacros_version_metadata'],
+        'additional_compile_targets': ['chrome'],
         'tests': [
             {
                 'name': 'resource_sizes_lacros_chrome',
@@ -1345,6 +1389,31 @@ BUILDERS = {
             'os': 'ChromeOS',
             'device_status': 'available',
             'device_type': 'eve',
+        },
+    },
+    'lacros-x86-perf': {
+        'tests': [
+            {
+                'isolate':
+                'performance_test_suite_octopus',
+                'extra_args': [
+                    # The magic hostname that resolves to a CrOS device in the test lab
+                    '--remote=variable_chromeos_device_hostname',
+                ],
+            },
+        ],
+        'platform':
+        'lacros',
+        'target_bits':
+        64,
+        'dimension': {
+            'pool': 'chrome.tests.perf',
+            # TODO(crbug.com/971204): Explicitly set the gpu to None to make
+            # chromium_swarming recipe_module ignore this dimension.
+            'gpu': None,
+            'os': 'ChromeOS',
+            'device_status': 'available',
+            'device_type': 'octopus',
         },
     },
 }
@@ -1469,7 +1538,7 @@ OTHER_BENCHMARKS = {
 OTHER_BENCHMARKS.update({
     'chrome_sizes':
     BenchmarkMetadata(
-        emails='heiserya@chromium.org, johnchen@chromium.org',
+        emails='johnchen@chromium.org',
         component='Build',
         documentation_url=(
             'https://chromium.googlesource.com/chromium/'
@@ -1531,8 +1600,10 @@ TELEMETRY_PERF_BENCHMARKS = _get_telemetry_perf_benchmarks_metadata()
 PERFORMANCE_TEST_SUITES = [
     'performance_test_suite',
     'performance_test_suite_eve',
+    'performance_test_suite_octopus',
     'performance_webview_test_suite',
     'performance_weblayer_test_suite',
+    'performance_web_engine_test_suite',
 ]
 for suffix in android_browser_types.TELEMETRY_ANDROID_BROWSER_TARGET_SUFFIXES:
   PERFORMANCE_TEST_SUITES.append('performance_test_suite' + suffix)
@@ -1620,8 +1691,7 @@ def _verify_benchmark_owners(benchmark_metadatas):
 def _create_csv(file_path):
   if sys.version_info.major == 2:
     return open(file_path, 'wb')
-  else:
-    return open(file_path, 'w', newline='')
+  return open(file_path, 'w', newline='')
 
 
 def update_benchmark_csv(file_path):
@@ -1878,7 +1948,6 @@ def generate_performance_test(tester_config, test, builder_name):
       # allow for other overhead. If the overall builder times out then we
       # don't get data even from the passing shards.
       'hard_timeout': int(6 * 60 * 60),  # 6 hours timeout for full suite
-      'ignore_task_failure': False,
       # 5.5 hour timeout. Note that this is effectively the timeout for a
       # benchmarking subprocess to run since we intentionally do not stream
       # subprocess output to the task stdout.
@@ -1995,9 +2064,7 @@ def main(args):
     if validate_all_files():
       print('All the perf config files are up-to-date. \\o/')
       return 0
-    else:
-      print('Not all perf config files are up-to-date. Please run %s '
-            'to update them.' % sys.argv[0])
-      return 1
-  else:
-    return 0 if update_all_files() else 1
+    print('Not all perf config files are up-to-date. Please run %s '
+          'to update them.' % sys.argv[0])
+    return 1
+  return 0 if update_all_files() else 1

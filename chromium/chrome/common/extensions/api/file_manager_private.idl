@@ -204,8 +204,10 @@ enum DriveSyncErrorType {
   delete_without_permission,
   // Google Drive is temporarily unavailable.
   service_unavailable,
-  // There is no server space to sync a file.
+  // There is no server space for the user to sync a file.
   no_server_space,
+  // There is no server space for the organization to sync a file.
+  no_server_space_organization,
   // There is no local space to sync a file.
   no_local_space,
   // Miscellaneous errors other than listed above.
@@ -359,10 +361,37 @@ enum IOTaskState {
 enum IOTaskType {
   copy,
   delete,
+  empty_trash,
   extract,
   move,
+  restore,
   trash,
   zip
+};
+
+enum RecentDateBucket {
+  today,
+  yesterday,
+  earlier_this_week,
+  earlier_this_month,
+  earlier_this_year,
+  older
+};
+
+enum VmType { termina, plugin_vm, borealis, bruschetta, arcvm };
+
+enum UserType {
+  // User doesn't belong to any organization.
+  kUnmanaged,
+  // User is a member of an organization.
+  kOrganization
+};
+
+enum DlpLevel {
+  // User cannot perform an action.
+  block,
+  // No restriction.
+  allow
 };
 
 // These three fields together uniquely identify a task.
@@ -409,6 +438,9 @@ dictionary EntryProperties {
 
   // Timestamp of entry update time by me, in milliseconds past the epoch.
   double? modificationByMeTime;
+
+  // Date bucket calculated by |modificationTime| or |modificationByMeTime|.
+  RecentDateBucket? recentDateBucket;
 
   // URL to the Drive thumbnail image for this file.
   DOMString? thumbnailUrl;
@@ -508,6 +540,23 @@ dictionary MountPointSizeStats {
   double remainingSize;
 };
 
+// Free and total space available in Drive relative to both the user and their
+// organization, if they belong to one.
+dictionary DriveQuotaMetadata {
+  UserType userType;
+
+  // How much space the individual user has used.
+  double usedUserBytes;
+  // The individual limit of a user. -1 means infinite.
+  double totalUserBytes;
+
+  // The following two fields only have meaning if user_type is kOrganization.
+  // Whether the organization has exceeded its storage limit.
+  boolean organizationLimitExceeded;
+  // Name of the organization the user belongs to.
+  DOMString organizationName;
+};
+
 // Information about a profile.
 dictionary ProfileInfo {
   // Profile ID. This is currently e-mail address of the profile.
@@ -605,6 +654,9 @@ dictionary VolumeMetadata {
 
   // Flag that specifies whether the volume is hidden from the user.
   boolean hidden;
+
+  // Type of the VM which owns this volume.
+  VmType? vmType;
 };
 
 // Payload data for mount event.
@@ -982,6 +1034,28 @@ dictionary ProgressStatus {
 
   // The name of the last error that happened.
   DOMString errorName;
+
+  // The files affected by the IOTask. Currently only returned for TrashIOTask.
+  [instanceOf=Entry] object[]? outputs;
+};
+
+dictionary DlpMetadata {
+  // The source URL of the file, if it's been downloaded.
+  DOMString sourceUrl;
+
+  // True if there is any DLP policy on the file, false otherwise.
+  boolean isDlpRestricted;
+};
+
+dictionary DlpRestrictionDetails {
+  // The level for which the restriction is enforced.
+  DlpLevel level;
+
+  // List of URLs for which the restriction is enforced.
+  DOMString[] urls;
+
+  // List of components for which the restriction is enforced.
+  VolumeType[] components;
 };
 
 // A Guest OS that supports guest->host file sharing. This definition should
@@ -992,6 +1066,22 @@ dictionary MountableGuest {
 
   // The localised display name of this guest as e.g. shown in the sidebar.
   DOMString displayName;
+
+  // The type of the VM backing this guest.
+  VmType vmType;
+};
+
+dictionary ParsedTrashInfoFile {
+  // The entry that the trashed file should be restored to. This does not exist
+  // but is used to identify whether the parent location still exists and
+  // identify the file name to restore to.
+  [instanceOf=Entry] object restoreEntry;
+
+  // The file name for the .trashinfo.
+  DOMString trashInfoFileName;
+
+  // The date the file was originally deleted.
+  double deletionDate;
 };
 
 // Callback that does not take arguments.
@@ -1043,9 +1133,15 @@ callback GetVolumeMetadataListCallback =
 callback GetDisallowedTransfersCallback =
     void([instanceOf=Entry] object[] disallowedEntries);
 
-// |restrictedFiles| A list of files with any Data Leak Prevention restriction.
-callback GetFilesRestrictedByDlpCallback =
-    void([instanceOf=Entry] object[] restrictedFiles);
+// |dlpMetadata| A list of DlpMetadata containing DLP information about
+// the entries.
+callback GetDlpMetadataCallback =
+    void(DlpMetadata[] dlpMetadata);
+
+// |restrictionDetails| A list of DlpRestrictionDetails containing
+// summarized restriction information about an entry.
+callback GetDlpRestrictionDetailsCallback =
+    void(DlpRestrictionDetails[] restrictionDetails);
 
 // |copyId| ID of the copy task. Can be used to identify the progress, and to
 // cancel the task.
@@ -1057,6 +1153,10 @@ callback IOTaskIdCallback = void(long taskId);
 // |sizeStats| Name/value pairs of size stats. Will be undefined if stats could
 // not be determined.
 callback GetSizeStatsCallback = void(optional MountPointSizeStats sizeStats);
+
+// |driveQuotaMetadata| Name/value pairs of drive quota metadata. Will be
+// undefined if quota metadata could not be determined.
+callback GetDriveQuotaMetadataCallback = void(optional DriveQuotaMetadata driveQuotaMetadata);
 
 callback GetPreferencesCallback = void(Preferences result);
 
@@ -1154,6 +1254,8 @@ callback HoldingSpaceStateCallback = void(HoldingSpaceState state);
 
 // |guests| List of Guest OSs which have available mounts.
 callback ListMountableGuestsCallback = void(MountableGuest[] guest);
+
+callback ParseTrashInfoFilesCallback = void(ParsedTrashInfoFile[] files);
 
 interface Functions {
   // Logout the current user for navigating to the re-authentication screen for
@@ -1328,13 +1430,21 @@ interface Functions {
       [instanceOf=DirectoryEntry] object destinationEntry,
       GetDisallowedTransfersCallback callback);
 
-  // Returns the list of files that have any Data Leak Prevention restriction rule set.
+  // Returns the list of DlpMetadata containing DLP information
+  // about the entries.
   // |entries| List of the source entries to be checked.
   // |callback| Result callback.
   [nocompile]
-  static void getFilesRestrictedByDlp(
+  static void getDlpMetadata(
       [instanceOf=Entry] object[] entries,
-      GetFilesRestrictedByDlpCallback callback);
+      GetDlpMetadataCallback callback);
+
+  // Retrieves Data Leak Prevention (DLP) restriction details.
+  // |sourceUrl| Source URL of the Entry for which the details should be shown.
+  // |callback| Result callback.
+  static void getDlpRestrictionDetails(
+      DOMString sourceUrl,
+      GetDlpRestrictionDetailsCallback callback);
 
   // Starts to copy an entry. If the source is a directory, the copy is done
   // recursively.
@@ -1357,6 +1467,11 @@ interface Functions {
   // |volumeId| ID of the volume to be checked.
   // |callback|
   static void getSizeStats(DOMString volumeId, GetSizeStatsCallback callback);
+
+
+  // Retrieves metadata about the user's Drive volume's quota.
+  // |callback|
+  static void getDriveQuotaMetadata(GetDriveQuotaMetadataCallback callback);
 
   // Formats a mounted volume.
   // |volumeId| ID of the volume to be formatted.
@@ -1686,6 +1801,14 @@ interface Functions {
 
   // Tells DriveFS to update its cached pin states of hosted files (once).
   static void pollDriveHostedFilePinStates();
+
+  // Opens the dialog to manage the currently syncing folders.
+  static void openManageSyncSettings();
+
+  // Validates and parses the supplied `entries` as .trashinfo files.
+  [nocompile]
+  static void parseTrashInfoFiles([instanceOf=Entry] object[] entries,
+                                  ParseTrashInfoFilesCallback callback);
 };
 
 // Events supported by fileManagerPrivate API. These events are broadcasted.

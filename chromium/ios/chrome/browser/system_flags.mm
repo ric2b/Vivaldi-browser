@@ -36,6 +36,7 @@ NSString* const kWhatsNewPromoStatus = @"WhatsNewPromoStatus";
 NSString* const kClearApplicationGroup = @"ClearApplicationGroup";
 const base::Feature kEnableThirdPartyKeyboardWorkaround{
     "EnableThirdPartyKeyboardWorkaround", base::FEATURE_ENABLED_BY_DEFAULT};
+
 }  // namespace
 
 namespace experimental_flags {
@@ -86,7 +87,15 @@ bool ShouldAlwaysShowFirstFollow() {
       boolForKey:@"AlwaysShowFirstFollow"];
 }
 
+bool ShouldAlwaysShowFollowIPH() {
+  return
+      [[NSUserDefaults standardUserDefaults] boolForKey:@"AlwaysShowFollowIPH"];
+}
+
 bool IsMemoryDebuggingEnabled() {
+#if defined(VIVALDI_BUILD)
+  return false;
+#else
 // Always return true for Chromium builds, but check the user default for
 // official builds because memory debugging should never be enabled on stable.
 #if BUILDFLAG(CHROMIUM_BRANDING)
@@ -95,6 +104,7 @@ bool IsMemoryDebuggingEnabled() {
   return [[NSUserDefaults standardUserDefaults]
       boolForKey:@"EnableMemoryDebugging"];
 #endif  // BUILDFLAG(CHROMIUM_BRANDING)
+#endif // defined(VIVALDI_BUILD)
 }
 
 bool IsStartupCrashEnabled() {

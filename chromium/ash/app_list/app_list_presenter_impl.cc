@@ -31,7 +31,7 @@
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "chromeos/services/assistant/public/cpp/assistant_enums.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -51,7 +51,7 @@
 namespace ash {
 namespace {
 
-using chromeos::assistant::AssistantExitPoint;
+using assistant::AssistantExitPoint;
 
 inline ui::Layer* GetLayer(views::Widget* widget) {
   return widget->GetNativeView()->layer();
@@ -172,6 +172,11 @@ void AppListPresenterImpl::Show(AppListViewState preferred_state,
     return;
   }
 
+  // TODO(https://crbug.com/1307871): Remove this when the linked crash gets
+  // diagnosed - the crash is possible if app list gets dismissed while being
+  // shown. `showing_app_list_` in intended to catch this case.
+  showing_app_list_ = true;
+
   is_target_visibility_show_ = true;
   OnVisibilityWillChange(GetTargetVisibility(), display_id);
   RequestPresentationTime(display_id, event_time_stamp);
@@ -197,7 +202,7 @@ void AppListPresenterImpl::Show(AppListViewState preferred_state,
   // to remove this observation (given that shelf background changes should not
   // affect appearance of a closing app list view).
   shelf_observer_.Reset();
-  shelf_observer_.Observe(shelf->shelf_layout_manager());
+  shelf_observer_.Observe(shelf);
 
   // By setting us as a drag-and-drop recipient, the app list knows that we can
   // handle items. Do this on every show because |view_| can be reused after a
@@ -231,6 +236,7 @@ void AppListPresenterImpl::Show(AppListViewState preferred_state,
   event_filter_ =
       std::make_unique<AppListPresenterEventFilter>(controller_, this, view_);
   controller_->ViewShown(display_id);
+  showing_app_list_ = false;
 
   OnVisibilityChanged(GetTargetVisibility(), display_id);
 }
@@ -242,6 +248,10 @@ void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
   // If the app list target visibility is shown, there should be an existing
   // view.
   DCHECK(view_);
+
+  // TODO(https://crbug.com/1307871): Remove this when the linked crash gets
+  // diagnosed.
+  CHECK(!showing_app_list_);
 
   is_target_visibility_show_ = false;
   RequestPresentationTime(GetDisplayId(), event_time_stamp);
@@ -295,8 +305,12 @@ void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
                                  base::Time::Now() - last_open_time_.value());
   last_open_source_.reset();
   last_open_time_.reset();
+
   if (!view_->GetWidget()->GetNativeWindow()->is_destroying())
     view_->SetState(AppListViewState::kClosed);
+
+  view_->SetDragAndDropHostOfCurrentAppList(nullptr);
+
   base::RecordAction(base::UserMetricsAction("Launcher_Dismiss"));
 }
 
@@ -704,11 +718,13 @@ void AppListPresenterImpl::OnDisplayMetricsChanged(
   SnapAppListBoundsToDisplayEdge();
 }
 
-void AppListPresenterImpl::WillDeleteShelfLayoutManager() {
+void AppListPresenterImpl::OnShelfShuttingDown() {
   shelf_observer_.Reset();
+  if (view_)
+    view_->SetDragAndDropHostOfCurrentAppList(nullptr);
 }
 
-void AppListPresenterImpl::OnBackgroundUpdated(
+void AppListPresenterImpl::OnBackgroundTypeChanged(
     ShelfBackgroundType background_type,
     AnimationChangeType change_type) {
   view_->SetShelfHasRoundedCorners(

@@ -28,21 +28,6 @@
   </head>
 
   <body aria-label="$i18n{FILEMANAGER_APP_NAME}" tabindex="-1" class="files-ng">
-    <custom-style>
-      <style>
-        .dialog-footer cr-input {
-          --cr-input-background-color: var(--cros-textfield-background-color);
-          --cr-input-border-radius: 0;
-          --cr-input-color: var(--cros-textfield-input-color);
-          --cr-input-error-color: var(--cros-textfield-label-color-error);
-          --cr-input-error-display: none;
-          --cr-input-focus-color: var(--cros-textfield-label-color-focus);
-          --cr-input-min-height: 32px;
-          width: 100%;
-        }
-      </style>
-    </custom-style>
-
     <commands>
       <command id="cut" label="$i18n{CUT_BUTTON_LABEL}"
                shortcut="x|Ctrl">
@@ -56,6 +41,7 @@
                label="$i18n{PASTE_INTO_FOLDER_BUTTON_LABEL}">
       <command id="get-info" label="$i18n{GET_INFO_BUTTON_LABEL}"
                shortcut="Space">
+      <command id="dlp-restriction-details" label="$i18n{DLP_RESTRICTION_DETAILS}">
       <command id="rename" label="$i18n{RENAME_BUTTON_LABEL}"
                shortcut="Enter|Ctrl">
       <command id="move-to-trash" shortcut="Backspace|Alt Delete" label="$i18n{MOVE_TO_TRASH_BUTTON_LABEL}">
@@ -137,6 +123,8 @@
                shortcut="." hide-shortcut-text>
       <command id="manage-in-drive"
                label="$i18n{MANAGE_IN_DRIVE_BUTTON_LABEL}" disabled hidden>
+      <command id="manage-mirrorsync"
+               label="$i18n{DRIVE_MANAGE_MIRRORSYNC}" disabled hidden>
       <command id="share-with-linux" label="$i18n{SHARE_WITH_LINUX_BUTTON_LABEL}" disabled hidden>
       <command id="manage-linux-sharing" label="$i18n{MANAGE_LINUX_SHARING_BUTTON_LABEL}" disabled hidden>
       <command id="manage-linux-sharing-gear" label="$i18n{MANAGE_LINUX_SHARING_BUTTON_LABEL}" disabled hidden>
@@ -187,6 +175,7 @@
         <cr-menu-item command="#paste-into-folder" visibleif="full-page"></cr-menu-item>
         <hr visibleif="full-page">
         <cr-menu-item command="#get-info"></cr-menu-item>
+        <cr-menu-item command="#dlp-restriction-details"></cr-menu-item>
         <cr-menu-item command="#rename"></cr-menu-item>
         <cr-menu-item command="#pin-folder"></cr-menu-item>
         <cr-menu-item command="#move-to-trash"></cr-menu-item>
@@ -276,6 +265,8 @@
                       command="#manage-plugin-vm-sharing-gear"></cr-menu-item>
         <cr-menu-item id="gear-menu-drive-sync-settings"
                       command="#drive-sync-settings"></cr-menu-item>
+        <cr-menu-item id="gear-menu-manage-mirrorsync"
+                      command="#manage-mirrorsync"></cr-menu-item>
         <hr id="help-separator">
         <cr-menu-item id="gear-menu-drive-buy-more-space"
                       command="#drive-buy-more-space"></cr-menu-item>
@@ -296,6 +287,7 @@
             <div class="progress-bar" aria-hidden="true">
               <div class="progress-track" id="volume-space-info-bar"></div>
             </div>
+            <div id="volume-space-info-warning" class="menu-warning"></div>
           </div>
         </cr-menu-item>
       </cr-menu>
@@ -509,6 +501,14 @@
                 <div id="sort-column-asc" hidden>$i18n{COLUMN_ASC_SORT_MESSAGE}</div>
                 <div id="sort-column-desc" hidden>$i18n{COLUMN_DESC_SORT_MESSAGE}</div>
                 <div id="external-link-label" hidden>$i18n{EXTERNAL_LINK_MESSAGE}</div>
+                <div id="empty-folder" hidden>
+                  <div class="image">
+                    <svg>
+                      <use xlink:href="foreground/images/files/ui/empty_folder.svg#empty_folder"></use>
+                    </svg>
+                  </div>
+                  <span class="label"></span>
+                </div>
                 <div class="detail-table" id="detail-table" tabindex="0">
                 </div>
                 <grid class="thumbnail-grid" tabindex="0" hidden></grid>

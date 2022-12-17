@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/commands/search_image_with_lens_command.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_utils.h"
@@ -42,6 +43,7 @@
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web/image_fetch/image_fetch_tab_helper.h"
+#import "ios/chrome/browser/web/web_navigation_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -161,24 +163,18 @@ NSString* const kContextMenuEllipsis = @"…";
         if (base::FeatureList::IsEnabled(
                 url_param_filter::features::kIncognitoParamFilterEnabled)) {
           // Experimental filter guarded by the kIncognitoParamFilterEnabled
-          // flag.
+          // flag and "should_filter" param.
           url_param_filter::FilterResult result =
               url_param_filter::FilterUrl(lastCommittedURL, linkURL);
-          if (result.experimental_status ==
-              url_param_filter::ClassificationExperimentStatus::EXPERIMENTAL) {
-            base::UmaHistogramCounts100(
-                "Navigation.UrlParamFilter.FilteredParamCountExperimental",
-                result.filtered_param_count);
-          } else {
-            base::UmaHistogramCounts100(
-                "Navigation.UrlParamFilter.FilteredParamCount",
-                result.filtered_param_count);
-          }
-          GURL targetURL =
-              result.filtered_param_count > 0 ? result.filtered_url : linkURL;
+          bool should_filter = base::GetFieldTrialParamByFeatureAsBool(
+              url_param_filter::features::kIncognitoParamFilterEnabled,
+              "should_filter", false);
+          GURL targetURL = should_filter && result.filtered_param_count > 0
+                               ? result.filtered_url
+                               : linkURL;
           loadParams = UrlLoadParams::InNewTab(targetURL);
           loadParams.in_incognito = YES;
-          loadParams.filtered_param_count = result.filtered_param_count;
+          loadParams.filtering_result = result;
           openIncognitoTab =
               [actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
                 ContextMenuConfigurationProvider* strongSelf = weakSelf;
@@ -187,6 +183,19 @@ NSString* const kContextMenuEllipsis = @"…";
                 UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
                     ->Load(loadParams);
               }];
+          // Log to UMA metrics.
+          if (should_filter) {
+            if (result.experimental_status ==
+                url_param_filter::ClassificationExperimentStatus::
+                    EXPERIMENTAL) {
+              base::UmaHistogramCounts100(
+                  "Navigation.UrlParamFilter.FilteredParamCountExperimental",
+                  result.filtered_param_count);
+            }
+            base::UmaHistogramCounts100(
+                "Navigation.UrlParamFilter.FilteredParamCount",
+                result.filtered_param_count);
+          }
         } else {
           openIncognitoTab =
               [actionFactory actionToOpenInNewIncognitoTabWithURL:linkURL
@@ -320,17 +329,23 @@ NSString* const kContextMenuEllipsis = @"…";
     }
   }
 
+  NSString* menuTitle;
+
   // Insert any provided menu items. Do after Link and/or Image to allow
   // inserting at beginning or adding to end.
-  ios::provider::AddContextMenuElements(
-      menuElements, self.browser->GetBrowserState(), webState, params,
-      self.baseViewController);
+  ElementsToAddToContextMenu* result =
+      ios::provider::GetContextMenuElementsToAdd(
+          self.browser->GetBrowserState(), webState, params,
+          self.baseViewController);
+  if (result && result.elements) {
+    [menuElements addObjectsFromArray:result.elements];
+    menuTitle = result.title;
+  }
 
   if (menuElements.count == 0) {
     return nil;
   }
 
-  NSString* menuTitle = nil;
   if (isLink || isImage) {
     menuTitle = GetContextMenuTitle(params);
 
@@ -366,7 +381,7 @@ NSString* const kContextMenuEllipsis = @"…";
 
 #pragma mark - Private
 
-// Searches an image with the given |imageURL| and |referrer|, optionally using
+// Searches an image with the given `imageURL` and `referrer`, optionally using
 // Lens.
 - (void)searchImageWithURL:(GURL)imageURL
                  usingLens:(BOOL)usingLens
@@ -384,7 +399,7 @@ NSString* const kContextMenuEllipsis = @"…";
   });
 }
 
-// Starts a reverse image search based on |imageData| and |imageURL| in a new
+// Starts a reverse image search based on `imageData` and `imageURL` in a new
 // tab.
 - (void)searchByImageData:(NSData*)imageData imageURL:(const GURL&)URL {
   web::NavigationManager::WebLoadParams webParams =
@@ -392,18 +407,28 @@ NSString* const kContextMenuEllipsis = @"…";
           imageData, URL,
           ios::TemplateURLServiceFactory::GetForBrowserState(
               self.browser->GetBrowserState()));
+  const BOOL isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
+
+  // Apply variation header data to the params.
+  // This flag guard is only for M106 and can be used as a killswitch in case
+  // this causes issues.
+  if (base::FeatureList::IsEnabled(kSendVariationDataWithSearchByImage)) {
+    NSMutableDictionary* combinedExtraHeaders =
+        [web_navigation_util::VariationHeadersForURL(webParams.url, isIncognito)
+            mutableCopy];
+    [combinedExtraHeaders addEntriesFromDictionary:webParams.extra_headers];
+    webParams.extra_headers = [combinedExtraHeaders copy];
+  }
 
   UrlLoadParams params = UrlLoadParams::InNewTab(webParams);
-  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  params.in_incognito = isIncognito;
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
 }
 
-// Searches an image with Lens using the given |imageData|.
+// Searches an image with Lens using the given `imageData`.
 - (void)searchImageUsingLensWithData:(NSData*)imageData {
-  // TODO(crbug.com/1323783): This should be an id<LensCommands> and use
-  // HandlerForProtocol().
-  id<BrowserCommands> handler =
-      static_cast<id<BrowserCommands>>(_browser->GetCommandDispatcher());
+  id<LensCommands> handler =
+      HandlerForProtocol(_browser->GetCommandDispatcher(), LensCommands);
   UIImage* image = [UIImage imageWithData:imageData];
   SearchImageWithLensCommand* command =
       [[SearchImageWithLensCommand alloc] initWithImage:image];

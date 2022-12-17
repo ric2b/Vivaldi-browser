@@ -84,6 +84,11 @@ class MODULES_EXPORT CanvasFormattedText final
     return true;
   }
 
+  bool CheckViewExists(CanvasFormattedTextRun* run,
+                       ExceptionState* exception_state) const;
+  bool CheckRunBelongsToSameFrame(CanvasFormattedTextRun* run,
+                                  ExceptionState* exception_state) const;
+
   CanvasFormattedTextRun* getRun(unsigned index,
                                  ExceptionState& exception_state) const {
     if (!CheckRunsIndexBound(index, &exception_state))

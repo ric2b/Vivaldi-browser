@@ -17,14 +17,13 @@
 #include "gpu/command_buffer/service/gl_surface_mock.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_unittest.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/mocks.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
-#include "gpu/command_buffer/service/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/test_image_backing.h"
 #include "gpu/command_buffer/service/test_helper.h"
-#include "gpu/command_buffer/service/test_shared_image_backing.h"
 #include "gpu/config/gpu_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_image_stub.h"
@@ -3078,7 +3077,7 @@ TEST_P(GLES2DecoderTest, CreateAndTexStorage2DSharedImageCHROMIUM) {
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
       GetSharedImageManager()->Register(
-          std::make_unique<TestSharedImageBacking>(
+          std::make_unique<TestImageBacking>(
               mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
               gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
               0, 0, kNewServiceId),
@@ -3140,7 +3139,7 @@ TEST_P(GLES2DecoderTest,
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
       GetSharedImageManager()->Register(
-          std::make_unique<TestSharedImageBacking>(
+          std::make_unique<TestImageBacking>(
               mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
               gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
               0, 0, kNewServiceId),
@@ -3164,7 +3163,7 @@ TEST_P(GLES2DecoderTest, BeginEndSharedImageAccessCRHOMIUM) {
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
       GetSharedImageManager()->Register(
-          std::make_unique<TestSharedImageBacking>(
+          std::make_unique<TestImageBacking>(
               mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
               gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
               0, 0, kNewServiceId),
@@ -3223,7 +3222,7 @@ TEST_P(GLES2DecoderTest, BeginSharedImageAccessDirectCHROMIUMCantBeginAccess) {
   // Create a shared image.
   MemoryTypeTracker memory_tracker(memory_tracker_.get());
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
-  auto shared_image_backing = std::make_unique<TestSharedImageBacking>(
+  auto shared_image_backing = std::make_unique<TestImageBacking>(
       mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
       gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0,
       kNewServiceId);

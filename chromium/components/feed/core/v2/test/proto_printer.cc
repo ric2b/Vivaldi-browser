@@ -197,7 +197,7 @@ class TextProtoPrinter {
     PRINT_FIELD(last_added_time_millis);
     PRINT_FIELD(shared_state_ids);
     PRINT_FIELD(stream_id);
-    PRINT_FIELD(content_ids);
+    PRINT_FIELD(content_hashes);
     EndMessage();
     return *this;
   }
@@ -257,6 +257,7 @@ class TextProtoPrinter {
     PRINT_FIELD(kind);
     PRINT_FIELD(web_feed_id);
     PRINT_FIELD(attempts);
+    PRINT_FIELD(change_reason);
     EndMessage();
     return *this;
   }

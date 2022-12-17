@@ -7,33 +7,32 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "base/feature_list.h"
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "chrome/browser/enterprise/connectors/analysis/analysis_settings.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate_base.h"
 #include "chrome/browser/enterprise/connectors/common.h"
-#include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/file_analysis_request.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/file_opening_job.h"
-#include "chrome/browser/ui/tab_modal_confirm_dialog.h"
-#include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
-#include "content/public/browser/web_contents_view_delegate.h"
 #include "url/gurl.h"
 
 class Profile;
 
+namespace content {
+class WebContent;
+}  // namespace content
+
 namespace enterprise_connectors {
 
 class ContentAnalysisDialog;
+class FilesRequestHandler;
 
 // A class that performs deep scans of data (for example malicious or sensitive
 // content checks) before allowing a page to access it.
@@ -113,39 +112,6 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
     bool page_result;
   };
 
-  // File information used as an input to event report functions.
-  struct FileInfo {
-    FileInfo();
-    FileInfo(FileInfo&& other);
-    ~FileInfo();
-
-    // Hex-encoded SHA256 hash for the given file.
-    std::string sha256;
-
-    // File size in bytes. -1 represents an unknown size.
-    uint64_t size = 0;
-
-    // File mime type.
-    std::string mime_type;
-  };
-
-  // File contents used as input for `file_info_` and the BinaryUploadService.
-  struct FileContents {
-    FileContents();
-    explicit FileContents(safe_browsing::BinaryUploadService::Result result);
-    FileContents(FileContents&&);
-    FileContents& operator=(FileContents&&);
-
-    safe_browsing::BinaryUploadService::Result result =
-        safe_browsing::BinaryUploadService::Result::UNKNOWN;
-    safe_browsing::BinaryUploadService::Request::Data data;
-
-    // Store the file size separately instead of using data.contents.size() to
-    // keep track of size for large files.
-    int64_t size = 0;
-    std::string sha256;
-  };
-
   // Callback used with CreateForWebContents() that informs caller of verdict
   // of deep scans.
   using CompletionCallback =
@@ -220,34 +186,38 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // Showing the UI is not possible in unit tests, call this to disable it.
   static void DisableUIForTesting();
 
-  // Determines if a request result should be used to allow a data use or to
-  // block it.
-  static bool ResultShouldAllowDataUse(
-      safe_browsing::BinaryUploadService::Result result,
-      const enterprise_connectors::AnalysisSettings& settings);
-
  protected:
   ContentAnalysisDelegate(content::WebContents* web_contents,
                           Data data,
                           CompletionCallback callback,
                           safe_browsing::DeepScanAccessPoint access_point);
 
-  // Callbacks from uploading data.  Protected so they can be called from
+  // Callbacks from uploading data. Protected so they can be called from
   // testing derived classes.
+  // TODO(crbug.com/1324892): Adapt once TextRequestHandler and
+  // PageRequestHandler are created and move reporting to the RequestHandlers.
   void StringRequestCallback(
-      safe_browsing::BinaryUploadService::Result result,
-      enterprise_connectors::ContentAnalysisResponse response);
-  void FileRequestCallback(
-      base::FilePath path,
       safe_browsing::BinaryUploadService::Result result,
       enterprise_connectors::ContentAnalysisResponse response);
   void PageRequestCallback(
       safe_browsing::BinaryUploadService::Result result,
       enterprise_connectors::ContentAnalysisResponse response);
 
+  // Callback called after all files are scanned by the FilesRequestHandler.
+  void FilesRequestCallback(std::vector<RequestHandlerResult> results);
+
   base::WeakPtr<ContentAnalysisDelegate> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
+
+  FilesRequestHandler* GetFilesRequestHandlerForTesting();
+
+  const Data& GetDataForTesting() { return data_; }
+
+  // Methods to either show the final result in the analysis dialog and to
+  // cancel the dialog.  These methods are protected and virtual for testing.
+  virtual bool ShowFinalResultInDialog();
+  virtual bool CancelDialog();
 
  private:
   // Uploads data for deep scanning.  Returns true if uploading is occurring in
@@ -257,19 +227,18 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
 
   // Prepares an upload request for the text in `data_`. If `data_.text` is
   // empty, this method does nothing.
+  // TODO(crbug.com/1324892): Move to TextRequestHandler.
   void PrepareTextRequest();
 
   // Prepares an upload request for the printed page bytes in `data_`. If there
   // aren't any, this method does nothing.
+  // TODO(crbug.com/1324892): Move to PageRequestHandler.
   void PreparePageRequest();
-
-  // Prepares an upload request for the file at `path`.  If the file
-  // cannot be uploaded it will have a failure verdict added to `result_`.
-  safe_browsing::FileAnalysisRequest* PrepareFileRequest(
-      const base::FilePath& path);
 
   // Adds required fields to `request` before sending it to the binary upload
   // service.
+  // TODO(crbug.com/1324892): Remove once TextRequestHandler and
+  // PageRequestHandler are created.
   void PrepareRequest(enterprise_connectors::AnalysisConnector connector,
                       safe_browsing::BinaryUploadService::Request* request);
 
@@ -280,11 +249,9 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // These methods exist so they can be overridden in tests as needed.
   // The `result` argument exists as an optimization to finish the request early
   // when the result is known in advance to avoid using the upload service.
+  // TODO(crbug.com/1324892): Remove once TextRequestHandler and
+  // PageRequestHandler are created.
   virtual void UploadTextForDeepScanning(
-      std::unique_ptr<safe_browsing::BinaryUploadService::Request> request);
-  virtual void UploadFileForDeepScanning(
-      safe_browsing::BinaryUploadService::Result result,
-      const base::FilePath& path,
       std::unique_ptr<safe_browsing::BinaryUploadService::Request> request);
   virtual void UploadPageForDeepScanning(
       std::unique_ptr<safe_browsing::BinaryUploadService::Request> request);
@@ -303,18 +270,14 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // `callback_` is cleared after being run.
   void RunCallback();
 
-  // Called when the file info for `path` has been fetched. Also begins the
-  // upload process.
-  void OnGotFileInfo(
-      std::unique_ptr<safe_browsing::BinaryUploadService::Request> request,
-      const base::FilePath& path,
-      safe_browsing::BinaryUploadService::Result result,
-      safe_browsing::BinaryUploadService::Request::Data data);
-
   // Updates `final_result_` following the precedence established by the
   // FinalResult enum.
   void UpdateFinalResult(FinalContentAnalysisResult message,
                          const std::string& tag);
+
+  // Send an acknowledgement to the service provider of the final result
+  // for the requests of this ContentAnalysisDelegate instance.
+  void AckAllRequests();
 
   // Returns the BinaryUploadService used to upload content for deep scanning.
   // Virtual to override in tests.
@@ -326,36 +289,35 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // The GURL corresponding to the page where the scan triggered.
   GURL url_;
 
+  // The title corresponding to the WebContents triggering the scan.
+  std::string title_;
+
   // Description of the data being scanned and the results of the scan.
-  // The elements of the vector `file_info_` hold the FileInfo of the file at
-  // the same index in `data_.paths`.
   Data data_;
   Result result_;
-  std::vector<FileInfo> file_info_;
 
   // Set to true if the full text got a DLP warning verdict.
   bool text_warning_ = false;
   enterprise_connectors::ContentAnalysisResponse text_response_;
 
-  // Scanning responses of files that got DLP warning verdicts.
-  std::map<size_t, enterprise_connectors::ContentAnalysisResponse>
-      file_warnings_;
+  // Indices of warned files.
+  std::vector<size_t> warned_file_indices_;
 
   // Set to true if the printed page got a DLP warning verdict.
   bool page_warning_ = false;
   enterprise_connectors::ContentAnalysisResponse page_response_;
 
   // Stores the scanned page's size since it moves from `data_` to be uploaded.
+  // TODO(crbug.com/1324892): Move to PageRequestHandler.
   int64_t page_size_bytes_ = 0;
 
   // Set to true once the scan of text has completed.  If the scan request has
   // no text requiring deep scanning, this is set to true immediately.
   bool text_request_complete_ = false;
 
-  // The number of files scans that have completed.  If more than one file is
-  // requested for scanning in `data_`, each is scanned in parallel with
-  // separate requests.
-  size_t file_result_count_ = 0;
+  // Set to true once all file scans have completed.  If the scan requests have
+  // no files requiring deep scanning, this is set to true immediately.
+  bool files_request_complete_ = false;
 
   // Set to true once the scan of a printed page has completed. If the scan
   // request has no page requiring deep scanning, this is set to true
@@ -382,13 +344,13 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // for every file/text. This is read to ensure `this` isn't deleted too early.
   bool data_uploaded_ = false;
 
-  // This is set to true as soon as a TOO_MANY_REQUESTS response is obtained. No
-  // more data should be upload for `this` at that point.
-  bool throttled_ = false;
+  // Responsible for opening and scanning multiple files on parallel threads.
+  // Always nullptr for non-file content scanning.
+  std::unique_ptr<FilesRequestHandler> files_request_handler_;
 
-  // Owner of the FileOpeningJob responsible for opening files on parallel
-  // threads. Always nullptr for non-file content scanning.
-  std::unique_ptr<safe_browsing::FileOpeningJob> file_opening_job_;
+  // The request tokens of all the requests that make up the user action
+  // represented by this ContentAnalysisDelegate instance.
+  std::vector<std::string> request_tokens_;
 
   base::TimeTicks upload_start_time_;
 

@@ -440,13 +440,13 @@ void VivaldiRenderViewContextMenu::UpdateMenuItem(int command_id,
                                                   const std::u16string& title) {
   ui::SimpleMenuModel* menu_model = GetMappedMenuModel(command_id);
   if (menu_model) {
-    int index = menu_model->GetIndexOfCommandId(command_id);
-    if (index == -1) {
+    auto index = menu_model->GetIndexOfCommandId(command_id);
+    if (!index.has_value()) {
       return;
     }
-    menu_model->SetLabel(index, title);
-    menu_model->SetEnabledAt(index, enabled);
-    menu_model->SetVisibleAt(index, !hidden);
+    menu_model->SetLabel(index.value(), title);
+    menu_model->SetEnabledAt(index.value(), enabled);
+    menu_model->SetVisibleAt(index.value(), !hidden);
     if (toolkit_delegate()) {
 #if BUILDFLAG(IS_MAC)
       toolkit_delegate()->UpdateMenuItem(command_id, enabled, hidden, title);
@@ -463,11 +463,11 @@ void VivaldiRenderViewContextMenu::UpdateMenuIcon(int command_id,
                                                   const ui::ImageModel& icon) {
   ui::SimpleMenuModel* menu_model = GetMappedMenuModel(command_id);
   if (menu_model) {
-    int index = menu_model->GetIndexOfCommandId(command_id);
-    if (index == -1) {
+    auto index = menu_model->GetIndexOfCommandId(command_id);
+    if (!index.has_value()) {
       return;
     }
-    menu_model->SetIcon(index, icon);
+    menu_model->SetIcon(index.value(), icon);
   } else {
     RenderViewContextMenu::UpdateMenuIcon(command_id, icon);
   }
@@ -476,11 +476,11 @@ void VivaldiRenderViewContextMenu::UpdateMenuIcon(int command_id,
 void VivaldiRenderViewContextMenu::RemoveMenuItem(int command_id) {
   ui::SimpleMenuModel* menu_model = GetMappedMenuModel(command_id);
   if (menu_model) {
-    int index = menu_model->GetIndexOfCommandId(command_id);
-    if (index == -1) {
+    auto index = menu_model->GetIndexOfCommandId(command_id);
+    if (!index.has_value()) {
       return;
     }
-    menu_model->RemoveItemAt(index);
+    menu_model->RemoveItemAt(index.value());
     if (toolkit_delegate()) {
       toolkit_delegate()->RebuildMenu();
     }
@@ -847,10 +847,10 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
           extensions::WebViewGuest::FromWebContents(source_web_contents_);
       if (guest_view) {
         std::u16string keyword(TemplateURL::GenerateKeyword(params_.page_url));
-        std::vector<base::Value> args;
-        args.emplace_back(keyword);
-        args.emplace_back(params_.vivaldi_keyword_url.spec());
-        guest_view->CreateSearch(base::ListValue(std::move(args)));
+        base::Value::List args;
+        args.Append(keyword);
+        args.Append(params_.vivaldi_keyword_url.spec());
+        guest_view->CreateSearch(std::move(args));
       }
       break;
     }
@@ -1040,7 +1040,6 @@ int VivaldiRenderViewContextMenu::GetStaticIdForAction(std::string command) {
       {"DOCUMENT_COPY_LINK_ADDRESS", IDC_CONTENT_CONTEXT_COPYLINKLOCATION},
       {"DOCUMENT_SAVE_LINK", IDC_CONTENT_CONTEXT_SAVELINKAS},
       {"DOCUMENT_COPY", IDC_CONTENT_CONTEXT_COPY},
-      {"DOCUMENT_PRINT", IDC_PRINT},
       {"DOCUMENT_OPEN_IMAGE_IN_NEW_TAB", IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB},
       {"DOCUMENT_OPEN_IMAGE_IN_NEW_BACKGROUND_TAB",
        IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB},

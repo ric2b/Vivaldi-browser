@@ -37,23 +37,23 @@ std::vector<std::unique_ptr<Config>> CreateTestConfigs() {
     std::unique_ptr<Config> config = std::make_unique<Config>();
     config->segmentation_key = kTestSegmentationKey1;
     config->segment_selection_ttl = base::Days(28);
-    config->segment_ids = {SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB,
-                           SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE};
+    config->AddSegmentId(SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB);
+    config->AddSegmentId(SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE);
     configs.push_back(std::move(config));
   }
   {
     std::unique_ptr<Config> config = std::make_unique<Config>();
     config->segmentation_key = kTestSegmentationKey2;
     config->segment_selection_ttl = base::Days(10);
-    config->segment_ids = {SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE,
-                           SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_VOICE};
+    config->AddSegmentId(SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE);
+    config->AddSegmentId(SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_VOICE);
     configs.push_back(std::move(config));
   }
   {
     std::unique_ptr<Config> config = std::make_unique<Config>();
     config->segmentation_key = kTestSegmentationKey3;
     config->segment_selection_ttl = base::Days(14);
-    config->segment_ids = {SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB};
+    config->AddSegmentId(SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB);
     configs.push_back(std::move(config));
   }
   {
@@ -103,8 +103,8 @@ void SegmentationPlatformServiceTestBase::InitPlatform(
   std::vector<std::unique_ptr<Config>> configs = CreateTestConfigs();
   base::flat_set<SegmentId> all_segment_ids;
   for (const auto& config : configs) {
-    for (const auto& segment_id : config->segment_ids)
-      all_segment_ids.insert(segment_id);
+    for (const auto& segment_id : config->segments)
+      all_segment_ids.insert(segment_id.first);
   }
   auto storage_service = std::make_unique<StorageService>(
       std::move(segment_db), std::move(signal_db),

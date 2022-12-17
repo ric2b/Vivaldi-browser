@@ -8,7 +8,7 @@
 #include "ash/webui/eche_app_ui/launch_app_helper.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/image/image.h"
 
@@ -59,7 +59,7 @@ class LaunchedAppInfo {
     gfx::Image icon_;
   };
 
-  LaunchedAppInfo();
+  LaunchedAppInfo() = delete;
   LaunchedAppInfo(const LaunchedAppInfo&) = delete;
   LaunchedAppInfo& operator=(const LaunchedAppInfo&) = delete;
   ~LaunchedAppInfo();
@@ -83,7 +83,7 @@ class LaunchedAppInfo {
 };
 
 // Factory to create a single EcheAppManager.
-class EcheAppManagerFactory : public BrowserContextKeyedServiceFactory {
+class EcheAppManagerFactory : public ProfileKeyedServiceFactory {
  public:
   static EcheAppManager* GetForProfile(Profile* profile);
   static EcheAppManagerFactory* GetInstance();
@@ -93,7 +93,9 @@ class EcheAppManagerFactory : public BrowserContextKeyedServiceFactory {
       const absl::optional<std::u16string>& title,
       const absl::optional<std::u16string>& message,
       std::unique_ptr<LaunchAppHelper::NotificationInfo> info);
-  static void CloseEche(Profile* profile);
+  static void CloseNotification(base::WeakPtr<EcheAppManagerFactory> weak_ptr,
+                                Profile* profile,
+                                const std::string& notification_id);
   static void LaunchEcheApp(Profile* profile,
                             const absl::optional<int64_t>& notification_id,
                             const std::string& package_name,
@@ -111,6 +113,7 @@ class EcheAppManagerFactory : public BrowserContextKeyedServiceFactory {
 
  private:
   friend struct base::DefaultSingletonTraits<EcheAppManagerFactory>;
+  friend class EcheAppManagerFactoryTest;
 
   EcheAppManagerFactory();
   ~EcheAppManagerFactory() override;

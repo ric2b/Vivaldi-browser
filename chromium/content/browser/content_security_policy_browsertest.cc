@@ -37,7 +37,7 @@ class ContentSecurityPolicyBrowserTest : public ContentBrowserTest {
   }
 
   RenderFrameHostImpl* current_frame_host() {
-    return web_contents()->GetMainFrame();
+    return web_contents()->GetPrimaryMainFrame();
   }
 };
 
@@ -452,6 +452,30 @@ IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyIsolatedAppBrowserTest,
         document.body.appendChild(element);
       } catch (e) {
         resolve('exception');
+      }
+    })
+  )"));
+}
+
+IN_PROC_BROWSER_TEST_F(ContentSecurityPolicyIsolatedAppBrowserTest, Wasm) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      https_server()->GetURL(kAppHost, "/cross-origin-isolated.html")));
+
+  EXPECT_EQ("allowed", EvalJs(shell(), R"(
+    new Promise(async (resolve) => {
+      document.addEventListener('securitypolicyviolation', e => {
+        resolve('violation');
+      });
+
+      try {
+        await WebAssembly.compile(new Uint8Array(
+            // The smallest possible Wasm module. Just the header
+            // (0, "A", "S", "M"), and the version (0x1).
+            [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]));
+        resolve('allowed');
+      } catch (e) {
+        resolve('exception: ' + e);
       }
     })
   )"));

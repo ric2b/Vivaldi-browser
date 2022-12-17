@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -38,7 +39,7 @@ namespace {
 bool GetAppLaunchContainer(Profile* profile,
                            const std::string& app_id,
                            const extensions::Extension** out_app,
-                           apps::mojom::LaunchContainer* out_launch_container) {
+                           apps::LaunchContainer* out_launch_container) {
   const extensions::Extension* app =
       extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
           app_id);
@@ -52,9 +53,8 @@ bool GetAppLaunchContainer(Profile* profile,
 
   // Look at preferences to find the right launch container. If no
   // preference is set, launch as a window.
-  apps::mojom::LaunchContainer launch_container =
-      extensions::GetLaunchContainer(extensions::ExtensionPrefs::Get(profile),
-                                     app);
+  apps::LaunchContainer launch_container = extensions::GetLaunchContainer(
+      extensions::ExtensionPrefs::Get(profile), app);
 
   *out_app = app;
   *out_launch_container = launch_container;
@@ -80,19 +80,19 @@ bool OpenExtensionApplicationWindow(Profile* profile,
                                     const std::string& app_id,
                                     const base::CommandLine& command_line,
                                     const base::FilePath& current_directory) {
-  apps::mojom::LaunchContainer launch_container;
+  LaunchContainer launch_container;
   const extensions::Extension* app;
   if (!GetAppLaunchContainer(profile, app_id, &app, &launch_container))
     return false;
 
-  if (launch_container == apps::mojom::LaunchContainer::kLaunchContainerTab)
+  if (launch_container == LaunchContainer::kLaunchContainerTab)
     return false;
 
   RecordCmdLineAppHistogram(app->GetType());
 
   apps::AppLaunchParams params(app_id, launch_container,
                                WindowOpenDisposition::NEW_WINDOW,
-                               apps::mojom::LaunchSource::kFromCommandLine);
+                               apps::LaunchSource::kFromCommandLine);
   params.command_line = command_line;
   params.current_directory = current_directory;
 
@@ -104,22 +104,22 @@ bool OpenExtensionApplicationWindow(Profile* profile,
 }
 
 bool OpenExtensionApplicationTab(Profile* profile, const std::string& app_id) {
-  apps::mojom::LaunchContainer launch_container;
+  apps::LaunchContainer launch_container;
   const extensions::Extension* app;
   if (!GetAppLaunchContainer(profile, app_id, &app, &launch_container))
     return false;
 
   // If the user doesn't want to open a tab, fail.
-  if (launch_container != apps::mojom::LaunchContainer::kLaunchContainerTab)
+  if (launch_container != apps::LaunchContainer::kLaunchContainerTab)
     return false;
 
   RecordCmdLineAppHistogram(app->GetType());
 
   content::WebContents* app_tab = ::OpenApplication(
-      profile, apps::AppLaunchParams(
-                   app_id, apps::mojom::LaunchContainer::kLaunchContainerTab,
-                   WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                   apps::mojom::LaunchSource::kFromCommandLine));
+      profile,
+      apps::AppLaunchParams(app_id, apps::LaunchContainer::kLaunchContainerTab,
+                            WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                            apps::LaunchSource::kFromCommandLine));
   return app_tab != nullptr;
 }
 
@@ -143,7 +143,7 @@ bool OpenDeprecatedApplicationPrompt(Profile* profile,
 
   NavigateParams params(browser, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  params.tabstrip_add_types = TabStripModel::ADD_ACTIVE;
+  params.tabstrip_add_types = AddTabTypes::ADD_ACTIVE;
   Navigate(&params);
 
   browser->window()->Show();
@@ -163,9 +163,8 @@ bool OpenExtensionApplicationWithReenablePrompt(
 
   RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
   apps::AppLaunchParams params(
-      app_id, apps::mojom::LaunchContainer::kLaunchContainerNone,
-      WindowOpenDisposition::NEW_WINDOW,
-      apps::mojom::LaunchSource::kFromCommandLine);
+      app_id, apps::LaunchContainer::kLaunchContainerNone,
+      WindowOpenDisposition::NEW_WINDOW, apps::LaunchSource::kFromCommandLine);
   params.command_line = command_line;
   params.current_directory = current_directory;
   ::OpenApplicationWithReenablePrompt(profile, std::move(params));

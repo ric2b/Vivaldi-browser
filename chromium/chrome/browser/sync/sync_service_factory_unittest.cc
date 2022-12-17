@@ -15,6 +15,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
@@ -32,10 +33,10 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
-#include "chromeos/components/sync_wifi/wifi_configuration_sync_service.h"
-#include "chromeos/dbus/shill/shill_clients.h"
-#include "chromeos/dbus/shill/shill_manager_client.h"
-#include "chromeos/network/network_handler.h"
+#include "chromeos/ash/components/dbus/shill/shill_clients.h"
+#include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/sync_wifi/wifi_configuration_sync_service.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #endif
 
@@ -56,9 +57,10 @@ class SyncServiceFactoryTest : public testing::Test {
                               HistoryServiceFactory::GetDefaultFactory());
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               SyncServiceFactory::GetDefaultFactory());
-    profile_ = builder.Build();
     // Some services will only be created if there is a WebDataService.
-    profile_->CreateWebDataService();
+    builder.AddTestingFactory(WebDataServiceFactory::GetInstance(),
+                              WebDataServiceFactory::GetDefaultFactory());
+    profile_ = builder.Build();
   }
 
   void TearDown() override {
@@ -72,9 +74,9 @@ class SyncServiceFactoryTest : public testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   SyncServiceFactoryTest() {
     // Fake network stack is required for WIFI_CONFIGURATIONS datatype.
-    chromeos::NetworkHandler::Initialize();
+    ash::NetworkHandler::Initialize();
   }
-  ~SyncServiceFactoryTest() override { chromeos::NetworkHandler::Shutdown(); }
+  ~SyncServiceFactoryTest() override { ash::NetworkHandler::Shutdown(); }
 #else
   SyncServiceFactoryTest() = default;
   ~SyncServiceFactoryTest() override = default;
@@ -82,7 +84,7 @@ class SyncServiceFactoryTest : public testing::Test {
 
   // Returns the collection of default datatypes.
   syncer::ModelTypeSet DefaultDatatypes() {
-    static_assert(39 + 1 /* notes */ == syncer::GetNumModelTypes(),
+    static_assert(40 + 1 /* notes */ == syncer::GetNumModelTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 
@@ -126,6 +128,9 @@ class SyncServiceFactoryTest : public testing::Test {
       datatypes.Put(syncer::OS_PRIORITY_PREFERENCES);
     }
     datatypes.Put(syncer::PRINTERS);
+    if (chromeos::features::IsOAuthIppEnabled()) {
+      datatypes.Put(syncer::PRINTERS_AUTHORIZATION_SERVERS);
+    }
     datatypes.Put(syncer::WIFI_CONFIGURATIONS);
     datatypes.Put(syncer::WORKSPACE_DESK);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -180,7 +185,7 @@ TEST_F(SyncServiceFactoryTest, DisableSyncFlag) {
 // and properly initialized.
 TEST_F(SyncServiceFactoryTest, CreateSyncServiceImplDefault) {
   syncer::SyncServiceImpl* sync_service =
-      SyncServiceFactory::GetAsSyncServiceImplForProfile(profile());
+      SyncServiceFactory::GetAsSyncServiceImplForProfileForTesting(profile());
   syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypesForTest();
   const syncer::ModelTypeSet default_types = DefaultDatatypes();
   EXPECT_EQ(default_types.Size(), types.Size());

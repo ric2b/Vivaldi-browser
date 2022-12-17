@@ -59,6 +59,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -82,6 +83,7 @@
 #include "url/origin.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_canon.h"
+#include "url/url_constants.h"
 
 using base::Time;
 using base::TimeTicks;
@@ -157,6 +159,13 @@ bool IncludeUnpartitionedCookies(
       return true;
   }
   return false;
+}
+
+size_t NameValueSizeBytes(const std::string& name, const std::string& value) {
+  base::CheckedNumeric<size_t> name_value_pair_size = name.size();
+  name_value_pair_size += value.size();
+  DCHECK(name_value_pair_size.IsValid());
+  return name_value_pair_size.ValueOrDie();
 }
 
 }  // namespace
@@ -993,12 +1002,11 @@ void CookieMonster::EnsureCookiesMapIsValid() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Iterate through all the of the cookies, grouped by host.
-  auto prev_range_end = cookies_.begin();
-  while (prev_range_end != cookies_.end()) {
-    auto cur_range_begin = prev_range_end;
+  for (auto next = cookies_.begin(); next != cookies_.end();) {
+    auto cur_range_begin = next;
     const std::string key = cur_range_begin->first;  // Keep a copy.
     auto cur_range_end = cookies_.upper_bound(key);
-    prev_range_end = cur_range_end;
+    next = cur_range_end;
 
     // Ensure no equivalent cookies for this host.
     TrimDuplicateCookiesForKey(key, cur_range_begin, cur_range_end,
@@ -1117,8 +1125,10 @@ void CookieMonster::TrimDuplicateCookiesForKey(
 }
 
 std::vector<CanonicalCookie*>
-CookieMonster::FindCookiesForRegistryControlledHost(const GURL& url,
-                                                    CookieMap* cookie_map) {
+CookieMonster::FindCookiesForRegistryControlledHost(
+    const GURL& url,
+    CookieMap* cookie_map,
+    CookieMonster::PartitionedCookieMap::iterator* partition_it) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!cookie_map)
@@ -1138,7 +1148,14 @@ CookieMonster::FindCookiesForRegistryControlledHost(const GURL& url,
 
     // If the cookie is expired, delete it.
     if (cc->IsExpired(current_time)) {
-      InternalDeleteCookie(curit, true, DELETE_COOKIE_EXPIRED);
+      if (cc->IsPartitioned()) {
+        DCHECK(partition_it);
+        DCHECK_EQ((*partition_it)->second.get(), cookie_map);
+        InternalDeletePartitionedCookie(*partition_it, curit, true,
+                                        DELETE_COOKIE_EXPIRED);
+      } else {
+        InternalDeleteCookie(curit, true, DELETE_COOKIE_EXPIRED);
+      }
       continue;
     }
     cookies.push_back(cc);
@@ -1157,7 +1174,7 @@ CookieMonster::FindPartitionedCookiesForRegistryControlledHost(
   if (it == partitioned_cookies_.end())
     return std::vector<CanonicalCookie*>();
 
-  return FindCookiesForRegistryControlledHost(url, it->second.get());
+  return FindCookiesForRegistryControlledHost(url, it->second.get(), &it);
 }
 
 void CookieMonster::FilterCookiesWithOptions(
@@ -1542,6 +1559,11 @@ void CookieMonster::SetCanonicalCookie(
                                  1 + IsolationInfo::kPartyContextMaxSize);
     }
 
+    if (cc->IsEffectivelySameSiteNone()) {
+      UMA_HISTOGRAM_COUNTS_10000("Cookie.SameSiteNoneSizeBytes",
+                                 NameValueSizeBytes(cc->Name(), cc->Value()));
+    }
+
     bool is_partitioned_cookie = cc->IsPartitioned();
     CookiePartitionKey cookie_partition_key;
     if (is_partitioned_cookie)
@@ -1562,11 +1584,11 @@ void CookieMonster::SetCanonicalCookie(
       CookieSource cookie_source_sample =
           (source_url.SchemeIsCryptographic()
                ? (cc->IsSecure()
-                      ? COOKIE_SOURCE_SECURE_COOKIE_CRYPTOGRAPHIC_SCHEME
-                      : COOKIE_SOURCE_NONSECURE_COOKIE_CRYPTOGRAPHIC_SCHEME)
+                      ? CookieSource::kSecureCookieCryptographicScheme
+                      : CookieSource::kNonsecureCookieCryptographicScheme)
                : (cc->IsSecure()
-                      ? COOKIE_SOURCE_SECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME
-                      : COOKIE_SOURCE_NONSECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME));
+                      ? CookieSource::kSecureCookieNoncryptographicScheme
+                      : CookieSource::kNonsecureCookieNoncryptographicScheme));
       UMA_HISTOGRAM_ENUMERATION("Cookie.CookieSourceScheme",
                                 cookie_source_sample);
 
@@ -2238,8 +2260,20 @@ bool CookieMonster::DoRecordPeriodicStats() {
   base::UmaHistogramCounts100000("Cookie.Count2", cookies_.size());
 
   if (cookie_access_delegate()) {
-    absl::optional<base::flat_map<SchemefulSite, std::set<SchemefulSite>>>
-        maybe_sets = cookie_access_delegate()->RetrieveFirstPartySets(
+    std::vector<SchemefulSite> sites;
+    for (const auto& entry : cookies_) {
+      sites.emplace_back(
+          GURL(base::StrCat({url::kHttpsScheme, "://", entry.first})));
+    }
+    for (const auto& [partition_key, cookie_map] : partitioned_cookies_) {
+      for (const auto& [domain, unused_cookie] : *cookie_map) {
+        sites.emplace_back(
+            GURL(base::StrCat({url::kHttpsScheme, "://", domain})));
+      }
+    }
+    absl::optional<base::flat_map<SchemefulSite, FirstPartySetEntry>>
+        maybe_sets = cookie_access_delegate()->FindFirstPartySetOwners(
+            sites,
             base::BindOnce(&CookieMonster::RecordPeriodicFirstPartySetsStats,
                            weak_ptr_factory_.GetWeakPtr()));
     if (maybe_sets.has_value())
@@ -2251,6 +2285,20 @@ bool CookieMonster::DoRecordPeriodicStats() {
                            domain_purged_keys_.size());
   // Can be up to kMaxCookies.
   UMA_HISTOGRAM_COUNTS_10000("Cookie.NumKeys", num_keys_);
+
+  std::map<std::string, size_t> n_same_site_none_cookies;
+  for (const auto& [host_key, host_cookie] : cookies_) {
+    if (!host_cookie || !host_cookie->IsEffectivelySameSiteNone())
+      continue;
+    n_same_site_none_cookies[host_key]++;
+  }
+  size_t max_n_cookies = 0;
+  for (const auto& entry : n_same_site_none_cookies) {
+    max_n_cookies = std::max(max_n_cookies, entry.second);
+  }
+  // Can be up to 180 cookies, the max per-domain.
+  base::UmaHistogramCounts1000("Cookie.MaxSameSiteNoneCookiesPerKey",
+                               max_n_cookies);
 
   // Collect stats for partitioned cookies if they are enabled.
   if (base::FeatureList::IsEnabled(features::kPartitionedCookies)) {
@@ -2264,8 +2312,12 @@ bool CookieMonster::DoRecordPeriodicStats() {
 }
 
 void CookieMonster::RecordPeriodicFirstPartySetsStats(
-    base::flat_map<SchemefulSite, std::set<SchemefulSite>> sets) const {
-  for (const auto& set : sets) {
+    base::flat_map<SchemefulSite, FirstPartySetEntry> sets) const {
+  base::flat_map<SchemefulSite, std::set<SchemefulSite>> grouped_by_owner;
+  for (const auto& [site, entry] : sets) {
+    grouped_by_owner[entry.primary()].insert(site);
+  }
+  for (const auto& set : grouped_by_owner) {
     int sample = std::accumulate(
         set.second.begin(), set.second.end(), 0,
         [this](int acc, const net::SchemefulSite& site) -> int {

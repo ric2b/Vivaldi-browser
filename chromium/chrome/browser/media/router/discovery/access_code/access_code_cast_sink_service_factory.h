@@ -7,7 +7,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "chrome/browser/profiles/profile_keyed_service_factory.h"
 
 namespace base {
 template <typename Type>
@@ -22,8 +22,7 @@ class AccessCodeCastSinkService;
 
 // A factory that lazily returns an AccessCodeCastSinkService
 // implementation for a given BrowserContext.
-class AccessCodeCastSinkServiceFactory
-    : public BrowserContextKeyedServiceFactory {
+class AccessCodeCastSinkServiceFactory : public ProfileKeyedServiceFactory {
  public:
   AccessCodeCastSinkServiceFactory(const AccessCodeCastSinkServiceFactory&) =
       delete;
@@ -44,7 +43,6 @@ class AccessCodeCastSinkServiceFactory
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
   bool ServiceIsCreatedWithBrowserContext() const override;
-  bool ServiceIsNULLWhileTesting() const override;
 };
 
 }  // namespace media_router

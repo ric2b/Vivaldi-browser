@@ -35,9 +35,10 @@ class InvalidationServiceStompWebsocket
     virtual void OnInvalidation(base::Value::Dict) = 0;
   };
 
-  InvalidationServiceStompWebsocket(content::BrowserContext* browser_context,
-                                    const GURL& url,
-                                    Client* client);
+  InvalidationServiceStompWebsocket(
+      network::mojom::NetworkContext* network_context,
+      const GURL& url,
+      Client* client);
   ~InvalidationServiceStompWebsocket() override;
   InvalidationServiceStompWebsocket(const InvalidationServiceStompWebsocket&) =
       delete;

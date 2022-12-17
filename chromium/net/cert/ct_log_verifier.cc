@@ -59,8 +59,7 @@ const EVP_MD* GetEvpAlg(ct::DigitallySigned::HashAlgorithm alg) {
 scoped_refptr<const CTLogVerifier> CTLogVerifier::Create(
     const base::StringPiece& public_key,
     std::string description) {
-  scoped_refptr<CTLogVerifier> result(
-      new CTLogVerifier(std::move(description)));
+  auto result = base::WrapRefCounted(new CTLogVerifier(std::move(description)));
   if (!result->Init(public_key))
     return nullptr;
   return result;
@@ -284,7 +283,7 @@ bool CTLogVerifier::Init(const base::StringPiece& public_key) {
 
   // Right now, only RSASSA-PKCS1v15 with SHA-256 and ECDSA with SHA-256 are
   // supported.
-  switch (EVP_PKEY_type(public_key_->type)) {
+  switch (EVP_PKEY_id(public_key_)) {
     case EVP_PKEY_RSA:
       hash_algorithm_ = ct::DigitallySigned::HASH_ALGO_SHA256;
       signature_algorithm_ = ct::DigitallySigned::SIG_ALGO_RSA;

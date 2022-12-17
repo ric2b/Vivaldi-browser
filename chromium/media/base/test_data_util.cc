@@ -207,12 +207,12 @@ std::string GetURLQueryString(const base::StringPairs& query_params) {
 }
 
 scoped_refptr<DecoderBuffer> ReadTestDataFile(const std::string& name
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
   , const base::FilePath& full_filename
 #endif
 ) {
   base::FilePath file_path =
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
       !full_filename.empty() ? full_filename :
 #endif
                              GetTestDataFilePath(name);

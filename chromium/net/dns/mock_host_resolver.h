@@ -22,6 +22,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_checker.h"
 #include "net/base/address_family.h"
+#include "net/base/address_list.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
@@ -48,15 +49,10 @@ class HostCache;
 class IPEndPoint;
 class URLRequestContext;
 
-// Fills `*addrlist` with a socket address for `host_list` which should be a
+// Fills `ip_endpoints` with a socket address for `host_list` which should be a
 // comma-separated list of IPv4 or IPv6 literal(s) without enclosing brackets.
-// If `dns_aliases` is non-empty, its first entry is considered the DNS
-// canonical name (i.e. address record name) for the host, and the alias
-// chain is listed in reverse order through to the last entry, the query name.
-// Returns OK on success, ERR_UNEXPECTED otherwise.
 int ParseAddressList(base::StringPiece host_list,
-                     const std::vector<std::string>& dns_aliases,
-                     AddressList* addrlist);
+                     std::vector<net::IPEndPoint>* ip_endpoints);
 
 // In most cases, it is important that unit tests avoid relying on making actual
 // DNS queries since the resulting tests can be flaky, especially if the network
@@ -78,7 +74,7 @@ int ParseAddressList(base::StringPiece host_list,
 // For more advanced matching, the first parameter may be replaced with a
 // MockHostResolverBase::RuleResolver::RuleKey. For more advanced responses, the
 // second parameter may be replaced with a
-// MockHostResolverBase::RuleResolver::RuleResult.
+// MockHostResolverBase::RuleResolver::RuleResultOrError.
 //
 // MockHostResolvers may optionally be created with a default result:
 //
@@ -139,14 +135,29 @@ class MockHostResolverBase
       absl::optional<HostResolverSource> query_source;
     };
 
+    struct RuleResult {
+      RuleResult();
+      explicit RuleResult(
+          std::vector<HostResolverEndpointResult> endpoints,
+          std::set<std::string> aliases = std::set<std::string>());
+
+      ~RuleResult();
+
+      RuleResult(const RuleResult&);
+      RuleResult& operator=(const RuleResult&);
+      RuleResult(RuleResult&&);
+      RuleResult& operator=(RuleResult&&);
+
+      std::vector<HostResolverEndpointResult> endpoints;
+      std::set<std::string> aliases;
+    };
+
     using ErrorResult = Error;
-    using RuleResult = absl::variant<AddressList,
-                                     std::vector<HostResolverEndpointResult>,
-                                     ErrorResult>;
+    using RuleResultOrError = absl::variant<RuleResult, ErrorResult>;
 
     // If `default_result` is nullopt, every resolve must match an added rule.
     explicit RuleResolver(
-        absl::optional<RuleResult> default_result = absl::nullopt);
+        absl::optional<RuleResultOrError> default_result = absl::nullopt);
     ~RuleResolver();
 
     RuleResolver(const RuleResolver&);
@@ -154,19 +165,21 @@ class MockHostResolverBase
     RuleResolver(RuleResolver&&);
     RuleResolver& operator=(RuleResolver&&);
 
-    const RuleResult& Resolve(const Host& request_endpoint,
-                              DnsQueryTypeSet request_types,
-                              HostResolverSource request_source) const;
+    const RuleResultOrError& Resolve(const Host& request_endpoint,
+                                     DnsQueryTypeSet request_types,
+                                     HostResolverSource request_source) const;
 
     void ClearRules();
 
-    static RuleResult GetLocalhostResult();
+    static RuleResultOrError GetLocalhostResult();
 
-    void AddRule(RuleKey key, RuleResult result);
+    void AddRule(RuleKey key, RuleResultOrError result);
     void AddRule(RuleKey key, base::StringPiece ip_literal);
-    void AddRule(base::StringPiece hostname_pattern, RuleResult result);
+
+    void AddRule(base::StringPiece hostname_pattern, RuleResultOrError result);
     void AddRule(base::StringPiece hostname_pattern,
                  base::StringPiece ip_literal);
+
     void AddRule(base::StringPiece hostname_pattern, Error error);
 
     // Legacy rule creation. Only for compatibility with tests written for use
@@ -189,8 +202,8 @@ class MockHostResolverBase
                           std::vector<std::string> dns_aliases = {});
 
    private:
-    std::map<RuleKey, RuleResult> rules_;
-    absl::optional<RuleResult> default_result_;
+    std::map<RuleKey, RuleResultOrError> rules_;
+    absl::optional<RuleResultOrError> default_result_;
   };
 
   using RequestMap = std::map<size_t, RequestImpl*>;
@@ -406,8 +419,9 @@ class MockHostResolverBase
       HostResolverFlags flags,
       HostResolverSource source,
       HostResolver::ResolveHostParameters::CacheUsage cache_usage,
-      AddressList* addresses,
-      absl::optional<HostCache::EntryStaleness>* stale_info);
+      std::vector<HostResolverEndpointResult>* out_endpoints,
+      std::set<std::string>* out_aliases,
+      absl::optional<HostCache::EntryStaleness>* out_stale_info);
   int DoSynchronousResolution(RequestImpl& request);
 
   void AddListener(MdnsListenerImpl* listener);
@@ -437,8 +451,8 @@ class MockHostResolverBase
 
 class MockHostResolver : public MockHostResolverBase {
  public:
-  explicit MockHostResolver(
-      absl::optional<RuleResolver::RuleResult> default_result = absl::nullopt)
+  explicit MockHostResolver(absl::optional<RuleResolver::RuleResultOrError>
+                                default_result = absl::nullopt)
       : MockHostResolverBase(/*use_caching=*/false,
                              /*cache_invalidation_num=*/0,
                              RuleResolver(std::move(default_result))) {}
@@ -457,7 +471,8 @@ class MockCachingHostResolver : public MockHostResolverBase {
   // scenarios.
   explicit MockCachingHostResolver(
       int cache_invalidation_num = 0,
-      absl::optional<RuleResolver::RuleResult> default_result = absl::nullopt)
+      absl::optional<RuleResolver::RuleResultOrError> default_result =
+          absl::nullopt)
       : MockHostResolverBase(/*use_caching=*/true,
                              cache_invalidation_num,
                              RuleResolver(std::move(default_result))) {}
@@ -509,20 +524,20 @@ class RuleBasedHostResolverProc : public HostResolverProc {
  public:
   // If `allow_fallback` is false, no Proc fallback is allowed except to
   // `previous`.
-  explicit RuleBasedHostResolverProc(HostResolverProc* previous,
+  explicit RuleBasedHostResolverProc(scoped_refptr<HostResolverProc> previous,
                                      bool allow_fallback = true);
 
   // Any hostname matching the given pattern will be replaced with the given
   // |ip_literal|.
-  void AddRule(const std::string& host_pattern, const std::string& ip_literal);
+  void AddRule(base::StringPiece host_pattern, base::StringPiece ip_literal);
 
   // Same as AddRule(), but further restricts to |address_family|.
-  void AddRuleForAddressFamily(const std::string& host_pattern,
+  void AddRuleForAddressFamily(base::StringPiece host_pattern,
                                AddressFamily address_family,
-                               const std::string& ip_literal);
+                               base::StringPiece ip_literal);
 
-  void AddRuleWithFlags(const std::string& host_pattern,
-                        const std::string& ip_literal,
+  void AddRuleWithFlags(base::StringPiece host_pattern,
+                        base::StringPiece ip_literal,
                         HostResolverFlags flags,
                         std::vector<std::string> dns_aliases = {});
 
@@ -533,9 +548,9 @@ class RuleBasedHostResolverProc : public HostResolverProc {
   // but does not impact DNS resolution.
   // |ip_literal| can be a single IP address like "192.168.1.1" or a comma
   // separated list of IP addresses, like "::1,192:168.1.2".
-  void AddIPLiteralRule(const std::string& host_pattern,
-                        const std::string& ip_literal,
-                        const std::string& canonical_name);
+  void AddIPLiteralRule(base::StringPiece host_pattern,
+                        base::StringPiece ip_literal,
+                        base::StringPiece canonical_name);
 
   // Same as AddIPLiteralRule, but with a parameter allowing multiple DNS
   // aliases, such as CNAME aliases, instead of only the canonical name. While
@@ -544,26 +559,26 @@ class RuleBasedHostResolverProc : public HostResolverProc {
   // MockHostResolver who need to be able to obtain aliases and can be
   // agnostic about how the host resolution took place, as the alternative,
   // MockDnsClient, is not currently hooked up to MockHostResolver.
-  void AddIPLiteralRuleWithDnsAliases(const std::string& host_pattern,
-                                      const std::string& ip_literal,
+  void AddIPLiteralRuleWithDnsAliases(base::StringPiece host_pattern,
+                                      base::StringPiece ip_literal,
                                       std::vector<std::string> dns_aliases);
 
-  void AddRuleWithLatency(const std::string& host_pattern,
-                          const std::string& replacement,
+  void AddRuleWithLatency(base::StringPiece host_pattern,
+                          base::StringPiece replacement,
                           int latency_ms);
 
   // Make sure that |host| will not be re-mapped or even processed by underlying
   // host resolver procedures. It can also be a pattern.
-  void AllowDirectLookup(const std::string& host);
+  void AllowDirectLookup(base::StringPiece host);
 
   // Simulate a lookup failure for |host| (it also can be a pattern).
   void AddSimulatedFailure(
-      const std::string& host,
+      base::StringPiece host,
       HostResolverFlags flags = HOST_RESOLVER_LOOPBACK_ONLY);
 
   // Simulate a lookup timeout failure for |host| (it also can be a pattern).
   void AddSimulatedTimeoutFailure(
-      const std::string& host,
+      base::StringPiece host,
       HostResolverFlags flags = HOST_RESOLVER_LOOPBACK_ONLY);
 
   // Deletes all the rules that have been added.
@@ -593,10 +608,10 @@ class RuleBasedHostResolverProc : public HostResolverProc {
     };
 
     Rule(ResolverType resolver_type,
-         const std::string& host_pattern,
+         base::StringPiece host_pattern,
          AddressFamily address_family,
          HostResolverFlags host_resolver_flags,
-         const std::string& replacement,
+         base::StringPiece replacement,
          std::vector<std::string> dns_aliases,
          int latency_ms);
     Rule(const Rule& other);
@@ -630,7 +645,7 @@ class RuleBasedHostResolverProc : public HostResolverProc {
 };
 
 // Create rules that map all requests to localhost.
-RuleBasedHostResolverProc* CreateCatchAllHostResolverProc();
+scoped_refptr<RuleBasedHostResolverProc> CreateCatchAllHostResolverProc();
 
 // HangingHostResolver never completes its |Resolve| request. As LOCAL_ONLY
 // requests are not allowed to complete asynchronously, they will always result

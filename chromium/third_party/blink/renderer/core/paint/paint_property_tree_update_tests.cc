@@ -1428,14 +1428,14 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
 
   auto* target = GetDocument().getElementById("target");
   const auto* properties = PaintPropertiesForElement("target");
-  // We don't need paint properties for object-fit: fill because the content
-  // never overflows.
+  // Image elements don't need a clip node if the image is clipped to its
+  // content box.
   EXPECT_EQ(nullptr, properties);
 
   target->setAttribute(html_names::kStyleAttr, "object-fit: cover");
   UpdateAllLifecyclePhasesForTest();
   properties = PaintPropertiesForElement("target");
-  // We don't need paint properties because image painter always clip to the
+  // Image elements don't need a clip node if the image is clipped to its
   // content box.
   EXPECT_EQ(nullptr, properties);
 
@@ -1445,15 +1445,23 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
   // Ditto.
   EXPECT_EQ(nullptr, properties);
 
-  // We need overflow clip when there is border radius.
+  target->setAttribute(html_names::kStyleAttr,
+                       "overflow-clip-margin: padding-box;");
+  UpdateAllLifecyclePhasesForTest();
+  properties = PaintPropertiesForElement("target");
+  // Changing overflow-clip-margin induces a clip node.
+  EXPECT_NE(nullptr, properties);
+
   target->setAttribute(html_names::kStyleAttr,
                        "object-fit: none; border-radius: 2px");
   UpdateAllLifecyclePhasesForTest();
   properties = PaintPropertiesForElement("target");
   ASSERT_TRUE(properties);
   ASSERT_TRUE(properties->OverflowClip());
-  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 2),
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 0),
                    properties->OverflowClip());
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 2),
+                   properties->InnerBorderRadiusClip());
 
   // We should update clip rect on border radius change.
   target->setAttribute(html_names::kStyleAttr,
@@ -1461,8 +1469,10 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
   UpdateAllLifecyclePhasesForTest();
   ASSERT_EQ(properties, PaintPropertiesForElement("target"));
   ASSERT_TRUE(properties->OverflowClip());
-  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 3),
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 0),
                    properties->OverflowClip());
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(8, 8, 8, 8), 3),
+                   properties->InnerBorderRadiusClip());
 
   // We should update clip rect on padding change.
   target->setAttribute(
@@ -1476,7 +1486,7 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForImage) {
   EXPECT_CLIP_RECT(
       FloatRoundedRect(gfx::RectF(12, 9, 2, 4), gfx::SizeF(0, 2),
                        gfx::SizeF(1, 2), gfx::SizeF(), gfx::SizeF(1, 0)),
-      properties->OverflowClip());
+      properties->InnerBorderRadiusClip());
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForVideo) {
@@ -1520,6 +1530,41 @@ TEST_P(PaintPropertyTreeUpdateTest, OverflowClipUpdateForVideo) {
   ASSERT_EQ(properties, PaintPropertiesForElement("target"));
   ASSERT_TRUE(properties->OverflowClip());
   EXPECT_CLIP_RECT(FloatRoundedRect(12, 9, 2, 4), properties->OverflowClip());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, OverflowClipWithBorderRadiusForVideo) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    video {
+      position: fixed;
+      top: 0px;
+      left: 0px;
+      width: 8px;
+      height: 8px;
+      padding: 1px 2px 3px 4px;
+    }
+    </style>
+    <video id="target"></video>
+  )HTML");
+
+  auto* target = GetDocument().getElementById("target");
+  const auto* properties = PaintPropertiesForElement("target");
+  ASSERT_TRUE(properties);
+  ASSERT_TRUE(properties->OverflowClip());
+  EXPECT_CLIP_RECT(FloatRoundedRect(4, 1, 8, 8), properties->OverflowClip());
+  ASSERT_FALSE(properties->InnerBorderRadiusClip());
+
+  target->setAttribute(html_names::kStyleAttr, "border-radius: 5px");
+  UpdateAllLifecyclePhasesForTest();
+  ASSERT_EQ(properties, PaintPropertiesForElement("target"));
+  ASSERT_TRUE(properties->OverflowClip());
+  EXPECT_CLIP_RECT(FloatRoundedRect(4, 1, 8, 8), properties->OverflowClip());
+  ASSERT_TRUE(properties->InnerBorderRadiusClip());
+  EXPECT_CLIP_RECT(FloatRoundedRect(gfx::RectF(4, 1, 8, 8),
+                                    FloatRoundedRect::Radii(
+                                        gfx::SizeF(1, 4), gfx::SizeF(3, 4),
+                                        gfx::SizeF(1, 2), gfx::SizeF(3, 2))),
+                   properties->InnerBorderRadiusClip());
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, ChangingClipPath) {
@@ -1617,9 +1662,8 @@ TEST_P(PaintPropertyTreeUpdateTest, ChangeDuringAnimation) {
   auto* paint_artifact_compositor =
       GetDocument().View()->GetPaintArtifactCompositor();
   EXPECT_TRUE(paint_artifact_compositor->NeedsUpdate());
-  // PaintArtifactCompositor can't clear the NeedsUpdate flag by itself when
-  // there is no cc::LayerTreeHost.
-  paint_artifact_compositor->ClearNeedsUpdateForTesting();
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(paint_artifact_compositor->NeedsUpdate());
 
   // Simulates changing transform and transform-origin during an animation.
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);

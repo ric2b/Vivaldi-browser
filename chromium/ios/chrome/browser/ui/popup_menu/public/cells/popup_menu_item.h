@@ -30,6 +30,8 @@ typedef NS_ENUM(NSInteger, PopupMenuAction) {
   PopupMenuActionOpenNewWindow,
   PopupMenuActionFollow,
   PopupMenuActionBookmarks,
+  // Vivaldi
+  PopupMenuActionNotes,
   PopupMenuActionReadingList,
   PopupMenuActionRecentTabs,
   PopupMenuActionHistory,

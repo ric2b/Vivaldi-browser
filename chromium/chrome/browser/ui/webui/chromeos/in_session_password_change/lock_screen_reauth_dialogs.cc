@@ -19,6 +19,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/in_session_password_change/base_lock_dialog.h"
@@ -30,9 +31,9 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/network/network_connection_handler.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_connection_handler.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -110,6 +111,24 @@ gfx::Size LockScreenStartReauthDialog::CalculateLockScreenReauthDialogSize(
   return CalculateOobeDialogSizeForPrimaryDisplay();
 }
 
+void LockScreenStartReauthDialog::RequestMediaAccessPermission(
+    content::WebContents* web_contents,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
+  // This is required for accessing the camera for SAML logins.
+  MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
+      web_contents, request, std::move(callback), nullptr /* extension */);
+}
+
+bool LockScreenStartReauthDialog::CheckMediaAccessPermission(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& security_origin,
+    blink::mojom::MediaStreamType type) {
+  // This is required for accessing the camera for SAML logins.
+  return MediaCaptureDevicesDispatcher::GetInstance()
+      ->CheckMediaAccessPermission(render_frame_host, security_origin, type);
+}
+
 void LockScreenStartReauthDialog::Show() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (g_dialog) {
@@ -127,9 +146,8 @@ void LockScreenStartReauthDialog::OnProfileCreated(
     Profile* profile,
     Profile::CreateStatus status) {
   if (status == Profile::CREATE_STATUS_INITIALIZED) {
-    profile_ = profile;
-    g_dialog->ShowSystemDialogForBrowserContext(
-        profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
+    profile_ = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+    g_dialog->ShowSystemDialogForBrowserContext(profile_);
     const NetworkStateInformer::State state = network_state_informer_->state();
     // Show network or captive portal screen if needed.
     // TODO(crbug.com/1237407): Handle other states in NetworkStateInformer
@@ -160,6 +178,13 @@ int LockScreenStartReauthDialog::GetDialogWidth() {
   gfx::Size ret;
   GetDialogSize(&ret);
   return ret.width();
+}
+
+content::WebContents* LockScreenStartReauthDialog::GetWebContents() {
+  auto* web_ui = webui();
+  if (!web_ui)
+    return nullptr;
+  return web_ui->GetWebContents();
 }
 
 void LockScreenStartReauthDialog::DeleteLockScreenNetworkDialog() {
@@ -281,6 +306,14 @@ void LockScreenStartReauthDialog::UpdateState(
     return;
 
   const NetworkStateInformer::State state = network_state_informer_->state();
+
+  // If frame didn't load but we believe that we are online then we want to show
+  // the network screen (mimicking behaviour of `ErrorScreen` on signin screen).
+  if (reason == NetworkError::ERROR_REASON_FRAME_ERROR &&
+      state == NetworkStateInformer::ONLINE) {
+    ShowLockScreenNetworkDialog();
+    return;
+  }
 
   if (state == NetworkStateInformer::OFFLINE) {
     ShowLockScreenNetworkDialog();

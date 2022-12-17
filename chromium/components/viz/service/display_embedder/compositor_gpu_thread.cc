@@ -20,8 +20,10 @@
 #include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/vulkan/buildflags.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface_egl.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -38,8 +40,12 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
     gpu::VulkanImplementation* vulkan_implementation,
     gpu::VulkanDeviceQueue* device_queue,
     bool enable_watchdog) {
-  if (!features::IsDrDcEnabled())
+  DCHECK(gpu_channel_manager);
+
+  if (!features::IsDrDcEnabled() ||
+      gpu_channel_manager->gpu_driver_bug_workarounds().disable_drdc) {
     return nullptr;
+  }
 
 #if BUILDFLAG(IS_ANDROID)
   // When using angle via enabling passthrough command decoder on android, angle
@@ -48,7 +54,7 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
   // that instead of enabling/disabling DrDc based on the extension.
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE)
     DCHECK(gl::GLSurfaceEGL::GetGLDisplayEGL()
-               ->IsANGLEContextVirtualizationSupported());
+               ->ext->b_EGL_ANGLE_context_virtualization);
 #endif
 
   scoped_refptr<VulkanContextProvider> vulkan_context_provider;
@@ -62,7 +68,8 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
         device_queue->GetVulkanPhysicalDevice(),
         device_queue->GetVulkanDevice(), device_queue->GetVulkanQueue(),
         device_queue->GetVulkanQueueIndex(), device_queue->enabled_extensions(),
-        device_queue->enabled_device_features_2());
+        device_queue->enabled_device_features_2(),
+        device_queue->vma_allocator());
     vulkan_context_provider =
         VulkanInProcessContextProvider::CreateForCompositorGpuThread(
             vulkan_implementation, std::move(compositor_thread_device_queue),
@@ -107,7 +114,8 @@ CompositorGpuThread::GetSharedContextState() {
   // Create a new share group. Note that this share group is different from the
   // share group which gpu main thread uses.
   auto share_group = base::MakeRefCounted<gl::GLShareGroup>();
-  auto surface = gl::init::CreateOffscreenGLSurface(gfx::Size());
+  auto surface =
+      gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(), gfx::Size());
 
   const auto& gpu_preferences = gpu_channel_manager_->gpu_preferences();
 
@@ -123,11 +131,33 @@ CompositorGpuThread::GetSharedContextState() {
   attribs.angle_context_virtualization_group_number =
       gl::AngleContextVirtualizationGroup::kDrDc;
 
+  bool enable_angle_validation = features::IsANGLEValidationEnabled();
+#if DCHECK_IS_ON()
+  // Force validation on for all debug builds and testing
+  enable_angle_validation = true;
+#endif
+
+  attribs.can_skip_validation = !enable_angle_validation;
+
+  // Compositor thread context doesn't need access textures and semaphores
+  // created with other contexts.
+  attribs.global_texture_share_group = false;
+  attribs.global_semaphore_share_group = false;
+
   // Create a new gl context. Note that this gl context is not part of same
   // share group which gpu main thread uses. Hence this context does not share
   // GL resources with the contexts created on gpu main thread.
   auto context =
       gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
+
+  if (!context && !features::UseGles2ForOopR()) {
+    LOG(ERROR) << "Failed to create GLES3 context, fallback to GLES2.";
+    attribs.client_major_es_version = 2;
+    attribs.client_minor_es_version = 0;
+    context =
+        gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
+  }
+
   if (!context) {
     LOG(ERROR) << "Failed to create shared context";
     return nullptr;
@@ -181,8 +211,7 @@ CompositorGpuThread::GetSharedContextState() {
 bool CompositorGpuThread::Initialize() {
   // Setup thread options.
   base::Thread::Options thread_options(base::MessagePumpType::DEFAULT, 0);
-  if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority))
-    thread_options.priority = base::ThreadPriority::DISPLAY;
+  thread_options.thread_type = base::ThreadType::kCompositing;
   StartWithOptions(std::move(thread_options));
 
   // Wait until thread is started and Init() is executed in order to return
@@ -251,11 +280,44 @@ void CompositorGpuThread::OnMemoryAllocatedChange(
 void CompositorGpuThread::OnBackgrounded() {
   if (watchdog_thread_)
     watchdog_thread_->OnBackgrounded();
+
+  task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CompositorGpuThread::OnBackgroundedOnCompositorGpuThread,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CompositorGpuThread::OnBackgroundedOnCompositorGpuThread() {
+  DCHECK(task_runner()->BelongsToCurrentThread());
+
+  if (shared_context_state_) {
+    shared_context_state_->PurgeMemory(
+        base::MemoryPressureListener::MemoryPressureLevel::
+            MEMORY_PRESSURE_LEVEL_CRITICAL);
+  }
+}
+
+void CompositorGpuThread::OnBackgroundCleanup() {
+  LoseContext();
 }
 
 void CompositorGpuThread::OnForegrounded() {
   if (watchdog_thread_)
     watchdog_thread_->OnForegrounded();
+}
+
+void CompositorGpuThread::LoseContext() {
+  if (!task_runner()->BelongsToCurrentThread()) {
+    task_runner()->PostTask(FROM_HERE,
+                            base::BindOnce(&CompositorGpuThread::LoseContext,
+                                           weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  if (shared_context_state_) {
+    shared_context_state_->MarkContextLost();
+    shared_context_state_.reset();
+  }
 }
 
 }  // namespace viz

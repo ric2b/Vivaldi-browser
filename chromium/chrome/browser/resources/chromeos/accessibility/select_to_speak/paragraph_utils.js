@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {WordUtils} from '/select_to_speak/word_utils.js';
+import {WordUtils} from './word_utils.js';
 
 var AutomationNode = chrome.automation.AutomationNode;
 var RoleType = chrome.automation.RoleType;
@@ -229,7 +229,7 @@ export class ParagraphUtils {
       }
 
       node.unclippedBoundsForRange(
-          boundQueryStartIndex, boundQueryEndIndex, (b) => {
+          boundQueryStartIndex, boundQueryEndIndex, b => {
             // If the word is entirely out of the blockparent bounds,
             // replace the word with space characters.
             if (b.left + b.width <= leftBound || b.left >= rightBound ||
@@ -478,7 +478,7 @@ export class ParagraphUtils {
     return {
       nodeGroup,
       startIndexInGroup: opt_startIndex,
-      endIndexInGroup: opt_endIndex
+      endIndexInGroup: opt_endIndex,
     };
   }
 
@@ -530,7 +530,7 @@ export class ParagraphUtils {
         return inlineTextNode ? {
           node: inlineTextNode,
           offset: currentNodeOffset -
-              ParagraphUtils.getStartCharIndexInParent(inlineTextNode)
+              ParagraphUtils.getStartCharIndexInParent(inlineTextNode),
         } :
                                 {node: currentNode, offset: currentNodeOffset};
       }

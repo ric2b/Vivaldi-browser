@@ -18,6 +18,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.variations.VariationsServiceMetricsHelper;
 import org.chromium.android_webview.common.variations.VariationsUtils;
+import org.chromium.android_webview.services.ServicesStatsHelper.NonembeddedService;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -35,9 +36,8 @@ import java.net.HttpURLConnection;
 import java.util.concurrent.TimeUnit;
 
 /**
- * AwVariationsSeedFetcher is a JobService which periodically downloads the variations seed. We use
- * JobService instead of BackgroundTaskScheduler, since JobService is available on L+, and WebView
- * is L+ only. The job is scheduled whenever an app requests the seed, and it's been at least 1 day
+ * AwVariationsSeedFetcher is a JobService which periodically downloads the variations seed.
+ * The job is scheduled whenever an app requests the seed, and it's been at least 1 day
  * since the last fetch. If WebView is never used, the job will never run. The 1-day minimum fetch
  * period is chosen as a trade-off between seed freshness (and prompt delivery of feature
  * killswitches) and data and battery usage. Various Android versions may enforce longer periods,
@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit;
  * be used outside the variations service. For the equivalent fetch in Chrome, see
  * AsyncInitTaskRunner$FetchSeedTask.
  */
+// TODO(https://crbug.com/1328637): consider using BackgroundTaskScheduler instead of JobService
 public class AwVariationsSeedFetcher extends JobService {
     @VisibleForTesting
     public static final String JOB_REQUEST_COUNT_KEY = "RequestCount";
@@ -223,6 +224,11 @@ public class AwVariationsSeedFetcher extends JobService {
                 Log.e(TAG, "Failed to write variations SharedPreferences to disk");
             }
         }
+    }
+
+    @Override
+    public void onCreate() {
+        ServicesStatsHelper.recordServiceLaunch(NonembeddedService.AW_VARIATIONS_SEED_FETCHER);
     }
 
     @Override

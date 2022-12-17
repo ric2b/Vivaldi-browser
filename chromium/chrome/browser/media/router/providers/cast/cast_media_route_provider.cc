@@ -106,7 +106,7 @@ void CastMediaRouteProvider::CreateRoute(const std::string& source_id,
                                          const std::string& sink_id,
                                          const std::string& presentation_id,
                                          const url::Origin& origin,
-                                         int32_t tab_id,
+                                         int32_t frame_tree_node_id,
                                          base::TimeDelta timeout,
                                          bool incognito,
                                          CreateRouteCallback callback) {
@@ -121,7 +121,7 @@ void CastMediaRouteProvider::CreateRoute(const std::string& source_id,
                       sink_id, source_id, presentation_id);
     std::move(callback).Run(absl::nullopt, nullptr,
                             std::string("Sink not found"),
-                            RouteRequestResult::ResultCode::SINK_NOT_FOUND);
+                            mojom::RouteRequestResultCode::SINK_NOT_FOUND);
     return;
   }
 
@@ -133,18 +133,18 @@ void CastMediaRouteProvider::CreateRoute(const std::string& source_id,
                       sink_id, source_id, presentation_id);
     std::move(callback).Run(
         absl::nullopt, nullptr, std::string("Invalid source"),
-        RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER);
+        mojom::RouteRequestResultCode::NO_SUPPORTED_PROVIDER);
     return;
   }
-
   activity_manager_->LaunchSession(*cast_source, *sink, presentation_id, origin,
-                                   tab_id, incognito, std::move(callback));
+                                   frame_tree_node_id, incognito,
+                                   std::move(callback));
 }
 
 void CastMediaRouteProvider::JoinRoute(const std::string& media_source,
                                        const std::string& presentation_id,
                                        const url::Origin& origin,
-                                       int32_t tab_id,
+                                       int32_t frame_tree_node_id,
                                        base::TimeDelta timeout,
                                        bool incognito,
                                        JoinRouteCallback callback) {
@@ -153,7 +153,7 @@ void CastMediaRouteProvider::JoinRoute(const std::string& media_source,
   if (!cast_source) {
     std::move(callback).Run(
         absl::nullopt, nullptr, std::string("Invalid source"),
-        RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER);
+        mojom::RouteRequestResultCode::NO_SUPPORTED_PROVIDER);
     logger_->LogError(mojom::LogCategory::kRoute, kLoggerComponent,
                       "Attempted to join a route with an invalid source", "",
                       media_source, presentation_id);
@@ -172,12 +172,12 @@ void CastMediaRouteProvider::JoinRoute(const std::string& media_source,
     LOG(ERROR) << "missing activity manager";
     std::move(callback).Run(absl::nullopt, nullptr,
                             "Internal error: missing activity manager",
-                            RouteRequestResult::ResultCode::UNKNOWN_ERROR);
+                            mojom::RouteRequestResultCode::UNKNOWN_ERROR);
     return;
   }
-
-  activity_manager_->JoinSession(*cast_source, presentation_id, origin, tab_id,
-                                 incognito, std::move(callback));
+  activity_manager_->JoinSession(*cast_source, presentation_id, origin,
+                                 frame_tree_node_id, incognito,
+                                 std::move(callback));
 }
 
 void CastMediaRouteProvider::TerminateRoute(const std::string& route_id,

@@ -39,6 +39,7 @@
 .cipd
 .classpath
 .code-coverage
+.coverage
 .cproject
 .dir-locals.el
 .emulator_sdk
@@ -237,7 +238,6 @@ vs-chromium-project.txt
 /ios/third_party/earl_grey/src
 /ios/third_party/earl_grey2/src
 /ios/third_party/edo/src
-/ios/third_party/gcdwebserver/src
 /ios/third_party/gtx/src
 /ios/third_party/material_components_ios/src
 /ios/third_party/material_font_disk_loader_ios/src
@@ -319,11 +319,13 @@ vs-chromium-project.txt
 /tools/metrics/histograms/metadata/*/*.before.pretty-print.xml
 /tools/metrics/histograms/enums.before.pretty-print.xml
 /tools/page_cycler/acid3
+/tools/bluetooth
 /tools/reclient
 /tools/skia_goldctl/
 /tools/tryserver
 /tools/win/link_limiter/build
 /ui/file_manager/internal
+/ui/file_manager/tsconfig.json
 /ui/keyboard/keyboard_mojom_bindings.xml
 /ui/surface/surface.xml
 /ui/surface/surface_gpu_tests.xml

@@ -118,7 +118,7 @@ KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
         GURL(local_state->GetString(vivaldiprefs::kVivaldiSyncServerUrl));
 
   auto vpss = std::make_unique<VivaldiSyncServiceImpl>(
-      &init_params, profile,
+      std::move(init_params), profile->GetPrefs(),
       VivaldiAccountManagerFactory::GetForProfile(profile));
 
   vpss->Initialize();

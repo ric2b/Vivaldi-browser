@@ -345,7 +345,10 @@ class OutputDeviceMixerImpl::MixableOutputStream final
   void Close() final {
     DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
     if (mixer_) {
-      mixer_->CloseStream(mix_track_);
+      // `CloseStream` destroys `mix_track_`. Use `ExtractAsDangling` to clear
+      // the underlying pointer and return another raw_ptr instance that is
+      // allowed to dangle.
+      mixer_->CloseStream(mix_track_.ExtractAsDangling());
     }
 
     // To match the typical usage pattern of AudioOutputStream.
@@ -361,7 +364,7 @@ class OutputDeviceMixerImpl::MixableOutputStream final
   // MixableOutputStream becomes a no-op.
   base::WeakPtr<OutputDeviceMixerImpl> const mixer_
       GUARDED_BY_CONTEXT(owning_sequence_);
-  const raw_ptr<MixTrack> mix_track_;  // Valid only when |mixer_| is valid.
+  raw_ptr<MixTrack> mix_track_;  // Valid only when |mixer_| is valid.
 };
 
 // Logs mixing statistics upon the destruction. Should be created when mixing

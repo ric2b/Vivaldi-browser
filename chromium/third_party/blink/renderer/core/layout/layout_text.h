@@ -420,12 +420,6 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   void LogicalStartingPointAndHeight(LogicalOffset& logical_starting_point,
                                      LayoutUnit& logical_height) const;
 
-  // Returns the size of area occupied by this LayoutText.
-  LayoutUnit PhysicalAreaSize() const;
-
-  // Returns the rightmost offset occupied by this LayoutText.
-  LayoutUnit PhysicalRightOffset() const;
-
   // For LayoutShiftTracker. Saves the value of LogicalStartingPoint() value
   // during the previous paint invalidation.
   LogicalOffset PreviousLogicalStartingPoint() const {
@@ -512,7 +506,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation&,
                    const PhysicalOffset&,
-                   HitTestAction) final {
+                   HitTestPhase) final {
     NOT_DESTROYED();
     NOTREACHED();
     return false;

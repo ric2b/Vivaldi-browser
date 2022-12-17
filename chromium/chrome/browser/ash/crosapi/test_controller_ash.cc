@@ -15,13 +15,17 @@
 #include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/callback_helpers.h"
+#include "base/containers/flat_set.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
+#include "chrome/browser/ash/crosapi/input_method_test_interface_ash.h"
 #include "chrome/browser/ash/crosapi/vpn_service_ash.h"
 #include "chrome/browser/ash/crosapi/window_util.h"
+#include "chrome/browser/ash/printing/cups_print_job_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sharesheet/sharesheet_service.h"
@@ -29,11 +33,14 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
-#include "chromeos/dbus/shill/shill_profile_client.h"
-#include "chromeos/dbus/shill/shill_third_party_vpn_driver_client.h"
+#include "chromeos/ash/components/dbus/shill/shill_profile_client.h"
+#include "chromeos/ash/components/dbus/shill/shill_third_party_vpn_driver_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/cryptohome_misc_client.h"
+#include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "components/version_info/version_info.h"
 #include "crypto/sha2.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "printing/buildflags/buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -46,6 +53,16 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/interaction/interaction_test_util_views.h"
+
+#if defined(USE_CUPS)
+#include "chrome/browser/ash/printing/cups_print_job.h"
+#include "chrome/browser/ash/printing/cups_print_job_manager_factory.h"
+#include "chrome/browser/ash/printing/history/print_job_history_service.h"
+#include "chrome/browser/ash/printing/history/print_job_history_service_factory.h"
+#include "chrome/browser/ash/printing/history/print_job_history_service_impl.h"
+#include "chrome/browser/ash/printing/history/test_print_job_database.h"
+#include "chrome/browser/ash/printing/test_cups_print_job_manager.h"
+#endif  // defined(USE_CUPS)
 
 namespace crosapi {
 
@@ -348,6 +365,9 @@ void TestControllerAsh::RegisterStandaloneBrowserTestController(
   standalone_browser_test_controller_.Bind(std::move(controller));
   standalone_browser_test_controller_.set_disconnect_handler(base::BindOnce(
       &TestControllerAsh::OnControllerDisconnected, base::Unretained(this)));
+
+  if (!on_standalone_browser_test_controller_bound_.is_signaled())
+    on_standalone_browser_test_controller_bound_.Signal();
 }
 
 void TestControllerAsh::WaiterFinished(OverviewWaiter* waiter) {
@@ -374,7 +394,7 @@ void TestControllerAsh::OnGetContextMenuForShelfItem(
     std::unique_ptr<ui::SimpleMenuModel> model) {
   std::vector<std::string> items;
   items.reserve(model->GetItemCount());
-  for (int i = 0; i < model->GetItemCount(); ++i) {
+  for (size_t i = 0; i < model->GetItemCount(); ++i) {
     items.push_back(base::UTF16ToUTF8(model->GetLabelAt(i)));
   }
   std::move(callback).Run(std::move(items));
@@ -383,7 +403,7 @@ void TestControllerAsh::OnGetContextMenuForShelfItem(
 void TestControllerAsh::OnSelectContextMenuForShelfItem(
     SelectContextMenuForShelfItemCallback callback,
     const std::string& item_id,
-    uint32_t index,
+    size_t index,
     std::unique_ptr<ui::SimpleMenuModel> model) {
   if (index < model->GetItemCount()) {
     model->ActivatedAt(index, /*event_flags=*/0);
@@ -441,6 +461,106 @@ void TestControllerAsh::BindTestShillController(
   std::move(callback).Run();
 }
 
+#if defined(USE_CUPS)
+namespace {
+
+// Observer that destroys itself after receiving OnPrintJobFinished event.
+class SelfOwnedPrintJobHistoryServiceObserver
+    : public ash::PrintJobHistoryService::Observer {
+ public:
+  SelfOwnedPrintJobHistoryServiceObserver(
+      ash::PrintJobHistoryService* print_job_history_service,
+      base::OnceClosure on_print_job_finished)
+      : on_print_job_finished_(std::move(on_print_job_finished)) {
+    observation_.Observe(print_job_history_service);
+  }
+  ~SelfOwnedPrintJobHistoryServiceObserver() override = default;
+
+ private:
+  // PrintJobHistoryService::Observer:
+  void OnPrintJobFinished(const ash::printing::proto::PrintJobInfo&) override {
+    observation_.Reset();
+    std::move(on_print_job_finished_).Run();
+    delete this;
+  }
+
+  base::ScopedObservation<ash::PrintJobHistoryService,
+                          ash::PrintJobHistoryService::Observer>
+      observation_{this};
+  base::OnceClosure on_print_job_finished_;
+};
+
+}  // namespace
+
+#endif  // defined(USE_CUPS)
+
+void TestControllerAsh::CreateAndCancelPrintJob(
+    const std::string& job_title,
+    CreateAndCancelPrintJobCallback callback) {
+#if defined(USE_CUPS)
+  auto* profile = ProfileManager::GetPrimaryUserProfile();
+
+  auto* observer = new SelfOwnedPrintJobHistoryServiceObserver(
+      ash::PrintJobHistoryServiceFactory::GetForBrowserContext(profile),
+      std::move(callback));
+  DCHECK(observer);
+
+  std::unique_ptr<ash::CupsPrintJob> print_job =
+      std::make_unique<ash::CupsPrintJob>(
+          chromeos::Printer(), /*job_id=*/0, job_title, /*total_page_number=*/1,
+          ::printing::PrintJob::Source::PRINT_PREVIEW,
+          /*source_id=*/"", ash::printing::proto::PrintSettings());
+
+  ash::CupsPrintJobManager* print_job_manager =
+      ash::CupsPrintJobManagerFactory::GetForBrowserContext(profile);
+  print_job->set_state(ash::CupsPrintJob::State::STATE_NONE);
+  print_job_manager->NotifyJobCreated(print_job->GetWeakPtr());
+  print_job->set_state(ash::CupsPrintJob::State::STATE_CANCELLED);
+  print_job_manager->NotifyJobCanceled(print_job->GetWeakPtr());
+#endif  // defined(USE_CUPS)
+}
+
+void TestControllerAsh::BindShillClientTestInterface(
+    mojo::PendingReceiver<crosapi::mojom::ShillClientTestInterface> receiver,
+    BindShillClientTestInterfaceCallback callback) {
+  mojo::MakeSelfOwnedReceiver<crosapi::mojom::ShillClientTestInterface>(
+      std::make_unique<crosapi::ShillClientTestInterfaceAsh>(),
+      std::move(receiver));
+  std::move(callback).Run();
+}
+
+void TestControllerAsh::GetSanitizedActiveUsername(
+    GetSanitizedActiveUsernameCallback callback) {
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  user_manager::User* user = user_manager->GetActiveUser();
+  CHECK(user);
+
+  ::user_data_auth::GetSanitizedUsernameRequest request;
+
+  request.set_username(
+      cryptohome::CreateAccountIdentifierFromAccountId(user->GetAccountId())
+          .account_id());
+  ash::CryptohomeMiscClient::Get()->GetSanitizedUsername(
+      request,
+      base::BindOnce(
+          [](GetSanitizedActiveUsernameCallback callback,
+             absl::optional<::user_data_auth::GetSanitizedUsernameReply>
+                 result) {
+            CHECK(result.has_value());
+            std::move(callback).Run(result->sanitized_username());
+          },
+          std::move(callback)));
+}
+
+void TestControllerAsh::BindInputMethodTestInterface(
+    mojo::PendingReceiver<crosapi::mojom::InputMethodTestInterface> receiver,
+    BindInputMethodTestInterfaceCallback callback) {
+  mojo::MakeSelfOwnedReceiver<crosapi::mojom::InputMethodTestInterface>(
+      std::make_unique<crosapi::InputMethodTestInterfaceAsh>(),
+      std::move(receiver));
+  std::move(callback).Run();
+}
+
 // This class waits for overview mode to either enter or exit and fires a
 // callback. This class will fire the callback at most once.
 class TestControllerAsh::OverviewWaiter : public ash::OverviewObserver {
@@ -494,7 +614,7 @@ class TestControllerAsh::OverviewWaiter : public ash::OverviewObserver {
 };
 
 TestShillControllerAsh::TestShillControllerAsh() {
-  chromeos::ShillProfileClient::Get()->GetTestInterface()->AddProfile(
+  ash::ShillProfileClient::Get()->GetTestInterface()->AddProfile(
       "/network/test", ash::ProfileHelper::GetUserIdHashFromProfile(
                            ProfileManager::GetPrimaryUserProfile()));
 }
@@ -510,8 +630,7 @@ void TestShillControllerAsh::OnPacketReceived(
   const std::string shill_key = shill::kObjectPathBase + key;
   // On linux ShillThirdPartyVpnDriverClient is initialized as Fake and
   // therefore exposes a testing interface.
-  auto* client =
-      chromeos::ShillThirdPartyVpnDriverClient::Get()->GetTestInterface();
+  auto* client = ash::ShillThirdPartyVpnDriverClient::Get()->GetTestInterface();
   CHECK(client);
   client->OnPacketReceived(shill_key,
                            std::vector<char>(data.begin(), data.end()));
@@ -526,10 +645,104 @@ void TestShillControllerAsh::OnPlatformMessage(
   const std::string shill_key = shill::kObjectPathBase + key;
   // On linux ShillThirdPartyVpnDriverClient is initialized as Fake and
   // therefore exposes a testing interface.
-  auto* client =
-      chromeos::ShillThirdPartyVpnDriverClient::Get()->GetTestInterface();
+  auto* client = ash::ShillThirdPartyVpnDriverClient::Get()->GetTestInterface();
   CHECK(client);
   client->OnPlatformMessage(shill_key, message);
+}
+
+////////////
+// ShillClientTestInterfaceAsh
+
+ShillClientTestInterfaceAsh::ShillClientTestInterfaceAsh() = default;
+ShillClientTestInterfaceAsh::~ShillClientTestInterfaceAsh() = default;
+
+void ShillClientTestInterfaceAsh::AddDevice(const std::string& device_path,
+                                            const std::string& type,
+                                            const std::string& name,
+                                            AddDeviceCallback callback) {
+  auto* device_test = ash::ShillDeviceClient::Get()->GetTestInterface();
+  device_test->AddDevice(device_path, type, name);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::ClearDevices(ClearDevicesCallback callback) {
+  auto* device_test = ash::ShillDeviceClient::Get()->GetTestInterface();
+  device_test->ClearDevices();
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::SetDeviceProperty(
+    const std::string& device_path,
+    const std::string& name,
+    ::base::Value value,
+    bool notify_changed,
+    SetDevicePropertyCallback callback) {
+  auto* device_test = ash::ShillDeviceClient::Get()->GetTestInterface();
+  device_test->SetDeviceProperty(device_path, name, value, notify_changed);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::SetSimLocked(const std::string& device_path,
+                                               bool enabled,
+                                               SetSimLockedCallback callback) {
+  auto* device_test = ash::ShillDeviceClient::Get()->GetTestInterface();
+  device_test->SetSimLocked(device_path, enabled);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::AddService(
+    const std::string& service_path,
+    const std::string& guid,
+    const std::string& name,
+    const std::string& type,
+    const std::string& state,
+    bool visible,
+    SetDevicePropertyCallback callback) {
+  auto* service_test = ash::ShillServiceClient::Get()->GetTestInterface();
+  service_test->AddService(service_path, guid, name, type, state, visible);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::ClearServices(
+    ClearServicesCallback callback) {
+  auto* service_test = ash::ShillServiceClient::Get()->GetTestInterface();
+  service_test->ClearServices();
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::SetServiceProperty(
+    const std::string& service_path,
+    const std::string& property,
+    base::Value value,
+    SetServicePropertyCallback callback) {
+  auto* service_test = ash::ShillServiceClient::Get()->GetTestInterface();
+  service_test->SetServiceProperty(service_path, property, value);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::AddProfile(const std::string& profile_path,
+                                             const std::string& userhash,
+                                             AddProfileCallback callback) {
+  auto* profile_test = ash::ShillProfileClient::Get()->GetTestInterface();
+  profile_test->AddProfile(profile_path, userhash);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::AddServiceToProfile(
+    const std::string& profile_path,
+    const std::string& service_path,
+    AddServiceToProfileCallback callback) {
+  auto* profile_test = ash::ShillProfileClient::Get()->GetTestInterface();
+  profile_test->AddService(profile_path, service_path);
+  std::move(callback).Run();
+}
+
+void ShillClientTestInterfaceAsh::AddIPConfig(const std::string& ip_config_path,
+                                              ::base::Value properties,
+                                              AddIPConfigCallback callback) {
+  auto* ip_config_test = ash::ShillIPConfigClient::Get()->GetTestInterface();
+  ip_config_test->AddIPConfig(ip_config_path, properties);
+  std::move(callback).Run();
 }
 
 }  // namespace crosapi

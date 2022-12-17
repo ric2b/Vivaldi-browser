@@ -66,6 +66,10 @@ class CalendarDateCellView : public CalendarViewController::Observer,
   // The row index in the date's month view.
   int row_index() const { return row_index_; }
 
+  // Whether this CalendarDateCellView represents today, when the view was
+  // constructed.
+  bool is_today() const { return is_today_; }
+
  protected:
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;
@@ -96,6 +100,10 @@ class CalendarDateCellView : public CalendarViewController::Observer,
 
   // If the current cell is selected.
   bool is_selected_ = false;
+
+  // Whether this CalendarDateCellView represented today when the view was
+  // constructed.
+  const bool is_today_;
 
   // The number of event for `date_`.
   int event_number_ = 0;
@@ -136,6 +144,9 @@ class ASH_EXPORT CalendarMonthView : public views::View,
   // Disable each cell's focus behavior.
   void DisableFocus();
 
+  // Updates is_fetched_ for each date cell and schedules repaint.
+  void UpdateIsFetchedAndRepaint(bool updated_is_fetched);
+
   // Gets the cells of each row that should be first focused on.
   std::vector<CalendarDateCellView*> focused_cells() { return focused_cells_; }
 
@@ -144,9 +155,6 @@ class ASH_EXPORT CalendarMonthView : public views::View,
 
   // Returns the index of this month view's last row.
   int last_row_index() const { return last_row_index_; }
-
-  // Updates is_fetched_ for each date cell and schedules repaint.
-  void UpdateIsFetchedAndRepaint(bool updated_is_fetched);
 
  private:
   // For unit tests.

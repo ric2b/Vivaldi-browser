@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
-import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
-import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
+import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import './icons.js';
@@ -83,7 +83,7 @@ Polymer({
       type: Array,
       value() {
         return [];
-      }
+      },
     },
 
     /**
@@ -94,7 +94,7 @@ Polymer({
       type: Array,
       value() {
         return [];
-      }
+      },
     },
 
     /**
@@ -115,7 +115,7 @@ Polymer({
       type: Number,
       value() {
         return -1;
-      }
+      },
     },
 
     /**
@@ -128,11 +128,14 @@ Polymer({
       type: Array,
       value() {
         return [
-          {text: 'Unknown', value: 0}, {text: 'Mouse', value: 0x2580},
-          {text: 'Keyboard', value: 0x2540}, {text: 'Audio', value: 0x240408},
-          {text: 'Phone', value: 0x7a020c}, {text: 'Computer', value: 0x104}
+          {text: 'Unknown', value: 0},
+          {text: 'Mouse', value: 0x2580},
+          {text: 'Keyboard', value: 0x2540},
+          {text: 'Audio', value: 0x240408},
+          {text: 'Phone', value: 0x7a020c},
+          {text: 'Computer', value: 0x104},
         ];
-      }
+      },
     },
 
     /**
@@ -144,7 +147,7 @@ Polymer({
       type: Array,
       value() {
         return [];
-      }
+      },
     },
 
     /**
@@ -156,7 +159,7 @@ Polymer({
       type: Array,
       value() {
         return [];
-      }
+      },
     },
   },
 
@@ -341,7 +344,7 @@ Polymer({
       deviceList.push(devices[i]);
       this.devicePaths[devices[i].path] = {
         predefined: predefined,
-        index: deviceList.length - 1
+        index: deviceList.length - 1,
       };
     }
 
@@ -473,7 +476,7 @@ Polymer({
     this.push('devices', device);
     this.devicePaths[device.path] = {
       predefined: false,
-      index: this.devices.length - 1
+      index: this.devices.length - 1,
     };
   },
 

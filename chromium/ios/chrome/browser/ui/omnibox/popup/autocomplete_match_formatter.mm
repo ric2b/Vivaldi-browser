@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/suggestion_answer.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_icon_formatter.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_swift.h"
@@ -23,16 +24,6 @@
 #endif
 
 namespace {
-
-// The current popup UI variation according to flags.
-PopupUIVariation CurrentPopupUIVariation() {
-  std::string variationName = base::GetFieldTrialParamValueByFeature(
-      kIOSOmniboxUpdatedPopupUI, kIOSOmniboxUpdatedPopupUIVariationName);
-
-  return variationName == kIOSOmniboxUpdatedPopupUIVariation1
-             ? PopupUIVariationOne
-             : PopupUIVariationTwo;
-}
 
 // The color of the main text of a suggest cell.
 UIColor* SuggestionTextColor() {
@@ -113,9 +104,9 @@ UIColor* DimColorIncognito() {
                            useDeemphasizedStyling:YES];
     }
   } else {
-    // The detail text should be the URL (|_match.contents|) for non-search
-    // suggestions and the entity type (|_match.description|) for search entity
-    // suggestions. For all other search suggestions, |_match.description| is
+    // The detail text should be the URL (`_match.contents`) for non-search
+    // suggestions and the entity type (`_match.description`) for search entity
+    // suggestions. For all other search suggestions, `_match.description` is
     // the name of the currently selected search engine, which for mobile we
     // suppress.
     NSString* detailText = nil;
@@ -130,8 +121,7 @@ UIColor* DimColorIncognito() {
     // instead.
     UIColor* suggestionDetailTextColor = nil;
     if (_match.type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
-        (base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI) &&
-         CurrentPopupUIVariation() == PopupUIVariationTwo)) {
+        IsOmniboxActionsVisualTreatment2()) {
       suggestionDetailTextColor = SuggestionDetailTextColor();
     } else {
       suggestionDetailTextColor = SuggestionTextColor();
@@ -182,8 +172,8 @@ UIColor* DimColorIncognito() {
                        useDeemphasizedStyling:NO];
     }
   } else {
-    // The text should be search term (|_match.contents|) for searches,
-    // otherwise page title (|_match.description|).
+    // The text should be search term (`_match.contents`) for searches,
+    // otherwise page title (`_match.description`).
     std::u16string textString =
         !self.isURL ? _match.contents : _match.description;
     NSString* text = base::SysUTF16ToNSString(textString);
@@ -206,6 +196,11 @@ UIColor* DimColorIncognito() {
   }
 }
 
+- (NSAttributedString*)omniboxPreviewText {
+  return [[NSAttributedString alloc]
+      initWithString:base::SysUTF16ToNSString(_match.fill_into_edit)];
+}
+
 // The primary purpose of this list is to omit the "what you typed" types, since
 // those are simply the input in the omnibox and copying the text back to the
 // omnibox would be a noop. However, this list also omits other types that are
@@ -214,11 +209,13 @@ UIColor* DimColorIncognito() {
   return _match.type == AutocompleteMatchType::BOOKMARK_TITLE ||
          _match.type == AutocompleteMatchType::CALCULATOR ||
          _match.type == AutocompleteMatchType::HISTORY_BODY ||
+         _match.type == AutocompleteMatchType::HISTORY_CLUSTER ||
          _match.type == AutocompleteMatchType::HISTORY_KEYWORD ||
          _match.type == AutocompleteMatchType::HISTORY_TITLE ||
          _match.type == AutocompleteMatchType::HISTORY_URL ||
          _match.type == AutocompleteMatchType::NAVSUGGEST ||
          _match.type == AutocompleteMatchType::NAVSUGGEST_PERSONALIZED ||
+         _match.type == AutocompleteMatchType::STARTER_PACK ||
          _match.type == AutocompleteMatchType::SEARCH_HISTORY ||
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED ||
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL ||
@@ -233,8 +230,31 @@ UIColor* DimColorIncognito() {
   return _match.has_tab_match.value_or(false);
 }
 
+- (BOOL)isClipboardMatch {
+  if (base::FeatureList::IsEnabled(kOmniboxPasteButton)) {
+    return _match.type == AutocompleteMatchType::CLIPBOARD_URL ||
+           _match.type == AutocompleteMatchType::CLIPBOARD_TEXT ||
+           _match.type == AutocompleteMatchType::CLIPBOARD_IMAGE;
+  } else {
+    return NO;
+  }
+}
+
 - (id<OmniboxPedal>)pedal {
   return self.pedalData;
+}
+
+- (UIImage*)matchTypeIcon {
+  return GetOmniboxSuggestionIconForAutocompleteMatchType(
+      _match.type, /* is_starred */ false);
+}
+
+- (BOOL)isMatchTypeSearch {
+  return AutocompleteMatch::IsSearchType(_match.type);
+}
+
+- (CrURL*)destinationUrl {
+  return [[CrURL alloc] initWithGURL:_match.destination_url];
 }
 
 #pragma mark tail suggest
@@ -270,7 +290,7 @@ UIColor* DimColorIncognito() {
                    useDeemphasizedStyling:useDeemphasizedStyling];
 }
 
-// Adds the |additional_text| and |status_text| from |line| to the given
+// Adds the `additional_text` and `status_text` from `line` to the given
 // attributed string. This is necessary because answers get their main text
 // from the match contents instead of the ImageLine's text_fields. This is
 // because those fields contain server-provided formatting, which aren't used.
@@ -319,7 +339,7 @@ UIColor* DimColorIncognito() {
 }
 
 // Return correct formatting attributes for the given style.
-// |useDeemphasizedStyling| is necessary because some styles (e.g. SUPERIOR)
+// `useDeemphasizedStyling` is necessary because some styles (e.g. SUPERIOR)
 // should take their color from the surrounding line; they don't have a fixed
 // color.
 - (NSDictionary<NSAttributedStringKey, id>*)

@@ -29,8 +29,8 @@ WaylandDisplayHandler::WaylandDisplayHandler(WaylandDisplayOutput* output,
 }
 
 WaylandDisplayHandler::~WaylandDisplayHandler() {
-  if (color_management_output_resource_)
-    wl_resource_set_user_data(color_management_output_resource_, nullptr);
+  for (auto& obs : observers_)
+    obs.OnOutputDestroyed();
   if (xdg_output_resource_)
     wl_resource_set_user_data(xdg_output_resource_, nullptr);
   output_->UnregisterOutput(output_resource_);
@@ -66,6 +66,10 @@ void WaylandDisplayHandler::AddObserver(WaylandDisplayObserver* observer) {
   }
 }
 
+void WaylandDisplayHandler::RemoveObserver(WaylandDisplayObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 int64_t WaylandDisplayHandler::id() const {
   DCHECK(output_);
   return output_->id();
@@ -82,20 +86,6 @@ void WaylandDisplayHandler::OnDisplayMetricsChanged(
   bool needs_done = false;
   for (auto& observer : observers_)
     needs_done |= observer.SendDisplayMetrics(display, changed_metrics);
-
-  // if the color space changed, send a
-  // zcr_color_management_output.color_space_changed() event as well as
-  // wl_output_send_done() event.
-  if ((changed_metrics & DISPLAY_METRIC_COLOR_SPACE) ==
-      DISPLAY_METRIC_COLOR_SPACE) {
-    if (color_management_output_resource_) {
-      // TODO(b/217795369): will need to track and send events for each
-      // potential client's zcr color management output resource.
-      zcr_color_management_output_v1_send_color_space_changed(
-          color_management_output_resource_);
-      needs_done = true;
-    }
-  }
 
   if (needs_done) {
     if (wl_resource_get_version(output_resource_) >=
@@ -124,26 +114,6 @@ void WaylandDisplayHandler::UnsetXdgOutputResource() {
   xdg_output_resource_ = nullptr;
 }
 
-void WaylandDisplayHandler::OnGetColorManagementOutput(
-    wl_resource* color_management_output_resource) {
-  DCHECK(!color_management_output_resource_);
-  color_management_output_resource_ = color_management_output_resource;
-
-  // TODO(b/215778539): send an appropriate EDR value. Currently using dummy
-  // value of 3000. Also find out when dynamic range changes and if it happens
-  // in OnDisplayMetricsChanged().
-  zcr_color_management_output_v1_send_extended_dynamic_range(
-      color_management_output_resource_, 3000);
-
-  wl_output_send_done(output_resource_);
-  wl_client_flush(wl_resource_get_client(output_resource_));
-}
-
-void WaylandDisplayHandler::UnsetColorManagementOutputResource() {
-  DCHECK(color_management_output_resource_);
-  color_management_output_resource_ = nullptr;
-}
-
 void WaylandDisplayHandler::XdgOutputSendLogicalPosition(
     const gfx::Point& position) {
   zxdg_output_v1_send_logical_position(xdg_output_resource_, position.x(),
@@ -153,6 +123,10 @@ void WaylandDisplayHandler::XdgOutputSendLogicalPosition(
 void WaylandDisplayHandler::XdgOutputSendLogicalSize(const gfx::Size& size) {
   zxdg_output_v1_send_logical_size(xdg_output_resource_, size.width(),
                                    size.height());
+}
+
+void WaylandDisplayHandler::XdgOutputSendDescription(const std::string& desc) {
+  zxdg_output_v1_send_description(xdg_output_resource_, desc.c_str());
 }
 
 bool WaylandDisplayHandler::SendDisplayMetrics(const display::Display& display,
@@ -223,6 +197,7 @@ bool WaylandDisplayHandler::SendDisplayMetrics(const display::Display& display,
   if (xdg_output_resource_) {
     XdgOutputSendLogicalPosition(origin);
     XdgOutputSendLogicalSize(display.bounds().size());
+    XdgOutputSendDescription(display.label());
   } else {
     if (wl_resource_get_version(output_resource_) >=
         WL_OUTPUT_SCALE_SINCE_VERSION) {
@@ -234,6 +209,20 @@ bool WaylandDisplayHandler::SendDisplayMetrics(const display::Display& display,
   }
 
   return true;
+}
+
+void WaylandDisplayHandler::OnOutputDestroyed() {
+  // destroying itself.
+  RemoveObserver(this);
+}
+
+size_t WaylandDisplayHandler::CountObserversForTesting() const {
+  size_t count = 0;
+  for (auto& obs : observers_) {
+    if (&obs != this)
+      count++;
+  }
+  return count;
 }
 
 }  // namespace wayland

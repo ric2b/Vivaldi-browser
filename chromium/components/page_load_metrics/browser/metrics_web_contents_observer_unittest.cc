@@ -19,6 +19,7 @@
 #include "components/page_load_metrics/browser/test_metrics_web_contents_observer_embedder.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/back_forward_cache_util.h"
@@ -123,7 +124,7 @@ class MetricsWebContentsObserverTest
         std::vector<blink::UseCounterFeature>(),
         std::vector<mojom::ResourceDataUpdatePtr>(),
         mojom::FrameRenderDataUpdatePtr(absl::in_place), timing.Clone(),
-        mojom::InputTimingPtr(absl::in_place), blink::MobileFriendliness());
+        mojom::InputTimingPtr(absl::in_place), blink::MobileFriendliness(), 0);
   }
 
   void SimulateTimingUpdate(const mojom::PageLoadTiming& timing,
@@ -148,7 +149,7 @@ class MetricsWebContentsObserverTest
                                 mojom::FrameRenderDataUpdatePtr(absl::in_place),
                                 mojom::CpuTimingPtr(absl::in_place),
                                 mojom::InputTimingPtr(absl::in_place),
-                                blink::MobileFriendliness());
+                                blink::MobileFriendliness(), 0);
   }
 
   virtual std::unique_ptr<TestMetricsWebContentsObserverEmbedder>

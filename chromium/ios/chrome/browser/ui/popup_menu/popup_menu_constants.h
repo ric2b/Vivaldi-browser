@@ -42,6 +42,8 @@ extern NSString* const kToolsMenuReadingListId;
 extern NSString* const kToolsMenuOtherDevicesId;
 // History item accessibility Identifier.
 extern NSString* const kToolsMenuHistoryId;
+// Passwords item accessibility Identifier.
+extern NSString* const kToolsMenuPasswordsId;
 // Report an issue item accessibility Identifier.
 extern NSString* const kToolsMenuReportAnIssueId;
 // Translate item accessibility Identifier.
@@ -52,6 +54,8 @@ extern NSString* const kToolsMenuFindInPageId;
 extern NSString* const kToolsMenuRequestDesktopId;
 // Settings item accessibility Identifier.
 extern NSString* const kToolsMenuSettingsId;
+// Settings action item accessibility Identifier.
+extern NSString* const kToolsMenuSettingsActionId;
 // Help item accessibility Identifier.
 extern NSString* const kToolsMenuHelpId;
 // Request mobile item accessibility Identifier.
@@ -86,5 +90,7 @@ extern NSString* const kToolsMenuFollow;
 extern NSString* const kToolsMenuUnfollow;
 // Clear Browsing Data item accessibility identifier.
 extern NSString* const kToolsMenuClearBrowsingData;
+// Share Chrome accessibility Identifier.
+extern NSString* const kToolsMenuShareChromeId;
 
 #endif  // IOS_CHROME_BROWSER_UI_POPUP_MENU_POPUP_MENU_CONSTANTS_H_

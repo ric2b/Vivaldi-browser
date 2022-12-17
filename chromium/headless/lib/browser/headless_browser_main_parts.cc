@@ -15,6 +15,7 @@
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_devtools.h"
 #include "headless/lib/browser/headless_screen.h"
+#include "headless/lib/browser/headless_select_file_dialog_factory.h"
 
 #if defined(HEADLESS_USE_PREFS)
 #include "components/os_crypt/os_crypt.h"  // nogncheck
@@ -61,6 +62,7 @@ int HeadlessBrowserMainParts::PreMainMessageLoopRun() {
   MaybeStartLocalDevToolsHttpHandler();
   browser_->PlatformInitialize();
   browser_->RunOnStartCallback();
+  HeadlessSelectFileDialogFactory::SetUp();
   return content::RESULT_CODE_NORMAL_EXIT;
 }
 
@@ -70,6 +72,10 @@ void HeadlessBrowserMainParts::WillRunMainMessageLoop(
 }
 
 void HeadlessBrowserMainParts::PostMainMessageLoopRun() {
+  // HeadlessBrowserImpl::Shutdown() is supposed to remove all browser contexts
+  // and therefore all associated web contents, however crbug.com/1342152
+  // implies it may not be happening.
+  CHECK_EQ(0U, browser_->GetAllBrowserContexts().size());
   if (devtools_http_handler_started_) {
     StopLocalDevToolsHttpHandler();
     devtools_http_handler_started_ = false;

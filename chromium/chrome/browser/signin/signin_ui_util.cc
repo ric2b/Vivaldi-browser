@@ -182,14 +182,6 @@ std::u16string GetAuthenticatedUsername(Profile* profile) {
   return base::UTF8ToUTF16(user_display_name);
 }
 
-void InitializePrefsForProfile(Profile* profile) {
-  if (profile->IsNewProfile()) {
-    // Suppresses the upgrade tutorial for a new profile.
-    profile->GetPrefs()->SetInteger(prefs::kProfileAvatarTutorialShown,
-                                    kUpgradeWelcomeTutorialShowMax + 1);
-  }
-}
-
 void ShowSigninErrorLearnMorePage(Profile* profile) {
   static const char kSigninErrorLearnMoreUrl[] =
       "https://support.google.com/chrome/answer/1181420?";
@@ -334,8 +326,7 @@ void EnableSyncFromMultiAccountPromo(Profile* profile,
 
   signin_metrics::LogSigninAccessPointStarted(access_point,
                                               existing_account_promo_action);
-  signin_metrics::RecordSigninUserActionForAccessPoint(
-      access_point, existing_account_promo_action);
+  signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
   GetSigninUiDelegate()->ShowTurnSyncOnUI(
       profile, access_point, existing_account_promo_action,
       signin_metrics::Reason::kSigninPrimaryAccount, account.account_id,
@@ -494,13 +485,6 @@ void RecordProfileMenuViewShown(Profile* profile) {
     base::RecordAction(base::UserMetricsAction("ProfileMenu_Opened_Guest"));
   } else if (profile->IsIncognitoProfile()) {
     base::RecordAction(base::UserMetricsAction("ProfileMenu_Opened_Incognito"));
-  }
-
-  base::TimeTicks last_shown =
-      AvatarButtonUserData::GetAnimatedIdentityLastShown(profile);
-  if (!last_shown.is_null()) {
-    base::UmaHistogramLongTimes("Profile.Menu.OpenedAfterAvatarAnimation",
-                                base::TimeTicks::Now() - last_shown);
   }
 }
 

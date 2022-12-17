@@ -13,13 +13,13 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_tile_view.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_parent_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_return_to_recent_tab_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_return_to_recent_tab_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_selection_actions.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_shortcut_tile_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_whats_new_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/query_suggestion_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
@@ -46,13 +46,17 @@
 namespace {
 // The width of the modules.
 const int kModuleWidthCompact = 343;
-const int kModuleWidthRegular = 382;
+const int kModuleWidthRegular = 432;
 
 // The height of the modules;
 const int kModuleHeight = 139;
 
 // The spacing between the modules.
 const float kModuleVerticalSpacing = 16.0f;
+const float kModuleMinimizedVerticalSpacing = 14.0f;
+
+// The horizontal spacing between trending query views.
+const float kTrendingQueryViewHorizontalSpacing = 12.0f;
 
 // Returns the module width depending on the horizontal trait collection.
 CGFloat GetModuleWidthForHorizontalTraitCollection(
@@ -60,6 +64,13 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   return traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular
              ? kModuleWidthRegular
              : kModuleWidthCompact;
+}
+
+// Returns the spacing between modules.
+CGFloat ModuleVerticalSpacing() {
+  return ShouldMinimizeSpacingForModuleRefresh()
+             ? kModuleMinimizedVerticalSpacing
+             : kModuleVerticalSpacing;
 }
 }  // namespace
 
@@ -85,9 +96,12 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
 // The Return To Recent Tab view.
 @property(nonatomic, strong)
     ContentSuggestionsReturnToRecentTabView* returnToRecentTabTile;
+// Module container of |returnToRecentTabTile|.
+@property(nonatomic, strong)
+    ContentSuggestionsModuleContainer* returnToRecentTabContainer;
 // The WhatsNew view.
 @property(nonatomic, strong) ContentSuggestionsWhatsNewView* whatsNewView;
-// StackView holding all of |mostVisitedViews|.
+// StackView holding all of `mostVisitedViews`.
 @property(nonatomic, strong) UIStackView* mostVisitedStackView;
 // Module Container for the Most Visited Tiles.
 @property(nonatomic, strong)
@@ -108,6 +122,21 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
 // List of all of the Shortcut views.
 @property(nonatomic, strong)
     NSMutableArray<ContentSuggestionsShortcutTileView*>* shortcutsViews;
+// Module Container for Trending Queries.
+@property(nonatomic, strong)
+    ContentSuggestionsModuleContainer* trendingQueriesModuleContainer;
+@property(nonatomic, strong) UIView* trendingQueriesContainingView;
+// Width Anchor of the Trending Queries module container.
+@property(nonatomic, strong)
+    NSLayoutConstraint* trendingQueriesContainerWidthAnchor;
+// List of all of the Trending Query views.
+@property(nonatomic, strong)
+    NSMutableArray<QuerySuggestionView*>* trendingQueryViews;
+// List of all UITapGestureRecognizers created for the Trending Queries.
+@property(nonatomic, strong)
+    NSMutableArray<UITapGestureRecognizer*>* trendingQueryTapRecognizers;
+// Set to YES when the trending queries fetch has been received.
+@property(nonatomic, assign) BOOL trendingQueriesReceived;
 
 @end
 
@@ -130,7 +159,7 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   self.verticalStackView = [[UIStackView alloc] init];
   self.verticalStackView.translatesAutoresizingMaskIntoConstraints = NO;
   if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-    self.verticalStackView.spacing = kModuleVerticalSpacing;
+    self.verticalStackView.spacing = ModuleVerticalSpacing();
   }
   self.verticalStackView.axis = UILayoutConstraintAxisVertical;
   // A centered alignment will ensure the views are centered.
@@ -141,7 +170,10 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   [self.view addSubview:self.verticalStackView];
   if (IsContentSuggestionsUIModuleRefreshEnabled()) {
     // Add bottom spacing to last module by applying it after
-    // `_verticalStackView`.
+    // `_verticalStackView`. If ShouldMinimizeSpacingForModuleRefresh() is YES,
+    // then no space is added after the last module.
+    CGFloat bottomSpacing =
+        ShouldMinimizeSpacingForModuleRefresh() ? 0 : kModuleVerticalSpacing;
     [NSLayoutConstraint activateConstraints:@[
       [self.verticalStackView.leadingAnchor
           constraintEqualToAnchor:self.view.leadingAnchor],
@@ -151,7 +183,7 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
           constraintEqualToAnchor:self.view.topAnchor],
       [self.verticalStackView.bottomAnchor
           constraintEqualToAnchor:self.view.bottomAnchor
-                         constant:-kModuleVerticalSpacing]
+                         constant:-bottomSpacing]
     ]];
   } else {
     AddSameConstraints(self.view, self.verticalStackView);
@@ -162,13 +194,13 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   if (self.returnToRecentTabTile) {
     UIView* parentView = self.returnToRecentTabTile;
     if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-      ContentSuggestionsModuleContainer* returnToRecentTabContainer =
-          [[ContentSuggestionsModuleContainer alloc]
-              initWithContentView:self.returnToRecentTabTile
-                       moduleType:
-                           ContentSuggestionsModuleTypeReturnToRecentTab];
-      parentView = returnToRecentTabContainer;
-      [self.verticalStackView addArrangedSubview:returnToRecentTabContainer];
+      self.returnToRecentTabContainer = [[ContentSuggestionsModuleContainer
+          alloc]
+          initWithContentView:self.returnToRecentTabTile
+                   moduleType:ContentSuggestionsModuleTypeReturnToRecentTab];
+      parentView = self.returnToRecentTabContainer;
+      [self.verticalStackView
+          addArrangedSubview:self.returnToRecentTabContainer];
     } else {
       [self addUIElement:self.returnToRecentTabTile
           withCustomBottomSpacing:content_suggestions::
@@ -193,7 +225,8 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
       [self.whatsNewView.heightAnchor constraintEqualToConstant:size.height]
     ]];
   }
-  if (IsContentSuggestionsUIModuleRefreshEnabled() || self.mostVisitedViews) {
+  if (IsContentSuggestionsUIModuleRefreshEnabled() ||
+      [self.mostVisitedViews count] > 0) {
     self.mostVisitedStackView = [[UIStackView alloc] init];
     self.mostVisitedStackView.axis = UILayoutConstraintAxisHorizontal;
     self.mostVisitedStackView.distribution = UIStackViewDistributionFillEqually;
@@ -244,6 +277,40 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
       [parentView.heightAnchor constraintGreaterThanOrEqualToConstant:height]
     ]];
     [self populateMostVisitedModule];
+  }
+  BOOL noTrendingQueriesToShow =
+      self.trendingQueriesReceived && [self.trendingQueryViews count] == 0;
+  if (IsTrendingQueriesModuleEnabled() && !noTrendingQueriesToShow) {
+    self.trendingQueriesContainingView = [[UIView alloc] init];
+    self.trendingQueriesModuleContainer =
+        [[ContentSuggestionsModuleContainer alloc]
+            initWithContentView:self.trendingQueriesContainingView
+                     moduleType:ContentSuggestionsModuleTypeTrendingQueries];
+    if (!self.trendingQueryViews) {
+      self.trendingQueriesModuleContainer.isPlaceholder = YES;
+      self.trendingQueryViews = [NSMutableArray array];
+      // Add placeholder tiles if Most Visited Tiles are not ready yet.
+      for (int i = 0; i < 4; i++) {
+        QuerySuggestionView* view =
+            [[QuerySuggestionView alloc] initWithConfiguration:nil];
+        view.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.trendingQueryViews addObject:view];
+      }
+    }
+    [self.verticalStackView
+        addArrangedSubview:self.trendingQueriesModuleContainer];
+    self.trendingQueriesContainerWidthAnchor =
+        [self.trendingQueriesModuleContainer.widthAnchor
+            constraintEqualToConstant:
+                GetModuleWidthForHorizontalTraitCollection(
+                    self.traitCollection)];
+    [NSLayoutConstraint activateConstraints:@[
+      self.trendingQueriesContainerWidthAnchor,
+      [self.trendingQueriesModuleContainer.heightAnchor
+          constraintEqualToConstant:[self.trendingQueriesModuleContainer
+                                            calculateIntrinsicHeight]]
+    ]];
+    [self populateTrendingQueriesModule];
   }
   if (self.shortcutsViews) {
     self.shortcutsStackView = [[UIStackView alloc] init];
@@ -329,6 +396,10 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
         GetModuleWidthForHorizontalTraitCollection(self.traitCollection);
     self.mostVisitedContainerWidthAnchor.constant =
         GetModuleWidthForHorizontalTraitCollection(self.traitCollection);
+    if (IsTrendingQueriesModuleEnabled()) {
+      self.trendingQueriesContainerWidthAnchor.constant =
+          GetModuleWidthForHorizontalTraitCollection(self.traitCollection);
+    }
   }
 }
 
@@ -336,6 +407,14 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
 
 - (void)showReturnToRecentTabTileWithConfig:
     (ContentSuggestionsReturnToRecentTabItem*)config {
+  if (self.returnToRecentTabTile) {
+    [self.returnToRecentTabTile removeFromSuperview];
+
+    if (IsContentSuggestionsUIModuleRefreshEnabled()) {
+      [self.returnToRecentTabContainer removeFromSuperview];
+    }
+  }
+
   self.returnToRecentTabTile = [[ContentSuggestionsReturnToRecentTabView alloc]
       initWithConfiguration:config];
   self.returnToRecentTabTapRecognizer = [[UITapGestureRecognizer alloc]
@@ -349,14 +428,14 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   if ([[self.verticalStackView arrangedSubviews] count]) {
     UIView* parentView = self.returnToRecentTabTile;
     if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-      ContentSuggestionsModuleContainer* returnToRecentTabContainer =
-          [[ContentSuggestionsModuleContainer alloc]
-              initWithContentView:self.returnToRecentTabTile
-                       moduleType:
-                           ContentSuggestionsModuleTypeReturnToRecentTab];
-      parentView = returnToRecentTabContainer;
-      [self.verticalStackView insertArrangedSubview:returnToRecentTabContainer
-                                            atIndex:0];
+      self.returnToRecentTabContainer = [[ContentSuggestionsModuleContainer
+          alloc]
+          initWithContentView:self.returnToRecentTabTile
+                   moduleType:ContentSuggestionsModuleTypeReturnToRecentTab];
+      parentView = self.returnToRecentTabContainer;
+      [self.verticalStackView
+          insertArrangedSubview:self.returnToRecentTabContainer
+                        atIndex:0];
     } else {
       [self.verticalStackView insertArrangedSubview:self.returnToRecentTabTile
                                             atIndex:0];
@@ -370,7 +449,7 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
     [NSLayoutConstraint activateConstraints:@[
       [parentView.widthAnchor constraintEqualToConstant:cardWidth],
       [parentView.heightAnchor
-          constraintEqualToConstant:kReturnToRecentTabSize.height]
+          constraintEqualToConstant:ReturnToRecentTabHeight()]
     ]];
     [self.audience returnToRecentTabWasAdded];
   }
@@ -382,15 +461,17 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
     self.returnToRecentTabTile.iconImageView.image = config.icon;
     self.returnToRecentTabTile.iconImageView.hidden = NO;
   }
+  if (config.title) {
+    self.returnToRecentTabTile.subtitleLabel.text = config.subtitle;
+  }
 }
 
 - (void)hideReturnToRecentTabTile {
-  UIView* moduleView = [self.returnToRecentTabTile superview];
   [self.returnToRecentTabTile removeFromSuperview];
   self.returnToRecentTabTile = nil;
   if (IsContentSuggestionsUIModuleRefreshEnabled()) {
     // Remove module container.
-    [moduleView removeFromSuperview];
+    [self.returnToRecentTabContainer removeFromSuperview];
   }
 }
 
@@ -475,6 +556,45 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   }
 }
 
+- (void)setTrendingQueriesWithConfigs:
+    (NSArray<QuerySuggestionConfig*>*)configs {
+  DCHECK(IsTrendingQueriesModuleEnabled());
+  self.trendingQueriesReceived = YES;
+  if (!self.trendingQueriesContainingView) {
+    self.trendingQueriesContainingView = [[UIView alloc] init];
+  }
+  self.trendingQueriesModuleContainer.isPlaceholder = NO;
+
+  if ([self.trendingQueryViews count]) {
+    for (QuerySuggestionView* view in self.trendingQueryViews) {
+      [view removeFromSuperview];
+    }
+    [self.trendingQueryViews removeAllObjects];
+    [self.trendingQueryTapRecognizers removeAllObjects];
+  } else {
+    self.trendingQueryViews = [NSMutableArray array];
+  }
+
+  if ((int)[configs count] < kMaxTrendingQueries) {
+    // No Trending Queries to show. Remove module.
+    [self.trendingQueriesContainingView removeFromSuperview];
+    [self.trendingQueriesModuleContainer removeFromSuperview];
+    [self.audience moduleWasRemoved];
+    return;
+  }
+
+  for (QuerySuggestionConfig* config in configs) {
+    QuerySuggestionView* view =
+        [[QuerySuggestionView alloc] initWithConfiguration:config];
+    //      view.menuProvider = self.menuProvider;
+    view.accessibilityIdentifier =
+        [NSString stringWithFormat:@"%@", config.query];
+    view.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.trendingQueryViews addObject:view];
+  }
+  [self populateTrendingQueriesModule];
+}
+
 - (void)updateMostVisitedTileConfig:(ContentSuggestionsMostVisitedItem*)config {
   for (ContentSuggestionsMostVisitedTileView* view in self.mostVisitedViews) {
     if (view.config == config) {
@@ -490,27 +610,39 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   CGFloat height = 0;
   if (IsContentSuggestionsUIModuleRefreshEnabled()) {
     height += [self.mostVisitedModuleContainer calculateIntrinsicHeight] +
-              kModuleVerticalSpacing;
+              ModuleVerticalSpacing();
   } else if ([self.mostVisitedViews count] > 0) {
     height += MostVisitedCellSize(
                   UIApplication.sharedApplication.preferredContentSizeCategory)
                   .height +
               kMostVisitedBottomMargin;
   }
+  if (IsContentSuggestionsUIModuleRefreshEnabled() &&
+      IsTrendingQueriesModuleEnabled() &&
+      [self.trendingQueriesModuleContainer superview]) {
+    height += [self.trendingQueriesModuleContainer calculateIntrinsicHeight];
+    // Only skip bottom spacing if minimizing spacing and Trending Queries is
+    // the last module.
+    if (!ShouldMinimizeSpacingForModuleRefresh() ||
+        !ShouldHideShortcutsForTrendingQueries()) {
+      height += ModuleVerticalSpacing();
+    }
+  }
   if ([self.shortcutsViews count] > 0) {
     if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-      height += [self.shortcutsModuleContainer calculateIntrinsicHeight] +
-                kModuleVerticalSpacing;
+      height += [self.shortcutsModuleContainer calculateIntrinsicHeight];
+      if (!ShouldMinimizeSpacingForModuleRefresh()) {
+        height += ModuleVerticalSpacing();
+      }
     } else {
       height +=
           MostVisitedCellSize(
               UIApplication.sharedApplication.preferredContentSizeCategory)
-              .height +
-          kMostVisitedBottomMargin;
+              .height;
     }
   }
   if (self.returnToRecentTabTile) {
-    height += (kReturnToRecentTabSize.height + kModuleVerticalSpacing);
+    height += (ReturnToRecentTabHeight() + ModuleVerticalSpacing());
   }
   if (self.whatsNewView) {
     height += MostVisitedCellSize(
@@ -568,7 +700,7 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
       CGPoint point = [sender locationInView:returnToRecentTabView];
       if (point.x < 0 || point.y < 0 ||
           point.x > kReturnToRecentTabSize.width ||
-          point.y > kReturnToRecentTabSize.height) {
+          point.y > ReturnToRecentTabHeight()) {
         // Reset the highlighted state and do nothing if the gesture ended
         // outside of the tile.
         returnToRecentTabView.backgroundColor = [UIColor clearColor];
@@ -579,6 +711,11 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   } else if ([sender.view
                  isKindOfClass:[ContentSuggestionsWhatsNewView class]]) {
     [self.suggestionCommandHandler handlePromoTapped];
+  } else if ([sender.view isKindOfClass:[QuerySuggestionView class]]) {
+    QuerySuggestionView* querySuggestionView =
+        static_cast<QuerySuggestionView*>(sender.view);
+    [self.suggestionCommandHandler
+        loadSuggestedQuery:querySuggestionView.config];
   }
 }
 
@@ -591,11 +728,11 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
   }
 }
 
-// Add the elements in |mostVisitedViews| into |verticalStackView|, constructing
-// |verticalStackView| beforehand if it has not been yet.
+// Add the elements in `mostVisitedViews` into `verticalStackView`, constructing
+// `verticalStackView` beforehand if it has not been yet.
 - (void)populateMostVisitedModule {
   // If viewDidLoad has been called before the first valid Most Visited Tiles
-  // are available, construct |mostVisitedStackView|.
+  // are available, construct `mostVisitedStackView`.
   if (!IsContentSuggestionsUIModuleRefreshEnabled() && self.verticalStackView &&
       !self.mostVisitedStackView) {
     self.mostVisitedStackView = [[UIStackView alloc] init];
@@ -636,6 +773,58 @@ CGFloat GetModuleWidthForHorizontalTraitCollection(
     [self.mostVisitedTapRecognizers addObject:tapRecognizer];
     [self.mostVisitedStackView addArrangedSubview:view];
   }
+}
+
+- (void)populateTrendingQueriesModule {
+  for (QuerySuggestionView* view in self.trendingQueryViews) {
+    UITapGestureRecognizer* tapRecognizer = [[UITapGestureRecognizer alloc]
+        initWithTarget:self
+                action:@selector(contentSuggestionsElementTapped:)];
+    [view addGestureRecognizer:tapRecognizer];
+    tapRecognizer.enabled = YES;
+    [self.trendingQueryTapRecognizers addObject:tapRecognizer];
+    [self.trendingQueriesContainingView addSubview:view];
+  }
+  QuerySuggestionView* query1 = self.trendingQueryViews[0];
+  [query1 addBottomSeparator];
+  QuerySuggestionView* query2 = self.trendingQueryViews[1];
+  [query2 addBottomSeparator];
+  QuerySuggestionView* query3 = self.trendingQueryViews[2];
+  QuerySuggestionView* query4 = self.trendingQueryViews[3];
+  [NSLayoutConstraint activateConstraints:@[
+    [query1.topAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView.topAnchor],
+    [query1.leadingAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView
+                                    .leadingAnchor],
+    [query2.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:query1.trailingAnchor
+                                    constant:
+                                        kTrendingQueryViewHorizontalSpacing],
+    [query2.topAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView.topAnchor],
+    [query2.trailingAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView
+                                    .trailingAnchor],
+    [query3.leadingAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView
+                                    .leadingAnchor],
+    [query3.bottomAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView
+                                    .bottomAnchor],
+    [query3.topAnchor constraintEqualToAnchor:query1.bottomAnchor],
+    [query4.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:query3.trailingAnchor
+                                    constant:
+                                        kTrendingQueryViewHorizontalSpacing],
+    [query4.bottomAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView
+                                    .bottomAnchor],
+    [query4.trailingAnchor
+        constraintEqualToAnchor:self.trendingQueriesContainingView
+                                    .trailingAnchor],
+    [query4.topAnchor constraintEqualToAnchor:query3.topAnchor]
+  ]];
 }
 
 @end

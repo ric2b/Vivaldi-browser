@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/follow/follow_util.h"
 
+#import <UIKit/UIKit.h>
+
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
@@ -15,6 +17,19 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+// Set the Follow IPH apperance threshold to 15 minutes.
+NSTimeInterval const kFollowIPHAppearanceThresholdInSeconds = 15 * 60;
+// Set the Follow IPH apperance threshold for site to 1 day.
+NSTimeInterval const kFollowIPHAppearanceThresholdForSiteInSeconds =
+    24 * 60 * 60;
+}  // namespace
+
+NSString* const kFollowIPHPreviousDisplayEvents =
+    @"FollowIPHPreviousDisplayEvents";
+NSString* const kFollowIPHHost = @"host";
+NSString* const kFollowIPHDate = @"date";
 
 FollowActionState GetFollowActionState(web::WebState* webState) {
   // This method should be called only if the feature flag has been enabled.
@@ -45,4 +60,86 @@ FollowActionState GetFollowActionState(web::WebState* webState) {
     return FollowActionStateEnabled;
   }
   return FollowActionStateHidden;
+}
+
+#pragma mark - For Follow IPH
+bool IsFollowIPHShownFrequencyEligible(NSString* host) {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+
+  NSArray<NSDictionary*>* followIPHPreviousDisplayEvents =
+      [defaults objectForKey:kFollowIPHPreviousDisplayEvents];
+  NSDate* lastIPHDate;
+  for (NSDictionary* event in followIPHPreviousDisplayEvents) {
+    if ([[event objectForKey:kFollowIPHHost] isEqualToString:host]) {
+      lastIPHDate = [event objectForKey:kFollowIPHDate];
+      break;
+    }
+  }
+
+  // Return false if its too soon to show another IPH.
+  if (lastIPHDate &&
+      [[NSDate
+          dateWithTimeIntervalSinceNow:-kFollowIPHAppearanceThresholdInSeconds]
+          compare:lastIPHDate] == NSOrderedAscending) {
+    return false;
+  }
+
+  // Return true if it is long enough to show another IPH for this specific
+  // site.
+  if (!lastIPHDate ||
+      [[NSDate dateWithTimeIntervalSinceNow:
+                   -kFollowIPHAppearanceThresholdForSiteInSeconds]
+          compare:lastIPHDate] != NSOrderedAscending) {
+    return true;
+  }
+
+  return false;
+}
+
+void StoreFollowIPHDisplayEvent(NSString* host) {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  NSArray<NSDictionary*>* followIPHPreviousDisplayEvents =
+      [defaults objectForKey:kFollowIPHPreviousDisplayEvents];
+
+  NSMutableArray<NSDictionary*>* updatedDisplayEvents =
+      [[NSMutableArray alloc] init];
+
+  // Add object to the the recentEvents while cleaning up dictionary that has a
+  // date older than 1 day ago. Since the follow iph will show in a specific
+  // regularity, this clean up logic will not execute often
+  NSDate* uselessDate =
+      [NSDate dateWithTimeIntervalSinceNow:
+                  -kFollowIPHAppearanceThresholdForSiteInSeconds];
+
+  for (NSDictionary* event in followIPHPreviousDisplayEvents) {
+    if ([[event objectForKey:kFollowIPHDate] compare:uselessDate] !=
+        NSOrderedAscending) {
+      [updatedDisplayEvents addObject:event];
+    }
+  }
+
+  // Add the last follow IPH event.
+  NSDictionary* IPHPresentingEvent =
+      @{kFollowIPHHost : host, kFollowIPHDate : [NSDate date]};
+  [updatedDisplayEvents addObject:IPHPresentingEvent];
+
+  [defaults setObject:updatedDisplayEvents
+               forKey:kFollowIPHPreviousDisplayEvents];
+  [defaults synchronize];
+}
+
+void RemoveLastFollowIPHDisplayEvent() {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  NSArray<NSDictionary*>* followIPHPreviousDisplayEvents =
+      [defaults objectForKey:kFollowIPHPreviousDisplayEvents];
+
+  DCHECK(followIPHPreviousDisplayEvents);
+
+  NSMutableArray<NSDictionary*>* updatedDisplayEvents =
+      [followIPHPreviousDisplayEvents mutableCopy];
+  [updatedDisplayEvents removeLastObject];
+
+  [defaults setObject:updatedDisplayEvents
+               forKey:kFollowIPHPreviousDisplayEvents];
+  [defaults synchronize];
 }

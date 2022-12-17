@@ -37,8 +37,7 @@ class PasswordManagerDriverFactory::PasswordManagerDriver
   void PasswordFormsParsed(
       const std::vector<autofill::FormData>& raw_forms_data) override {}
   void PasswordFormsRendered(
-      const std::vector<autofill::FormData>& raw_visible_forms_data,
-      bool did_stop_loading) override {}
+      const std::vector<autofill::FormData>& raw_visible_forms_data) override {}
   void PasswordFormSubmitted(const autofill::FormData& raw_form_data) override {
   }
   void InformAboutUserInput(const autofill::FormData& raw_form_data) override {
@@ -105,6 +104,9 @@ void PasswordManagerDriverFactory::BindPasswordManagerDriver(
     mojo::PendingAssociatedReceiver<autofill::mojom::PasswordManagerDriver>
         pending_receiver,
     content::RenderFrameHost* render_frame_host) {
+  // TODO(https://crbug.com/1233858): Similarly to the
+  // ContentPasswordManagerDriver implementation. Do not bind the interface when
+  // the RenderFrameHost is in an anonymous iframe.
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
   if (!web_contents)

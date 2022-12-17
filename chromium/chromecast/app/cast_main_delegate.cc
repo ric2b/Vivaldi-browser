@@ -36,6 +36,7 @@
 #include "components/crash/core/common/crash_key.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -71,7 +72,7 @@ CastMainDelegate::CastMainDelegate() {}
 
 CastMainDelegate::~CastMainDelegate() {}
 
-bool CastMainDelegate::BasicStartupComplete(int* exit_code) {
+absl::optional<int> CastMainDelegate::BasicStartupComplete() {
   RegisterPathProvider();
 
   logging::LoggingSettings settings;
@@ -159,7 +160,7 @@ bool CastMainDelegate::BasicStartupComplete(int* exit_code) {
   if (settings.logging_dest & logging::LOG_TO_FILE) {
     LOG(INFO) << "Logging to file: " << settings.log_file_path;
   }
-  return false;
+  return absl::nullopt;
 }
 
 void CastMainDelegate::PreSandboxStartup() {
@@ -233,13 +234,14 @@ void CastMainDelegate::ZygoteForked() {
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
 bool CastMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
-  return invoked_in == InvokedIn::kChildProcess;
+  return absl::holds_alternative<InvokedInChildProcess>(invoked_in);
 }
 
-void CastMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
+absl::optional<int> CastMainDelegate::PostEarlyInitialization(
+    InvokedIn invoked_in) {
   if (ShouldCreateFeatureList(invoked_in)) {
     // content is handling the feature list.
-    return;
+    return absl::nullopt;
   }
 
   DCHECK(cast_feature_list_creator_);
@@ -258,7 +260,9 @@ void CastMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
   //
   // The FieldTrialList is a dependency of the feature list. In tests, it is
   // constructed as part of the test suite.
-  if (invoked_in == InvokedIn::kBrowserProcessUnderTest) {
+  const auto* invoked_in_browser =
+      absl::get_if<InvokedInBrowserProcess>(&invoked_in);
+  if (invoked_in_browser && invoked_in_browser->is_running_test) {
     DCHECK(base::FieldTrialList::GetInstance());
   } else {
     // This is intentionally leaked since it needs to live for the duration of
@@ -279,6 +283,8 @@ void CastMainDelegate::PostEarlyInitialization(InvokedIn invoked_in) {
   ProcessType process_type = use_browser_config ? ProcessType::kCastBrowser
                                                 : ProcessType::kCastService;
   cast_feature_list_creator_->CreatePrefServiceAndFeatureList(process_type);
+
+  return absl::nullopt;
 }
 
 void CastMainDelegate::InitializeResourceBundle() {

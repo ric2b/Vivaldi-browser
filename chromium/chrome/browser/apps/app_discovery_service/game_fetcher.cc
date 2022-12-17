@@ -156,8 +156,9 @@ void GameFetcher::GetIcon(const std::string& app_id,
       base::BindOnce(&DecodeIcon, std::move(callback), size_hint_in_dip));
 }
 
-void GameFetcher::OnAppDataUpdated(const proto::AppWithLocaleList& app_data) {
-  last_results_ = GetAppsForCurrentLocale(app_data);
+void GameFetcher::OnAppWithLocaleListUpdated(
+    const proto::AppWithLocaleList& app_with_locale_list) {
+  last_results_ = GetAppsForCurrentLocale(app_with_locale_list);
   std::map<std::string, Result*> map;
   for (auto& result : last_results_) {
     map.emplace(result.GetAppId(), &result);
@@ -167,9 +168,9 @@ void GameFetcher::OnAppDataUpdated(const proto::AppWithLocaleList& app_data) {
 }
 
 std::vector<Result> GameFetcher::GetAppsForCurrentLocale(
-    const proto::AppWithLocaleList& app_data) {
+    const proto::AppWithLocaleList& app_with_locale_list) {
   std::vector<Result> results;
-  for (const auto& app_with_locale : app_data.app_with_locale()) {
+  for (const auto& app_with_locale : app_with_locale_list.app_with_locale()) {
     if (!AvailableInCurrentLocale(app_with_locale.locale_availability())) {
       continue;
     }
@@ -189,16 +190,16 @@ std::vector<Result> GameFetcher::GetAppsForCurrentLocale(
     if (localised_name.empty()) {
       continue;
     }
-    results.push_back(Result(AppSource::kGames,
-                             app_with_locale.app().app_id_for_platform(),
-                             localised_name, std::move(extras)));
+    results.emplace_back(AppSource::kGames,
+                         app_with_locale.app().app_id_for_platform(),
+                         localised_name, std::move(extras));
   }
   return results;
 }
 
 void GameFetcher::SetResultsForTesting(
-    const proto::AppWithLocaleList& app_data) {
-  OnAppDataUpdated(app_data);
+    const proto::AppWithLocaleList& app_with_locale_list) {
+  OnAppWithLocaleListUpdated(app_with_locale_list);
 }
 
 void GameFetcher::SetLocaleForTesting(const std::string& country,

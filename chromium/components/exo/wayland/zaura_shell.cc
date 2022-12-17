@@ -20,6 +20,7 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/chromeos_buildflags.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "components/exo/display.h"
 #include "components/exo/seat.h"
@@ -272,6 +273,10 @@ void aura_surface_unset_pin(wl_client* client, wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->Unpin();
 }
 
+void aura_surface_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
 const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_frame,
     aura_surface_set_parent,
@@ -300,6 +305,7 @@ const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_initial_workspace,
     aura_surface_set_pin,
     aura_surface_unset_pin,
+    aura_surface_release,
 };
 
 }  // namespace
@@ -723,6 +729,14 @@ void AuraToplevel::OnOriginChange(const gfx::Point& origin) {
   wl_client_flush(wl_resource_get_client(aura_toplevel_resource_));
 }
 
+void AuraToplevel::SetDecoration(SurfaceFrameType type) {
+  shell_surface_->OnSetFrame(type);
+}
+
+void AuraToplevel::SetZOrder(ui::ZOrderLevel z_order) {
+  shell_surface_->SetZOrder(z_order);
+}
+
 void AuraToplevel::SetClientUsesScreenCoordinates() {
   supports_window_bounds_ = true;
   shell_surface_->set_client_supports_window_bounds(true);
@@ -739,9 +753,17 @@ void AuraToplevel::SetSystemModal(bool modal) {
   shell_surface_->SetSystemModal(modal);
 }
 
-void AddState(wl_array* states, xdg_toplevel_state state) {
-  xdg_toplevel_state* value = static_cast<xdg_toplevel_state*>(
-      wl_array_add(states, sizeof(xdg_toplevel_state)));
+void AuraToplevel::SetFloat() {
+  shell_surface_->SetFloat();
+}
+
+void AuraToplevel::UnsetFloat() {
+  shell_surface_->UnsetFloat();
+}
+
+template <class T>
+void AddState(wl_array* states, T state) {
+  T* value = static_cast<T*>(wl_array_add(states, sizeof(T)));
   DCHECK(value);
   *value = state;
 }
@@ -758,11 +780,22 @@ void AuraToplevel::OnConfigure(const gfx::Rect& bounds,
   // TODO(crbug/1250129): Support snapped state.
   if (IsFullscreenOrPinnedWindowStateType(state_type)) {
     AddState(&states, XDG_TOPLEVEL_STATE_FULLSCREEN);
+    if (shell_surface_->GetWidget()->GetNativeWindow()->GetProperty(
+            chromeos::kImmersiveImpliedByFullscreen))
+      AddState(&states, ZAURA_TOPLEVEL_STATE_IMMERSIVE);
   }
   if (resizing)
     AddState(&states, XDG_TOPLEVEL_STATE_RESIZING);
   if (activated)
     AddState(&states, XDG_TOPLEVEL_STATE_ACTIVATED);
+
+  if (state_type == chromeos::WindowStateType::kPrimarySnapped)
+    AddState(&states, ZAURA_TOPLEVEL_STATE_SNAPPED_PRIMARY);
+  if (state_type == chromeos::WindowStateType::kSecondarySnapped)
+    AddState(&states, ZAURA_TOPLEVEL_STATE_SNAPPED_SECONDARY);
+
+  if (state_type == chromeos::WindowStateType::kMinimized)
+    AddState(&states, ZAURA_TOPLEVEL_STATE_MINIMIZED);
 
   zaura_toplevel_send_configure(aura_toplevel_resource_, bounds.x(), bounds.y(),
                                 bounds.width(), bounds.height(), &states);
@@ -780,14 +813,41 @@ void AuraPopup::SetClientSubmitsSurfacesInPixelCoordinates(bool enable) {
   shell_surface_->set_client_submits_surfaces_in_pixel_coordinates(enable);
 }
 
+void AuraPopup::SetDecoration(SurfaceFrameType type) {
+  shell_surface_->OnSetFrame(type);
+}
+
+void AuraPopup::SetMenu() {
+  shell_surface_->SetMenu();
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+namespace {
+
+void aura_output_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct zaura_output_interface aura_output_implementation = {
+    aura_output_release,
+};
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // aura_output_interface:
 
-AuraOutput::AuraOutput(wl_resource* resource) : resource_(resource) {}
+AuraOutput::AuraOutput(wl_resource* resource,
+                       WaylandDisplayHandler* display_handler)
+    : resource_(resource), display_handler_(display_handler) {
+  display_handler_->AddObserver(this);
+}
 
-AuraOutput::~AuraOutput() = default;
+AuraOutput::~AuraOutput() {
+  if (display_handler_)
+    display_handler_->RemoveObserver(this);
+}
 
 bool AuraOutput::SendDisplayMetrics(const display::Display& display,
                                     uint32_t changed_metrics) {
@@ -861,6 +921,15 @@ bool AuraOutput::SendDisplayMetrics(const display::Display& display,
   }
 
   return true;
+}
+
+void AuraOutput::OnOutputDestroyed() {
+  display_handler_->RemoveObserver(this);
+  display_handler_ = nullptr;
+}
+
+bool AuraOutput::HasDisplayHandlerForTesting() const {
+  return !!display_handler_;
 }
 
 void AuraOutput::SendInsets(const gfx::Insets& insets) {
@@ -1095,6 +1164,14 @@ void aura_toplevel_unset_system_modal(wl_client* client,
   GetUserDataAs<AuraToplevel>(resource)->SetSystemModal(false);
 }
 
+void aura_toplevel_set_float(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->SetFloat();
+}
+
+void aura_toplevel_unset_float(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->UnsetFloat();
+}
+
 void aura_toplevel_set_restore_info_with_window_id_source(
     wl_client* client,
     wl_resource* resource,
@@ -1102,6 +1179,54 @@ void aura_toplevel_set_restore_info_with_window_id_source(
     const char* restore_window_id_source) {
   GetUserDataAs<AuraToplevel>(resource)->SetRestoreInfoWithWindowIdSource(
       restore_session_id, restore_window_id_source);
+}
+
+SurfaceFrameType AuraTopLevelDecorationType(uint32_t decoration_type) {
+  switch (decoration_type) {
+    case ZAURA_TOPLEVEL_DECORATION_TYPE_NONE:
+      return SurfaceFrameType::NONE;
+    case ZAURA_TOPLEVEL_DECORATION_TYPE_NORMAL:
+      return SurfaceFrameType::NORMAL;
+    case ZAURA_TOPLEVEL_DECORATION_TYPE_SHADOW:
+      return SurfaceFrameType::SHADOW;
+    default:
+      VLOG(2) << "Unknown aura-toplevel decoration type: " << decoration_type;
+      return SurfaceFrameType::NONE;
+  }
+}
+
+void aura_toplevel_set_decoration(wl_client* client,
+                                  wl_resource* resource,
+                                  uint32_t type) {
+  GetUserDataAs<AuraToplevel>(resource)->SetDecoration(
+      AuraTopLevelDecorationType(type));
+}
+
+void aura_toplevel_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+ui::ZOrderLevel AuraTopLevelZOrderLevel(uint32_t z_order_level) {
+  switch (z_order_level) {
+    case ZAURA_TOPLEVEL_Z_ORDER_LEVEL_NORMAL:
+      return ui::ZOrderLevel::kNormal;
+    case ZAURA_TOPLEVEL_Z_ORDER_LEVEL_FLOATING_WINDOW:
+      return ui::ZOrderLevel::kFloatingWindow;
+    case ZAURA_TOPLEVEL_Z_ORDER_LEVEL_FLOATING_UI_ELEMENT:
+      return ui::ZOrderLevel::kFloatingUIElement;
+    case ZAURA_TOPLEVEL_Z_ORDER_LEVEL_SECURITY_SURFACE:
+      return ui::ZOrderLevel::kSecuritySurface;
+  }
+
+  NOTREACHED();
+  return ui::ZOrderLevel::kNormal;
+}
+
+void aura_toplevel_set_z_order(wl_client* client,
+                               wl_resource* resource,
+                               uint32_t z_order) {
+  GetUserDataAs<AuraToplevel>(resource)->SetZOrder(
+      AuraTopLevelZOrderLevel(z_order));
 }
 
 const struct zaura_toplevel_interface aura_toplevel_implementation = {
@@ -1113,6 +1238,11 @@ const struct zaura_toplevel_interface aura_toplevel_implementation = {
     aura_toplevel_set_system_modal,
     aura_toplevel_unset_system_modal,
     aura_toplevel_set_restore_info_with_window_id_source,
+    aura_toplevel_set_decoration,
+    aura_toplevel_release,
+    aura_toplevel_set_float,
+    aura_toplevel_unset_float,
+    aura_toplevel_set_z_order,
 };
 
 void aura_popup_surface_submission_in_pixel_coordinates(wl_client* client,
@@ -1121,8 +1251,40 @@ void aura_popup_surface_submission_in_pixel_coordinates(wl_client* client,
       ->SetClientSubmitsSurfacesInPixelCoordinates(true);
 }
 
+SurfaceFrameType AuraPopupDecorationType(uint32_t decoration_type) {
+  switch (decoration_type) {
+    case ZAURA_POPUP_DECORATION_TYPE_NONE:
+      return SurfaceFrameType::NONE;
+    case ZAURA_POPUP_DECORATION_TYPE_NORMAL:
+      return SurfaceFrameType::NORMAL;
+    case ZAURA_POPUP_DECORATION_TYPE_SHADOW:
+      return SurfaceFrameType::SHADOW;
+    default:
+      VLOG(2) << "Unknown aura-popup decoration type: " << decoration_type;
+      return SurfaceFrameType::NONE;
+  }
+}
+
+void aura_popup_set_decoration(wl_client* client,
+                               wl_resource* resource,
+                               uint32_t type) {
+  GetUserDataAs<AuraPopup>(resource)->SetDecoration(
+      AuraPopupDecorationType(type));
+}
+
+void aura_popup_set_menu(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraPopup>(resource)->SetMenu();
+}
+
+void aura_popup_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
 const struct zaura_popup_interface aura_popup_implementation = {
     aura_popup_surface_submission_in_pixel_coordinates,
+    aura_popup_set_decoration,
+    aura_popup_set_menu,
+    aura_popup_release,
 };
 
 void aura_shell_get_aura_toplevel(wl_client* client,
@@ -1201,15 +1363,20 @@ void aura_shell_get_aura_output(wl_client* client,
   wl_resource* aura_output_resource = wl_resource_create(
       client, &zaura_output_interface, wl_resource_get_version(resource), id);
 
-  auto aura_output = std::make_unique<AuraOutput>(aura_output_resource);
-  display_handler->AddObserver(aura_output.get());
+  auto aura_output =
+      std::make_unique<AuraOutput>(aura_output_resource, display_handler);
 
-  SetImplementation(aura_output_resource, nullptr, std::move(aura_output));
+  SetImplementation(aura_output_resource, &aura_output_implementation,
+                    std::move(aura_output));
 }
 
 void aura_shell_surface_submission_in_pixel_coordinates(wl_client* client,
                                                         wl_resource* resource) {
   LOG(WARNING) << "Deprecated. The server doesn't support this request.";
+}
+
+void aura_shell_release(wl_client* client, wl_resource* resource) {
+  // Nothing to do here.
 }
 
 const struct zaura_shell_interface aura_shell_implementation = {
@@ -1218,6 +1385,7 @@ const struct zaura_shell_interface aura_shell_implementation = {
     aura_shell_surface_submission_in_pixel_coordinates,
     aura_shell_get_aura_toplevel,
     aura_shell_get_aura_popup,
+    aura_shell_release,
 };
 }  // namespace
 

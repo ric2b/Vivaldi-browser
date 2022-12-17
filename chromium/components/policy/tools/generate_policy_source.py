@@ -7,7 +7,7 @@
 Pass at least:
 --chrome-version-file <path to src/chrome/VERSION> or --all-chrome-versions
 --target-platform <which platform the target code will be generated for and can
-  be one of (win, mac, linux, chromeos, ios)>
+  be one of (win, mac, linux, chromeos, ios, fuchsia)>
 --policy-templates-file <path to the policy_templates.json input file>.'''
 
 
@@ -48,10 +48,11 @@ PLATFORM_STRINGS = {
     'android': ['android'],
     'webview_android': ['android'],
     'ios': ['ios'],
+    'fuchsia': ['fuchsia'],
     'chrome.win': ['win'],
     'chrome.linux': ['linux'],
     'chrome.mac': ['mac'],
-    'chrome.*': ['win', 'mac', 'linux', 'fuchsia'],
+    'chrome.*': ['win', 'mac', 'linux'],
     'chrome.win7': ['win'],
 }
 
@@ -91,7 +92,8 @@ class PolicyDetails:
       raise RuntimeError('Platform "%s" is not supported' % platform)
     return PLATFORM_STRINGS[platform]
 
-  def __init__(self, policy, chrome_major_version, target_platform, valid_tags):
+  def __init__(self, policy, chrome_major_version, deprecation_milestone_buffer,
+               target_platform, valid_tags):
     self.id = policy['id']
     self.name = policy['name']
     self.tags = policy.get('tags', None)
@@ -113,7 +115,8 @@ class PolicyDetails:
       self.enterprise_default = policy['default_for_enterprise_users']
     if self.has_enterprise_default:
       self.default_policy_level = policy.get('default_policy_level', '')
-      if self.default_policy_level == 'recommended' and not self.can_be_recommended:
+      if (self.default_policy_level == 'recommended'
+          and not self.can_be_recommended):
         raise RuntimeError('Policy ' + self.name +
                            ' has default_policy_level set to ' +
                            self.default_policy_level + ', '
@@ -134,8 +137,9 @@ class PolicyDetails:
       # Skip if filtering by Chromium version and the current Chromium version
       # does not support the policy.
       if chrome_major_version:
-        if (int(version_min) > chrome_major_version or
-            version_max != '' and int(version_max) < chrome_major_version):
+        if (int(version_min) > chrome_major_version
+            or version_max != '' and int(version_max) <
+            chrome_major_version - deprecation_milestone_buffer):
           continue
       self.platforms.update(self._ConvertPlatform(platform))
 
@@ -332,6 +336,13 @@ def main():
       dest='policy_templates_file',
       help='path to the policy_templates.json input file',
       metavar='FILE')
+  parser.add_argument(
+      '--deprecation-milestone-buffer',
+      dest='deprecation_milestone_buffer',
+      type=int,
+      help='Number of major versions before a code for a policy stops being '
+      'generated',
+      default=2)
   args = parser.parse_args()
 
   has_arg_error = False
@@ -359,6 +370,7 @@ def main():
   version_path = args.chrome_version_file
   target_platform = args.target_platform
   template_file_name = args.policy_templates_file
+  deprecation_milestone_buffer = int(args.deprecation_milestone_buffer)
 
   # --target-platform accepts "chromeos" as its input because that's what is
   # used within GN. Within policy templates, "chrome_os" is used instead.
@@ -373,8 +385,8 @@ def main():
   template_file_contents = _LoadJSONFile(template_file_name)
   risk_tags = RiskTags(template_file_contents)
   policy_details = [
-      PolicyDetails(policy, chrome_major_version, target_platform,
-                    risk_tags.GetValidTags())
+      PolicyDetails(policy, chrome_major_version, deprecation_milestone_buffer,
+                    target_platform, risk_tags.GetValidTags())
       for policy in template_file_contents['policy_definitions']
       if policy['type'] != 'group'
   ]
@@ -480,8 +492,7 @@ def _OutputComment(f, comment):
 
 def _LoadJSONFile(json_file):
   with codecs.open(json_file, 'r', encoding='utf-8') as f:
-    text = f.read()
-  return ast.literal_eval(text)
+    return json.load(f)
 
 
 def _GetSupportedChromeUserPolicies(policies, protobuf_type):
@@ -492,11 +503,20 @@ def _GetSupportedChromeUserPolicies(policies, protobuf_type):
 
 
 # Returns the policies supported by at least one platform.
-def _GetSupportedPolicies(policies):
-  return [
-      policy for policy in policies
-      if len(policy.platforms) + len(policy.future_on) > 0
-  ]
+# Ensure only windows supported policies are returned when building for windows.
+# Eventually only supported policies on every platforms will be returned.
+def _GetSupportedPolicies(policies, target_platform):
+  # TODO(crbug.com/1348959): Remove this special case once deprecated policies
+  # have been removed for fuchsia
+  if target_platform == 'fuchsia':
+    is_deprecated = lambda policy: len(policy.platforms) + len(
+        policy.future_on) > 0 and policy.is_deprecated
+    return [
+        policy for policy in policies
+        if (policy.is_supported or is_deprecated(policy))
+    ]
+
+  return [policy for policy in policies if policy.is_supported]
 
 #------------------ policy constants header ------------------------#
 
@@ -510,7 +530,7 @@ def _GetMetapoliciesOfType(policies, metapolicy_type):
 
 def _WritePolicyConstantHeader(all_policies, policy_atomic_groups,
                                target_platform, f, risk_tags):
-  policies = _GetSupportedPolicies(all_policies)
+  policies = _GetSupportedPolicies(all_policies, target_platform)
   f.write('''#ifndef COMPONENTS_POLICY_POLICY_CONSTANTS_H_
 #define COMPONENTS_POLICY_POLICY_CONSTANTS_H_
 
@@ -1100,7 +1120,7 @@ def _GenerateDefaultValue(value):
 
 def _WritePolicyConstantSource(all_policies, policy_atomic_groups,
                                target_platform, f, risk_tags):
-  policies = _GetSupportedPolicies(all_policies)
+  policies = _GetSupportedPolicies(all_policies, target_platform)
   policy_names = [policy.name for policy in policies]
   f.write('''#include "components/policy/policy_constants.h"
 

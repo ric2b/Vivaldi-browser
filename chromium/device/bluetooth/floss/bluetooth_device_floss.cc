@@ -16,33 +16,36 @@
 #include "device/bluetooth/floss/floss_dbus_client.h"
 #include "device/bluetooth/floss/floss_dbus_manager.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "device/bluetooth/chromeos/bluetooth_utils.h"
+#endif
+
 namespace floss {
 
 namespace {
 
-void OnCreateBond(const absl::optional<bool>& ret,
-                  const absl::optional<Error>& error) {
+void OnCreateBond(DBusResult<bool> ret) {
   if (ret.has_value() && !*ret) {
     BLUETOOTH_LOG(ERROR) << "CreateBond returned failure";
   }
 
-  if (error.has_value()) {
-    BLUETOOTH_LOG(ERROR) << "Failed to create bond: " << error->name << ": "
-                         << error->message;
+  if (!ret.has_value()) {
+    BLUETOOTH_LOG(ERROR) << "Failed to create bond: " << ret.error();
   }
 }
 
-void OnRemoveBond(base::OnceClosure callback,
-                  const absl::optional<bool>& ret,
-                  const absl::optional<Error>& error) {
-  if (ret.has_value() && !*ret) {
+void OnRemoveBond(base::OnceClosure callback, DBusResult<bool> ret) {
+  if (!ret.has_value()) {
+    BLUETOOTH_LOG(ERROR) << "Failed to remove bond: " << ret.error();
+  } else if (!*ret) {
     BLUETOOTH_LOG(ERROR) << "RemoveBond returned failure";
   }
 
-  if (error.has_value()) {
-    BLUETOOTH_LOG(ERROR) << "Failed to remove bond: " << error->name << ": "
-                         << error->message;
-  }
+#if BUILDFLAG(IS_CHROMEOS)
+  bool success = ret.has_value() && *ret;
+  device::RecordForgetResult(success ? device::ForgetResult::kSuccess
+                                     : device::ForgetResult::kFailure);
+#endif
 
   std::move(callback).Run();
 }
@@ -363,60 +366,10 @@ BluetoothDeviceFloss::BluetoothDeviceFloss(BluetoothAdapterFloss* adapter,
   // TODO(abps): Add observers and cache data here.
 }
 
-void BluetoothDeviceFloss::ConnectInternal(ConnectCallback callback) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnConnect(ConnectCallback callback) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnConnectError(ConnectCallback callback,
-                                          const Error& error) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnPairDuringConnect(ConnectCallback callback) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnPairDuringConnectError(ConnectCallback callback,
-                                                    const Error& error) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnDisconnect(base::OnceClosure callback) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnDisconnectError(ErrorCallback error_callback,
-                                             const Error& error) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnPair(ConnectCallback callback) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnPairError(ConnectCallback callback,
-                                       const Error& error) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnCancelPairingError(const Error& error) {
-  NOTIMPLEMENTED();
-}
-
-void BluetoothDeviceFloss::OnForgetError(ErrorCallback error_callback,
-                                         const Error& error) {
-  NOTIMPLEMENTED();
-}
-
 void BluetoothDeviceFloss::OnGetRemoteType(
-    const absl::optional<FlossAdapterClient::BluetoothDeviceType>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
-    BLUETOOTH_LOG(ERROR) << "GetRemoteType() failed: " << error->message;
+    DBusResult<FlossAdapterClient::BluetoothDeviceType> ret) {
+  if (!ret.has_value()) {
+    BLUETOOTH_LOG(ERROR) << "GetRemoteType() failed: " << ret.error();
     return;
   }
 
@@ -435,34 +388,28 @@ void BluetoothDeviceFloss::OnGetRemoteType(
   }
 }
 
-void BluetoothDeviceFloss::OnGetRemoteClass(
-    const absl::optional<uint32_t>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
-    BLUETOOTH_LOG(ERROR) << "GetRemoteClass() failed: " << error->message;
+void BluetoothDeviceFloss::OnGetRemoteClass(DBusResult<uint32_t> ret) {
+  if (!ret.has_value()) {
+    BLUETOOTH_LOG(ERROR) << "GetRemoteClass() failed: " << ret.error();
     return;
   }
 
   cod_ = *ret;
 }
 
-void BluetoothDeviceFloss::OnGetRemoteUuids(
-    const absl::optional<UUIDList>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
-    BLUETOOTH_LOG(ERROR) << "GetRemoteUuids() failed: " << error->message;
+void BluetoothDeviceFloss::OnGetRemoteUuids(DBusResult<UUIDList> ret) {
+  if (!ret.has_value()) {
+    BLUETOOTH_LOG(ERROR) << "GetRemoteUuids() failed: " << ret.error();
     return;
   }
 
   device_uuids_.ReplaceServiceUUIDs(*ret);
 }
 
-void BluetoothDeviceFloss::OnConnectAllEnabledProfiles(
-    const absl::optional<Void>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
+void BluetoothDeviceFloss::OnConnectAllEnabledProfiles(DBusResult<Void> ret) {
+  if (!ret.has_value()) {
     BLUETOOTH_LOG(ERROR) << "Failed to connect all enabled profiles: "
-                         << error->name << ": " << error->message;
+                         << ret.error();
     // TODO(b/202874707): Design a proper new errors for Floss.
     if (pending_callback_on_connect_profiles_)
       TriggerConnectCallback(BluetoothDevice::ConnectErrorCode::ERROR_UNKNOWN);
@@ -482,14 +429,24 @@ void BluetoothDeviceFloss::TriggerConnectCallback(
 void BluetoothDeviceFloss::OnDisconnectAllEnabledProfiles(
     base::OnceClosure callback,
     ErrorCallback error_callback,
-    const absl::optional<Void>& ret,
-    const absl::optional<Error>& error) {
-  if (error.has_value()) {
+    DBusResult<Void> ret) {
+  if (!ret.has_value()) {
+#if BUILDFLAG(IS_CHROMEOS)
+    device::RecordUserInitiatedDisconnectResult(
+        device::DisconnectResult::kFailure,
+        /*transport=*/GetType());
+#endif
     BLUETOOTH_LOG(ERROR) << "Failed to discconnect all enabled profiles: "
-                         << error->name << ": " << error->message;
+                         << ret.error();
     std::move(error_callback).Run();
     return;
   }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  device::RecordUserInitiatedDisconnectResult(
+      device::DisconnectResult::kSuccess,
+      /*transport=*/GetType());
+#endif
 
   std::move(callback).Run();
 }

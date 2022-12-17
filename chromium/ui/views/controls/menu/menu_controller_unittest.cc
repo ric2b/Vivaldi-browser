@@ -721,17 +721,6 @@ class MenuControllerTest : public ViewsTestBase,
         parent, MenuController::INCREMENT_SELECTION_UP);
   }
 
-  MenuItemView* FindNextSelectableMenuItem(MenuItemView* parent, int index) {
-    return menu_controller_->FindNextSelectableMenuItem(
-        parent, index, MenuController::INCREMENT_SELECTION_DOWN, false);
-  }
-
-  MenuItemView* FindPreviousSelectableMenuItem(MenuItemView* parent,
-                                               int index) {
-    return menu_controller_->FindNextSelectableMenuItem(
-        parent, index, MenuController::INCREMENT_SELECTION_UP, false);
-  }
-
   internal::MenuControllerDelegate* GetCurrentDelegate() {
     return menu_controller_->delegate_;
   }
@@ -768,6 +757,10 @@ class MenuControllerTest : public ViewsTestBase,
 
   // Note that coordinates of events passed to MenuController must be in that of
   // the MenuScrollViewContainer.
+  void ProcessGestureEvent(SubmenuView* source, ui::GestureEvent& event) {
+    menu_controller_->OnGestureEvent(source, &event);
+  }
+
   void ProcessMousePressed(SubmenuView* source, const ui::MouseEvent& event) {
     menu_controller_->OnMousePressed(source, event);
   }
@@ -1064,11 +1057,6 @@ TEST_F(MenuControllerTest, InitialSelectedItem) {
   last_selectable = FindInitialSelectableMenuItemUp(menu_item());
   ASSERT_NE(nullptr, last_selectable);
   EXPECT_EQ(2, last_selectable->GetCommand());
-
-  // There should be no next or previous selectable item since there is only a
-  // single enabled item in the menu.
-  EXPECT_EQ(nullptr, FindNextSelectableMenuItem(menu_item(), 1));
-  EXPECT_EQ(nullptr, FindPreviousSelectableMenuItem(menu_item(), 1));
 
   // Clear references in menu controller to the menu item that is going away.
   ResetSelection();
@@ -2839,7 +2827,6 @@ TEST_F(MenuControllerTest, ContextMenuInitializesAuraWindowWhenShown) {
             anchor->anchor_position);
   EXPECT_EQ(ui::OwnedWindowAnchorGravity::kBottomRight, anchor->anchor_gravity);
   EXPECT_EQ((ui::OwnedWindowConstraintAdjustment::kAdjustmentSlideX |
-             ui::OwnedWindowConstraintAdjustment::kAdjustmentSlideY |
              ui::OwnedWindowConstraintAdjustment::kAdjustmentFlipY |
              ui::OwnedWindowConstraintAdjustment::kAdjustmentRezizeY),
             anchor->constraint_adjustment);
@@ -3255,6 +3242,76 @@ TEST_F(MenuControllerTest, BrowserHotkeysCancelMenusAndAreRedispatched) {
   EXPECT_FALSE(press_f.stopped_propagation());
 }
 #endif
+
+class ExecuteCommandWithoutClosingMenuTest : public MenuControllerTest {
+ public:
+  void SetUp() override {
+    MenuControllerTest::SetUp();
+
+    views::test::DisableMenuClosureAnimations();
+    menu_controller()->Run(owner(), nullptr, menu_item(), gfx::Rect(),
+                           MenuAnchorPosition::kTopLeft, false, false);
+
+    MenuHost::InitParams params;
+    params.parent = owner();
+    params.bounds = gfx::Rect(0, 0, 100, 100);
+    params.do_capture = false;
+    menu_item()->GetSubmenu()->ShowAt(params);
+
+    menu_delegate()->set_should_execute_command_without_closing_menu(true);
+  }
+};
+
+TEST_F(ExecuteCommandWithoutClosingMenuTest, OnClick) {
+  TestMenuControllerDelegate* delegate = menu_controller_delegate();
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+
+  MenuItemView* menu_item_view = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  gfx::Point press_location(menu_item_view->bounds().CenterPoint());
+  ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, press_location,
+                             press_location, ui::EventTimeForNow(),
+                             ui::EF_LEFT_MOUSE_BUTTON, 0);
+  ui::MouseEvent release_event(ui::ET_MOUSE_RELEASED, press_location,
+                               press_location, ui::EventTimeForNow(),
+                               ui::EF_LEFT_MOUSE_BUTTON, 0);
+  ProcessMousePressed(menu_item()->GetSubmenu(), press_event);
+  ProcessMouseReleased(menu_item()->GetSubmenu(), release_event);
+
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+  EXPECT_TRUE(IsShowing());
+  EXPECT_EQ(menu_delegate()->execute_command_id(),
+            menu_item_view->GetCommand());
+}
+
+TEST_F(ExecuteCommandWithoutClosingMenuTest, OnTap) {
+  TestMenuControllerDelegate* delegate = menu_controller_delegate();
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+
+  MenuItemView* menu_item_view = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  gfx::Point tap_location(menu_item_view->bounds().CenterPoint());
+  ui::GestureEvent event(tap_location.x(), tap_location.y(), 0,
+                         ui::EventTimeForNow(),
+                         ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  ProcessGestureEvent(menu_item()->GetSubmenu(), event);
+
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+  EXPECT_TRUE(IsShowing());
+  EXPECT_EQ(menu_delegate()->execute_command_id(),
+            menu_item_view->GetCommand());
+}
+
+TEST_F(ExecuteCommandWithoutClosingMenuTest, OnReturnKey) {
+  TestMenuControllerDelegate* delegate = menu_controller_delegate();
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+
+  DispatchKey(ui::VKEY_DOWN);
+  DispatchKey(ui::VKEY_RETURN);
+
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+  EXPECT_TRUE(IsShowing());
+  EXPECT_EQ(menu_delegate()->execute_command_id(),
+            menu_item()->GetSubmenu()->GetMenuItemAt(0)->GetCommand());
+}
 
 }  // namespace test
 }  // namespace views

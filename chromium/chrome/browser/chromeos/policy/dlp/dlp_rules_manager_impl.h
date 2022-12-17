@@ -46,12 +46,19 @@ class DlpRulesManagerImpl : public DlpRulesManager {
                               const Component& destination,
                               Restriction restriction,
                               std::string* out_source_pattern) const override;
+  AggregatedDestinations GetAggregatedDestinations(
+      const GURL& source,
+      Restriction restriction) const override;
+  AggregatedComponents GetAggregatedComponents(
+      const GURL& source,
+      Restriction restriction) const override;
   bool IsReportingEnabled() const override;
   DlpReportingManager* GetReportingManager() const override;
   std::string GetSourceUrlPattern(const GURL& source_url,
                                   Restriction restriction,
                                   Level level) const override;
   size_t GetClipboardCheckSizeLimitInBytes() const override;
+  bool IsFilesPolicyEnabled() const override;
 
  protected:
   friend class DlpRulesManagerFactory;
@@ -98,6 +105,7 @@ class DlpRulesManagerImpl : public DlpRulesManager {
   // string patterns.
   std::map<UrlConditionId, std::string> dst_pattterns_mapping_;
 
+  // System-wide singleton instantiated when required by rules configuration.
   std::unique_ptr<DlpReportingManager> reporting_manager_;
 };
 

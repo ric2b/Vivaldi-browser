@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_piece.h"
@@ -83,7 +84,7 @@ class LacrosWebAppsController : public crosapi::mojom::AppController,
 
   // crosapi::mojom::AppController:
   void Uninstall(const std::string& app_id,
-                 apps::mojom::UninstallSource uninstall_source,
+                 apps::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
   void PauseApp(const std::string& app_id) override;
@@ -128,10 +129,10 @@ class LacrosWebAppsController : public crosapi::mojom::AppController,
       GetMenuModelCallback callback,
       ShortcutsMenuIconBitmaps shortcuts_menu_icon_bitmaps);
 
-  Profile* const profile_;
-  WebAppProvider* const provider_;
+  const raw_ptr<Profile> profile_;
+  const raw_ptr<WebAppProvider> provider_;
   WebAppPublisherHelper publisher_helper_;
-  crosapi::mojom::AppPublisher* remote_publisher_ = nullptr;
+  raw_ptr<crosapi::mojom::AppPublisher> remote_publisher_ = nullptr;
   int remote_publisher_version_ = 0;
 
   mojo::Receiver<crosapi::mojom::AppController> receiver_{this};

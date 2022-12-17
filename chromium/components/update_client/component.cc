@@ -642,6 +642,13 @@ void Component::StateChecking::DoHandle() {
     return;
   }
 
+  if (component.update_context_.is_cancelled) {
+    TransitionState(std::make_unique<StateUpdateError>(&component));
+    component.error_category_ = ErrorCategory::kService;
+    component.error_code_ = static_cast<int>(ServiceError::CANCELLED);
+    return;
+  }
+
   if (component.status_ == "ok") {
     TransitionState(std::make_unique<StateCanUpdate>(&component));
     return;
@@ -706,6 +713,13 @@ void Component::StateCanUpdate::DoHandle() {
     return;
   }
 
+  if (component.update_context_.is_cancelled) {
+    TransitionState(std::make_unique<StateUpdateError>(&component));
+    component.error_category_ = ErrorCategory::kService;
+    component.error_code_ = static_cast<int>(ServiceError::CANCELLED);
+    return;
+  }
+
   // Start computing the cost of the this update from here on.
   component.update_begin_ = base::TimeTicks::Now();
 
@@ -736,7 +750,7 @@ void Component::StateUpToDate::DoHandle() {
   auto& component = State::component();
   DCHECK(component.crx_component());
 
-  component.NotifyObservers(Events::COMPONENT_NOT_UPDATED);
+  component.NotifyObservers(Events::COMPONENT_ALREADY_UP_TO_DATE);
   EndState();
 }
 
@@ -795,6 +809,13 @@ void Component::StateDownloadingDiff::DownloadComplete(
     component.AppendEvent(component.MakeEventDownloadMetrics(download_metrics));
 
   crx_downloader_ = nullptr;
+
+  if (component.update_context_.is_cancelled) {
+    TransitionState(std::make_unique<StateUpdateError>(&component));
+    component.error_category_ = ErrorCategory::kService;
+    component.error_code_ = static_cast<int>(ServiceError::CANCELLED);
+    return;
+  }
 
   if (download_result.error) {
     DCHECK(download_result.response.empty());
@@ -865,6 +886,13 @@ void Component::StateDownloading::DownloadComplete(
     component.AppendEvent(component.MakeEventDownloadMetrics(download_metrics));
 
   crx_downloader_ = nullptr;
+
+  if (component.update_context_.is_cancelled) {
+    TransitionState(std::make_unique<StateUpdateError>(&component));
+    component.error_category_ = ErrorCategory::kService;
+    component.error_code_ = static_cast<int>(ServiceError::CANCELLED);
+    return;
+  }
 
   if (download_result.error) {
     DCHECK(download_result.response.empty());

@@ -405,6 +405,10 @@
 // Injects typed URL to sync FakeServer.
 + (void)addFakeSyncServerTypedURL:(NSString*)URL;
 
+// Injects device info to sync FakeServer.
++ (void)addFakeSyncServerDeviceInfo:(NSString*)deviceName
+               lastUpdatedTimestamp:(base::Time)lastUpdatedTimestamp;
+
 // Adds typed URL into HistoryService.
 + (void)addHistoryServiceTypedURL:(NSString*)URL;
 
@@ -500,9 +504,6 @@
 // Returns YES if a variation triggering server-side behavior is enabled.
 + (BOOL)isTriggerVariationEnabled:(int)variationID;
 
-// Returns YES if |kSupportForAddPasswordsInSettings| is enabled.
-+ (BOOL)isAddCredentialsInSettingsEnabled;
-
 // Returns YES if UKM feature is enabled.
 + (BOOL)isUKMEnabled [[nodiscard]];
 
@@ -538,6 +539,12 @@
 
 // Returns whether the OmniboxPopupUpdatedUI feature is enabled.
 + (BOOL)isNewOmniboxPopupEnabled;
+
+// Returns whether the kIOSNewOmniboxImplementation feature is enabled.
++ (BOOL)isExperimentalOmniboxEnabled;
+
+// Returns whether the UseLensToSearchForImage feature is enabled.
++ (BOOL)isUseLensToSearchForImageEnabled;
 
 // Returns whether the Thumbstrip feature is enabled for window with given
 // number.
@@ -586,6 +593,9 @@
 // clearing Browsing data.
 + (void)resetBrowsingDataPrefs;
 
+// Resets data for the local state pref with |prefName|.
++ (void)resetDataForLocalStatePref:(NSString*)prefName;
+
 #pragma mark - Unified Consent utilities
 
 // Enables or disables URL-keyed anonymized data collection.
@@ -609,9 +619,9 @@
 // Clears the URLs stored in the pasteboard, from the tested app's perspective.
 + (void)clearPasteboardURLs;
 
-// Retrieves the currently stored string on the pasteboard from the tested app's
-// perspective.
-+ (NSString*)pasteboardString;
+// Retrieves the currently stored strings on the pasteboard from the tested
+// app's perspective.
++ (NSArray<NSString*>*)pasteboardStrings;
 
 // Retrieves the currently stored URL on the pasteboard from the tested app's
 // perspective.
@@ -647,6 +657,13 @@
 // message.
 + (void)disableDefaultBrowserPromo;
 
+#pragma mark - Url Param Classification utilities
+// Sets |contents| to be used by the url_param_filter::ClassificationsLoader.
++ (void)setUrlParamClassifications:(NSString*)contents;
+
+// Resets the stored classifications on the
+// url_param_filter::ClassificationsLoader.
++ (void)resetUrlParamClassifications;
 @end
 
 #endif  // IOS_CHROME_TEST_EARL_GREY_CHROME_EARL_GREY_APP_INTERFACE_H_

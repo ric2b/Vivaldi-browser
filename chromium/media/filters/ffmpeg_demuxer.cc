@@ -67,11 +67,6 @@ void SetAVStreamDiscard(AVStream* stream, AVDiscard discard) {
 
 }  // namespace
 
-ScopedAVPacket MakeScopedAVPacket() {
-  ScopedAVPacket packet(av_packet_alloc());
-  return packet;
-}
-
 static base::Time ExtractTimelineOffset(
     container_names::MediaContainerName container,
     const AVFormatContext* format_context) {
@@ -327,12 +322,6 @@ FFmpegDemuxerStream::FFmpegDemuxerStream(
     encryption_key_id_.assign(enc_key_id);
     demuxer_->OnEncryptedMediaInitData(EmeInitDataType::WEBM, enc_key_id);
   }
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (audio_config_) {
-    audio_config_->platform_media_ffmpeg_demuxer_ = true;
-  }
-#endif
 }
 
 FFmpegDemuxerStream::~FFmpegDemuxerStream() {
@@ -1785,7 +1774,7 @@ void FFmpegDemuxer::ReadFrameIfNeeded() {
   // Allocate and read an AVPacket from the media. Save |packet_ptr| since
   // evaluation order of packet.get() and std::move(&packet) is
   // undefined.
-  ScopedAVPacket packet = MakeScopedAVPacket();
+  auto packet = ScopedAVPacket::Allocate();
   AVPacket* packet_ptr = packet.get();
 
   pending_read_ = true;

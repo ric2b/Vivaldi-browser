@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './files_icon_button.js';
 import './files_metadata_box.js';
@@ -12,6 +12,7 @@ import './icons.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {toSandboxedURL} from '../../common/js/url_constants.js';
 
 export const FilesQuickView = Polymer({
@@ -382,7 +383,7 @@ export const FilesQuickView = Polymer({
     // Catch and re-fire the 'close' event such that it bubbles across Shadow
     // DOM v1.
     this.fire('close');
-  }
+  },
 });
 
 //# sourceURL=//ui/file_manager/file_manager/foreground/elements/files_quick_view.js

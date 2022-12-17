@@ -12,10 +12,12 @@
 #include "chrome/browser/ash/crostini/crostini_export_import.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/crostini/crostini_port_forwarder.h"
+#include "chrome/browser/ash/guest_os/guest_id.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/services/app_service/public/cpp/intent.h"
 
 class Profile;
 
@@ -60,7 +62,7 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
   void OnCrostiniDialogStatusChanged(crostini::DialogType dialog_type,
                                      bool open) override;
   // crostini::CrostiniContainerPropertiesObserver
-  void OnContainerOsReleaseChanged(const crostini::ContainerId& container_id,
+  void OnContainerOsReleaseChanged(const guest_os::GuestId& container_id,
                                    bool can_upgrade) override;
   // Handle a request for the CrostiniExportImport operation status.
   void HandleCrostiniExportImportOperationStatusRequest(
@@ -81,7 +83,7 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
   void OnCanDisableArcAdbSideloading(bool can_change_adb_sideloading);
   // Launch the Crostini terminal, with |intent| specifying any non-default
   // container id.
-  void LaunchTerminal(apps::mojom::IntentPtr intent);
+  void LaunchTerminal(apps::IntentPtr intent);
   // Handle a request for showing the container upgrade view.
   void HandleRequestContainerUpgradeView(const base::Value::List& args);
   // Callback of HandleQueryArcAdbRequest.
@@ -100,7 +102,7 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
   // Handles a request for removing all ports.
   void HandleRemoveAllCrostiniPortForwards(const base::Value::List& args);
   // CrostiniPortForwarder::Observer.
-  void OnActivePortsChanged(const base::ListValue& activePorts) override;
+  void OnActivePortsChanged(const base::Value::List& activePorts) override;
   // Handles a request for activating an existing port.
   void HandleActivateCrostiniPortForward(const base::Value::List& args);
   // Handles a request for deactivating an existing port.
@@ -121,9 +123,9 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
   // Checks if Crostini is running.
   void HandleCheckCrostiniIsRunning(const base::Value::List& args);
   // crostini::ContainerStartedObserver
-  void OnContainerStarted(const crostini::ContainerId& container_id) override;
+  void OnContainerStarted(const guest_os::GuestId& container_id) override;
   // crostini::ContainerShutdownObserver
-  void OnContainerShutdown(const crostini::ContainerId& container_id) override;
+  void OnContainerShutdown(const guest_os::GuestId& container_id) override;
   // Handles a request to shut down Crostini.
   void HandleShutdownCrostini(const base::Value::List& args);
   // Handle a request for checking permission for changing ARC adb sideloading.

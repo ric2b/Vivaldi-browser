@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -39,6 +40,10 @@ void AddTabAt(Browser* browser,
   params.tabstrip_index = idx;
   params.group = group;
   Navigate(&params);
+
+  if (!params.navigated_or_inserted_contents)
+    return;
+
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(params.navigated_or_inserted_contents);
   core_tab_helper->set_new_tab_start_time(new_tab_start_time);
@@ -91,8 +96,8 @@ void CloseWebContents(Browser* browser,
   }
 
   browser->tab_strip_model()->CloseWebContentsAt(
-      index, add_to_history ? TabStripModel::CLOSE_CREATE_HISTORICAL_TAB
-                            : TabStripModel::CLOSE_NONE);
+      index, add_to_history ? TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB
+                            : TabCloseTypes::CLOSE_NONE);
 }
 
 void ConfigureTabGroupForNavigation(NavigateParams* nav_params) {

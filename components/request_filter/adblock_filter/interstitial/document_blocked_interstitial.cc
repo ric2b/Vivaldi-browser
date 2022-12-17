@@ -4,8 +4,9 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
+#include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/grit/components_resources.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/strings/grit/components_strings.h"
@@ -17,12 +18,12 @@ namespace {
 void DoAllowDomain(adblock_filter::RuleService* service,
                    adblock_filter::RuleGroup group,
                    const std::string& domain) {
-  service->RemoveExceptionForDomain(
-      group, adblock_filter::RuleService::kProcessList, domain);
-  if (service->GetActiveExceptionList(group) ==
-      adblock_filter::RuleService::kExemptList) {
-    service->AddExceptionForDomain(
-        group, adblock_filter::RuleService::kExemptList, domain);
+  service->GetRuleManager()->RemoveExceptionForDomain(
+      group, adblock_filter::RuleManager::kProcessList, domain);
+  if (service->GetRuleManager()->GetActiveExceptionList(group) ==
+      adblock_filter::RuleManager::kExemptList) {
+    service->GetRuleManager()->AddExceptionForDomain(
+        group, adblock_filter::RuleManager::kExemptList, domain);
   }
 }
 }  // namespace
@@ -58,9 +59,7 @@ bool DocumentBlockedInterstitial::ShouldDisplayURL() const {
 void DocumentBlockedInterstitial::OnInterstitialClosing() {}
 
 void DocumentBlockedInterstitial::PopulateInterstitialStrings(
-    base::Value* load_time_data) {
-  CHECK(load_time_data);
-
+    base::Value::Dict& load_time_data) {
   std::u16string blocker_name =
       blocking_group_ == RuleGroup::kTrackingRules
           ? l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_TRACKER_BLOCKER)
@@ -70,19 +69,19 @@ void DocumentBlockedInterstitial::PopulateInterstitialStrings(
           ? l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_TRACKERS)
           : l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_ADS);
 
-  load_time_data->SetStringKey(
+  load_time_data.Set(
       "tabTitle",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_TAB_TITLE, blocker_name));
-  load_time_data->SetStringKey(
+  load_time_data.Set(
       "heading",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_HEADING, blocker_name));
-  load_time_data->SetStringKey(
+  load_time_data.Set(
       "primaryParagraph", l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_INFO));
-  load_time_data->SetStringKey(
+  load_time_data.Set(
       "proceedButtonText",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_ALLOW_DOMAIN, block_type,
                                  GetFormattedHostName()));
-  load_time_data->SetStringKey(
+  load_time_data.Set(
       "primaryButtonText",
       l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_GO_BACK));
 }

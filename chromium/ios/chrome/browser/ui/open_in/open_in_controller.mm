@@ -21,6 +21,8 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/ui/open_in/open_in_activity_delegate.h"
+#import "ios/chrome/browser/ui/open_in/open_in_activity_view_controller.h"
 #import "ios/chrome/browser/ui/open_in/open_in_controller_testing.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -46,23 +48,23 @@ namespace {
 // other applications.
 static NSString* const kDocumentsTemporaryPath = @"OpenIn";
 
-// Duration of the show/hide animation for the |openInToolbar_|.
+// Duration of the show/hide animation for the `openInToolbar_`.
 const NSTimeInterval kOpenInToolbarAnimationDuration = 0.2;
 
-// Duration to show or hide the |overlayedView_|.
+// Duration to show or hide the `overlayedView_`.
 const NSTimeInterval kOverlayViewAnimationDuration = 0.3;
 
-// Time interval after which the |openInToolbar_| is automatically hidden.
+// Time interval after which the `openInToolbar_` is automatically hidden.
 const NSTimeInterval kOpenInToolbarDisplayDuration = 2.0;
 
-// Alpha value for the background view of |overlayedView_|.
+// Alpha value for the background view of `overlayedView_`.
 const CGFloat kOverlayedViewBackgroundAlpha = 0.6;
 
-// Width of the label displayed on the |overlayedView_| as a percentage of the
-// |overlayedView_|'s width.
+// Width of the label displayed on the `overlayedView_` as a percentage of the
+// `overlayedView_`'s width.
 const CGFloat kOverlayedViewLabelWidthPercentage = 0.7;
 
-// Bottom margin for the label displayed on the |overlayedView_|.
+// Bottom margin for the label displayed on the `overlayedView_`.
 const CGFloat kOverlayedViewLabelBottomMargin = 60;
 
 // Logs the result of the download process after the user taps "open in" button.
@@ -70,7 +72,7 @@ void LogOpenInDownloadResult(const OpenInDownloadResult result) {
   UMA_HISTOGRAM_ENUMERATION("IOS.OpenIn.DownloadResult", result);
 }
 
-// Returns true if the file located at |url| can be previewed.
+// Returns true if the file located at `url` can be previewed.
 bool HasValidFileAtUrl(NSURL* url) {
   if (!url)
     return false;
@@ -94,7 +96,7 @@ NSString* GetTemporaryDocumentDirectory() {
       stringByAppendingPathComponent:kDocumentsTemporaryPath];
 }
 
-// Removes the file at |file_url|.
+// Removes the file at `file_url`.
 void RemoveDocumentAtPath(NSURL* file_url) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::WILL_BLOCK);
@@ -110,7 +112,7 @@ void RemoveDocumentAtPath(NSURL* file_url) {
   }
 }
 
-// Removes all the stored files at |path|.
+// Removes all the stored files at `path`.
 void RemoveAllStoredDocumentsAtPath(NSString* path) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::WILL_BLOCK);
@@ -171,7 +173,8 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
 
 }  // anonymous namespace
 
-@interface OpenInController () <CRWWebViewScrollViewProxyObserver> {
+@interface OpenInController () <CRWWebViewScrollViewProxyObserver,
+                                OpenInActivityDelegate> {
   // AlertCoordinator for showing an alert if no applications were found to open
   // the current document.
   AlertCoordinator* _alertCoordinator;
@@ -188,31 +191,31 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
 @property(nonatomic, assign) scoped_refptr<base::SequencedTaskRunner>
     sequencedTaskRunner;
 
-// SimpleURLLoader completion callback, when |urlLoader_| completes a request.
+// SimpleURLLoader completion callback, when `urlLoader_` completes a request.
 - (void)urlLoadDidComplete:(const base::FilePath&)file_path;
-// Starts downloading the file at path |kDocumentsTemporaryPath| with the name
-// |suggestedFilename_|.
+// Starts downloading the file at path `kDocumentsTemporaryPath` with the name
+// `suggestedFilename_`.
 - (void)startDownload;
-// Shows the overlayed toolbar |openInToolbar_|. If |withTimer| is YES, it would
+// Shows the overlayed toolbar `openInToolbar_`. If `withTimer` is YES, it would
 // be hidden after a certain amount of time.
 - (void)showOpenInToolbarWithTimer:(BOOL)withTimer;
-// Hides the overlayed toolbar |openInToolbar_|.
+// Hides the overlayed toolbar `openInToolbar_`.
 - (void)hideOpenInToolbar;
-// Called when there is a tap on the |webState_|'s view to display the
-// overlayed toolbar |openInToolbar_| if necessary and (re)schedule the
-// |openInTimer_|.
+// Called when there is a tap on the `webState_`'s view to display the
+// overlayed toolbar `openInToolbar_` if necessary and (re)schedule the
+// `openInTimer_`.
 - (void)handleTapFrom:(UIGestureRecognizer*)gestureRecognizer;
-// Downloads the file at |documentURL_| and presents the OpenIn menu for opening
+// Downloads the file at `documentURL_` and presents the OpenIn menu for opening
 // it in other applications.
 - (void)exportFileWithOpenInMenuAnchoredAt:(id)sender;
-// Called when there is a tap on the |overlayedView_| to cancel the file
+// Called when there is a tap on the `overlayedView_` to cancel the file
 // download.
 - (void)handleTapOnOverlayedView:(UIGestureRecognizer*)gestureRecognizer;
-// Removes |overlayedView_| from the top view of the application.
+// Removes `overlayedView_` from the top view of the application.
 - (void)removeOverlayedView;
 // Shows an alert with the given error message.
 - (void)showErrorWithMessage:(NSString*)message;
-// Presents the OpenIn menu for the file at |fileURL|.
+// Presents the OpenIn menu for the file at `fileURL`.
 - (void)presentOpenInMenuForFileAtURL:(NSURL*)fileURL;
 // Shows an overlayed spinner on the top view to indicate that a file download
 // is in progress.
@@ -230,12 +233,12 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
   GURL _documentURL;
 
   // Controller for opening documents in other applications.
-  UIActivityViewController* activityViewController;
+  OpenInActivityViewController* activityViewController;
 
   // Toolbar overlay to be displayed on tap.
   OpenInToolbar* _openInToolbar;
 
-  // Timer used to automatically hide the |openInToolbar_| after a period.
+  // Timer used to automatically hide the `openInToolbar_` after a period.
   NSTimer* _openInTimer;
 
   // Gesture recognizer to catch taps on the document.
@@ -248,7 +251,7 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
   std::unique_ptr<network::SimpleURLLoader> _urlLoader;
 
   // WebState used to check if the tap is not on a link and the
-  // |openInToolbar_| should be displayed.
+  // `openInToolbar_` should be displayed.
   web::WebState* _webState;
 
   // Browser used to display errors.
@@ -439,7 +442,7 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
   [self showDownloadOverlayView];
   _downloadCanceled = NO;
 
-  // Download the document and save it at |filePath|.
+  // Download the document and save it at `filePath`.
   auto resourceRequest = std::make_unique<network::ResourceRequest>();
   resourceRequest->url = _documentURL;
   resourceRequest->load_flags = net::LOAD_SKIP_CACHE_VALIDATION;
@@ -498,19 +501,9 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
   if (!_webState)
     return;
 
-  NSArray* customActions = @[ fileURL ];
-  NSArray* activities = nil;
-
   activityViewController =
-      [[UIActivityViewController alloc] initWithActivityItems:customActions
-                                        applicationActivities:activities];
-
-  // Set completion callback.
-  __weak OpenInController* weakSelf = self;
-  activityViewController.completionWithItemsHandler =
-      ^(NSString*, BOOL, NSArray*, NSError*) {
-        [weakSelf completedPresentOpenInMenuForFileAtURL:fileURL];
-      };
+      [[OpenInActivityViewController alloc] initWithURL:fileURL];
+  activityViewController.delegate = self;
 
   // UIActivityViewController is presented in a popover on iPad.
   activityViewController.popoverPresentationController.sourceView =
@@ -606,7 +599,12 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
   return _openInToolbar;
 }
 
-#pragma mark -
+#pragma mark - OpenInActivityDelegate
+
+- (void)openInActivityWillDisappearForFileAtURL:(NSURL*)fileURL {
+  [self completedPresentOpenInMenuForFileAtURL:fileURL];
+}
+
 #pragma mark File management
 
 - (void)urlLoadDidComplete:(const base::FilePath&)filePath {

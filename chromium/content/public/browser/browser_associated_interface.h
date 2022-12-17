@@ -83,6 +83,10 @@ class BrowserAssociatedInterface : public Interface {
         return;
       }
       receivers_.reset();
+      // `impl_` destructor calls this function, so it must be reset. It isn't
+      // useful anymore, because `BindReceiver` become a no-op after resetting
+      // `receiver_`.
+      impl_ = nullptr;
     }
 
     void BindReceiver(mojo::ScopedInterfaceEndpointHandle handle) {

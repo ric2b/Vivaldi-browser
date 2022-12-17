@@ -26,17 +26,12 @@ bool IsInlineContainerForNode(const NGBlockNode& node,
 
 }  // namespace
 
-void NGContainerFragmentBuilder::ChildWithOffset::Trace(
-    Visitor* visitor) const {
-  visitor->Trace(fragment);
-}
-
 void NGContainerFragmentBuilder::ReplaceChild(
     wtf_size_t index,
     const NGPhysicalFragment& new_child,
     const LogicalOffset offset) {
   DCHECK_LT(index, children_.size());
-  children_[index] = ChildWithOffset(offset, std::move(&new_child));
+  children_[index] = NGLogicalLink{std::move(&new_child), offset};
 }
 
 // Propagate data in |child| to this fragment. The |child| will then be added as
@@ -47,6 +42,20 @@ void NGContainerFragmentBuilder::PropagateChildData(
     LogicalOffset relative_offset,
     const NGInlineContainer<LogicalOffset>* inline_container,
     absl::optional<LayoutUnit> adjustment_for_oof_propagation) {
+  // Set the child's `anchor-name` before propagating its descendants', so
+  // that ancestors have precedence over their descendants. Descendants' anchors
+  // are propagated in |PropagateOOFPositionedInfo| below.
+  if (child.IsBox()) {
+    if (const AtomicString& anchor_name = child.Style().AnchorName();
+        !anchor_name.IsNull()) {
+      DCHECK(RuntimeEnabledFeatures::CSSAnchorPositioningEnabled());
+      anchor_query_.Set(
+          anchor_name, child,
+          LogicalRect{child_offset + relative_offset,
+                      child.Size().ConvertToLogical(GetWritingMode())});
+    }
+  }
+
   if (adjustment_for_oof_propagation &&
       child.NeedsOOFPositionedInfoPropagation()) {
     PropagateOOFPositionedInfo(child, child_offset, relative_offset,
@@ -162,7 +171,7 @@ void NGContainerFragmentBuilder::AddChildInternal(
   // In order to know where list-markers are within the children list (for the
   // |NGSimplifiedLayoutAlgorithm|) we always place them as the first child.
   if (child->IsListMarker()) {
-    children_.push_front(ChildWithOffset(child_offset, std::move(child)));
+    children_.push_front(NGLogicalLink{std::move(child), child_offset});
     return;
   }
 
@@ -171,34 +180,23 @@ void NGContainerFragmentBuilder::AddChildInternal(
     // ::placeholder earlier.
     const wtf_size_t size = children_.size();
     if (size > 0) {
-      children_.insert(size - 1,
-                       ChildWithOffset(child_offset, std::move(child)));
+      children_.insert(size - 1, NGLogicalLink{std::move(child), child_offset});
       return;
     }
   }
 
-  children_.emplace_back(child_offset, std::move(child));
+  children_.push_back(NGLogicalLink{std::move(child), child_offset});
 }
 
 void NGContainerFragmentBuilder::AddOutOfFlowChildCandidate(
     NGBlockNode child,
     const LogicalOffset& child_offset,
     NGLogicalStaticPosition::InlineEdge inline_edge,
-    NGLogicalStaticPosition::BlockEdge block_edge,
-    bool needs_block_offset_adjustment) {
+    NGLogicalStaticPosition::BlockEdge block_edge) {
   DCHECK(child);
-
-  // If an OOF-positioned candidate has a static-position which uses a
-  // non-block-start edge, we may need to adjust its static-position when the
-  // final block-size is known.
-  needs_block_offset_adjustment &=
-      block_edge != NGLogicalStaticPosition::BlockEdge::kBlockStart;
-  has_oof_candidate_that_needs_block_offset_adjustment_ |=
-      needs_block_offset_adjustment;
-
   oof_positioned_candidates_.emplace_back(
       child, NGLogicalStaticPosition{child_offset, inline_edge, block_edge},
-      NGInlineContainer<LogicalOffset>(), needs_block_offset_adjustment);
+      NGInlineContainer<LogicalOffset>());
 }
 
 void NGContainerFragmentBuilder::AddOutOfFlowChildCandidate(
@@ -243,27 +241,6 @@ void NGContainerFragmentBuilder::SwapOutOfFlowPositionedCandidates(
     HeapVector<NGLogicalOutOfFlowPositionedNode>* candidates) {
   DCHECK(candidates->IsEmpty());
   std::swap(oof_positioned_candidates_, *candidates);
-
-  if (!has_oof_candidate_that_needs_block_offset_adjustment_)
-    return;
-
-  using BlockEdge = NGLogicalStaticPosition::BlockEdge;
-
-  // We might have an OOF-positioned candidate whose static-position depends on
-  // the final block-size of this fragment.
-  DCHECK_NE(BlockSize(), kIndefiniteSize);
-  for (auto& candidate : *candidates) {
-    if (!candidate.needs_block_offset_adjustment)
-      continue;
-
-    if (candidate.static_position.block_edge == BlockEdge::kBlockCenter)
-      candidate.static_position.offset.block_offset += BlockSize() / 2;
-    else if (candidate.static_position.block_edge == BlockEdge::kBlockEnd)
-      candidate.static_position.offset.block_offset += BlockSize();
-    candidate.needs_block_offset_adjustment = false;
-  }
-
-  has_oof_candidate_that_needs_block_offset_adjustment_ = false;
 }
 
 void NGContainerFragmentBuilder::AddMulticolWithPendingOOFs(
@@ -285,7 +262,6 @@ void NGContainerFragmentBuilder::SwapMulticolsWithPendingOOFs(
 void NGContainerFragmentBuilder::SwapOutOfFlowFragmentainerDescendants(
     HeapVector<NGLogicalOOFNodeForFragmentation>* descendants) {
   DCHECK(descendants->IsEmpty());
-  DCHECK(!has_oof_candidate_that_needs_block_offset_adjustment_);
   std::swap(oof_positioned_fragmentainer_descendants_, *descendants);
 }
 
@@ -303,7 +279,6 @@ void NGContainerFragmentBuilder::TransferOutOfFlowCandidates(
       DCHECK(!candidate.inline_container.container);
       destination_builder->AddOutOfFlowFragmentainerDescendant(
           {node, candidate.static_position, multicol->fixedpos_inline_container,
-           candidate.needs_block_offset_adjustment,
            multicol->fixedpos_containing_block,
            multicol->fixedpos_containing_block,
            multicol->fixedpos_inline_container});
@@ -410,7 +385,6 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
           new_fixedpos_inline_container = *fixedpos_inline_container;
         AddOutOfFlowFragmentainerDescendant(
             {node, static_position, new_fixedpos_inline_container,
-             /* needs_block_offset_adjustment */ false,
              *fixedpos_containing_block, *fixedpos_containing_block,
              new_fixedpos_inline_container});
         continue;
@@ -426,6 +400,12 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
         }));
     oof_positioned_candidates_.emplace_back(node, static_position,
                                             new_inline_container);
+  }
+
+  // Collect any anchor references.
+  if (const NGPhysicalAnchorQuery* anchor_query = fragment.AnchorQuery()) {
+    anchor_query_.SetFromPhysical(*anchor_query, converter, adjusted_offset,
+                                  fragment.IsPositioned());
   }
 
   NGFragmentedOutOfFlowData* oof_data = fragment.FragmentedOutOfFlowData();
@@ -504,8 +484,26 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
     }
   }
 
-  if (oof_data->oof_positioned_fragmentainer_descendants.IsEmpty())
+  PropagateOOFFragmentainerDescendants(fragment, offset, relative_offset,
+                                       containing_block_adjustment,
+                                       fixedpos_containing_block);
+}
+
+void NGContainerFragmentBuilder::PropagateOOFFragmentainerDescendants(
+    const NGPhysicalFragment& fragment,
+    LogicalOffset offset,
+    LogicalOffset relative_offset,
+    LayoutUnit containing_block_adjustment,
+    const NGContainingBlock<LogicalOffset>* fixedpos_containing_block,
+    HeapVector<NGLogicalOOFNodeForFragmentation>* out_list) {
+  NGFragmentedOutOfFlowData* oof_data = fragment.FragmentedOutOfFlowData();
+  if (!oof_data || oof_data->oof_positioned_fragmentainer_descendants.IsEmpty())
     return;
+
+  const WritingModeConverter converter(GetWritingDirection(), fragment.Size());
+  const NGPhysicalBoxFragment* box_fragment =
+      DynamicTo<NGPhysicalBoxFragment>(&fragment);
+  bool is_column_spanner = box_fragment && box_fragment->IsColumnSpanAll();
 
   auto& out_of_flow_fragmentainer_descendants =
       oof_data->oof_positioned_fragmentainer_descendants;
@@ -618,28 +616,32 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
       fixedpos_containing_block_rel_offset =
           fixedpos_containing_block->RelativeOffset();
     }
+    NGLogicalOOFNodeForFragmentation oof_node(
+        descendant.Node(), static_position, new_inline_container,
+        NGContainingBlock<LogicalOffset>(
+            containing_block_offset, containing_block_rel_offset,
+            containing_block_fragment, container_inside_column_spanner,
+            descendant.containing_block.RequiresContentBeforeBreaking()),
+        NGContainingBlock<LogicalOffset>(
+            fixedpos_containing_block_offset,
+            fixedpos_containing_block_rel_offset,
+            fixedpos_containing_block_fragment,
+            fixedpos_container_inside_column_spanner,
+            descendant.fixedpos_containing_block
+                .RequiresContentBeforeBreaking()),
+        new_fixedpos_inline_container);
 
-    AddOutOfFlowFragmentainerDescendant(
-        {descendant.Node(), static_position, new_inline_container,
-         /* needs_block_offset_adjustment */ false,
-         NGContainingBlock<LogicalOffset>(
-             containing_block_offset, containing_block_rel_offset,
-             containing_block_fragment, container_inside_column_spanner,
-             descendant.containing_block.RequiresContentBeforeBreaking()),
-         NGContainingBlock<LogicalOffset>(
-             fixedpos_containing_block_offset,
-             fixedpos_containing_block_rel_offset,
-             fixedpos_containing_block_fragment,
-             fixedpos_container_inside_column_spanner,
-             descendant.fixedpos_containing_block
-                 .RequiresContentBeforeBreaking()),
-         new_fixedpos_inline_container});
+    if (out_list) {
+      out_list->emplace_back(oof_node);
+    } else {
+      AddOutOfFlowFragmentainerDescendant(oof_node);
 
-    // Remove any descendants that were propagated to the next fragmentation
-    // context root (as a result of a column spanner).
-    if (remove_descendant) {
-      out_of_flow_fragmentainer_descendants.EraseAt(idx);
-      next_idx = idx;
+      // Remove any descendants that were propagated to the next fragmentation
+      // context root (as a result of a column spanner).
+      if (remove_descendant) {
+        out_of_flow_fragmentainer_descendants.EraseAt(idx);
+        next_idx = idx;
+      }
     }
   }
 }

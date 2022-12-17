@@ -7,25 +7,32 @@
 
 #include <stdint.h>
 
-#include <map>
 #include <memory>
+#include <set>
 
+#include "ash/components/disks/disk.h"
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/observer_list_types.h"
-#include "chromeos/dbus/cros_disks/cros_disks_client.h"
+#include "base/strings/string_piece.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
 
 namespace ash {
 namespace disks {
 
-class Disk;
-
-// Condition of mounted filesystem.
-enum MountCondition {
-  MOUNT_CONDITION_NONE,
-  MOUNT_CONDITION_UNKNOWN_FILESYSTEM,
-  MOUNT_CONDITION_UNSUPPORTED_FILESYSTEM,
+// State of a mounted filesystem.
+// This enum is a subset of ash::MountError (but with different numeric values).
+// This enum matches extensions::api::file_manager_private::MountCondition (but
+// with different names).
+enum class MountCondition {
+  kNone,
+  kUnknownFilesystem,
+  kUnsupportedFilesystem,
 };
+
+// Output operator for logging.
+COMPONENT_EXPORT(ASH_DISKS)
+std::ostream& operator<<(std::ostream& out, MountCondition condition);
 
 // Possible filesystem types that can be passed to FormatMountedDevice.
 // These values are persisted to logs. Entries should not be renumbered and
@@ -72,32 +79,55 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
 
   enum RenameEvent { RENAME_STARTED, RENAME_COMPLETED };
 
-  typedef std::map<std::string, std::unique_ptr<Disk>> DiskMap;
+  // Comparator sorting Disk objects by device_path.
+  struct SortByDevicePath {
+    using is_transparent = void;
 
-  // A struct to store information about mount point.
-  struct MountPointInfo {
+    template <typename A, typename B>
+    bool operator()(const A& a, const B& b) const {
+      return GetKey(a) < GetKey(b);
+    }
+
+    static base::StringPiece GetKey(const base::StringPiece a) { return a; }
+
+    static base::StringPiece GetKey(const std::unique_ptr<Disk>& disk) {
+      DCHECK(disk);
+      return disk->device_path();
+    }
+  };
+
+  using Disks = std::set<std::unique_ptr<Disk>, SortByDevicePath>;
+
+  // Information about a mount point.
+  struct MountPoint {
     // Device's path.
     std::string source_path;
     // Mounted path.
     std::string mount_path;
     // Type of mount.
-    MountType mount_type;
+    MountType mount_type = MountType::kInvalid;
     // Condition of mount.
-    MountCondition mount_condition;
+    MountCondition mount_condition = MountCondition::kNone;
+  };
 
-    MountPointInfo(const std::string& source,
-                   const std::string& mount,
-                   const MountType type,
-                   MountCondition condition)
-        : source_path(source),
-          mount_path(mount),
-          mount_type(type),
-          mount_condition(condition) {
+  // Comparator sorting MountPoint objects by mount_path.
+  struct SortByMountPath {
+    using is_transparent = void;
+
+    template <typename A, typename B>
+    bool operator()(const A& a, const B& b) const {
+      return GetKey(a) < GetKey(b);
+    }
+
+    static base::StringPiece GetKey(const base::StringPiece a) { return a; }
+
+    static base::StringPiece GetKey(const MountPoint& mp) {
+      return mp.mount_path;
     }
   };
 
-  // MountPointMap key is mount_path.
-  typedef std::map<std::string, MountPointInfo> MountPointMap;
+  // MountPoints indexed by mount_path.
+  typedef std::set<MountPoint, SortByMountPath> MountPoints;
 
   // A callback function type which is called after UnmountDeviceRecursively
   // finishes.
@@ -105,7 +135,7 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
       UnmountDeviceRecursivelyCallbackType;
 
   typedef base::OnceCallback<void(MountError error_code,
-                                  const MountPointInfo& mount_info)>
+                                  const MountPoint& mount_info)>
       MountPathCallback;
 
   // A callback type for UnmountPath method.
@@ -128,7 +158,7 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
     // Called after a mount point has been mounted or unmounted.
     virtual void OnMountEvent(MountEvent event,
                               MountError error_code,
-                              const MountPointInfo& mount_info) {}
+                              const MountPoint& mount_info) {}
     // Called on format process events.
     virtual void OnFormatEvent(FormatEvent event,
                                FormatError error_code,
@@ -157,14 +187,14 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
   virtual void RemoveObserver(Observer* observer) = 0;
 
   // Gets the list of disks found.
-  virtual const DiskMap& disks() const = 0;
+  virtual const Disks& disks() const = 0;
 
   // Returns Disk object corresponding to |source_path| or NULL on failure.
   virtual const Disk* FindDiskBySourcePath(
       const std::string& source_path) const = 0;
 
   // Gets the list of mount points.
-  virtual const MountPointMap& mount_points() const = 0;
+  virtual const MountPoints& mount_points() const = 0;
 
   // Refreshes all the information about mounting if it is not yet done and
   // invokes |callback| when finished. If the information is already refreshed
@@ -175,12 +205,12 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
 
   // Mounts a device or an archive file.
   // |source_path| specifies either a device or an archive file path.
-  // When |type|=MOUNT_TYPE_ARCHIVE, caller may set two optional arguments:
-  // |source_format| and |mount_label|. See CrosDisksClient::Mount for detail.
-  // |access_mode| specifies read-only or read-write mount mode for a device.
-  // Note that the mount operation may fail. To find out the result, one should
-  // observe DiskMountManager for |Observer::OnMountEvent| event, which will be
-  // raised upon the mount operation completion.
+  // When |type|=MountType::kArchive, caller may set two optional
+  // arguments: |source_format| and |mount_label|. See CrosDisksClient::Mount
+  // for detail. |access_mode| specifies read-only or read-write mount mode for
+  // a device. Note that the mount operation may fail. To find out the result,
+  // one should observe DiskMountManager for |Observer::OnMountEvent| event,
+  // which will be raised upon the mount operation completion.
   virtual void MountPath(const std::string& source_path,
                          const std::string& source_format,
                          const std::string& mount_label,
@@ -199,7 +229,7 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
 
   // Remounts mounted removable devices to change the read-only mount option.
   // Devices that can be mounted only in its read-only mode will be ignored.
-  virtual void RemountAllRemovableDrives(chromeos::MountAccessMode mode) = 0;
+  virtual void RemountAllRemovableDrives(MountAccessMode mode) = 0;
 
   // Formats device mounted at |mount_path| with the given filesystem and label.
   // Also unmounts the device before formatting.
@@ -236,13 +266,7 @@ class COMPONENT_EXPORT(ASH_DISKS) DiskMountManager {
   // Used in tests to initialize the manager's disk and mount point sets.
   // Default implementation does noting. It just fails.
   virtual bool AddDiskForTest(std::unique_ptr<Disk> disk);
-  virtual bool AddMountPointForTest(const MountPointInfo& mount_point);
-
-  // Returns corresponding string to |type| like "unknown_filesystem".
-  static std::string MountConditionToString(MountCondition type);
-
-  // Returns corresponding string to |type|, like "sd", "usb".
-  static std::string DeviceTypeToString(DeviceType type);
+  virtual bool AddMountPointForTest(const MountPoint& mount_point);
 
   // Creates the global DiskMountManager instance.
   static void Initialize();

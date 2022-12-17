@@ -19,6 +19,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringize_macros.h"
@@ -29,6 +30,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/policy/policy_constants.h"
+#include "components/webrtc/thread_wrapper.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
@@ -42,7 +44,6 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/url_util.h"
 #include "net/socket/client_socket_factory.h"
-#include "net/url_request/url_fetcher.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/cpu_utils.h"
@@ -60,7 +61,6 @@
 #include "remoting/host/branding.h"
 #include "remoting/host/chromoting_host.h"
 #include "remoting/host/chromoting_host_context.h"
-#include "remoting/host/chromoting_messages.h"
 #include "remoting/host/config_file_watcher.h"
 #include "remoting/host/config_watcher.h"
 #include "remoting/host/crash_process.h"
@@ -78,6 +78,7 @@
 #include "remoting/host/ipc_desktop_environment.h"
 #include "remoting/host/ipc_host_event_logger.h"
 #include "remoting/host/me2me_desktop_environment.h"
+#include "remoting/host/mojom/desktop_session.mojom.h"
 #include "remoting/host/mojom/remoting_host.mojom.h"
 #include "remoting/host/pairing_registry_delegate.h"
 #include "remoting/host/pin_hash.h"
@@ -227,7 +228,8 @@ class HostProcess : public ConfigWatcher::Delegate,
                     public HeartbeatSender::Delegate,
                     public IPC::Listener,
                     public base::RefCountedThreadSafe<HostProcess>,
-                    public mojom::RemotingHostControl {
+                    public mojom::RemotingHostControl,
+                    public mojom::WorkerProcessControl {
  public:
   // |shutdown_watchdog| is armed when shutdown is started, and should be kept
   // alive as long as possible until the process exits (since destroying the
@@ -368,11 +370,13 @@ class HostProcess : public ConfigWatcher::Delegate,
   void GoOffline(const std::string& host_offline_reason);
   void OnHostOfflineReasonAck(bool success);
 
+  // mojom::WorkerProcessControl implementation.
+  void CrashProcess(const std::string& function_name,
+                    const std::string& file_name,
+                    int line_number) override;
+
 #if BUILDFLAG(IS_WIN)
   // mojom::RemotingHostControl implementation.
-  void CrashHostProcess(const std::string& function_name,
-                        const std::string& file_name,
-                        int line_number) override;
   void ApplyHostConfig(base::Value serialized_config) override;
   void InitializePairingRegistry(
       ::mojo::PlatformHandle privileged_handle,
@@ -479,6 +483,8 @@ class HostProcess : public ConfigWatcher::Delegate,
 
   mojo::AssociatedReceiver<mojom::RemotingHostControl> remoting_host_control_{
       this};
+  mojo::AssociatedReceiver<mojom::WorkerProcessControl>
+      worker_process_control_{this};
 
 #if BUILDFLAG(IS_APPLE)
   // When using the command line option to check the Accessibility or Screen
@@ -606,11 +612,6 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
     return false;
   }
 #endif  // !defined(REMOTING_MULTI_PROCESS)
-
-  // Ignore certificate requests - the host currently has no client certificate
-  // support, so ignoring certificate requests allows connecting to servers that
-  // request, but don't require, a certificate (optional client authentication).
-  net::URLFetcher::SetIgnoreCertificateRequests(true);
 
   signal_parent_ = cmd_line->HasSwitch(kSignalParentSwitchName);
 
@@ -874,8 +875,17 @@ void HostProcess::OnAssociatedInterfaceRequest(
     mojo::PendingAssociatedReceiver<mojom::RemotingHostControl>
         pending_receiver(std::move(handle));
     remoting_host_control_.Bind(std::move(pending_receiver));
-  } else if (interface_name == mojom::DesktopSessionConnectionEvents::Name_) {
+  } else if (interface_name == mojom::WorkerProcessControl::Name_) {
+    if (worker_process_control_.is_bound()) {
+      LOG(ERROR) << "Receiver already bound for associated interface: "
+                 << mojom::WorkerProcessControl::Name_;
+      CrashProcess(__FUNCTION__, __FILE__, __LINE__);
+    }
 
+    mojo::PendingAssociatedReceiver<mojom::WorkerProcessControl>
+        pending_receiver(std::move(handle));
+    worker_process_control_.Bind(std::move(pending_receiver));
+  } else if (interface_name == mojom::DesktopSessionConnectionEvents::Name_) {
     if (!desktop_session_connector_->BindConnectionEventsReceiver(
             std::move(handle))) {
       LOG(ERROR) << "Failed to bind Receiver for associated interface: "
@@ -1333,6 +1343,7 @@ bool HostProcess::OnUsernamePolicyUpdate(base::DictionaryValue* policies) {
   // Returns false: never restart the host after this policy update.
   DCHECK(context_->network_task_runner()->BelongsToCurrentThread());
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   absl::optional<bool> host_username_match_required =
       policies->FindBoolKey(policy::key::kRemoteAccessHostMatchUsername);
   if (!host_username_match_required.has_value())
@@ -1340,6 +1351,7 @@ bool HostProcess::OnUsernamePolicyUpdate(base::DictionaryValue* policies) {
 
   host_username_match_required_ = host_username_match_required.value();
   ApplyUsernamePolicy();
+#endif
   return false;
 }
 
@@ -1659,6 +1671,9 @@ void HostProcess::StartHost() {
   DCHECK(context_->network_task_runner()->BelongsToCurrentThread());
   DCHECK(!host_);
 
+  // This thread is used as a network thread in WebRTC.
+  webrtc::ThreadWrapper::EnsureForCurrentMessageLoop();
+
   SetState(HOST_STARTED);
 
   InitializeSignaling();
@@ -1686,6 +1701,7 @@ void HostProcess::StartHost() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           std::make_unique<protocol::ChromiumPortAllocatorFactory>(),
+          webrtc::ThreadWrapper::current()->SocketServer(),
           context_->url_loader_factory(), oauth_token_getter_.get(),
           network_settings, protocol::TransportRole::SERVER);
   std::unique_ptr<protocol::SessionManager> session_manager(
@@ -1902,14 +1918,12 @@ void HostProcess::OnHostOfflineReasonAck(bool success) {
   }
 }
 
-#if BUILDFLAG(IS_WIN)
-void HostProcess::CrashHostProcess(const std::string& function_name,
-                                   const std::string& file_name,
-                                   int line_number) {
+void HostProcess::CrashProcess(const std::string& function_name,
+                               const std::string& file_name,
+                               int line_number) {
   // The daemon requested us to crash the process.
-  CrashProcess(function_name, file_name, line_number);
+  ::remoting::CrashProcess(function_name, file_name, line_number);
 }
-#endif
 
 int HostProcessMain() {
   HOST_LOG << "Starting host process: version " << STRINGIZE(VERSION);

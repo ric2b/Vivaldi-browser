@@ -360,7 +360,7 @@ void TabsPrivateAPI::NotifyTabSelectionChange(
 
 void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents) {
   if (!web_contents || !static_cast<content::WebContentsImpl*>(web_contents)
-                            ->GetMainFrame()
+                            ->GetPrimaryMainFrame()
                             ->GetProcess()) {
     return;
   }
@@ -407,10 +407,6 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
       vivaldiprefs::kWebpagesFocusTrap,
       base::BindRepeating(&VivaldiPrivateTabObserver::OnPrefsChanged,
                           weak_ptr_factory_.GetWeakPtr()));
-  prefs_registrar_.Add(
-      vivaldiprefs::kWebpagesAccessKeys,
-      base::BindRepeating(&VivaldiPrivateTabObserver::OnPrefsChanged,
-                          weak_ptr_factory_.GetWeakPtr()));
 
   VivaldiTranslateClient* translate_client =
       VivaldiTranslateClient::FromWebContents(web_contents);
@@ -434,9 +430,6 @@ void VivaldiPrivateTabObserver::WebContentsDestroyed() {
 void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesFocusTrap) {
     UpdateAllowTabCycleIntoUI();
-    CommitSettings();
-  } else if (path == vivaldiprefs::kWebpagesAccessKeys) {
-    UpdateAllowAccessKeys();
     CommitSettings();
   }
 }
@@ -508,11 +501,8 @@ void VivaldiPrivateTabObserver::RenderFrameCreated(
     SetMuted(true);
   }
 
-  SetShowImages(show_images_);
   SetLoadFromCacheOnly(load_from_cache_only_);
-  SetEnablePlugins(enable_plugins_);
   UpdateAllowTabCycleIntoUI();
-  UpdateAllowAccessKeys();
   CommitSettings();
 
   const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
@@ -550,12 +540,9 @@ void VivaldiPrivateTabObserver::RenderViewHostChanged(
                                           tab_zoom_level_);
   }
 
-  // Set the setting on the new RenderViewHost too.
-  SetShowImages(show_images_);
+  // Set the renderer prefs on the new RenderViewHost too.
   SetLoadFromCacheOnly(load_from_cache_only_);
-  SetEnablePlugins(enable_plugins_);
   UpdateAllowTabCycleIntoUI();
-  UpdateAllowAccessKeys();
   CommitSettings();
 }
 
@@ -569,23 +556,17 @@ void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
       !profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesFocusTrap);
 }
 
-void VivaldiPrivateTabObserver::UpdateAllowAccessKeys() {
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  render_prefs->allow_access_keys =
-      profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesAccessKeys);
-}
-
 void VivaldiPrivateTabObserver::SetShowImages(bool show_images) {
+  if (show_images_ == show_images) {
+    // Make sure we do not call SetImagesEnabled uneccesary. OnUpdated is called
+    // numerous times.
+    return;
+  }
+
   show_images_ = show_images;
 
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
-  render_prefs->should_show_images = show_images;
+  // This will loop over all images and show or hide them.
+  web_contents()->GetRenderViewHost()->SetImagesEnabled(show_images);
 }
 
 void VivaldiPrivateTabObserver::SetLoadFromCacheOnly(
@@ -596,14 +577,8 @@ void VivaldiPrivateTabObserver::SetLoadFromCacheOnly(
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   render_prefs->serve_resources_only_from_cache = load_from_cache_only;
-}
-
-void VivaldiPrivateTabObserver::SetEnablePlugins(bool enable_plugins) {
-  enable_plugins_ = enable_plugins;
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
-  render_prefs->should_enable_plugin_content = enable_plugins;
+  web_contents()->GetRenderViewHost()->SetServeResourceFromCacheOnly(
+      load_from_cache_only);
 }
 
 void VivaldiPrivateTabObserver::SetMuted(bool mute) {
@@ -642,12 +617,8 @@ void VivaldiPrivateTabObserver::CommitSettings() {
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile);
 
-  if (load_from_cache_only_ && enable_plugins_) {
-    render_prefs->should_ask_plugin_content = true;
-  } else {
-    render_prefs->should_ask_plugin_content = false;
-  }
   web_contents()->SyncRendererPrefs();
+  web_contents()->OnWebPreferencesChanged();
 }
 
 void VivaldiPrivateTabObserver::OnZoomChanged(
@@ -701,7 +672,7 @@ void VivaldiPrivateTabObserver::DidFinishLoad(
 void VivaldiPrivateTabObserver::GetAccessKeys(JSAccessKeysCallback callback) {
   DCHECK(callback);
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
   rfhi->GetVivaldiFrameService()->GetAccessKeysForPage(
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&VivaldiPrivateTabObserver::AccessKeysReceived,
@@ -717,20 +688,20 @@ void VivaldiPrivateTabObserver::AccessKeysReceived(
 
 void VivaldiPrivateTabObserver::UpdateSpatnavRects() {
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
   rfhi->GetVivaldiFrameService()->UpdateSpatnavRects();
 }
 
 void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
   auto* rfh = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
   rfh->GetVivaldiFrameService()->AccessKeyAction(access_key);
 }
 
 void VivaldiPrivateTabObserver::GetCurrentSpatnavRect(
     JSSpatnavRectCallback callback) {
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-     web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
 
   rfhi->GetVivaldiFrameService()->GetCurrentSpatnavRect(
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
@@ -743,7 +714,7 @@ void VivaldiPrivateTabObserver::MoveSpatnavRect(
     ::vivaldi::mojom::SpatnavDirection direction,
     JSSpatnavRectCallback callback) {
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-     web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
   rfhi->GetVivaldiFrameService()->MoveSpatnavRect(direction,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&VivaldiPrivateTabObserver::SpatnavRectReceived,
@@ -762,7 +733,7 @@ void VivaldiPrivateTabObserver::DetermineTextLanguage(
     JSDetermineTextLanguageCallback callback) {
   DCHECK(callback);
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetMainFrame());
+      web_contents()->GetPrimaryMainFrame());
   rfhi->GetVivaldiFrameService()->DetermineTextLanguage(
       text,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
@@ -820,13 +791,10 @@ void VivaldiPrivateTabObserver::WebContentsDidDetach() {
 
 void VivaldiPrivateTabObserver::WebContentsDidAttach() {
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
-  const std::vector<tabs_private::TabAlertState> states = ConvertTabAlertState(
-      chrome::GetTabAlertStatesForContents(web_contents()));
-
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabIsAttached::kEventName,
       tabs_private::OnTabIsAttached::Create(
-          tab_id, ExtensionTabUtil::GetWindowIdOfTab(web_contents()), states),
+          tab_id, ExtensionTabUtil::GetWindowIdOfTab(web_contents())),
       web_contents()->GetBrowserContext());
 }
 
@@ -969,7 +937,7 @@ void VivaldiPrivateTabObserver::MediaPictureInPictureChanged(
 
 namespace {
 
-::vivaldi::mojom::VivaldiFrameService* GetFocusedFrameService(
+::vivaldi::mojom::VivaldiFrameService* GetPrimaryFrameService(
     ExtensionFunction* function,
     int tab_id,
     std::string* error) {
@@ -979,13 +947,9 @@ namespace {
   if (!tabstrip_contents)
     return nullptr;
 
-  auto* focused_frame = static_cast<content::RenderFrameHostImpl*>(
-      tabstrip_contents->GetFocusedFrame());
-  if (!focused_frame) {
-    *error = "GetFocusedFrame() is null";
-    return nullptr;
-  }
-  return focused_frame->GetVivaldiFrameService().get();
+  auto* primary_frame = static_cast<content::RenderFrameHostImpl*>(
+      tabstrip_contents->GetPrimaryMainFrame());
+  return primary_frame->GetVivaldiFrameService().get();
 }
 
 }  // namespace
@@ -1009,9 +973,6 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   }
   if (info->load_from_cache_only) {
     tab_api->SetLoadFromCacheOnly(*info->load_from_cache_only.get());
-  }
-  if (info->enable_plugins) {
-    tab_api->SetEnablePlugins(*info->enable_plugins.get());
   }
   if (info->mute_tab) {
     tab_api->SetMuted(*info->mute_tab.get());
@@ -1038,7 +999,6 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   tabs_private::UpdateTabInfo info;
   info.show_images.reset(new bool(tab_api->show_images()));
   info.load_from_cache_only.reset(new bool(tab_api->load_from_cache_only()));
-  info.enable_plugins.reset(new bool(tab_api->enable_plugins()));
   return RespondNow(ArgumentList(Results::Create(info)));
 }
 
@@ -1050,7 +1010,7 @@ ExtensionFunction::ResponseAction TabsPrivateInsertTextFunction::Run() {
 
   std::string error;
   ::vivaldi::mojom::VivaldiFrameService* frame_service =
-      GetFocusedFrameService(this, params->tab_id, &error);
+      GetPrimaryFrameService(this, params->tab_id, &error);
   if (!frame_service)
     return RespondNow(Error(error));
 
@@ -1219,7 +1179,7 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
 
   std::string error;
   ::vivaldi::mojom::VivaldiFrameService* frame_service =
-      GetFocusedFrameService(this, params->tab_id, &error);
+      GetPrimaryFrameService(this, params->tab_id, &error);
   if (!frame_service)
     return RespondNow(Error(error));
 
@@ -1340,7 +1300,7 @@ TabsPrivateActivateSpatnavElementFunction::Run() {
 
   std::string error;
   ::vivaldi::mojom::VivaldiFrameService* frame_service =
-      GetFocusedFrameService(this, params->tab_id, &error);
+      GetPrimaryFrameService(this, params->tab_id, &error);
   if (!frame_service)
     return RespondNow(Error(error));
 

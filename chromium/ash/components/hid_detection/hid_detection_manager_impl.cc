@@ -4,7 +4,9 @@
 
 #include "ash/components/hid_detection/hid_detection_manager_impl.h"
 
+#include "ash/components/hid_detection/bluetooth_hid_detector_impl.h"
 #include "ash/components/hid_detection/hid_detection_utils.h"
+#include "base/containers/contains.h"
 #include "base/no_destructor.h"
 #include "components/device_event_log/device_event_log.h"
 
@@ -25,10 +27,9 @@ void HidDetectionManagerImpl::SetInputDeviceManagerBinderForTest(
 }
 
 HidDetectionManagerImpl::HidDetectionManagerImpl(
-    device::mojom::DeviceService* device_service,
-    BluetoothHidDetector* bluetooth_hid_detector)
+    device::mojom::DeviceService* device_service)
     : device_service_{device_service},
-      bluetooth_hid_detector_{bluetooth_hid_detector} {}
+      bluetooth_hid_detector_{std::make_unique<BluetoothHidDetectorImpl>()} {}
 
 HidDetectionManagerImpl::~HidDetectionManagerImpl() = default;
 
@@ -55,19 +56,29 @@ void HidDetectionManagerImpl::PerformStartHidDetection() {
 void HidDetectionManagerImpl::PerformStopHidDetection() {
   HID_LOG(EVENT) << "Stopping HID detection.";
   input_device_manager_receiver_.reset();
-  bluetooth_hid_detector_->StopBluetoothHidDetection();
+
+  // Check if any of the connected input devices are connected via Bluetooth.
+  bool is_using_bluetooth = false;
+  for (const auto& [device_id, device] : device_id_to_device_map_) {
+    if (device->type == device::mojom::InputDeviceType::TYPE_BLUETOOTH) {
+      is_using_bluetooth = true;
+      break;
+    }
+  }
+  bluetooth_hid_detector_->StopBluetoothHidDetection(is_using_bluetooth);
 }
 
 HidDetectionManager::HidDetectionStatus
 HidDetectionManagerImpl::ComputeHidDetectionStatus() const {
   BluetoothHidDetector::BluetoothHidDetectionStatus bluetooth_status =
       bluetooth_hid_detector_->GetBluetoothHidDetectionStatus();
-  return HidDetectionManager::HidDetectionStatus{
+  return HidDetectionManager::HidDetectionStatus(
       GetInputMetadata(connected_pointer_id_, BluetoothHidType::kPointer,
                        bluetooth_status.current_pairing_device),
       GetInputMetadata(connected_keyboard_id_, BluetoothHidType::kKeyboard,
                        bluetooth_status.current_pairing_device),
-      connected_touchscreen_id_.has_value()};
+      connected_touchscreen_id_.has_value(),
+      std::move(bluetooth_status.pairing_state));
 }
 
 void HidDetectionManagerImpl::InputDeviceAdded(
@@ -76,6 +87,7 @@ void HidDetectionManagerImpl::InputDeviceAdded(
                  << ", name: " << info->name;
   const std::string& device_id = info->id;
   device_id_to_device_map_[device_id] = std::move(info);
+  hid_detection::RecordHidConnected(*device_id_to_device_map_[device_id]);
 
   if (AttemptSetDeviceAsConnectedHid(*device_id_to_device_map_[device_id])) {
     NotifyHidDetectionStatusChanged();
@@ -84,11 +96,18 @@ void HidDetectionManagerImpl::InputDeviceAdded(
 }
 
 void HidDetectionManagerImpl::InputDeviceRemoved(const std::string& id) {
-  DCHECK(device_id_to_device_map_[id])
-      << " Input device removed was not found in "
-         "|device_id_to_device_map_|.";
+  if (!base::Contains(device_id_to_device_map_, id)) {
+    // Some devices may be removed that were not registered in
+    // InputDeviceAdded() or OnGetDevicesAndSetClient().
+    HID_LOG(EVENT)
+        << "Input device with id: " << id
+        << " was removed that was not in |device_id_to_device_map_|.";
+    return;
+  }
+
   HID_LOG(EVENT) << "Input device removed, id: " << id
                  << ", name: " << device_id_to_device_map_[id]->name;
+  hid_detection::RecordHidDisconnected(*device_id_to_device_map_[id]);
   device_id_to_device_map_.erase(id);
   bool was_connected_hid_disconnected_ = false;
 
@@ -149,6 +168,18 @@ void HidDetectionManagerImpl::OnGetDevicesForIsRequired(
     if (has_pointer && has_keyboard)
       break;
   }
+
+  hid_detection::HidsMissing hids_missing = hid_detection::HidsMissing::kNone;
+  if (!has_pointer) {
+    if (!has_keyboard) {
+      hids_missing = hid_detection::HidsMissing::kPointerAndKeyboard;
+    } else {
+      hids_missing = hid_detection::HidsMissing::kPointer;
+    }
+  } else if (!has_keyboard) {
+    hids_missing = hid_detection::HidsMissing::kKeyboard;
+  }
+  hid_detection::RecordInitialHidsMissing(hids_missing);
 
   HID_LOG(EVENT)
       << "Fetched " << devices.size()
@@ -250,6 +281,11 @@ void HidDetectionManagerImpl::SetInputDevicesStatus() {
   bluetooth_hid_detector_->SetInputDevicesStatus(
       {.pointer_is_missing = !connected_pointer_id_.has_value(),
        .keyboard_is_missing = !connected_keyboard_id_.has_value()});
+}
+
+void HidDetectionManagerImpl::SetBluetoothHidDetectorForTest(
+    std::unique_ptr<BluetoothHidDetector> bluetooth_hid_detector) {
+  bluetooth_hid_detector_ = std::move(bluetooth_hid_detector);
 }
 
 }  // namespace ash::hid_detection

@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/bitrate.h"
 #include "media/base/bitstream_buffer.h"
@@ -48,7 +49,7 @@ const uint32_t kMaxKeyframeInterval = 100;
 scoped_refptr<VEAEncoder> VEAEncoder::Create(
     const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_cb,
     const VideoTrackRecorder::OnErrorCB& on_error_cb,
-    int32_t bits_per_second,
+    uint32_t bits_per_second,
     media::VideoCodecProfile codec,
     absl::optional<uint8_t> level,
     const gfx::Size& size,
@@ -71,7 +72,7 @@ bool VEAEncoder::OutputBuffer::IsValid() {
 VEAEncoder::VEAEncoder(
     const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_cb,
     const VideoTrackRecorder::OnErrorCB& on_error_cb,
-    int32_t bits_per_second,
+    uint32_t bits_per_second,
     media::VideoCodecProfile codec,
     absl::optional<uint8_t> level,
     const gfx::Size& size,
@@ -198,6 +199,7 @@ void VEAEncoder::FrameFinished(std::unique_ptr<InputBuffer> shm) {
 
 void VEAEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
                                             base::TimeTicks capture_timestamp) {
+  TRACE_EVENT0("media", "VEAEncoder::EncodeOnEncodingTaskRunner");
   DVLOG(3) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoding_sequence_checker_);
 
@@ -247,6 +249,7 @@ void VEAEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
        vea_requested_input_coded_size_ != frame->coded_size() ||
        input_visible_size_.width() < kVEAEncoderMinResolutionWidth ||
        input_visible_size_.height() < kVEAEncoderMinResolutionHeight)) {
+    TRACE_EVENT0("media", "VEAEncoder::EncodeOnEncodingTaskRunner::Copy");
     // Create SharedMemory backed input buffers as necessary. These SharedMemory
     // instances will be shared with GPU process.
     const size_t desired_mapped_size = media::VideoFrame::AllocationSize(
@@ -305,7 +308,7 @@ void VEAEncoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size,
   DVLOG(3) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoding_sequence_checker_);
   DCHECK(gpu_factories_->GetTaskRunner()->RunsTasksInCurrentSequence());
-  DCHECK_GT(bits_per_second_, 0);
+  DCHECK_NE(bits_per_second_, 0u);
 
   input_visible_size_ = size;
   vea_requested_input_coded_size_ = gfx::Size();
@@ -327,9 +330,8 @@ void VEAEncoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size,
   // |bits_per_second_| is stored as uint32_t.
   const media::VideoEncodeAccelerator::Config config(
       pixel_format, input_visible_size_, codec_,
-      media::Bitrate::ConstantBitrate(
-          base::saturated_cast<uint32_t>(bits_per_second_)),
-      absl::nullopt, absl::nullopt, level_, false, storage_type,
+      media::Bitrate::ConstantBitrate(bits_per_second_), absl::nullopt,
+      absl::nullopt, level_, false, storage_type,
       media::VideoEncodeAccelerator::Config::ContentType::kCamera);
   if (!video_encoder_ ||
       !video_encoder_->Initialize(config, this,

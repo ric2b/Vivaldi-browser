@@ -30,7 +30,9 @@ class VivaldiAccountPasswordHandler
     virtual void OnAccountPasswordStateChanged() = 0;
   };
 
-  explicit VivaldiAccountPasswordHandler(Profile* profile, Delegate* delegate);
+  explicit VivaldiAccountPasswordHandler(
+      scoped_refptr<password_manager::PasswordStoreInterface> password_store,
+      Delegate* delegate);
   ~VivaldiAccountPasswordHandler() override;
   VivaldiAccountPasswordHandler(const VivaldiAccountPasswordHandler&) = delete;
   VivaldiAccountPasswordHandler& operator=(

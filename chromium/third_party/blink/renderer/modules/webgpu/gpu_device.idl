@@ -15,7 +15,7 @@
 
     [SameObject] readonly attribute GPUQueue queue;
 
-    void destroy();
+    [CallWith=ScriptState] void destroy();
 
     GPUBuffer createBuffer(GPUBufferDescriptor descriptor);
     [RaisesException] GPUTexture createTexture(GPUTextureDescriptor descriptor);
@@ -37,7 +37,7 @@
     GPUCommandEncoder createCommandEncoder(optional GPUCommandEncoderDescriptor descriptor = {});
     [RaisesException] GPURenderBundleEncoder createRenderBundleEncoder(GPURenderBundleEncoderDescriptor descriptor);
 
-    GPUQuerySet createQuerySet(GPUQuerySetDescriptor descriptor);
+    [RaisesException] GPUQuerySet createQuerySet(GPUQuerySetDescriptor descriptor);
 
     void pushErrorScope(GPUErrorFilter filter);
     [CallWith=ScriptState] Promise<GPUError?> popErrorScope();

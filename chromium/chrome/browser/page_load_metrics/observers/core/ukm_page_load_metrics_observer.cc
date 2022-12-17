@@ -18,7 +18,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_tab_helper.h"
-#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
+#include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -245,6 +245,7 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
   UpdateMainFrameRequestHadCookie(
       navigation_handle->GetWebContents()->GetBrowserContext(),
       navigation_handle->GetURL());
+  was_discarded_ = navigation_handle->ExistingDocumentWasDiscarded();
 
   return CONTINUE_OBSERVING;
 }
@@ -254,6 +255,15 @@ page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 UkmPageLoadMetricsObserver::OnFencedFramesStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url) {
+  return STOP_OBSERVING;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+UkmPageLoadMetricsObserver::OnPrerenderStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // PrerenderPageLoadMetricsObserver records prerendering version of metrics
+  // and this PLMO can stop on prerendering.
   return STOP_OBSERVING;
 }
 
@@ -769,6 +779,8 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
   builder.SetNet_MediaBytes2(
       ukm::GetExponentialBucketMinForBytes(media_bytes_));
 
+  builder.SetSoftNavigationCount(GetDelegate().GetSoftNavigationCount());
+
   if (main_frame_timing_)
     ReportMainResourceTimingMetrics(builder);
 
@@ -851,6 +863,9 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
   }
   if (GetDelegate().DidCommit() && was_cached_) {
     builder.SetWasCached(1);
+  }
+  if (GetDelegate().DidCommit() && was_discarded_) {
+    builder.SetWasDiscarded(true);
   }
   if (GetDelegate().DidCommit() && navigation_is_cross_process_) {
     builder.SetIsCrossProcessNavigation(navigation_is_cross_process_);
@@ -1178,8 +1193,6 @@ void UkmPageLoadMetricsObserver::RecordSmoothnessMetrics() {
       .SetAboveThreshold(smoothness_data.above_threshold)
       .SetWorstCase(smoothness_data.worst_smoothness)
       .SetVariance(smoothness_data.variance)
-      .SetTimingSinceFCPWorstCase(
-          smoothness_data.time_max_delta.InMilliseconds())
       .SetSmoothnessVeryGood(smoothness_data.buckets[0])
       .SetSmoothnessGood(smoothness_data.buckets[1])
       .SetSmoothnessOkay(smoothness_data.buckets[2])
@@ -1207,18 +1220,11 @@ void UkmPageLoadMetricsObserver::RecordSmoothnessMetrics() {
   builder.Record(ukm::UkmRecorder::Get());
 
   base::UmaHistogramPercentage(
-      "Graphics.Smoothness.PerSession.AveragePercentDroppedFrames",
-      smoothness_data.avg_smoothness);
-  base::UmaHistogramPercentage(
       "Graphics.Smoothness.PerSession.95pctPercentDroppedFrames_1sWindow",
       smoothness_data.percentile_95);
   base::UmaHistogramPercentage(
       "Graphics.Smoothness.PerSession.MaxPercentDroppedFrames_1sWindow",
       smoothness_data.worst_smoothness);
-  base::UmaHistogramCustomTimes(
-      "Graphics.Smoothness.PerSession.TimeMaxPercentDroppedFrames_1sWindow",
-      smoothness_data.time_max_delta, base::Milliseconds(1), base::Seconds(25),
-      50);
 }
 
 void UkmPageLoadMetricsObserver::RecordMobileFriendlinessMetrics() {
@@ -1315,8 +1321,9 @@ UkmPageLoadMetricsObserver::GetThirdPartyCookieBlockingEnabled() const {
   if (!cookie_settings->ShouldBlockThirdPartyCookies())
     return absl::nullopt;
 
-  return !cookie_settings->IsThirdPartyAccessAllowed(GetDelegate().GetUrl(),
-                                                     nullptr /* source */);
+  return !cookie_settings->IsThirdPartyAccessAllowed(
+      GetDelegate().GetUrl(), nullptr /* source */,
+      content_settings::CookieSettings::QueryReason::kSetting);
 }
 
 void UkmPageLoadMetricsObserver::RecordResponsivenessMetrics() {

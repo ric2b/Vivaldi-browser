@@ -48,15 +48,12 @@ import org.chromium.chrome.browser.password_check.PasswordCheckComponentUiFactor
 import org.chromium.chrome.browser.password_check.PasswordCheckFragmentView;
 import org.chromium.chrome.browser.password_entry_edit.CredentialEditUiFactory;
 import org.chromium.chrome.browser.password_entry_edit.CredentialEntryFragmentViewBase;
-import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelper;
-import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelperFactory;
-import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
-import org.chromium.chrome.browser.privacy.settings.PrivacySettings;
+import org.chromium.chrome.browser.privacy_guide.PrivacyGuideFragment;
 import org.chromium.chrome.browser.privacy_sandbox.AdMeasurementFragment;
 import org.chromium.chrome.browser.privacy_sandbox.AdPersonalizationFragment;
 import org.chromium.chrome.browser.privacy_sandbox.AdPersonalizationRemovedFragment;
 import org.chromium.chrome.browser.privacy_sandbox.FlocSettingsFragment;
-import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsFragment;
+import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsBaseFragment;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.safety_check.SafetyCheckCoordinator;
@@ -373,17 +370,9 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                     HelpAndFeedbackLauncherImpl.getInstance());
         }
         if (fragment instanceof SafetyCheckSettingsFragment) {
-            PasswordCheckupClientHelper checkupHelper = null;
-            if (PasswordManagerHelper.canUseUpmCheckup()) {
-                // At this point it can still happen that the helper cannot be created.
-                // In this case, the helper will be null. Safety Check knows to handle
-                // that correctly.
-                checkupHelper = PasswordCheckupClientHelperFactory.getInstance().createHelper();
-            }
             SafetyCheckCoordinator.create((SafetyCheckSettingsFragment) fragment,
                     new SafetyCheckUpdatesDelegateImpl(this), mSettingsLauncher,
-                    SyncConsentActivityLauncherImpl.get(), checkupHelper,
-                    getModalDialogManagerSupplier());
+                    SyncConsentActivityLauncherImpl.get(), getModalDialogManagerSupplier());
         }
         if (fragment instanceof PasswordCheckFragmentView) {
             PasswordCheckComponentUiFactory.create((PasswordCheckFragmentView) fragment,
@@ -414,8 +403,8 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             }
             imageFragment.setDelegate(ImageDescriptionsController.getInstance().getDelegate());
         }
-        if (fragment instanceof PrivacySandboxSettingsFragment) {
-            ((PrivacySandboxSettingsFragment) fragment)
+        if (fragment instanceof PrivacySandboxSettingsBaseFragment) {
+            ((PrivacySandboxSettingsBaseFragment) fragment)
                     .setCustomTabIntentHelper(
                             LaunchIntentDispatcher::createCustomTabActivityIntent);
         }
@@ -447,9 +436,8 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                     .setCustomTabIntentHelper(
                             LaunchIntentDispatcher::createCustomTabActivityIntent);
         }
-        if (fragment instanceof PrivacySettings) {
-            ((PrivacySettings) fragment).setBottomSheetController(mBottomSheetController);
-            ((PrivacySettings) fragment).setDialogContainer(findViewById(R.id.dialog_container));
+        if (fragment instanceof PrivacyGuideFragment) {
+            ((PrivacyGuideFragment) fragment).setBottomSheetController(mBottomSheetController);
         }
         if (fragment instanceof AccessibilitySettings) {
             ((AccessibilitySettings) fragment)

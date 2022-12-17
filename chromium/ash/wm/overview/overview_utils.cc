@@ -38,6 +38,7 @@
 #include "ui/views/background.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/window_animations.h"
 
@@ -60,6 +61,7 @@ bool ShouldAnimateWallpaper(aura::Window* root_window) {
     // Never animate when doing app dragging or when immediately exiting.
     const auto enter_exit_type = overview_session->enter_exit_overview_type();
     if (enter_exit_type == OverviewEnterExitType::kImmediateEnter ||
+        enter_exit_type == OverviewEnterExitType::kImmediateEnterWithoutFocus ||
         enter_exit_type == OverviewEnterExitType::kImmediateExit) {
       return false;
     }
@@ -106,6 +108,10 @@ void FadeInWidgetToOverview(views::Widget* widget,
 
 void FadeOutWidgetFromOverview(std::unique_ptr<views::Widget> widget,
                                OverviewAnimationType animation_type) {
+  // Make it so the widget is no longer activatable, since it will be deleted
+  // when the animation is complete.
+  widget->widget_delegate()->SetCanActivate(false);
+
   // The overview controller may be nullptr on shutdown.
   OverviewController* controller = Shell::Get()->overview_controller();
   if (!controller) {
@@ -248,8 +254,10 @@ gfx::Rect GetGridBoundsInScreen(
         Shell::Get()->overview_controller()->overview_session();
     const bool hotseat_will_extend =
         overview_session &&
-        overview_session->enter_exit_overview_type() ==
-            OverviewEnterExitType::kImmediateEnter &&
+        (overview_session->enter_exit_overview_type() ==
+             OverviewEnterExitType::kImmediateEnter ||
+         overview_session->enter_exit_overview_type() ==
+             OverviewEnterExitType::kImmediateEnterWithoutFocus) &&
         !split_view_controller->InSplitViewMode();
     if (hotseat_extended || hotseat_will_extend) {
       // Use the default hotseat size here to avoid the possible re-layout

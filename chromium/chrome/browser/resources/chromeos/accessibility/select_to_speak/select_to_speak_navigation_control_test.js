@@ -34,6 +34,7 @@ SelectToSpeakNavigationControlTest = class extends SelectToSpeakE2ETest {
       await importModule(
           'SelectToSpeakConstants',
           '/select_to_speak/select_to_speak_constants.js');
+      await importModule('AutomationUtil', '/common/automation_util.js');
       selectToSpeak.prefsManager_.enhancedVoicesDialogShown_ = true;
   }
 
@@ -63,7 +64,7 @@ SelectToSpeakNavigationControlTest = class extends SelectToSpeakE2ETest {
   waitForPanelFocus(root, callback) {
     callback = this.newCallback(callback);
     const focusCallback = () => {
-      chrome.automation.getFocus((node) => {
+      chrome.automation.getFocus(node => {
         if (!this.isNodeWithinPanel(node)) {
           return;
         }
@@ -75,7 +76,7 @@ SelectToSpeakNavigationControlTest = class extends SelectToSpeakE2ETest {
   }
 };
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'NavigatesToNextParagraph',
     async function() {
       const bodyHtml = `
@@ -106,7 +107,7 @@ TEST_F(
       });
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'NavigatesToPreviousParagraph',
     async function() {
       const bodyHtml = `
@@ -137,7 +138,7 @@ TEST_F(
       });
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ReadsParagraphOnClick',
     async function() {
       const bodyHtml = `
@@ -146,7 +147,7 @@ TEST_F(
     `;
       const root = await this.runWithLoadedTree(bodyHtml);
       this.mockTts.setOnSpeechCallbacks([
-        this.newCallback((utterance) => {
+        this.newCallback(utterance => {
           // Speech for first click.
           assertTrue(this.mockTts.currentlySpeaking());
           assertEquals(this.mockTts.pendingUtterances().length, 1);
@@ -154,7 +155,7 @@ TEST_F(
               this.mockTts.pendingUtterances()[0],
               'Sentence one . Sentence two.');
 
-          this.mockTts.setOnSpeechCallbacks([this.newCallback((utterance) => {
+          this.mockTts.setOnSpeechCallbacks([this.newCallback(utterance => {
             // Speech for second click.
             assertTrue(this.mockTts.currentlySpeaking());
             assertEquals(this.mockTts.pendingUtterances().length, 1);
@@ -166,22 +167,22 @@ TEST_F(
           const textNode2 = this.findTextNode(root, 'two');
           const mouseEvent2 = {
             screenX: textNode2.location.left + 1,
-            screenY: textNode2.location.top + 1
+            screenY: textNode2.location.top + 1,
           };
           this.triggerReadMouseSelectedText(mouseEvent2, mouseEvent2);
-        })
+        }),
       ]);
 
       // Click on node in first paragraph.
       const textNode1 = this.findTextNode(root, 'one');
       const event1 = {
         screenX: textNode1.location.left + 1,
-        screenY: textNode1.location.top + 1
+        screenY: textNode1.location.top + 1,
       };
       this.triggerReadMouseSelectedText(event1, event1);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PauseResumeWithinTheSentence',
     async function() {
       const bodyHtml = `
@@ -213,7 +214,7 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], 'sentence. Third sentence.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PauseResumeAtTheBeginningOfSentence',
     async function() {
       const bodyHtml = `
@@ -245,7 +246,7 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], 'Third sentence.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest',
     'PauseResumeAtTheBeginningOfParagraph', async function() {
       const bodyHtml = `
@@ -276,7 +277,7 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], 'sentence.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest',
     'PauseResumeInTheMiddleOfMultiParagraphs', async function() {
       const bodyHtml = `
@@ -323,7 +324,7 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], 'Paragraph three.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PauseResumeAfterParagraphNavigation',
     async function() {
       const bodyHtml = `
@@ -362,7 +363,7 @@ TEST_F(
       assertEquals(this.mockTts.pendingUtterances().length, 0);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PauseResumeAfterSentenceNavigation',
     async function() {
       const bodyHtml = `
@@ -400,7 +401,7 @@ TEST_F(
       assertEquals(this.mockTts.pendingUtterances().length, 0);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PauseResumeAtTheEndOfNodeGroupItem',
     async function() {
       const bodyHtml = `
@@ -431,12 +432,12 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], '. Sentence two.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PauseResumeFromKeystrokeSelection',
     async function() {
       const bodyHtml =
           '<p>This is some <b>bold</b> text</p><p>Second paragraph</p>';
-      const setFocusCallback = this.newCallback((root) => {
+      const setFocusCallback = this.newCallback(root => {
         const firstNode = this.findTextNode(root, 'This is some ');
         const lastNode = this.findTextNode(root, 'Second paragraph');
         // Sets the selection from "is some" to "Second".
@@ -444,7 +445,7 @@ TEST_F(
           anchorObject: firstNode,
           anchorOffset: 5,
           focusObject: lastNode,
-          focusOffset: 6
+          focusOffset: 6,
         });
       });
       const root = await this.runWithLoadedTree(bodyHtml);
@@ -484,31 +485,32 @@ TEST_F(
       setFocusCallback(root);
     });
 
-TEST_F('SelectToSpeakNavigationControlTest', 'NextSentence', async function() {
-  const bodyHtml = `
+AX_TEST_F(
+    'SelectToSpeakNavigationControlTest', 'NextSentence', async function() {
+      const bodyHtml = `
       <p id="p1">This is the first. This is the second.</p>'
     `;
-  await this.runWithLoadedTree(
-      this.generateHtmlWithSelectedElement('p1', bodyHtml));
-  this.triggerReadSelectedText();
+      await this.runWithLoadedTree(
+          this.generateHtmlWithSelectedElement('p1', bodyHtml));
+      this.triggerReadSelectedText();
 
-  // Speaks the first word.
-  this.mockTts.speakUntilCharIndex(5);
-  assertTrue(this.mockTts.currentlySpeaking());
-  assertEquals(this.mockTts.pendingUtterances().length, 1);
-  this.assertEqualsCollapseWhitespace(
-      this.mockTts.pendingUtterances()[0],
-      'This is the first. This is the second.');
+      // Speaks the first word.
+      this.mockTts.speakUntilCharIndex(5);
+      assertTrue(this.mockTts.currentlySpeaking());
+      assertEquals(this.mockTts.pendingUtterances().length, 1);
+      this.assertEqualsCollapseWhitespace(
+          this.mockTts.pendingUtterances()[0],
+          'This is the first. This is the second.');
 
-  // Hitting next sentence will start another TTS.
-  await selectToSpeak.onNextSentenceRequested();
-  assertTrue(this.mockTts.currentlySpeaking());
-  assertEquals(this.mockTts.pendingUtterances().length, 1);
-  this.assertEqualsCollapseWhitespace(
-      this.mockTts.pendingUtterances()[0], 'This is the second.');
-});
+      // Hitting next sentence will start another TTS.
+      await selectToSpeak.onNextSentenceRequested();
+      assertTrue(this.mockTts.currentlySpeaking());
+      assertEquals(this.mockTts.pendingUtterances().length, 1);
+      this.assertEqualsCollapseWhitespace(
+          this.mockTts.pendingUtterances()[0], 'This is the second.');
+    });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'NextSentenceWithinParagraph',
     async function() {
       const bodyHtml = `
@@ -535,7 +537,7 @@ TEST_F(
       });
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'NextSentenceAcrossParagraph',
     async function() {
       const bodyHtml = `
@@ -564,31 +566,33 @@ TEST_F(
       });
     });
 
-TEST_F('SelectToSpeakNavigationControlTest', 'PrevSentence', async function() {
-  const bodyHtml = `
+AX_TEST_F(
+    'SelectToSpeakNavigationControlTest', 'PrevSentence', async function() {
+      const bodyHtml = `
       <p id="p1">First sentence. Second sentence. Third sentence.</p>'
     `;
-  await this.runWithLoadedTree(
-      this.generateHtmlWithSelectedElement('p1', bodyHtml));
-  this.triggerReadSelectedText();
+      await this.runWithLoadedTree(
+          this.generateHtmlWithSelectedElement('p1', bodyHtml));
+      this.triggerReadSelectedText();
 
-  // Speaks util the start of the second sentence.
-  this.mockTts.speakUntilCharIndex(33);
-  assertTrue(this.mockTts.currentlySpeaking());
-  assertEquals(this.mockTts.pendingUtterances().length, 1);
-  this.assertEqualsCollapseWhitespace(
-      this.mockTts.pendingUtterances()[0],
-      'First sentence. Second sentence. Third sentence.');
+      // Speaks util the start of the second sentence.
+      this.mockTts.speakUntilCharIndex(33);
+      assertTrue(this.mockTts.currentlySpeaking());
+      assertEquals(this.mockTts.pendingUtterances().length, 1);
+      this.assertEqualsCollapseWhitespace(
+          this.mockTts.pendingUtterances()[0],
+          'First sentence. Second sentence. Third sentence.');
 
-  // Hitting prev sentence will start another TTS.
-  await selectToSpeak.onPreviousSentenceRequested();
-  assertTrue(this.mockTts.currentlySpeaking());
-  assertEquals(this.mockTts.pendingUtterances().length, 1);
-  this.assertEqualsCollapseWhitespace(
-      this.mockTts.pendingUtterances()[0], 'Second sentence. Third sentence.');
-});
+      // Hitting prev sentence will start another TTS.
+      await selectToSpeak.onPreviousSentenceRequested();
+      assertTrue(this.mockTts.currentlySpeaking());
+      assertEquals(this.mockTts.pendingUtterances().length, 1);
+      this.assertEqualsCollapseWhitespace(
+          this.mockTts.pendingUtterances()[0],
+          'Second sentence. Third sentence.');
+    });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PrevSentenceFromMiddleOfSentence',
     async function() {
       const bodyHtml = `
@@ -615,7 +619,7 @@ TEST_F(
           'First sentence. Second sentence. Third sentence.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PrevSentenceWithinParagraph',
     async function() {
       const bodyHtml = `
@@ -641,7 +645,7 @@ TEST_F(
       });
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'PrevSentenceAcrossParagraph',
     async function() {
       const bodyHtml = `
@@ -670,7 +674,7 @@ TEST_F(
       });
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ChangeSpeedWhilePlaying',
     async function() {
       chrome.settingsPrivate.setPref('settings.tts.speech_rate', 1.2);
@@ -710,7 +714,7 @@ TEST_F(
           0);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'RetainsSpeedChange',
     async function() {
       chrome.settingsPrivate.setPref('settings.tts.speech_rate', 1.0);
@@ -733,7 +737,7 @@ TEST_F(
       assertEquals(this.mockTts.getOptions().rate, 1.5);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ChangeSpeedWhilePaused',
     async function() {
       chrome.settingsPrivate.setPref('settings.tts.speech_rate', 1.2);
@@ -768,7 +772,7 @@ TEST_F(
       }, 0));
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ResumeAtTheEndOfParagraph',
     async function() {
       const bodyHtml = `
@@ -790,7 +794,7 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], 'Paragraph 2');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ResumeAtTheEndOfUserSelection',
     async function() {
       const bodyHtml = `
@@ -812,23 +816,23 @@ TEST_F(
           this.mockTts.pendingUtterances()[0], '. Sentence two.');
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ResumeFromSelectionEndingInSpace',
     async function() {
       const bodyHtml = '<p>This is some text with space.</p>';
-      const setFocusCallback = this.newCallback((root) => {
+      const setFocusCallback = this.newCallback(root => {
         const node = this.findTextNode(root, 'This is some text with space.');
         // Sets the selection to "This ".
         chrome.automation.setDocumentSelection({
           anchorObject: node,
           anchorOffset: 0,
           focusObject: node,
-          focusOffset: 5
+          focusOffset: 5,
         });
       });
       const root = await this.runWithLoadedTree(bodyHtml);
       root.addEventListener(
-          'documentSelectionChanged', this.newCallback((event) => {
+          'documentSelectionChanged', this.newCallback(event => {
             this.triggerReadSelectedText();
 
             assertTrue(this.mockTts.currentlySpeaking());
@@ -852,7 +856,7 @@ TEST_F(
       setFocusCallback(root);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'ResizeWhilePlaying',
     async function() {
       const longLine =
@@ -903,7 +907,7 @@ TEST_F(
       resizeButton.doDefault();
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest',
     'RemainsActiveAfterCompletingUtterance', async function() {
       const bodyHtml = '<p id="p1">Paragraph 1</p>';
@@ -917,14 +921,16 @@ TEST_F(
       assertEquals(selectToSpeak.state_, SelectToSpeakState.SPEAKING);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest',
     'AutoDismissesIfNavigationControlsDisabled', async function() {
-      // Disable navigation controls via settings.
-      chrome.storage.sync.set({'navigationControls': false});
       const bodyHtml = '<p id="p1">Paragraph 1</p>';
       await this.runWithLoadedTree(
           this.generateHtmlWithSelectedElement('p1', bodyHtml));
+
+      // Disable navigation controls.
+      selectToSpeak.prefsManager_.navigationControlsEnabled_ = false;
+
       // Simulate starting and completing TTS.
       this.triggerReadSelectedText();
       this.mockTts.finishPendingUtterance();
@@ -933,7 +939,7 @@ TEST_F(
       assertEquals(selectToSpeak.state_, SelectToSpeakState.INACTIVE);
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'NavigatesToNextParagraphQuickly',
     async function() {
       const bodyHtml = `
@@ -960,7 +966,7 @@ TEST_F(
       });
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'SetsInitialFocusToPanel',
     async function() {
       const bodyHtml = '<p id="p1">Sample text</p>';
@@ -976,7 +982,7 @@ TEST_F(
       this.triggerReadSelectedText();
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'KeyboardShortcutKeepsFocusInPanel',
     async function() {
       const bodyHtml = '<p id="p1">Sample text</p>';
@@ -992,7 +998,7 @@ TEST_F(
           anchorObject: textNode,
           anchorOffset: 0,
           focusObject: textNode,
-          focusOffset: 0
+          focusOffset: 0,
         });
 
         // Perform Search key + S, which should restore focus to
@@ -1007,7 +1013,7 @@ TEST_F(
             {keyCode: SelectToSpeakConstants.SEARCH_KEY_CODE});
 
         // Verify focus is still on button within panel.
-        chrome.automation.getFocus(this.newCallback((focusedNode) => {
+        chrome.automation.getFocus(this.newCallback(focusedNode => {
           assertEquals(focusedNode.role, RoleType.TOGGLE_BUTTON);
           assertTrue(this.isNodeWithinPanel(focusedNode));
         }));
@@ -1017,7 +1023,7 @@ TEST_F(
       this.triggerReadSelectedText();
     });
 
-TEST_F(
+AX_TEST_F(
     'SelectToSpeakNavigationControlTest', 'SelectingWindowDoesNotShowPanel',
     async function() {
       const bodyHtml = `
@@ -1029,7 +1035,7 @@ TEST_F(
       const root = await this.runWithLoadedTree(bodyHtml);
       // Expect call to updateSelectToSpeakPanel to set panel to be hidden.
       chrome.accessibilityPrivate.updateSelectToSpeakPanel =
-          this.newCallback((visible) => {
+          this.newCallback(visible => {
             assertFalse(visible);
           });
 

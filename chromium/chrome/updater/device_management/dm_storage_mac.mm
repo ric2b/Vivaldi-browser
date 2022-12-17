@@ -15,8 +15,10 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/updater/mac/mac_util.h"
 #include "chrome/updater/updater_branding.h"
 
 namespace updater {
@@ -91,6 +93,7 @@ class TokenService : public TokenServiceInterface {
   bool StoreEnrollmentToken(const std::string& enrollment_token) override;
   std::string GetEnrollmentToken() const override { return enrollment_token_; }
   bool StoreDmToken(const std::string& dm_token) override;
+  bool DeleteDmToken() override;
   std::string GetDmToken() const override { return dm_token_; }
 
  private:
@@ -136,9 +139,30 @@ bool TokenService::StoreDmToken(const std::string& token) {
   return true;
 }
 
+bool TokenService::DeleteDmToken() {
+  const base::FilePath dm_token_path = GetDmTokenFilePath();
+  if (dm_token_path.empty() || !base::DeleteFile(dm_token_path)) {
+    return false;
+  }
+  dm_token_.clear();
+  return true;
+}
+
 }  // namespace
 
 DMStorage::DMStorage(const base::FilePath& policy_cache_root)
     : DMStorage(policy_cache_root, std::make_unique<TokenService>()) {}
+
+scoped_refptr<DMStorage> GetDefaultDMStorage() {
+  absl::optional<base::FilePath> sys_library_path =
+      GetLibraryFolderPath(UpdaterScope::kSystem);
+  if (!sys_library_path)
+    return nullptr;
+
+  return base::MakeRefCounted<DMStorage>(
+      sys_library_path->AppendASCII(COMPANY_SHORTNAME_STRING)
+          .Append(FILE_PATH_LITERAL(KEYSTONE_NAME))
+          .AppendASCII("DeviceManagement"));
+}
 
 }  // namespace updater

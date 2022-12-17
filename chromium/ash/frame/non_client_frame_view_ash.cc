@@ -98,7 +98,8 @@ class NonClientFrameViewAshImmersiveHelper : public WindowStateObserver,
     if (window_state_->IsFullscreen())
       return;
     if (Shell::Get()->tablet_mode_controller()->ShouldAutoHideTitlebars(
-            widget_)) {
+            widget_) &&
+        !window_state_->IsFloated()) {
       ImmersiveFullscreenController::EnableForWidget(widget_, true);
     }
   }
@@ -127,7 +128,7 @@ class NonClientFrameViewAshImmersiveHelper : public WindowStateObserver,
         Shell::Get()->tablet_mode_controller() &&
         Shell::Get()->tablet_mode_controller()->ShouldAutoHideTitlebars(
             widget)) {
-      if (window_state->IsMinimized())
+      if (window_state->IsMinimized() || window_state->IsFloated())
         ImmersiveFullscreenController::EnableForWidget(widget_, false);
       else if (window_state->IsMaximized())
         ImmersiveFullscreenController::EnableForWidget(widget_, true);
@@ -141,13 +142,6 @@ class NonClientFrameViewAshImmersiveHelper : public WindowStateObserver,
         window_state->window()->GetProperty(kImmersiveImpliedByFullscreen)) {
       ImmersiveFullscreenController::EnableForWidget(widget_, true);
     }
-  }
-
-  NonClientFrameViewAsh* GetFrameView() {
-    views::Widget* widget =
-        views::Widget::GetWidgetForNativeWindow(window_state_->window());
-    return static_cast<NonClientFrameViewAsh*>(
-        widget->non_client_view()->frame_view());
   }
 
   views::Widget* widget_;
@@ -463,6 +457,14 @@ void NonClientFrameViewAsh::OnDidSchedulePaint(const gfx::Rect& r) {
     views::View::ConvertRectToTarget(this, header_view_, &to_paint);
     header_view_->SchedulePaintInRect(gfx::ToEnclosingRect(to_paint));
   }
+}
+
+void NonClientFrameViewAsh::AddedToWidget() {
+  if (!chromeos::features::IsDarkLightModeEnabled())
+    return;
+
+  highlight_border_overlay_ =
+      std::make_unique<HighlightBorderOverlay>(GetWidget());
 }
 
 // views::NonClientFrameView:

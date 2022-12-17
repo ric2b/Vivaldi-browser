@@ -5,18 +5,17 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_NETWORK_PORTAL_DETECTOR_NETWORK_PORTAL_DETECTOR_H_
 #define CHROMEOS_ASH_COMPONENTS_NETWORK_PORTAL_DETECTOR_NETWORK_PORTAL_DETECTOR_H_
 
+#include <string>
+
 #include "base/component_export.h"
 #include "base/notreached.h"
-#include "chromeos/ash/components/network/portal_detector/network_portal_detector_strategy.h"
-// TODO(https://crbug.com/1164001): forward declare NetworkState when moved to
-// chrome/browser/ash/.
-#include "chromeos/network/network_state.h"
 
-namespace chromeos {
+namespace ash {
+
+class NetworkState;
 
 // This is an interface for a chromeos portal detector that allows for
-// observation of captive portal state. It supports retries based on a portal
-// detector strategy.
+// observation of captive portal state.
 class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkPortalDetector {
  public:
   enum CaptivePortalStatus {
@@ -78,21 +77,16 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkPortalDetector {
   // Returns true if portal detection is enabled.
   virtual bool IsEnabled() = 0;
 
-  // Enable portal detection. This method is needed because we can't
-  // check current network for portal state unless user accepts EULA.
-  // If |start_detection| is true and NetworkPortalDetector was
-  // disabled previously, portal detection for the active network is
-  // initiated by this method.
-  virtual void Enable(bool start_detection) = 0;
+  // Enable portal detection. We do not want to show any portal detection UI
+  // during OOBE until the user accepts the EULA, so NetworkPortalDetector is
+  // 'disabled' while in that state. Once enabled, if a network is connected,
+  // portal detection for the default network will be handled.
+  virtual void Enable() = 0;
 
   // Starts or restarts portal detection for the default network. If not
   // currently in the idle state, does nothing. Returns true if a new portal
   // detection attempt was started.
   virtual void StartPortalDetection() = 0;
-
-  // Sets current strategy according to |id|. If current detection id
-  // doesn't equal to |id|, detection is restarted.
-  virtual void SetStrategy(PortalDetectorStrategy::StrategyId id) = 0;
 
   // Returns non-localized string representation of |status|.
   static std::string CaptivePortalStatusString(CaptivePortalStatus status);
@@ -130,19 +124,15 @@ COMPONENT_EXPORT(CHROMEOS_NETWORK) bool SetForTesting();
 
 }  // namespace network_portal_detector
 
-}  // namespace chromeos
-
-// TODO(https://crbug.com/1164001): remove when moved to ash.
-namespace ash {
-using ::chromeos::NetworkPortalDetector;
-namespace network_portal_detector {
-using ::chromeos::network_portal_detector::GetInstance;
-using ::chromeos::network_portal_detector::InitializeForTesting;
-using ::chromeos::network_portal_detector::IsInitialized;
-using ::chromeos::network_portal_detector::SetForTesting;
-using ::chromeos::network_portal_detector::SetNetworkPortalDetector;
-using ::chromeos::network_portal_detector::Shutdown;
-}  // namespace network_portal_detector
 }  // namespace ash
+
+// TODO(https://crbug.com/1164001): remove when the migration is finished.
+namespace chromeos {
+using ::ash::NetworkPortalDetector;
+namespace network_portal_detector {
+using ::ash::network_portal_detector::GetInstance;
+using ::ash::network_portal_detector::InitializeForTesting;
+}  // namespace network_portal_detector
+}  // namespace chromeos
 
 #endif  // CHROMEOS_ASH_COMPONENTS_NETWORK_PORTAL_DETECTOR_NETWORK_PORTAL_DETECTOR_H_

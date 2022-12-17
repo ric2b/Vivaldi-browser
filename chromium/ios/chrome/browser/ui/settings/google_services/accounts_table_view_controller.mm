@@ -63,7 +63,7 @@ using signin_metrics::PromoAction;
 namespace {
 
 // The size of the symbol image.
-NSInteger kSymbolAddAccountPointSize = 20;
+const CGFloat kSymbolAddAccountPointSize = 20;
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierAccounts = kSectionIdentifierEnumZero,
@@ -135,8 +135,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @end
 
 @implementation AccountsTableViewController
-
-@synthesize dispatcher = _dispatcher;
 
 - (instancetype)initWithBrowser:(Browser*)browser
       closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount {
@@ -488,8 +486,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
                callback:^(BOOL success) {
                  [weakSelf handleDidAddAccount:success];
                }];
-  DCHECK(self.dispatcher);
-  [self.dispatcher showSignin:command baseViewController:self];
+  [self.applicationCommandsHandler showSignin:command baseViewController:self];
 }
 
 - (void)handleDidAddAccount:(BOOL)success {
@@ -498,7 +495,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self allowUserInteraction];
   [self handleAuthenticationOperationDidFinish];
   if (success && _closeSettingsOnAddAccount) {
-    [self.dispatcher closeSettingsUI];
+    [self.applicationCommandsHandler closeSettingsUI];
   }
 }
 
@@ -596,6 +593,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       });
 }
 
+// Offer the user to sign-out near itemView
+// If they sync, they can keep or delete their data.
 - (void)showSignOutWithItemView:(UIView*)itemView {
   DCHECK(!self.signoutCoordinator);
   if (_authenticationOperationInProgress ||
@@ -607,7 +606,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       initWithBaseViewController:self
                          browser:_browser
                             rect:itemView.frame
-                            view:itemView];
+                            view:itemView
+                      withSource:signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS];
   __weak AccountsTableViewController* weakSelf = self;
   self.signoutCoordinator.completion = ^(BOOL success) {
     [weakSelf.signoutCoordinator stop];
@@ -618,31 +618,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   };
   self.signoutCoordinator.delegate = self;
   [self.signoutCoordinator start];
-}
-
-- (void)handleSignOutWithForceClearData:(BOOL)forceClearData {
-  if (!_browser)
-    return;
-
-  // `self.removeOrMyGoogleChooserAlertCoordinator` should not be stopped, since
-  // the coordinator has been confirmed.
-  DCHECK(self.removeOrMyGoogleChooserAlertCoordinator);
-  self.removeOrMyGoogleChooserAlertCoordinator = nil;
-
-  AuthenticationService* authService = [self authService];
-  if (authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
-    _authenticationOperationInProgress = YES;
-    [self preventUserInteraction];
-    __weak AccountsTableViewController* weakSelf = self;
-    authService->SignOut(
-        signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, forceClearData, ^{
-          // Metrics logging must occur before dismissing the currently
-          // presented view controller from `handleSignoutDidFinish`.
-          [weakSelf logSignoutMetricsWithForceClearData:forceClearData];
-          [weakSelf allowUserInteraction];
-          [weakSelf handleAuthenticationOperationDidFinish];
-        });
-  }
 }
 
 // Logs the UMA metrics to record the data retention option selected by the user
@@ -707,7 +682,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     DCHECK(!self.signoutCoordinator);
     // TODO(crbug.com/1221066): Need to add a completion block in
     // `dismissAccountDetailsViewControllerBlock` callback, to trigger
-    // `popAccountsTableViewController()|.
+    // `popAccountsTableViewController()`.
     // Once we have a completion block, we can set `animated` to YES.
     self.dismissAccountDetailsViewControllerBlock(/*animated=*/NO);
     self.dismissAccountDetailsViewControllerBlock = nil;
@@ -787,11 +762,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - TableViewLinkHeaderFooterItemDelegate
 
 - (void)view:(TableViewLinkHeaderFooterView*)view didTapLinkURL:(CrURL*)URL {
-  // Subclass must have a valid dispatcher assigned.
-  DCHECK(self.dispatcher);
   OpenNewTabCommand* command =
       [OpenNewTabCommand commandWithURLFromChrome:URL.gurl];
-  [self.dispatcher closeSettingsUIAndOpenURL:command];
+  [self.applicationCommandsHandler closeSettingsUIAndOpenURL:command];
 }
 
 @end

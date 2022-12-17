@@ -65,7 +65,7 @@ suite('network-config', function() {
         pemOrId: kCaPem,
         availableForNetworkAuth: true,
         hardwareBacked: true,
-        deviceWide: true
+        deviceWide: true,
       });
     }
     if (hasUserCert) {
@@ -74,7 +74,7 @@ suite('network-config', function() {
         pemOrId: kUserCertId,
         availableForNetworkAuth: true,
         hardwareBacked: true,
-        deviceWide: false
+        deviceWide: false,
       });
     }
     mojoApi_.setCertificatesForTest(serverCas, userCerts);
@@ -123,6 +123,32 @@ suite('network-config', function() {
           chromeos.networkConfig.mojom.SecurityType.kWpaPsk;
       return flushAsync().then(() => {
         assertTrue(!!networkConfig.$$('#wifi-passphrase'));
+      });
+    });
+
+    // Syntactic sugar for running test twice with different values for the
+    // enableHiddenNetworkMigration feature flag.
+    [true, false].forEach(isHiddenNetworkMigrationEnabled => {
+      test('New networks are explicitly not hidden', async () => {
+        loadTimeData.overrideValues(
+            {'enableHiddenNetworkMigration': isHiddenNetworkMigrationEnabled});
+
+        await flushAsync();
+
+        networkConfig.save();
+
+        await flushAsync();
+
+        const props = mojoApi_.getPropertiesToSetForTest();
+        if (isHiddenNetworkMigrationEnabled) {
+          assertEquals(
+              props.typeConfig.wifi.hiddenSsid,
+              chromeos.networkConfig.mojom.HiddenSsidMode.kDisabled);
+        } else {
+          assertEquals(
+              props.typeConfig.wifi.hiddenSsid,
+              chromeos.networkConfig.mojom.HiddenSsidMode.kAutomatic);
+        }
       });
     });
   });
@@ -176,6 +202,26 @@ suite('network-config', function() {
         passwordInput.fire('keypress');
         flush();
         assertFalse(!!networkConfig.error);
+      });
+    });
+
+    // Syntactic sugar for running test twice with different values for the
+    // enableHiddenNetworkMigration feature flag.
+    [true, false].forEach(isHiddenNetworkMigrationEnabled => {
+      test('Networks\' hidden SSID mode is not overwritten', async () => {
+        loadTimeData.overrideValues(
+            {'enableHiddenNetworkMigration': isHiddenNetworkMigrationEnabled});
+
+        await flushAsync();
+
+        networkConfig.save();
+
+        await flushAsync();
+
+        const props = mojoApi_.getPropertiesToSetForTest();
+        assertEquals(
+            props.typeConfig.wifi.hiddenSsid,
+            chromeos.networkConfig.mojom.HiddenSsidMode.kAutomatic);
       });
     });
   });
@@ -940,8 +986,8 @@ suite('network-config', function() {
             publicKey: 'KFhwdv4+jKpSXMW6xEUVtOe4Mo8l/xOvGmshmjiHx1Y=',
             endpoint: '192.168.66.66:32000',
             allowedIps: '0.0.0.0/0',
-          }]
-        }
+          }],
+        },
       };
       wg1.staticIpConfig = {ipAddress: {activeValue: '10.10.0.1'}};
       setNetworkConfig(wg1);
@@ -1122,7 +1168,7 @@ suite('network-config', function() {
       eth.typeProperties.ethernet.authentication =
           OncMojo.createManagedString('8021x');
       eth.typeProperties.ethernet.eap = {
-        outer: OncMojo.createManagedString('PEAP')
+        outer: OncMojo.createManagedString('PEAP'),
       };
       setNetworkConfig(eth);
       initNetworkConfig();
@@ -1152,7 +1198,7 @@ suite('network-config', function() {
       eth.typeProperties.ethernet.authentication =
           OncMojo.createManagedString('8021x');
       eth.typeProperties.ethernet.eap = {
-        outer: OncMojo.createManagedString('PEAP')
+        outer: OncMojo.createManagedString('PEAP'),
       };
       setNetworkConfig(eth);
       initNetworkConfig();
@@ -1210,14 +1256,14 @@ suite('network-config', function() {
             hash: kCaHash,
             availableForNetworkAuth: true,
             hardwareBacked: true,
-            deviceWide: true
+            deviceWide: true,
           }],
           [{
             hash: kUserHash1,
             pemOrId: kUserCertId,
             availableForNetworkAuth: true,
             hardwareBacked: true,
-            deviceWide: false
+            deviceWide: false,
           }]);
       initNetworkConfig();
       networkConfig.shareNetwork_ = false;
@@ -1241,7 +1287,7 @@ suite('network-config', function() {
             hash: kCaHash,
             availableForNetworkAuth: true,
             hardwareBacked: true,
-            deviceWide: true
+            deviceWide: true,
           }],
           [
             {
@@ -1249,15 +1295,15 @@ suite('network-config', function() {
               pemOrId: kUserCertId,
               availableForNetworkAuth: true,
               hardwareBacked: true,
-              deviceWide: false
+              deviceWide: false,
             },
             {
               hash: kUserHash2,
               pemOrId: kUserCertId,
               availableForNetworkAuth: true,
               hardwareBacked: true,
-              deviceWide: true
-            }
+              deviceWide: true,
+            },
           ]);
       initNetworkConfig();
       networkConfig.shareNetwork_ = true;
@@ -1301,14 +1347,14 @@ suite('network-config', function() {
             hash: kCaHash,
             availableForNetworkAuth: true,
             hardwareBacked: true,
-            deviceWide: true
+            deviceWide: true,
           }],
           [{
             hash: kUserHash1,
             pemOrId: kUserCertId,
             availableForNetworkAuth: true,
             hardwareBacked: true,
-            deviceWide: false
+            deviceWide: false,
           }]);
       initNetworkConfig();
       networkConfig.shareNetwork_ = false;

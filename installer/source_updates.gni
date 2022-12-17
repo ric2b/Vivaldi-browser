@@ -61,6 +61,9 @@ if (is_win) {
       "//vivaldi/installer/util/vivaldi_static_install_helpers.cc",
       "//vivaldi/installer/util/vivaldi_static_install_helpers.h",
     ]
+    deps += [
+      "//base",
+    ]
     libs += [
       "rpcrt4.lib"
     ]
@@ -136,4 +139,49 @@ if (is_mac) {
       ]
     }
   }
+}
+
+if (is_ios) {
+  update_template_instance("//ios/chrome/app:entitlements") {
+    entitlements_templates -= [ "resources/Chrome.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/installer/ios/Vivaldi.entitlements",
+    ]
+  }
+
+  update_template_instance("//ios/chrome/content_widget_extension:entitlements") {
+    entitlements_templates -= [ "entitlements/external/content_widget_extension.appex.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/ios/app/entitlements/content_widget_extension.appex.entitlements",
+    ]
+  }
+
+  update_template_instance("//ios/chrome/search_widget_extension:entitlements") {
+    entitlements_templates -= [ "entitlements/external/search_widget_extension.appex.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/ios/app/entitlements/search_widget_extension.appex.entitlements",
+    ]
+  }
+
+  update_template_instance("//ios/chrome/widget_kit_extension:entitlements") {
+    entitlements_templates -= [ "entitlements/external/widget_kit_extension.appex.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/ios/app/entitlements/widget_kit_extension.appex.entitlements",
+    ]
+  }
+
+  update_template_instance("//ios/chrome/share_extension:entitlements") {
+    entitlements_templates -= [ "entitlements/external/share_extension.appex.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/ios/app/entitlements/share_extension.appex.entitlements",
+    ]
+  }
+
+  update_template_instance("//ios/chrome/credential_provider_extension:entitlements") {
+    entitlements_templates -= [ "entitlements/external/credential_provider_extension.appex.entitlements" ]
+    entitlements_templates += [
+      "//vivaldi/ios/app/entitlements/credential_provider_extension.appex.entitlements",
+    ]
+  }
+
 }

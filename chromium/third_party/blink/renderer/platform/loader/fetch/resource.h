@@ -140,9 +140,6 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
     // Match fails due to different request methods.
     kRequestMethodDoesNotMatch,
 
-    // Match fails due to different request headers.
-    kRequestHeadersDoNotMatch,
-
     // Match fails due to different script types.
     kScriptTypeDoesNotMatch,
   };
@@ -267,9 +264,18 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   virtual void ResponseBodyReceived(
       ResponseBodyLoaderDrainableInterface& body_loader,
       scoped_refptr<base::SingleThreadTaskRunner> loader_task_runner) {}
-  virtual void DidReceiveDecodedData(
-      const String& data,
-      std::unique_ptr<ParkableStringImpl::SecureDigest> digest) {}
+
+  // A class Resource subclasses can use to hold ResourceType specific info
+  // related to DidReceiveDecodedData().
+  class DecodedDataInfo {
+   public:
+    virtual ~DecodedDataInfo() = default;
+
+    virtual ResourceType GetType() const = 0;
+  };
+  virtual void DidReceiveDecodedData(const String& data,
+                                     std::unique_ptr<DecodedDataInfo> info) {}
+
   void SetResponse(const ResourceResponse&);
   const ResourceResponse& GetResponse() const { return response_; }
 
@@ -363,7 +369,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   }
 
   // Returns |kOk| when |this| can be resused for the given arguments.
-  virtual MatchStatus CanReuse(const FetchParameters& params) const;
+  MatchStatus CanReuse(const FetchParameters& params) const;
 
   // TODO(yhirano): Remove this once out-of-blink CORS is fully enabled.
   void SetResponseType(network::mojom::FetchResponseType response_type) {

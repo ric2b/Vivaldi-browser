@@ -2,12 +2,10 @@
 
 #include "vivaldi_account/vivaldi_account_manager_request_handler.h"
 
-#include "chrome/browser/profiles/profile.h"
-#include "content/public/browser/browser_context.h"
-#include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
 namespace vivaldi {
@@ -96,12 +94,12 @@ std::unique_ptr<network::SimpleURLLoader> CreateURLLoader(
 }  // anonymous namespace
 
 VivaldiAccountManagerRequestHandler::VivaldiAccountManagerRequestHandler(
-    Profile* profile,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const GURL& request_url,
     const std::string& body,
     const net::HttpRequestHeaders& headers,
     RequestDoneCallback callback)
-    : profile_(profile),
+    : url_loader_factory_(std::move(url_loader_factory)),
       request_url_(request_url),
       headers_(headers),
       body_(body),
@@ -115,13 +113,10 @@ VivaldiAccountManagerRequestHandler::~VivaldiAccountManagerRequestHandler() {}
 void VivaldiAccountManagerRequestHandler::HandleRequest() {
   request_start_time_ = base::Time::Now();
 
-  auto url_loader_factory = profile_->GetDefaultStoragePartition()
-                                ->GetURLLoaderFactoryForBrowserProcess();
-
   url_loader_ = CreateURLLoader(request_url_, body_, headers_);
 
   url_loader_->DownloadToString(
-      url_loader_factory.get(),
+      url_loader_factory_.get(),
       base::BindOnce(&VivaldiAccountManagerRequestHandler::OnURLLoadComplete,
                      base::Unretained(this)),
       1024 * 1024);

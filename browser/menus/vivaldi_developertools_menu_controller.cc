@@ -93,7 +93,7 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
         return true;
 
       case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
-        DevToolsWindow::InspectElement(web_contents_->GetMainFrame(),
+        DevToolsWindow::InspectElement(web_contents_->GetPrimaryMainFrame(),
                                        location_.x(), location_.y());
         return true;
 

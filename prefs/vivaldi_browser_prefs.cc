@@ -20,7 +20,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
-#include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -28,14 +27,18 @@
 #include "components/version_info/version_info.h"
 
 #include "components/datasource/resource_reader.h"
-#include "components/datasource/vivaldi_theme_io.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 // Preference override is available on Linux or in internal desktop builds on
 // any platform for testing convenience.
-#if BUILDFLAG(IS_LINUX) || !(defined(OFFICIAL_BUILD) || BUILDFLAG(IS_ANDROID))
+#if BUILDFLAG(IS_LINUX) || \
+    !(defined(OFFICIAL_BUILD) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS))
 #define VIVALDI_PREFERENCE_OVERRIDE_FILE
+#endif
+
+#ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
+#include "components/datasource/vivaldi_theme_io.h"
 #endif
 
 namespace vivaldi {

@@ -47,6 +47,8 @@ class UpdateStateImpl
   IFACEMETHODIMP get_errorCategory(LONG* error_category) override;
   IFACEMETHODIMP get_errorCode(LONG* error_code) override;
   IFACEMETHODIMP get_extraCode1(LONG* extra_code1) override;
+  IFACEMETHODIMP get_installerText(BSTR* installer_text) override;
+  IFACEMETHODIMP get_installerCommandLine(BSTR* installer_cmd_line) override;
 
  private:
   ~UpdateStateImpl() override = default;
@@ -87,11 +89,16 @@ class UpdaterImpl
   UpdaterImpl(const UpdaterImpl&) = delete;
   UpdaterImpl& operator=(const UpdaterImpl&) = delete;
 
+  // Returns S_OK if user, or for system, only if the COM caller is Admin.
+  // Otherwise, fails creation of this COM class.
+  HRESULT RuntimeClassInitialize();
+
   // Overrides for IUpdater.
   IFACEMETHODIMP GetVersion(BSTR* version) override;
   IFACEMETHODIMP CheckForUpdate(const wchar_t* app_id) override;
   IFACEMETHODIMP RegisterApp(const wchar_t* app_id,
                              const wchar_t* brand_code,
+                             const wchar_t* brand_path,
                              const wchar_t* tag,
                              const wchar_t* version,
                              const wchar_t* existence_checker_path,
@@ -99,9 +106,20 @@ class UpdaterImpl
   IFACEMETHODIMP RunPeriodicTasks(IUpdaterCallback* callback) override;
   IFACEMETHODIMP Update(const wchar_t* app_id,
                         const wchar_t* install_data_index,
+                        LONG priority,
                         BOOL same_version_update_allowed,
                         IUpdaterObserver* observer) override;
   IFACEMETHODIMP UpdateAll(IUpdaterObserver* observer) override;
+  IFACEMETHODIMP Install(const wchar_t* app_id,
+                         const wchar_t* brand_code,
+                         const wchar_t* brand_path,
+                         const wchar_t* tag,
+                         const wchar_t* version,
+                         const wchar_t* existence_checker_path,
+                         const wchar_t* install_data_index,
+                         LONG priority,
+                         IUpdaterObserver* observer) override;
+  IFACEMETHODIMP CancelInstalls(const wchar_t* app_id) override;
   IFACEMETHODIMP RunInstaller(const wchar_t* app_id,
                               const wchar_t* installer_path,
                               const wchar_t* install_args,
@@ -123,6 +141,10 @@ class UpdaterInternalImpl
   UpdaterInternalImpl() = default;
   UpdaterInternalImpl(const UpdaterInternalImpl&) = delete;
   UpdaterInternalImpl& operator=(const UpdaterInternalImpl&) = delete;
+
+  // Returns S_OK if user, or for system, only if the COM caller is Admin.
+  // Otherwise, fails creation of this COM class.
+  HRESULT RuntimeClassInitialize();
 
   // Overrides for IUpdaterInternal.
   IFACEMETHODIMP Run(IUpdaterInternalCallback* callback) override;

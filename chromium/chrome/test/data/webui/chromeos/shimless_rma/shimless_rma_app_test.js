@@ -4,7 +4,7 @@
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
-import {fakeChromeVersion, fakeStates} from 'chrome://shimless-rma/fake_data.js';
+import {fakeCalibrationComponentsWithFails, fakeChromeVersion, fakeStates} from 'chrome://shimless-rma/fake_data.js';
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
 import {ButtonState, ShimlessRma} from 'chrome://shimless-rma/shimless_rma.js';
@@ -21,13 +21,10 @@ export function shimlessRMAAppTest() {
   /** @type {?FakeShimlessRmaService} */
   let service = null;
 
-  suiteSetup(() => {
-    service = new FakeShimlessRmaService();
-    setShimlessRmaServiceForTesting(service);
-  });
-
   setup(() => {
     document.body.innerHTML = '';
+    service = new FakeShimlessRmaService();
+    setShimlessRmaServiceForTesting(service);
   });
 
   teardown(() => {
@@ -108,6 +105,11 @@ export function shimlessRMAAppTest() {
   test('ShimlessRMALoaded', async () => {
     await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
     assertNavButtons();
+
+    // The Hardware Error page should be hidden by default.
+    const hardwareErrorPage =
+        component.shadowRoot.querySelector('hardware-error-page');
+    assertFalse(!!hardwareErrorPage);
   });
 
   test('ShimlessRMABasicNavigation', async () => {
@@ -266,7 +268,7 @@ export function shimlessRMAAppTest() {
           state: State.kSelectComponents,
           canExit: true,
           canGoBack: true,
-          error: RmadErrorCode.kOk
+          error: RmadErrorCode.kOk,
         }],
         fakeChromeVersion[0]);
 
@@ -290,7 +292,7 @@ export function shimlessRMAAppTest() {
           state: State.kSelectComponents,
           canExit: true,
           canGoBack: true,
-          error: RmadErrorCode.kOk
+          error: RmadErrorCode.kOk,
         }],
         fakeChromeVersion[0]);
 
@@ -331,7 +333,7 @@ export function shimlessRMAAppTest() {
           state: State.kSelectComponents,
           canExit: true,
           canGoBack: true,
-          error: RmadErrorCode.kOk
+          error: RmadErrorCode.kOk,
         }],
         fakeChromeVersion[0]);
 
@@ -370,7 +372,7 @@ export function shimlessRMAAppTest() {
           state: State.kSelectComponents,
           canExit: true,
           canGoBack: true,
-          error: RmadErrorCode.kOk
+          error: RmadErrorCode.kOk,
         }],
         fakeChromeVersion[0]);
 
@@ -447,7 +449,7 @@ export function shimlessRMAAppTest() {
           state: State.kWelcomeScreen,
           canExit: true,
           canGoBack: true,
-          error: RmadErrorCode.kOk
+          error: RmadErrorCode.kOk,
         }],
         fakeChromeVersion[0]);
 
@@ -482,8 +484,9 @@ export function shimlessRMAAppTest() {
         {
           bubbles: true,
           composed: true,
-          detail: () => Promise.resolve(
-              {stateResult: {state: State.kUpdateOs, error: RmadErrorCode.kOk}})
+          detail: () => Promise.resolve({
+            stateResult: {state: State.kUpdateOs, error: RmadErrorCode.kOk},
+          }),
         },
         ));
     await flushTasks();
@@ -492,5 +495,132 @@ export function shimlessRMAAppTest() {
     const updatePage =
         component.shadowRoot.querySelector('onboarding-update-page');
     assertTrue(!!updatePage);
+  });
+
+  test('StateResultCanExitCanGoBack', async () => {
+    await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
+
+    // Confirm starting on the landing page.
+    const initialPage =
+        component.shadowRoot.querySelector('onboarding-landing-page');
+    assertTrue(!!initialPage);
+
+    component.dispatchEvent(new CustomEvent(
+        'transition-state',
+        {
+          bubbles: true,
+          composed: true,
+          detail: () => Promise.resolve({
+            stateResult: {
+              state: State.kUpdateOs,
+              error: RmadErrorCode.kOk,
+              canExit: false,
+              canGoBack: false,
+            },
+          }),
+        },
+        ));
+    await flushTasks();
+
+    // Confirm transition to the OS Update page.
+    const updatePage =
+        component.shadowRoot.querySelector('onboarding-update-page');
+    assertTrue(!!updatePage);
+    const backButton = component.shadowRoot.querySelector('#back');
+    const exitButton = component.shadowRoot.querySelector('#exit');
+
+    // Both buttons should be hidden due to the `stateResult` response.
+    assertTrue(backButton.hidden);
+    assertTrue(exitButton.hidden);
+
+    // Initialize the fake data.
+    service.setGetCalibrationComponentListResult(
+        fakeCalibrationComponentsWithFails);
+
+    // Attempt to transition to Calibration Failed page.
+    component.dispatchEvent(new CustomEvent(
+        'transition-state',
+        {
+          bubbles: true,
+          composed: true,
+          detail: () => Promise.resolve({
+            stateResult: {
+              state: State.kCheckCalibration,
+              error: RmadErrorCode.kOk,
+              canExit: false,
+              canGoBack: false,
+            },
+          }),
+        },
+        ));
+    await flushTasks();
+
+    // The exit button should never be hidden for the Calibration failed page.
+    assertTrue(backButton.hidden);
+    assertFalse(exitButton.hidden);
+  });
+
+  test('HardwareErrorEventIsHandled', async () => {
+    await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
+
+    component.dispatchEvent(new CustomEvent(
+        'fatal-hardware-error',
+        {bubbles: true, composed: true},
+        ));
+
+    await flushTasks();
+
+    // Confirm transition to the Hardware Error page.
+    const hardwareErrorPage =
+        component.shadowRoot.querySelector('hardware-error-page');
+    assertTrue(!!hardwareErrorPage);
+  });
+
+  test('RebootErrorCodeResultsInShowingRebootPage', async () => {
+    await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
+
+    // Emulate platform sending a reboot error code.
+    component.dispatchEvent(new CustomEvent(
+        'transition-state',
+        {
+          bubbles: true,
+          composed: true,
+          detail: () => Promise.resolve({
+            stateResult: {
+              state: State.kWPDisableComplete,
+              error: RmadErrorCode.kExpectReboot,
+            },
+          }),
+        },
+        ));
+    await flushTasks();
+
+    // Confirm transition to the reboot page.
+    const rebootPage = component.shadowRoot.querySelector('reboot-page');
+    assertTrue(!!rebootPage);
+  });
+
+  test('ShutdownErrorCodeResultsInShowingShutdownPage', async () => {
+    await initializeShimlessRMAApp(fakeStates, fakeChromeVersion[0]);
+
+    // Emulate platform sending a shut down error code.
+    component.dispatchEvent(new CustomEvent(
+        'transition-state',
+        {
+          bubbles: true,
+          composed: true,
+          detail: () => Promise.resolve({
+            stateResult: {
+              state: State.kWPDisableComplete,
+              error: RmadErrorCode.kExpectShutdown,
+            },
+          }),
+        },
+        ));
+    await flushTasks();
+
+    // Confirm transition to the reboot page.
+    const rebootPage = component.shadowRoot.querySelector('reboot-page');
+    assertTrue(!!rebootPage);
   });
 }

@@ -88,18 +88,6 @@ void SetFlag(volatile std::atomic<uint32_t>* flags, uint32_t flag) {
 
 namespace base {
 
-// All allocations and data-structures must be aligned to this byte boundary.
-// Alignment as large as the physical bus between CPU and RAM is _required_
-// for some architectures, is simply more efficient on other CPUs, and
-// generally a Good Idea(tm) for all platforms as it reduces/eliminates the
-// chance that a type will span cache lines. Alignment mustn't be less
-// than 8 to ensure proper alignment for all types. The rest is a balance
-// between reducing spans across multiple cache lines and wasted space spent
-// padding out allocations. An alignment of 16 would ensure that the block
-// header structure always sits in a single cache line. An average of about
-// 1/2 this value will be wasted with every allocation.
-const uint32_t PersistentMemoryAllocator::kAllocAlignment = 8;
-
 // The block-header is placed at the top of every allocation within the
 // segment to describe the data that follows it.
 struct PersistentMemoryAllocator::BlockHeader {
@@ -704,14 +692,16 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
     // Don't leave a slice at the end of a page too small for anything. This
     // can result in an allocation up to two alignment-sizes greater than the
     // minimum required by requested-size + header + alignment.
-    if (page_free - size < sizeof(BlockHeader) + kAllocAlignment)
+    if (page_free - size < sizeof(BlockHeader) + kAllocAlignment) {
       size = page_free;
-
-    const uint32_t new_freeptr = freeptr + size;
-    if (new_freeptr > mem_size_) {
-      SetCorrupt();
-      return kReferenceNull;
+      if (freeptr + size > mem_size_) {
+        SetCorrupt();
+        return kReferenceNull;
+      }
     }
+
+    // This cast is safe because (freeptr + size) <= mem_size_.
+    const uint32_t new_freeptr = static_cast<uint32_t>(freeptr + size);
 
     // Save our work. Try again if another thread has completed an allocation
     // while we were processing. A "weak" exchange would be permissable here

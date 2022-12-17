@@ -78,8 +78,8 @@ class BorealisInstallerView::TitleLabel : public views::Label {
   ~TitleLabel() override = default;
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->SetName(GetText());
     node_data->role = ax::mojom::Role::kStatus;
+    node_data->SetName(GetText());
   }
 };
 
@@ -249,7 +249,8 @@ void BorealisInstallerView::OnProgressUpdated(double fraction_complete) {
 }
 
 void BorealisInstallerView::OnInstallationEnded(
-    borealis::BorealisInstallResult result) {
+    borealis::BorealisInstallResult result,
+    const std::string& error_description) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   switch (result) {
     using ResultEnum = borealis::BorealisInstallResult;
@@ -262,6 +263,7 @@ void BorealisInstallerView::OnInstallationEnded(
     default:
       state_ = State::kError;
       result_ = result;
+      LOG(ERROR) << "Borealis Installation Error: " << error_description;
       break;
   }
   installing_state_ = InstallingState::kInactive;

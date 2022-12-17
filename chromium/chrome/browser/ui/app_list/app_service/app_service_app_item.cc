@@ -28,8 +28,8 @@
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_service/app_service_context_menu.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
-#include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
 
 namespace {
@@ -89,6 +89,7 @@ AppServiceAppItem::AppServiceAppItem(
   } else {
     // Handle the case that the app under construction is a remote app.
     if (app_type_ == apps::AppType::kRemote) {
+      SetIsEphemeral(true);
       ash::RemoteAppsManager* remote_manager =
           ash::RemoteAppsManagerFactory::GetForProfile(profile);
       if (remote_manager->ShouldAddToFront(app_update.AppId())) {
@@ -203,7 +204,7 @@ void AppServiceAppItem::Activate(int event_flags) {
       return;
     }
   }
-  Launch(event_flags, apps::mojom::LaunchSource::kFromAppListGrid);
+  Launch(event_flags, apps::LaunchSource::kFromAppListGrid);
 }
 
 const char* AppServiceAppItem::GetItemType() const {
@@ -224,7 +225,7 @@ app_list::AppContextMenu* AppServiceAppItem::GetAppContextMenu() {
 }
 
 void AppServiceAppItem::ExecuteLaunchCommand(int event_flags) {
-  Launch(event_flags, apps::mojom::LaunchSource::kFromAppListGridContextMenu);
+  Launch(event_flags, apps::LaunchSource::kFromAppListGridContextMenu);
 
   // TODO(crbug.com/826982): drop the if, and call MaybeDismissAppList
   // unconditionally?
@@ -253,30 +254,28 @@ void AppServiceAppItem::ResetIsNewInstall() {
 }
 
 void AppServiceAppItem::Launch(int event_flags,
-                               apps::mojom::LaunchSource launch_source) {
+                               apps::LaunchSource launch_source) {
   ResetIsNewInstall();
-  apps::AppServiceProxyFactory::GetForProfile(profile())->Launch(
-      id(), event_flags, launch_source,
-      apps::MakeWindowInfo(GetController()->GetAppListDisplayId()));
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    apps::AppServiceProxyFactory::GetForProfile(profile())->Launch(
+        id(), event_flags, launch_source,
+        std::make_unique<apps::WindowInfo>(
+            GetController()->GetAppListDisplayId()));
+  } else {
+    apps::AppServiceProxyFactory::GetForProfile(profile())->Launch(
+        id(), event_flags,
+        apps::ConvertLaunchSourceToMojomLaunchSource(launch_source),
+        apps::MakeWindowInfo(GetController()->GetAppListDisplayId()));
+  }
 }
 
 void AppServiceAppItem::CallLoadIcon(bool allow_placeholder_icon) {
-  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    apps::AppServiceProxyFactory::GetForProfile(profile())->LoadIcon(
-        app_type_, id(), apps::IconType::kStandard,
-        ash::SharedAppListConfig::instance().default_grid_icon_dimension(),
-        allow_placeholder_icon,
-        base::BindOnce(&AppServiceAppItem::OnLoadIcon,
-                       weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    apps::AppServiceProxyFactory::GetForProfile(profile())->LoadIcon(
-        apps::ConvertAppTypeToMojomAppType(app_type_), id(),
-        apps::mojom::IconType::kStandard,
-        ash::SharedAppListConfig::instance().default_grid_icon_dimension(),
-        allow_placeholder_icon,
-        apps::MojomIconValueToIconValueCallback(base::BindOnce(
-            &AppServiceAppItem::OnLoadIcon, weak_ptr_factory_.GetWeakPtr())));
-  }
+  apps::AppServiceProxyFactory::GetForProfile(profile())->LoadIcon(
+      app_type_, id(), apps::IconType::kStandard,
+      ash::SharedAppListConfig::instance().default_grid_icon_dimension(),
+      allow_placeholder_icon,
+      base::BindOnce(&AppServiceAppItem::OnLoadIcon,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AppServiceAppItem::OnLoadIcon(apps::IconValuePtr icon_value) {

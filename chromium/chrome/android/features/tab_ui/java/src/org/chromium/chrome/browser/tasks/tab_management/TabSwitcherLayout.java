@@ -18,7 +18,6 @@ import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.vectordrawable.graphics.drawable.AnimationUtilsCompat;
 
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
@@ -27,7 +26,6 @@ import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -69,8 +67,9 @@ public class TabSwitcherLayout extends Layout {
 
     // Duration of the transition animation
     public static final long ZOOMING_DURATION = 300;
-    private static final int TRANSLATE_DURATION_MS = 500;
+    private static final int TRANSLATE_DURATION_MS = 450;
     private static final int BACKGROUND_FADING_DURATION_MS = 150;
+    private static final int SCRIM_FADE_DURATION_MS = 450;
 
     private static final String TRACE_SHOW_TAB_SWITCHER = "TabSwitcherLayout.Show.TabSwitcher";
     private static final String TRACE_HIDE_TAB_SWITCHER = "TabSwitcherLayout.Hide.TabSwitcher";
@@ -79,7 +78,7 @@ public class TabSwitcherLayout extends Layout {
 
     // The transition animation from a tab to the tab switcher.
     private AnimatorSet mTabToSwitcherAnimation;
-    private boolean mIsAnimating;
+    private boolean mIsAnimatingHide;
 
     private TabListSceneLayer mSceneLayer;
     private final TabSwitcher mTabSwitcher;
@@ -255,7 +254,7 @@ public class TabSwitcherLayout extends Layout {
 
     private void hideBrowserScrim() {
         if (mScrimCoordinator == null || !mScrimCoordinator.isShowingScrim()) return;
-        mScrimCoordinator.hideScrim(true);
+        mScrimCoordinator.hideScrim(true, SCRIM_FADE_DURATION_MS);
     }
 
     @Override
@@ -299,7 +298,7 @@ public class TabSwitcherLayout extends Layout {
 
             updateCacheVisibleIds(new LinkedList<>(Arrays.asList(sourceTabId)));
 
-            mIsAnimating = true;
+            mIsAnimatingHide = true;
             if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) {
                 translateDown();
             } else {
@@ -519,8 +518,7 @@ public class TabSwitcherLayout extends Layout {
 
         Animator translateUp = ObjectAnimator.ofFloat(mController.getTabSwitcherContainer(),
                 View.TRANSLATION_Y, mController.getTabSwitcherContainer().getHeight(), 0f);
-        translateUp.setInterpolator(AnimationUtilsCompat.loadInterpolator(
-                getContext(), R.anim.fast_out_extra_slow_in_interpolator));
+        translateUp.setInterpolator(Interpolators.EMPHASIZED_DECELERATE);
         translateUp.setDuration(TRANSLATE_DURATION_MS);
 
         mTabToSwitcherAnimation = new AnimatorSet();
@@ -555,8 +553,7 @@ public class TabSwitcherLayout extends Layout {
 
         Animator translateDown = ObjectAnimator.ofFloat(mController.getTabSwitcherContainer(),
                 View.TRANSLATION_Y, 0f, mController.getTabSwitcherContainer().getHeight());
-        translateDown.setInterpolator(AnimationUtilsCompat.loadInterpolator(
-                getContext(), R.anim.fast_out_extra_slow_in_interpolator));
+        translateDown.setInterpolator(Interpolators.EMPHASIZED_ACCELERATE);
         translateDown.setDuration(TRANSLATE_DURATION_MS);
 
         mTabToSwitcherAnimation = new AnimatorSet();
@@ -564,6 +561,7 @@ public class TabSwitcherLayout extends Layout {
         mTabToSwitcherAnimation.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationStart(Animator animation) {
+                mController.prepareHideTabSwitcherView();
                 mController.setSnackbarParentView(null);
             }
 
@@ -591,13 +589,18 @@ public class TabSwitcherLayout extends Layout {
 
     private void postHiding() {
         mGridTabListDelegate.postHiding();
-        mIsAnimating = false;
+        mIsAnimatingHide = false;
         doneHiding();
     }
 
     @VisibleForTesting
     void setPerfListenerForTesting(PerfListener perfListener) {
         mPerfListenerForTesting = perfListener;
+    }
+
+    @VisibleForTesting
+    public TabSwitcher getTabSwitcherForTesting() {
+        return mTabSwitcher;
     }
 
     private void reportAnimationPerf(boolean isShrinking) {
@@ -663,7 +666,7 @@ public class TabSwitcherLayout extends Layout {
 
     @Override
     public boolean onUpdateAnimation(long time, boolean jumpToEnd) {
-        return mTabToSwitcherAnimation == null && !mIsAnimating;
+        return mTabToSwitcherAnimation == null && !mIsAnimatingHide;
     }
 
     @Override

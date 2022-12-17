@@ -389,10 +389,12 @@ void ClientControlledShellSurface::SetBounds(int64_t display_id,
   SetGeometry(bounds_dp);
 }
 
-void ClientControlledShellSurface::SetBoundsOrigin(const gfx::Point& origin) {
-  TRACE_EVENT1("exo", "ClientControlledShellSurface::SetBoundsOrigin", "origin",
-               origin.ToString());
+void ClientControlledShellSurface::SetBoundsOrigin(int64_t display_id,
+                                                   const gfx::Point& origin) {
+  TRACE_EVENT2("exo", "ClientControlledShellSurface::SetBoundsOrigin",
+               "display_id", display_id, "origin", origin.ToString());
 
+  SetDisplay(display_id);
   EnsurePendingScale(/*commit_immediately=*/true);
   const gfx::Point origin_dp =
       gfx::ScaleToRoundedPoint(origin, GetClientToDpPendingScale());
@@ -672,7 +674,15 @@ void ClientControlledShellSurface::OnBoundsChangeEvent(
   bool is_resize = client_bounds.size() != current_size &&
                    !widget_->IsMaximized() && !widget_->IsFullscreen();
 
-  const float scale = 1.f / GetClientToDpScale();
+  // Make sure to use the up-to-date scale factor. At this point, |scale_| or
+  // |pending_scale_| may not be updated yet.
+  display::Display display;
+  const bool display_exists =
+      display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id,
+                                                            &display);
+  DCHECK(display_exists && display.is_valid());
+  const float scale =
+      use_default_scale_cancellation_ ? 1.f : display.device_scale_factor();
   const gfx::Rect scaled_client_bounds =
       gfx::ScaleToRoundedRect(client_bounds, scale);
   delegate_->OnBoundsChanged(current_state, requested_state, display_id,
@@ -968,7 +978,8 @@ void ClientControlledShellSurface::SetSystemModal(bool system_modal) {
   ShellSurfaceBase::SetSystemModal(system_modal);
 }
 
-void ClientControlledShellSurface::SetWidgetBounds(const gfx::Rect& bounds) {
+void ClientControlledShellSurface::SetWidgetBounds(const gfx::Rect& bounds,
+                                                   bool adjusted_by_server) {
   const auto* screen = display::Screen::GetScreen();
   aura::Window* window = widget_->GetNativeWindow();
   display::Display current_display = screen->GetDisplayNearestWindow(window);
@@ -1006,6 +1017,7 @@ void ClientControlledShellSurface::SetWidgetBounds(const gfx::Rect& bounds) {
   }
 
   // Calculate a minimum window visibility required bounds.
+  // TODO(oshima): Move this to ComputeAdjustedBounds.
   gfx::Rect adjusted_bounds = bounds;
   if (!is_display_move_pending) {
     const gfx::Rect& restriction = GetWindowState()->IsFullscreen()
@@ -1176,8 +1188,8 @@ bool ClientControlledShellSurface::OnPreWidgetCommit() {
     // Animate PIP window movement unless it is being dragged.
     client_controlled_state_->set_next_bounds_change_animation_type(
         window_state->IsPip() && !window_state->is_dragged()
-            ? ash::ClientControlledState::kAnimationAnimated
-            : ash::ClientControlledState::kAnimationNone);
+            ? ash::WindowState::BoundsChangeAnimationType::kAnimate
+            : ash::WindowState::BoundsChangeAnimationType::kNone);
     return true;
   }
 
@@ -1186,18 +1198,20 @@ bool ClientControlledShellSurface::OnPreWidgetCommit() {
     return true;
   }
 
-  auto animation_type = ash::ClientControlledState::kAnimationNone;
+  auto animation_type = ash::WindowState::BoundsChangeAnimationType::kNone;
   switch (pending_window_state_) {
     case chromeos::WindowStateType::kNormal:
       if (widget_->IsMaximized() || widget_->IsFullscreen()) {
-        animation_type = ash::ClientControlledState::kAnimationCrossFade;
+        animation_type =
+            ash::WindowState::BoundsChangeAnimationType::kCrossFade;
       }
       break;
 
     case chromeos::WindowStateType::kMaximized:
     case chromeos::WindowStateType::kFullscreen:
       if (!window_state->IsPip())
-        animation_type = ash::ClientControlledState::kAnimationCrossFade;
+        animation_type =
+            ash::WindowState::BoundsChangeAnimationType::kCrossFade;
       break;
 
     default:

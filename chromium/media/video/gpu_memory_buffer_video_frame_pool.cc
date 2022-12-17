@@ -18,6 +18,7 @@
 #include "base/bind.h"
 #include "base/bits.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/stack_container.h"
 #include "base/location.h"
@@ -36,6 +37,7 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/config/gpu_switches.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/video/gpu_video_accelerator_factories.h"
@@ -754,16 +756,16 @@ gfx::Size CodedSize(const VideoFrame* video_frame,
       DCHECK_EQ(video_frame->visible_rect().x() % 2, 0);
       DCHECK_EQ(video_frame->visible_rect().y() % 2, 0);
       if (!gfx::IsOddWidthMultiPlanarBuffersAllowed())
-        width = base::bits::AlignUp(width, 2);
+        width = base::bits::AlignUp(width, size_t{2});
       if (!gfx::IsOddHeightMultiPlanarBuffersAllowed())
-        height = base::bits::AlignUp(height, 2);
+        height = base::bits::AlignUp(height, size_t{2});
       output = gfx::Size(width, height);
       break;
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
     case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
     case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
-      output = gfx::Size(base::bits::AlignUp(width, 2), height);
+      output = gfx::Size(base::bits::AlignUp(width, size_t{2}), height);
       break;
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
       NOTREACHED();
@@ -940,10 +942,6 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDone(
         plane_resource.gpu_memory_buffer->Unmap();
         plane_resource.gpu_memory_buffer->SetColorSpace(
             video_frame->ColorSpace());
-        if (video_frame->hdr_metadata()) {
-          plane_resource.gpu_memory_buffer->SetHDRMetadata(
-              video_frame->hdr_metadata().value());
-        }
       }
     }
   }
@@ -1190,6 +1188,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDoneOnMediaThread(
   bool new_allow_overlay = frame->metadata().allow_overlay;
   bool new_read_lock_fences_enabled =
       frame->metadata().read_lock_fences_enabled;
+  frame->set_hdr_metadata(video_frame->hdr_metadata());
   frame->metadata().MergeMetadataFrom(video_frame->metadata());
   frame->metadata().allow_overlay = new_allow_overlay;
   frame->metadata().read_lock_fences_enabled = new_read_lock_fences_enabled;
@@ -1213,6 +1212,7 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
   }
 
   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
+  bool is_webgpu_compatible = true;
   // Set up the planes creating the mailboxes needed to refer to the textures.
   for (size_t plane = 0; plane < NumSharedImages(output_format_); plane++) {
     size_t gpu_memory_buffer_plane =
@@ -1223,6 +1223,17 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
         frame_resources->plane_resources[gpu_memory_buffer_plane]
             .gpu_memory_buffer.get();
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+    is_webgpu_compatible &= (gpu_memory_buffer != nullptr);
+    if (is_webgpu_compatible) {
+      is_webgpu_compatible &=
+          gpu_memory_buffer->CloneHandle()
+              .native_pixmap_handle.supports_zero_copy_webgpu_import;
+    }
+#else
+    is_webgpu_compatible = false;
+#endif
+
     const gfx::BufferFormat buffer_format =
         GpuMemoryBufferFormat(output_format_, plane);
     unsigned texture_target = gpu_factories_->ImageTextureTarget(buffer_format);
@@ -1231,6 +1242,16 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
       uint32_t usage =
           gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
           gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+      // TODO(crbug.com/1241537): Always add the flag once the
+      // OzoneImageBacking is by default turned on.
+      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kEnableUnsafeWebGPU)) {
+        usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU;
+      }
+#endif
+
       plane_resource.mailbox = sii->CreateSharedImage(
           gpu_memory_buffer, gpu_factories_->GpuMemoryBufferManager(),
           GetSharedImageBufferPlane(output_format_, plane), color_space,
@@ -1251,6 +1272,13 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
     mailbox_holders[plane].sync_token = sync_token;
 
   VideoPixelFormat frame_format = VideoFormat(output_format_);
+
+#if BUILDFLAG(IS_MAC)
+  // TODO(https://crbug.com/1155760): Until individual planes can be bound as
+  // their own textures, P010 buffers are copied to F16 textures for sampling.
+  if (frame_format == PIXEL_FORMAT_P016LE)
+    frame_format = PIXEL_FORMAT_RGBAF16;
+#endif
 
   // Create the VideoFrame backed by native textures.
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
@@ -1307,6 +1335,7 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
 #endif  // BUILDFLAG(IS_WIN)
   frame->metadata().allow_overlay = allow_overlay;
   frame->metadata().read_lock_fences_enabled = true;
+  frame->metadata().is_webgpu_compatible = is_webgpu_compatible;
   return frame;
 }
 

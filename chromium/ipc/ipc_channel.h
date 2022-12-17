@@ -131,11 +131,7 @@ class COMPONENT_EXPORT(IPC) Channel : public Sender {
 
   // The maximum message size in bytes. Attempting to receive a message of this
   // size or bigger results in a channel error.
-#if defined(OFFICIAL_BUILD)
   static constexpr size_t kMaximumMessageSize = 128 * 1024 * 1024;
-#else
-  static constexpr size_t kMaximumMessageSize = 512 * 1024 * 1024;
-#endif
 
   // Amount of data to read at once from the pipe.
   static const size_t kReadBufferSize = 4 * 1024;

@@ -13,7 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "net/base/idempotency.h"
-#include "net/base/network_change_notifier.h"
+#include "net/base/network_handle.h"
 #include "net/base/request_priority.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
@@ -110,25 +110,27 @@ class CronetURLRequest {
     // methods will be invoked.
     virtual void OnDestroyed() = 0;
 
-    // Invoked right before request is destroyed to report collected metrics if
-    // |enable_metrics| is true in CronetURLRequest::CronetURLRequest().
-    virtual void OnMetricsCollected(const base::Time& request_start_time,
-                                    const base::TimeTicks& request_start,
-                                    const base::TimeTicks& dns_start,
-                                    const base::TimeTicks& dns_end,
-                                    const base::TimeTicks& connect_start,
-                                    const base::TimeTicks& connect_end,
-                                    const base::TimeTicks& ssl_start,
-                                    const base::TimeTicks& ssl_end,
-                                    const base::TimeTicks& send_start,
-                                    const base::TimeTicks& send_end,
-                                    const base::TimeTicks& push_start,
-                                    const base::TimeTicks& push_end,
-                                    const base::TimeTicks& receive_headers_end,
-                                    const base::TimeTicks& request_end,
-                                    bool socket_reused,
-                                    int64_t sent_bytes_count,
-                                    int64_t received_bytes_count) = 0;
+    // Invoked right before request is destroyed to report collected metrics.
+    virtual void OnMetricsCollected(
+        const base::Time& request_start_time,
+        const base::TimeTicks& request_start,
+        const base::TimeTicks& dns_start,
+        const base::TimeTicks& dns_end,
+        const base::TimeTicks& connect_start,
+        const base::TimeTicks& connect_end,
+        const base::TimeTicks& ssl_start,
+        const base::TimeTicks& ssl_end,
+        const base::TimeTicks& send_start,
+        const base::TimeTicks& send_end,
+        const base::TimeTicks& push_start,
+        const base::TimeTicks& push_end,
+        const base::TimeTicks& receive_headers_end,
+        const base::TimeTicks& request_end,
+        bool socket_reused,
+        int64_t sent_bytes_count,
+        int64_t received_bytes_count,
+        bool quic_connection_migration_attempted,
+        bool quic_connection_migration_successful) = 0;
   };
   // Invoked in response to CronetURLRequest::GetStatus() to allow multiple
   // overlapping calls. The load states correspond to the lengthy periods of
@@ -146,14 +148,13 @@ class CronetURLRequest {
                    net::RequestPriority priority,
                    bool disable_cache,
                    bool disable_connection_migration,
-                   bool enable_metrics,
                    bool traffic_stats_tag_set,
                    int32_t traffic_stats_tag,
                    bool traffic_stats_uid_set,
                    int32_t traffic_stats_uid,
                    net::Idempotency idempotency,
-                   net::NetworkChangeNotifier::NetworkHandle network =
-                       net::NetworkChangeNotifier::kInvalidNetworkHandle);
+                   net::handles::NetworkHandle network =
+                       net::handles::kInvalidNetworkHandle);
 
   CronetURLRequest(const CronetURLRequest&) = delete;
   CronetURLRequest& operator=(const CronetURLRequest&) = delete;
@@ -210,13 +211,12 @@ class CronetURLRequest {
                  const GURL& url,
                  net::RequestPriority priority,
                  int load_flags,
-                 bool enable_metrics,
                  bool traffic_stats_tag_set,
                  int32_t traffic_stats_tag,
                  bool traffic_stats_uid_set,
                  int32_t traffic_stats_uid,
                  net::Idempotency idempotency,
-                 net::NetworkChangeNotifier::NetworkHandle network);
+                 net::handles::NetworkHandle network);
 
     NetworkTasks(const NetworkTasks&) = delete;
     NetworkTasks& operator=(const NetworkTasks&) = delete;
@@ -284,8 +284,6 @@ class CronetURLRequest {
     // OnSSLCertificateError().
     bool error_reported_;
 
-    // Whether detailed metrics should be collected and reported.
-    const bool enable_metrics_;
     // Whether metrics have been reported.
     bool metrics_reported_;
 
@@ -300,7 +298,7 @@ class CronetURLRequest {
     // Idempotency of the request.
     const net::Idempotency idempotency_;
 
-    net::NetworkChangeNotifier::NetworkHandle network_;
+    net::handles::NetworkHandle network_;
 
     scoped_refptr<net::IOBuffer> read_buffer_;
     std::unique_ptr<net::URLRequest> url_request_;

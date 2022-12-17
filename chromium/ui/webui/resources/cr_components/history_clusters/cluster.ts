@@ -37,6 +37,8 @@ const HistoryClusterElementBase = I18nMixin(PolymerElement);
 interface HistoryClusterElement {
   $: {
     label: HTMLElement,
+    labelSidePanel: HTMLElement,
+    container: HTMLElement,
   };
 }
 
@@ -62,6 +64,15 @@ class HistoryClusterElement extends HistoryClusterElementBase {
       index: {
         type: Number,
         value: -1,  // Initialized to an invalid value.
+      },
+
+      /**
+       * Whether the cluster is in the side panel.
+       */
+      inSidePanel: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('inSidePanel'),
+        reflectToAttribute: true,
       },
 
       /**
@@ -112,13 +123,14 @@ class HistoryClusterElement extends HistoryClusterElementBase {
 
   cluster: Cluster;
   index: number;
+  inSidePanel: boolean;
   query: string;
   private callbackRouter_: PageCallbackRouter;
   private expanded_: boolean;
-  private hiddenVisits_: Array<URLVisit>;
+  private hiddenVisits_: URLVisit[];
   private onVisitsRemovedListenerId_: number|null = null;
   private unusedLabel_: string;
-  private visibleVisits_: Array<URLVisit>;
+  private visibleVisits_: URLVisit[];
 
   //============================================================================
   // Overridden methods
@@ -242,7 +254,7 @@ class HistoryClusterElement extends HistoryClusterElementBase {
    * multiple Clusters, all Clusters receive this callback in order to get a
    * chance to remove their matching visits.
    */
-  private onVisitsRemoved_(removedVisits: Array<URLVisit>) {
+  private onVisitsRemoved_(removedVisits: URLVisit[]) {
     const visitHasBeenRemoved = (visit: URLVisit) => {
       return removedVisits.findIndex((removedVisit) => {
         if (visit.normalizedUrl.url !== removedVisit.normalizedUrl.url) {
@@ -286,7 +298,7 @@ class HistoryClusterElement extends HistoryClusterElementBase {
     }));
   }
 
-  private computeHiddenVisits_(): Array<URLVisit> {
+  private computeHiddenVisits_(): URLVisit[] {
     return this.cluster.visits.filter((visit: URLVisit) => {
       return visit.hidden;
     });
@@ -299,12 +311,13 @@ class HistoryClusterElement extends HistoryClusterElementBase {
       return 'no_label';
     }
 
+    const label = this.inSidePanel ? this.$.labelSidePanel : this.$.label;
     insertHighlightedTextWithMatchesIntoElement(
-        this.$.label, this.cluster.label!, this.cluster.labelMatchPositions);
+        label, this.cluster.label!, this.cluster.labelMatchPositions);
     return this.cluster.label!;
   }
 
-  private computeVisibleVisits_(): Array<URLVisit> {
+  private computeVisibleVisits_(): URLVisit[] {
     return this.cluster.visits.filter((visit: URLVisit) => {
       return !visit.hidden;
     });

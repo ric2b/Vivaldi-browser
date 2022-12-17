@@ -16,9 +16,9 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_browser_delegate.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/assistant/internal/libassistant/shared_headers.h"
-#include "chromeos/services/assistant/public/cpp/assistant_browser_delegate.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/services/libassistant/audio/audio_input_stream.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_parameters.h"
@@ -64,11 +64,13 @@ class DspHotwordStateManager : public AudioInputImpl::HotwordStateManager {
   }
 
   void OnConversationTurnFinished() override {
-    input_->RecreateAudioInputStream(true /* use_dsp */);
-    if (stream_state_ == StreamState::HOTWORD) {
-      // If |stream_state_| remains unchanged, that indicates the first stage
-      // DSP hotword detection was rejected by Libassistant.
-      RecordDspHotwordDetection(DspHotwordDetectionStatus::SOFTWARE_REJECTED);
+    if (input_->IsHotwordEnabled()) {
+      input_->RecreateAudioInputStream(true /* use_dsp */);
+      if (stream_state_ == StreamState::HOTWORD) {
+        // If |stream_state_| remains unchanged, that indicates the first stage
+        // DSP hotword detection was rejected by Libassistant.
+        RecordDspHotwordDetection(DspHotwordDetectionStatus::SOFTWARE_REJECTED);
+      }
     }
     stream_state_ = StreamState::HOTWORD;
   }

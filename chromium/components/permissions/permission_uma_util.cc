@@ -30,7 +30,6 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_string.h"
-#include "components/permissions/android/jni_headers/PermissionUmaUtil_jni.h"
 #endif
 
 namespace permissions {
@@ -577,13 +576,6 @@ void PermissionUmaUtil::PermissionPromptResolved(
     RecordPermissionPromptPriorCount(
         permission, priorIgnorePrefix,
         autoblocker->GetIgnoreCount(requesting_origin, permission));
-#if BUILDFLAG(IS_ANDROID)
-    if (permission == ContentSettingsType::GEOLOCATION &&
-        permission_action != PermissionAction::IGNORED) {
-      RecordWithBatteryBucket("Permissions.BatteryLevel." + action_string +
-                              ".Geolocation");
-    }
-#endif
   }
 
   base::UmaHistogramEnumeration("Permissions.Action.WithDisposition." +
@@ -657,14 +649,6 @@ void PermissionUmaUtil::RecordPermissionPromptPriorCount(
       base::HistogramBase::kUmaTargetedHistogramFlag)
       ->Add(count);
 }
-
-#if BUILDFLAG(IS_ANDROID)
-void PermissionUmaUtil::RecordWithBatteryBucket(const std::string& histogram) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_PermissionUmaUtil_recordWithBatteryBucket(
-      env, base::android::ConvertUTF8ToJavaString(env, histogram));
-}
-#endif
 
 void PermissionUmaUtil::RecordInfobarDetailsExpanded(bool expanded) {
   base::UmaHistogramBoolean("Permissions.Prompt.Infobar.DetailsExpanded",
@@ -999,24 +983,6 @@ void PermissionUmaUtil::RecordAutoDSEPermissionReverted(
   base::UmaHistogramEnumeration(
       "Permissions.DSE.AutoPermissionRevertTransition." + permission_string,
       transition);
-
-  if (transition == AutoDSEPermissionRevertTransition::INVALID_END_STATE) {
-    base::UmaHistogramEnumeration(
-        "Permissions.DSE.InvalidAutoPermissionRevertTransition."
-        "BackedUpSetting." +
-            permission_string,
-        backed_up_setting, CONTENT_SETTING_NUM_SETTINGS);
-    base::UmaHistogramEnumeration(
-        "Permissions.DSE.InvalidAutoPermissionRevertTransition."
-        "EffectiveSetting." +
-            permission_string,
-        effective_setting, CONTENT_SETTING_NUM_SETTINGS);
-    base::UmaHistogramEnumeration(
-        "Permissions.DSE.InvalidAutoPermissionRevertTransition."
-        "EndStateSetting." +
-            permission_string,
-        end_state_setting, CONTENT_SETTING_NUM_SETTINGS);
-  }
 }
 
 // static

@@ -10,6 +10,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -34,13 +35,18 @@ constexpr SkColor kSaveButtonBackgroundColor = gfx::kGoogleBlue300;
 constexpr SkColor kSaveButtonTextColor = gfx::kGoogleGrey900;
 constexpr char kFontStyle[] = "Google Sans";
 constexpr int kFontSize = 16;
+// This color is same as the background color of input_mapping_view in kEdit
+// mode and is used for buttons to decide what ink drop color should be. If the
+// dark background color is set, then it will show the light ink drop color.
+// Since we only need the dark mode for the kEdit mode, so dark background is
+// passed for setting up the ink drop.
+constexpr SkColor kEditBackgroundColor = SkColorSetA(SK_ColorBLACK, 0x99);
 
 // About focus ring.
 // Gap between focus ring outer edge to label.
 constexpr float kHaloInset = -6;
 // Thickness of focus ring.
 constexpr float kHaloThickness = 4;
-constexpr SkColor kFocusRingColor = gfx::kGoogleBlue300;
 }  // namespace
 
 class EditFinishView::ChildButton : public views::LabelButton {
@@ -66,11 +72,11 @@ class EditFinishView::ChildButton : public views::LabelButton {
     auto* focus_ring = views::FocusRing::Get(this);
     focus_ring->SetHaloInset(kHaloInset);
     focus_ring->SetHaloThickness(kHaloThickness);
-    focus_ring->SetColor(kFocusRingColor);
+    focus_ring->SetColorId(ui::kColorAshEditFinishFocusRing);
     ash::StyleUtil::SetUpInkDropForButton(this, gfx::Insets(),
                                           /*highlight_on_hover=*/true,
-                                          /*highlight_on_focus=*/true);
-    SetHasInkDropActionOnClick(true);
+                                          /*highlight_on_focus=*/true,
+                                          kEditBackgroundColor);
   }
   ~ChildButton() override = default;
 };
@@ -120,7 +126,7 @@ void EditFinishView::Init(const gfx::Size& parent_size) {
   SetSize(gfx::Size(width, kViewHeight));
   SetPosition(
       gfx::Point(std::max(0, parent_size.width() - width - kSideMargin),
-                 std::max(0, (parent_size.height() - kViewHeight) / 2)));
+                 std::max(0, parent_size.height() / 3 - kViewHeight / 2)));
 }
 
 int EditFinishView::CalculateWidth() {

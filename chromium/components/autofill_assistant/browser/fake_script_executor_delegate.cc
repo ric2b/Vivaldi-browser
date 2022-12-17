@@ -39,6 +39,18 @@ WebController* FakeScriptExecutorDelegate::GetWebController() {
   return web_controller_;
 }
 
+bool FakeScriptExecutorDelegate::IsXmlSigned(
+    const std::string& xml_string) const {
+  return true;
+}
+
+const std::vector<std::string>
+FakeScriptExecutorDelegate::ExtractValuesFromSingleTagXml(
+    const std::string& xml_string,
+    const std::vector<std::string>& keys) const {
+  return (const std::vector<std::string>){};
+}
+
 TriggerContext* FakeScriptExecutorDelegate::GetTriggerContext() {
   return trigger_context_.get();
 }
@@ -59,6 +71,10 @@ FakeScriptExecutorDelegate::GetPasswordChangeSuccessTracker() {
 
 content::WebContents* FakeScriptExecutorDelegate::GetWebContents() {
   return web_contents_;
+}
+
+const std::string FakeScriptExecutorDelegate::GetLocale() {
+  return "en-US";
 }
 
 void FakeScriptExecutorDelegate::SetJsFlowLibrary(
@@ -162,6 +178,10 @@ UserModel* FakeScriptExecutorDelegate::GetUserModel() {
   return user_model_;
 }
 
+UserData* FakeScriptExecutorDelegate::GetUserData() {
+  return user_data_;
+}
+
 void FakeScriptExecutorDelegate::SetOverlayBehavior(
     ConfigureUiStateProto::OverlayBehavior overaly_behavior) {}
 
@@ -174,6 +194,11 @@ bool FakeScriptExecutorDelegate::ShouldShowWarning() {
 std::vector<std::string>*
 FakeScriptExecutorDelegate::GetCurrentBrowseDomainsList() {
   return &browse_domains_;
+}
+
+void FakeScriptExecutorDelegate::OnActionsResponseReceived(
+    const RoundtripNetworkStats& network_stats) {
+  roundtrip_network_stats_ = network_stats;
 }
 
 }  // namespace autofill_assistant

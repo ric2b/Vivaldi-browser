@@ -123,15 +123,9 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   // Sets final policies to defaults suitable for error pages, and builds a
   // policy container host.
   //
-  // `is_inside_mhtml` specifies whether the navigation loads an MHTML document
-  // or a subframe of an MHTML document. This influences computed sandbox flags.
-  // `frame_sandbox_flags` represents the frame's sandbox flags.
-  //
   // This method must only be called once. However it can be called after
   // `ComputePolicies()`.
-  void ComputePoliciesForError(
-      bool is_inside_mhtml,
-      network::mojom::WebSandboxFlags frame_sandbox_flags);
+  void ComputePoliciesForError();
 
   // Sets final policies to their correct values and builds a policy container
   // host.
@@ -149,7 +143,8 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   // called later, in which case it overrides the final policies.
   void ComputePolicies(const GURL& url,
                        bool is_inside_mhtml,
-                       network::mojom::WebSandboxFlags frame_sandbox_flags);
+                       network::mojom::WebSandboxFlags frame_sandbox_flags,
+                       bool is_anonymous);
 
   // Returns a reference to the policies of the new document, i.e. the policies
   // in the policy container host to be committed.
@@ -220,7 +215,8 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   PolicyContainerPolicies ComputeFinalPolicies(
       const GURL& url,
       bool is_inside_mhtml,
-      network::mojom::WebSandboxFlags frame_sandbox_flags);
+      network::mojom::WebSandboxFlags frame_sandbox_flags,
+      bool is_anonymous);
 
   // The policies of the parent document, if any.
   const std::unique_ptr<PolicyContainerPolicies> parent_policies_;

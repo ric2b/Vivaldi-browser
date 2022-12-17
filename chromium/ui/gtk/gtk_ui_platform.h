@@ -10,10 +10,14 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gtk/gtk_compat.h"
 
-using GdkKeymap = struct _GdkKeymap;
 using GtkWindow = struct _GtkWindow;
 using GtkWidget = struct _GtkWidget;
 using GdkWindow = struct _GdkWindow;
+
+namespace ui {
+class LinuxInputMethodContext;
+class LinuxInputMethodContextDelegate;
+}  // namespace ui
 
 namespace gtk {
 
@@ -53,8 +57,9 @@ class GtkUiPlatform {
   // needed, if any.
   virtual void ShowGtkWindow(GtkWindow* window) = 0;
 
-  // Reports whether InputMethodContextImplGtk is the preferred input method.
-  virtual bool PreferGtkIme() = 0;
+  // Creates a new IME context or may return nullptr.
+  virtual std::unique_ptr<ui::LinuxInputMethodContext> CreateInputMethodContext(
+      ui::LinuxInputMethodContextDelegate* delegate) const = 0;
 };
 
 }  // namespace gtk

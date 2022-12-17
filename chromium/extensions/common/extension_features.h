@@ -22,6 +22,8 @@ extern const base::Feature kReportKeepaliveUkm;
 
 extern const base::Feature kAllowSharedArrayBuffersUnconditionally;
 
+extern const base::Feature kLoadCryptoTokenExtension;
+
 extern const base::Feature kU2FSecurityKeyAPI;
 
 extern const base::Feature kStructuredCloningForMV3Messaging;
@@ -38,6 +40,12 @@ extern const base::Feature kExtensionDynamicURLRedirection;
 extern const base::Feature kExtensionsMenuAccessControl;
 
 extern const base::Feature kAvoidEarlyExtensionScriptContextCreation;
+
+extern const base::Feature kExtensionsOffscreenDocuments;
+
+extern const base::Feature kNewWebstoreDomain;
+
+extern const base::Feature kExtensionSidePanelIntegration;
 
 }  // namespace extensions_features
 

@@ -10,20 +10,16 @@ GEN_INCLUDE(['../testing/chromevox_next_e2e_test_base.js']);
  */
 ChromeVoxAutoScrollHandlerTest = class extends ChromeVoxNextE2ETest {
   /** @override */
-  setUp() {
-    super.setUp();
-    window.EventType = chrome.automation.EventType;
-
-    this.forceContextualLastOutput();
-  }
-
-  /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
     await importModule(
         'AutoScrollHandler', '/chromevox/background/auto_scroll_handler.js');
     await importModule(
         'ChromeVoxState', '/chromevox/background/chromevox_state.js');
+    await importModule('CursorRange', '/common/cursors/range.js');
+
+    window.EventType = chrome.automation.EventType;
+    this.forceContextualLastOutput();
   }
 
   /** @return {chrome.automation.AutomationNode} */
@@ -54,7 +50,7 @@ ChromeVoxAutoScrollHandlerTest = class extends ChromeVoxNextE2ETest {
         this.numChildrenBeforeScroll_ = list.children.length;
       },
       scrollFinished: list =>
-          list.children.length !== this.numChildrenBeforeScroll_
+          list.children.length !== this.numChildrenBeforeScroll_,
     });
   }
 
@@ -95,7 +91,7 @@ ChromeVoxAutoScrollHandlerTest = class extends ChromeVoxNextE2ETest {
       },
       scrollFinished: list => list.children.length === 2 &&
           list.children[0] !== this.childrenBeforeScroll_[0] &&
-          list.children[1] !== this.childrenBeforeScroll_[1]
+          list.children[1] !== this.childrenBeforeScroll_[1],
     });
   }
 
@@ -125,7 +121,7 @@ ChromeVoxAutoScrollHandlerTest = class extends ChromeVoxNextE2ETest {
     Object.defineProperty(list, 'standardActions', {
       get: () =>
           [chrome.automation.ActionType.SCROLL_FORWARD,
-           chrome.automation.ActionType.SCROLL_BACKWARD]
+           chrome.automation.ActionType.SCROLL_BACKWARD],
     });
 
     // Create a fake addEventListener to dispatch an event listener of
@@ -168,15 +164,15 @@ ChromeVoxAutoScrollHandlerTest = class extends ChromeVoxNextE2ETest {
   }
 };
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'DontScrollInSameScrollable',
     async function() {
       const root = await this.runWithFakeArcSimpleScrollable();
       const handler = new AutoScrollHandler();
 
       const list = root.find({role: RoleType.LIST});
-      const firstItemCursor = cursors.Range.fromNode(list.firstChild);
-      const lastItemCursor = cursors.Range.fromNode(list.lastChild);
+      const firstItemCursor = CursorRange.fromNode(list.firstChild);
+      const lastItemCursor = CursorRange.fromNode(list.lastChild);
 
       ChromeVoxState.instance.navigateToRange(firstItemCursor);
 
@@ -185,16 +181,16 @@ TEST_F(
           /*speechProps=*/ null));
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'PreventMultipleScrolling',
     async function() {
       const root = await this.runWithFakeArcSimpleScrollable();
       const handler = new AutoScrollHandler();
 
       const list = root.find({role: RoleType.LIST});
-      const rootCursor = cursors.Range.fromNode(root);
-      const firstItemCursor = cursors.Range.fromNode(list.firstChild);
-      const lastItemCursor = cursors.Range.fromNode(list.lastChild);
+      const rootCursor = CursorRange.fromNode(root);
+      const firstItemCursor = CursorRange.fromNode(list.firstChild);
+      const lastItemCursor = CursorRange.fromNode(list.lastChild);
 
       ChromeVoxState.instance.navigateToRange(lastItemCursor);
 
@@ -211,7 +207,7 @@ TEST_F(
           /*speechProps=*/ null));
     });
 
-TEST_F('ChromeVoxAutoScrollHandlerTest', 'ScrollForward', async function() {
+AX_TEST_F('ChromeVoxAutoScrollHandlerTest', 'ScrollForward', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithFakeArcSimpleScrollable();
   mockFeedback.expectSpeech('1st item')
@@ -222,11 +218,11 @@ TEST_F('ChromeVoxAutoScrollHandlerTest', 'ScrollForward', async function() {
       .call(doCmd('nextObject'))
       .expectSpeech('4th item')
       .call(doCmd('nextObject'))
-      .expectSpeech('5th item')
-      .replay();
+      .expectSpeech('5th item');
+  await mockFeedback.replay();
 });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'ScrollForwardReturnsFalse',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -242,11 +238,11 @@ TEST_F(
           .call(doCmd('nextObject'))
           .expectSpeech('hello')
           .call(doCmd('nextObject'))
-          .expectSpeech('world')
-          .replay();
+          .expectSpeech('world');
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'RecyclerViewByObject', async function() {
       const mockFeedback = this.createMockFeedback();
       const root = await this.runWithFakeArcRecyclerView();
@@ -256,11 +252,11 @@ TEST_F(
           .call(doCmd('nextObject'))  // scroll forward
           .expectSpeech('3rd item')
           .call(doCmd('previousObject'))  // scroll backward
-          .expectSpeech('2nd item')
-          .replay();
+          .expectSpeech('2nd item');
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'RecyclerViewByWord', async function() {
       const mockFeedback = this.createMockFeedback();
       const root = await this.runWithFakeArcRecyclerView();
@@ -274,11 +270,11 @@ TEST_F(
           .call(doCmd('previousWord'))  // scroll backward
           .expectSpeech('item')
           .call(doCmd('previousWord'))
-          .expectSpeech('2nd')
-          .replay();
+          .expectSpeech('2nd');
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'RecyclerViewByCharacter',
     async function() {
       const mockFeedback = this.createMockFeedback();
@@ -303,11 +299,11 @@ TEST_F(
           .call(doCmd('previousCharacter'))  // scroll backward
           .expectSpeech('m')
           .call(doCmd('previousCharacter'))
-          .expectSpeech('e')
-          .replay();
+          .expectSpeech('e');
+      await mockFeedback.replay();
     });
 
-TEST_F(
+AX_TEST_F(
     'ChromeVoxAutoScrollHandlerTest', 'RecyclerViewByPredicate',
     async function() {
       // TODO(hirokisato): This test fails without '<p>unrelated content</p>' in
@@ -322,6 +318,6 @@ TEST_F(
           .call(doCmd('nextSimilarItem'))  // scroll forward
           .expectSpeech('3rd item')
           .call(doCmd('previousSimilarItem'))  // scroll backward
-          .expectSpeech('2nd item')
-          .replay();
+          .expectSpeech('2nd item');
+      await mockFeedback.replay();
     });

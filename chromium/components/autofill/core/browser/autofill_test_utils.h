@@ -14,6 +14,7 @@
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
+#include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
@@ -91,6 +92,9 @@ FormGlobalId MakeFormGlobalId(
 // LocalFrameToken is generated randomly, otherwise it is stable.
 FieldGlobalId MakeFieldGlobalId(
     RandomizeFrame randomize_frame = RandomizeFrame(false));
+
+// Returns a copy of `form` with cleared values.
+FormData WithoutValues(FormData form);
 
 // Helper function to set values and verification statuses to a form group.
 void SetFormGroupValues(FormGroup& form_group,
@@ -202,6 +206,9 @@ AutofillProfile GetServerProfile();
 // Returns a server profile full of dummy info, different to the above.
 AutofillProfile GetServerProfile2();
 
+// Returns an IBAN full of dummy info.
+IBAN GetIBAN();
+
 // Returns a credit card full of dummy info.
 CreditCard GetCreditCard();
 
@@ -221,7 +228,6 @@ CreditCard GetMaskedServerCardWithNonLegacyId();
 CreditCard GetMaskedServerCardWithLegacyId();
 CreditCard GetMaskedServerCardAmex();
 CreditCard GetMaskedServerCardWithNickname();
-CreditCard GetMaskedServerCardWithInvalidNickname();
 
 // Returns a full server card full of dummy info.
 CreditCard GetFullServerCard();

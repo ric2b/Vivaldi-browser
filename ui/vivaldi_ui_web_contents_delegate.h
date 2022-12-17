@@ -101,6 +101,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
       content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
+  void PrimaryMainDocumentElementAvailable() override;
 
   void UpdateDraggableRegions(
       content::RenderFrameHost* sender,

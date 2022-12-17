@@ -10,6 +10,7 @@
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -18,7 +19,6 @@
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -50,25 +50,46 @@ CreateDOMExceptionCodeAndMessageFromNetErrorCode(int32_t net_error) {
 
 }  // namespace
 
-ScriptPromise Socket::connection(ScriptState* script_state) const {
-  return ScriptPromise(script_state,
-                       connection_.Get(script_state->GetIsolate()));
+ScriptPromise Socket::opened(ScriptState* script_state) const {
+  return ScriptPromise(script_state, opened_.Get(script_state->GetIsolate()));
 }
 
 ScriptPromise Socket::closed(ScriptState* script_state) const {
   return ScriptPromise(script_state, closed_.Get(script_state->GetIsolate()));
 }
 
-ScriptPromise Socket::close(ScriptState* script_state,
-                            const SocketCloseOptions* options,
-                            ExceptionState& exception_state) {
-  Close(options, exception_state);
-  if (exception_state.HadException()) {
+ScriptPromise Socket::close(ScriptState*, ExceptionState& exception_state) {
+  if (!Initialized()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Socket is not properly initialized.");
     return ScriptPromise();
-  } else {
-    DCHECK(Closed());
-    return ScriptPromise::CastUndefined(script_state);
   }
+
+  if (Closed()) {
+    return closed(script_state_);
+  }
+
+  if (readable_stream_wrapper_->Locked() ||
+      writable_stream_wrapper_->Locked()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Close called on locked streams.");
+    return ScriptPromise();
+  }
+
+  auto* reason = MakeGarbageCollected<DOMException>(
+      DOMExceptionCode::kAbortError, "Stream closed.");
+
+  auto readable_cancel = readable_stream_wrapper_->Readable()->cancel(
+      script_state_, ScriptValue::From(script_state_, reason), exception_state);
+  DCHECK(!exception_state.HadException()) << exception_state.Message();
+  readable_cancel.MarkAsHandled();
+
+  auto writable_abort = writable_stream_wrapper_->Writable()->abort(
+      script_state_, ScriptValue::From(script_state_, reason), exception_state);
+  DCHECK(!exception_state.HadException()) << exception_state.Message();
+  writable_abort.MarkAsHandled();
+
+  return closed(script_state_);
 }
 
 Socket::Socket(ScriptState* script_state)
@@ -79,10 +100,10 @@ Socket::Socket(ScriptState* script_state)
           GetExecutionContext()->GetScheduler()->RegisterFeature(
               SchedulingPolicy::Feature::kOutstandingNetworkRequestDirectSocket,
               {SchedulingPolicy::DisableBackForwardCache()})),
-      connection_resolver_(
+      opened_resolver_(
           MakeGarbageCollected<ScriptPromiseResolver>(script_state)),
-      connection_(script_state->GetIsolate(),
-                  connection_resolver_->Promise().V8Promise()),
+      opened_(script_state->GetIsolate(),
+              opened_resolver_->Promise().V8Promise()),
       closed_resolver_(
           MakeGarbageCollected<ScriptPromiseResolver>(script_state)),
       closed_(script_state->GetIsolate(),
@@ -130,7 +151,7 @@ void Socket::ContextDestroyed() {}
 void Socket::ContextLifecycleStateChanged(
     mojom::blink::FrameLifecycleState state) {
   if (state == mojom::blink::FrameLifecycleState::kFrozen) {
-    // Clear service_remote_ and pending connections.
+    // Clear service_remote_ and fail pending connection.
     OnServiceConnectionError();
   }
 }
@@ -154,12 +175,13 @@ bool Socket::HasPendingActivity() const {
          writable_stream_wrapper_->HasPendingWrite();
 }
 
-void Socket::ResolveOrRejectClosed(bool error) {
-  if (error) {
-    closed_resolver_->Reject();
-  } else {
-    closed_resolver_->Resolve();
-  }
+void Socket::ResolveClosed() {
+  closed_resolver_->Resolve();
+  closed_resolver_ = nullptr;
+}
+
+void Socket::RejectClosed(ScriptValue exception) {
+  closed_resolver_->Reject(exception);
   closed_resolver_ = nullptr;
 }
 
@@ -174,8 +196,8 @@ void Socket::Trace(Visitor* visitor) const {
   visitor->Trace(script_state_);
   visitor->Trace(service_);
 
-  visitor->Trace(connection_resolver_);
-  visitor->Trace(connection_);
+  visitor->Trace(opened_resolver_);
+  visitor->Trace(opened_);
 
   visitor->Trace(closed_resolver_);
   visitor->Trace(closed_);

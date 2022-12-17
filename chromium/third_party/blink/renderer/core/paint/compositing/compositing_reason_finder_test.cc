@@ -109,7 +109,7 @@ TEST_P(CompositingReasonFinderTest, FixedElementShouldHaveCompositingReason) {
 
   ScopedFixedElementsDontOverscrollForTest fixed_elements_dont_overscroll(true);
   EXPECT_REASONS(
-      CompositingReason::kFixedToViewport,
+      CompositingReason::kFixedPosition | CompositingReason::kFixedToViewport,
       DirectReasonsForPaintProperties(*GetLayoutObjectByElementId("fixedDiv")));
 }
 
@@ -170,35 +170,36 @@ TEST_P(CompositingReasonFinderTest, OnlyScrollingStickyPositionPromoted) {
     <div class='overflow-hidden'>
       <div id='overflow-hidden-no-scrolling' class='sticky'></div>
     </div>
+    <div style="position: fixed">
+      <div id='under-fixed' class='sticky'></div>
+    </div>
+    < div style='height: 2000px;"></div>
   )HTML");
 
-  auto& sticky_scrolling =
-      *To<LayoutBoxModelObject>(GetLayoutObjectByElementId("sticky-scrolling"));
   EXPECT_REASONS(
       CompositingReason::kStickyPosition,
       CompositingReasonFinder::CompositingReasonsForScrollDependentPosition(
-          *sticky_scrolling.Layer()));
+          *GetPaintLayerByElementId("sticky-scrolling")));
 
-  auto& sticky_no_scrolling = *To<LayoutBoxModelObject>(
-      GetLayoutObjectByElementId("sticky-no-scrolling"));
   EXPECT_REASONS(
       CompositingReason::kNone,
       CompositingReasonFinder::CompositingReasonsForScrollDependentPosition(
-          *sticky_no_scrolling.Layer()));
+          *GetPaintLayerByElementId("sticky-no-scrolling")));
 
-  auto& overflow_hidden_scrolling = *To<LayoutBoxModelObject>(
-      GetLayoutObjectByElementId("overflow-hidden-scrolling"));
   EXPECT_REASONS(
       CompositingReason::kStickyPosition,
       CompositingReasonFinder::CompositingReasonsForScrollDependentPosition(
-          *overflow_hidden_scrolling.Layer()));
+          *GetPaintLayerByElementId("overflow-hidden-scrolling")));
 
-  auto& overflow_hidden_no_scrolling = *To<LayoutBoxModelObject>(
-      GetLayoutObjectByElementId("overflow-hidden-no-scrolling"));
   EXPECT_REASONS(
       CompositingReason::kNone,
       CompositingReasonFinder::CompositingReasonsForScrollDependentPosition(
-          *overflow_hidden_no_scrolling.Layer()));
+          *GetPaintLayerByElementId("overflow-hidden-no-scrolling")));
+
+  EXPECT_REASONS(
+      CompositingReason::kNone,
+      CompositingReasonFinder::CompositingReasonsForScrollDependentPosition(
+          *GetPaintLayerByElementId("under-fixed")));
 }
 
 void CompositingReasonFinderTest::CheckCompositingReasonsForAnimation(
@@ -288,7 +289,7 @@ TEST_P(CompositingReasonFinderTest, DontPromoteEmptyIframe) {
   ASSERT_TRUE(child_frame);
   LocalFrameView* child_frame_view = child_frame->View();
   ASSERT_TRUE(child_frame_view);
-  EXPECT_TRUE(child_frame_view->CanThrottleRendering());
+  EXPECT_FALSE(child_frame_view->CanThrottleRendering());
 }
 
 TEST_P(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
@@ -302,7 +303,7 @@ TEST_P(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
   ASSERT_TRUE(iframe);
   iframe->contentDocument()->OverrideIsInitialEmptyDocument();
   To<LocalFrame>(iframe->ContentFrame())->View()->BeginLifecycleUpdates();
-  ASSERT_FALSE(iframe->ContentFrame()->IsCrossOriginToMainFrame());
+  ASSERT_FALSE(iframe->ContentFrame()->IsCrossOriginToNearestMainFrame());
   UpdateAllLifecyclePhasesForTest();
   LayoutView* iframe_layout_view =
       To<LocalFrame>(iframe->ContentFrame())->ContentLayoutObject();
@@ -325,7 +326,7 @@ TEST_P(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
       To<LocalFrame>(iframe->ContentFrame())->ContentLayoutObject();
   iframe_layer = iframe_layout_view->Layer();
   ASSERT_TRUE(iframe_layer);
-  ASSERT_TRUE(iframe->ContentFrame()->IsCrossOriginToMainFrame());
+  ASSERT_TRUE(iframe->ContentFrame()->IsCrossOriginToNearestMainFrame());
   EXPECT_FALSE(iframe_layer->GetScrollableArea()->NeedsCompositedScrolling());
   EXPECT_REASONS(CompositingReason::kIFrame,
                  DirectReasonsForPaintProperties(*iframe_layout_view));

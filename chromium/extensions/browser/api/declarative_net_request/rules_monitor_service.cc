@@ -356,7 +356,7 @@ RulesMonitorService::GetSessionRules(const ExtensionId& extension_id) const {
   std::vector<api::declarative_net_request::Rule> result;
   std::u16string error;
   bool populate_result = json_schema_compiler::util::PopulateArrayFromList(
-      GetSessionRulesValue(extension_id).GetListDeprecated(), &result, &error);
+      GetSessionRulesValue(extension_id).GetList(), &result, &error);
   DCHECK(populate_result);
   DCHECK(error.empty());
   return result;
@@ -925,23 +925,29 @@ void RulesMonitorService::OnNewStaticRulesetsLoaded(
     return;
   }
 
-  if (!matcher) {
+  if (matcher) {
+    bool had_extra_headers_matcher =
+        ruleset_manager_.HasAnyExtraHeadersMatcher();
+    matcher->RemoveRulesetsWithIDs(ids_to_disable);
+    matcher->AddOrUpdateRulesets(std::move(new_matchers));
+    AdjustExtraHeaderListenerCountIfNeeded(had_extra_headers_matcher);
+  } else {
     // The extension didn't have any existing rulesets. Hence just add a new
-    // CompositeMatcher with |new_matchers|.
+    // CompositeMatcher with |new_matchers|. Note, this also updates the
+    // extra header listener count.
     AddCompositeMatcher(*extension, std::move(new_matchers));
-    std::move(callback).Run(absl::nullopt);
-    return;
+    matcher = ruleset_manager_.GetMatcherForExtension(load_data.extension_id);
   }
 
-  bool had_extra_headers_matcher = ruleset_manager_.HasAnyExtraHeadersMatcher();
-
-  matcher->RemoveRulesetsWithIDs(ids_to_disable);
-  matcher->AddOrUpdateRulesets(std::move(new_matchers));
-
-  prefs_->SetDNREnabledStaticRulesets(load_data.extension_id,
-                                      matcher->ComputeStaticRulesetIDs());
-
-  AdjustExtraHeaderListenerCountIfNeeded(had_extra_headers_matcher);
+  // matcher still can be null if the extension didn't have any existing
+  // rulesets and the OnNewStaticRulesetsLoaded() is called without any rulesets
+  // in load_data.rulesets (means, ids_to_enable is empty).
+  // In this case, we don't need to update the DNREnabledStaticRulesets since
+  // it will not be changed. (It was empty list and it is still empty)
+  if (matcher) {
+    prefs_->SetDNREnabledStaticRulesets(load_data.extension_id,
+                                        matcher->ComputeStaticRulesetIDs());
+  }
 
   std::move(callback).Run(absl::nullopt);
 }

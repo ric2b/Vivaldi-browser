@@ -66,19 +66,25 @@ const web::CertVerificationErrorsCacheType::size_type kMaxCertErrorsCount = 100;
 // Returns true if the navigation was upgraded to HTTPS but failed due to an
 // SSL or net error. This can happen when HTTPS-Only Mode feature automatically
 // upgrades a navigation to HTTPS.
-bool IsFailedHttpsUpgrade(NSError* error,
-                          web::NavigationContextImpl* context,
-                          NSError* cancellationError) {
+web::HttpsUpgradeType GetFailedHttpsUpgradeType(
+    NSError* error,
+    web::NavigationContextImpl* context,
+    NSError* cancellationError) {
   if (!context || !context->GetItem() ||
-      !context->GetItem()->IsUpgradedToHttps() || cancellationError) {
-    return false;
+      context->GetItem()->GetHttpsUpgradeType() ==
+          web::HttpsUpgradeType::kNone ||
+      cancellationError) {
+    return web::HttpsUpgradeType::kNone;
   }
   int error_code = 0;
   if (!web::GetNetErrorFromIOSErrorCode(
           error.code, &error_code, net::NSURLWithGURL(context->GetUrl()))) {
     error_code = net::ERR_FAILED;
   }
-  return (error_code != net::OK || web::IsWKWebViewSSLCertError(error));
+  if (error_code != net::OK || web::IsWKWebViewSSLCertError(error)) {
+    return context->GetItem()->GetHttpsUpgradeType();
+  }
+  return web::HttpsUpgradeType::kNone;
 }
 
 }  // namespace
@@ -326,10 +332,8 @@ bool IsFailedHttpsUpgrade(NSError* error,
       requestURL.SchemeIs(url::kBlobScheme);
 
   _shouldPerformDownload = NO;
-  if (web::features::IsNewDownloadAPIEnabled()) {
-    if (@available(iOS 15, *)) {
-      _shouldPerformDownload = action.shouldPerformDownload;
-    }
+  if (@available(iOS 15, *)) {
+    _shouldPerformDownload = action.shouldPerformDownload;
   }
 
   __weak CRWWKNavigationHandler* weakSelf = self;
@@ -438,11 +442,9 @@ bool IsFailedHttpsUpgrade(NSError* error,
     return;
   }
 
-  if (web::features::IsNewDownloadAPIEnabled()) {
-    if (@available(iOS 15, *)) {
-      handler(WKNavigationResponsePolicyDownload);
-      return;
-    }
+  if (@available(iOS 15, *)) {
+    handler(WKNavigationResponsePolicyDownload);
+    return;
   }
 
   if (web::UrlHasWebScheme(responseURL)) {
@@ -992,8 +994,7 @@ bool IsFailedHttpsUpgrade(NSError* error,
 
 - (void)webView:(WKWebView*)webView
      authenticationChallenge:(NSURLAuthenticationChallenge*)challenge
-    shouldAllowDeprecatedTLS:(void (^)(BOOL))decisionHandler
-    API_AVAILABLE(ios(14)) {
+    shouldAllowDeprecatedTLS:(void (^)(BOOL))decisionHandler {
   [self didReceiveWKNavigationDelegateCallback];
   DCHECK(challenge);
   DCHECK(decisionHandler);
@@ -1375,7 +1376,6 @@ bool IsFailedHttpsUpgrade(NSError* error,
   }
 
   if (_shouldPerformDownload) {
-    DCHECK(web::features::IsNewDownloadAPIEnabled());
     return NO;
   }
 
@@ -1685,10 +1685,11 @@ bool IsFailedHttpsUpgrade(NSError* error,
 
   web::NavigationContextImpl* navigationContext =
       [self.navigationStates contextForNavigation:navigation];
-  if (IsFailedHttpsUpgrade(error, navigationContext,
-                           policyDecisionCancellationError)) {
+  web::HttpsUpgradeType failed_upgrade_type = GetFailedHttpsUpgradeType(
+      error, navigationContext, policyDecisionCancellationError);
+  if (failed_upgrade_type != web::HttpsUpgradeType::kNone) {
     navigationContext->SetError(contextError);
-    navigationContext->SetIsFailedHTTPSUpgrade();
+    navigationContext->SetFailedHttpsUpgradeType(failed_upgrade_type);
     [self handleCancelledError:error
                  forNavigation:navigation
                provisionalLoad:provisionalLoad];
@@ -1815,8 +1816,7 @@ bool IsFailedHttpsUpgrade(NSError* error,
   self.navigationManagerImpl->AddPendingItem(
       blockedURL, web::Referrer(), transition,
       web::NavigationInitiationType::BROWSER_INITIATED,
-      /*is_post_navigation=*/false,
-      /*is_using_https_as_default_scheme=*/false);
+      /*is_post_navigation=*/false, web::HttpsUpgradeType::kNone);
 
   // Create context.
   std::unique_ptr<web::NavigationContextImpl> context =
@@ -1846,6 +1846,11 @@ bool IsFailedHttpsUpgrade(NSError* error,
   CRWErrorPageHelper* errorPage =
       [[CRWErrorPageHelper alloc] initWithError:error];
   WKBackForwardListItem* backForwardItem = webView.backForwardList.currentItem;
+  GURL backForwardGURL = net::GURLWithNSURL(backForwardItem.URL);
+  GURL failedURL = [CRWErrorPageHelper
+      failedNavigationURLFromErrorPageFileURL:backForwardGURL];
+  bool isSameURLFromWebClient = web::GetWebClient()->IsPointingToSameDocument(
+      failedURL, net::GURLWithNSURL(errorPage.failedNavigationURL));
   // There are 4 possible scenarios here:
   //   1. Current nav item is an error page for failed URL;
   //   2. Current nav item has a failed URL. This may happen when
@@ -1862,6 +1867,7 @@ bool IsFailedHttpsUpgrade(NSError* error,
   if (provisionalLoad &&
       ![errorPage
           isErrorPageFileURLForFailedNavigationURL:backForwardItem.URL] &&
+      !isSameURLFromWebClient &&
       ![backForwardItem.URL isEqual:errorPage.failedNavigationURL] &&
       !web::wk_navigation_util::IsRestoreSessionUrl(backForwardItem.URL)) {
     errorNavigation = [webView loadFileURL:errorPage.errorPageFileURL
@@ -1880,9 +1886,10 @@ bool IsFailedHttpsUpgrade(NSError* error,
 - (void)handleCancelledError:(NSError*)error
                forNavigation:(WKNavigation*)navigation
              provisionalLoad:(BOOL)provisionalLoad {
-  if (!IsFailedHttpsUpgrade(
-          error, [self.navigationStates contextForNavigation:navigation],
-          self.pendingNavigationInfo.cancellationError) &&
+  web::HttpsUpgradeType failed_upgrade_type = GetFailedHttpsUpgradeType(
+      error, [self.navigationStates contextForNavigation:navigation],
+      self.pendingNavigationInfo.cancellationError);
+  if (failed_upgrade_type == web::HttpsUpgradeType::kNone &&
       ![self shouldCancelLoadForCancelledError:error
                                provisionalLoad:provisionalLoad]) {
     return;

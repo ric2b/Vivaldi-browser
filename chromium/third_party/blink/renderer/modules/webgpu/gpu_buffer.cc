@@ -42,7 +42,7 @@ WGPUBufferDescriptor AsDawnType(const GPUBufferDescriptor* webgpu_desc,
 
   WGPUBufferDescriptor dawn_desc = {};
   dawn_desc.nextInChain = nullptr;
-  dawn_desc.usage = AsDawnFlags<WGPUTextureUsage>(webgpu_desc->usage());
+  dawn_desc.usage = AsDawnFlags<WGPUBufferUsage>(webgpu_desc->usage());
   dawn_desc.size = webgpu_desc->size();
   dawn_desc.mappedAtCreation = webgpu_desc->mappedAtCreation();
   if (webgpu_desc->hasLabel()) {
@@ -142,6 +142,7 @@ GPUBuffer* GPUBuffer::Create(GPUDevice* device,
   if (is_mappable) {
     GPU* gpu = device->adapter()->gpu();
     gpu->TrackMappableBuffer(buffer);
+    device->TrackMappableBuffer(buffer);
     buffer->mappable_buffer_handles_ = gpu->mappable_buffer_handles();
   }
 
@@ -205,9 +206,18 @@ void GPUBuffer::destroy(ScriptState* script_state) {
   GetProcs().bufferDestroy(GetHandle());
   // Destroyed, so it can never be mapped again. Stop tracking.
   device_->adapter()->gpu()->UntrackMappableBuffer(this);
+  device_->UntrackMappableBuffer(this);
   // Drop the reference to the mapped buffer handles. No longer
   // need to remove the WGPUBuffer from this set in ~GPUBuffer.
   mappable_buffer_handles_ = nullptr;
+}
+
+uint64_t GPUBuffer::size() const {
+  return size_;
+}
+
+uint32_t GPUBuffer::usage() const {
+  return GetProcs().bufferGetUsage(GetHandle());
 }
 
 ScriptPromise GPUBuffer::MapAsyncImpl(ScriptState* script_state,

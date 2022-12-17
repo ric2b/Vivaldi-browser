@@ -8,9 +8,9 @@
 
 #include "base/bind.h"
 #include "base/check.h"
+#include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/assistant/internal/internal_util.h"
 #include "chromeos/assistant/internal/libassistant/shared_headers.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/services/libassistant/chromium_api_delegate.h"
 #include "chromeos/services/libassistant/grpc/assistant_client.h"
 #include "chromeos/services/libassistant/libassistant_factory.h"
@@ -116,12 +116,6 @@ void ServiceController::Initialize(
   if (assistant_client_) {
     LOG(ERROR) << "Initialize() should only be called once.";
     return;
-  }
-
-  // Currently only V1 library is uploaded to DLC.
-  // If V2 flag is enabled, will fallback to load libassistant.so from rootfs.
-  if (!chromeos::assistant::features::IsLibAssistantV2Enabled()) {
-    libassistant_factory_.LoadLibassistantLibraryFromDlc(config->dlc_path);
   }
 
   auto assistant_manager = libassistant_factory_.CreateAssistantManager(

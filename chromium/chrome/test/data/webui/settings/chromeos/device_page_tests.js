@@ -4,7 +4,7 @@
 
 import 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 
-import {DevicePageBrowserProxyImpl, IdleBehavior, LidClosedBehavior, NoteAppLockScreenSupport, Router, routes, setDisplayApiForTesting, StorageSpaceState} from 'chrome://os-settings/chromeos/os_settings.js';
+import {crosAudioConfigMojomWebui, DevicePageBrowserProxyImpl, IdleBehavior, LidClosedBehavior, NoteAppLockScreenSupport, Router, routes, setCrosAudioConfigForTesting, setDisplayApiForTesting, StorageSpaceState} from 'chrome://os-settings/chromeos/os_settings.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -14,11 +14,13 @@ import {flushTasks, isVisible, waitAfterNextRender} from 'chrome://test/test_uti
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 
+import {crosAudioConfigActiveFakeSpeaker, crosAudioConfigDefaultFakeMicJack, crosAudioConfigDefaultFakeSpeaker, crosAudioConfigInactiveFakeMicJack, defaultFakeAudioSystemProperties, FakeCrosAudioConfig} from './fake_cros_audio_config.js';
 import {FakeSystemDisplay} from './fake_system_display.js';
 
 /** @enum {string} */
 const TestNames = {
   DevicePage: 'device page',
+  Audio: 'audio',
   Display: 'display',
   Keyboard: 'keyboard',
   NightLight: 'night light',
@@ -231,7 +233,7 @@ TestDevicePageBrowserProxy.prototype = {
           return Object.assign({}, app);
         }),
         !this.androidAppsReceived_);
-  }
+  },
 };
 
 function getFakePrefs() {
@@ -444,8 +446,8 @@ function getFakePrefs() {
           type: chrome.settingsPrivate.PrefType.NUMBER,
           value: 500,
         },
-      }
-    }
+      },
+    },
   };
 }
 
@@ -468,7 +470,16 @@ suite('SettingsDevicePage', function() {
     PolymerTest.clearBody();
     Router.getInstance().navigateTo(routes.BASIC);
 
-    DevicePageBrowserProxyImpl.setInstance(new TestDevicePageBrowserProxy());
+    DevicePageBrowserProxyImpl.setInstanceForTesting(
+        new TestDevicePageBrowserProxy());
+
+    // Allow the light DOM to be distributed to settings-animated-pages.
+    setTimeout(done);
+  });
+
+  async function init() {
+    // await is necessary in order for setup() to complete.
+    await flushTasks();
     devicePage = document.createElement('settings-device-page');
     devicePage.prefs = getFakePrefs();
 
@@ -477,10 +488,7 @@ suite('SettingsDevicePage', function() {
     basicPage.dataset.page = 'basic';
     basicPage.appendChild(devicePage);
     document.body.appendChild(basicPage);
-
-    // Allow the light DOM to be distributed to settings-animated-pages.
-    setTimeout(done);
-  });
+  }
 
   /** @return {!Promise<!HTMLElement>} */
   function showAndGetDeviceSubpage(subpage, expectedRoute) {
@@ -561,7 +569,7 @@ suite('SettingsDevicePage', function() {
           width: 3000,
           height: 2000,
           refreshRate: 100,
-        }
+        },
       ],
       bounds: {
         left: 0,
@@ -647,10 +655,14 @@ suite('SettingsDevicePage', function() {
         `${elementDesc} should be focused for settingId=${settingId}.`);
   }
 
-  test(assert(TestNames.DevicePage), function() {
+  test(assert(TestNames.DevicePage), async function() {
+    await init();
     assertTrue(isVisible(devicePage.shadowRoot.querySelector('#pointersRow')));
     assertTrue(isVisible(devicePage.shadowRoot.querySelector('#keyboardRow')));
     assertTrue(isVisible(devicePage.shadowRoot.querySelector('#displayRow')));
+
+    // enableAudioSettingsPage feature flag by default is turned on in tests.
+    assertTrue(isVisible(devicePage.shadowRoot.querySelector('#audioRow')));
 
     webUIListenerCallback('has-mouse-changed', false);
     assertTrue(isVisible(devicePage.shadowRoot.querySelector('#pointersRow')));
@@ -665,10 +677,267 @@ suite('SettingsDevicePage', function() {
     assertTrue(isVisible(devicePage.shadowRoot.querySelector('#pointersRow')));
   });
 
+  test('audio row visibility', async function() {
+    loadTimeData.overrideValues({
+      enableAudioSettingsPage: false,
+    });
+    await init();
+    assertFalse(isVisible(devicePage.shadowRoot.querySelector('#audioRow')));
+  });
+
+  suite(assert(TestNames.Audio), function() {
+    let audioPage;
+
+    setup(async function() {
+      loadTimeData.overrideValues({
+        enableAudioSettingsPage: true,
+      });
+      await init();
+      return showAndGetDeviceSubpage('audio', routes.AUDIO)
+          .then(function(page) {
+            audioPage = page;
+          });
+    });
+
+    test('subpage visibility', function() {
+      assertEquals(routes.AUDIO, Router.getInstance().getCurrentRoute());
+      assertTrue(
+          isVisible(audioPage.shadowRoot.querySelector('#audioOutputTitle')));
+      assertTrue(isVisible(
+          audioPage.shadowRoot.querySelector('#audioOutputSubsection')));
+    });
+  });
+
+  suite(assert(TestNames.Audio), function() {
+    let audioPage;
+
+    /** @type {?FakeCrosAudioConfig} */
+    let crosAudioConfig;
+
+    // Static test audio system properties.
+    /** @type {!AudioSystemProperties} */
+    const maxVolumePercentFakeAudioSystemProperties = {
+      outputVolumePercent: 100,
+
+      /** @type {!MuteState} */
+      outputMuteState: crosAudioConfigMojomWebui.MuteState.kNotMuted,
+
+      /** @type {!Array<!AudioDevice>} */
+      outputDevices: [
+        crosAudioConfigDefaultFakeSpeaker,
+        crosAudioConfigDefaultFakeMicJack,
+      ],
+    };
+
+    /** @type {!AudioSystemProperties} */
+    const minVolumePercentFakeAudioSystemProperties = {
+      outputVolumePercent: 0,
+
+      /** @type {!MuteState} */
+      outputMuteState: crosAudioConfigMojomWebui.MuteState.kNotMuted,
+
+      /** @type {!Array<!AudioDevice>} */
+      outputDevices: [
+        crosAudioConfigDefaultFakeSpeaker,
+        crosAudioConfigDefaultFakeMicJack,
+      ],
+    };
+
+    /** @type {!AudioSystemProperties} */
+    const mutedByUserFakeAudioSystemProperties = {
+      outputVolumePercent: 75,
+
+      /** @type {!MuteState} */
+      outputMuteState: crosAudioConfigMojomWebui.MuteState.kMutedByUser,
+
+      /** @type {!Array<!AudioDevice>} */
+      outputDevices: [
+        crosAudioConfigDefaultFakeSpeaker,
+        crosAudioConfigDefaultFakeMicJack,
+      ],
+    };
+
+    /** @type {!AudioSystemProperties} */
+    const mutedByPolicyFakeAudioSystemProperties = {
+      outputVolumePercent: 75,
+
+      /** @type {!MuteState} */
+      outputMuteState: crosAudioConfigMojomWebui.MuteState.kMutedByPolicy,
+
+      /** @type {!Array<!AudioDevice>} */
+      outputDevices: [
+        crosAudioConfigDefaultFakeSpeaker,
+        crosAudioConfigDefaultFakeMicJack,
+      ],
+    };
+
+    /** @type {!AudioSystemProperties} */
+    const emptyOutputDevicesFakeAudioSystemProperties = {
+      outputVolumePercent: 75,
+
+      /** @type {!MuteState} */
+      outputMuteState: crosAudioConfigMojomWebui.MuteState.kNotMuted,
+
+      /** @type {!Array<!AudioDevice>} */
+      outputDevices: [],
+    };
+
+    /** @type {!AudioSystemProperties} */
+    const activeSpeakerFakeAudioSystemProperties = {
+      outputVolumePercent: 75,
+
+      /** @type {!MuteState} */
+      outputMuteState: crosAudioConfigMojomWebui.MuteState.kNotMuted,
+
+      /** @type {!Array<!AudioDevice>} */
+      outputDevices: [
+        crosAudioConfigActiveFakeSpeaker,
+        crosAudioConfigInactiveFakeMicJack,
+      ],
+    };
+
+    setup(async function() {
+      loadTimeData.overrideValues({
+        enableAudioSettingsPage: true,
+      });
+      await init();
+
+      // FakeAudioConfig must be set before audio subpage is loaded.
+      crosAudioConfig = new FakeCrosAudioConfig();
+      setCrosAudioConfigForTesting(crosAudioConfig);
+      return showAndGetDeviceSubpage('audio', routes.AUDIO)
+          .then(function(page) {
+            audioPage = page;
+            return flushTasks();
+          });
+    });
+
+    test('output volume mojo test', async function() {
+      const outputVolumeSlider =
+          audioPage.shadowRoot.querySelector('#outputVolumeSlider');
+
+      // Test default properties.
+      assertEquals(
+          defaultFakeAudioSystemProperties.outputVolumePercent,
+          outputVolumeSlider.value);
+
+      // Test min volume case.
+      crosAudioConfig.setAudioSystemProperties(
+          minVolumePercentFakeAudioSystemProperties);
+      await flushTasks();
+      assertEquals(
+          minVolumePercentFakeAudioSystemProperties.outputVolumePercent,
+          outputVolumeSlider.value);
+
+      // Test max volume case.
+      crosAudioConfig.setAudioSystemProperties(
+          maxVolumePercentFakeAudioSystemProperties);
+      await flushTasks();
+      assertEquals(
+          maxVolumePercentFakeAudioSystemProperties.outputVolumePercent,
+          outputVolumeSlider.value);
+    });
+
+    test('simulate setting output volume slider mojo test', async function() {
+      async function simulateSliderClicked(value) {
+        const outputVolumeSlider =
+            audioPage.shadowRoot.querySelector('#outputVolumeSlider');
+        const rect = outputVolumeSlider.$.container.getBoundingClientRect();
+        outputVolumeSlider.dispatchEvent(new PointerEvent('pointerdown', {
+          buttons: 1,
+          pointerId: 1,
+          clientX: rect.left + (value * rect.width),
+        }));
+        return await flushTasks();
+      }
+
+      // Test clicking to min volume case.
+      const minOutputVolumePercent = 0;
+      await simulateSliderClicked(minOutputVolumePercent / 100);
+      assertEquals(
+          minOutputVolumePercent,
+          audioPage.audioSystemProperties_.outputVolumePercent,
+      );
+
+      // Test clicking to max volume case.
+      const maxOutputVolumePercent = 100;
+      await simulateSliderClicked(maxOutputVolumePercent / 100);
+      assertEquals(
+          maxOutputVolumePercent,
+          audioPage.audioSystemProperties_.outputVolumePercent,
+      );
+
+      // Test clicking to non-boundary volume case.
+      const nonBoundaryOutputVolumePercent = 50;
+      await simulateSliderClicked(50 / 100);
+      assertEquals(
+          nonBoundaryOutputVolumePercent,
+          audioPage.audioSystemProperties_.outputVolumePercent,
+      );
+    });
+
+    test('output mute mojo test', async function() {
+      const outputVolumeSlider =
+          audioPage.shadowRoot.querySelector('#outputVolumeSlider');
+
+      // Test default properties.
+      assertFalse(audioPage.getIsOutputMutedForTest());
+      assertFalse(outputVolumeSlider.disabled);
+
+      // Test muted by user case.
+      crosAudioConfig.setAudioSystemProperties(
+          mutedByUserFakeAudioSystemProperties);
+      await flushTasks();
+      assertTrue(audioPage.getIsOutputMutedForTest());
+      assertFalse(outputVolumeSlider.disabled);
+
+      // Test muted by policy case.
+      crosAudioConfig.setAudioSystemProperties(
+          mutedByPolicyFakeAudioSystemProperties);
+      await flushTasks();
+      assertTrue(audioPage.getIsOutputMutedForTest());
+      assertTrue(outputVolumeSlider.disabled);
+    });
+
+    test('output device mojo test', async function() {
+      const outputDeviceDropdown =
+          audioPage.shadowRoot.querySelector('#audioOutputDeviceDropdown');
+
+      // Test default properties.
+      assertEquals(
+          crosAudioConfigDefaultFakeMicJack.id,
+          BigInt(outputDeviceDropdown.value));
+      assertEquals(
+          defaultFakeAudioSystemProperties.outputDevices.length,
+          outputDeviceDropdown.length);
+
+      // Test empty output devices case.
+      crosAudioConfig.setAudioSystemProperties(
+          emptyOutputDevicesFakeAudioSystemProperties);
+      await flushTasks();
+      assertTrue(!outputDeviceDropdown.value);
+      assertEquals(
+          emptyOutputDevicesFakeAudioSystemProperties.outputDevices.length,
+          outputDeviceDropdown.length);
+
+      // Test active speaker case.
+      crosAudioConfig.setAudioSystemProperties(
+          activeSpeakerFakeAudioSystemProperties);
+      await flushTasks();
+      assertEquals(
+          crosAudioConfigActiveFakeSpeaker.id,
+          BigInt(outputDeviceDropdown.value));
+      assertEquals(
+          activeSpeakerFakeAudioSystemProperties.outputDevices.length,
+          outputDeviceDropdown.length);
+    });
+  });
+
   suite(assert(TestNames.Pointers), function() {
     let pointersPage;
 
-    setup(function() {
+    setup(async function() {
+      await init();
       return showAndGetDeviceSubpage('pointers', routes.POINTERS)
           .then(function(page) {
             pointersPage = page;
@@ -908,6 +1177,7 @@ suite('SettingsDevicePage', function() {
     let keyboardPage;
 
     setup(async () => {
+      await init();
       keyboardPage = await showAndGetDeviceSubpage('keyboard', routes.KEYBOARD);
     });
 
@@ -1063,6 +1333,7 @@ suite('SettingsDevicePage', function() {
     let browserProxy;
 
     setup(async () => {
+      await init();
       displayPage = await showAndGetDeviceSubpage('display', routes.DISPLAY);
       browserProxy = DevicePageBrowserProxyImpl.getInstance();
       await fakeSystemDisplay.getInfoCalled.promise;
@@ -1132,7 +1403,7 @@ suite('SettingsDevicePage', function() {
               fakeSystemDisplay.getLayoutCalled.promise,
               new Promise(function(resolve, reject) {
                 setTimeout(resolve);
-              })
+              }),
             ]);
           })
           .then(function() {
@@ -1210,7 +1481,7 @@ suite('SettingsDevicePage', function() {
               fakeSystemDisplay.getLayoutCalled.promise,
               new Promise(function(resolve, reject) {
                 setTimeout(resolve);
-              })
+              }),
             ]);
           })
           .then(function() {
@@ -1233,7 +1504,7 @@ suite('SettingsDevicePage', function() {
               fakeSystemDisplay.getLayoutCalled.promise,
               new Promise(function(resolve, reject) {
                 setTimeout(resolve);
-              })
+              }),
             ]);
           })
           .then(function() {
@@ -1305,7 +1576,7 @@ suite('SettingsDevicePage', function() {
 
       const deepLinkElement =
           displayPage.shadowRoot.querySelector('#displayMirrorCheckbox')
-              .$$('#checkbox');
+              .shadowRoot.querySelector('#checkbox');
       await waitAfterNextRender(deepLinkElement);
       assertEquals(
           deepLinkElement, getDeepActiveElement(),
@@ -1380,6 +1651,7 @@ suite('SettingsDevicePage', function() {
 
   test(assert(TestNames.NightLight), async function() {
     // Set up a single display.
+    await init();
     const displayPage =
         await showAndGetDeviceSubpage('display', routes.DISPLAY);
     await fakeSystemDisplay.getInfoCalled.promise;
@@ -1441,7 +1713,8 @@ suite('SettingsDevicePage', function() {
         });
       });
 
-      setup(function() {
+      setup(async function() {
+        await init();
         return showAndGetDeviceSubpage('power', routes.POWER)
             .then(function(page) {
               powerPage = page;
@@ -1466,12 +1739,14 @@ suite('SettingsDevicePage', function() {
                       .requestPowerManagementSettingsCalled_);
               sendPowerManagementSettings(
                   [
-                    IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                    IdleBehavior.DISPLAY_ON
+                    IdleBehavior.DISPLAY_OFF_SLEEP,
+                    IdleBehavior.DISPLAY_OFF,
+                    IdleBehavior.DISPLAY_ON,
                   ],
                   [
-                    IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                    IdleBehavior.DISPLAY_ON
+                    IdleBehavior.DISPLAY_OFF_SLEEP,
+                    IdleBehavior.DISPLAY_OFF,
+                    IdleBehavior.DISPLAY_ON,
                   ],
                   IdleBehavior.DISPLAY_OFF_SLEEP,
                   IdleBehavior.DISPLAY_OFF_SLEEP, false /* acIdleManaged */,
@@ -1481,7 +1756,8 @@ suite('SettingsDevicePage', function() {
             });
       });
 
-      test('no battery', function() {
+      test('no battery', async function() {
+        await init();
         const batteryStatus = {
           present: false,
           charging: false,
@@ -1638,12 +1914,14 @@ suite('SettingsDevicePage', function() {
         const sendLid = function(lidBehavior) {
           sendPowerManagementSettings(
               [
-                IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                IdleBehavior.DISPLAY_ON
+                IdleBehavior.DISPLAY_OFF_SLEEP,
+                IdleBehavior.DISPLAY_OFF,
+                IdleBehavior.DISPLAY_ON,
               ],
               [
-                IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                IdleBehavior.DISPLAY_ON
+                IdleBehavior.DISPLAY_OFF_SLEEP,
+                IdleBehavior.DISPLAY_OFF,
+                IdleBehavior.DISPLAY_ON,
               ],
               IdleBehavior.DISPLAY_OFF, IdleBehavior.DISPLAY_OFF,
               false /* acIdleManaged */, false /* batteryIdleManaged */,
@@ -1775,12 +2053,14 @@ suite('SettingsDevicePage', function() {
                  // Send power management settings first.
                  sendPowerManagementSettings(
                      [
-                       IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                       IdleBehavior.DISPLAY_ON
+                       IdleBehavior.DISPLAY_OFF_SLEEP,
+                       IdleBehavior.DISPLAY_OFF,
+                       IdleBehavior.DISPLAY_ON,
                      ],
                      [
-                       IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                       IdleBehavior.DISPLAY_ON
+                       IdleBehavior.DISPLAY_OFF_SLEEP,
+                       IdleBehavior.DISPLAY_OFF,
+                       IdleBehavior.DISPLAY_ON,
                      ],
                      IdleBehavior.DISPLAY_ON, IdleBehavior.DISPLAY_OFF,
                      false /* acIdleManaged */, false /* batteryIdleManaged */,
@@ -1830,12 +2110,14 @@ suite('SettingsDevicePage', function() {
             .then(function() {
               sendPowerManagementSettings(
                   [
-                    IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                    IdleBehavior.DISPLAY_ON
+                    IdleBehavior.DISPLAY_OFF_SLEEP,
+                    IdleBehavior.DISPLAY_OFF,
+                    IdleBehavior.DISPLAY_ON,
                   ],
                   [
-                    IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                    IdleBehavior.DISPLAY_ON
+                    IdleBehavior.DISPLAY_OFF_SLEEP,
+                    IdleBehavior.DISPLAY_OFF,
+                    IdleBehavior.DISPLAY_ON,
                   ],
                   IdleBehavior.DISPLAY_OFF, IdleBehavior.DISPLAY_ON,
                   false /* acIdleManaged */, false /* batteryIdleManaged */,
@@ -1964,12 +2246,14 @@ suite('SettingsDevicePage', function() {
                          .hidden);
                  sendPowerManagementSettings(
                      [
-                       IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                       IdleBehavior.DISPLAY_ON
+                       IdleBehavior.DISPLAY_OFF_SLEEP,
+                       IdleBehavior.DISPLAY_OFF,
+                       IdleBehavior.DISPLAY_ON,
                      ],
                      [
-                       IdleBehavior.DISPLAY_OFF_SLEEP, IdleBehavior.DISPLAY_OFF,
-                       IdleBehavior.DISPLAY_ON
+                       IdleBehavior.DISPLAY_OFF_SLEEP,
+                       IdleBehavior.DISPLAY_OFF,
+                       IdleBehavior.DISPLAY_ON,
                      ],
                      IdleBehavior.DISPLAY_OFF_SLEEP,
                      IdleBehavior.DISPLAY_OFF_SLEEP, false /* acIdleManaged */,
@@ -2042,7 +2326,8 @@ suite('SettingsDevicePage', function() {
       });
     });
 
-    setup(function() {
+    setup(async function() {
+      await init();
       return showAndGetDeviceSubpage('stylus', routes.STYLUS)
           .then(function(page) {
             stylusPage = page;
@@ -2063,7 +2348,7 @@ suite('SettingsDevicePage', function() {
         name: name,
         value: value,
         preferred: preferred,
-        lockScreenSupport: lockScreenSupport
+        lockScreenSupport: lockScreenSupport,
       };
     }
 
@@ -2132,7 +2417,7 @@ suite('SettingsDevicePage', function() {
       // value set.
       browserProxy.setNoteTakingApps([
         entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-        entry('n2', 'v2', false, LockScreenSupport.NOT_SUPPORTED)
+        entry('n2', 'v2', false, LockScreenSupport.NOT_SUPPORTED),
       ]);
       flush();
       assertEquals('v1', appSelector.value);
@@ -2142,7 +2427,7 @@ suite('SettingsDevicePage', function() {
       // Selector chooses the preferred value if set.
       browserProxy.setNoteTakingApps([
         entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-        entry('n2', 'v2', true, LockScreenSupport.NOT_SUPPORTED)
+        entry('n2', 'v2', true, LockScreenSupport.NOT_SUPPORTED),
       ]);
       flush();
       assertEquals('v2', appSelector.value);
@@ -2152,7 +2437,7 @@ suite('SettingsDevicePage', function() {
       // Load app list.
       browserProxy.setNoteTakingApps([
         entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-        entry('n2', 'v2', true, LockScreenSupport.NOT_SUPPORTED)
+        entry('n2', 'v2', true, LockScreenSupport.NOT_SUPPORTED),
       ]);
       flush();
       assertEquals(0, browserProxy.setPreferredAppCount_);
@@ -2183,7 +2468,7 @@ suite('SettingsDevicePage', function() {
 
       browserProxy.setNoteTakingApps([
         entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-        entry('n2', 'v2', true, LockScreenSupport.NOT_SUPPORTED)
+        entry('n2', 'v2', true, LockScreenSupport.NOT_SUPPORTED),
       ]);
       flush();
       assertEquals(0, browserProxy.setPreferredAppCount_);
@@ -2193,7 +2478,7 @@ suite('SettingsDevicePage', function() {
     test('Deep link to preferred app', async () => {
       browserProxy.setNoteTakingApps([
         entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-        entry('n2', 'v2', false, LockScreenSupport.NOT_SUPPORTED)
+        entry('n2', 'v2', false, LockScreenSupport.NOT_SUPPORTED),
       ]);
       browserProxy.setAndroidAppsReceived(true);
 
@@ -2297,7 +2582,7 @@ suite('SettingsDevicePage', function() {
             // Preferred app updated to be enabled on lock screen.
             browserProxy.setNoteTakingApps([
               entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-              entry('n2', 'v2', true, LockScreenSupport.ENABLED)
+              entry('n2', 'v2', true, LockScreenSupport.ENABLED),
             ]);
             return new Promise(function(resolve) {
               stylusPage.async(resolve);
@@ -2525,7 +2810,7 @@ suite('SettingsDevicePage', function() {
       return new Promise(function(resolve) {
                browserProxy.setNoteTakingApps([
                  entry('n1', 'v1', true, LockScreenSupport.NOT_SUPPORTED),
-                 entry('n2', 'v2', false, LockScreenSupport.SUPPORTED)
+                 entry('n2', 'v2', false, LockScreenSupport.SUPPORTED),
                ]);
                stylusPage.async(resolve);
              })
@@ -2536,7 +2821,7 @@ suite('SettingsDevicePage', function() {
 
             browserProxy.setNoteTakingApps([
               entry('n1', 'v1', false, LockScreenSupport.NOT_SUPPORTED),
-              entry('n2', 'v2', true, LockScreenSupport.SUPPORTED)
+              entry('n2', 'v2', true, LockScreenSupport.SUPPORTED),
             ]);
             return new Promise(function(resolve) {
               stylusPage.async(resolve);
@@ -2622,7 +2907,8 @@ suite('SettingsDevicePage', function() {
       testing.Test.disableAnimationsAndTransitions();
     });
 
-    setup(function() {
+    setup(async function() {
+      await init();
       return showAndGetDeviceSubpage('storage', routes.STORAGE)
           .then(function(page) {
             storagePage = page;

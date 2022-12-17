@@ -91,6 +91,8 @@ ALWAYS_INLINE int GetMinSaturatedSetResultForTesting() {
 class PLATFORM_EXPORT LayoutUnit;
 constexpr bool operator<(const LayoutUnit&, const LayoutUnit&);
 
+// LayoutUnit is a fixed-point math class, storing multiples of 1/64 of a pixel.
+// See: https://trac.webkit.org/wiki/LayoutUnit
 class LayoutUnit {
   DISALLOW_NEW();
 
@@ -105,6 +107,8 @@ class LayoutUnit {
   }
   constexpr explicit LayoutUnit(uint64_t value)
       : value_(base::saturated_cast<int>(value * kFixedPointDenominator)) {}
+  // A |value| is clamped by Min() and Max().
+  // A NaN |value| produces LayoutUnit(0).
   constexpr explicit LayoutUnit(float value)
       : value_(base::saturated_cast<int>(value * kFixedPointDenominator)) {}
   constexpr explicit LayoutUnit(double value)

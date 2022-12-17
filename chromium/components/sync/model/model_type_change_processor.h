@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -67,6 +68,9 @@ class ModelTypeChangeProcessor {
   virtual void UntrackEntityForClientTagHash(
       const ClientTagHash& client_tag_hash) = 0;
 
+  // Returns the storage keys for all tracked entities (including tombstones).
+  virtual std::vector<std::string> GetAllTrackedStorageKeys() const = 0;
+
   // Returns true if a tracked entity has local changes. A commit may or may not
   // be in progress at this time.
   virtual bool IsEntityUnsynced(const std::string& storage_key) = 0;
@@ -102,11 +106,11 @@ class ModelTypeChangeProcessor {
 
   // Returns the account ID for which metadata is being tracked, or empty if not
   // tracking metadata.
-  virtual std::string TrackedAccountId() = 0;
+  virtual std::string TrackedAccountId() const = 0;
 
   // Returns the cache guid for which metadata is being tracked, or empty if not
   // tracking metadata.
-  virtual std::string TrackedCacheGuid() = 0;
+  virtual std::string TrackedCacheGuid() const = 0;
 
   // Report an error in the model to sync. Should be called for any persistence
   // or consistency error the bridge encounters outside of a method that allows

@@ -5,14 +5,13 @@
 #include "chrome/browser/chromeos/extensions/extensions_permissions_tracker.h"
 
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/extensions/device_local_account_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/login/login_state/login_state.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/browser/device_local_account_util.h"
 #include "extensions/browser/pref_names.h"
-#include "extensions/common/permissions/api_permission.h"
+#include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/permissions/manifest_permission_set.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -42,15 +41,16 @@ ExtensionsPermissionsTracker::~ExtensionsPermissionsTracker() = default;
 void ExtensionsPermissionsTracker::OnForcedExtensionsPrefChanged() {
   // TODO(crbug.com/1015378): handle pref_names::kExtensionManagement with
   // installation_mode: forced.
-  const base::Value* value = pref_service_->Get(pref_names::kInstallForceList);
-  if (!value || value->type() != base::Value::Type::DICTIONARY) {
+  const base::Value& value =
+      pref_service_->GetValue(pref_names::kInstallForceList);
+  if (value.type() != base::Value::Type::DICTIONARY) {
     return;
   }
 
   extension_safety_ratings_.clear();
   pending_forced_extensions_.clear();
 
-  for (const auto entry : value->DictItems()) {
+  for (const auto entry : value.DictItems()) {
     const ExtensionId& extension_id = entry.first;
     // By default the extension permissions are assumed to trigger full warning
     // (false). When the extension is loaded, if all of its permissions is safe,

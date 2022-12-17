@@ -36,16 +36,10 @@ class CastContentWindowAndroid : public CastContentWindow {
   void RequestVisibility(VisibilityPriority visibility_priority) override;
   void SetActivityContext(base::Value activity_context) override;
   void SetHostContext(base::Value host_context) override;
-  void RequestMoveOut() override;
 
   // Called through JNI.
   void OnActivityStopped(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& jcaller);
-  void ConsumeGesture(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& jcaller,
-      int gesture_type,
-      const base::android::JavaParamRef<jobject>& handled_callback);
   void OnVisibilityChange(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& jcaller,
                           int visibility_type);

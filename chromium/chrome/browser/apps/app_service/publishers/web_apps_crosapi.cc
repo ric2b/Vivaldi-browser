@@ -90,6 +90,60 @@ void WebAppsCrosapi::LoadIcon(const std::string& app_id,
                      std::move(callback)));
 }
 
+void WebAppsCrosapi::Launch(const std::string& app_id,
+                            int32_t event_flags,
+                            LaunchSource launch_source,
+                            WindowInfoPtr window_info) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    return;
+  }
+
+  controller_->Launch(
+      CreateCrosapiLaunchParamsWithEventFlags(
+          proxy_, app_id, event_flags, launch_source,
+          window_info ? window_info->display_id : display::kInvalidDisplayId),
+      base::DoNothing());
+}
+
+void WebAppsCrosapi::LaunchAppWithFiles(
+    const std::string& app_id,
+    int32_t event_flags,
+    LaunchSource launch_source,
+    std::vector<base::FilePath> file_paths) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    return;
+  }
+
+  auto params = CreateCrosapiLaunchParamsWithEventFlags(
+      proxy_, app_id, event_flags, launch_source, display::kInvalidDisplayId);
+  params->intent =
+      apps_util::CreateCrosapiIntentForViewFiles(std::move(file_paths));
+  controller_->Launch(std::move(params), base::DoNothing());
+}
+
+void WebAppsCrosapi::LaunchAppWithIntent(
+    const std::string& app_id,
+    int32_t event_flags,
+    IntentPtr intent,
+    LaunchSource launch_source,
+    WindowInfoPtr window_info,
+    base::OnceCallback<void(bool)> callback) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    std::move(callback).Run(/*success=*/false);
+    return;
+  }
+
+  auto params = CreateCrosapiLaunchParamsWithEventFlags(
+      proxy_, app_id, event_flags, launch_source,
+      window_info ? window_info->display_id : display::kInvalidDisplayId);
+
+  params->intent =
+      apps_util::ConvertAppServiceToCrosapiIntent(intent, proxy_->profile());
+  controller_->Launch(std::move(params), base::DoNothing());
+  // TODO(crbug/1261263): handle the case where launch fails.
+  std::move(callback).Run(/*success=*/true);
+}
+
 void WebAppsCrosapi::LaunchAppWithParams(AppLaunchParams&& params,
                                          LaunchCallback callback) {
   if (!LogIfNotConnected(FROM_HERE)) {
@@ -112,39 +166,33 @@ void WebAppsCrosapi::LaunchShortcut(const std::string& app_id,
                                          base::DoNothing());
 }
 
+void WebAppsCrosapi::SetPermission(const std::string& app_id,
+                                   PermissionPtr permission) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    return;
+  }
+
+  controller_->SetPermission(app_id, std::move(permission));
+}
+
+void WebAppsCrosapi::Uninstall(const std::string& app_id,
+                               UninstallSource uninstall_source,
+                               bool clear_site_data,
+                               bool report_abuse) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    return;
+  }
+
+  controller_->Uninstall(app_id, uninstall_source, clear_site_data,
+                         report_abuse);
+}
+
 void WebAppsCrosapi::Connect(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
     apps::mojom::ConnectOptionsPtr opts) {
   mojo::Remote<apps::mojom::Subscriber> subscriber(
       std::move(subscriber_remote));
   subscribers_.Add(std::move(subscriber));
-}
-
-void WebAppsCrosapi::LoadIcon(const std::string& app_id,
-                              apps::mojom::IconKeyPtr icon_key,
-                              apps::mojom::IconType mojom_icon_type,
-                              int32_t size_hint_in_dip,
-                              bool allow_placeholder_icon,
-                              LoadIconCallback callback) {
-  if (!LogIfNotConnected(FROM_HERE)) {
-    std::move(callback).Run(apps::mojom::IconValue::New());
-    return;
-  }
-
-  if (!icon_key) {
-    std::move(callback).Run(apps::mojom::IconValue::New());
-    return;
-  }
-
-  const IconType icon_type = ConvertMojomIconTypeToIconType(mojom_icon_type);
-  const apps::IconEffects icon_effects =
-      static_cast<apps::IconEffects>(icon_key->icon_effects);
-  controller_->LoadIcon(
-      app_id, ConvertMojomIconKeyToIconKey(icon_key), icon_type,
-      size_hint_in_dip,
-      base::BindOnce(&WebAppsCrosapi::OnLoadIcon, weak_factory_.GetWeakPtr(),
-                     icon_type, size_hint_in_dip, icon_effects,
-                     IconValueToMojomIconValueCallback(std::move(callback))));
 }
 
 void WebAppsCrosapi::Launch(const std::string& app_id,
@@ -157,7 +205,8 @@ void WebAppsCrosapi::Launch(const std::string& app_id,
 
   controller_->Launch(
       CreateCrosapiLaunchParamsWithEventFlags(
-          proxy_, app_id, event_flags, launch_source,
+          proxy_, app_id, event_flags,
+          ConvertMojomLaunchSourceToLaunchSource(launch_source),
           window_info ? window_info->display_id : display::kInvalidDisplayId),
       base::DoNothing());
 }
@@ -175,7 +224,8 @@ void WebAppsCrosapi::LaunchAppWithIntent(
   }
 
   auto params = CreateCrosapiLaunchParamsWithEventFlags(
-      proxy_, app_id, event_flags, launch_source,
+      proxy_, app_id, event_flags,
+      ConvertMojomLaunchSourceToLaunchSource(launch_source),
       window_info ? window_info->display_id : display::kInvalidDisplayId);
 
   params->intent =
@@ -194,7 +244,9 @@ void WebAppsCrosapi::LaunchAppWithFiles(const std::string& app_id,
   }
 
   auto params = CreateCrosapiLaunchParamsWithEventFlags(
-      proxy_, app_id, event_flags, launch_source, display::kInvalidDisplayId);
+      proxy_, app_id, event_flags,
+      ConvertMojomLaunchSourceToLaunchSource(launch_source),
+      display::kInvalidDisplayId);
   params->intent = apps_util::CreateCrosapiIntentForViewFiles(file_paths);
   controller_->Launch(std::move(params), base::DoNothing());
 }
@@ -203,12 +255,9 @@ void WebAppsCrosapi::Uninstall(const std::string& app_id,
                                apps::mojom::UninstallSource uninstall_source,
                                bool clear_site_data,
                                bool report_abuse) {
-  if (!LogIfNotConnected(FROM_HERE)) {
-    return;
-  }
-
-  controller_->Uninstall(app_id, uninstall_source, clear_site_data,
-                         report_abuse);
+  Uninstall(app_id,
+            ConvertMojomUninstallSourceToUninstallSource(uninstall_source),
+            clear_site_data, report_abuse);
 }
 
 void WebAppsCrosapi::GetMenuModel(const std::string& app_id,
@@ -231,8 +280,7 @@ void WebAppsCrosapi::GetMenuModel(const std::string& app_id,
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
 
   if (display_mode != WindowMode::kUnknown && !is_system_web_app) {
-    apps::CreateOpenNewSubmenu(menu_type,
-                               display_mode == WindowMode::kBrowser
+    apps::CreateOpenNewSubmenu(display_mode == WindowMode::kBrowser
                                    ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
                                    : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
                                &menu_items);
@@ -356,17 +404,14 @@ void WebAppsCrosapi::ExecuteContextMenuCommand(const std::string& app_id,
 
 void WebAppsCrosapi::SetPermission(const std::string& app_id,
                                    apps::mojom::PermissionPtr permission) {
-  if (!LogIfNotConnected(FROM_HERE)) {
-    return;
-  }
-
-  controller_->SetPermission(app_id,
-                             ConvertMojomPermissionToPermission(permission));
+  SetPermission(app_id, ConvertMojomPermissionToPermission(permission));
 }
 
 void WebAppsCrosapi::OnApps(std::vector<AppPtr> deltas) {
   if (!web_app::IsWebAppsCrosapiEnabled())
     return;
+
+  on_initial_apps_received_ = true;
 
   if (!controller_.is_bound()) {
     // If `controller_` is not bound, add `deltas` to `delta_cache_` to wait for
@@ -378,18 +423,7 @@ void WebAppsCrosapi::OnApps(std::vector<AppPtr> deltas) {
     return;
   }
 
-  std::vector<apps::mojom::AppPtr> mojom_apps;
-  for (const AppPtr& delta : deltas) {
-    mojom_apps.push_back(ConvertAppToMojomApp(delta));
-  }
-  apps::AppPublisher::Publish(std::move(deltas), AppType::kWeb,
-                              should_notify_initialized_);
-
-  for (auto& subscriber : subscribers_) {
-    subscriber->OnApps(apps_util::CloneStructPtrVector(mojom_apps),
-                       apps::mojom::AppType::kWeb, should_notify_initialized_);
-  }
-  should_notify_initialized_ = false;
+  PublishImpl(std::move(deltas));
 }
 
 void WebAppsCrosapi::RegisterAppController(
@@ -401,27 +435,12 @@ void WebAppsCrosapi::RegisterAppController(
   controller_.set_disconnect_handler(base::BindOnce(
       &WebAppsCrosapi::OnControllerDisconnected, base::Unretained(this)));
 
-  if (delta_cache_.empty()) {
-    // If there is no apps saved in `app_cache_`, still publish an empty app
-    // list to initialize the web app AppType for AppRegistryCache.
-    apps::AppPublisher::Publish(std::vector<AppPtr>{}, AppType::kWeb,
-                                should_notify_initialized_);
-  } else {
-    std::vector<apps::mojom::AppPtr> mojom_apps;
-    for (const auto& delta : delta_cache_) {
-      mojom_apps.push_back(ConvertAppToMojomApp(delta));
-    }
-    apps::AppPublisher::Publish(std::move(delta_cache_), AppType::kWeb,
-                                should_notify_initialized_);
-    delta_cache_.clear();
-
-    for (auto& subscriber : subscribers_) {
-      subscriber->OnApps(apps_util::CloneStructPtrVector(mojom_apps),
-                         apps::mojom::AppType::kWeb,
-                         should_notify_initialized_);
-    }
+  if (!on_initial_apps_received_) {
+    return;
   }
-  should_notify_initialized_ = false;
+
+  PublishImpl(std::move(delta_cache_));
+  delta_cache_.clear();
 }
 
 void WebAppsCrosapi::OnCapabilityAccesses(
@@ -480,6 +499,21 @@ void WebAppsCrosapi::OnApplyIconEffects(IconType icon_type,
   }
 
   std::move(callback).Run(std::move(icon_value));
+}
+
+void WebAppsCrosapi::PublishImpl(std::vector<AppPtr> deltas) {
+  std::vector<apps::mojom::AppPtr> mojom_apps;
+  for (const auto& delta : deltas) {
+    mojom_apps.push_back(ConvertAppToMojomApp(delta));
+  }
+  apps::AppPublisher::Publish(std::move(deltas), AppType::kWeb,
+                              should_notify_initialized_);
+
+  for (auto& subscriber : subscribers_) {
+    subscriber->OnApps(apps_util::CloneStructPtrVector(mojom_apps),
+                       apps::mojom::AppType::kWeb, should_notify_initialized_);
+  }
+  should_notify_initialized_ = false;
 }
 
 }  // namespace apps

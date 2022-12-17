@@ -146,11 +146,12 @@
 <translation id="6177128806592000436">Злучэнне з гэтым сайтам не забаронена</translation>
 <translation id="6203231073485539293">Праверце злучэнне з інтэрнэтам</translation>
 <translation id="6225522625585012689">Каб праглядзець спіс заблакаваных URL-адрасоў і іншыя правілы, якія вызначае сістэмны адміністратар, наведайце &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
-<translation id="6264485186158353794">Вярнуцца да бяспекі</translation>
+<translation id="6264485186158353794">Вярнуцца да бяспечнага злучэння</translation>
 <translation id="6305205051461490394">Сайт <ph name="URL" /> недаступны.</translation>
 <translation id="6321917430147971392">Праверце налады DNS</translation>
 <translation id="6328639280570009161">Паспрабуйце адключыць прапанову сеткавых дзеянняў</translation>
 <translation id="6328786501058569169">Гэта несапраўдны сайт</translation>
+<translation id="6348220984832452017">Актыўныя варыянты</translation>
 <translation id="6358450015545214790">Што гэта азначае?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> не дазваляе падлучыцца.</translation>
 <translation id="6447842834002726250">Файлы сookie</translation>
@@ -169,6 +170,7 @@
 <translation id="7113310725918019676">Дазволіць <ph name="BLOCKED_TYPE" /> з <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не адпавядае стандартам бяспекі.</translation>
 <translation id="7219179957768738017">У гэтым злучэнні выкарыстоўваецца <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Паказваць апавяшчэнні</translation>
 <translation id="7260504762447901703">Адклікаць доступ</translation>
 <translation id="7353601530677266744">Загадны радок</translation>
 <translation id="7364115444476960850">Старонка, на якую вы хочаце перайсці, была заблакаваная Vivaldi<ph name="BLOCKER_NAME" /></translation>

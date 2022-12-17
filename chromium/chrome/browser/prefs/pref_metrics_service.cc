@@ -11,13 +11,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
-#include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engine_utils.h"
 #include "url/gurl.h"
@@ -77,10 +75,10 @@ void PrefMetricsService::RecordLaunchPrefs() {
   if (SessionStartupPref(
           SessionStartupPref::PrefValueToType(restore_on_startup))
           .ShouldOpenUrls()) {
-    const base::Value* url_list =
-        prefs_->GetList(prefs::kURLsToRestoreOnStartup);
+    const base::Value::List& url_list =
+        prefs_->GetValueList(prefs::kURLsToRestoreOnStartup);
     // Similarly, check startup pages for known search engine TLD+1s.
-    for (const base::Value& i : url_list->GetListDeprecated()) {
+    for (const base::Value& i : url_list) {
       const std::string* url_text = i.GetIfString();
       if (url_text) {
         GURL start_url(*url_text);
@@ -108,9 +106,9 @@ PrefMetricsService* PrefMetricsService::Factory::GetForProfile(
 }
 
 PrefMetricsService::Factory::Factory()
-    : BrowserContextKeyedServiceFactory(
-        "PrefMetricsService",
-        BrowserContextDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactory(
+          "PrefMetricsService",
+          ProfileSelections::BuildRedirectedInIncognito()) {
   DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
@@ -124,9 +122,4 @@ KeyedService* PrefMetricsService::Factory::BuildServiceInstanceFor(
 
 bool PrefMetricsService::Factory::ServiceIsCreatedWithBrowserContext() const {
   return true;
-}
-
-content::BrowserContext* PrefMetricsService::Factory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
 }

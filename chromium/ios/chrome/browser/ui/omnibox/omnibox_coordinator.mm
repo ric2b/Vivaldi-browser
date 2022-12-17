@@ -10,6 +10,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
+#import "components/omnibox/common/omnibox_features.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/strings/grit/components_strings.h"
@@ -17,9 +18,12 @@
 #include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
+#import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
 #import "ios/chrome/browser/ui/commands/thumb_strip_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_animatee.h"
@@ -38,6 +42,7 @@
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_coordinator.h"
 #include "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_view_ios.h"
 #import "ios/chrome/browser/ui/omnibox/popup/pedal_section_extractor.h"
+#import "ios/chrome/browser/ui/omnibox/zero_suggest_prefetch_helper.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
@@ -64,6 +69,10 @@
 
 // The return delegate.
 @property(nonatomic, strong) ForwardingReturnDelegate* returnDelegate;
+
+// Helper that starts ZPS prefetch when the user opens a NTP.
+@property(nonatomic, strong)
+    ZeroSuggestPrefetchHelper* zeroSuggestPrefetchHelper;
 
 @end
 
@@ -107,8 +116,8 @@
   id<OmniboxCommands> focuser =
       static_cast<id<OmniboxCommands>>(self.browser->GetCommandDispatcher());
   _editView = std::make_unique<OmniboxViewIOS>(
-      self.textField, self.editController, self.mediator,
-      self.browser->GetBrowserState(), focuser);
+      self.textField, self.editController, self.browser->GetBrowserState(),
+      focuser);
   self.pasteDelegate = [[OmniboxTextFieldPasteDelegate alloc] init];
   [self.textField setPasteDelegate:self.pasteDelegate];
 
@@ -120,14 +129,23 @@
           self.browser->GetCommandDispatcher());
 
   self.keyboardDelegate = [[OmniboxAssistiveKeyboardDelegateImpl alloc] init];
+  self.keyboardDelegate.applicationCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  self.keyboardDelegate.qrScannerCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), QRScannerCommands);
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
-  self.keyboardDelegate.dispatcher =
-      static_cast<id<ApplicationCommands, BrowserCommands>>(
-          self.browser->GetCommandDispatcher());
+  self.keyboardDelegate.browserCommandsHandler =
+      static_cast<id<BrowserCommands>>(self.browser->GetCommandDispatcher());
   self.keyboardDelegate.omniboxTextField = self.textField;
   ConfigureAssistiveKeyboardViews(self.textField, kDotComTLD,
                                   self.keyboardDelegate);
+
+  if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching)) {
+    self.zeroSuggestPrefetchHelper = [[ZeroSuggestPrefetchHelper alloc]
+          initWithWebStateList:self.browser->GetWebStateList()
+        autocompleteController:_editView->model()->autocomplete_controller()];
+  }
 }
 
 - (void)stop {
@@ -138,6 +156,7 @@
   self.viewController = nil;
   self.mediator = nil;
   self.returnDelegate = nil;
+  self.zeroSuggestPrefetchHelper = nil;
 
   [NSNotificationCenter.defaultCenter removeObserver:self];
 }
@@ -183,7 +202,7 @@
 
 - (void)insertTextToOmnibox:(NSString*)text {
   [self.textField insertTextWhileEditing:text];
-  // The call to |setText| shouldn't be needed, but without it the "Go" button
+  // The call to `setText` shouldn't be needed, but without it the "Go" button
   // of the keyboard is disabled.
   [self.textField setText:text];
   // Notify the accessibility system to start reading the new contents of the
@@ -209,13 +228,9 @@
   self.returnDelegate = [[ForwardingReturnDelegate alloc] init];
   self.returnDelegate.acceptDelegate = _editView.get();
 
-  if (base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI)) {
-    coordinator.pedalExtractor.matchPreviewDelegate = self.mediator;
-    coordinator.pedalExtractor.acceptDelegate = self.returnDelegate;
-    self.viewController.returnKeyDelegate = coordinator.pedalExtractor;
-  } else {
-    self.viewController.returnKeyDelegate = self.returnDelegate;
-  }
+  coordinator.pedalExtractor.matchPreviewDelegate = self.mediator;
+  coordinator.pedalExtractor.acceptDelegate = self.returnDelegate;
+  self.viewController.returnKeyDelegate = coordinator.pedalExtractor;
 
   return coordinator;
 }
@@ -264,22 +279,15 @@
   [agent.nonModalScheduler logUserPastedInOmnibox];
 }
 
-- (void)omniboxViewControllerSearchCopiedImage:
-    (OmniboxViewController*)omniboxViewController {
-  ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
-      base::BindOnce(^(absl::optional<gfx::Image> optionalImage) {
-        if (!optionalImage) {
-          return;
-        }
-        UIImage* image = optionalImage.value().ToUIImage();
-        web::NavigationManager::WebLoadParams webParams =
-            ImageSearchParamGenerator::LoadParamsForImage(
-                image, ios::TemplateURLServiceFactory::GetForBrowserState(
-                           self.browser->GetBrowserState()));
-        UrlLoadParams params = UrlLoadParams::InCurrentTab(webParams);
+- (void)omniboxViewControllerSearchImage:(UIImage*)image {
+  DCHECK(image);
+  web::NavigationManager::WebLoadParams webParams =
+      ImageSearchParamGenerator::LoadParamsForImage(
+          image, ios::TemplateURLServiceFactory::GetForBrowserState(
+                     self.browser->GetBrowserState()));
+  UrlLoadParams params = UrlLoadParams::InCurrentTab(webParams);
 
-        UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
-      }));
+  UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
 }
 
 #pragma mark - private

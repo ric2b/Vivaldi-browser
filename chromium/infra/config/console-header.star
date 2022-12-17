@@ -35,7 +35,7 @@ HEADER = headers.header(
         ),
         headers.oncall(
             name = "GPU",
-            url = "https://chrome-ops-rotation-proxy.appspot.com/current/oncallator:chrome-gpu-pixel-wrangler",
+            url = "https://chrome-ops-rotation-proxy.appspot.com/current/oncallator:chrome-gpu-pixel-wrangler-weekly",
         ),
         headers.oncall(
             name = "ANGLE",
@@ -131,7 +131,7 @@ HEADER = headers.header(
                 headers.link(
                     text = "coverage",
                     branch_selector = branches.ALL_BRANCHES,
-                    url = "https://analysis.chromium.org/p/chromium/coverage",
+                    url = "https://analysis.chromium.org/coverage/p/chromium",
                     alt = "Chromium code coverage dashboard",
                 ),
                 headers.link(
@@ -232,6 +232,11 @@ HEADER = headers.header(
                     url = "/p/{}/g/chromium.chromiumos".format(settings.project),
                     alt = "ChromiumOS console",
                 ),
+                headers.link(
+                    text = "flakiness",
+                    url = "/p/{}/g/chromium.flakiness".format(settings.project),
+                    alt = "Chromium Flakiness console",
+                ),
             ],
         ),
         headers.link_group(
@@ -304,6 +309,11 @@ HEADER = headers.header(
                     text = "swangle",
                     url = "/p/{}/g/tryserver.chromium.swangle/builders".format(settings.project),
                     alt = "SWANGLE",
+                ),
+                headers.link(
+                    text = "tricium",
+                    url = "/p/{}/g/tryserver.chromium.tricium/builders".format(settings.project),
+                    alt = "Tricium",
                 ),
                 headers.link(
                     text = "win",

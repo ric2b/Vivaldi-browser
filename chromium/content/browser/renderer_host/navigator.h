@@ -135,16 +135,14 @@ class CONTENT_EXPORT Navigator {
       WindowOpenDisposition disposition,
       bool should_replace_current_entry,
       bool user_gesture,
-      // TODO(crbug.com/1315802): Refactor _unfencedTop handling.
-      bool is_unfenced_top_navigation,
       blink::mojom::TriggeringEventInfo triggering_event_info,
       const std::string& href_translate,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       const absl::optional<blink::Impression>& impression);
 
   // Called when a document requests a navigation in another document through a
-  // RenderFrameProxy. If |method| is "POST", then |post_body| needs to specify
-  // the request body, otherwise |post_body| should be null.
+  // `blink::RemoteFrame`. If `method` is "POST", then `post_body` needs to
+  // specify the request body, otherwise `post_body` should be null.
   void NavigateFromFrameProxy(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
@@ -162,9 +160,11 @@ class CONTENT_EXPORT Navigator {
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       network::mojom::SourceLocationPtr source_location,
       bool has_user_gesture,
+      bool is_form_submission,
       const absl::optional<blink::Impression>& impression,
       base::TimeTicks navigation_start_time,
-      absl::optional<bool> is_fenced_frame_opaque_url = absl::nullopt);
+      bool is_embedder_initiated_fenced_frame_navigation = false,
+      bool is_unfenced_top_navigation = false);
 
   // Called after BeforeUnloadCompleted callback is invoked from the renderer.
   // If |frame_tree_node| has a NavigationRequest waiting for the renderer
@@ -184,7 +184,9 @@ class CONTENT_EXPORT Navigator {
       mojo::PendingAssociatedRemote<mojom::NavigationClient> navigation_client,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
-      std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker);
+      std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker,
+      mojo::PendingReceiver<mojom::NavigationRendererCancellationListener>
+          renderer_cancellation_listener);
 
   // Used to restart a navigation that was thought to be same-document in
   // cross-document mode.

@@ -5,14 +5,13 @@
 #ifndef SYNC_NOTES_SYNCED_NOTE_TRACKER_ENTITY_H_
 #define SYNC_NOTES_SYNCED_NOTE_TRACKER_ENTITY_H_
 
-#include <memory>
 #include <string>
 
 #include "base/memory/raw_ptr.h"
 #include "components/sync/base/client_tag_hash.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
 
 namespace sync_pb {
-class EntityMetadata;
 class EntitySpecifics;
 }  // namespace sync_pb
 
@@ -31,9 +30,9 @@ namespace sync_notes {
 // is not reused for notes for historic reasons.
 class SyncedNoteTrackerEntity {
  public:
-  // |note_node| can be null for tombstones. |metadata| must not be null.
+  // |note_node| can be null for tombstones.
   SyncedNoteTrackerEntity(const vivaldi::NoteNode* note_node,
-                          std::unique_ptr<sync_pb::EntityMetadata> metadata);
+                          sync_pb::EntityMetadata metadata);
   SyncedNoteTrackerEntity(const SyncedNoteTrackerEntity&) = delete;
   SyncedNoteTrackerEntity(SyncedNoteTrackerEntity&&) = delete;
   ~SyncedNoteTrackerEntity();
@@ -64,9 +63,9 @@ class SyncedNoteTrackerEntity {
     note_node_ = note_node;
   }
 
-  const sync_pb::EntityMetadata* metadata() const { return metadata_.get(); }
+  const sync_pb::EntityMetadata& metadata() const { return metadata_; }
 
-  sync_pb::EntityMetadata* metadata() { return metadata_.get(); }
+  sync_pb::EntityMetadata* MutableMetadata() { return &metadata_; }
 
   bool commit_may_have_started() const { return commit_may_have_started_; }
   void set_commit_may_have_started(bool value) {
@@ -83,7 +82,7 @@ class SyncedNoteTrackerEntity {
   raw_ptr<const vivaldi::NoteNode> note_node_;
 
   // Serializable Sync metadata.
-  const std::unique_ptr<sync_pb::EntityMetadata> metadata_;
+  sync_pb::EntityMetadata metadata_;
 
   // Whether there could be a commit sent to the server for this entity. It's
   // used to protect against sending tombstones for entities that have never

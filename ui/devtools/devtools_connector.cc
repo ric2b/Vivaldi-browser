@@ -432,6 +432,19 @@ content::WebContents* DevtoolsConnectorItem::OpenURLFromTab(
   return nullptr;
 }
 
+std::unique_ptr<content::EyeDropper> DevtoolsConnectorItem::OpenEyeDropper(
+    content::RenderFrameHost* frame,
+    content::EyeDropperListener* listener) {
+  if (devtools_delegate_) {
+    return devtools_delegate_->OpenEyeDropper(frame, listener);
+  }
+  if (guest_delegate_) {
+    return guest_delegate_->OpenEyeDropper(frame, listener);
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
 // DevToolsUIBindings::Delegate implementation
 UIBindingsDelegate::UIBindingsDelegate(content::BrowserContext* browser_context,
                                        int tab_id,

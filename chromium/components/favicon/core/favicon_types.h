@@ -70,7 +70,8 @@ enum FaviconBitmapType {
   // - Furthermore, on-demand bitmaps are immediately marked as expired. Hence,
   //   they are always replaced by ON_VISIT favicons whenever their page gets
   //   visited.
-  ON_DEMAND
+  ON_DEMAND,
+  VIVALDI_PRELOADED,
 };
 
 // Defines all associated mappings of a given favicon.

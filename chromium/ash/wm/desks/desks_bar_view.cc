@@ -216,10 +216,10 @@ class DesksBarScrollViewLayout : public views::LayoutManager {
       // The presenter is shutdown early in the overview destruction process to
       // prevent calls to the model. Some animations on the desks bar may still
       // call this function past shutdown start. In this case we just continue
-      // as if the saved desks Ui should be hidden.
+      // as if the saved desks UI should be hidden.
       OverviewSession* session = bar_view_->overview_grid()->overview_session();
       const bool should_show_templates_ui =
-          saved_desk_util::IsSavedDesksEnabled() &&
+          saved_desk_util::IsSavedDesksEnabled() && session &&
           !session->is_shutting_down() &&
           session->saved_desk_presenter()->should_show_templates_ui();
       auto* zero_state_desks_templates_button =
@@ -542,8 +542,10 @@ void DesksBarView::HandlePressEvent(DeskMiniView* mini_view,
 
   DeskNameView::CommitChanges(GetWidget());
 
-  gfx::PointF location = event.target()->GetScreenLocationF(event);
-  InitDragDesk(mini_view, location);
+  if (ui::EventTarget* target = event.target()) {
+    gfx::PointF location = target->GetScreenLocationF(event);
+    InitDragDesk(mini_view, location);
+  }
 }
 
 void DesksBarView::HandleLongPressEvent(DeskMiniView* mini_view,
@@ -819,7 +821,13 @@ void DesksBarView::OnDeskRemoved(const Desk* desk) {
       mini_views_.begin(), mini_views_.end(),
       [desk](DeskMiniView* mini_view) { return desk == mini_view->desk(); });
 
-  DCHECK(iter != mini_views_.end());
+  // There are cases where a desk may be removed before the `desks_bar_view`
+  // finishes initializing (i.e. removed on a separate root window before the
+  // overview starting animation completes). In those cases, that mini_view
+  // would not exist and the bar view will already be in the correct state so we
+  // do not need to update the UI (https://crbug.com/1346154).
+  if (iter == mini_views_.end())
+    return;
 
   // Let the highlight controller know the view is destroying before it is
   // removed from the collection because it needs to know the index of the mini
@@ -830,7 +838,7 @@ void DesksBarView::OnDeskRemoved(const Desk* desk) {
   // comes later in the highlight order (See documentation of
   // OnViewDestroyingOrDisabling()).
   highlight_controller->OnViewDestroyingOrDisabling((*iter)->desk_name_view());
-  highlight_controller->OnViewDestroyingOrDisabling(*iter);
+  highlight_controller->OnViewDestroyingOrDisabling((*iter)->desk_preview());
 
   expanded_state_new_desk_button_->SetButtonState(/*enabled=*/true);
 
@@ -1274,8 +1282,10 @@ int DesksBarView::GetAdjustedUncroppedScrollPosition(int position) const {
 
 void DesksBarView::OnDesksTemplatesButtonPressed() {
   RecordLoadSavedDeskLibraryHistogram();
+  if (IsDeskNameBeingModified())
+    DeskNameView::CommitChanges(GetWidget());
   overview_grid_->overview_session()->ShowDesksTemplatesGrids(
-      IsZeroState(), base::GUID(),
+      IsZeroState(), base::GUID(), /*saved_desk_name=*/u"",
       GetWidget()->GetNativeWindow()->GetRootWindow());
 }
 
@@ -1314,7 +1324,10 @@ void DesksBarView::NudgeDeskName(int desk_index) {
 
   // Set `name_view`'s accessible name to the default desk name since its text
   // is cleared.
-  name_view->SetAccessibleName(DesksController::GetDeskDefaultName(desk_index));
+  if (name_view->GetAccessibleName().empty()) {
+    name_view->SetAccessibleName(
+        DesksController::GetDeskDefaultName(desk_index));
+  }
 
   auto* highlight_controller = GetHighlightController();
   if (highlight_controller->IsFocusHighlightVisible())

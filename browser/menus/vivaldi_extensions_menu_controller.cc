@@ -110,7 +110,7 @@ void ExtensionsMenuController::AppendCurrentExtensionItems(
     key =
         extensions::MenuItem::ExtensionKey(extension->id(),
                                            web_view_guest->owner_web_contents()
-                                               ->GetMainFrame()
+                                               ->GetPrimaryMainFrame()
                                                ->GetProcess()
                                                ->GetID(),
                                            web_view_guest->view_instance_id());

@@ -151,8 +151,10 @@ class ThumbnailTabHelperInteractiveTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-#if BUILDFLAG(IS_MAC)
-// TODO(crbug.com/1288117): Flakes on macOS.
+#if BUILDFLAG(IS_MAC) || defined(THREAD_SANITIZER) || \
+    defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER)
+// TODO(crbug.com/1288117, crbug.com/1336124): Flakes on macOS and various
+// MSAN/TSAN/ASAN builders.
 #define MAYBE_TabLoadTriggersScreenshot DISABLED_TabLoadTriggersScreenshot
 #else
 #define MAYBE_TabLoadTriggersScreenshot TabLoadTriggersScreenshot
@@ -174,8 +176,10 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTabHelperInteractiveTest,
 
 // On browser restore, some tabs may not be loaded. Requesting a
 // thumbnail for one of these tabs should trigger load and capture.
-// TODO(crbug.com/1294473): Flaky on Mac.
-#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1294473, crbug.com/1294473): Flaky on Mac and various
+// sanitizer builds.
+#if BUILDFLAG(IS_MAC) || defined(THREAD_SANITIZER) || \
+    defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER)
 #define MAYBE_CapturesRestoredTabWhenRequested \
   DISABLED_CapturesRestoredTabWhenRequested
 #else

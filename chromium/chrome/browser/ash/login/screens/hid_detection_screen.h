@@ -13,11 +13,14 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 // TODO(https://crbug.com/1164001): move to forward declaration.
 #include "chrome/browser/ash/login/wizard_context.h"
 // TODO(https://crbug.com/1164001): move to forward declaration.
+#include "ash/components/hid_detection/hid_detection_manager.h"
+#include "base/timer/elapsed_timer.h"
 #include "chrome/browser/ui/webui/chromeos/login/hid_detection_screen_handler.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -34,7 +37,8 @@ namespace ash {
 class HIDDetectionScreen : public BaseScreen,
                            public device::BluetoothAdapter::Observer,
                            public device::BluetoothDevice::PairingDelegate,
-                           public device::mojom::InputDeviceManagerClient {
+                           public device::mojom::InputDeviceManagerClient,
+                           public hid_detection::HidDetectionManager::Delegate {
  public:
   using TView = HIDDetectionView;
   using InputDeviceInfoPtr = device::mojom::InputDeviceInfoPtr;
@@ -73,6 +77,12 @@ class HIDDetectionScreen : public BaseScreen,
   static void OverrideInputDeviceManagerBinderForTesting(
       InputDeviceManagerBinder binder);
 
+  // Allows tests to override what HidDetectionManager implementation is used
+  // when the kOobeHidDetectionRevamp flag is enabled.
+  static void OverrideHidDetectionManagerForTesting(
+      std::unique_ptr<hid_detection::HidDetectionManager>
+          hid_detection_manager);
+
   void InputDeviceAddedForTesting(InputDeviceInfoPtr info);
   const absl::optional<Result>& get_exit_result_for_testing() const {
     return exit_result_for_testing_;
@@ -82,7 +92,7 @@ class HIDDetectionScreen : public BaseScreen,
   friend class HIDDetectionScreenChromeboxTest;
 
   // BaseScreen:
-  bool MaybeSkip(WizardContext* context) override;
+  bool MaybeSkip(WizardContext& context) override;
   void ShowImpl() override;
   void HideImpl() override;
   void OnUserActionDeprecated(const std::string& action_id) override;
@@ -112,6 +122,10 @@ class HIDDetectionScreen : public BaseScreen,
   // device::mojom::InputDeviceManagerClient:
   void InputDeviceAdded(InputDeviceInfoPtr info) override;
   void InputDeviceRemoved(const std::string& id) override;
+
+  // hid_detection::HidDetectionManager::Delegate:
+  void OnHidDetectionStatusChanged(
+      hid_detection::HidDetectionManager::HidDetectionStatus status) override;
 
   // Called when continue button was clicked.
   void OnContinueButtonClicked();
@@ -191,6 +205,7 @@ class HIDDetectionScreen : public BaseScreen,
   void OnConnect(
       const std::string& address,
       device::BluetoothDeviceType device_type,
+      uint16_t device_id,
       absl::optional<device::BluetoothDevice::ConnectErrorCode> error_code);
 
   // Sends a notification to the Web UI of the status of available Bluetooth/USB
@@ -257,6 +272,14 @@ class HIDDetectionScreen : public BaseScreen,
   bool switch_on_adapter_when_ready_ = false;
 
   bool devices_enumerated_ = false;
+
+  size_t num_pairing_attempts_ = 0;
+
+  std::unique_ptr<hid_detection::HidDetectionManager> hid_detection_manager_;
+
+  // Map that contains the start times of pairings for devices.
+  base::flat_map<uint16_t, std::unique_ptr<base::ElapsedTimer>>
+      pairing_device_id_to_timer_map_;
 
   base::WeakPtrFactory<HIDDetectionScreen> weak_ptr_factory_{this};
 };

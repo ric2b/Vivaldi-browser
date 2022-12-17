@@ -97,10 +97,15 @@ class WebView {
   // as appropriate. It is legal to modify settings before completing
   // initialization.
   //
+  // The WebView is kept alive as long as the `page_handle` mojo interface
+  // is alive. The WebView will be destroyed when that interface closes, if
+  // a client wishes to close the WebView synchronously it can call `Close`
+  // directly.
+  //
   // clients may be null, but should both be null or not together.
   // |is_hidden| defines the initial visibility of the page.
   // |is_prerendering| defines whether the page is being prerendered by the
-  // Prerender2 feature (see content/browser/prerender/README.md).
+  // Prerender2 feature (see content/browser/preloading/prerender/README.md).
   // [is_inside_portal] defines whether the page is inside_portal.
   // [is_fenced_frame] defines whether the page is for a fenced frame.
   // |compositing_enabled| dictates whether accelerated compositing should be
@@ -137,7 +142,7 @@ class WebView {
       const SessionStorageNamespaceId& session_storage_namespace_id,
       absl::optional<SkColor> page_base_background_color);
 
-  // Destroys the WebView.
+  // Destroys the WebView synchronously.
   virtual void Close() = 0;
 
   // Called to inform WebViewImpl that a local main frame has been attached.
@@ -289,9 +294,6 @@ class WebView {
   // Override the screen orientation override.
   virtual void SetScreenOrientationOverrideForTesting(
       absl::optional<display::mojom::ScreenOrientation> orientation) = 0;
-
-  // Enable/Disable synchronous resize mode that is used for web tests.
-  virtual void UseSynchronousResizeModeForTesting(bool enable) = 0;
 
   // Set the window rect synchronously for testing. The normal flow is an
   // asynchronous request to the browser.
@@ -474,7 +476,7 @@ class WebView {
   // Set image visibility for the page. Loading is blocked if disabled.
   virtual void SetImagesEnabled(const bool images_enabled) = 0;
 
-  // Will make the resource fetcher only serve cached resources.
+  // Will make the image resource fetcher only serve cached resources.
   virtual void SetServeResourceFromCacheOnly(
       const bool only_load_from_cache) = 0;
 
@@ -482,11 +484,9 @@ class WebView {
   virtual void SetAllowTabCycleIntoUI(
       bool allow_tab_cycle_from_webpage_into_ui) = 0;
 
-  // Control plugins.
-  virtual void SetPluginsEnabled(const bool plugins_enabled) = 0;
   virtual void LoadImageAt(const gfx::Point&) = 0;
 
-  virtual void SetAllowAccessKeys(const bool allow_access_keys) = 0;
+  virtual void UpdateVivaldiRendererPreferences() = 0;
   // Vivaldi end
 
  protected:

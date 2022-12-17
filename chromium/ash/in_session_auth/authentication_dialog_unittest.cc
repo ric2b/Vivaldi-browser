@@ -6,18 +6,19 @@
 
 #include <cctype>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
-#include "ash/components/login/auth/auth_factors_data.h"
 #include "ash/components/login/auth/auth_performer.h"
-#include "ash/components/login/auth/cryptohome_key_constants.h"
 #include "ash/components/login/auth/mock_auth_performer.h"
+#include "ash/components/login/auth/public/auth_factors_data.h"
+#include "ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "ash/public/cpp/in_session_auth_token_provider.h"
 #include "ash/public/cpp/test/mock_in_session_auth_token_provider.h"
 #include "ash/test/ash_test_base.h"
 #include "base/logging.h"
 #include "base/test/bind.h"
 #include "base/unguessable_token.h"
-#include "chromeos/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/cryptohome/common_types.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
@@ -25,18 +26,23 @@
 #include "ui/views/controls/textfield/textfield.h"
 
 namespace ash {
+
 namespace {
+
+using ::cryptohome::KeyLabel;
+using ::testing::_;
+
 const char kTestAccount[] = "user@test.com";
 const char kExpectedPassword[] = "qwerty";
 base::UnguessableToken kToken = base::UnguessableToken::Create();
-using testing::_;
+
 }  // namespace
 
 class AuthenticationDialogTest : public AshTestBase {
  public:
   void SetUp() override {
     AshTestBase::SetUp();
-    chromeos::UserDataAuthClient::InitializeFake();
+    UserDataAuthClient::InitializeFake();
     auth_token_provider_ = std::make_unique<MockInSessionAuthTokenProvider>();
   }
 
@@ -45,7 +51,7 @@ class AuthenticationDialogTest : public AshTestBase {
                         AuthPerformer::StartSessionCallback callback) {
     user_context->SetAuthFactorsData(
         AuthFactorsData{{cryptohome::KeyDefinition::CreateForPassword(
-            "secret", kCryptohomeGaiaKeyLabel, 0)}});
+            "secret", KeyLabel(kCryptohomeGaiaKeyLabel), 0)}});
 
     std::move(callback).Run(true, std::move(user_context), absl::nullopt);
   }

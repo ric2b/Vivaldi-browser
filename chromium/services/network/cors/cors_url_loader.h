@@ -7,6 +7,8 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "base/types/strong_alias.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -15,6 +17,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/cors/preflight_controller.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
+#include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/mojom/client_security_state.mojom-forward.h"
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
@@ -28,10 +31,13 @@
 namespace network {
 
 class URLLoaderFactory;
+class NetworkContext;
 
 namespace cors {
 
 class OriginAccessList;
+
+using HasFactoryOverride = base::StrongAlias<class HasFactoryOverrideTag, bool>;
 
 // Wrapper class that adds cross-origin resource sharing capabilities
 // (https://fetch.spec.whatwg.org/#http-cors-protocol), delegating requests as
@@ -59,13 +65,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
       mojom::URLLoaderFactory* network_loader_factory,
       URLLoaderFactory* sync_network_loader_factory,
       const OriginAccessList* origin_access_list,
-      PreflightController* preflight_controller,
-      const base::flat_set<std::string>* allowed_exempt_headers,
       bool allow_any_cors_exempt_header,
-      NonWildcardRequestHeadersSupport non_wildcard_request_headers_support,
+      HasFactoryOverride has_factory_override,
       const net::IsolationInfo& isolation_info,
       mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
-      const mojom::ClientSecurityState* factory_client_security_state);
+      const mojom::ClientSecurityState* factory_client_security_state,
+      const CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
+      NetworkContext* context);
 
   CorsURLLoader(const CorsURLLoader&) = delete;
   CorsURLLoader& operator=(const CorsURLLoader&) = delete;
@@ -202,6 +208,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
 
   // For the actual request.
   mojo::Remote<mojom::URLLoader> network_loader_;
+  base::TimeTicks network_loader_start_time_;
   // `sync_client_receiver_factory_` should be invalidated if this is ever
   // reset.
   mojo::Receiver<mojom::URLLoaderClient> network_client_receiver_{this};
@@ -246,15 +253,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
 
   // Outlives `this`.
   const raw_ptr<const OriginAccessList> origin_access_list_;
-  raw_ptr<PreflightController> preflight_controller_;
-  raw_ptr<const base::flat_set<std::string>> allowed_exempt_headers_;
 
   // Flag to specify if the CORS-enabled scheme check should be applied.
   const bool skip_cors_enabled_scheme_check_;
 
   const bool allow_any_cors_exempt_header_;
 
-  const NonWildcardRequestHeadersSupport non_wildcard_request_headers_support_;
+  const HasFactoryOverride has_factory_override_;
 
   net::IsolationInfo isolation_info_;
 
@@ -268,6 +273,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
   // initializes this member explicitly.
   raw_ptr<const mojom::ClientSecurityState> factory_client_security_state_ =
       nullptr;
+
+  // True when `network_loader_` is bound to a URLLoader that serves response
+  // from `memory_cache_`.
+  bool memory_cache_was_used_ = false;
+
+  const CrossOriginEmbedderPolicy cross_origin_embedder_policy_;
 
   bool has_authorization_covered_by_wildcard_ = false;
 
@@ -292,6 +303,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
   mojo::Remote<mojom::DevToolsObserver> devtools_observer_;
 
   net::NetLogWithSource net_log_;
+
+  const raw_ptr<NetworkContext> context_;
 
   // Used to provide weak pointers of this class for synchronously calling
   // URLLoaderClient methods. This should be reset any time

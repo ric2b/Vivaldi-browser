@@ -4,6 +4,8 @@
 
 package org.chromium.components.browser_ui.accessibility;
 
+import static org.chromium.content_public.browser.HostZoomMap.AVAILABLE_ZOOM_FACTORS;
+
 import android.content.Context;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -17,11 +19,16 @@ import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import org.chromium.ui.widget.ChromeImageButton;
+
 /**
  * Custom preference for the page zoom section of Accessibility Settings.
  */
 public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarChangeListener {
     private int mInitialValue;
+    private SeekBar mSeekBar;
+    private ChromeImageButton mDecreaseButton;
+    private ChromeImageButton mIncreaseButton;
     private TextView mCurrentValueText;
 
     // Values taken from dimens of text_size_* in //ui/android/java/res/values/dimens.xml
@@ -68,10 +75,18 @@ public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarC
         mCurrentValueText.setText(
                 getContext().getResources().getString(R.string.page_zoom_factor, 100));
 
-        SeekBar currentValueSlider = (SeekBar) holder.findViewById(R.id.page_zoom_slider);
-        currentValueSlider.setOnSeekBarChangeListener(this);
-        currentValueSlider.setMax(PageZoomUtils.PAGE_ZOOM_MAXIMUM_SEEKBAR_VALUE);
-        currentValueSlider.setProgress(mInitialValue);
+        mDecreaseButton =
+                (ChromeImageButton) holder.findViewById(R.id.page_zoom_decrease_zoom_button);
+        mDecreaseButton.setOnClickListener(v -> onHandleDecreaseClicked());
+
+        mIncreaseButton =
+                (ChromeImageButton) holder.findViewById(R.id.page_zoom_increase_zoom_button);
+        mIncreaseButton.setOnClickListener(v -> onHandleIncreaseClicked());
+
+        mSeekBar = (SeekBar) holder.findViewById(R.id.page_zoom_slider);
+        mSeekBar.setOnSeekBarChangeListener(this);
+        mSeekBar.setMax(PageZoomUtils.PAGE_ZOOM_MAXIMUM_SEEKBAR_VALUE);
+        mSeekBar.setProgress(mInitialValue);
         updateViewsOnProgressChanged(mInitialValue);
     }
 
@@ -86,6 +101,7 @@ public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarC
     private void updateViewsOnProgressChanged(int progress) {
         updateZoomPercentageText(progress);
         updatePreviewWidget(progress);
+        updateButtonStates(progress);
     }
 
     private void updateZoomPercentageText(int progress) {
@@ -108,9 +124,21 @@ public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarC
         mPreviewImage.setLayoutParams(mPreviewImageParams);
     }
 
+    private void updateButtonStates(int progress) {
+        double newZoomFactor = PageZoomUtils.convertSeekBarValueToZoomFactor(progress);
+
+        // If the new zoom factor is greater than the minimum zoom factor, enable decrease button.
+        mDecreaseButton.setEnabled(newZoomFactor > AVAILABLE_ZOOM_FACTORS[0]);
+
+        // If the new zoom factor is less than the maximum zoom factor, enable increase button.
+        mIncreaseButton.setEnabled(
+                newZoomFactor < AVAILABLE_ZOOM_FACTORS[AVAILABLE_ZOOM_FACTORS.length - 1]);
+    }
+
     @Override
     public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-        // Update the zoom percentage text and preview widget as the slider is updated.
+        // Update the zoom percentage text, preview widget and enabled state of increase/decrease
+        // buttons as the slider is updated.
         updateViewsOnProgressChanged(progress);
     }
 
@@ -121,5 +149,33 @@ public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarC
     public void onStopTrackingTouch(SeekBar seekBar) {
         // When a user stops changing the slider value, record the new value in prefs.
         callChangeListener(seekBar.getProgress());
+    }
+
+    private void onHandleDecreaseClicked() {
+        // When decreasing zoom, "snap" to the greatest preset value that is less than the current.
+        double currentZoomFactor =
+                PageZoomUtils.convertSeekBarValueToZoomFactor(mSeekBar.getProgress());
+        int index = PageZoomUtils.getNextIndex(true, currentZoomFactor);
+
+        if (index >= 0) {
+            int seekBarValue =
+                    PageZoomUtils.convertZoomFactorToSeekBarValue(AVAILABLE_ZOOM_FACTORS[index]);
+            mSeekBar.setProgress(seekBarValue);
+            callChangeListener(seekBarValue);
+        }
+    }
+
+    private void onHandleIncreaseClicked() {
+        // When increasing zoom, "snap" to the smallest preset value that is more than the current.
+        double currentZoomFactor =
+                PageZoomUtils.convertSeekBarValueToZoomFactor(mSeekBar.getProgress());
+        int index = PageZoomUtils.getNextIndex(false, currentZoomFactor);
+
+        if (index <= AVAILABLE_ZOOM_FACTORS.length - 1) {
+            int seekBarValue =
+                    PageZoomUtils.convertZoomFactorToSeekBarValue(AVAILABLE_ZOOM_FACTORS[index]);
+            mSeekBar.setProgress(seekBarValue);
+            callChangeListener(seekBarValue);
+        }
     }
 }

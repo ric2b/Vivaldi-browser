@@ -154,7 +154,6 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   bool GrabFocusOrSetSequentialFocusNavigationStartingPointAtOffset(int offset);
   bool GrabFocusOrSetSequentialFocusNavigationStartingPoint();
   bool SetSequentialFocusNavigationStartingPoint();
-  bool DoDefaultAction();
   const gchar* GetDefaultActionName();
   AtkAttributeSet* GetAtkAttributes();
 
@@ -292,9 +291,6 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   // parent. If this object doesn't have a parent or isn't embedded, return
   // nullopt.
   absl::optional<std::pair<int, int>> GetEmbeddedObjectIndices();
-
-  std::vector<ax::mojom::Action> GetSupportedActions() const;
-  bool HasDefaultActionVerb() const;
 
   std::string accessible_name_;
   

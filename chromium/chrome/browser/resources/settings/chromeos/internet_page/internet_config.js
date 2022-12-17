@@ -7,16 +7,17 @@
  * 'internet-config' is a Settings dialog wrapper for network-config.
  */
 import 'chrome://resources/cr_components/chromeos/network/network_config.m.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import './internet_shared_css.js';
 
 import {OncMojo} from 'chrome://resources/cr_components/chromeos/network/onc_mojo.m.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {HTMLEscape} from 'chrome://resources/js/util.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 
 /**
@@ -44,7 +45,7 @@ export class InternetConfigElement extends InternetConfigElementBase {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('shareNetworkAllowEnable');
-        }
+        },
       },
 
       /** @private */
@@ -52,7 +53,7 @@ export class InternetConfigElement extends InternetConfigElementBase {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('shareNetworkDefault');
-        }
+        },
       },
 
       /**
@@ -177,9 +178,7 @@ export class InternetConfigElement extends InternetConfigElementBase {
     if (this.type ===
         OncMojo.getNetworkTypeString(
             chromeos.networkConfig.mojom.NetworkType.kWiFi)) {
-      recordSettingChange(
-          chromeos.settings.mojom.Setting.kWifiAddNetwork,
-          {stringValue: this.guid});
+      recordSettingChange(Setting.kWifiAddNetwork, {stringValue: this.guid});
     } else {
       recordSettingChange();
     }

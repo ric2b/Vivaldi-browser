@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
 <translation id="1397811292916898096">Iskanje z <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju. Iskanju Google pošlje izbrano besedo in trenutno stran kot kontekst. Izklopite ga lahko v <ph name="BEGIN_LINK" />Nastavitve<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Preklop na običajne/zasebne zavihke</translation>
 <translation id="1644574205037202324">Zgodovina</translation>
 <translation id="17513872634828108">Odprti zavihki</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nov zasebni zavihek</translation>
 <translation id="4243710787042215766">Odpri na zasebnem zavihku</translation>
 <translation id="4526803704855831732">Zasebni zavihki</translation>
+<translation id="4719086422742491124">Spoznajte teme na spletnih mestih, ne da bi zapustili stran. Izberite eno ali več besed na strani, da jih poiščete.
+
+Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju.</translation>
 <translation id="4759238208242260848">Prenosi</translation>
 <translation id="4883379392681899581">Zapusti zasebni način</translation>
 <translation id="4943872375798546930">Ni rezultatov</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> shramba</translation>
 <translation id="5186185447130319458">Zasebno</translation>
 <translation id="5233638681132016545">Nov zavihek</translation>
-<translation id="572328651809341494">Nedavni zavihki</translation>
-<translation id="5840488417521835756">Iskanje z dotikom je funkcija, ki je na voljo samo, če je Google privzeti iskalnik v programu Vivaldi. Pošlje besedo in kontekst ki ga obkroža v Google Iskanje, vrne definicije, slike, rezultate iskanja in druge podrobnosti.
+<translation id="5375131951310889874">Spoznajte teme na spletnih mestih, ne da bi zapustili stran. Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju. Iskanju Google pošlje besedo in njen kontekst, ki vrne definicije, slike, rezultate iskanja in druge podrobnosti.
 
-Če želite prilagoditi iskalno poizvedbo, jo izberite z daljšim dotikom. Če želite podrobneje nastaviti iskanje, potisnite podokno povsem navzgor in se dotaknite iskalnega polja.</translation>
+Če želite prilagoditi iskalni izraz, dolgo pritisnite, da izberete. Če želite izboljšati iskanje, povlecite panel do konca navzgor in tapnite iskalno polje.</translation>
+<translation id="572328651809341494">Nedavni zavihki</translation>
 <translation id="6150320133806434356">Zaznamek je shranjen</translation>
 <translation id="6336451774241870485">Nov zasebni zavihek</translation>
 <translation id="6585139692466700358">Ponudite prevod strani v druge jezike z uporabo storitve prevajanja Vivaldi</translation>
@@ -53,7 +57,6 @@
 <translation id="732145680195464316">Zaznamek je shranjen v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O brskalniku Vivaldi</translation>
 <translation id="7465104139234185284">Zapri vse zasebne zavihke</translation>
-<translation id="7519434535192513364">Iskanje z dotikom je funkcija, ki je na voljo samo, če je Google privzeti iskalnik v programu Vivaldi. Izbrano besedo in trenutno stran pošlje kot kontekst v Google Iskanje. Izklopite jo lahko v <ph name="BEGIN_LINK" />nastavitvah<ph name="END_LINK" />.</translation>
 <translation id="804786196054284061">Licenčna pogodba za končnega uporabnika</translation>
 <translation id="85991616550051997">Pojdi na domačo stran</translation>
 <translation id="8820817407110198400">Zaznamki</translation>

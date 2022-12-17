@@ -19,7 +19,8 @@
 #error "This file requires ARC support."
 #endif
 
-NSInteger kSymbolToolbarPointSize = 18;
+// Vivaldi
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 @interface ActionFactory ()
 
@@ -265,8 +266,12 @@ NSInteger kSymbolToolbarPointSize = 18;
 
 - (UIAction*)actionSearchImageWithTitle:(NSString*)title
                                   Block:(ProceduralBlock)block {
+  UIImage* image =
+      UseSymbols() ? CustomSymbolWithPointSize(kPhotoBadgeMagnifyingglassSymbol,
+                                               kSymbolActionPointSize)
+                   : [UIImage imageNamed:@"search_image"];
   UIAction* action = [self actionWithTitle:title
-                                     image:[UIImage imageNamed:@"search_image"]
+                                     image:image
                                       type:MenuActionType::SearchImage
                                      block:block];
   return action;
@@ -308,5 +313,54 @@ NSInteger kSymbolToolbarPointSize = 18;
                       block:block];
   return action;
 }
+
+#pragma mark - Vivaldi
+
+- (UIAction*)actionToAddNoteWithBlock:(ProceduralBlock)block {
+  UIImage* image = [UIImage imageNamed:@"note"];
+  return [self actionWithTitle:l10n_util::GetNSString(
+                         IDS_VIVALDI_CONTENT_CONTEXT_NEWNOTE)
+                         image:image
+                         type:MenuActionType::NewNote
+                         block:block];
+}
+
+- (UIAction*)actionToAddFolderWithBlock:(ProceduralBlock)block {
+  UIImage* image = [UIImage imageNamed:@"note"];
+  return [self actionWithTitle:l10n_util::GetNSString(
+                         IDS_VIVALDI_CONTENT_CONTEXT_NEWFOLDER)
+                         image:image
+                         type:MenuActionType::NewFolder
+                         block:block];
+}
+
+- (UIAction*)actionToClearHistoryWithBlock:(ProceduralBlock)block {
+    UIImage* image = UseSymbols()
+                         ? DefaultSymbolWithPointSize(kAddBookmarkActionSymbol,
+                                                      kSymbolActionPointSize)
+                         : [UIImage imageNamed:@"note"];
+    return [self actionWithTitle:l10n_util::GetNSStringWithFixup(
+                           IDS_VIVALDI_HISTORY_OPEN_CLEAR_BROWSING_DATA_DIALOG)
+                           image:image
+                           type:MenuActionType::ClearHistory
+                           block:block];
+}
+
+
+// Creates a UIAction instance whose title and icon are configured for done
+// which will invoke the given edit |block| when executed.
+- (UIAction*)actionDoneWithBlock:(ProceduralBlock)block {
+    UIImage* image = UseSymbols()
+                         ? DefaultSymbolWithPointSize(@"done",
+                                                      kSymbolActionPointSize)
+                         : [UIImage imageNamed:@"notes"];
+    return [self actionWithTitle:l10n_util::GetNSString(
+                           IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
+                           image:image
+                           type:MenuActionType::NewNote
+                           block:block];
+  }
+
+
 
 @end

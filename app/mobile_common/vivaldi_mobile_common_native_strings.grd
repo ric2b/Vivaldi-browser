@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+This file contains definition of resources that will be translated for each
+locale.  The strings in this file are specific to iOS.
+-->
+
+<grit base_dir="." latest_public_release="0" current_release="1"
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
+  <outputs>
+    <if expr="is_ios">
+      <output filename="grit/vivaldi_mobile_common_native_strings.h" type="rc_header">
+        <emit emit_type="prepend"></emit>
+      </output>
+      <output filename="vivaldi_mobile_common_native_strings_af.pak" type="data_package" lang="af" />
+      <output filename="vivaldi_mobile_common_native_strings_am.pak" type="data_package" lang="am" />
+      <output filename="vivaldi_mobile_common_native_strings_ar.pak" type="data_package" lang="ar" />
+      <output filename="vivaldi_mobile_common_native_strings_az.pak" type="data_package" lang="az" />
+      <output filename="vivaldi_mobile_common_native_strings_be.pak" type="data_package" lang="be" />
+      <output filename="vivaldi_mobile_common_native_strings_bg.pak" type="data_package" lang="bg" />
+      <output filename="vivaldi_mobile_common_native_strings_bn.pak" type="data_package" lang="bn" />
+      <output filename="vivaldi_mobile_common_native_strings_ca.pak" type="data_package" lang="ca" />
+      <output filename="vivaldi_mobile_common_native_strings_cs.pak" type="data_package" lang="cs" />
+      <output filename="vivaldi_mobile_common_native_strings_da.pak" type="data_package" lang="da" />
+      <output filename="vivaldi_mobile_common_native_strings_de.pak" type="data_package" lang="de" />
+      <output filename="vivaldi_mobile_common_native_strings_de-CH.pak" type="data_package" lang="de-CH" />
+      <output filename="vivaldi_mobile_common_native_strings_el.pak" type="data_package" lang="el" />
+      <output filename="vivaldi_mobile_common_native_strings_en-GB.pak" type="data_package" lang="en-GB" />
+      <output filename="vivaldi_mobile_common_native_strings_en-US.pak" type="data_package" lang="en-GB" />
+      <output filename="vivaldi_mobile_common_native_strings_eo.pak" type="data_package" lang="eo" />
+      <output filename="vivaldi_mobile_common_native_strings_es.pak" type="data_package" lang="es" />
+      <output filename="vivaldi_mobile_common_native_strings_es-MX.pak" type="data_package" lang="es-419" />
+      <output filename="vivaldi_mobile_common_native_strings_es-PE.pak" type="data_package" lang="es-PE" />
+      <output filename="vivaldi_mobile_common_native_strings_et.pak" type="data_package" lang="et" />
+      <output filename="vivaldi_mobile_common_native_strings_eu.pak" type="data_package" lang="eu" />
+      <output filename="vivaldi_mobile_common_native_strings_fa.pak" type="data_package" lang="fa" />
+      <output filename="vivaldi_mobile_common_native_strings_fi.pak" type="data_package" lang="fi" />
+      <output filename="vivaldi_mobile_common_native_strings_fil.pak" type="data_package" lang="fil" />
+      <output filename="vivaldi_mobile_common_native_strings_fr.pak" type="data_package" lang="fr" />
+      <output filename="vivaldi_mobile_common_native_strings_fy.pak" type="data_package" lang="fy" />
+      <output filename="vivaldi_mobile_common_native_strings_gd.pak" type="data_package" lang="gd" />
+      <output filename="vivaldi_mobile_common_native_strings_gl.pak" type="data_package" lang="gl" />
+      <output filename="vivaldi_mobile_common_native_strings_gu.pak" type="data_package" lang="gu" />
+      <output filename="vivaldi_mobile_common_native_strings_he.pak" type="data_package" lang="he" />
+      <output filename="vivaldi_mobile_common_native_strings_hi.pak" type="data_package" lang="hi" />
+      <output filename="vivaldi_mobile_common_native_strings_hr.pak" type="data_package" lang="hr" />
+      <output filename="vivaldi_mobile_common_native_strings_hu.pak" type="data_package" lang="hu" />
+      <output filename="vivaldi_mobile_common_native_strings_hy.pak" type="data_package" lang="hy" />
+      <output filename="vivaldi_mobile_common_native_strings_id.pak" type="data_package" lang="id" />
+      <output filename="vivaldi_mobile_common_native_strings_io.pak" type="data_package" lang="io" />
+      <output filename="vivaldi_mobile_common_native_strings_is.pak" type="data_package" lang="is" />
+      <output filename="vivaldi_mobile_common_native_strings_it.pak" type="data_package" lang="it" />
+      <output filename="vivaldi_mobile_common_native_strings_ja.pak" type="data_package" lang="ja" />
+      <output filename="vivaldi_mobile_common_native_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
+      <output filename="vivaldi_mobile_common_native_strings_jbo.pak" type="data_package" lang="jbo" />
+      <output filename="vivaldi_mobile_common_native_strings_ka.pak" type="data_package" lang="ka" />
+      <output filename="vivaldi_mobile_common_native_strings_kab.pak" type="data_package" lang="kab" />
+      <output filename="vivaldi_mobile_common_native_strings_kn.pak" type="data_package" lang="kn" />
+      <output filename="vivaldi_mobile_common_native_strings_ko.pak" type="data_package" lang="ko" />
+      <output filename="vivaldi_mobile_common_native_strings_ku.pak" type="data_package" lang="ku" />
+      <output filename="vivaldi_mobile_common_native_strings_lt.pak" type="data_package" lang="lt" />
+      <output filename="vivaldi_mobile_common_native_strings_lv.pak" type="data_package" lang="lv" />
+      <output filename="vivaldi_mobile_common_native_strings_mk.pak" type="data_package" lang="mk" />
+      <output filename="vivaldi_mobile_common_native_strings_ml.pak" type="data_package" lang="ml" />
+      <output filename="vivaldi_mobile_common_native_strings_mr.pak" type="data_package" lang="mr" />
+      <output filename="vivaldi_mobile_common_native_strings_ms.pak" type="data_package" lang="ms" />
+      <output filename="vivaldi_mobile_common_native_strings_nb.pak" type="data_package" lang="no" />
+      <output filename="vivaldi_mobile_common_native_strings_nl.pak" type="data_package" lang="nl" />
+      <output filename="vivaldi_mobile_common_native_strings_nn.pak" type="data_package" lang="nn" />
+      <output filename="vivaldi_mobile_common_native_strings_pa.pak" type="data_package" lang="pa" />
+      <output filename="vivaldi_mobile_common_native_strings_pl.pak" type="data_package" lang="pl" />
+      <output filename="vivaldi_mobile_common_native_strings_pt.pak" type="data_package" lang="pt-BR" />
+      <output filename="vivaldi_mobile_common_native_strings_pt-PT.pak" type="data_package" lang="pt-PT" />
+      <output filename="vivaldi_mobile_common_native_strings_ro.pak" type="data_package" lang="ro" />
+      <output filename="vivaldi_mobile_common_native_strings_ru.pak" type="data_package" lang="ru" />
+      <output filename="vivaldi_mobile_common_native_strings_sc.pak" type="data_package" lang="sc" />
+      <output filename="vivaldi_mobile_common_native_strings_sk.pak" type="data_package" lang="sk" />
+      <output filename="vivaldi_mobile_common_native_strings_sl.pak" type="data_package" lang="sl" />
+      <output filename="vivaldi_mobile_common_native_strings_sq.pak" type="data_package" lang="sq" />
+      <output filename="vivaldi_mobile_common_native_strings_sr.pak" type="data_package" lang="sr" />
+      <output filename="vivaldi_mobile_common_native_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
+      <output filename="vivaldi_mobile_common_native_strings_sv.pak" type="data_package" lang="sv" />
+      <output filename="vivaldi_mobile_common_native_strings_sw.pak" type="data_package" lang="sw" />
+      <output filename="vivaldi_mobile_common_native_strings_ta.pak" type="data_package" lang="ta" />
+      <output filename="vivaldi_mobile_common_native_strings_te.pak" type="data_package" lang="te" />
+      <output filename="vivaldi_mobile_common_native_strings_th.pak" type="data_package" lang="th" />
+      <output filename="vivaldi_mobile_common_native_strings_tr.pak" type="data_package" lang="tr" />
+      <output filename="vivaldi_mobile_common_native_strings_uk.pak" type="data_package" lang="uk" />
+      <output filename="vivaldi_mobile_common_native_strings_ur.pak" type="data_package" lang="ur" />
+      <output filename="vivaldi_mobile_common_native_strings_vi.pak" type="data_package" lang="vi" />
+      <output filename="vivaldi_mobile_common_native_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
+      <output filename="vivaldi_mobile_common_native_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+      <output filename="vivaldi_mobile_common_native_strings_en-XA.pak" type="data_package" lang="en-XA" />
+      <output filename="vivaldi_mobile_common_native_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
+    </if>
+    <if expr="is_android">
+      <output filename="values/vivaldi_mobile_common_native_strings.xml" lang="en" type="android" />
+      <output filename="values-af/vivaldi_mobile_common_native_strings.xml" type="android" lang="af" />
+      <output filename="values-am/vivaldi_mobile_common_native_strings.xml" type="android" lang="am" />
+      <output filename="values-ar/vivaldi_mobile_common_native_strings.xml" type="android" lang="ar" />
+      <output filename="values-as/vivaldi_mobile_common_native_strings.xml" type="android" lang="as" />
+      <output filename="values-az/vivaldi_mobile_common_native_strings.xml" type="android" lang="az" />
+      <output filename="values-be/vivaldi_mobile_common_native_strings.xml" type="android" lang="be" />
+      <output filename="values-bg/vivaldi_mobile_common_native_strings.xml" type="android" lang="bg" />
+      <output filename="values-bn/vivaldi_mobile_common_native_strings.xml" type="android" lang="bn" />
+      <output filename="values-bs/vivaldi_mobile_common_native_strings.xml" type="android" lang="bs" />
+      <output filename="values-ca/vivaldi_mobile_common_native_strings.xml" type="android" lang="ca" />
+      <output filename="values-cs/vivaldi_mobile_common_native_strings.xml" type="android" lang="cs" />
+      <output filename="values-da/vivaldi_mobile_common_native_strings.xml" type="android" lang="da" />
+      <output filename="values-de/vivaldi_mobile_common_native_strings.xml" type="android" lang="de" />
+      <output filename="values-de-rCH/vivaldi_mobile_common_native_strings.xml" type="android" lang="de-CH" />
+      <output filename="values-el/vivaldi_mobile_common_native_strings.xml" type="android" lang="el" />
+      <output filename="values-en-rGB/vivaldi_mobile_common_native_strings.xml" type="android" lang="en-GB" />
+      <output filename="values-eo/vivaldi_mobile_common_native_strings.xml" type="android" lang="eo" />
+      <output filename="values-es/vivaldi_mobile_common_native_strings.xml" type="android" lang="es" />
+      <output filename="values-es-rUS/vivaldi_mobile_common_native_strings.xml" type="android" lang="es-419" />
+      <output filename="values-es-rPE/vivaldi_mobile_common_native_strings.xml" type="android" lang="es-PE" />
+      <output filename="values-et/vivaldi_mobile_common_native_strings.xml" type="android" lang="et" />
+      <output filename="values-eu/vivaldi_mobile_common_native_strings.xml" type="android" lang="eu" />
+      <output filename="values-fa/vivaldi_mobile_common_native_strings.xml" type="android" lang="fa" />
+      <output filename="values-fi/vivaldi_mobile_common_native_strings.xml" type="android" lang="fi" />
+      <output filename="values-tl/vivaldi_mobile_common_native_strings.xml" type="android" lang="fil" />
+      <output filename="values-fr/vivaldi_mobile_common_native_strings.xml" type="android" lang="fr" />
+      <output filename="values-fr-rCA/vivaldi_mobile_common_native_strings.xml" type="android" lang="fr-CA" />
+      <output filename="values-fy/vivaldi_mobile_common_native_strings.xml" type="android" lang="fy" />
+      <output filename="values-gd/vivaldi_mobile_common_native_strings.xml" type="android" lang="gd" />
+      <output filename="values-gl/vivaldi_mobile_common_native_strings.xml" type="android" lang="gl" />
+      <output filename="values-gu/vivaldi_mobile_common_native_strings.xml" type="android" lang="gu" />
+      <output filename="values-hi/vivaldi_mobile_common_native_strings.xml" type="android" lang="hi" />
+      <output filename="values-hr/vivaldi_mobile_common_native_strings.xml" type="android" lang="hr" />
+      <output filename="values-hu/vivaldi_mobile_common_native_strings.xml" type="android" lang="hu" />
+      <output filename="values-hy/vivaldi_mobile_common_native_strings.xml" type="android" lang="hy" />
+      <output filename="values-in/vivaldi_mobile_common_native_strings.xml" type="android" lang="id" />
+      <output filename="values-io/vivaldi_mobile_common_native_strings.xml" type="android" lang="io" />
+      <output filename="values-is/vivaldi_mobile_common_native_strings.xml" type="android" lang="is" />
+      <output filename="values-it/vivaldi_mobile_common_native_strings.xml" type="android" lang="it" />
+      <output filename="values-iw/vivaldi_mobile_common_native_strings.xml" type="android" lang="he" />
+      <output filename="values-ja/vivaldi_mobile_common_native_strings.xml" type="android" lang="ja" />
+      <output filename="values-ja-rKS/vivaldi_mobile_common_native_strings.xml" type="android" lang="ja-KS" />
+      <output filename="values-jbo/vivaldi_mobile_common_native_strings.xml" type="android" lang="jbo" />
+      <output filename="values-ka/vivaldi_mobile_common_native_strings.xml" type="android" lang="ka" />
+      <output filename="values-kab/vivaldi_mobile_common_native_strings.xml" type="android" lang="kab" />
+      <output filename="values-kk/vivaldi_mobile_common_native_strings.xml" type="android" lang="kk" />
+      <output filename="values-km/vivaldi_mobile_common_native_strings.xml" type="android" lang="km" />
+      <output filename="values-kn/vivaldi_mobile_common_native_strings.xml" type="android" lang="kn" />
+      <output filename="values-ko/vivaldi_mobile_common_native_strings.xml" type="android" lang="ko" />
+      <output filename="values-ku/vivaldi_mobile_common_native_strings.xml" type="android" lang="ku" />
+      <output filename="values-ky/vivaldi_mobile_common_native_strings.xml" type="android" lang="ky" />
+      <output filename="values-lo/vivaldi_mobile_common_native_strings.xml" type="android" lang="lo" />
+      <output filename="values-lt/vivaldi_mobile_common_native_strings.xml" type="android" lang="lt" />
+      <output filename="values-lv/vivaldi_mobile_common_native_strings.xml" type="android" lang="lv" />
+      <output filename="values-mk/vivaldi_mobile_common_native_strings.xml" type="android" lang="mk" />
+      <output filename="values-ml/vivaldi_mobile_common_native_strings.xml" type="android" lang="ml" />
+      <output filename="values-mn/vivaldi_mobile_common_native_strings.xml" type="android" lang="mn" />
+      <output filename="values-mr/vivaldi_mobile_common_native_strings.xml" type="android" lang="mr" />
+      <output filename="values-ms/vivaldi_mobile_common_native_strings.xml" type="android" lang="ms" />
+      <output filename="values-my/vivaldi_mobile_common_native_strings.xml" type="android" lang="my" />
+      <output filename="values-nb/vivaldi_mobile_common_native_strings.xml" type="android" lang="no" />
+      <output filename="values-ne/vivaldi_mobile_common_native_strings.xml" type="android" lang="ne" />
+      <output filename="values-nl/vivaldi_mobile_common_native_strings.xml" type="android" lang="nl" />
+      <output filename="values-nn/vivaldi_mobile_common_native_strings.xml" type="android" lang="nn" />
+      <output filename="values-or/vivaldi_mobile_common_native_strings.xml" type="android" lang="or" />
+      <output filename="values-pa/vivaldi_mobile_common_native_strings.xml" type="android" lang="pa" />
+      <output filename="values-pl/vivaldi_mobile_common_native_strings.xml" type="android" lang="pl" />
+      <output filename="values-pt-rBR/vivaldi_mobile_common_native_strings.xml" type="android" lang="pt-BR" />
+      <output filename="values-pt-rPT/vivaldi_mobile_common_native_strings.xml" type="android" lang="pt-PT" />
+      <output filename="values-ro/vivaldi_mobile_common_native_strings.xml" type="android" lang="ro" />
+      <output filename="values-ru/vivaldi_mobile_common_native_strings.xml" type="android" lang="ru" />
+      <output filename="values-sc/vivaldi_mobile_common_native_strings.xml" type="android" lang="sc" />
+      <output filename="values-si/vivaldi_mobile_common_native_strings.xml" type="android" lang="si" />
+      <output filename="values-sk/vivaldi_mobile_common_native_strings.xml" type="android" lang="sk" />
+      <output filename="values-sl/vivaldi_mobile_common_native_strings.xml" type="android" lang="sl" />
+      <output filename="values-sq/vivaldi_mobile_common_native_strings.xml" type="android" lang="sq" />
+      <output filename="values-sr/vivaldi_mobile_common_native_strings.xml" type="android" lang="sr" />
+      <output filename="values-b+sr+Latn/vivaldi_mobile_common_native_strings.xml" type="android" lang="sr-Latn" />
+      <output filename="values-sv/vivaldi_mobile_common_native_strings.xml" type="android" lang="sv" />
+      <output filename="values-sw/vivaldi_mobile_common_native_strings.xml" type="android" lang="sw" />
+      <output filename="values-ta/vivaldi_mobile_common_native_strings.xml" type="android" lang="ta" />
+      <output filename="values-te/vivaldi_mobile_common_native_strings.xml" type="android" lang="te" />
+      <output filename="values-th/vivaldi_mobile_common_native_strings.xml" type="android" lang="th" />
+      <output filename="values-tr/vivaldi_mobile_common_native_strings.xml" type="android" lang="tr" />
+      <output filename="values-uk/vivaldi_mobile_common_native_strings.xml" type="android" lang="uk" />
+      <output filename="values-ur/vivaldi_mobile_common_native_strings.xml" type="android" lang="ur" />
+      <output filename="values-uz/vivaldi_mobile_common_native_strings.xml" type="android" lang="uz" />
+      <output filename="values-vi/vivaldi_mobile_common_native_strings.xml" type="android" lang="vi" />
+      <output filename="values-zh-rCN/vivaldi_mobile_common_native_strings.xml" type="android" lang="zh-CN" />
+      <output filename="values-zh-rHK/vivaldi_mobile_common_native_strings.xml" type="android" lang="zh-HK" />
+      <output filename="values-zh-rTW/vivaldi_mobile_common_native_strings.xml" type="android" lang="zh-TW" />
+      <output filename="values-zu/vivaldi_mobile_common_native_strings.xml" type="android" lang="zu" />
+      <output filename="values-ar-rXB/vivaldi_mobile_common_native_strings.xml" type="android" lang="ar-XB" />
+      <output filename="values-en-rXA/vivaldi_mobile_common_native_strings.xml" type="android" lang="en-XA" />
+    </if>
+  </outputs>
+  <translations>
+    <file path="strings/vivaldi_mobile_common_native_strings_af.xtb" lang="af" />
+    <file path="strings/vivaldi_mobile_common_native_strings_am.xtb" lang="am" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ar.xtb" lang="ar" />
+    <file path="strings/vivaldi_mobile_common_native_strings_as.xtb" lang="as" />
+    <file path="strings/vivaldi_mobile_common_native_strings_az.xtb" lang="az" />
+    <file path="strings/vivaldi_mobile_common_native_strings_be.xtb" lang="be" />
+    <file path="strings/vivaldi_mobile_common_native_strings_bg.xtb" lang="bg" />
+    <file path="strings/vivaldi_mobile_common_native_strings_bn.xtb" lang="bn" />
+    <file path="strings/vivaldi_mobile_common_native_strings_bs.xtb" lang="bs" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ca.xtb" lang="ca" />
+    <file path="strings/vivaldi_mobile_common_native_strings_cs.xtb" lang="cs" />
+    <file path="strings/vivaldi_mobile_common_native_strings_da.xtb" lang="da" />
+    <file path="strings/vivaldi_mobile_common_native_strings_de.xtb" lang="de" />
+    <file path="strings/vivaldi_mobile_common_native_strings_el.xtb" lang="el" />
+    <file path="strings/vivaldi_mobile_common_native_strings_en-GB.xtb" lang="en-GB" />
+    <file path="strings/vivaldi_mobile_common_native_strings_es.xtb" lang="es" />
+    <file path="strings/vivaldi_mobile_common_native_strings_es-419.xtb" lang="es-419" />
+    <file path="strings/vivaldi_mobile_common_native_strings_et.xtb" lang="et" />
+    <file path="strings/vivaldi_mobile_common_native_strings_eu.xtb" lang="eu" />
+    <file path="strings/vivaldi_mobile_common_native_strings_fa.xtb" lang="fa" />
+    <file path="strings/vivaldi_mobile_common_native_strings_fi.xtb" lang="fi" />
+    <file path="strings/vivaldi_mobile_common_native_strings_fil.xtb" lang="fil" />
+    <file path="strings/vivaldi_mobile_common_native_strings_fr.xtb" lang="fr" />
+    <file path="strings/vivaldi_mobile_common_native_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_mobile_common_native_strings_gl.xtb" lang="gl" />
+    <file path="strings/vivaldi_mobile_common_native_strings_gu.xtb" lang="gu" />
+    <file path="strings/vivaldi_mobile_common_native_strings_he.xtb" lang="he" />
+    <file path="strings/vivaldi_mobile_common_native_strings_hi.xtb" lang="hi" />
+    <file path="strings/vivaldi_mobile_common_native_strings_hr.xtb" lang="hr" />
+    <file path="strings/vivaldi_mobile_common_native_strings_hu.xtb" lang="hu" />
+    <file path="strings/vivaldi_mobile_common_native_strings_hy.xtb" lang="hy" />
+    <file path="strings/vivaldi_mobile_common_native_strings_id.xtb" lang="id" />
+    <file path="strings/vivaldi_mobile_common_native_strings_is.xtb" lang="is" />
+    <file path="strings/vivaldi_mobile_common_native_strings_it.xtb" lang="it" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ka.xtb" lang="ka" />
+    <file path="strings/vivaldi_mobile_common_native_strings_kk.xtb" lang="kk" />
+    <file path="strings/vivaldi_mobile_common_native_strings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_mobile_common_native_strings_kn.xtb" lang="kn" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ko.xtb" lang="ko" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ky.xtb" lang="ky" />
+    <file path="strings/vivaldi_mobile_common_native_strings_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_mobile_common_native_strings_lt.xtb" lang="lt" />
+    <file path="strings/vivaldi_mobile_common_native_strings_lv.xtb" lang="lv" />
+    <file path="strings/vivaldi_mobile_common_native_strings_mk.xtb" lang="mk" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ml.xtb" lang="ml" />
+    <file path="strings/vivaldi_mobile_common_native_strings_mn.xtb" lang="mn" />
+    <file path="strings/vivaldi_mobile_common_native_strings_mr.xtb" lang="mr" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ms.xtb" lang="ms" />
+    <file path="strings/vivaldi_mobile_common_native_strings_my.xtb" lang="my" />
+    <file path="strings/vivaldi_mobile_common_native_strings_nb.xtb" lang="no" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ne.xtb" lang="ne" />
+    <file path="strings/vivaldi_mobile_common_native_strings_nl.xtb" lang="nl" />
+    <file path="strings/vivaldi_mobile_common_native_strings_or.xtb" lang="or" />
+    <file path="strings/vivaldi_mobile_common_native_strings_pa.xtb" lang="pa" />
+    <file path="strings/vivaldi_mobile_common_native_strings_pl.xtb" lang="pl" />
+    <file path="strings/vivaldi_mobile_common_native_strings_pt-BR.xtb" lang="pt-BR" />
+    <file path="strings/vivaldi_mobile_common_native_strings_pt-PT.xtb" lang="pt-PT" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ro.xtb" lang="ro" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ru.xtb" lang="ru" />
+    <file path="strings/vivaldi_mobile_common_native_strings_si.xtb" lang="si" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sk.xtb" lang="sk" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sl.xtb" lang="sl" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sq.xtb" lang="sq" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sr.xtb" lang="sr" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sr-Latn.xtb" lang="sr-Latn" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sv.xtb" lang="sv" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sw.xtb" lang="sw" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ta.xtb" lang="ta" />
+    <file path="strings/vivaldi_mobile_common_native_strings_te.xtb" lang="te" />
+    <file path="strings/vivaldi_mobile_common_native_strings_th.xtb" lang="th" />
+    <file path="strings/vivaldi_mobile_common_native_strings_tr.xtb" lang="tr" />
+    <file path="strings/vivaldi_mobile_common_native_strings_uk.xtb" lang="uk" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ur.xtb" lang="ur" />
+    <file path="strings/vivaldi_mobile_common_native_strings_uz.xtb" lang="uz" />
+    <file path="strings/vivaldi_mobile_common_native_strings_vi.xtb" lang="vi" />
+    <file path="strings/vivaldi_mobile_common_native_strings_zh-CN.xtb" lang="zh-CN" />
+    <file path="strings/vivaldi_mobile_common_native_strings_zh-HK.xtb" lang="zh-HK" />
+    <file path="strings/vivaldi_mobile_common_native_strings_zh-TW.xtb" lang="zh-TW" />
+    <file path="strings/vivaldi_mobile_common_native_strings_zu.xtb" lang="zu" />
+    <file path="strings/vivaldi_mobile_common_native_strings_de-CH.xtb" lang="de-CH" />
+    <file path="strings/vivaldi_mobile_common_native_strings_eo.xtb" lang="eo" />
+    <file path="strings/vivaldi_mobile_common_native_strings_es-PE.xtb" lang="es-PE" />
+    <file path="strings/vivaldi_mobile_common_native_strings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_mobile_common_native_strings_gd.xtb" lang="gd" />
+    <file path="strings/vivaldi_mobile_common_native_strings_io.xtb" lang="io" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_mobile_common_native_strings_jbo.xtb" lang="jbo" />
+    <file path="strings/vivaldi_mobile_common_native_strings_kab.xtb" lang="kab" />
+    <file path="strings/vivaldi_mobile_common_native_strings_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_mobile_common_native_strings_sc.xtb" lang="sc" />
+    <file path="strings/vivaldi_mobile_common_native_strings_nn.xtb" lang="nn" />
+  </translations>
+  <release seq="1">
+    <messages fallback_to_english="true">
+        <message name="IDS_VIVALDI_TOOLS_MENU_ADD_TO_NOTES" desc="The iOS menu item for adding the current page to the notes. This is a verb  [iOS only]" meaning="Add current page to notes. [Verb]">
+          Create note
+        </message>
+        <message name="IDS_VIVALDI_TOOLS_MENU_NOTES" desc="The iOS menu item for opening the notes manager [Length: 15em] [iOS only]">
+          Notes
+        </message>
+        <message name="IDS_VIVALDI_COPY_TO_NOTE" desc="Menu item for copy to note functionality. [Length: 35em]" meaning="Menu item text for copy to note functionality. [Length: 35em]">
+          Copy to note
+        </message>
+        <message name="IDS_VIVALDI_NOTE_SNACKBAR_MESSAGE" desc="Message briefly displayed at the bottom of the screen to the user to inform that text has been copied to a note. [Length: 35em]" meaning="The selected text has been added to a note. [Length: 35em]">
+          Copied to note
+        </message>
+        <message name="IDS_VIVALDI_SYNC_DATATYPE_NOTES" desc="Notes">
+          Notes
+        </message>
+        <message name="IDS_VIVALDI_NOTE_PAGE_SAVED" desc="Presented in an infobar when a note is created. [Length: 30em.]">
+          Note saved
+        </message>
+        <message name="IDS_VIVALDI_NOTE_PAGE_SAVED_FOLDER" desc="Presented in an infobar when a note is created. Specifies in which folder the note was added. [Length: 30em.]">
+          Note saved to <ph name="FOLDER_TITLE">$1<ex>My Folder</ex></ph>
+        </message>
+        <message name="IDS_VIVALDI_NOTE_FOLDERS_LABEL" desc="Title on top of the note folder list [Length: 30em] [iOS only]">
+          Folders
+        </message>
+        <message name="IDS_VIVALDI_NOTE_GROUP_BUTTON" desc="Button to change the folder of a note. [iOS only]">
+          Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_GROUP_DELETE" desc="Button to delete a folder. [Length: 30em.] [iOS only]">
+          Delete Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_ITEM_COUNT" desc="Displayed when there are more than one item in a note folder [Length: 30em.]">
+          <ph name="COUNT">$1<ex>42</ex></ph> items
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NAME_FIELD_HEADER" desc="Title shown above note name field on Edit Note screen. [Length: 20em]" meaning="Name of an inanimate object">
+          Name
+        </message>
+
+        <message name="IDS_VIVALDI_NOTE_NEW_NOTES_BAR_TITLE" desc="Text that describes the notes present in the notes bar for chrome on desktop. [Length: 30em.] [iOS only]">
+          Notes Bar
+        </message>
+
+        <message name="IDS_VIVALDI_NOTE_NEW_NOTE_CREATED" desc="A description presented to the user that they just created a note. [Length: 30em.] [iOS only]">
+          Item created
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_NOTE_UPDATED" desc="A description presented to the user that they just updated a note. [Length: 30em.] [iOS only]">
+          Item updated
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_CANCEL_BUTTON_LABEL" desc="Accessibility label for a button that cancels the current action. [Length: 30em.]">
+          Cancel
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_DELETE_BUTTON_LABEL" desc="Accessibility label for a button that allows the user to delete one or many notes. [Length: 30em.]">
+          Delete
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_EDITOR_NAME_LABEL" desc="Label shown before the title/name of the URL [Length: 30em.]">
+          Title
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_EDIT_BUTTON_LABEL" desc="Accessibility label for a button that allows the user to edit a note. [Length: 30em.]">
+          Edit
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_GROUP_DEFAULT_NAME" desc="Default name for new folders. [iOS only]">
+          New Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_GROUP_EDITOR_CREATE_TITLE" desc="Title of the view controller to create a new folder. [Length: 30em.] [iOS only]">
+          New Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_GROUP_EDITOR_EDIT_TITLE" desc="Title of the view controller to edit an existing folder. [Length: 30em.] [iOS only]">
+          Edit Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_MANY_ITEM_LABEL" desc="Text that indicates that a user has selected many notes for editing. It will be prefaced with a single number greater than 1. e.g. '5 selected' [Length: 30em.]">
+          <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> selected
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_MENU_LABEL" desc="Accessibility label for a button that shows the user a menu of possible options. [Length: 30em.]">
+          Menu
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_MORE_BUTTON_ACCESSIBILITY_LABEL" desc="The accessibility label of the button that shows the options menu on a given note, ie the menu for 'More' options. [iOS only]">
+          More menu
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_MOVE_BUTTON_LABEL" desc="Accessibility label for a button that allows the user to move the position of one or many notes. [Length: 30em.]">
+          Move
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_MULTIPLE_NOTE_DELETE" desc="A description presented to the user that they just deleted multiple notes. [Length: 30em.] [iOS only]">
+          <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> items deleted
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_MULTIPLE_NOTE_MOVE" desc="A description presented to the user that they just moved multiple notes. [Length: 30em.] [iOS only]">
+          <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> items moved
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_ONE_ITEM_LABEL" desc="Text that indicates that a user has selected one note for editing. [Length: 30em.]">
+          1 selected
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_SINGLE_NOTE_DELETE" desc="A description presented to the user that they just deleted 1 note. [Length: 30em.] [iOS only]">
+          1 item deleted
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_SINGLE_NOTE_MOVE" desc="A description presented to the user that they just moved 1 note. [Length: 30em.] [iOS only]">
+          1 item moved
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_UNDO_BUTTON_TITLE" desc="Text shown for the undo button. [Length: 30em.] [iOS only]">
+          Undo
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NEW_ZERO_ITEM_LABEL" desc="Text that indicates that a user has selected zero notes for editing. [Length: 30em.]">
+          0 selected
+        </message>
+        <message name="IDS_VIVALDI_NOTE_NO_ITEM_COUNT" desc="Displayed when there are no items in a note folder [Length: 30em.]">
+          No items
+        </message>
+        <message name="IDS_VIVALDI_NOTE_ONE_ITEM_COUNT" desc="Displayed when there is only one item in a note folder [Length: 30em.]">
+          1 item
+        </message>
+        <message name="IDS_VIVALDI_NOTE_FOLDER_TRASH" desc="Trash [Length: 30em.] [iOS only]">
+          Trash folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_BAR_OTHER_FOLDER_NAME" desc="Trash [Length: 30em.] [iOS only]">
+          Other folder
+        </message>
+        <message name="IDS_VIVALDI_CONTENT_CONTEXT_ADDNOTE" desc="The iOS context menu item for adding the url of a tab to the notes. [iOS only]">
+          Add note
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="Text on the notes context bar to create new folder">
+          New Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE" desc="Text on the notes context bar to create new note">
+          New Note
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_DELETE" desc="Text on the notes context bar for delete action">
+         Delete
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_SELECT" desc="Text on the notes context bar for select action">
+          Select
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_EDIT" desc="Text on the notes context bar for edit action">
+          Edit
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_MORE" desc="Text on the notes context bar to show more context menu">
+          More...
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN" desc="Text on the notes context menu to open all selected notes">
+          Open All Note Addresses
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN_INCOGNITO" desc="Text on the notes context menu to open selected note in Incognito">
+          Open Note Addresses in Incognito
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE" desc="Text on the notes context menu to move selected note">
+          Move
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT" desc="Text on the notes context menu to edit selected note">
+          Edit Note
+        </message>
+         <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT_FOLDER" desc="Text on the notes context menu to edit selected note folder">
+          Edit Folder
+        </message>
+         <message name="IDS_VIVALDI_NOTE_NEW_NOTE" desc="Text on the new note action">
+           New note
+        </message>
+        <message name="IDS_VIVALDI_NOTE_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
+           You can remember text notes you need for later use by adding a note
+        </message>
+        <message name="IDS_VIVALDI_NOTE_EMPTY_TITLE" desc="Title shown on the Note screen when there are no Notes.">
+           You'll find your notes here
+        </message>
+        <message name="IDS_VIVALDI_NOTE_EDIT_SCREEN_TITLE" desc="Title of Edit Note screen [Length: 13em]">
+          Edit Note
+        </message>
+        <message name="IDS_VIVALDI_NOTE_DELETE" desc="Title of button that deletes currently edited note. [Length: 20em.]">
+          Delete
+        </message>
+        <message name="IDS_VIVALDI_NOTE_EDIT_PARENT_FOLDER_BUTTON_HINT" desc="The accessibility hint spoken when hovering over the parent folder of a note in the editor. [iOS only]">
+          Double tap to change the parent folder.
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CHOOSE_GROUP_BUTTON" desc="Button to assign a folder to an uncategorized note. [iOS only]">
+          Choose Folder
+        </message>
+        <message name="IDS_VIVALDI_NOTE_CREATE_GROUP" desc="Button to create a new note folder [Length: 30em.]">
+          New Folder…
+        </message>
+        <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_MESSAGE" desc="Message shown in the Incognito Tabs page when the grid is empty, explaining that the user can open a new tab.">
+          Tap the plus icon below to create a new private tab.
+        </message>
+        <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE" desc="Title shown above a message on the Incognito tab switcher when there are no Incognito tabs. [iOS only]">
+          Private Tabs
+        </message>
+        <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_TITLE" desc="Title shown above a message on the synced tab switcher when there are no items. [iOS only]">
+          Synced Tabs
+        </message>
+        <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_MESSAGE" desc="Message shown underneath a title on the synced tab switcher when there are no item.">
+          Synchronized tabs from other devices will appear here. Sign in to Sync to use this service.
+        </message>
+        <message name="IDS_VIVALDI_TAB_GRID_REGULAR_TABS_TITLE" desc="The accessibility label of the Regular Tabs page (as opposed to the Private Tabs page) in the tab grid UI">
+          Tabs
+        </message>
+        <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_TITLE" desc="The accessibility label of the Incognito Tabs page in the tab grid UI.">
+          Private Tabs
+        </message>
+        <message name="IDS_VIVALDI_TAB_GRID_REMOTE_TABS_TITLE" desc="The accessibility label of the Remote Tabs page in the tab grid UI">
+          Tabs from other devices
+        </message>
+        <message name="IDS_VIVALDI_TAB_GRID_RECENTLY_CLOSED_TABS_TITLE" desc="The accessibility label of the Recently Closed Tabs page in the tab grid UI.">
+          Recently Closed Tabs
+        </message>
+        <message name="IDS_VIVALDI_CONTENT_CONTEXT_NEWNOTE" desc="The iOS context menu item for adding a new note. ">
+          New Note
+        </message>
+        <message name="IDS_VIVALDI_CONTENT_CONTEXT_NEWFOLDER" desc="The iOS context menu item for adding a new folder. ">
+          New Folder
+        </message>
+        <message name="IDS_VIVALDI_HISTORY_OPEN_CLEAR_BROWSING_DATA_DIALOG" desc="The iOS context menu item for adding a new folder. ">
+          Clear Browsing Data ...
+        </message>
+    </messages>
+  </release>
+</grit>

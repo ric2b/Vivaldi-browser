@@ -442,6 +442,12 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         case IDC_VIV_MAC_ALL_WINDOWS_TO_FRONT:
           // Do nothing (which basically means std. behavior).
           break;
+        case IDC_VIV_SHARE_MENU_MAC:
+          [menuItem setTag:0];
+          [menuItem setSubmenu:[[[NSMenu alloc] initWithTitle:
+              base::SysUTF8ToNSString(item.name)] autorelease]];
+          [appController vivInitShareMenu:menuItem];
+          break;
         case IDC_VIV_MAC_SERVICES:
           [menuItem setTag:0];
           [menuItem setSubmenu:[[[NSMenu alloc] initWithTitle:
@@ -537,7 +543,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
             NSMenuItem* item = [subMenu numberOfItems] > 0
               ? [subMenu itemAtIndex:0] : nullptr;
             if (!item || item.tag != IDC_VIV_MAC_MINIMIZE) {
-              std::string shortcut = "meta+m";
+              std::string shortcut = "Meta+M";
               item = MakeMenuItem(
                 l10n_util::GetNSStringWithFixup(IDS_MINIMIZE_WINDOW_MAC),
                 &shortcut,

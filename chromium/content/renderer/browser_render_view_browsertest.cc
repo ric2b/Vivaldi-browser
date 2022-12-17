@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Browser tests targeted at the RenderView that run in browser context.
+// Browser tests targeted at the `blink::WebView` that run in browser context.
 // Note that these tests rely on single-process mode, and hence may be
 // disabled in some configurations (check gyp files).
 
@@ -21,7 +21,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/renderer/render_view.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -174,7 +173,7 @@ IN_PROC_BROWSER_TEST_F(RenderViewBrowserTest,
     base::RunLoop run_loop;
     content::StoragePartition* partition = shell()
                                                ->web_contents()
-                                               ->GetMainFrame()
+                                               ->GetPrimaryMainFrame()
                                                ->GetProcess()
                                                ->GetStoragePartition();
     partition->GetNetworkContext()->ClearHttpCache(

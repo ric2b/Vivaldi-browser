@@ -14,9 +14,9 @@
 #include "base/rand_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/version_info/channel.h"
 #include "google_apis/google_api_keys.h"
@@ -194,11 +194,10 @@ void DeviceActivityController::Start(
 
   // Wrap with callback from |psm_device_active_secret_| retrieval using
   // |SessionManagerClient| DBus.
-  chromeos::SessionManagerClient::Get()->GetPsmDeviceActiveSecret(
-      base::BindOnce(&device_activity::DeviceActivityController::
-                         OnPsmDeviceActiveSecretFetched,
-                     weak_factory_.GetWeakPtr(), local_state,
-                     url_loader_factory));
+  SessionManagerClient::Get()->GetPsmDeviceActiveSecret(base::BindOnce(
+      &device_activity::DeviceActivityController::
+          OnPsmDeviceActiveSecretFetched,
+      weak_factory_.GetWeakPtr(), local_state, url_loader_factory));
 }
 
 void DeviceActivityController::OnPsmDeviceActiveSecretFetched(
@@ -244,8 +243,8 @@ void DeviceActivityController::OnMachineStatisticsLoaded(
       psm_device_active_secret, chrome_passed_device_params_, local_state));
 
   da_client_network_ = std::make_unique<DeviceActivityClient>(
-      chromeos::NetworkHandler::Get()->network_state_handler(),
-      url_loader_factory, std::make_unique<PsmDelegateImpl>(),
+      NetworkHandler::Get()->network_state_handler(), url_loader_factory,
+      std::make_unique<PsmDelegateImpl>(),
       std::make_unique<base::RepeatingTimer>(), kFresnelBaseUrl,
       google_apis::GetFresnelAPIKey(), std::move(use_cases));
 }

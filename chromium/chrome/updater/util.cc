@@ -24,6 +24,8 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/updater/constants.h"
@@ -101,7 +103,7 @@ std::string EscapeQueryParamValue(base::StringPiece text, bool use_plus) {
 
 }  // namespace
 
-absl::optional<base::FilePath> GetBaseDirectory(UpdaterScope scope) {
+absl::optional<base::FilePath> GetBaseDataDirectory(UpdaterScope scope) {
   absl::optional<base::FilePath> app_data_dir;
 #if BUILDFLAG(IS_WIN)
   base::FilePath path;
@@ -130,8 +132,9 @@ absl::optional<base::FilePath> GetBaseDirectory(UpdaterScope scope) {
   return product_data_dir;
 }
 
-absl::optional<base::FilePath> GetVersionedDirectory(UpdaterScope scope) {
-  const absl::optional<base::FilePath> product_dir = GetBaseDirectory(scope);
+absl::optional<base::FilePath> GetVersionedDataDirectory(UpdaterScope scope) {
+  const absl::optional<base::FilePath> product_dir =
+      GetBaseDataDirectory(scope);
   if (!product_dir) {
     LOG(ERROR) << "Failed to get the base directory.";
     return absl::nullopt;
@@ -146,19 +149,18 @@ absl::optional<base::FilePath> GetVersionedDirectory(UpdaterScope scope) {
   return versioned_dir;
 }
 
-absl::optional<base::FilePath> GetVersionedUpdaterFolderPathForVersion(
+absl::optional<base::FilePath> GetVersionedInstallDirectory(
     UpdaterScope scope,
     const base::Version& version) {
-  const absl::optional<base::FilePath> path = GetUpdaterFolderPath(scope);
+  const absl::optional<base::FilePath> path = GetBaseInstallDirectory(scope);
   if (!path)
     return absl::nullopt;
   return path->AppendASCII(version.GetString());
 }
 
-absl::optional<base::FilePath> GetVersionedUpdaterFolderPath(
+absl::optional<base::FilePath> GetVersionedInstallDirectory(
     UpdaterScope scope) {
-  return GetVersionedUpdaterFolderPathForVersion(
-      scope, base::Version(kUpdaterVersion));
+  return GetVersionedInstallDirectory(scope, base::Version(kUpdaterVersion));
 }
 
 TagParsingResult::TagParsingResult() = default;
@@ -225,7 +227,7 @@ base::CommandLine MakeElevated(base::CommandLine command_line) {
 void InitLogging(UpdaterScope updater_scope) {
   logging::LoggingSettings settings;
   const absl::optional<base::FilePath> log_dir =
-      GetBaseDirectory(updater_scope);
+      GetBaseDataDirectory(updater_scope);
   if (!log_dir) {
     LOG(ERROR) << "Error getting base dir.";
     return;
@@ -264,7 +266,7 @@ GURL AppendQueryParameter(const GURL& url,
 #if BUILDFLAG(IS_LINUX)
 
 // TODO(crbug.com/1276188) - implement the functions below.
-absl::optional<base::FilePath> GetUpdaterFolderPath(UpdaterScope scope) {
+absl::optional<base::FilePath> GetBaseInstallDirectory(UpdaterScope scope) {
   NOTIMPLEMENTED();
   return absl::nullopt;
 }
@@ -323,6 +325,20 @@ absl::optional<base::FilePath> WriteInstallerDataToTempFile(
   }
 
   return path;
+}
+
+void InitializeThreadPool(const char* name) {
+  base::ThreadPoolInstance::Create(name);
+
+  // Reuses the logic in base::ThreadPoolInstance::StartWithDefaultParams.
+  const size_t max_num_foreground_threads =
+      static_cast<size_t>(std::max(3, base::SysInfo::NumberOfProcessors() - 1));
+  base::ThreadPoolInstance::InitParams init_params(max_num_foreground_threads);
+#if BUILDFLAG(IS_WIN)
+  init_params.common_thread_pool_environment = base::ThreadPoolInstance::
+      InitParams::CommonThreadPoolEnvironment::COM_MTA;
+#endif
+  base::ThreadPoolInstance::Get()->Start(init_params);
 }
 
 }  // namespace updater

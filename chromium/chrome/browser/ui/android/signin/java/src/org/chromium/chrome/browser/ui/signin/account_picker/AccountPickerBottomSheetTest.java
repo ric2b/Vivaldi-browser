@@ -20,17 +20,13 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.core.AllOf.allOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.accounts.AccountManager;
 import android.app.Activity;
-import android.content.Intent;
-import android.os.Bundle;
 import android.view.View;
 
 import androidx.test.espresso.ViewInteraction;
@@ -83,21 +79,6 @@ import org.chromium.ui.test.util.ViewUtils;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Batch(Batch.PER_CLASS)
 public class AccountPickerBottomSheetTest {
-    /** Fakes the user successfully adding an account with email ACCOUNT_EMAIL to the device. */
-    // TODO(crbug.com/1261387): Consider exposing this class to other tests.
-    public static class DummyAddAccountActivity extends Activity {
-        private static final String ACCOUNT_EMAIL = "test.account3@gmail.com";
-
-        @Override
-        public void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            Intent data = new Intent();
-            data.putExtra(AccountManager.KEY_ACCOUNT_NAME, ACCOUNT_EMAIL);
-            setResult(RESULT_OK, data);
-            finish();
-        }
-    }
-
     private static class CustomFakeAccountInfoService extends FakeAccountInfoService {
         int getNumberOfObservers() {
             return TestThreadUtils.runOnUiThreadBlockingNoException(mObservers::size);
@@ -108,6 +89,7 @@ public class AccountPickerBottomSheetTest {
     private static final String FULL_NAME1 = "Test Account1";
     private static final String GIVEN_NAME1 = "Account1";
     private static final String TEST_EMAIL2 = "test.account2@gmail.com";
+    private static final String NEW_ACCOUNT_EMAIL = "new.account@gmail.com";
 
     @ClassRule
     public static final ChromeTabbedActivityTestRule sActivityTestRule =
@@ -134,9 +116,6 @@ public class AccountPickerBottomSheetTest {
 
     @Mock
     private AccountPickerDelegate mAccountPickerDelegateMock;
-
-    @Captor
-    private ArgumentCaptor<Callback<Intent>> mAddAccountIntentCreationCallbackCaptor;
 
     @Captor
     private ArgumentCaptor<Callback<Boolean>> mUpdateCredentialsSuccessCallbackCaptor;
@@ -539,17 +518,13 @@ public class AccountPickerBottomSheetTest {
         HistogramDelta signedInWithNonDefaultAccountHistogram =
                 new HistogramDelta("Signin.AccountConsistencyPromoAction",
                         AccountConsistencyPromoAction.SIGNED_IN_WITH_NON_DEFAULT_ACCOUNT);
+        mAccountManagerTestRule.setResultForNextAddAccountFlow(
+                Activity.RESULT_OK, NEW_ACCOUNT_EMAIL);
         buildAndShowExpandedBottomSheet();
 
         onVisibleView(withText(R.string.signin_add_account_to_device)).perform(click());
-        verify(mFakeAccountManagerFacade)
-                .createAddAccountIntent(mAddAccountIntentCreationCallbackCaptor.capture());
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mAddAccountIntentCreationCallbackCaptor.getValue().onResult(
-                    new Intent(sActivityTestRule.getActivity(), DummyAddAccountActivity.class));
-        });
 
-        ViewUtils.onViewWaiting(withText(DummyAddAccountActivity.ACCOUNT_EMAIL));
+        ViewUtils.waitForView(withText(NEW_ACCOUNT_EMAIL));
         clickContinueButtonAndCheckSignInInProgressSheet();
         Assert.assertEquals(1, addAccountHistogram.getDelta());
         Assert.assertEquals(1, signedInWithAddedAccountHistogram.getDelta());
@@ -670,18 +645,14 @@ public class AccountPickerBottomSheetTest {
         HistogramDelta addAccountCompletedHistogram =
                 new HistogramDelta("Signin.AccountConsistencyPromoAction",
                         AccountConsistencyPromoAction.ADD_ACCOUNT_COMPLETED);
+        mAccountManagerTestRule.setResultForNextAddAccountFlow(
+                Activity.RESULT_OK, NEW_ACCOUNT_EMAIL);
         buildAndShowExpandedBottomSheet();
 
         onVisibleView(withText(R.string.signin_add_account_to_device)).perform(click());
 
-        verify(mFakeAccountManagerFacade)
-                .createAddAccountIntent(mAddAccountIntentCreationCallbackCaptor.capture());
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mAddAccountIntentCreationCallbackCaptor.getValue().onResult(
-                    new Intent(sActivityTestRule.getActivity(), DummyAddAccountActivity.class));
-        });
-        ViewUtils.onViewWaiting(withText(DummyAddAccountActivity.ACCOUNT_EMAIL));
-        checkCollapsedAccountListForWebSignin(DummyAddAccountActivity.ACCOUNT_EMAIL, null, null);
+        ViewUtils.waitForView(withText(NEW_ACCOUNT_EMAIL));
+        checkCollapsedAccountListForWebSignin(NEW_ACCOUNT_EMAIL, null, null);
         Assert.assertEquals(1, addAccountStartedHistogram.getDelta());
         Assert.assertEquals(1, addAccountCompletedHistogram.getDelta());
     }
@@ -747,8 +718,8 @@ public class AccountPickerBottomSheetTest {
         onVisibleView(withText(TEST_EMAIL2)).check(doesNotExist());
         onView(withId(R.id.account_picker_account_list)).check(matches(not(isDisplayed())));
         onView(withId(R.id.account_picker_selected_account)).check(matches(not(isDisplayed())));
-        onVisibleView(withText(R.string.signin_add_account_to_device)).perform(click());
-        verify(AccountManagerFacadeProvider.getInstance()).createAddAccountIntent(notNull());
+        onVisibleView(withText(R.string.signin_add_account_to_device))
+                .check(matches(isDisplayed()));
     }
 
     private void checkCollapsedAccountListForWebSignin(

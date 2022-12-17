@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -24,9 +23,10 @@
 #include "chrome/browser/chromeos/extensions/login_screen/login_screen_apitest_base.h"
 #include "chrome/browser/policy/extension_force_install_mixin.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/dbus/cryptohome/rpc.pb.h"
-#include "chromeos/dbus/session_manager/fake_session_manager_client.h"
-#include "chromeos/dbus/userdataauth/fake_userdataauth_client.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
+#include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/test/policy_builder.h"
 #include "components/policy/core/common/policy_service.h"
@@ -277,7 +277,8 @@ IN_PROC_BROWSER_TEST_F(LoginApitest, LockManagedGuestSessionNotActive) {
   RunTest(kLockManagedGuestSessionNotActive);
 }
 
-IN_PROC_BROWSER_TEST_F(LoginApitest, UnlockManagedGuestSession) {
+// Flaky. https://crbug.com/1351338
+IN_PROC_BROWSER_TEST_F(LoginApitest, DISABLED_UnlockManagedGuestSession) {
   SetUpDeviceLocalAccountPolicy();
   LogInWithPassword();
 

@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -82,7 +83,6 @@ class FakeTopSites : public history::TopSites {
 };
 
 constexpr const auto* WEB_URL = u"https://example.com/";
-constexpr const auto* NTP_URL = u"chrome://newtab";
 constexpr const auto* SRP_URL = u"https://www.google.com/?q=flowers";
 constexpr const auto* FTP_URL = u"ftp://just.for.filtering.com";
 }  // namespace
@@ -131,8 +131,10 @@ class MostVisitedSitesProviderTest : public testing::Test,
                                     size_t index);
 
   // AutocompleteProviderListener:
-  void OnProviderUpdate(bool updated_matches) override;
+  void OnProviderUpdate(bool updated_matches,
+                        const AutocompleteProvider* provider) override;
 
+  base::HistogramTester histogram_;
   std::unique_ptr<base::test::SingleThreadTaskEnvironment> task_environment_;
   scoped_refptr<FakeTopSites> top_sites_;
   scoped_refptr<MostVisitedSitesProvider> provider_;
@@ -141,6 +143,7 @@ class MostVisitedSitesProviderTest : public testing::Test,
 };
 
 size_t MostVisitedSitesProviderTest::NumMostVisitedMatches() {
+  // TODO(khalidpeer): Update to make direct use of the provider's matches.
   const auto& result = controller_->result();
   size_t count = 0;
   for (const auto& match : result) {
@@ -155,6 +158,7 @@ size_t MostVisitedSitesProviderTest::NumMostVisitedMatches() {
 const AutocompleteMatch* MostVisitedSitesProviderTest::GetMatch(
     AutocompleteMatchType::Type type,
     size_t index) {
+  // TODO(khalidpeer): Update to make direct use of the provider's matches.
   const auto& result = controller_->result();
   for (const auto& match : result) {
     if (match.type == type) {
@@ -173,6 +177,7 @@ void MostVisitedSitesProviderTest::CheckMatchesEquivalentTo(
   // Note that additional matches may be offered if other providers are also
   // registered in the same category as MostVisitedSitesProvider.
   // We ignore all matches that are not ours.
+  // TODO(khalidpeer): Update to make direct use of the provider's matches.
   const auto& result = controller_->result();
 
   size_t match_index = 0;
@@ -224,7 +229,7 @@ void MostVisitedSitesProviderTest::SetUp() {
   controller_ = std::make_unique<AutocompleteController>(
       std::move(client), AutocompleteProvider::TYPE_MOST_VISITED_SITES);
 
-  // Inject a few URLs to
+  // Inject a few URLs to test MostVisitedSitesProvider behavior.
   std::array<history::MostVisitedURL, 5> test_data{{
       {GURL("http://www.a.art/"), u"A art"},
       {GURL("http://www.b.biz/"), u"B biz"},
@@ -236,7 +241,9 @@ void MostVisitedSitesProviderTest::SetUp() {
   top_sites_->urls().assign(test_data.begin(), test_data.end());
 }
 
-void MostVisitedSitesProviderTest::OnProviderUpdate(bool updated_matches) {}
+void MostVisitedSitesProviderTest::OnProviderUpdate(
+    bool updated_matches,
+    const AutocompleteProvider* provider) {}
 
 class MostVisitedSitesProviderWithMatchesTest
     : public MostVisitedSitesProviderTest {
@@ -257,12 +264,23 @@ TEST_F(MostVisitedSitesProviderWithMatchesTest, TestMostVisitedCallback) {
 
   controller_->Start(input);
   controller_->Stop(false);
-  EXPECT_EQ(0u, NumMostVisitedMatches());
+  // Since this provider's async logic is still in-flight (`EmitURLs()` has not
+  // been called yet), the AutocompleteController will transfer old matches from
+  // the previous provider run.
+  CheckMatchesEquivalentTo(top_sites_->urls(), /* expect_tiles=*/false);
+
+  history::MostVisitedURLList old_urls = top_sites_->urls();
+  // Update the list of top sites so that we can clearly identify when
+  // matches have been transferred from the previous provider run.
+  std::array<history::MostVisitedURL, 1> new_urls{{
+      {GURL("http://www.g.gov/"), u"G gov"},
+  }};
+  top_sites_->urls().assign(new_urls.begin(), new_urls.end());
 
   // Most visited results arriving after Stop() has been called, ensure they
   // are not displayed.
   EXPECT_TRUE(top_sites_->EmitURLs());
-  EXPECT_EQ(0u, NumMostVisitedMatches());
+  CheckMatchesEquivalentTo(old_urls, /* expect_tiles=*/false);
 
   controller_->Start(input);
   controller_->Stop(false);
@@ -270,11 +288,11 @@ TEST_F(MostVisitedSitesProviderWithMatchesTest, TestMostVisitedCallback) {
 
   // Stale results should get rejected.
   EXPECT_TRUE(top_sites_->EmitURLs());
-  EXPECT_EQ(0u, NumMostVisitedMatches());
+  CheckMatchesEquivalentTo(old_urls, /* expect_tiles=*/false);
 
   // Results for the second Start() action should be recorded.
   EXPECT_TRUE(top_sites_->EmitURLs());
-  EXPECT_EQ(top_sites_->urls().size(), NumMostVisitedMatches());
+  CheckMatchesEquivalentTo(top_sites_->urls(), /* expect_tiles=*/false);
   controller_->Stop(false);
 }
 
@@ -301,7 +319,19 @@ class ParameterizedMostVisitedSitesProviderTest
     : public MostVisitedSitesProviderTest,
       public ::testing::WithParamInterface<bool> {
   void SetUp() override {
-    features_.InitWithFeatureState(omnibox::kMostVisitedTiles, GetParam());
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features;
+
+    bool isEnabled = GetParam();
+    if (isEnabled) {
+      enabled_features.push_back(omnibox::kMostVisitedTiles);
+      enabled_features.push_back(omnibox::kOmniboxMostVisitedTilesOnSrp);
+    } else {
+      disabled_features.push_back(omnibox::kMostVisitedTiles);
+      disabled_features.push_back(omnibox::kOmniboxMostVisitedTilesOnSrp);
+    }
+
+    features_.InitWithFeatures(enabled_features, disabled_features);
     MostVisitedSitesProviderTest::SetUp();
   }
 };
@@ -336,17 +366,12 @@ TEST_P(ParameterizedMostVisitedSitesProviderTest,
       provider_->AllowMostVisitedSitesSuggestions(BuildAutocompleteInput(
           WEB_URL, WEB_URL, OEP::OTHER, OFT::DELETED_PERMANENT_TEXT)));
 
-  // Verifies that metrics::OmniboxEventProto::START_SURFACE_HOMEPAGE is allowed
-  // for MostVisited.
-  EXPECT_TRUE(
+  // Offer MV sites when the User searched for a query and focus on omnibox.
+  EXPECT_EQ(
+      GetParam(),
       provider_->AllowMostVisitedSitesSuggestions(BuildAutocompleteInput(
-          {}, NTP_URL, OEP::START_SURFACE_HOMEPAGE, OFT::ON_FOCUS)));
-
-  // Verifies that metrics::OmniboxEventProto::START_SURFACE_NEW_TAB is allowed
-  // for MostVisited.
-  EXPECT_TRUE(
-      provider_->AllowMostVisitedSitesSuggestions(BuildAutocompleteInput(
-          {}, NTP_URL, OEP::START_SURFACE_NEW_TAB, OFT::ON_FOCUS)));
+          WEB_URL, WEB_URL, OEP::SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT,
+          OFT::ON_FOCUS)));
 }
 
 TEST_P(ParameterizedMostVisitedSitesProviderTest, TestCreateMostVisitedMatch) {
@@ -369,6 +394,21 @@ TEST_P(ParameterizedMostVisitedSitesProviderTest,
 }
 
 TEST_P(ParameterizedMostVisitedSitesProviderTest,
+       NoMatchesWhenTopSitesNotLoadedAndWantAsyncMatchesFalse) {
+  // Assume that top sites list has not been loaded yet from the DB.
+  ASSERT_FALSE(top_sites_->loaded());
+  auto input = BuildAutocompleteInputForWebOnFocus();
+  input.set_focus_type(OmniboxFocusType::DEFAULT);
+  input.set_omit_asynchronous_matches(true);
+  controller_->Start(input);
+  EXPECT_TRUE(provider_->done());
+  EXPECT_EQ(0u, NumMostVisitedMatches());
+  // No callbacks should have been added due to early return.
+  EXPECT_FALSE(top_sites_->EmitURLs());
+  EXPECT_EQ(0u, NumMostVisitedMatches());
+}
+
+TEST_P(ParameterizedMostVisitedSitesProviderTest,
        TestDeleteMostVisitedElement) {
   // Make a copy (intentional - we'll modify this later)
   auto urls = top_sites_->urls();
@@ -379,9 +419,19 @@ TEST_P(ParameterizedMostVisitedSitesProviderTest,
 
   // Commence delete.
   if (GetParam()) {
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.TileTypeCount.Search", 1);
+    histogram_.ExpectBucketCount("Omnibox.SuggestTiles.TileTypeCount.Search", 0,
+                                 1);
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.TileTypeCount.URL", 1);
+    histogram_.ExpectBucketCount("Omnibox.SuggestTiles.TileTypeCount.URL", 5,
+                                 1);
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.DeletedTileIndex", 0);
     auto* match = GetMatch(AutocompleteMatchType::TILE_NAVSUGGEST, 0);
     ASSERT_NE(nullptr, match) << "No TILE_NAVSUGGEST Match found";
     controller_->DeleteMatchElement(*match, 1);
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.DeletedTileIndex", 1);
+    histogram_.ExpectBucketCount("Omnibox.SuggestTiles.DeletedTileIndex", 1, 1);
+    // Note: TileTypeCounts are not emitted after deletion.
   } else {
     auto* match = GetMatch(AutocompleteMatchType::NAVSUGGEST, 1);
     ASSERT_NE(nullptr, match) << "No NAVSUGGEST Match found";
@@ -408,9 +458,19 @@ TEST_P(ParameterizedMostVisitedSitesProviderTest,
 
   // Commence delete of the only item that we have.
   if (GetParam()) {
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.TileTypeCount.Search", 1);
+    histogram_.ExpectBucketCount("Omnibox.SuggestTiles.TileTypeCount.Search", 0,
+                                 1);
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.TileTypeCount.URL", 1);
+    histogram_.ExpectBucketCount("Omnibox.SuggestTiles.TileTypeCount.URL", 1,
+                                 1);
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.DeletedTileIndex", 0);
     auto* match = GetMatch(AutocompleteMatchType::TILE_NAVSUGGEST, 0);
     ASSERT_NE(nullptr, match) << "No TILE_NAVSUGGEST Match found";
     controller_->DeleteMatchElement(*match, 0);
+    histogram_.ExpectTotalCount("Omnibox.SuggestTiles.DeletedTileIndex", 1);
+    histogram_.ExpectBucketCount("Omnibox.SuggestTiles.DeletedTileIndex", 0, 1);
+    // Note: TileTypeCounts are not emitted after deletion.
   } else {
     auto* match = GetMatch(AutocompleteMatchType::NAVSUGGEST, 0);
     ASSERT_NE(nullptr, match) << "No NAVSUGGEST Match found";

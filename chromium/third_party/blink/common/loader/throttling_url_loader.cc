@@ -45,6 +45,16 @@ void CheckThrottleWillNotCauseCorsPreflight(
     const net::HttpRequestHeaders& headers,
     const net::HttpRequestHeaders& cors_exempt_headers,
     const std::vector<std::string> cors_exempt_header_list) {
+  // There are many ways for the renderer to cache the list, e.g. for workers,
+  // and it might have been cached before the renderer receives a message with
+  // the list. This isn't guaranteed because the caching paths aren't triggered
+  // by mojo calls that are associated with the method that receives the list.
+  // Since the renderer just checks to help catch develper bugs, if the list
+  // isn't received don't DCHECK. Most of the time it will which is all we need
+  // on bots.
+  if (cors_exempt_header_list.empty())
+    return;
+
   base::flat_set<std::string> cors_exempt_header_flat_set(
       cors_exempt_header_list);
   for (auto& header : headers.GetHeaderVector()) {
@@ -1080,17 +1090,20 @@ const char* ThrottlingURLLoader::GetStageNameForHistogram(DeferredStage stage) {
 ThrottlingURLLoader::ThrottleEntry::ThrottleEntry(
     ThrottlingURLLoader* loader,
     std::unique_ptr<URLLoaderThrottle> the_throttle)
-    : delegate(
-          std::make_unique<ForwardingThrottleDelegate>(loader,
-                                                       the_throttle.get())),
-      throttle(std::move(the_throttle)) {
+    : throttle(std::move(the_throttle)),
+      delegate(std::make_unique<ForwardingThrottleDelegate>(loader,
+                                                            throttle.get())) {
   throttle->set_delegate(delegate.get());
 }
 
 ThrottlingURLLoader::ThrottleEntry::ThrottleEntry(ThrottleEntry&& other) =
     default;
 
-ThrottlingURLLoader::ThrottleEntry::~ThrottleEntry() = default;
+ThrottlingURLLoader::ThrottleEntry::~ThrottleEntry() {
+  // `delegate` is destroyed before `throttle`; clear the pointer so the
+  // throttle cannot inadvertently use-after-free the delegate.
+  throttle->set_delegate(nullptr);
+}
 
 ThrottlingURLLoader::ThrottleEntry& ThrottlingURLLoader::ThrottleEntry::
 operator=(ThrottleEntry&& other) = default;

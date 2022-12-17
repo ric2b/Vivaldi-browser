@@ -49,7 +49,6 @@ namespace policy {
 class ArcAppInstallEventLogUploader;
 class CloudExternalDataManager;
 class DeviceManagementService;
-class ExtensionInstallEventLogUploader;
 class PolicyOAuth2TokenFetcher;
 class RemoteCommandsInvalidator;
 
@@ -153,10 +152,6 @@ class UserCloudPolicyManagerAsh
   // event logs to the policy server.
   ArcAppInstallEventLogUploader* GetAppInstallEventLogUploader();
 
-  // Return the ExtensionInstallEventLogUploader used to send extension install
-  // event logs to the policy server.
-  ExtensionInstallEventLogUploader* GetExtensionInstallEventLogUploader();
-
   // ConfigurationPolicyProvider:
   void Shutdown() override;
   bool IsInitializationComplete(PolicyDomain domain) const override;
@@ -256,7 +251,7 @@ class UserCloudPolicyManagerAsh
   void OnProfileAdded(Profile* profile) override;
 
   // Called on profile shutdown.
-  void ProfileShutdown();
+  void ShutdownRemoteCommands();
 
   // Profile associated with the current user.
   Profile* const profile_;
@@ -270,10 +265,6 @@ class UserCloudPolicyManagerAsh
   // Helper used to send app push-install event logs to the policy server.
   std::unique_ptr<ArcAppInstallEventLogUploader>
       app_install_event_log_uploader_;
-
-  // Helper used to send extension install event logs to the policy server.
-  std::unique_ptr<ExtensionInstallEventLogUploader>
-      extension_install_event_log_uploader_;
 
   // Scheduler used to report usage data to DM server periodically.
   std::unique_ptr<enterprise_reporting::ReportScheduler> report_scheduler_;

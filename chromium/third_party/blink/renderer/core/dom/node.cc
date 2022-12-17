@@ -372,10 +372,6 @@ void Node::setNodeValue(const String&, ExceptionState&) {
   // By default, setting nodeValue has no effect.
 }
 
-ContainerNode* Node::parentNode() const {
-  return IsShadowRoot() ? nullptr : ParentOrShadowHostNode();
-}
-
 NodeList* Node::childNodes() {
   auto* this_node = DynamicTo<ContainerNode>(this);
   if (this_node)
@@ -553,6 +549,8 @@ void Node::NativeApplyScroll(ScrollState& scroll_state) {
     return;
   LayoutBox* box_to_scroll = scrollable_area->GetLayoutBox();
 
+  auto& visual_viewport = GetDocument().GetPage()->GetVisualViewport();
+
   // TODO(bokan): This is a hack to fix https://crbug.com/977954. If we have a
   // non-default root scroller, scrolling from one of its siblings or a fixed
   // element will chain up to the root node without passing through the root
@@ -562,8 +560,8 @@ void Node::NativeApplyScroll(ScrollState& scroll_state) {
   // thread is awkward since we assume only Nodes are scrollable but the
   // VisualViewport isn't a Node. See LTHI::ApplyScroll for the equivalent
   // behavior in CC.
-  bool also_scroll_visual_viewport = GetDocument().GetFrame() &&
-                                     GetDocument().GetFrame()->IsMainFrame() &&
+  bool also_scroll_visual_viewport = GetDocument().IsInMainFrame() &&
+                                     visual_viewport.IsActiveViewport() &&
                                      IsA<LayoutView>(box_to_scroll);
   DCHECK(!also_scroll_visual_viewport ||
          !box_to_scroll->IsGlobalRootScroller());
@@ -575,9 +573,8 @@ void Node::NativeApplyScroll(ScrollState& scroll_state) {
   // Also try scrolling the visual viewport if we're at the end of the scroll
   // chain.
   if (!result.DidScroll() && also_scroll_visual_viewport) {
-    result = GetDocument().GetPage()->GetVisualViewport().UserScroll(
-        scroll_state.delta_granularity(), delta,
-        ScrollableArea::ScrollCallback());
+    result = visual_viewport.UserScroll(scroll_state.delta_granularity(), delta,
+                                        ScrollableArea::ScrollCallback());
   }
 
   if (!result.DidScroll())
@@ -1685,7 +1682,7 @@ bool Node::NeedsLayoutSubtreeUpdate() const {
 bool Node::CanStartSelection() const {
   if (DisplayLockUtilities::LockedAncestorPreventingPaint(*this))
     GetDocument().UpdateStyleAndLayoutTreeForNode(this);
-  if (HasEditableStyle(*this))
+  if (IsEditable(*this))
     return true;
 
   if (GetLayoutObject()) {
@@ -1711,7 +1708,7 @@ bool Node::IsRichlyEditableForAccessibility() const {
       << GetDocument().Lifecycle().ToString();
 #endif  // DCHECK_IS_ON()
 
-  return HasRichlyEditableStyle(*this);
+  return IsRichlyEditable(*this);
 }
 
 void Node::NotifyPriorityScrollAnchorStatusChanged() {
@@ -2246,8 +2243,9 @@ Node::InsertionNotificationRequest Node::InsertedInto(
   }
   if (ParentOrShadowHostNode()->IsInShadowTree())
     SetFlag(kIsInShadowTreeFlag);
-  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-    cache->ChildrenChanged(&insertion_point);
+  if (GetDocument().HasAXObjectCache()) {
+    GetDocument().ExistingAXObjectCache()->ChildrenChanged(&insertion_point);
+  }
   return kInsertionDone;
 }
 
@@ -2264,8 +2262,9 @@ void Node::RemovedFrom(ContainerNode& insertion_point) {
   }
   if (IsInShadowTree() && !ContainingTreeScope().RootNode().IsShadowRoot())
     ClearFlag(kIsInShadowTreeFlag);
-  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-    cache->Remove(this);
+  if (GetDocument().HasAXObjectCache()) {
+    GetDocument().ExistingAXObjectCache()->Remove(this);
+  }
 }
 
 String Node::DebugName() const {
@@ -2340,11 +2339,17 @@ String Node::ToString() const {
     builder.Append(" ");
     builder.Append(nodeValue().EncodeForDebugging());
     return builder.ReleaseString();
+  } else if (const auto* element = DynamicTo<Element>(this)) {
+    const AtomicString& pseudo = element->ShadowPseudoId();
+    if (!pseudo.IsEmpty()) {
+      builder.Append(" ::");
+      builder.Append(pseudo);
+    }
+    DumpAttributeDesc(*this, html_names::kIdAttr, builder);
+    DumpAttributeDesc(*this, html_names::kClassAttr, builder);
+    DumpAttributeDesc(*this, html_names::kStyleAttr, builder);
   }
-  DumpAttributeDesc(*this, html_names::kIdAttr, builder);
-  DumpAttributeDesc(*this, html_names::kClassAttr, builder);
-  DumpAttributeDesc(*this, html_names::kStyleAttr, builder);
-  if (HasEditableStyle(*this))
+  if (IsEditable(*this))
     builder.Append(" (editable)");
   if (GetDocument().FocusedElement() == this)
     builder.Append(" (focused)");
@@ -2892,7 +2897,7 @@ void Node::NotifyMutationObserversNodeWillDetach() {
 }
 
 void Node::HandleLocalEvents(Event& event) {
-  if (UNLIKELY(IsDocumentNode() && GetDocument().PopupOrHintShowing())) {
+  if (UNLIKELY(IsDocumentNode() && GetDocument().TopmostPopupAutoOrHint())) {
     // Check if this event should "light dismiss" one or more popups.
     Element::HandlePopupLightDismiss(event);
   }
@@ -3068,7 +3073,7 @@ bool Node::WillRespondToMouseClickEvents() {
   if (IsDisabledFormControl(this))
     return false;
   GetDocument().UpdateStyleAndLayoutTree();
-  return HasEditableStyle(*this) ||
+  return IsEditable(*this) ||
          HasAnyEventListeners(event_util::MouseButtonEventTypes());
 }
 

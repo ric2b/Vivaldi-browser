@@ -35,15 +35,9 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   static std::unique_ptr<VivaldiBrowserMainExtraParts> Create();
 
  private:
-#if !BUILDFLAG(IS_ANDROID)
-  class PreloadedFaviconInitializer;
-#endif  // !BUILDFLAG(IS_ANDROID)
   void EnsureBrowserContextKeyedServiceFactoriesBuilt();
 
   std::unique_ptr<vivaldi::StatsReporter> stats_reporter_;
-#if !BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<PreloadedFaviconInitializer> preloaded_favicon_initializer_;
-#endif  // !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<translate::VivaldiTranslateLanguageList>
       translate_language_list_;
 };

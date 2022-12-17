@@ -976,6 +976,8 @@ TEST_F(DrawPropertiesTest, DrawableContentRectForReferenceFilter) {
   auto& child_effect_node = CreateEffectNode(child);
   child_effect_node.render_surface_reason = RenderSurfaceReason::kTest;
   child_effect_node.filters = filters;
+  auto& child_clip_node = CreateClipNode(child);
+  child_clip_node.pixel_moving_filter_id = child_effect_node.id;
 
   UpdateActiveTreeDrawProperties();
 
@@ -1005,6 +1007,8 @@ TEST_F(DrawPropertiesTest, DrawableContentRectForReferenceFilterHighDpi) {
   auto& child_effect_node = CreateEffectNode(child);
   child_effect_node.render_surface_reason = RenderSurfaceReason::kTest;
   child_effect_node.filters = filters;
+  auto& child_clip_node = CreateClipNode(child);
+  child_clip_node.pixel_moving_filter_id = child_effect_node.id;
 
   UpdateActiveTreeDrawProperties(device_scale_factor);
 
@@ -1015,6 +1019,53 @@ TEST_F(DrawPropertiesTest, DrawableContentRectForReferenceFilterHighDpi) {
   ASSERT_TRUE(GetRenderSurface(child));
   EXPECT_EQ(gfx::RectF(100, 100, 50, 50),
             GetRenderSurface(child)->DrawableContentRect());
+}
+
+TEST_F(DrawPropertiesTest, VisibleLayerRectForBlurFilterUnderClip) {
+  LayerImpl* root = root_layer();
+  LayerImpl* child = AddLayer<LayerImpl>();
+
+  root->SetBounds(gfx::Size(100, 100));
+  child->SetBounds(gfx::Size(300, 300));
+  child->SetDrawsContent(true);
+  FilterOperations filters;
+  filters.Append(FilterOperation::CreateBlurFilter(10));
+
+  CreateClipNode(root);
+  CopyProperties(root, child);
+  child->SetOffsetToTransformParent(gfx::Vector2dF(-100, -100));
+  auto& filter_node = CreateEffectNode(child);
+  filter_node.render_surface_reason = RenderSurfaceReason::kFilter;
+  filter_node.filters = filters;
+  auto& clip_node = CreateClipNode(child);
+  clip_node.pixel_moving_filter_id = filter_node.id;
+
+  UpdateActiveTreeDrawProperties();
+  EXPECT_EQ(gfx::Rect(70, 70, 160, 160), child->visible_layer_rect());
+}
+
+TEST_F(DrawPropertiesTest, VisibleLayerRectForReferenceFilterUnderClip) {
+  LayerImpl* root = root_layer();
+  LayerImpl* child = AddLayer<LayerImpl>();
+
+  root->SetBounds(gfx::Size(100, 100));
+  child->SetBounds(gfx::Size(300, 300));
+  child->SetDrawsContent(true);
+  FilterOperations filters;
+  filters.Append(FilterOperation::CreateReferenceFilter(
+      sk_make_sp<OffsetPaintFilter>(50, 50, nullptr)));
+
+  CreateClipNode(root);
+  CopyProperties(root, child);
+  child->SetOffsetToTransformParent(gfx::Vector2dF(-100, -100));
+  auto& filter_node = CreateEffectNode(child);
+  filter_node.render_surface_reason = RenderSurfaceReason::kFilter;
+  filter_node.filters = filters;
+  auto& clip_node = CreateClipNode(child);
+  clip_node.pixel_moving_filter_id = filter_node.id;
+
+  UpdateActiveTreeDrawProperties();
+  EXPECT_EQ(gfx::Rect(100, 100, 150, 150), child->visible_layer_rect());
 }
 
 TEST_F(DrawPropertiesTest, RenderSurfaceForBlendMode) {
@@ -2408,6 +2459,32 @@ TEST_F(DrawPropertiesTest,
   // CalcDrawProps skips a subtree when a layer's screen space transform is
   // uninvertible
   EXPECT_EQ(gfx::Rect(), grand_child->visible_layer_rect());
+}
+
+TEST_F(DrawPropertiesTest, ClipExpanderWithUninvertibleTransform) {
+  LayerImpl* root = root_layer();
+  LayerImpl* child = AddLayer<LayerImpl>();
+
+  root->SetBounds(gfx::Size(100, 100));
+  child->SetBounds(gfx::Size(50, 50));
+  child->SetDrawsContent(true);
+
+  gfx::Transform uninvertible_matrix(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  ASSERT_FALSE(uninvertible_matrix.IsInvertible());
+
+  CopyProperties(root, child);
+  CreateTransformNode(child).local = uninvertible_matrix;
+  FilterOperations filters;
+  auto& filter_node = CreateEffectNode(child);
+  filter_node.render_surface_reason = RenderSurfaceReason::kFilter;
+  filter_node.filters.Append(FilterOperation::CreateBlurFilter(10));
+  auto& clip_node = CreateClipNode(child);
+  clip_node.pixel_moving_filter_id = filter_node.id;
+
+  UpdateActiveTreeDrawProperties();
+
+  EXPECT_TRUE(child->visible_layer_rect().IsEmpty());
+  EXPECT_TRUE(child->visible_drawable_content_rect().IsEmpty());
 }
 
 // Needs layer tree mode: mask layer.
@@ -5411,6 +5488,171 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionNested) {
       inner_sticky_impl->ScreenSpaceTransform().To2dTranslation());
 }
 
+class DrawPropertiesAnchorScrollTest : public DrawPropertiesTest {
+ protected:
+  void CreateRoot() {
+    root_ = Layer::Create();
+    root_->SetBounds(gfx::Size(100, 100));
+    host()->SetRootLayer(root_);
+    SetupRootProperties(root_.get());
+  }
+
+  std::pair<scoped_refptr<Layer>, scoped_refptr<Layer>> CreateScroller(
+      Layer* parent) {
+    scoped_refptr<Layer> container = Layer::Create();
+    scoped_refptr<Layer> scroller = Layer::Create();
+    scroller->SetElementId(LayerIdToElementIdForTesting(scroller->id()));
+
+    container->SetBounds(gfx::Size(100, 100));
+    CopyProperties(parent, container.get());
+    root_->AddChild(container);
+
+    scroller->SetBounds(gfx::Size(1000, 1000));
+    CopyProperties(container.get(), scroller.get());
+    CreateTransformNode(scroller.get());
+    CreateScrollNode(scroller.get(), container->bounds());
+    root_->AddChild(scroller);
+
+    return std::make_pair(std::move(container), std::move(scroller));
+  }
+
+  scoped_refptr<Layer> CreateAnchored(Layer* parent,
+                                      Layer* inner_most_scroller,
+                                      Layer* outer_most_scroller) {
+    scoped_refptr<Layer> anchored = Layer::Create();
+    anchored->SetBounds(gfx::Size(10, 10));
+    CopyProperties(parent, anchored.get());
+    CreateTransformNode(anchored.get());
+    SetAnchorScrollContainers(anchored.get(),
+                              inner_most_scroller->scroll_tree_index(),
+                              outer_most_scroller->scroll_tree_index());
+    root_->AddChild(anchored);
+    return anchored;
+  }
+
+  void Commit() {
+    UpdateMainDrawProperties();
+    host_impl()->CreatePendingTree();
+    host()->CommitAndCreatePendingTree();
+    host_impl()->ActivateSyncTree();
+  }
+
+  LayerImpl* GetImpl(Layer* layer) {
+    LayerTreeImpl* layer_tree_impl = host_impl()->active_tree();
+    return layer_tree_impl->LayerById(layer->id());
+  }
+
+  void SetAnchorScrollContainers(Layer* anchored,
+                                 int inner_most_scroll_container_id,
+                                 int outer_most_scroll_container_id) {
+    auto& data =
+        GetPropertyTrees(anchored)
+            ->transform_tree_mutable()
+            .EnsureAnchorScrollContainersData(anchored->transform_tree_index());
+    data.inner_most_scroll_container_id = inner_most_scroll_container_id;
+    data.outer_most_scroll_container_id = outer_most_scroll_container_id;
+  }
+
+  scoped_refptr<Layer> root_;
+};
+
+TEST_F(DrawPropertiesAnchorScrollTest, Basics) {
+  // Virtual layer hierarchy:
+  // + root
+  //   + container
+  //     + scroller <-- anchor
+  //   + anchored
+  CreateRoot();
+
+  scoped_refptr<Layer> container;
+  scoped_refptr<Layer> scroller;
+  std::tie(container, scroller) = CreateScroller(root_.get());
+
+  scoped_refptr<Layer> anchored =
+      CreateAnchored(root_.get(), scroller.get(), scroller.get());
+
+  SetPostTranslation(anchored.get(), gfx::Vector2dF(10, 20));
+  Commit();
+
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(10, 20),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll the scroller. Anchored element should always move with it.
+
+  SetScrollOffsetDelta(GetImpl(scroller.get()), gfx::Vector2dF(5, 5));
+
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(5, 15),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+
+  SetScrollOffsetDelta(GetImpl(scroller.get()), gfx::Vector2dF(15, 25));
+
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(-5, -5),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+}
+
+TEST_F(DrawPropertiesAnchorScrollTest, NestedScrollers) {
+  // Virtual layer hierarchy:
+  // + root
+  //   + container1
+  //     + scroller1
+  //       + container2
+  //         + scroller2
+  //           + container3
+  //             + scroller3 <-- anchor
+  //       + anchored
+  CreateRoot();
+
+  scoped_refptr<Layer> container1;
+  scoped_refptr<Layer> scroller1;
+  std::tie(container1, scroller1) = CreateScroller(root_.get());
+
+  scoped_refptr<Layer> container2;
+  scoped_refptr<Layer> scroller2;
+  std::tie(container2, scroller2) = CreateScroller(scroller1.get());
+
+  scoped_refptr<Layer> container3;
+  scoped_refptr<Layer> scroller3;
+  std::tie(container3, scroller3) = CreateScroller(scroller2.get());
+
+  scoped_refptr<Layer> anchored =
+      CreateAnchored(scroller1.get(), scroller3.get(), scroller2.get());
+
+  SetPostTranslation(anchored.get(), gfx::Vector2dF(10, 20));
+  Commit();
+
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(10, 20),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+
+  // Scrolling scroller3 will apply the same translation offset to the anchored
+  // element even if it's not a descendant of scroller 3.
+  SetScrollOffsetDelta(GetImpl(scroller3.get()), gfx::Vector2dF(5, 5));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(5, 15),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+
+  // Same to scroller 2.
+  SetScrollOffsetDelta(GetImpl(scroller2.get()), gfx::Vector2dF(10, 15));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(-5, 0),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+
+  // Scrolling scroller1 natually moves the anchored element because it's
+  // already a descendant. Note that we should not apply a double translation
+  // offset to it.
+  SetScrollOffsetDelta(GetImpl(scroller1.get()), gfx::Vector2dF(15, 20));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(-20, -20),
+      GetImpl(anchored.get())->ScreenSpaceTransform().To2dTranslation());
+}
 class AnimationScaleFactorTrackingLayerImpl : public LayerImpl {
  public:
   static std::unique_ptr<AnimationScaleFactorTrackingLayerImpl> Create(

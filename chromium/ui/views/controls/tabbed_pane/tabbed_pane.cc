@@ -331,15 +331,15 @@ void TabStrip::OnSelectedTabChanged(Tab* from_tab, Tab* to_tab, bool animate) {
     return;
 
   if (GetOrientation() == TabbedPane::Orientation::kHorizontal) {
-    animating_from_ = gfx::Range(from_tab->GetMirroredX(),
-                                 from_tab->GetMirroredX() + from_tab->width());
-    animating_to_ = gfx::Range(to_tab->GetMirroredX(),
-                               to_tab->GetMirroredX() + to_tab->width());
+    animating_from_ = {from_tab->GetMirroredX(),
+                       from_tab->GetMirroredX() + from_tab->width()};
+    animating_to_ = {to_tab->GetMirroredX(),
+                     to_tab->GetMirroredX() + to_tab->width()};
   } else {
-    animating_from_ = gfx::Range(from_tab->bounds().y(),
-                                 from_tab->bounds().y() + from_tab->height());
-    animating_to_ = gfx::Range(to_tab->bounds().y(),
-                               to_tab->bounds().y() + to_tab->height());
+    animating_from_ = {from_tab->bounds().y(),
+                       from_tab->bounds().y() + from_tab->height()};
+    animating_to_ = {to_tab->bounds().y(),
+                     to_tab->bounds().y() + to_tab->height()};
   }
 
   contract_animation_->Stop();
@@ -355,10 +355,11 @@ Tab* TabStrip::GetTabAtDeltaFromSelected(int delta) const {
   const size_t selected_tab_index = GetSelectedTabIndex();
   DCHECK_NE(kNoSelectedTab, selected_tab_index);
   const size_t num_children = children().size();
-  // Clamping |delta| here ensures that even a large negative |delta| will not
-  // cause the addition in the next statement to wrap below 0.
-  delta %= static_cast<int>(num_children);
-  return GetTabAtIndex((selected_tab_index + num_children + delta) %
+  // Clamping |delta| here ensures that even a large negative |delta| will be
+  // positive after the addition in the next statement.
+  delta %= base::checked_cast<int>(num_children);
+  delta += static_cast<int>(num_children);
+  return GetTabAtIndex((selected_tab_index + static_cast<size_t>(delta)) %
                        num_children);
 }
 
@@ -438,30 +439,30 @@ void TabStrip::OnPaintBorder(gfx::Canvas* canvas) {
   int min_main_axis = 0;
   int max_main_axis = 0;
   if (expand_animation_->is_animating()) {
-    bool animating_leading = animating_to_.start() < animating_from_.start();
+    bool animating_leading = animating_to_.start < animating_from_.start;
     double anim_value = gfx::Tween::CalculateValue(
         gfx::Tween::FAST_OUT_LINEAR_IN, expand_animation_->GetCurrentValue());
     if (animating_leading) {
       min_main_axis = gfx::Tween::IntValueBetween(
-          anim_value, animating_from_.start(), animating_to_.start());
-      max_main_axis = animating_from_.end();
+          anim_value, animating_from_.start, animating_to_.start);
+      max_main_axis = animating_from_.end;
     } else {
-      min_main_axis = animating_from_.start();
+      min_main_axis = animating_from_.start;
       max_main_axis = gfx::Tween::IntValueBetween(
-          anim_value, animating_from_.end(), animating_to_.end());
+          anim_value, animating_from_.end, animating_to_.end);
     }
   } else if (contract_animation_->is_animating()) {
-    bool animating_leading = animating_to_.start() < animating_from_.start();
+    bool animating_leading = animating_to_.start < animating_from_.start;
     double anim_value = gfx::Tween::CalculateValue(
         gfx::Tween::LINEAR_OUT_SLOW_IN, contract_animation_->GetCurrentValue());
     if (animating_leading) {
-      min_main_axis = animating_to_.start();
+      min_main_axis = animating_to_.start;
       max_main_axis = gfx::Tween::IntValueBetween(
-          anim_value, animating_from_.end(), animating_to_.end());
+          anim_value, animating_from_.end, animating_to_.end);
     } else {
       min_main_axis = gfx::Tween::IntValueBetween(
-          anim_value, animating_from_.start(), animating_to_.start());
-      max_main_axis = animating_to_.end();
+          anim_value, animating_from_.start, animating_to_.start);
+      max_main_axis = animating_to_.end;
     }
   } else if (is_horizontal) {
     min_main_axis = tab->GetMirroredX();
@@ -483,7 +484,7 @@ void TabStrip::OnPaintBorder(gfx::Canvas* canvas) {
 }
 
 BEGIN_METADATA(TabStrip, View)
-ADD_READONLY_PROPERTY_METADATA(int, SelectedTabIndex)
+ADD_READONLY_PROPERTY_METADATA(size_t, SelectedTabIndex)
 ADD_READONLY_PROPERTY_METADATA(TabbedPane::Orientation, Orientation)
 ADD_READONLY_PROPERTY_METADATA(TabbedPane::TabStripStyle, Style)
 END_METADATA
@@ -525,12 +526,13 @@ void TabbedPane::AddTabInternal(size_t index,
                                 std::unique_ptr<View> contents) {
   DCHECK_LE(index, GetTabCount());
   contents->SetVisible(false);
-  contents->GetViewAccessibility().OverrideName(title);
   contents->GetViewAccessibility().OverrideRole(ax::mojom::Role::kTabPanel);
+  if (!title.empty())
+    contents->GetViewAccessibility().OverrideName(title);
 
   tab_strip_->AddChildViewAt(std::make_unique<Tab>(this, title, contents.get()),
-                             static_cast<int>(index));
-  contents_->AddChildViewAt(std::move(contents), static_cast<int>(index));
+                             index);
+  contents_->AddChildViewAt(std::move(contents), index);
   if (!GetSelectedTab())
     SelectTabAt(index);
 
@@ -564,8 +566,10 @@ void TabbedPane::SelectTab(Tab* new_selected_tab, bool animate) {
       focus_manager->SetFocusedView(new_selected_tab->contents());
   }
 
-  if (listener())
-    listener()->TabSelectedAt(tab_strip_->GetIndexOf(new_selected_tab));
+  if (listener()) {
+    listener()->TabSelectedAt(base::checked_cast<int>(
+        tab_strip_->GetIndexOf(new_selected_tab).value()));
+  }
 }
 
 void TabbedPane::SelectTabAt(size_t index, bool animate) {

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/connectors_prefs.h"
 #include "chrome/browser/enterprise/connectors/device_trust/common/metrics_utils.h"
-#include "chrome/browser/enterprise/connectors/device_trust/device_trust_connector_service.h"
+#include "chrome/browser/enterprise/connectors/device_trust/device_trust_features.h"
 #include "chrome/browser/enterprise/connectors/device_trust/device_trust_service.h"
 #include "chrome/browser/enterprise/connectors/device_trust/device_trust_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -33,24 +33,21 @@ constexpr char kVerifiedAccessResponseHeader[] =
 std::unique_ptr<DeviceTrustNavigationThrottle>
 DeviceTrustNavigationThrottle::MaybeCreateThrottleFor(
     content::NavigationHandle* navigation_handle) {
-  PrefService* prefs =
-      Profile::FromBrowserContext(
-          navigation_handle->GetWebContents()->GetBrowserContext())
-          ->GetPrefs();
   // TODO(b/183690432): Check if the browser or device is being managed
   // to create the throttle.
-  if (!DeviceTrustConnectorService::IsConnectorEnabled(prefs))
+
+  // TODO(b/241102348): Remove this check.
+  if (!enterprise_connectors::IsDeviceTrustConnectorFeatureEnabled())
+    return nullptr;
+  auto* device_trust_service =
+      DeviceTrustServiceFactory::GetForProfile(Profile::FromBrowserContext(
+          navigation_handle->GetWebContents()->GetBrowserContext()));
+  if (!device_trust_service || !device_trust_service->IsEnabled())
     return nullptr;
 
-  return std::make_unique<DeviceTrustNavigationThrottle>(navigation_handle);
+  return std::make_unique<DeviceTrustNavigationThrottle>(device_trust_service,
+                                                         navigation_handle);
 }
-
-DeviceTrustNavigationThrottle::DeviceTrustNavigationThrottle(
-    content::NavigationHandle* navigation_handle)
-    : DeviceTrustNavigationThrottle(
-          DeviceTrustServiceFactory::GetForProfile(Profile::FromBrowserContext(
-              navigation_handle->GetWebContents()->GetBrowserContext())),
-          navigation_handle) {}
 
 DeviceTrustNavigationThrottle::DeviceTrustNavigationThrottle(
     DeviceTrustService* device_trust_service,

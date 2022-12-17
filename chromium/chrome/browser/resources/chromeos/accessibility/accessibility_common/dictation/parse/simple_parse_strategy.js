@@ -7,19 +7,28 @@
  * it into a Macro.
  */
 
-import {InputController} from '/accessibility_common/dictation/input_controller.js';
-import {HiddenMacroManager} from '/accessibility_common/dictation/macros/hidden_macro_manager.js';
-import {InputTextViewMacro, NewLineMacro} from '/accessibility_common/dictation/macros/input_text_view_macro.js';
-import {ListCommandsMacro} from '/accessibility_common/dictation/macros/list_commands_macro.js';
-import {Macro} from '/accessibility_common/dictation/macros/macro.js';
-import {MacroName} from '/accessibility_common/dictation/macros/macro_names.js';
-import * as RepeatableKeyPressMacro from '/accessibility_common/dictation/macros/repeatable_key_press_macro.js';
-import {ParseStrategy} from '/accessibility_common/dictation/parse/parse_strategy.js';
+import {InputController} from '../input_controller.js';
+import {LocaleInfo} from '../locale_info.js';
+import {DeletePrevSentMacro} from '../macros/delete_prev_sent_macro.js';
+import {HiddenMacroManager} from '../macros/hidden_macro_manager.js';
+import {InputTextViewMacro, NewLineMacro} from '../macros/input_text_view_macro.js';
+import {ListCommandsMacro} from '../macros/list_commands_macro.js';
+import {Macro} from '../macros/macro.js';
+import {MacroName} from '../macros/macro_names.js';
+import {NavNextSentMacro, NavPrevSentMacro} from '../macros/nav_sent_macro.js';
+import * as RepeatableKeyPress from '../macros/repeatable_key_press_macro.js';
+import {SmartDeletePhraseMacro} from '../macros/smart_delete_phrase_macro.js';
+import {SmartInsertBeforeMacro} from '../macros/smart_insert_before_macro.js';
+import {SmartReplacePhraseMacro} from '../macros/smart_replace_phrase_macro.js';
+import {SmartSelectBetweenMacro} from '../macros/smart_select_between_macro.js';
+import {StopListeningMacro} from '../macros/stop_listening_macro.js';
+
+import {ParseStrategy} from './parse_strategy.js';
 
 /**
  * @typedef {{
  *   messageId: string,
- *   build: Function,
+ *   build: !Function,
  * }}
  */
 let MacroData;
@@ -31,55 +40,95 @@ class SimpleMacroFactory {
   /**
    * @param {!MacroName} macroName
    * @param {!InputController} inputController
-   * @param {boolean} isRTLLocale
    */
-  constructor(macroName, inputController, isRTLLocale) {
+  constructor(macroName, inputController) {
+    if (!SimpleMacroFactory.getData_()[macroName]) {
+      throw new Error(
+          'Macro is not supported by SimpleMacroFactory: ' + macroName);
+    }
+
     /** @private {!MacroName} */
     this.macroName_ = macroName;
     /** @private {!InputController} */
     this.inputController_ = inputController;
-    /** @private {boolean} */
-    this.isRTLLocale_ = isRTLLocale;
 
-    if (!SimpleMacroFactory.getData_()[this.macroName_]) {
-      throw new Error(
-          'Macro is not supported by SimpleMacroFactory: ' + this.macroName_);
-    }
-
-    /** @private {string} */
-    this.commandString_ = chrome.i18n.getMessage(
-        SimpleMacroFactory.getData_()[this.macroName_].messageId);
-  }
-
-  /** @return {Macro} */
-  createMacro() {
-    const args = [];
-    switch (this.macroName_) {
-      case MacroName.NAV_PREV_CHAR:
-      case MacroName.NAV_NEXT_CHAR:
-      case MacroName.UNSELECT_TEXT:
-        args.push(this.isRTLLocale_);
-        break;
-      case MacroName.NEW_LINE:
-        args.push(this.inputController_);
-        break;
-    }
-
-    const data = SimpleMacroFactory.getData_();
-    return new data[this.macroName_].build(...args);
+    /** @private {RegExp} */
+    this.commandRegex_ = null;
+    this.initializeCommandRegex_(this.macroName_);
   }
 
   /**
-   * Checks whether a string matches `commandString_`, ignoring case and
-   * whitespace.
-   * @param {string} text
-   * @return {boolean}
+   * Builds a RegExp that can be used to parse a command. For example, the
+   * SmartReplacePhraseMacro can be parsed with the pattern:
+   * /replace (.*) with (.*)/i.
+   * @param {!MacroName} macroName
+   * @private
    */
-  matchesMacro(text) {
-    return text.trim().toLowerCase() === this.commandString_;
+  initializeCommandRegex_(macroName) {
+    const matchAnythingPattern = '(.*)';
+    const args = [];
+    switch (macroName) {
+      case MacroName.INPUT_TEXT_VIEW:
+      case MacroName.SMART_DELETE_PHRASE:
+        args.push(matchAnythingPattern);
+        break;
+      case MacroName.SMART_REPLACE_PHRASE:
+      case MacroName.SMART_INSERT_BEFORE:
+      case MacroName.SMART_SELECT_BTWN_INCL:
+        args.push(matchAnythingPattern, matchAnythingPattern);
+        break;
+    }
+    const message = chrome.i18n.getMessage(
+        SimpleMacroFactory.getData_()[macroName].messageId, args);
+    const pattern = `^${message}$`;
+    this.commandRegex_ = new RegExp(pattern, 'i');
   }
 
   /**
+   * @param {string} text
+   * @return {Macro|null}
+   */
+  createMacro(text) {
+    // Check whether `text` matches `this.commandRegex_`, ignoring case and
+    // whitespace.
+    text = text.trim().toLowerCase();
+    if (!this.commandRegex_.test(text)) {
+      return null;
+    }
+
+    const initialArgs = [];
+    switch (this.macroName_) {
+      case MacroName.NEW_LINE:
+      case MacroName.DELETE_PREV_SENT:
+      case MacroName.NAV_NEXT_SENT:
+      case MacroName.NAV_PREV_SENT:
+      case MacroName.SMART_DELETE_PHRASE:
+      case MacroName.SMART_REPLACE_PHRASE:
+      case MacroName.SMART_INSERT_BEFORE:
+      case MacroName.SMART_SELECT_BTWN_INCL:
+        initialArgs.push(this.inputController_);
+        break;
+    }
+
+    const result = this.commandRegex_.exec(text);
+    // `result[0]` contains the entire matched text, while all subsequent
+    // indices contain text matched by each /(.*)/. We're only interested in
+    // text matched by /(.*)/, so ignore `result[0]`.
+    const extractedArgs = result.slice(1);
+    const finalArgs = initialArgs.concat(extractedArgs);
+    const data = SimpleMacroFactory.getData_();
+    const macro = new data[this.macroName_].build(...finalArgs);
+    if (macro.isSmart() && !LocaleInfo.allowSmartEditing()) {
+      return null;
+    }
+
+    return macro;
+  }
+
+  /**
+   * Returns data that is used to create a macro. `messageId` is used to
+   * retrieve the macro's command string and `build` is used to construct the
+   * macro.
    * @return {Object<MacroName, MacroData>}
    * @private
    */
@@ -87,70 +136,111 @@ class SimpleMacroFactory {
     return {
       [MacroName.DELETE_PREV_CHAR]: {
         messageId: 'dictation_command_delete_prev_char',
-        build: RepeatableKeyPressMacro.DeletePreviousCharacterMacro
+        build: RepeatableKeyPress.DeletePreviousCharacterMacro,
       },
       [MacroName.NAV_PREV_CHAR]: {
         messageId: 'dictation_command_nav_prev_char',
-        build: RepeatableKeyPressMacro.NavPreviousCharMacro
+        build: RepeatableKeyPress.NavPreviousCharMacro,
       },
       [MacroName.NAV_NEXT_CHAR]: {
         messageId: 'dictation_command_nav_next_char',
-        build: RepeatableKeyPressMacro.NavNextCharMacro
+        build: RepeatableKeyPress.NavNextCharMacro,
       },
       [MacroName.NAV_PREV_LINE]: {
         messageId: 'dictation_command_nav_prev_line',
-        build: RepeatableKeyPressMacro.NavPreviousLineMacro
+        build: RepeatableKeyPress.NavPreviousLineMacro,
       },
       [MacroName.NAV_NEXT_LINE]: {
         messageId: 'dictation_command_nav_next_line',
-        build: RepeatableKeyPressMacro.NavNextLineMacro
+        build: RepeatableKeyPress.NavNextLineMacro,
       },
       [MacroName.COPY_SELECTED_TEXT]: {
         messageId: 'dictation_command_copy_selected_text',
-        build: RepeatableKeyPressMacro.CopySelectedTextMacro
+        build: RepeatableKeyPress.CopySelectedTextMacro,
       },
       [MacroName.PASTE_TEXT]: {
         messageId: 'dictation_command_paste_text',
-        build: RepeatableKeyPressMacro.PasteTextMacro
+        build: RepeatableKeyPress.PasteTextMacro,
       },
       [MacroName.CUT_SELECTED_TEXT]: {
         messageId: 'dictation_command_cut_selected_text',
-        build: RepeatableKeyPressMacro.CutSelectedTextMacro
+        build: RepeatableKeyPress.CutSelectedTextMacro,
       },
       [MacroName.UNDO_TEXT_EDIT]: {
         messageId: 'dictation_command_undo_text_edit',
-        build: RepeatableKeyPressMacro.UndoTextEditMacro
+        build: RepeatableKeyPress.UndoTextEditMacro,
       },
       [MacroName.REDO_ACTION]: {
         messageId: 'dictation_command_redo_action',
-        build: RepeatableKeyPressMacro.RedoActionMacro
+        build: RepeatableKeyPress.RedoActionMacro,
       },
       [MacroName.SELECT_ALL_TEXT]: {
         messageId: 'dictation_command_select_all_text',
-        build: RepeatableKeyPressMacro.SelectAllTextMacro
+        build: RepeatableKeyPress.SelectAllTextMacro,
       },
       [MacroName.UNSELECT_TEXT]: {
         messageId: 'dictation_command_unselect_text',
-        build: RepeatableKeyPressMacro.UnselectTextMacro
+        build: RepeatableKeyPress.UnselectTextMacro,
       },
       [MacroName.LIST_COMMANDS]: {
         messageId: 'dictation_command_list_commands',
-        build: ListCommandsMacro
+        build: ListCommandsMacro,
       },
       [MacroName.NEW_LINE]:
           {messageId: 'dictation_command_new_line', build: NewLineMacro},
+      [MacroName.STOP_LISTENING]: {
+        messageId: 'dictation_command_stop_listening',
+        build: StopListeningMacro,
+      },
+      [MacroName.DELETE_PREV_WORD]: {
+        messageId: 'dictation_command_delete_prev_word',
+        build: RepeatableKeyPress.DeletePrevWordMacro,
+      },
+      [MacroName.DELETE_PREV_SENT]: {
+        messageId: 'dictation_command_delete_prev_sent',
+        build: DeletePrevSentMacro,
+      },
+      [MacroName.NAV_NEXT_WORD]: {
+        messageId: 'dictation_command_nav_next_word',
+        build: RepeatableKeyPress.NavNextWordMacro,
+      },
+      [MacroName.NAV_PREV_WORD]: {
+        messageId: 'dictation_command_nav_prev_word',
+        build: RepeatableKeyPress.NavPrevWordMacro,
+      },
+      [MacroName.SMART_DELETE_PHRASE]: {
+        messageId: 'dictation_command_smart_delete_phrase',
+        build: SmartDeletePhraseMacro,
+      },
+      [MacroName.SMART_REPLACE_PHRASE]: {
+        messageId: 'dictation_command_smart_replace_phrase',
+        build: SmartReplacePhraseMacro,
+      },
+      [MacroName.SMART_INSERT_BEFORE]: {
+        messageId: 'dictation_command_smart_insert_before',
+        build: SmartInsertBeforeMacro,
+      },
+      [MacroName.SMART_SELECT_BTWN_INCL]: {
+        messageId: 'dictation_command_smart_select_btwn_incl',
+        build: SmartSelectBetweenMacro,
+      },
+      [MacroName.NAV_NEXT_SENT]: {
+        messageId: 'dictation_command_nav_next_sent',
+        build: NavNextSentMacro,
+      },
+      [MacroName.NAV_PREV_SENT]: {
+        messageId: 'dictation_command_nav_prev_sent',
+        build: NavPrevSentMacro,
+      },
     };
   }
 }
 
 /** A parsing strategy that utilizes SimpleMacroFactory. */
 export class SimpleParseStrategy extends ParseStrategy {
-  /**
-   * @param {!InputController} inputController
-   * @param {boolean} isRTLLocale
-   */
-  constructor(inputController, isRTLLocale) {
-    super(inputController, isRTLLocale);
+  /** @param {!InputController} inputController */
+  constructor(inputController) {
+    super(inputController);
 
     /**
      * Map of macro names to a factory for that macro.
@@ -172,18 +262,35 @@ export class SimpleParseStrategy extends ParseStrategy {
       }
 
       this.macroFactoryMap_.set(
-          name,
-          new SimpleMacroFactory(
-              name, this.getInputController(), this.getIsRTLLocale()));
+          name, new SimpleMacroFactory(name, this.getInputController()));
     }
   }
 
   /** @override */
   async parse(text) {
+    const macros = [];
     for (const [name, factory] of this.macroFactoryMap_) {
-      if (factory.matchesMacro(text)) {
-        return factory.createMacro();
+      const macro = factory.createMacro(text);
+      if (macro) {
+        macros.push(macro);
       }
+    }
+    if (macros.length === 1) {
+      return macros[0];
+    } else if (macros.length === 2) {
+      // Pick which macro to use from the list of matched macros.
+      // TODO(crbug.com/1288965): Turn this into a disambiguation class as we
+      // add more commands. Currently the only ambiguous macro is DELETE_PHRASE
+      // which conflicts with other deletion macros. For example, the phrase
+      // "Delete the previous word" should be parsed as a DELETE_PREV_WORD
+      // instead of SMART_DELETE_PHRASE with phrase "the previous word".
+      // Prioritize other deletion macros over SMART_DELETE_PHRASE.
+      return macros[0].getMacroName() === MacroName.SMART_DELETE_PHRASE ?
+          macros[1] :
+          macros[0];
+    } else if (macros.length > 2) {
+      console.warn(`Unexpected ambiguous macros found for text: ${text}.`);
+      return macros[0];
     }
 
     // The command is simply to input the given text.

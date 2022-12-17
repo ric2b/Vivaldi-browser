@@ -187,7 +187,7 @@ class TraceEventDataConverter {
   // Return saved values to pass to TRACE_EVENT macros.
   const char* name() { return name_.c_str(); }
   const char* arg_name() { return has_arg_ ? "arg" : nullptr; }
-  const char* arg() { return has_arg_ ? arg_.c_str() : nullptr; }
+  const std::string& arg() { return arg_; }
 
  private:
   std::string name_;
@@ -201,33 +201,49 @@ static void JNI_TraceEvent_Instant(JNIEnv* env,
                                    const JavaParamRef<jstring>& jname,
                                    const JavaParamRef<jstring>& jarg) {
   TraceEventDataConverter converter(env, jname, jarg);
-  if (converter.arg()) {
-    TRACE_EVENT_INSTANT_WITH_FLAGS1(
-        internal::kJavaTraceCategory, converter.name(),
-        TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY |
-            TRACE_EVENT_SCOPE_THREAD,
-        converter.arg_name(), converter.arg());
+  if (converter.arg_name()) {
+    TRACE_EVENT_INSTANT(internal::kJavaTraceCategory, nullptr,
+                        converter.arg_name(), converter.arg(),
+                        [&](::perfetto::EventContext& ctx) {
+                          ctx.event()->set_name(converter.name());
+                        });
   } else {
-    TRACE_EVENT_INSTANT_WITH_FLAGS0(
-        internal::kJavaTraceCategory, converter.name(),
-        TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY |
-            TRACE_EVENT_SCOPE_THREAD);
+    TRACE_EVENT_INSTANT(internal::kJavaTraceCategory, nullptr,
+                        [&](::perfetto::EventContext& ctx) {
+                          ctx.event()->set_name(converter.name());
+                        });
   }
+}
+
+static void JNI_TraceEvent_InstantAndroidIPC(JNIEnv* env,
+                                             const JavaParamRef<jstring>& jname,
+                                             jlong jdur) {
+  TRACE_EVENT_INSTANT(
+      internal::kJavaTraceCategory, "AndroidIPC",
+      [&](perfetto::EventContext ctx) {
+        TraceEventDataConverter converter(env, jname, nullptr);
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* android_ipc = event->set_android_ipc();
+        android_ipc->set_name(converter.name());
+        android_ipc->set_dur_ms(jdur);
+      });
 }
 
 static void JNI_TraceEvent_Begin(JNIEnv* env,
                                  const JavaParamRef<jstring>& jname,
                                  const JavaParamRef<jstring>& jarg) {
   TraceEventDataConverter converter(env, jname, jarg);
-  if (converter.arg()) {
-    TRACE_EVENT_BEGIN_WITH_FLAGS1(
-        internal::kJavaTraceCategory, converter.name(),
-        TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY,
-        converter.arg_name(), converter.arg());
+  if (converter.arg_name()) {
+    TRACE_EVENT_BEGIN(internal::kJavaTraceCategory, nullptr,
+                      converter.arg_name(), converter.arg(),
+                      [&](::perfetto::EventContext& ctx) {
+                        ctx.event()->set_name(converter.name());
+                      });
   } else {
-    TRACE_EVENT_BEGIN_WITH_FLAGS0(
-        internal::kJavaTraceCategory, converter.name(),
-        TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+    TRACE_EVENT_BEGIN(internal::kJavaTraceCategory, nullptr,
+                      [&](::perfetto::EventContext& ctx) {
+                        ctx.event()->set_name(converter.name());
+                      });
   }
 }
 
@@ -235,50 +251,46 @@ static void JNI_TraceEvent_End(JNIEnv* env,
                                const JavaParamRef<jstring>& jname,
                                const JavaParamRef<jstring>& jarg) {
   TraceEventDataConverter converter(env, jname, jarg);
-  if (converter.arg()) {
-    TRACE_EVENT_END_WITH_FLAGS1(
-        internal::kJavaTraceCategory, converter.name(),
-        TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY,
-        converter.arg_name(), converter.arg());
+  if (converter.arg_name()) {
+    TRACE_EVENT_END(internal::kJavaTraceCategory, converter.arg_name(),
+                    converter.arg());
   } else {
-    TRACE_EVENT_END_WITH_FLAGS0(
-        internal::kJavaTraceCategory, converter.name(),
-        TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+    TRACE_EVENT_END(internal::kJavaTraceCategory);
   }
 }
 
 static void JNI_TraceEvent_BeginToplevel(JNIEnv* env,
                                          const JavaParamRef<jstring>& jtarget) {
   std::string target = ConvertJavaStringToUTF8(env, jtarget);
-  TRACE_EVENT_BEGIN_WITH_FLAGS0(
-      internal::kToplevelTraceCategory, target.c_str(),
-      TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+  TRACE_EVENT_BEGIN(internal::kToplevelTraceCategory, nullptr,
+                    [&](::perfetto::EventContext& ctx) {
+                      ctx.event()->set_name(target.c_str());
+                    });
 }
 
 static void JNI_TraceEvent_EndToplevel(JNIEnv* env,
                                        const JavaParamRef<jstring>& jtarget) {
   std::string target = ConvertJavaStringToUTF8(env, jtarget);
-  TRACE_EVENT_END_WITH_FLAGS0(
-      internal::kToplevelTraceCategory, target.c_str(),
-      TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+  TRACE_EVENT_END(internal::kToplevelTraceCategory);
 }
 
 static void JNI_TraceEvent_StartAsync(JNIEnv* env,
                                       const JavaParamRef<jstring>& jname,
                                       jlong jid) {
   TraceEventDataConverter converter(env, jname, nullptr);
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_FLAGS0(
-      internal::kJavaTraceCategory, converter.name(), TRACE_ID_LOCAL(jid),
-      TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+  TRACE_EVENT_BEGIN(internal::kJavaTraceCategory, nullptr,
+                    perfetto::Track(static_cast<uint64_t>(jid)),
+                    [&](::perfetto::EventContext& ctx) {
+                      ctx.event()->set_name(converter.name());
+                    });
 }
 
 static void JNI_TraceEvent_FinishAsync(JNIEnv* env,
                                        const JavaParamRef<jstring>& jname,
                                        jlong jid) {
   TraceEventDataConverter converter(env, jname, nullptr);
-  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_FLAGS0(
-      internal::kJavaTraceCategory, converter.name(), TRACE_ID_LOCAL(jid),
-      TRACE_EVENT_FLAG_JAVA_STRING_LITERALS | TRACE_EVENT_FLAG_COPY);
+  TRACE_EVENT_END(internal::kJavaTraceCategory,
+                  perfetto::Track(static_cast<uint64_t>(jid)));
 }
 
 }  // namespace android

@@ -16,6 +16,7 @@
 <translation id="1187722533808055681">Ji bêkêrî radibe</translation>
 <translation id="119944043368869598">Hemûyan pak bike</translation>
 <translation id="1221825588892235038">Tenê hilbijartin</translation>
+<translation id="1234736487471201993">Koda QR ji bo vê wêneyê biafrîne</translation>
 <translation id="1244303850296295656">Çewtiya pêvekê</translation>
 <translation id="125220115284141797">Berdest</translation>
 <translation id="1297175357211070620">Berok</translation>
@@ -61,6 +62,7 @@
 <translation id="2148892889047469596">Rûgerê biweşîne</translation>
 <translation id="2150139952286079145">Berokên lêgerînê</translation>
 <translation id="215753907730220065">Ji dîmendera tijî derkeve</translation>
+<translation id="2158475082070321257">Navnîşana girêdanê jê bigire</translation>
 <translation id="2177950615300672361">Rûgera veşartî: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modula rajegira xwecihî: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Wekî nivîseke normal pêve bike</translation>
@@ -84,7 +86,7 @@
 <translation id="2443487764245141020">Dibe ku pêdiviya malperê hebê ku amûrê te nas bike bi riya karanîna naskerê</translation>
 <translation id="2445081178310039857">Pêdiviya pêvekê bi rêbera rehê heye.</translation>
 <translation id="2470702053775288986">Pêvekên ne piştgirîdayî hat neçalakkirin</translation>
-<translation id="2476578072172137802">Sazkariyên malperê</translation>
+<translation id="2485422356828889247">Jê rake</translation>
 <translation id="2498539833203011245">Kêmkirin</translation>
 <translation id="2509495747794740764">Nirxa pîvanê divê di navbera 10 û 200 de be.</translation>
 <translation id="253557089021624350">Hejmarên zindî</translation>
@@ -108,6 +110,7 @@
 <translation id="2932883381142163287">Xerabkariyê ragihîne</translation>
 <translation id="2941112035454246133">Nizm</translation>
 <translation id="2972581237482394796">&amp;Dûbare bike</translation>
+<translation id="2993517869960930405">Zanyariyên sepanê</translation>
 <translation id="3003623123441819449">Pêşbîra CSS-ê</translation>
 <translation id="3008272652534848354">Mafan ji nû ve saz bike</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -124,6 +127,7 @@
 <translation id="3144647712221361880">Girêdanê veke wekî</translation>
 <translation id="3222066309010235055">Pêşnexşeker: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Ji bo bapêçkirina pêvekê rêbera rehê hilbijêre. Di heman demê de pelê kilîda taybet jî hilbijêre ya ku dê ji bo rojanekirina pêvekê dîsa were bikaranîn.</translation>
+<translation id="3275778913554317645">Wekî çarçove veke</translation>
 <translation id="3280237271814976245">Tomar bike wekî...</translation>
 <translation id="3285322247471302225">&amp;Rûgera nû</translation>
 <translation id="3288047731229977326">Pêvek di moda pêşvebirinê de dixebitin, dikarin ziyanê bidin kombersa te. Heke tu ne pêşvebir bî, divê tu van pêvekan di moda pêşvebirê de neçalak bikî bo ku ewlehiya te xera nebe.</translation>
@@ -133,11 +137,13 @@
 <translation id="3305661444342691068">PDF di pêşdîtinê de veke</translation>
 <translation id="3308134619352333507">Bişkokê veşêre</translation>
 <translation id="3317459757438853210">Du-alî</translation>
+<translation id="3331974543021145906">Zanyariyên sepanê</translation>
 <translation id="3341703758641437857">Mafê bide gihîştinê bo URL-yên pelê</translation>
 <translation id="3347086966102161372">Navnîşana wênêyê j&amp;ê bigire</translation>
 <translation id="3360297538363969800">Çapkirin biserneket. Ji kerema xwe, çapkera xwe kontrol bike û dîsa biceribîne.</translation>
 <translation id="3378572629723696641">Dibe ku ev pêvek hatibe xerakirin.</translation>
 <translation id="3387614642886316601">Kontrolkirina rastnivîsê ya baştirkirî bi kar bîne</translation>
+<translation id="3390013585654699824">Hûrgiliyên sepanê</translation>
 <translation id="3393582007140394275">Wêşana dîmenderê nayê pêkanîn.</translation>
 <translation id="3432227430032737297">Hemû yên nîşankirî rake</translation>
 <translation id="345693547134384690">Wêneyê di rûgerekê nû de veke</translation>
@@ -171,6 +177,7 @@
 <translation id="3948116654032448504"><ph name="SEARCH_ENGINE" /> &amp;li nav wêneyan bigere</translation>
 <translation id="3955193568934677022">Mafê bide malperên ku naveroka parastinê lê bidin (tê pêşniyazkirin)</translation>
 <translation id="3979395879372752341">Pêveka nû hate tevlîkirin (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Navnîşana girêdanê jê bigire</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Tevlî ferhengê bike</translation>
 <translation id="407520071244661467">Pîvan</translation>
@@ -183,6 +190,7 @@
 <translation id="4109898769411476438">Gerokê bigire berî têxistinê</translation>
 <translation id="4130207949184424187">Pêvekê malper guherand a ku gava tu li ser Omnibox-ê binivîsî dê were xuyakirin.</translation>
 <translation id="4131410914670010031">Reş û spî</translation>
+<translation id="4165986682804962316">Sazkariyên malperê</translation>
 <translation id="4176463684765177261">Neçalak</translation>
 <translation id="4200983522494130825">&amp;Rûgera nû</translation>
 <translation id="4225397296022057997">Li ser hemû malperan</translation>
@@ -206,6 +214,7 @@
 <translation id="4711638718396952945">Sazkariyan vegerîne</translation>
 <translation id="4726710629007580002">Di gava sazkirina vê pêvekê de hişyarî derdikeve:</translation>
 <translation id="479536056609751218">Rûpela Tevnê, HTML Tenê</translation>
+<translation id="4827904420700932487">Koda QR ji bo vê wêneyê biafrîne</translation>
 <translation id="4839303808932127586">Vîdyoyê tomar bike wekî ...</translation>
 <translation id="4840096453115567876">Tu dixwazî moda veşartî rawestînî bi her awayî?</translation>
 <translation id="488785315393301722">Hûrguliyan nîşan bide</translation>
@@ -262,6 +271,7 @@
 <translation id="563535393368633106">Berî gihiştinê bipirse (tê pêşniyazkirin)</translation>
 <translation id="5677928146339483299">Astengkirî</translation>
 <translation id="5707185214361380026">Barkirina pêvekê biserneket:</translation>
+<translation id="5713171467967533494">Di geroka Vivaldi de veke</translation>
 <translation id="5715711091495208045">Pêveka alîkar: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Tomar bike wekî PDF</translation>
 <translation id="5747809636523347288">Pêve bike û biçe <ph name="URL" /></translation>
@@ -315,6 +325,7 @@
 <translation id="6550675742724504774">Vebijêrk</translation>
 <translation id="6579369886355986318">Hemû &amp;kontrolan nîşan bide</translation>
 <translation id="6639554308659482635">Bîrgeha SQLite-ê</translation>
+<translation id="666731172850799929">Di <ph name="APP_NAME" /> de veke</translation>
 <translation id="6686817083349815241">Pêborîna xwe tomar bike</translation>
 <translation id="6691936601825168937">&amp;Pêş</translation>
 <translation id="6798954102094737107">Pevek: <ph name="PLUGIN_NAME" /></translation>
@@ -431,6 +442,7 @@ Pelê xwe yê kilîdê li cihekî ewle biparêze. Ji bo afirandina gohertoyekê 
 <translation id="9003647077635673607">Mafê bide hemû malperan</translation>
 <translation id="9027459031423301635">Girêdanê di rûgereke nû de veke</translation>
 <translation id="9056810968620647706">Tu girêdan nehate dîtin.</translation>
+<translation id="9084064520949870008">Wekî çarçove veke</translation>
 <translation id="9137916601698928395">Girêdanê veke wekî <ph name="USER" /></translation>
 <translation id="91568222606626347">Kurteriyekê biafirîne ...</translation>
 <translation id="916607977885256133">Wêne di wêneyê de</translation>

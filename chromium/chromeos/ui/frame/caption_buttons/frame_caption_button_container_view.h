@@ -9,6 +9,7 @@
 
 #include "base/check.h"
 #include "base/component_export.h"
+#include "base/memory/raw_ptr.h"
 #include "chromeos/ui/frame/caption_buttons/caption_button_model.h"
 #include "chromeos/ui/frame/caption_buttons/frame_size_button_delegate.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
@@ -91,7 +92,7 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) FrameCaptionButtonContainerView
     }
 
    private:
-    FrameCaptionButtonContainerView* container_view_;
+    raw_ptr<FrameCaptionButtonContainerView> container_view_;
   };
 
   views::FrameCaptionButton* size_button() { return size_button_; }
@@ -118,11 +119,19 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) FrameCaptionButtonContainerView
   void OnWindowControlsOverlayEnabledChanged(bool enabled,
                                              SkColor background_color);
 
+  // Updates the visibility of the caption button container based on whether the
+  // app is in borderless mode or not, which means whether the title bar is
+  // shown or not.
+  void UpdateBorderlessModeEnabled(bool enabled);
+
   // Updates the caption buttons' state based on the caption button model's
   // state. A parent view should relayout to reflect the change in states.
   void UpdateCaptionButtonState(bool animate);
 
   void UpdateSizeButtonTooltip(bool use_restore_frame);
+
+  // Updates the float button's image and tooltip.
+  void UpdateFloatButton();
 
   // Sets the size of the buttons in this container.
   void SetButtonSize(const gfx::Size& size);
@@ -181,19 +190,16 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) FrameCaptionButtonContainerView
   void CommitSnap(SnapDirection snap) override;
 
   // The widget that the buttons act on.
-  views::Widget* frame_;
+  raw_ptr<views::Widget> frame_;
 
   // The buttons. In the normal button style, at most one of |minimize_button_|
   // and |size_button_| is visible.
-  views::FrameCaptionButton* custom_button_ = nullptr;
-  views::FrameCaptionButton* float_button_ = nullptr;
-  views::FrameCaptionButton* menu_button_ = nullptr;
-  views::FrameCaptionButton* minimize_button_ = nullptr;
-  views::FrameCaptionButton* size_button_ = nullptr;
-  views::FrameCaptionButton* close_button_ = nullptr;
-
-  // Change float button status.
-  void ToggleFloatButton();
+  raw_ptr<views::FrameCaptionButton> custom_button_ = nullptr;
+  raw_ptr<views::FrameCaptionButton> float_button_ = nullptr;
+  raw_ptr<views::FrameCaptionButton> menu_button_ = nullptr;
+  raw_ptr<views::FrameCaptionButton> minimize_button_ = nullptr;
+  raw_ptr<views::FrameCaptionButton> size_button_ = nullptr;
+  raw_ptr<views::FrameCaptionButton> close_button_ = nullptr;
 
   // Mapping of the image needed to paint a button for each of the values of
   // CaptionButtonIcon.
@@ -214,6 +220,10 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) FrameCaptionButtonContainerView
   // background of the entire view should be updated when the background of the
   // button container changes and SetBackgroundColor() gets called.
   bool window_controls_overlay_enabled_ = false;
+
+  // Keeps track of the borderless mode being enabled or not. This defines the
+  // visibility of the caption button container.
+  bool is_borderless_mode_enabled_ = false;
 };
 
 }  // namespace chromeos

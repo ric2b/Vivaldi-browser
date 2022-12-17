@@ -12,7 +12,6 @@
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/test/test_assistant_service.h"
-#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/display/display_configuration_controller_test_api.h"
 #include "ash/display/screen_ash.h"
@@ -24,10 +23,11 @@
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
-#include "ash/style/dark_mode_controller.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/message_center/session_state_notification_blocker.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/screen_layout_observer.h"
+#include "ash/test/ash_test_ui_stabilizer.h"
 #include "ash/test/ash_test_views_delegate.h"
 #include "ash/test/toplevel_window.h"
 #include "ash/test_shell_delegate.h"
@@ -38,8 +38,9 @@
 #include "base/run_loop.h"
 #include "base/system/sys_info.h"
 #include "base/system/system_monitor.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/dbus/audio/cras_audio_client.h"
 #include "chromeos/ash/components/dbus/rgbkbd/rgbkbd_client.h"
-#include "chromeos/dbus/audio/cras_audio_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/login/login_state/login_state.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -48,6 +49,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/ash/mock_input_method_manager.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -114,7 +116,7 @@ AshTestHelper::AshTestHelper(ui::ContextFactory* context_factory)
   display::ResetDisplayIdForTest();
   display::SetInternalDisplayIds({});
 
-  chromeos::CrasAudioClient::InitializeFake();
+  CrasAudioClient::InitializeFake();
   // Create CrasAudioHandler for testing since g_browser_process is not
   // created in AshTestBase tests.
   CrasAudioHandler::InitializeForTesting();
@@ -165,7 +167,7 @@ void AshTestHelper::TearDown() {
   chromeos::LoginState::Shutdown();
 
   CrasAudioHandler::Shutdown();
-  chromeos::CrasAudioClient::Shutdown();
+  CrasAudioClient::Shutdown();
 
   // The PowerPolicyController holds a pointer to the PowerManagementClient, so
   // shut the controller down first.
@@ -188,6 +190,10 @@ void AshTestHelper::TearDown() {
   prefs_provider_.reset();
   statistics_provider_.reset();
   command_line_.reset();
+
+  // Purge ColorProviderManager between tests so that we don't accumulate
+  // ColorProviderInitializers. crbug.com/1349232.
+  ui::ColorProviderManager::ResetForTesting();
 
   AuraTestHelper::TearDown();
 
@@ -232,6 +238,14 @@ aura::client::CaptureClient* AshTestHelper::GetCaptureClient() {
 }
 
 void AshTestHelper::SetUp(InitParams init_params) {
+  // Build `ui_stabilizer_` only for a pixel diff test.
+  if (init_params.pixel_test_init_params) {
+    // Constructing `ui_stabilizer_` sets the locale. Therefore, building
+    // `ui_stabilizer_` before the code that establishes the Ash UI.
+    ui_stabilizer_ = std::make_unique<AshTestUiStabilizer>(
+        *init_params.pixel_test_init_params);
+  }
+
   // This block of objects are conditionally initialized here rather than in the
   // constructor to make it easier for test classes to override them.
   if (!input_method::InputMethodManager::Get()) {
@@ -265,11 +279,6 @@ void AshTestHelper::SetUp(InitParams init_params) {
 
   ambient_ash_test_helper_ = std::make_unique<AmbientAshTestHelper>();
 
-  // There is a temporary M92-M94 notification that shows once to users
-  // at startup, but this interferes with many tests that expect a
-  // specific active window, or a certain number of notifications.
-  AcceleratorControllerImpl::SetShouldShowShortcutNotificationForTest(false);
-
   ShellInitParams shell_init_params;
   shell_init_params.delegate = std::move(init_params.delegate);
   if (!shell_init_params.delegate)
@@ -288,7 +297,7 @@ void AshTestHelper::SetUp(InitParams init_params) {
   // operations needed in many of the tests, e.g, when productive launcher is
   // shown as well, we need one more click outside of the launcher to dismiss
   // the nudge first before dismissing the launcher.
-  shell->dark_mode_controller()->SetShowNudgeForTesting(false);
+  shell->dark_light_mode_controller()->SetShowNudgeForTesting(false);
 
   // Set up a test wallpaper controller client before signing in any users. At
   // the time a user logs in, Wallpaper controller relies on
@@ -365,11 +374,35 @@ void AshTestHelper::SetUp(InitParams init_params) {
   // Fake the |ec_lid_angle_driver_status_| in the unittests.
   AccelerometerReader::GetInstance()->SetECLidAngleDriverStatusForTesting(
       ECLidAngleDriverStatus::NOT_SUPPORTED);
+
+  // Call `StabilizeUIForPixelTest()` after the user session is activated (if
+  // any) in the test setup.
+  if (ui_stabilizer_) {
+    DCHECK(init_params.pixel_test_init_params);
+    StabilizeUIForPixelTest();
+  }
 }
 
 display::Display AshTestHelper::GetSecondaryDisplay() const {
   return display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
       .GetSecondaryDisplay();
+}
+
+void AshTestHelper::SimulateUserLogin(const AccountId& account_id,
+                                      user_manager::UserType user_type) {
+  session_controller_client_->AddUserSession(
+      account_id, account_id.GetUserEmail(), user_type);
+  session_controller_client_->SwitchActiveUser(account_id);
+  session_controller_client_->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+}
+
+void AshTestHelper::StabilizeUIForPixelTest() {
+  const gfx::Size primary_display_size =
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(Shell::GetPrimaryRootWindow())
+          .size();
+  ui_stabilizer_->StabilizeUi(primary_display_size);
 }
 
 }  // namespace ash

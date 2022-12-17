@@ -9,6 +9,7 @@
 #include "base/i18n/rtl.h"
 #include "base/mac/mac_util.h"
 #import "base/message_loop/message_pump_mac.h"
+#include "base/numerics/safe_conversions.h"
 #import "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/menu_controller.h"
@@ -212,7 +213,7 @@ NSImage* IPHDotImage(const ui::ColorProvider* color_provider) {
 
 - (void)controllerWillAddItem:(NSMenuItem*)menuItem
                     fromModel:(ui::MenuModel*)model
-                      atIndex:(NSInteger)index
+                      atIndex:(size_t)index
             withColorProvider:(const ui::ColorProvider*)colorProvider {
   if (model->IsNewFeatureAt(index)) {
     NSMutableAttributedString* attrTitle = [[[NSMutableAttributedString alloc]
@@ -242,12 +243,12 @@ NSImage* IPHDotImage(const ui::ColorProvider* color_provider) {
 }
 
 - (void)controllerWillAddMenu:(NSMenu*)menu fromModel:(ui::MenuModel*)model {
-  int alerted_index = -1;
+  absl::optional<size_t> alerted_index;
   IdentifierContainer* const element_ids =
       [[[IdentifierContainer alloc] init] autorelease];
-  for (int i = 0; i < model->GetItemCount(); ++i) {
+  for (size_t i = 0; i < model->GetItemCount(); ++i) {
     if (model->IsAlertedAt(i)) {
-      DCHECK_LT(alerted_index, 0);
+      DCHECK(!alerted_index.has_value());
       alerted_index = i;
     }
     const ui::ElementIdentifier identifier = model->GetElementIdentifierAt(i);
@@ -255,14 +256,16 @@ NSImage* IPHDotImage(const ui::ColorProvider* color_provider) {
       [element_ids ids].push_back(identifier);
   }
 
-  if (alerted_index >= 0 || ![element_ids ids].empty()) {
+  if (alerted_index.has_value() || ![element_ids ids].empty()) {
     auto shown_callback = ^(NSNotification* note) {
       NSMenu* const menu_obj = note.object;
-      if (alerted_index >= 0) {
+      if (alerted_index.has_value()) {
         if ([menu respondsToSelector:@selector(_menuImpl)]) {
           NSCarbonMenuImpl* menuImpl = [menu_obj _menuImpl];
           if ([menuImpl respondsToSelector:@selector(highlightItemAtIndex:)]) {
-            [menuImpl highlightItemAtIndex:alerted_index];
+            const auto index =
+                base::checked_cast<NSInteger>(alerted_index.value());
+            [menuImpl highlightItemAtIndex:index];
           }
         }
       }
@@ -366,8 +369,10 @@ namespace {
 // Returns the first item in |menu_controller|'s menu that will be checked.
 NSMenuItem* FirstCheckedItem(MenuControllerCocoa* menu_controller) {
   for (NSMenuItem* item in [[menu_controller menu] itemArray]) {
-    if ([menu_controller model]->IsItemCheckedAt([item tag]))
+    if ([menu_controller model]->IsItemCheckedAt(
+            base::checked_cast<size_t>([item tag]))) {
       return item;
+    }
   }
   return nil;
 }

@@ -9,11 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "ash/wm/desks/templates/saved_desk_feedback_button.h"
 #include "base/guid.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/events/event.h"
-#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/view.h"
@@ -21,8 +21,8 @@
 
 namespace ash {
 
+class DeskMiniView;
 class DeskTemplate;
-class PillButton;
 class SavedDeskGridView;
 class SavedDeskItemView;
 class SavedDeskLibraryEventHandler;
@@ -48,6 +48,8 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
 
   const std::vector<SavedDeskGridView*>& grid_views() { return grid_views_; }
 
+  FeedbackButton* feedback_button() { return feedback_button_; }
+
   // Retrieve the item view for a given saved desk, or nullptr.
   SavedDeskItemView* GetItemForUUID(const base::GUID& uuid);
 
@@ -60,7 +62,16 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
                             bool initializing_grid_view,
                             const base::GUID& last_saved_desk_uuid);
 
-  void DeleteTemplates(const std::vector<std::string>& uuids);
+  // Delete all templates identified by `uuids`. If `delete_animation` is false,
+  // then the respective item views will just disappear instead of fading out.
+  void DeleteTemplates(const std::vector<std::string>& uuids,
+                       bool delete_animation);
+
+  // This performs the launch animation for Save & Recall. The `DeskItemView`
+  // identified by `uuid` is animated up into the position of the desk preview
+  // housed in `mini_view`. It then crossfades into the desk preview. The
+  // `DeskItemView` is also removed from the grid.
+  void AnimateDeskLaunch(const base::GUID& uuid, DeskMiniView* mini_view);
 
  private:
   friend class SavedDeskLibraryEventHandler;
@@ -82,6 +93,14 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
   aura::Window* GetWidgetWindow();
 
   void OnLocatedEvent(ui::LocatedEvent* event, bool is_touch);
+
+  // This returns the screen space bounds of the desk preview that `mini_view`
+  // holds. It is intended to be called when launching a Save & Recall desk so
+  // that the `SavedDeskItemView` can be animated up to the `DesksBarView`. It
+  // takes animation into consideration and will return the position where the
+  // desk preview will end up, rather than where it currently is.
+  absl::optional<gfx::Rect> GetDeskPreviewBoundsForLaunch(
+      const DeskMiniView* mini_view);
 
   // views::View:
   void AddedToWidget() override;
@@ -113,7 +132,7 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
 
   // Owned by views hierarchy. Temporary button to help users give feedback.
   // TODO(crbug.com/1289880): Remove this button when it is no longer needed.
-  PillButton* feedback_button_ = nullptr;
+  FeedbackButton* feedback_button_ = nullptr;
 
   // Label that shows up when the library has no items.
   views::Label* no_items_label_ = nullptr;

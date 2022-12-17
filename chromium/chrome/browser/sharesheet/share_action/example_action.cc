@@ -29,15 +29,19 @@ const gfx::VectorIcon& ExampleAction::GetActionIcon() {
 
 void ExampleAction::LaunchAction(SharesheetController* controller,
                                  views::View* root_view,
-                                 apps::mojom::IntentPtr intent) {
+                                 apps::IntentPtr intent) {
   LOG(ERROR) << "ExampleAction launches.";
   controller_ = controller;
-  controller_->CloseBubble(SharesheetResult::kSuccess);
 }
 
 void ExampleAction::OnClosing(SharesheetController* controller) {
   LOG(ERROR) << "ExampleAction knows it needs to spin down now.";
   controller_ = nullptr;
+}
+
+bool ExampleAction::HasActionView() {
+  // Return true so that the UI is shown after it has been selected.
+  return true;
 }
 
 }  // namespace sharesheet

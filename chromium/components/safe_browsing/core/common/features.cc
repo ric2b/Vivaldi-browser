@@ -79,14 +79,11 @@ const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks{
 const base::Feature kDownloadBubble{"DownloadBubble",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kEnhancedProtection {
-  "SafeBrowsingEnhancedProtection",
-#if BUILDFLAG(IS_IOS)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
+const base::Feature kDownloadBubbleV2{"DownloadBubbleV2",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnhancedProtection{"SafeBrowsingEnhancedProtection",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnhancedProtectionPhase2IOS{
     "SafeBrowsingEnhancedProtectionPhase2IOS",
@@ -118,11 +115,24 @@ const base::Feature kExtensionTelemetryReportContactedHosts{
 const base::Feature kFileTypePoliciesTag{"FileTypePoliciesTag",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kLogAccountEnhancedProtectionStateInProtegoPings{
+    "TailoredSecurityLogAccountEnhancedProtectionStateInProtegoPings",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kSimplifiedUrlDisplay{"SimplifiedUrlDisplay",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kTailoredSecurityDesktopNotice{
+    "TailoredSecurityDesktopNotice", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kTailoredSecurityIntegration{
-    "TailoredSecurityIntegration", base::FEATURE_ENABLED_BY_DEFAULT};
+  "TailoredSecurityIntegration",
+#if BUILDFLAG(IS_IOS)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 const base::Feature kOmitNonUserGesturesFromReferrerChain{
     "SafeBrowsingOmitNonUserGesturesFromReferrerChain",
@@ -162,7 +172,7 @@ const base::Feature kVisualFeaturesSizes{"VisualFeaturesSizes",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kVisualFeaturesInCsppPings{
-    "VisualFeaturesInCsppPings", base::FEATURE_DISABLED_BY_DEFAULT};
+    "VisualFeaturesInCsppPings", base::FEATURE_ENABLED_BY_DEFAULT};
 
 namespace {
 // List of Safe Browsing features. Boolean value for each list member should
@@ -181,6 +191,7 @@ constexpr struct {
     {&kConnectorsScanningReportOnlyUI, true},
     {&kDelayedWarnings, true},
     {&kDownloadBubble, true},
+    {&kDownloadBubbleV2, true},
     {&kEnhancedProtection, true},
     {&kEnhancedProtectionPhase2IOS, true},
     {&kExtensionTelemetry, true},
@@ -198,33 +209,33 @@ constexpr struct {
 
 // Adds the name and the enabled/disabled status of a given feature.
 void AddFeatureAndAvailability(const base::Feature* exp_feature,
-                               base::ListValue* param_list) {
-  param_list->Append(base::Value(exp_feature->name));
+                               base::Value::List* param_list) {
+  param_list->Append(exp_feature->name);
   if (base::FeatureList::IsEnabled(*exp_feature)) {
-    param_list->Append(base::Value("Enabled"));
+    param_list->Append("Enabled");
   } else {
-    param_list->Append(base::Value("Disabled"));
+    param_list->Append("Disabled");
   }
 }
 }  // namespace
 
 // Returns the list of the experimental features that are enabled or disabled,
 // as part of currently running Safe Browsing experiments.
-base::ListValue GetFeatureStatusList() {
-  base::ListValue param_list;
+base::Value::List GetFeatureStatusList() {
+  base::Value::List param_list;
   for (const auto& feature_status : kExperimentalFeatures) {
     if (feature_status.show_state)
       AddFeatureAndAvailability(feature_status.feature, &param_list);
   }
 
   // Manually add experimental features that we want param values for.
-  param_list.Append(base::Value(variations::GetVariationParamValueByFeature(
+  param_list.Append(variations::GetVariationParamValueByFeature(
       safe_browsing::kClientSideDetectionModelTag,
-      kClientSideDetectionTagParamName)));
-  param_list.Append(base::Value(kClientSideDetectionModelTag.name));
-  param_list.Append(base::Value(variations::GetVariationParamValueByFeature(
-      kFileTypePoliciesTag, kFileTypePoliciesTagParamName)));
-  param_list.Append(base::Value(kFileTypePoliciesTag.name));
+      kClientSideDetectionTagParamName));
+  param_list.Append(kClientSideDetectionModelTag.name);
+  param_list.Append(variations::GetVariationParamValueByFeature(
+      kFileTypePoliciesTag, kFileTypePoliciesTagParamName));
+  param_list.Append(kFileTypePoliciesTag.name);
 
   return param_list;
 }

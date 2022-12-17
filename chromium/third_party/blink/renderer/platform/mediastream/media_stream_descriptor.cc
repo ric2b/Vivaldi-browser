@@ -34,6 +34,7 @@
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component_impl.h"
 #include "third_party/blink/renderer/platform/wtf/uuid.h"
 
 namespace blink {
@@ -50,7 +51,7 @@ int MediaStreamDescriptor::GenerateUniqueId() {
 }
 
 void MediaStreamDescriptor::AddComponent(MediaStreamComponent* component) {
-  switch (component->Source()->GetType()) {
+  switch (component->GetSourceType()) {
     case MediaStreamSource::kTypeAudio:
       if (audio_components_.Find(component) == kNotFound)
         audio_components_.push_back(component);
@@ -69,7 +70,7 @@ void MediaStreamDescriptor::AddComponent(MediaStreamComponent* component) {
 
 void MediaStreamDescriptor::RemoveComponent(MediaStreamComponent* component) {
   wtf_size_t pos = kNotFound;
-  switch (component->Source()->GetType()) {
+  switch (component->GetSourceType()) {
     case MediaStreamSource::kTypeAudio:
       pos = audio_components_.Find(component);
       if (pos != kNotFound)
@@ -145,12 +146,12 @@ MediaStreamDescriptor::MediaStreamDescriptor(
   DCHECK(id_.length());
   for (MediaStreamSource* source : audio_sources) {
     audio_components_.push_back(
-        MakeGarbageCollected<MediaStreamComponent>(source));
+        MakeGarbageCollected<MediaStreamComponentImpl>(source));
   }
 
   for (MediaStreamSource* source : video_sources) {
     video_components_.push_back(
-        MakeGarbageCollected<MediaStreamComponent>(source));
+        MakeGarbageCollected<MediaStreamComponentImpl>(source));
   }
 }
 

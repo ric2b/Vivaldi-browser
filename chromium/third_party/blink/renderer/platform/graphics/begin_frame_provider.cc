@@ -74,16 +74,17 @@ void BeginFrameProvider::CreateCompositorFrameSinkIfNeeded() {
   if (compositor_frame_sink_.is_bound())
     return;
 
-  // Once we are using RAF, this thread is driving Display updates. Update
-  // priority accordingly.
-  base::PlatformThread::SetCurrentThreadPriority(base::ThreadPriority::DISPLAY);
+  // Once we are using RAF, this thread is driving user interactive display
+  // updates. Update priority accordingly.
+  base::PlatformThread::SetCurrentThreadType(
+      base::ThreadType::kDisplayCritical);
 
   mojo::Remote<mojom::blink::EmbeddedFrameSinkProvider> provider;
   Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
       provider.BindNewPipeAndPassReceiver());
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      ThreadScheduler::Current()->CompositorTaskRunner();
+      begin_frame_client_->GetCompositorTaskRunner();
 
   provider->CreateSimpleCompositorFrameSink(
       parent_frame_sink_id_, frame_sink_id_,

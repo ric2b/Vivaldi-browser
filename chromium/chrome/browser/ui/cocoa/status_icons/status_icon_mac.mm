@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/cocoa/status_icons/status_icon_mac.h"
 
+#include "base/memory/raw_ptr.h"
+
 #import <AppKit/AppKit.h>
 
 #include "base/check.h"
@@ -18,7 +20,7 @@
 #include "app/vivaldi_apptools.h"
 
 @interface StatusItemController : NSObject {
-  StatusIconMac* _statusIcon; // weak
+  raw_ptr<StatusIconMac> _statusIcon;  // weak
 }
 - (instancetype)initWithIcon:(StatusIconMac*)icon;
 - (void)handleClick:(id)sender;

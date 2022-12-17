@@ -18,10 +18,6 @@
 
 class Profile;
 
-namespace ash {
-class SystemWebAppManager;
-}
-
 namespace content {
 class WebContents;
 }
@@ -46,16 +42,28 @@ class OsIntegrationManager;
 class WebAppTranslationManager;
 class WebAppCommandManager;
 
+// WebAppProvider is the heart of Chrome web app code.
+//
 // Connects Web App features, such as the installation of default and
 // policy-managed web apps, with Profiles (as WebAppProvider is a
 // Profile-linked KeyedService) and their associated PrefService.
 //
 // Lifecycle notes:
-// All subsystems are constructed independently of each other in the
-// WebAppProvider constructor.
-// Subsystem construction should have no side effects and start no tasks.
-// Tests can replace any of the subsystems before Start() is called.
-// Similarly, in destruction, subsystems should not refer to each other.
+// - WebAppProvider and its sub-managers are not ready for use until the
+//   on_registry_ready() event has fired. Its database must be loaded from
+//   disk before it can be interacted with.
+//   Example of waiting for on_registry_ready():
+//   WebAppProvider* provider = WebAppProvider::GetForWebApps(profile);
+//   provider->on_registry_ready().Post(
+//       FROM_HERE,
+//       base::BindOnce([](WebAppProvider& provider) {
+//         ...
+//       }, std::ref(*provider));
+// - All subsystems are constructed independently of each other in the
+//   WebAppProvider constructor.
+// - Subsystem construction should have no side effects and start no tasks.
+// - Tests can replace any of the subsystems before Start() is called.
+// - Similarly, in destruction, subsystems should not refer to each other.
 class WebAppProvider : public KeyedService {
  public:
   // Deprecated: Use GetForWebApps instead.
@@ -133,8 +141,6 @@ class WebAppProvider : public KeyedService {
   // KeyedService:
   void Shutdown() override;
 
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-
   // Signals when app registry becomes ready.
   const base::OneShotEvent& on_registry_ready() const {
     return on_registry_ready_;
@@ -148,10 +154,6 @@ class WebAppProvider : public KeyedService {
   }
 
  protected:
-  // TODO(crbug.com/1321984): Delete system_web_app_manager_.
-  friend class ash::SystemWebAppManager;
-  friend class WebAppProviderFactory;
-
   virtual void StartImpl();
 
   void CreateSubsystems(Profile* profile);
@@ -179,9 +181,6 @@ class WebAppProvider : public KeyedService {
   std::unique_ptr<WebAppInstallFinalizer> install_finalizer_;
   std::unique_ptr<ManifestUpdateManager> manifest_update_manager_;
   std::unique_ptr<ExternallyManagedAppManager> externally_managed_app_manager_;
-  // TODO(crbug.com/1321984): Extract system web app manager as
-  // chrome/browser/ash/ keyed service.
-  std::unique_ptr<ash::SystemWebAppManager> system_web_app_manager_;
   std::unique_ptr<WebAppAudioFocusIdMap> audio_focus_id_map_;
   std::unique_ptr<WebAppInstallManager> install_manager_;
   std::unique_ptr<WebAppPolicyManager> web_app_policy_manager_;

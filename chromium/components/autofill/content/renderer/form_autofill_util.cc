@@ -20,6 +20,7 @@
 #include "base/containers/flat_set.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -253,34 +254,37 @@ std::u16string FindChildTextInner(const WebNode& node,
     return std::u16string();
 
   // Ignore elements known not to contain inferable labels.
+  bool skip_node = false;
   if (node.IsElementNode()) {
     const WebElement element = node.To<WebElement>();
-    if (IsOptionElement(element) || IsScriptElement(element) ||
-        IsNoScriptElement(element) ||
+    if (IsOptionElement(element) ||
+        (element.HasHTMLTagName("div") && base::Contains(divs_to_skip, node)) ||
         (element.IsFormControlElement() &&
          IsAutofillableElement(element.To<WebFormControlElement>()))) {
       return std::u16string();
     }
-
-    if (element.HasHTMLTagName("div") && base::Contains(divs_to_skip, node))
-      return std::u16string();
+    skip_node = IsScriptElement(element) || IsNoScriptElement(element);
   }
 
-  // Extract the text exactly at this node.
-  std::u16string node_text = node.NodeValue().Utf16();
+  std::u16string node_text;
 
-  // Recursively compute the children's text.
-  // Preserve inter-element whitespace separation.
-  std::u16string child_text =
-      FindChildTextInner(node.FirstChild(), depth - 1, divs_to_skip);
-  bool add_space = node.IsTextNode() && node_text.empty();
-  node_text = CombineAndCollapseWhitespace(node_text, child_text, add_space);
+  if (!skip_node) {
+    // Extract the text exactly at this node.
+    node_text = node.NodeValue().Utf16();
+
+    // Recursively compute the children's text.
+    // Preserve inter-element whitespace separation.
+    std::u16string child_text =
+        FindChildTextInner(node.FirstChild(), depth - 1, divs_to_skip);
+    bool add_space = node.IsTextNode() && node_text.empty();
+    node_text = CombineAndCollapseWhitespace(node_text, child_text, add_space);
+  }
 
   // Recursively compute the siblings' text.
   // Again, preserve inter-element whitespace separation.
   std::u16string sibling_text =
       FindChildTextInner(node.NextSibling(), depth - 1, divs_to_skip);
-  add_space = node.IsTextNode() && node_text.empty();
+  bool add_space = node.IsTextNode() && node_text.empty();
   node_text = CombineAndCollapseWhitespace(node_text, sibling_text, add_space);
 
   return node_text;
@@ -304,21 +308,14 @@ std::u16string FindChildTextWithIgnoreList(
 
 bool IsLabelValid(base::StringPiece16 inferred_label) {
   // List of characters a label can't be entirely made of (this list can grow).
-  auto IsStopWord = [](char16_t c) {
-    switch (c) {
-      case u' ':
-      case u'*':
-      case u':':
-      case u'-':
-      case u'–':  // U+2013
-      case u'(':
-      case u')':
-        return true;
-      default:
-        return false;
-    }
-  };
-  return !base::ranges::all_of(inferred_label, IsStopWord);
+  const base::StringPiece16 invalid_chars =
+      base::FeatureList::IsEnabled(
+          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
+          ? u" *:"
+          : u" *:-–()";  // U+2013 dash
+  return !base::ranges::all_of(inferred_label, [&](char16_t c) {
+    return base::Contains(invalid_chars, c);
+  });
 }
 
 // Shared function for InferLabelFromPrevious() and InferLabelFromNext().
@@ -358,8 +355,13 @@ bool InferLabelFromSibling(const WebFormControlElement& element,
       // A text node's value will be empty if it is for a line break.
       bool add_space = sibling.IsTextNode() && value.empty();
       inferred_label_source = FormFieldData::LabelSource::kCombined;
-      inferred_label =
-          CombineAndCollapseWhitespace(value, inferred_label, add_space);
+      if (forward) {
+        inferred_label =
+            CombineAndCollapseWhitespace(inferred_label, value, add_space);
+      } else {
+        inferred_label =
+            CombineAndCollapseWhitespace(value, inferred_label, add_space);
+      }
       continue;
     }
 
@@ -649,8 +651,14 @@ std::u16string InferLabelFromTableRow(const WebNode& cell) {
 // e.g. <div>Some Text<span><input ...></span></div>
 // e.g. <div>Some Text</div><div><input ...></div>
 //
-// Because this is already traversing the <div> structure, if it finds a <label>
-// sibling along the way, infer from that <label>.
+// Contrary to the other InferLabelFrom* functions, this functions walks up
+// the DOM tree from the original input, instead of down from the surrounding
+// tag. While doing so, if a <label> or text node sibling are found along the
+// way, a label is inferred from them directly. For example, <div>First
+// name<div><input></div>Last name<div><input></div></div> infers "First name"
+// and "Last name" for the two inputs, respectively, by picking up the text
+// nodes on the way to the surrounding div. Without doing so, the label of both
+// inputs becomes "First nameLast name".
 std::u16string InferLabelFromDivTable(const WebFormControlElement& element) {
   WebNode node = element.ParentNode();
   bool looking_for_parent = true;
@@ -679,11 +687,21 @@ std::u16string InferLabelFromDivTable(const WebFormControlElement& element) {
       }
 
       looking_for_parent = false;
-    } else if (!looking_for_parent && HasTagName(node, *kLabel)) {
-      WebLabelElement label_element = node.To<WebLabelElement>();
-      if (label_element.CorrespondingControl().IsNull())
+    } else if (!looking_for_parent) {
+      // Infer a label from text nodes and unassigned <label> siblings.
+      if (HasTagName(node, *kLabel) &&
+          node.To<WebLabelElement>().CorrespondingControl().IsNull()) {
         inferred_label = FindChildText(node);
-    } else if (looking_for_parent && IsTraversableContainerElement(node)) {
+      } else if (node.IsTextNode()) {
+        // TODO(crbug.com/796918): Ideally `FindChildText()` should be used
+        // here as well. But because the function doesn't trim it's return
+        // value on every code path, the `NodeValue()` is explicitly extracted
+        // here. Trimming is necessary to skip indentation.
+        inferred_label = node.NodeValue().Utf16();
+        base::TrimWhitespace(inferred_label, base::TrimPositions::TRIM_ALL,
+                             &inferred_label);
+      }
+    } else if (IsTraversableContainerElement(node)) {
       // If the element is in a non-div container, its label most likely is too.
       break;
     }
@@ -1034,7 +1052,8 @@ std::vector<WebFormControlElement> ForEachMatchingFormFieldCommon(
 
     WebFormControlElement& element = *it;
 
-    element.SetAutofillSection(WebString::FromUTF8(data.fields[i].section));
+    element.SetAutofillSection(
+        WebString::FromUTF8(data.fields[i].section.ToString()));
 
     // Only autofill empty fields (or those with the field's default value
     // attribute) and the field that initiated the filling, i.e. the field the
@@ -1285,7 +1304,8 @@ struct CompareByRendererId {
 FormFieldData* SearchForFormControlByName(
     const std::u16string& field_name,
     const base::flat_set<std::pair<FormFieldData*, ShadowFieldData>,
-                         CompareByRendererId>& field_set) {
+                         CompareByRendererId>& field_set,
+    AssignedLabelSource& label_source) {
   if (field_name.empty())
     return nullptr;
 
@@ -1299,6 +1319,14 @@ FormFieldData* SearchForFormControlByName(
              base::Contains(p.second.shadow_host_id_attributes, field_name);
     };
     it = base::ranges::find_if(field_set, ShadowHostHasTargetName);
+    if (it != end) {
+      label_source =
+          base::Contains(it->second.shadow_host_name_attributes, field_name)
+              ? AssignedLabelSource::kShadowHostName
+              : AssignedLabelSource::kShadowHostId;
+    }
+  } else {
+    label_source = AssignedLabelSource::kName;
   }
   return it != end ? it->first : nullptr;
 }
@@ -1323,12 +1351,13 @@ void MatchLabelsAndFields(
     WebLabelElement label = item.To<WebLabelElement>();
     WebElement control = label.CorrespondingControl();
     FormFieldData* field_data = nullptr;
+    auto label_source = AssignedLabelSource::kId;
 
     if (control.IsNull()) {
       // Sometimes site authors will incorrectly specify the corresponding
       // field element's name rather than its id, so we compensate here.
       field_data = SearchForFormControlByName(label.GetAttribute(*kFor).Utf16(),
-                                              field_set);
+                                              field_set, label_source);
     } else if (control.IsFormControlElement()) {
       WebFormControlElement form_control = control.To<WebFormControlElement>();
       if (form_control.FormControlTypeForAutofill() == *kHidden)
@@ -1350,6 +1379,7 @@ void MatchLabelsAndFields(
     if (!field_data->label.empty() && !label_text.empty())
       field_data->label += u" ";
     field_data->label += label_text;
+    base::UmaHistogramEnumeration(kAssignedLabelSourceHistogram, label_source);
   }
 }
 
@@ -1452,7 +1482,8 @@ bool FormOrFieldsetsToFormData(
   }
 
   // Extracts field labels from the <label for="..."> tags.
-  {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillImprovedLabelForInference)) {
     std::vector<std::pair<FormFieldData*, ShadowFieldData>> items;
     DCHECK_EQ(form->fields.size(), shadow_fields.size());
     for (size_t i = 0; i < form->fields.size(); i++) {
@@ -1597,6 +1628,22 @@ std::string GetAutocompleteAttribute(const WebElement& element) {
   return autocomplete_attribute;
 }
 
+// Returns the concatenated label text of all labels assigned to the `element`
+// using <label for=`element.GetIdAttribute()`>, separated by a space.
+std::u16string GetAssignedLabel(const WebFormControlElement& element) {
+  std::u16string concatenated_labels;
+  for (const auto& label : element.Labels()) {
+    if (auto label_text = FindChildText(label); !label_text.empty()) {
+      if (!concatenated_labels.empty())
+        concatenated_labels.push_back(' ');
+      concatenated_labels.append(std::move(label_text));
+      base::UmaHistogramEnumeration(kAssignedLabelSourceHistogram,
+                                    AssignedLabelSource::kId);
+    }
+  }
+  return concatenated_labels;
+}
+
 void FindFormElementUpShadowRoots(const WebElement& element,
                                   WebFormElement* found_form_element) {
   // If we are in shadowdom, then look to see if the host(s) are inside a form
@@ -1636,7 +1683,7 @@ bool IsVisibleIframe(const WebElement& element) {
 bool IsAdIframe(const WebElement& element) {
   DCHECK(element.HasHTMLTagName("iframe"));
   WebFrame* iframe = WebFrame::FromFrameOwnerElement(element);
-  return iframe && iframe->IsAdSubframe();
+  return iframe && iframe->IsAdFrame();
 }
 
 // A necessary condition for an iframe to be added to FormData::child_frames.
@@ -1796,6 +1843,11 @@ bool IsTextAreaElement(const WebFormControlElement& element) {
          element.FormControlTypeForAutofill() == "textarea";
 }
 
+bool IsTextAreaElementOrTextInput(const WebFormControlElement& element) {
+  return IsTextAreaElement(element) ||
+         IsTextInput(element.DynamicTo<WebInputElement>());
+}
+
 bool IsCheckableElement(const WebInputElement& element) {
   if (element.IsNull())
     return false;
@@ -1822,7 +1874,7 @@ bool IsWebElementFocusable(const blink::WebElement& element) {
   return element.IsFocusable();
 }
 
-bool IsWebElementVisible(blink::WebElement element) {
+bool IsWebElementVisible(const blink::WebElement& element) {
   auto HasMinSize = [](auto size) {
     constexpr int kMinPixelSize = 10;
     return size.width() >= kMinPixelSize && size.height() >= kMinPixelSize;
@@ -1906,6 +1958,10 @@ void WebFormControlElementToFormField(
   field->form_control_ax_id = element.GetAxId();
   field->form_control_type = element.FormControlTypeForAutofill().Utf8();
   field->autocomplete_attribute = GetAutocompleteAttribute(element);
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillImprovedLabelForInference)) {
+    field->label = GetAssignedLabel(element);
+  }
   if (base::EqualsCaseInsensitiveASCII(element.GetAttribute(*kRole).Utf16(),
                                        "presentation")) {
     field->role = FormFieldData::RoleAttribute::kPresentation;

@@ -457,7 +457,7 @@ class ComplexOutlinePainter {
                            outline_style_ != EBorderStyle::kDouble;
     if (use_alpha_layer) {
       context_.BeginLayer(color_.Alpha() / 255.0);
-      color_.SetRGB(color_.Red(), color_.Green(), color_.Blue());
+      color_ = Color::FromRGB(color_.Red(), color_.Green(), color_.Blue());
     }
 
     SkPath outer_path = right_angle_outer_path_;
@@ -548,7 +548,7 @@ class ComplexOutlinePainter {
         PaintAutoDarkMode(style_, DarkModeFilter::ElementRole::kBackground));
     if (is_rounded_) {
       context_.StrokePath(center_path, auto_dark_mode,
-                          Path(center_path).length() + width_, width_);
+                          Path(center_path).length(), width_);
     } else {
       // Draw edges one by one instead of the whole path to let the corners
       // have starting/ending dots/dashes.

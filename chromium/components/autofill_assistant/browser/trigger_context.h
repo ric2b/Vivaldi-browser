@@ -23,7 +23,9 @@ class TriggerContext {
             bool onboarding_shown,
             bool is_direct_action,
             const std::string& initial_url,
-            bool is_in_chrome_triggered);
+            bool is_in_chrome_triggered,
+            bool is_externally_triggered,
+            bool skip_autofill_assistant_onboarding);
     Options();
     ~Options();
     std::string experiment_ids;
@@ -32,6 +34,8 @@ class TriggerContext {
     bool is_direct_action = false;
     std::string initial_url;
     bool is_in_chrome_triggered = false;
+    bool is_externally_triggered = false;
+    bool skip_autofill_assistant_onboarding = false;
   };
 
   // Creates an empty trigger context.
@@ -53,7 +57,9 @@ class TriggerContext {
                  bool onboarding_shown,
                  bool is_direct_action,
                  const std::string& initial_url,
-                 bool is_in_chrome_triggered);
+                 bool is_in_chrome_triggered,
+                 bool is_externally_triggered,
+                 bool skip_autofill_assistant_onboarding);
 
   // Creates a trigger context that contains the merged contents of all input
   // instances at the time of calling (does not reference |contexts| after
@@ -100,6 +106,13 @@ class TriggerContext {
   // i.e., a button or link on a website, or whether this is from within Chrome.
   virtual bool GetInChromeTriggered() const;
 
+  // Returns whether the triggering source is external, i.e. headless.
+  virtual bool GetIsExternallyTriggered() const;
+
+  // Returns whether the triggering source will handle its own onboarding flow
+  // and the default onboarding flow should be skipped.
+  virtual bool GetSkipAutofillAssistantOnboarding() const;
+
   // Returns the trigger type of the trigger script that was shown and accepted
   // at the beginning of the flow, if any.
   virtual TriggerScriptProto::TriggerUIType GetTriggerUIType() const;
@@ -119,6 +132,8 @@ class TriggerContext {
   bool onboarding_shown_ = false;
   bool direct_action_ = false;
   bool is_in_chrome_triggered_ = false;
+  bool is_externally_triggered_ = false;
+  bool skip_autofill_assistant_onboarding_ = false;
 
   // The initial url at the time of triggering.
   std::string initial_url_;

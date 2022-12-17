@@ -77,14 +77,14 @@ class CalendarMonthViewTest : public AshTestBase {
     ash::system::TimezoneSettings::GetInstance()->SetTimezoneFromID(timezone);
     controller_ = std::make_unique<CalendarViewController>();
     controller_->UpdateMonth(date);
-    calendar_month_view_ =
-        std::make_unique<CalendarMonthView>(date, controller_.get());
+    calendar_month_view_ = std::make_unique<CalendarMonthView>(
+        controller_->GetOnScreenMonthFirstDayUTC(), controller_.get());
     calendar_month_view_->Layout();
   }
 
-  void UploadEvents() {
-    calendar_month_view_->calendar_model_->InsertEventsForTesting(
-        CreateMockEventList().get());
+  void MockFetchEvents(base::Time start_of_month) {
+    calendar_month_view_->calendar_model_->InsertPendingFetchesForTesting(
+        start_of_month);
   }
 
   void TriggerPaint() {
@@ -107,9 +107,10 @@ class CalendarMonthViewTest : public AshTestBase {
   }
 
   void NotifyObservers(base::Time start_of_month) {
-    for (auto& observer : calendar_month_view_->calendar_model_->observers_)
-      observer.OnEventsFetched(CalendarModel::kSuccess, start_of_month,
-                               nullptr);
+    calendar_month_view_->calendar_model_->PruneEventCache();
+    calendar_month_view_->calendar_model_->OnEventsFetched(
+        start_of_month, google_apis::ApiErrorCode::HTTP_SUCCESS,
+        CreateMockEventList().get());
   }
 
   CalendarModel::MonthToEventsMap event_months() {
@@ -215,6 +216,44 @@ TEST_F(CalendarMonthViewTest, AzoreSummerTime) {
                       ->GetText());
 }
 
+// Tests that the month view should be rendered correctly with any time zone.
+// Using March to test since there's a DST change in several time zones in
+// March. If any calculation is wrong, there could be duplicated dates and the
+// last row will be rendered with one day off.
+TEST_F(CalendarMonthViewTest, AllTimeZone) {
+  // Create a monthview based on Mar,1st 2022.
+  //
+  // 27, 28, 1 , 2 , 3 , 4 , 5
+  // 6,  7,  8 , 9 , 10, 11, 12
+  // 13, 14, 15, 16, 17, 18, 19
+  // 20, 21, 22, 23, 24, 25, 26
+  // 27, 28, 29, 30, 31, 1 , 2
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("6 Mar 2022 10:00 GMT", &date));
+
+  for (auto* timezone : kAllTimeZones) {
+    // Creates a month view based on the current timezone.
+    CreateMonthView(date, base::UTF8ToUTF16(timezone));
+
+    // Checks some dates in the first row and last row of this month view.
+    EXPECT_EQ(u"27",
+              static_cast<views::LabelButton*>(month_view()->children()[0])
+                  ->GetText());
+    EXPECT_EQ(u"28",
+              static_cast<views::LabelButton*>(month_view()->children()[1])
+                  ->GetText());
+    EXPECT_EQ(u"1",
+              static_cast<views::LabelButton*>(month_view()->children()[2])
+                  ->GetText());
+    EXPECT_EQ(u"29",
+              static_cast<views::LabelButton*>(month_view()->children()[30])
+                  ->GetText());
+    EXPECT_EQ(u"2",
+              static_cast<views::LabelButton*>(month_view()->children()[34])
+                  ->GetText());
+  }
+}
+
 // Tests that todays row position is not updated when today is not in the month.
 TEST_F(CalendarMonthViewTest, TodayNotInMonth) {
   base::Time date;
@@ -281,7 +320,7 @@ TEST_F(CalendarMonthViewTest, UpdateEvents) {
 
   CreateMonthView(date, u"America/Los_Angeles");
   // Used to fetch events and notify observers.
-  base::Time date_midnight = date.UTCMidnight();
+  base::Time month_start_midnight = calendar_utils::GetStartOfMonthUTC(today);
 
   TriggerPaint();
   // Grayed out cell. Sep 2nd is the 33 one in this calendar, which is with
@@ -300,7 +339,7 @@ TEST_F(CalendarMonthViewTest, UpdateEvents) {
             static_cast<CalendarDateCellView*>(month_view()->children()[17])
                 ->GetTooltipText());
 
-  InsertPendingFetches(date_midnight);
+  InsertPendingFetches(month_start_midnight);
   // Grayed out cell. Sep 2nd is the 33 one in this calendar, which is with
   // index 32.
   EXPECT_EQ(u"2",
@@ -319,8 +358,8 @@ TEST_F(CalendarMonthViewTest, UpdateEvents) {
 
   // After events are fetched before the observers are notified the event number
   // is not updated.
-  DeletePendingFetches(date_midnight);
-  UploadEvents();
+  DeletePendingFetches(month_start_midnight);
+  MockFetchEvents(month_start_midnight);
   // Grayed out cell. Sep 2nd is the 33 one in this calendar, which is with
   // index 32.
   EXPECT_EQ(u"2",
@@ -339,7 +378,7 @@ TEST_F(CalendarMonthViewTest, UpdateEvents) {
 
   // After notifying observers and repainting, the event numbers are updated for
   // regular cells, not for grayed out cells.
-  NotifyObservers(date_midnight);
+  NotifyObservers(month_start_midnight);
   EXPECT_EQ(u"2",
             static_cast<CalendarDateCellView*>(month_view()->children()[32])
                 ->GetText());
@@ -356,10 +395,6 @@ TEST_F(CalendarMonthViewTest, UpdateEvents) {
 }
 
 TEST_F(CalendarMonthViewTest, TimeZone) {
-  // Create a monthview based on Aug,1st 2021. Today is set to 18th.
-  base::Time date;
-  ASSERT_TRUE(base::Time::FromString("1 Aug 2021 10:00 GMT", &date));
-
   // Set "Now" to a date that is in this month.
   base::Time today;
   ASSERT_TRUE(base::Time::FromString("18 Aug 2021 10:00 GMT", &today));
@@ -369,13 +404,13 @@ TEST_F(CalendarMonthViewTest, TimeZone) {
       /*thread_ticks_override=*/nullptr);
 
   // Used to fetch events and notify observers.
-  base::Time date_midnight = date.UTCMidnight();
+  base::Time month_start_midnight = calendar_utils::GetStartOfMonthUTC(today);
 
   // Sets the timezone to "America/Los_Angeles";
-  CreateMonthView(date, u"America/Los_Angeles");
+  CreateMonthView(today, u"America/Los_Angeles");
   TriggerPaint();
-  UploadEvents();
-  NotifyObservers(date_midnight);
+  MockFetchEvents(month_start_midnight);
+  NotifyObservers(month_start_midnight);
 
   EXPECT_EQ(u"18",
             static_cast<CalendarDateCellView*>(month_view()->children()[17])
@@ -405,10 +440,6 @@ TEST_F(CalendarMonthViewTest, TimeZone) {
 }
 
 TEST_F(CalendarMonthViewTest, InactiveUserSession) {
-  // Create a monthview based on Aug,1st 2021. Today is set to 18th.
-  base::Time date;
-  ASSERT_TRUE(base::Time::FromString("1 Aug 2021 10:00 GMT", &date));
-
   // Set "Now" to a date that is in this month.
   base::Time today;
   ASSERT_TRUE(base::Time::FromString("18 Aug 2021 10:00 GMT", &today));
@@ -417,13 +448,13 @@ TEST_F(CalendarMonthViewTest, InactiveUserSession) {
       &CalendarMonthViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
       /*thread_ticks_override=*/nullptr);
 
-  CreateMonthView(date, u"America/Los_Angeles");
+  CreateMonthView(today, u"America/Los_Angeles");
   // Used to fetch events and notify observers.
-  base::Time date_midnight = date.UTCMidnight();
+  base::Time month_start_midnight = calendar_utils::GetStartOfMonthUTC(today);
 
   TriggerPaint();
-  UploadEvents();
-  NotifyObservers(date_midnight);
+  MockFetchEvents(month_start_midnight);
+  NotifyObservers(month_start_midnight);
   EXPECT_EQ(u"18",
             static_cast<CalendarDateCellView*>(month_view()->children()[17])
                 ->GetText());

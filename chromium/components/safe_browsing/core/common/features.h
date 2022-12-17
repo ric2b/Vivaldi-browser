@@ -11,10 +11,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/values.h"
 
-namespace base {
-class ListValue;
-}  // namespace base
-
 namespace safe_browsing {
 // Features list, in alphabetical order.
 
@@ -76,6 +72,11 @@ extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
 // Whether to use download bubble instead of download shelf.
 extern const base::Feature kDownloadBubble;
 
+// The V2 of the download bubble, consisting of features that were not available
+// on the download shelf. This is only eligible to be enabled when
+// kDownloadBubble is already enabled.
+extern const base::Feature kDownloadBubbleV2;
+
 // Enables Enhanced Safe Browsing.
 extern const base::Feature kEnhancedProtection;
 
@@ -111,6 +112,9 @@ extern const base::Feature kFileTypePoliciesTag;
 // `kFileTypePoliciesTag`.
 const char kFileTypePoliciesTagParamName[] = "policy_omaha_tag";
 
+// Enable logging of the account enhanced protection setting in Protego pings.
+extern const base::Feature kLogAccountEnhancedProtectionStateInProtegoPings;
+
 // Enable omitting non-user gesture from referrer chain.
 extern const base::Feature kOmitNonUserGesturesFromReferrerChain;
 
@@ -145,6 +149,12 @@ extern const base::Feature kSendSampledPingsForProtegoAllowlistDomains;
 // default and control groups of the experiment.
 extern const base::Feature kSimplifiedUrlDisplay;
 
+// Controls whether to automatically enable Enhanced Protection for desktop
+// tailored security users. If not enabled, users of tailored security are
+// notified that they can enable Enhanced Protection through an operating system
+// notification.
+extern const base::Feature kTailoredSecurityDesktopNotice;
+
 // Controls whether the integration of tailored security settings is enabled.
 extern const base::Feature kTailoredSecurityIntegration;
 
@@ -167,7 +177,7 @@ extern const base::Feature kVisualFeaturesSizes;
 // Controls whether we send visual features in CSPP pings.
 extern const base::Feature kVisualFeaturesInCsppPings;
 
-base::ListValue GetFeatureStatusList();
+base::Value::List GetFeatureStatusList();
 
 // Returns the tag used for Client Side Phishing Detection models, as
 // computed from the current feature flags.

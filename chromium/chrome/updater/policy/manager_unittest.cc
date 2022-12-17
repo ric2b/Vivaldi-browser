@@ -7,9 +7,10 @@
 
 namespace updater {
 
-TEST(PolicyManager, GetPolicyManager) {
-  std::unique_ptr<PolicyManagerInterface> policy_manager(GetPolicyManager());
-  ASSERT_TRUE(policy_manager->IsManaged());
+TEST(PolicyManager, GetDefaultValuesPolicyManager) {
+  std::unique_ptr<PolicyManagerInterface> policy_manager(
+      GetDefaultValuesPolicyManager());
+  ASSERT_TRUE(policy_manager->HasActiveDevicePolicies());
 }
 
 TEST(PolicyManager, UpdateSuppressedTimes) {

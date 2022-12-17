@@ -22,10 +22,8 @@ namespace em = enterprise_management;
 namespace policy {
 
 RequestHandlerForRegisterBrowser::RequestHandlerForRegisterBrowser(
-    ClientStorage* client_storage,
-    PolicyStorage* policy_storage)
-    : EmbeddedPolicyTestServer::RequestHandler(client_storage, policy_storage) {
-}
+    EmbeddedPolicyTestServer* parent)
+    : EmbeddedPolicyTestServer::RequestHandler(parent) {}
 
 RequestHandlerForRegisterBrowser::~RequestHandlerForRegisterBrowser() = default;
 
@@ -73,7 +71,9 @@ std::unique_ptr<HttpResponse> RequestHandlerForRegisterBrowser::HandleRequest(
   client_info.allowed_policy_types.insert(
       {dm_protocol::kChromeMachineLevelUserCloudPolicyType,
        dm_protocol::kChromeMachineLevelUserCloudPolicyAndroidType,
-       dm_protocol::kChromeMachineLevelExtensionCloudPolicyType});
+       dm_protocol::kChromeMachineLevelUserCloudPolicyIOSType,
+       dm_protocol::kChromeMachineLevelExtensionCloudPolicyType,
+       dm_protocol::kChromeUserPolicyType});
   client_storage()->RegisterClient(std::move(client_info));
 
   return CreateHttpResponse(net::HTTP_OK,

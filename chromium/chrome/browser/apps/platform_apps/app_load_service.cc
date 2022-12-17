@@ -133,6 +133,7 @@ void AppLoadService::OnExtensionUnloaded(
     extensions::UnloadedExtensionReason reason) {
   if (!extension->is_platform_app())
     return;
+
 #if defined(VIVALDI_BUILD)
   if (vivaldi::IsVivaldiApp(extension->id())) {
     static int attempts = 5;  // avoid endless restart loop
@@ -151,6 +152,7 @@ void AppLoadService::OnExtensionUnloaded(
     }
   }
 #endif
+
   extensions::ExtensionPrefs* extension_prefs =
       extensions::ExtensionPrefs::Get(browser_context);
   if (WasUnloadedForReload(extension->id(), reason) &&

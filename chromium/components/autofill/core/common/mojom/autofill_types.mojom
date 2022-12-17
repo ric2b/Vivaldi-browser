@@ -35,8 +35,9 @@ enum SubmissionSource {
   NONE,                      // No submission signal was detected.
   SAME_DOCUMENT_NAVIGATION,  // The form was removed in same document
                              // navigation.
-  XHR_SUCCEEDED,             // The form was removed whem XHR succeeded.
-  FRAME_DETACHED,            // The subframe which has form was detached.
+  XHR_SUCCEEDED,             // The form was removed when XHR succeeded.
+  FRAME_DETACHED,            // The subframe or non primary main frame
+                             // containing the form was detached.
   DOM_MUTATION_AFTER_XHR,    // The form was removed after XHR.
   PROBABLY_FORM_SUBMITTED,   // The form was probably submitted since new page
                              // is loaded.
@@ -136,6 +137,38 @@ struct SelectOption {
   mojo_base.mojom.String16 content;
 };
 
+// autofill::Section::Autocomplete
+// (components/autofill/core/common/form_field_data.h)
+struct SectionAutocomplete {
+  string section;
+  // autofill::HtmlFieldMode
+  uint8 html_field_mode;
+};
+
+// autofill::Section::FieldIdentifier
+// (components/autofill/core/common/form_field_data.h)
+struct SectionFieldIdentifier {
+  string field_name;
+  uint64 local_frame_id;
+  FieldRendererId field_renderer_id;
+};
+
+// autofill::Section::SectionPrefix
+// (components/autofill/core/common/form_field_data.h)
+union SectionPrefix {
+  bool default_prefix;
+  SectionAutocomplete autocomplete_section_prefix;
+  SectionFieldIdentifier from_field_prefix;
+  bool credit_card_prefix;
+};
+
+// autofill::Section (components/autofill/core/common/form_field_data.h)
+struct Section {
+  // autofill::Section::FieldTypeGroupSuffix
+  uint8 field_type_group;
+  SectionPrefix prefix;
+};
+
 // autofill::FormFieldData (components/autofill/core/common/form_field_data.h)
 struct FormFieldData {
   enum CheckStatus {
@@ -185,7 +218,7 @@ struct FormFieldData {
 
   uint64 max_length;
   bool is_autofilled;
-  string section;
+  Section section;
   CheckStatus check_status;
   bool is_focusable;
   bool is_visible;

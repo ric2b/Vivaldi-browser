@@ -26,7 +26,6 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -290,6 +289,7 @@ void ChromeNativeAppWindowViewsAuraAsh::SetFullscreen(int fullscreen_types) {
             ? EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION
             : EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE,
         ExclusiveAccessBubbleHideCallback(),
+        /*notify_download=*/false,
         /*force_update=*/false);
   }
 
@@ -362,8 +362,10 @@ void ChromeNativeAppWindowViewsAuraAsh::UpdateExclusiveAccessExitBubbleContent(
     const GURL& url,
     ExclusiveAccessBubbleType bubble_type,
     ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
+    bool notify_download,
     bool force_update) {
-  if (bubble_type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE) {
+  DCHECK(!notify_download || exclusive_access_bubble_);
+  if (bubble_type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE && !notify_download) {
     exclusive_access_bubble_.reset();
     if (bubble_first_hide_callback) {
       std::move(bubble_first_hide_callback)
@@ -374,7 +376,8 @@ void ChromeNativeAppWindowViewsAuraAsh::UpdateExclusiveAccessExitBubbleContent(
 
   if (exclusive_access_bubble_) {
     exclusive_access_bubble_->UpdateContent(
-        url, bubble_type, std::move(bubble_first_hide_callback), force_update);
+        url, bubble_type, std::move(bubble_first_hide_callback),
+        notify_download, force_update);
     return;
   }
 
@@ -537,7 +540,9 @@ bool ChromeNativeAppWindowViewsAuraAsh::ShouldEnableImmersiveMode() const {
   // is no need for immersive mode.
   // TODO(crbug.com/801619): This adds a little extra animation
   // when minimizing or unminimizing window.
-  return ash::TabletMode::IsInTabletMode() && CanResize() && !IsMinimized();
+  return ash::TabletMode::IsInTabletMode() && CanResize() && !IsMinimized() &&
+         GetNativeWindow()->GetProperty(chromeos::kWindowStateTypeKey) !=
+             chromeos::WindowStateType::kFloated;
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::UpdateImmersiveMode() {
@@ -570,24 +575,12 @@ void ChromeNativeAppWindowViewsAuraAsh::LoadAppIcon(
         proxy->AppRegistryCache().GetAppType(app_window()->extension_id());
 
     if (app_type != apps::AppType::kUnknown) {
-      if (base::FeatureList::IsEnabled(
-              features::kAppServiceLoadIconWithoutMojom)) {
-        proxy->LoadIcon(
-            app_type, app_window()->extension_id(), apps::IconType::kStandard,
-            app_window()->app_delegate()->PreferredIconSize(),
-            allow_placeholder_icon,
-            base::BindOnce(&ChromeNativeAppWindowViewsAuraAsh::OnLoadIcon,
-                           weak_ptr_factory_.GetWeakPtr()));
-      } else {
-        proxy->LoadIcon(apps::ConvertAppTypeToMojomAppType(app_type),
-                        app_window()->extension_id(),
-                        apps::mojom::IconType::kStandard,
-                        app_window()->app_delegate()->PreferredIconSize(),
-                        allow_placeholder_icon,
-                        apps::MojomIconValueToIconValueCallback(base::BindOnce(
-                            &ChromeNativeAppWindowViewsAuraAsh::OnLoadIcon,
-                            weak_ptr_factory_.GetWeakPtr())));
-      }
+      proxy->LoadIcon(
+          app_type, app_window()->extension_id(), apps::IconType::kStandard,
+          app_window()->app_delegate()->PreferredIconSize(),
+          allow_placeholder_icon,
+          base::BindOnce(&ChromeNativeAppWindowViewsAuraAsh::OnLoadIcon,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   }
 

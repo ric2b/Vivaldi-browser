@@ -8,8 +8,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/extensions/telemetry/api/hardware_info_delegate.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/profiles/profile.h"
@@ -17,12 +19,23 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"
-#include "components/user_manager/user.h"
-#include "components/user_manager/user_manager.h"
+#include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/externally_connectable.h"
 #include "extensions/common/url_pattern_set.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/startup/browser_params_proxy.h"
+#include "components/policy/core/common/policy_loader_lacros.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace content {
 class BrowserContext;
@@ -32,9 +45,10 @@ namespace chromeos {
 
 namespace {
 
-std::string OnGetManufacturer(const std::string& expected_manufacturer,
-                              std::string actual_manufacturer) {
-  return actual_manufacturer == expected_manufacturer
+std::string OnGetManufacturer(
+    base::flat_set<std::string> expected_manufacturers,
+    std::string actual_manufacturer) {
+  return expected_manufacturers.contains(actual_manufacturer)
              ? ""
              : "This extension is not allowed to access the API on this "
                "device";
@@ -65,13 +79,18 @@ class ApiGuardDelegateImpl : public ApiGuardDelegate {
         std::move(callback).Run("This extension is not installed by the admin");
         return;
       }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     } else if (!IsCurrentUserOwner()) {
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    } else if (!IsCurrentUserOwner(context)) {
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
       std::move(callback).Run("This extension is not run by the device owner");
       return;
     }
 
-    if (!IsPwaUiOpen(context, extension)) {
-      std::move(callback).Run("Companion PWA UI is not open");
+    if (!IsPwaUiOpenAndSecure(context, extension)) {
+      std::move(callback).Run("Companion PWA UI is not open or not secure");
       return;
     }
 
@@ -90,15 +109,33 @@ class ApiGuardDelegateImpl : public ApiGuardDelegate {
   }
 
   bool IsUserAffiliated() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     return user_manager::UserManager::Get()->GetActiveUser()->IsAffiliated();
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    return policy::PolicyLoaderLacros::IsMainUserAffiliated();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   bool IsCurrentUserOwner() {
     return user_manager::UserManager::Get()->IsCurrentUserOwner();
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  bool IsPwaUiOpen(content::BrowserContext* context,
-                   const extensions::Extension* extension) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // In order to determine device ownership in LaCrOS, we need to check
+  // whether the current Ash user is the device owner (stored in
+  // browser init params) and if the current profile is the same profile
+  // as the one logged into Ash.
+  bool IsCurrentUserOwner(content::BrowserContext* context) {
+    return BrowserParamsProxy::Get()->IsCurrentUserDeviceOwner() &&
+           Profile::FromBrowserContext(context)->IsMainProfile();
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
+  bool IsPwaUiOpenAndSecure(content::BrowserContext* context,
+                            const extensions::Extension* extension) {
     Profile* profile = Profile::FromBrowserContext(context);
 
     const auto* externally_connectable_info =
@@ -116,7 +153,13 @@ class ApiGuardDelegateImpl : public ApiGuardDelegate {
             target_tab_strip->GetWebContentsAt(i);
         if (externally_connectable_info->matches.MatchesURL(
                 target_contents->GetLastCommittedURL())) {
-          return true;
+          // Ensure the PWA URL connection is secure (e.g. valid certificate).
+          const auto visible_security_state =
+              security_state::GetVisibleSecurityState(target_contents);
+          return security_state::GetSecurityLevel(
+                     *visible_security_state,
+                     /*used_policy_installed_certificate=*/false) ==
+                 security_state::SecurityLevel::SECURE;
         }
       }
     }
@@ -127,7 +170,7 @@ class ApiGuardDelegateImpl : public ApiGuardDelegate {
   void VerifyManufacturer(const extensions::Extension* extension,
                           CanAccessApiCallback callback) {
     const auto extension_info = GetChromeOSExtensionInfoForId(extension->id());
-    const std::string& expected_manufacturer = extension_info.manufacturer;
+    const auto expected_manufacturers = extension_info.manufacturers;
 
     // We can expect VerifyManufacturer() to be called at most once for the
     // lifetime of the ApiGuardDelegateImpl because CanAccessApi() can be called
@@ -136,7 +179,7 @@ class ApiGuardDelegateImpl : public ApiGuardDelegate {
     // is safe to instantiate |hardware_info_delegate_| here (vs in the ctor).
     hardware_info_delegate_ = HardwareInfoDelegate::Factory::Create();
     hardware_info_delegate_->GetManufacturer(
-        base::BindOnce(&OnGetManufacturer, expected_manufacturer)
+        base::BindOnce(&OnGetManufacturer, expected_manufacturers)
             .Then(std::move(callback)));
   }
 

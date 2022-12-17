@@ -11,8 +11,6 @@
 #ifndef GPU_COMMAND_BUFFER_COMMON_RASTER_CMD_FORMAT_AUTOGEN_H_
 #define GPU_COMMAND_BUFFER_COMMON_RASTER_CMD_FORMAT_AUTOGEN_H_
 
-#define GL_SCANOUT_CHROMIUM 0x6000
-
 struct Finish {
   typedef Finish ValueType;
   static const CommandId kCmdId = kFinish;
@@ -718,50 +716,6 @@ static_assert(
     offsetof(UnlockTransferCacheEntryINTERNAL, entry_id) == 8,
     "offset of UnlockTransferCacheEntryINTERNAL entry_id should be 8");
 
-struct DeletePaintCacheTextBlobsINTERNALImmediate {
-  typedef DeletePaintCacheTextBlobsINTERNALImmediate ValueType;
-  static const CommandId kCmdId = kDeletePaintCacheTextBlobsINTERNALImmediate;
-  static const cmd::ArgFlags kArgFlags = cmd::kAtLeastN;
-  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
-
-  static uint32_t ComputeDataSize(GLsizei _n) {
-    return static_cast<uint32_t>(sizeof(GLuint) * _n);  // NOLINT
-  }
-
-  static uint32_t ComputeSize(GLsizei _n) {
-    return static_cast<uint32_t>(sizeof(ValueType) +
-                                 ComputeDataSize(_n));  // NOLINT
-  }
-
-  void SetHeader(GLsizei _n) {
-    header.SetCmdByTotalSize<ValueType>(ComputeSize(_n));
-  }
-
-  void Init(GLsizei _n, const GLuint* _ids) {
-    SetHeader(_n);
-    n = _n;
-    memcpy(ImmediateDataAddress(this), _ids, ComputeDataSize(_n));
-  }
-
-  void* Set(void* cmd, GLsizei _n, const GLuint* _ids) {
-    static_cast<ValueType*>(cmd)->Init(_n, _ids);
-    const uint32_t size = ComputeSize(_n);
-    return NextImmediateCmdAddressTotalSize<ValueType>(cmd, size);
-  }
-
-  gpu::CommandHeader header;
-  int32_t n;
-};
-
-static_assert(sizeof(DeletePaintCacheTextBlobsINTERNALImmediate) == 8,
-              "size of DeletePaintCacheTextBlobsINTERNALImmediate should be 8");
-static_assert(
-    offsetof(DeletePaintCacheTextBlobsINTERNALImmediate, header) == 0,
-    "offset of DeletePaintCacheTextBlobsINTERNALImmediate header should be 0");
-static_assert(
-    offsetof(DeletePaintCacheTextBlobsINTERNALImmediate, n) == 4,
-    "offset of DeletePaintCacheTextBlobsINTERNALImmediate n should be 4");
-
 struct DeletePaintCachePathsINTERNALImmediate {
   typedef DeletePaintCachePathsINTERNALImmediate ValueType;
   static const CommandId kCmdId = kDeletePaintCachePathsINTERNALImmediate;
@@ -804,6 +758,51 @@ static_assert(
     "offset of DeletePaintCachePathsINTERNALImmediate header should be 0");
 static_assert(offsetof(DeletePaintCachePathsINTERNALImmediate, n) == 4,
               "offset of DeletePaintCachePathsINTERNALImmediate n should be 4");
+
+struct DeletePaintCachePathsINTERNAL {
+  typedef DeletePaintCachePathsINTERNAL ValueType;
+  static const CommandId kCmdId = kDeletePaintCachePathsINTERNAL;
+  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
+
+  static uint32_t ComputeSize() {
+    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
+  }
+
+  void SetHeader() { header.SetCmd<ValueType>(); }
+
+  void Init(GLsizei _n, uint32_t _ids_shm_id, uint32_t _ids_shm_offset) {
+    SetHeader();
+    n = _n;
+    ids_shm_id = _ids_shm_id;
+    ids_shm_offset = _ids_shm_offset;
+  }
+
+  void* Set(void* cmd,
+            GLsizei _n,
+            uint32_t _ids_shm_id,
+            uint32_t _ids_shm_offset) {
+    static_cast<ValueType*>(cmd)->Init(_n, _ids_shm_id, _ids_shm_offset);
+    return NextCmdAddress<ValueType>(cmd);
+  }
+
+  gpu::CommandHeader header;
+  int32_t n;
+  uint32_t ids_shm_id;
+  uint32_t ids_shm_offset;
+};
+
+static_assert(sizeof(DeletePaintCachePathsINTERNAL) == 16,
+              "size of DeletePaintCachePathsINTERNAL should be 16");
+static_assert(offsetof(DeletePaintCachePathsINTERNAL, header) == 0,
+              "offset of DeletePaintCachePathsINTERNAL header should be 0");
+static_assert(offsetof(DeletePaintCachePathsINTERNAL, n) == 4,
+              "offset of DeletePaintCachePathsINTERNAL n should be 4");
+static_assert(offsetof(DeletePaintCachePathsINTERNAL, ids_shm_id) == 8,
+              "offset of DeletePaintCachePathsINTERNAL ids_shm_id should be 8");
+static_assert(
+    offsetof(DeletePaintCachePathsINTERNAL, ids_shm_offset) == 12,
+    "offset of DeletePaintCachePathsINTERNAL ids_shm_offset should be 12");
 
 struct ClearPaintCacheINTERNAL {
   typedef ClearPaintCacheINTERNAL ValueType;
@@ -1260,7 +1259,7 @@ struct ConvertYUVAMailboxesToRGBINTERNALImmediate {
   static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(2);
 
   static uint32_t ComputeDataSize() {
-    return static_cast<uint32_t>(sizeof(GLbyte) * 80);
+    return static_cast<uint32_t>(sizeof(GLbyte) * 144);
   }
 
   static uint32_t ComputeSize() {

@@ -9,52 +9,52 @@
  */
 
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.m.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../controls/settings_toggle_button.js';
 import '../prefs/prefs.js';
 import '../privacy_page/collapse_radio_button.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../site_favicon.js';
 
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {getTemplate} from './protocol_handlers.html.js';
 
+import {getTemplate} from './protocol_handlers.html.js';
 import {SiteSettingsMixin} from './site_settings_mixin.js';
 
-export type HandlerEntry = {
-  host: string,
-  is_default: boolean,
-  protocol: string,
-  protocol_display_name: string,
-  spec: string,
-};
+export interface HandlerEntry {
+  host: string;
+  is_default: boolean;
+  protocol: string;
+  protocol_display_name: string;
+  spec: string;
+}
 
-export type ProtocolEntry = {
-  handlers: Array<HandlerEntry>,
-  protocol: string,
-  protocol_display_name: string,
-};
+export interface ProtocolEntry {
+  handlers: HandlerEntry[];
+  protocol: string;
+  protocol_display_name: string;
+}
 
-export type AppHandlerEntry = {
-  host: string,
-  protocol: string,
-  protocol_display_name: string,
-  spec: string,
-  app_id: string,
-};
+export interface AppHandlerEntry {
+  host: string;
+  protocol: string;
+  protocol_display_name: string;
+  spec: string;
+  app_id: string;
+}
 
-export type AppProtocolEntry = {
-  handlers: Array<AppHandlerEntry>,
-  protocol: string,
-  protocol_display_name: string,
-};
+export interface AppProtocolEntry {
+  handlers: AppHandlerEntry[];
+  protocol: string;
+  protocol_display_name: string;
+}
 
 export interface ProtocolHandlersElement {
   $: {
@@ -136,14 +136,14 @@ export class ProtocolHandlersElement extends ProtocolHandlersElementBase {
     };
   }
 
-  protocols: Array<ProtocolEntry>;
-  appAllowedProtocols: Array<AppProtocolEntry>;
-  appDisallowedProtocols: Array<AppProtocolEntry>;
+  protocols: ProtocolEntry[];
+  appAllowedProtocols: AppProtocolEntry[];
+  appDisallowedProtocols: AppProtocolEntry[];
   private showAppsProtocolHandlersTitle_: boolean;
   private actionMenuModel_: HandlerEntry|null;
   toggleOffLabel: string;
   toggleOnLabel: string;
-  ignoredProtocols: Array<HandlerEntry>;
+  ignoredProtocols: HandlerEntry[];
   private handlersEnabledPref_: chrome.settingsPrivate.PrefObject;
 
   override ready() {
@@ -154,11 +154,10 @@ export class ProtocolHandlersElement extends ProtocolHandlersElementBase {
         (enabled: boolean) => this.setHandlersEnabled_(enabled));
     this.addWebUIListener(
         'setProtocolHandlers',
-        (protocols: Array<ProtocolEntry>) =>
-            this.setProtocolHandlers_(protocols));
+        (protocols: ProtocolEntry[]) => this.setProtocolHandlers_(protocols));
     this.addWebUIListener(
         'setIgnoredProtocolHandlers',
-        (ignoredProtocols: Array<HandlerEntry>) =>
+        (ignoredProtocols: HandlerEntry[]) =>
             this.setIgnoredProtocolHandlers_(ignoredProtocols));
     this.browserProxy.observeProtocolHandlers();
 
@@ -193,7 +192,7 @@ export class ProtocolHandlersElement extends ProtocolHandlersElementBase {
    * Updates the list of protocol handlers.
    * @param protocols The new protocol handler list.
    */
-  private setProtocolHandlers_(protocols: Array<ProtocolEntry>) {
+  private setProtocolHandlers_(protocols: ProtocolEntry[]) {
     this.protocols = protocols;
   }
 
@@ -201,7 +200,7 @@ export class ProtocolHandlersElement extends ProtocolHandlersElementBase {
    * Updates the list of ignored protocol handlers.
    * @param ignoredProtocols The new (ignored) protocol handler list.
    */
-  private setIgnoredProtocolHandlers_(ignoredProtocols: Array<HandlerEntry>) {
+  private setIgnoredProtocolHandlers_(ignoredProtocols: HandlerEntry[]) {
     this.ignoredProtocols = ignoredProtocols;
   }
 
@@ -210,7 +209,7 @@ export class ProtocolHandlersElement extends ProtocolHandlersElementBase {
    * @param appAllowedProtocols The new allowed app protocol handler list.
    */
   private setAppAllowedProtocolHandlers_(appAllowedProtocols:
-                                             Array<AppProtocolEntry>) {
+                                             AppProtocolEntry[]) {
     this.appAllowedProtocols = appAllowedProtocols;
     this.updateShowAppsProtocolHandlersTitle_();
   }
@@ -221,7 +220,7 @@ export class ProtocolHandlersElement extends ProtocolHandlersElementBase {
    *     handler list.
    */
   private setAppDisallowedProtocolHandlers_(appDisallowedProtocols:
-                                                Array<AppProtocolEntry>) {
+                                                AppProtocolEntry[]) {
     this.appDisallowedProtocols = appDisallowedProtocols;
     this.updateShowAppsProtocolHandlersTitle_();
   }

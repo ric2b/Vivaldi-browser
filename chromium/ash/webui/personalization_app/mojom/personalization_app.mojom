@@ -187,6 +187,9 @@ struct CurrentWallpaper {
 
 // Receives updated wallpaper information whenever it is changed.
 interface WallpaperObserver {
+  // Triggered by |WallpaperControllerObserver::OnWallpaperPreviewEnded|.
+  OnWallpaperPreviewEnded();
+
   // Triggered by |WallpaperControllerObserver::OnWallpaperChanged|. Retrieves
   // updated wallpaper information and calls the observer. |image| will be null
   // if there is an error retrieving wallpaper information.
@@ -341,11 +344,22 @@ interface ThemeProvider {
 
 // Contains information about the current user.
 struct UserInfo {
-  // The display email of the user.
+  // The display email of the user. It can be empty for guest users.
   string email;
 
   // The display name of the user.
   string name;
+};
+
+// Additional attribution information for several deprecated user image choices.
+// These avatars are no longer able to be selected by users, but some users may
+// still have one set as their chosen avatar image.
+struct DeprecatedSourceInfo {
+  // The name of the author that created the avatar image.
+  mojo_base.mojom.String16 author;
+
+  // The website of the author.
+  url.mojom.Url website;
 };
 
 // A default user image stored on the device that can be set as the user's
@@ -359,6 +373,9 @@ struct DefaultUserImage {
 
   // A url to display the image. Typically |chrome://theme/IDR_LOGIN_DEFAULT_X|.
   url.mojom.Url url;
+
+  // Additional information about the source of the avatar.
+  DeprecatedSourceInfo? source_info;
 };
 
 // An empty struct that is just used to indicate the presence of a profile
@@ -529,6 +546,9 @@ interface AmbientProvider {
 
   // Record that the user viewed the Ambient mode page.
   SetPageViewed();
+
+  // Request updated Ambient mode settings and albums.
+  FetchSettingsAndAlbums();
 };
 
 // The supported preset colors for keyboard backlight.
@@ -549,12 +569,12 @@ enum BacklightColor {
 
 // Hex values of the colors displayed in the rgb keyboard section.
 const uint32 kWhiteColor = 0xFFFFFF;
-const uint32 kRedColor = 0xF28B82;
-const uint32 kYellowColor = 0xFDD663;
-const uint32 kGreenColor = 0x81C995;
-const uint32 kBlueColor = 0x78D9EC;
-const uint32 kIndigoColor = 0x8AB4F8;
-const uint32 kPurpleColor = 0xC58AF9;
+const uint32 kRedColor = 0xEE675C;
+const uint32 kYellowColor = 0xFBBC04;
+const uint32 kGreenColor = 0x34A853;
+const uint32 kBlueColor = 0x00A3C2;
+const uint32 kIndigoColor = 0x4285F4;
+const uint32 kPurpleColor = 0xB76DF8;
 
 // Receives information whenever there are keyboard backlight related changes
 // such as backlight colors.
@@ -574,4 +594,10 @@ interface KeyboardBacklightProvider {
 
   // Sets the backlight color.
   SetBacklightColor(BacklightColor backlight_color);
+
+  // Determines whether to show the education nudge.
+  ShouldShowNudge() => (bool should_show_nudge);
+
+  // Called when the nudge is shown.
+  HandleNudgeShown();
 };

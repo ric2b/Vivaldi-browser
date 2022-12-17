@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
-import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.js';
 import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
 import 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
@@ -218,8 +218,8 @@ export class ExtensionsManagerElement extends PolymerElement {
   private detailViewItem_?: chrome.developerPrivate.ExtensionInfo;
   private activityLogItem_?: chrome.developerPrivate.ExtensionInfo|
       ActivityLogExtensionPlaceholder;
-  private extensions_: Array<chrome.developerPrivate.ExtensionInfo>;
-  private apps_: Array<chrome.developerPrivate.ExtensionInfo>;
+  private extensions_: chrome.developerPrivate.ExtensionInfo[];
+  private apps_: chrome.developerPrivate.ExtensionInfo[];
   private didInitPage_: boolean;
   private showDrawer_: boolean;
   private showLoadErrorDialog_: boolean;
@@ -422,8 +422,8 @@ export class ExtensionsManagerElement extends PolymerElement {
    * Categorizes |extensionsAndApps| to apps and extensions and initializes
    * those lists.
    */
-  private initExtensionsAndApps_(
-      extensionsAndApps: Array<chrome.developerPrivate.ExtensionInfo>) {
+  private initExtensionsAndApps_(extensionsAndApps:
+                                     chrome.developerPrivate.ExtensionInfo[]) {
     extensionsAndApps.sort(compareExtensions);
     const apps: chrome.developerPrivate.ExtensionInfo[] = [];
     const extensions: chrome.developerPrivate.ExtensionInfo[] = [];
@@ -587,7 +587,8 @@ export class ExtensionsManagerElement extends PolymerElement {
       assert(newPage.extensionId);
       this.showOptionsDialog_ = true;
       setTimeout(() => {
-        this.shadowRoot!.querySelector('extensions-options-dialog')!.show(data!
+        this.shadowRoot!.querySelector('extensions-options-dialog')!.show(
+            data!,
         );
       }, 0);
     }
@@ -659,7 +660,7 @@ export class ExtensionsManagerElement extends PolymerElement {
     }
   }
 
-  private onShowInstallWarnings_(e: CustomEvent<Array<string>>) {
+  private onShowInstallWarnings_(e: CustomEvent<string[]>) {
     // Leverage Polymer data bindings instead of just assigning the
     // installWarnings on the dialog since the dialog hasn't been stamped
     // in the DOM yet.

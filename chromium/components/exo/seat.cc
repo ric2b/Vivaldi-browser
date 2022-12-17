@@ -38,12 +38,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/shell.h"
+#include "ui/aura/env.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace exo {
-namespace {
-
-}  // namespace
 
 Seat::Seat(std::unique_ptr<DataExchangeDelegate> delegate)
     : changing_clipboard_data_to_selection_source_(false),
@@ -130,12 +128,12 @@ void Seat::StartDrag(DataSource* source,
                      Surface* origin,
                      Surface* icon,
                      ui::mojom::DragEventSource event_source) {
+  gfx::Point cursor_location = aura::Env::GetInstance()->GetLastPointerPoint(
+      event_source, origin->window(), /*fallback=*/absl::nullopt);
   // DragDropOperation manages its own lifetime.
-  auto cursor_location =
-      gfx::PointF(display::Screen::GetScreen()->GetCursorScreenPoint());
-  drag_drop_operation_ =
-      DragDropOperation::Create(data_exchange_delegate_.get(), source, origin,
-                                icon, cursor_location, event_source);
+  drag_drop_operation_ = DragDropOperation::Create(
+      data_exchange_delegate_.get(), source, origin, icon,
+      gfx::PointF(cursor_location), event_source);
 }
 
 void Seat::AbortPendingDragOperation() {
@@ -397,6 +395,10 @@ void Seat::OnKeyEvent(ui::KeyEvent* event) {
   }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   xkb_tracker_->UpdateKeyboardModifiers(event->flags());
+  for (auto& observer_list : priority_observer_list_) {
+    for (auto& observer : observer_list)
+      observer.OnKeyboardModifierUpdated();
+  }
 #endif
 }
 

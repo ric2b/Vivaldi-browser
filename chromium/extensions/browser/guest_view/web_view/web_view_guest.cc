@@ -210,11 +210,12 @@ std::string GetStoragePartitionIdFromPartitionConfig(
   return (persist_storage ? webview::kPersistPrefix : "") + partition_id;
 }
 
-void ParsePartitionParam(const base::DictionaryValue& create_params,
+void ParsePartitionParam(const base::Value::Dict& create_params,
                          std::string* storage_partition_id,
                          bool* persist_storage) {
-  std::string partition_str;
-  if (!create_params.GetString(webview::kStoragePartitionId, &partition_str)) {
+  const std::string* partition_str =
+      create_params.FindString(webview::kStoragePartitionId);
+  if (!partition_str) {
     return;
   }
 
@@ -222,12 +223,12 @@ void ParsePartitionParam(const base::DictionaryValue& create_params,
   // UTF-8 encoded |partition_id|. If the prefix is a match, we can safely
   // remove the prefix without splicing in the middle of a multi-byte codepoint.
   // We can use the rest of the string as UTF-8 encoded one.
-  if (base::StartsWith(partition_str, "persist:",
-                       base::CompareCase::SENSITIVE)) {
-    size_t index = partition_str.find(":");
+  if (base::StartsWith(*partition_str,
+                       "persist:", base::CompareCase::SENSITIVE)) {
+    size_t index = partition_str->find(":");
     CHECK(index != std::string::npos);
     // It is safe to do index + 1, since we tested for the full prefix above.
-    *storage_partition_id = partition_str.substr(index + 1);
+    *storage_partition_id = partition_str->substr(index + 1);
 
     if (storage_partition_id->empty()) {
       // TODO(lazyboy): Better way to deal with this error.
@@ -235,7 +236,7 @@ void ParsePartitionParam(const base::DictionaryValue& create_params,
     }
     *persist_storage = true;
   } else {
-    *storage_partition_id = partition_str;
+    *storage_partition_id = *partition_str;
     *persist_storage = false;
   }
 }
@@ -275,9 +276,6 @@ WebViewGuest::NewWindowInfo::~NewWindowInfo() = default;
 void WebViewGuest::CleanUp(content::BrowserContext* browser_context,
                            int embedder_process_id,
                            int view_instance_id) {
-  GuestViewBase::CleanUp(browser_context, embedder_process_id,
-                         view_instance_id);
-
   // Clean up rules registries for the WebView.
   WebViewKey key(embedder_process_id, view_instance_id);
   auto it = web_view_key_to_id_map.Get().find(key);
@@ -345,7 +343,7 @@ int WebViewGuest::GetOrGenerateRulesRegistryID(
   return rules_registry_id;
 }
 
-void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
+void WebViewGuest::CreateWebContents(const base::Value::Dict& create_params,
                                      WebContentsCreatedCallback callback) {
   // Break the path completely for Vivaldi. We break from the start if something
   // changes here. Go look in
@@ -429,7 +427,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
 }
 
 void WebViewGuest::DidAttachToEmbedder() {
-  ApplyAttributes(*attach_params());
+  ApplyAttributes(attach_params());
   if (delayed_open_url_.get()) {
     NavigateGuest(*delayed_open_url_.get(), false);
     delayed_open_url_.reset(nullptr);
@@ -439,10 +437,9 @@ void WebViewGuest::DidAttachToEmbedder() {
   LoadTabContentsIfNecessary();
 
   web_contents()->ResumeLoadingCreatedWebContents();
-
 }
 
-void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
+void WebViewGuest::DidInitialize(const base::Value::Dict& create_params) {
   script_executor_ = std::make_unique<ScriptExecutor>(web_contents());
 
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
@@ -482,9 +479,10 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
 void WebViewGuest::ClearCodeCache(base::Time remove_since,
                                   uint32_t removal_mask,
                                   base::OnceClosure callback) {
+  auto* guest_main_frame = GetGuestMainFrame();
+  DCHECK(guest_main_frame);
   content::StoragePartition* partition =
-      web_contents()->GetBrowserContext()->GetStoragePartition(
-          web_contents()->GetSiteInstance());
+      guest_main_frame->GetStoragePartition();
   DCHECK(partition);
   base::OnceClosure code_cache_removal_done_callback = base::BindOnce(
       &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),
@@ -528,13 +526,15 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
 
   bool perform_cleanup = remove_since.is_null();
 
+  auto* guest_main_frame = GetGuestMainFrame();
+  DCHECK(guest_main_frame);
   content::StoragePartition* partition =
-      web_contents()->GetBrowserContext()->GetStoragePartition(
-          web_contents()->GetSiteInstance());
+      guest_main_frame->GetStoragePartition();
+  DCHECK(partition);
   partition->ClearData(
       storage_partition_removal_mask,
       content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-      content::StoragePartition::OriginMatcherFunction(),
+      content::StoragePartition::StorageKeyPolicyMatcherFunction(),
       std::move(cookie_delete_filter), perform_cleanup, remove_since,
       base::Time::Max(), std::move(callback));
 }
@@ -732,13 +732,12 @@ void WebViewGuest::CreateNewGuestWebViewWindow(
       web_contents()->GetSiteInstance()->GetStoragePartitionConfig();
   const std::string storage_partition_id =
       GetStoragePartitionIdFromPartitionConfig(storage_partition_config);
-  base::DictionaryValue create_params;
-  create_params.SetStringKey(webview::kStoragePartitionId,
-                             storage_partition_id);
+  base::Value::Dict create_params;
+  create_params.Set(webview::kStoragePartitionId, storage_partition_id);
 
   // gisli@vivaldi.com:  Add the url so we can create the right site instance
   // when creating the webcontents.
-  create_params.SetStringKey(webview::kNewURL, params.url.spec());
+  create_params.Set(webview::kNewURL, params.url.spec());
 
   guest_manager->CreateGuest(
       WebViewGuest::Type, embedder_web_contents(), create_params,
@@ -859,9 +858,10 @@ bool WebViewGuest::ClearData(base::Time remove_since,
                              uint32_t removal_mask,
                              base::OnceClosure callback) {
   base::RecordAction(UserMetricsAction("WebView.Guest.ClearData"));
+  auto* guest_main_frame = GetGuestMainFrame();
+  DCHECK(guest_main_frame);
   content::StoragePartition* partition =
-      web_contents()->GetBrowserContext()->GetStoragePartition(
-          web_contents()->GetSiteInstance());
+      guest_main_frame->GetStoragePartition();
 
   if (!partition)
     return false;
@@ -869,8 +869,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
   if (removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_CACHE) {
     // First clear http cache data and then clear the code cache in
     // |ClearCodeCache| and the rest is cleared in |ClearDataInternal|.
-    int render_process_id =
-        web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID();
+    int render_process_id = guest_main_frame->GetProcess()->GetID();
     // We need to clear renderer cache separately for our process because
     // StoragePartitionHttpCacheDataRemover::ClearData() does not clear that.
     web_cache::WebCacheManager::GetInstance()->ClearCacheForProcess(
@@ -896,15 +895,9 @@ WebViewGuest::WebViewGuest(WebContents* owner_web_contents)
     : GuestView<WebViewGuest>(owner_web_contents),
       rules_registry_id_(RulesRegistryService::kInvalidRulesRegistryID),
       find_helper_(this),
-      is_overriding_user_agent_(false),
-      allow_transparency_(false),
       javascript_dialog_helper_(this),
-      allow_scaling_(false),
-      is_guest_fullscreen_(false),
-      is_embedder_fullscreen_(false),
-      last_fullscreen_permission_was_allowed_by_embedder_(false),
-      pending_zoom_factor_(0.0),
-      did_set_explicit_zoom_(false),
+      web_view_guest_delegate_(base::WrapUnique(
+          ExtensionsAPIClient::Get()->CreateWebViewGuestDelegate(this))),
       is_spatial_navigation_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableSpatialNavigation)),
@@ -912,13 +905,9 @@ WebViewGuest::WebViewGuest(WebContents* owner_web_contents)
 // Vivaldi specific member initialization
 #include "extensions/api/guest_view/vivaldi_web_view_guest_construct.inc"
 #endif // VIVALDI_BUILD
-      {
-  web_view_guest_delegate_.reset(
-      ExtensionsAPIClient::Get()->CreateWebViewGuestDelegate(this));
-}
+      {}
 
-WebViewGuest::~WebViewGuest() {
-}
+WebViewGuest::~WebViewGuest() = default;
 
 void WebViewGuest::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -1328,24 +1317,23 @@ bool WebViewGuest::HandleKeyboardShortcuts(
   return false;
 }
 
-void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
-  std::string name;
-  if (params.GetString(webview::kAttributeName, &name)) {
+void WebViewGuest::ApplyAttributes(const base::Value::Dict& params) {
+  if (const std::string* name = params.FindString(webview::kAttributeName)) {
     // If the guest window's name is empty, then the WebView tag's name is
     // assigned. Otherwise, the guest window's name takes precedence over the
     // WebView tag's name.
     if (name_.empty())
-      SetName(name);
+      SetName(*name);
   }
   if (attached())
     ReportFrameNameChange(name_);
 
-  std::string user_agent_override;
-  params.GetString(webview::kParameterUserAgentOverride, &user_agent_override);
-  SetUserAgentOverride(user_agent_override);
+  const std::string* user_agent_override =
+      params.FindString(webview::kParameterUserAgentOverride);
+  SetUserAgentOverride(user_agent_override ? *user_agent_override : "");
 
   absl::optional<bool> allow_transparency =
-      params.FindBoolKey(webview::kAttributeAllowTransparency);
+      params.FindBool(webview::kAttributeAllowTransparency);
   if (allow_transparency) {
     // We need to set the background opaque flag after navigation to ensure that
     // there is a RenderWidgetHostView available.
@@ -1353,12 +1341,12 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
   }
 
   absl::optional<bool> allow_scaling =
-      params.FindBoolKey(webview::kAttributeAllowScaling);
+      params.FindBool(webview::kAttributeAllowScaling);
   if (allow_scaling)
     SetAllowScaling(*allow_scaling);
 
   // Check for a pending zoom from before the first navigation.
-  pending_zoom_factor_ = params.FindDoubleKey(webview::kInitialZoomFactor)
+  pending_zoom_factor_ = params.FindDouble(webview::kInitialZoomFactor)
                              .value_or(pending_zoom_factor_);
 
   bool is_pending_new_window = false;
@@ -1390,9 +1378,8 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
 
   // Only read the src attribute if this is not a New Window API flow.
   if (!is_pending_new_window) {
-    std::string src;
-    if (params.GetString(webview::kAttributeSrc, &src))
-      NavigateGuest(src, true /* force_navigation */);
+    if (const std::string* src = params.FindString(webview::kAttributeSrc))
+      NavigateGuest(*src, true /* force_navigation */);
   }
 
   if (IsVivaldiRunning()) {
@@ -1619,7 +1606,7 @@ WebContents* WebViewGuest::OpenURLFromTab(
     NavigateParams nav_params(browser, params.url, params.transition);
     nav_params.FillNavigateParamsFromOpenURLParams(params);
     nav_params.source_contents = source;
-    nav_params.tabstrip_add_types = TabStripModel::ADD_NONE;
+    nav_params.tabstrip_add_types = AddTabTypes::ADD_NONE;
     if (params.user_gesture)
       nav_params.window_action = NavigateParams::SHOW_WINDOW;
     if (IsVivaldiRunning()) {

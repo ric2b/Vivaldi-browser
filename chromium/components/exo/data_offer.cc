@@ -25,9 +25,6 @@
 #include "components/exo/data_offer_delegate.h"
 #include "components/exo/data_offer_observer.h"
 #include "net/base/filename_util.h"
-#include "third_party/skia/include/core/SkEncodedImageFormat.h"
-#include "third_party/skia/include/core/SkImageEncoder.h"
-#include "third_party/skia/include/core/SkStream.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -101,9 +98,16 @@ void ReadDataTransferEndpointFromClipboard(
       ui::Clipboard::GetForCurrentThread()->GetSource(
           ui::ClipboardBuffer::kCopyPaste);
 
-  DCHECK(data_src);
-  std::u16string encoded_endpoint =
-      base::UTF8ToUTF16(ui::ConvertDataTransferEndpointToJson(*data_src));
+  std::u16string encoded_endpoint;
+  if (data_src) {
+    encoded_endpoint =
+        base::UTF8ToUTF16(ui::ConvertDataTransferEndpointToJson(*data_src));
+  } else {
+    DCHECK(data_src) << "Clipboard source DataTransferEndpoint has changed "
+                        "after initial MIME advertising. If you see this "
+                        "please file a bug and contact the chromeos-dlp team.";
+  }
+
   std::move(callback).Run(EncodeAsRefCountedString(encoded_endpoint, charset));
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

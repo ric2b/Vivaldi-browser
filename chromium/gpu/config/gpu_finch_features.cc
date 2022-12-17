@@ -143,8 +143,19 @@ const base::Feature kDefaultEnableGpuRasterization{
 };
 
 // Enables the use of out of process rasterization for canvas.
-const base::Feature kCanvasOopRasterization{"CanvasOopRasterization",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kCanvasOopRasterization {
+  "CanvasOopRasterization",
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH) || \
+    (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_FUCHSIA)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
+
+// Enables the use of MSAA in skia on Ice Lake and later intel architectures.
+const base::Feature kEnableMSAAOnNewIntelGPUs{
+    "EnableMSAAOnNewIntelGPUs", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the use of ANGLE validation for non-WebGL contexts.
 const base::Feature kDefaultEnableANGLEValidation{
@@ -159,17 +170,12 @@ const base::Feature kCanvasContextLostInBackground{
 // Use a high priority for GPU process on Windows.
 const base::Feature kGpuProcessHighPriorityWin{
     "GpuProcessHighPriorityWin", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
 
-// Use ThreadPriority::DISPLAY for GPU main, viz compositor and IO threads.
-const base::Feature kGpuUseDisplayThreadPriority{
-  "GpuUseDisplayThreadPriority",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
+// Disable overlay promotion for clear video quads when their MPO quad would
+// move.
+const base::Feature kDisableVideoOverlayIfMoving{
+    "DisableVideoOverlayIfMoving", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-};
 
 #if BUILDFLAG(IS_MAC)
 // Enable use of Metal for OOP rasterization.
@@ -216,8 +222,14 @@ const base::Feature kVulkan {
 #endif
 };
 
-const base::Feature kEnableDrDc{"EnableDrDc",
-                                base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableDrDc {
+  "EnableDrDc",
+#if BUILDFLAG(IS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 const base::Feature kForceGpuMainThreadToNormalPriorityDrDc{
     "ForceGpuMainThreadToNormalPriorityDrDc",
@@ -228,10 +240,16 @@ const base::Feature kEnableDrDcVulkan{"EnableDrDcVulkan",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Enable WebGPU on gpu service side only. This is used with origin trial
-// before gpu service is enabled by default.
-const base::Feature kWebGPUService{"WebGPUService",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+// Enable WebGPU on gpu service side only. This is used with origin trial and
+// enabled by default on supported platforms.
+const base::Feature kWebGPUService {
+  "WebGPUService",
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 #if BUILDFLAG(IS_ANDROID)
 
@@ -309,6 +327,11 @@ const base::Feature kReduceOpsTaskSplitting{
 // discardable memory.
 const base::Feature kNoDiscardableMemoryForGpuDecodePath{
     "NoDiscardableMemoryForGpuDecodePath", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Use a 100-command limit before forcing context switch per command buffer
+// instead of 20.
+const base::Feature kIncreasedCmdBufferParseSlice{
+    "IncreasedCmdBufferParseSlice", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool UseGles2ForOopR() {
 #if BUILDFLAG(IS_ANDROID)
@@ -451,16 +474,17 @@ bool IsUsingThreadSafeMediaForWebView() {
 #endif
 }
 
+// Note that DrDc is also disabled on some of the gpus (crbug.com/1354201).
+// Thread safe media will still be used on those gpus which should be fine for
+// now as the lock shouldn't have much overhead and is limited to only few gpus.
+// This should be fixed/updated later to account for disabled gpus.
 bool NeedThreadSafeAndroidMedia() {
   return IsDrDcEnabled() || IsUsingThreadSafeMediaForWebView();
 }
 
 bool IsANGLEValidationEnabled() {
-  if (!UsePassthroughCommandDecoder()) {
-    return false;
-  }
-
-  return base::FeatureList::IsEnabled(kDefaultEnableANGLEValidation);
+  return base::FeatureList::IsEnabled(kDefaultEnableANGLEValidation) &&
+         UsePassthroughCommandDecoder();
 }
 
 #if BUILDFLAG(IS_ANDROID)

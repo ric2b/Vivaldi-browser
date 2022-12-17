@@ -34,7 +34,6 @@ import "services/network/public/mojom/net_log.mojom";
 import "services/network/public/mojom/network_isolation_key.mojom";
 import "services/network/public/mojom/isolation_info.mojom";
 import "services/network/public/mojom/network_param.mojom";
-import "services/network/public/mojom/origin_policy_manager.mojom";
 import "services/network/public/mojom/parsed_headers.mojom";
 import "services/network/public/mojom/proxy_config.mojom";
 import "services/network/public/mojom/proxy_config_with_annotation.mojom";
@@ -43,6 +42,7 @@ import "services/network/public/mojom/proxy_resolving_socket.mojom";
 import "services/network/public/mojom/reporting_service.mojom";
 import "services/network/public/mojom/restricted_cookie_manager.mojom";
 import "services/network/public/mojom/site_for_cookies.mojom";
+import "services/network/public/mojom/socket_broker.mojom";
 import "services/network/public/mojom/ssl_config.mojom";
 import "services/network/public/mojom/tcp_socket.mojom";
 import "services/network/public/mojom/transferable_directory.mojom";
@@ -302,6 +302,9 @@ struct NetworkContextParams {
   // If false, the referrer of requests is never populated.
   bool enable_referrers = true;
 
+  // Whether dns-prefetch and preconnect are allowed.
+  bool enable_preconnect = true;
+
   // If true, requests initiated with referrers that don't match their referrer
   // policy will fail.
   bool validate_referrer_policy_on_initial_request = true;
@@ -405,6 +408,10 @@ struct NetworkContextParams {
   // Optional client that will be notified of errors related to the proxy
   // settings.
   pending_remote<ProxyErrorClient>? proxy_error_client;
+
+  // Broker used by the network service sandbox to create sockets in
+  // the browser. Set when the sandbox is enabled.
+  pending_remote<SocketBroker>? socket_broker;
 
   // When PAC quick checking is enabled, DNS lookups for PAC script's host are
   // timed out aggressively. This prevents hanging all network request on DNS
@@ -775,16 +782,18 @@ struct URLLoaderFactoryParams {
 // Implemented by the browser process.
 interface NetworkContextClient {
   // Called when file uploading was requested.
-  // If the process that requested the uploads has permission to read all of
-  // the files referenced by |file_paths|, the callback arguments will be
-  // net::OK, along with an array of open file handles. The array will contain
-  // exactly one handle for each path in |file_paths|, in the same order.
-  // If any files referenced by |file_paths| cannot be read, a net::ERROR will
-  // be returned, and |files| will be an empty list. If the |async| parameter
-  // is true, the files will be opened with FLAG_ASYNC.
+  // If the process that requested the uploads to |destination_url| has
+  // permission to read all of the files referenced by |file_paths|,
+  // the callback arguments will be net::OK, along with an array of open file
+  // handles. The array will contain exactly one handle for each path in
+  // |file_paths|, in the same order. If any files referenced by |file_paths|
+  // cannot be read, a net::ERROR will be returned, and |files| will be an empty
+  // list. If the |async| parameter is true, the files will be opened with
+  // FLAG_ASYNC.
   OnFileUploadRequested(int32 process_id,
                         bool async,
-                        array<mojo_base.mojom.FilePath> file_paths) =>
+                        array<mojo_base.mojom.FilePath> file_paths,
+                        url.mojom.Url destination_url) =>
       (int32 net_error, array<mojo_base.mojom.ReadOnlyFile> files);
 
   // Checks if network error reports could be sent for the given origins.
@@ -793,7 +802,7 @@ interface NetworkContextClient {
       (array<url.mojom.Origin> origins);
 
   // Checks if a Domain Reliability report can be uploaded for the given origin.
-  OnCanSendDomainReliabilityUpload(url.mojom.Url origin) => (bool allowed);
+  OnCanSendDomainReliabilityUpload(url.mojom.Origin origin) => (bool allowed);
 
   // Called to generate an auth token for SPNEGO authentication on Android.
   [EnableIf=is_android]
@@ -878,8 +887,9 @@ interface NetworkContext {
       IsolationInfo isolation_info,
       pending_remote<CookieAccessObserver>? cookie_observer);
 
-  // Provides a HasTrustTokensAnswerer scoped to the given top-frame origin
-  // (subsequent calls to its HasTrustTokens(issuer) method will attempt to
+  // Provides a TrustTokenQueryAnswerer scoped to the given top-frame origin
+  // (subsequent calls to its HasTrustTokens(issuer) and
+  // HasRedemptionRecord(issuer) methods will attempt to
   // associate |issuer| with |top_frame_origin|, in the sense of
   // TrustTokenStore::SetAssociation, and reject if |top_frame_origin| is
   // already at its number-of-associated-issuers limit).
@@ -892,8 +902,8 @@ interface NetworkContext {
   // The first is a general security requirement; the second is in order to
   // ensure that the origin has a unique serialization (and, consequently, is
   // suitable for keying persistent Trust Tokens state).
-  GetHasTrustTokensAnswerer(
-      pending_receiver<HasTrustTokensAnswerer> has_trust_tokens_answerer,
+  GetTrustTokenQueryAnswerer(
+      pending_receiver<TrustTokenQueryAnswerer> trust_token_query_answerer,
       url.mojom.Origin top_frame_origin);
 
   // Clears persistent Trust Tokens data keyed by the origins in |filter|, and
@@ -1002,9 +1012,6 @@ interface NetworkContext {
   ClearDomainReliability(ClearDataFilter? filter,
                          DomainReliabilityClearMode mode) => ();
 
-  // Returns a JSON value containing data for displaying on a debugging page.
-  GetDomainReliabilityJSON() => (mojo_base.mojom.Value data);
-
   // Configures per-resource reporting endpoints set with the
   // Reporting-Endpoints header.
   // |reporting_source| is a token which identifies the document or worker with
@@ -1091,6 +1098,9 @@ interface NetworkContext {
   // If false, the referrer of requests is never populated.
   SetEnableReferrers(bool enable_referrers);
 
+  // See 'enable_preconnect' above.
+  SetEnablePreconnect(bool enable_preconnect);
+
   // Updates the additional trust anchors for certificate verification.
   [EnableIf=is_chromeos]
   UpdateAdditionalCertificates(AdditionalCertificates? additional_certificates);
@@ -1118,7 +1128,7 @@ interface NetworkContext {
   [EnableIf=is_ct_supported]
   GetExpectCTState(string domain,
                    NetworkIsolationKey network_isolation_key)
-                   => (mojo_base.mojom.DeprecatedDictionaryValue state);
+                   => (mojo_base.mojom.DictionaryValue state);
 
   // Creates a UDP socket. Caller can supply a |listener| interface pointer
   // to listen for incoming datagrams. A null |listener| is acceptable if caller
@@ -1365,7 +1375,7 @@ interface NetworkContext {
   // Retrieve values from the HSTS state from the associated contexts
   // transport security state.
   GetHSTSState(string domain)
-      => (mojo_base.mojom.DeprecatedDictionaryValue state);
+      => (mojo_base.mojom.DictionaryValue state);
 
   // Sets allowed and blocked origins respectively for the URLLoaderFactory
   // consumers to access beyond the same-origin policy. The list is managed per
@@ -1455,16 +1465,16 @@ interface NetworkContext {
   [Sync]
   // Adds a Domain Reliability Context.
   AddDomainReliabilityContextForTesting(
-    url.mojom.Url origin, url.mojom.Url upload_url) => ();
+    url.mojom.Origin origin, url.mojom.Url upload_url) => ();
 
   [Sync]
   // Forces all pending Domain Reliability uploads to run now, even if their
   // minimum delay has not yet passed.
   ForceDomainReliabilityUploadsForTesting() => ();
 
-  // Gets the OriginPolicyManager associated with this network context.
-  GetOriginPolicyManager(
-      pending_receiver<OriginPolicyManager> origin_policy_manager);
+  // If called, the CT log list will be considered always timely.
+  [EnableIf=is_ct_supported]
+  SetCTLogListAlwaysTimelyForTesting();
 
   // Set the SCT auditing mode for this NetworkContext.
   [EnableIf=is_ct_supported]

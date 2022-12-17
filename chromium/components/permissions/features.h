@@ -62,6 +62,9 @@ extern const base::Feature kBlockNotificationPromptsIfDisabledOnAppLevel;
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
 extern const base::Feature kPermissionsPostPromptSurvey;
 
+COMPONENT_EXPORT(PERMISSIONS_COMMON)
+extern const base::Feature kRecordPermissionExpirationTimestamps;
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace features
@@ -73,9 +76,6 @@ extern const base::FeatureParam<bool> kOkButtonBehavesAsAllowAlways;
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
 extern const base::FeatureParam<std::string>
     kPermissionPredictionServiceUrlOverride;
-
-COMPONENT_EXPORT(PERMISSIONS_COMMON)
-extern const base::FeatureParam<bool> kPermissionPredictionServiceUseJson;
 
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
 extern const base::FeatureParam<double>

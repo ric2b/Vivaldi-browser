@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_shortcut_tile_view.h"
 
-#import <MaterialComponents/MaterialTypography.h>
-
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -84,7 +82,7 @@ const CGFloat kIconSize = 56;
     _countContainer = [[UIView alloc] init];
     _countContainer.backgroundColor = [UIColor colorNamed:kBackgroundColor];
     // Unfortunately, simply setting a CALayer borderWidth and borderColor
-    // on |_countContainer|, and setting a background color on |_countLabel|
+    // on `_countContainer`, and setting a background color on `_countLabel`
     // will result in the inner color bleeeding thru to the outside.
     _countContainer.layer.cornerRadius = kCountBorderWidth / 2;
     _countContainer.layer.masksToBounds = YES;
@@ -113,7 +111,10 @@ const CGFloat kIconSize = 56;
       [_countLabel.heightAnchor
           constraintEqualToAnchor:_countLabel.widthAnchor],
     ]];
-    _countLabel.font = [MDCTypography captionFont];
+    const CGFloat kCaptionFontSize = 12.0;
+    const UIFontWeight kCaptionFontWeight = UIFontWeightRegular;
+    _countLabel.font = [UIFont systemFontOfSize:kCaptionFontSize
+                                         weight:kCaptionFontWeight];
     AddSameCenterConstraints(_countLabel, _countContainer);
   }
   return _countLabel;

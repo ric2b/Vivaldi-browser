@@ -477,7 +477,8 @@ TEST_F(VirtualCardEnrollmentManagerTest, Enroll) {
 
     payments_client_->set_update_virtual_card_enrollment_result(
         AutofillClient::PaymentsRpcResult::kSuccess);
-    virtual_card_enrollment_manager_->Enroll();
+    virtual_card_enrollment_manager_->Enroll(
+        /*virtual_card_enrollment_update_response_callback=*/absl::nullopt);
 
     payments::PaymentsClient::UpdateVirtualCardEnrollmentRequestDetails
         request_details =
@@ -518,7 +519,8 @@ TEST_F(VirtualCardEnrollmentManagerTest, Enroll) {
     // Starts another request and makes sure it fails.
     payments_client_->set_update_virtual_card_enrollment_result(
         AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure);
-    virtual_card_enrollment_manager_->Enroll();
+    virtual_card_enrollment_manager_->Enroll(
+        /*virtual_card_enrollment_update_response_callback=*/absl::nullopt);
 
     // Verifies the logging.
     histogram_tester.ExpectUniqueSample(
@@ -538,7 +540,8 @@ TEST_F(VirtualCardEnrollmentManagerTest, Unenroll) {
       AutofillClient::PaymentsRpcResult::kNone);
 
   virtual_card_enrollment_manager_->Unenroll(
-      /*instrument_id=*/9223372036854775807);
+      /*instrument_id=*/9223372036854775807,
+      /*virtual_card_enrollment_update_response_callback=*/absl::nullopt);
 
   payments::PaymentsClient::UpdateVirtualCardEnrollmentRequestDetails
       request_details =
@@ -567,7 +570,8 @@ TEST_F(VirtualCardEnrollmentManagerTest, Unenroll) {
   payments_client_->set_update_virtual_card_enrollment_result(
       AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure);
   virtual_card_enrollment_manager_->Unenroll(
-      /*instrument_id=*/9223372036854775807);
+      /*instrument_id=*/9223372036854775807,
+      /*virtual_card_enrollment_update_response_callback=*/absl::nullopt);
 
   // Verifies the logging.
   histogram_tester.ExpectUniqueSample(
@@ -577,110 +581,6 @@ TEST_F(VirtualCardEnrollmentManagerTest, Unenroll) {
       "Autofill.VirtualCard.Unenroll.Result.SettingsPage",
       /*sample=*/false, 1);
 }
-
-#if !BUILDFLAG(IS_ANDROID)
-TEST_F(VirtualCardEnrollmentManagerTest, UpstreamAnimationSync_AnimationFirst) {
-  for (bool optimized_upstream : {true, false}) {
-    virtual_card_enrollment_manager_->SetBubbleShown(false);
-    virtual_card_enrollment_manager_->SetAvatarAnimationComplete(false);
-    virtual_card_enrollment_manager_->SetEnrollResponseDetailsReceived(false);
-
-    personal_data_manager_->ClearCreditCardArtImages();
-    SetUpCard();
-    SetValidCardArtImageForCard(*card_);
-
-    VirtualCardEnrollmentProcessState* state =
-        virtual_card_enrollment_manager_
-            ->GetVirtualCardEnrollmentProcessState();
-    state->virtual_card_enrollment_fields.credit_card = *card_;
-    state->vcn_context_token = kTestVcnContextToken;
-    state->virtual_card_enrollment_fields.virtual_card_enrollment_source =
-        VirtualCardEnrollmentSource::kUpstream;
-
-    payments::PaymentsClient::GetDetailsForEnrollmentResponseDetails response;
-    response.vcn_context_token = kTestVcnContextToken;
-    response.issuer_legal_message = {
-        TestLegalMessageLine("issuer_test_legal_message_line")};
-    response.google_legal_message = {
-        TestLegalMessageLine("google_test_legal_message_line")};
-
-    absl::optional<
-        payments::PaymentsClient::GetDetailsForEnrollmentResponseDetails>
-        response_optional = response;
-    // Update avatar animation complete boolean.
-    virtual_card_enrollment_manager_->OnCardSavedAnimationComplete();
-    EXPECT_TRUE(virtual_card_enrollment_manager_->GetAvatarAnimationComplete());
-
-    // Ensure bubble was not shown yet.
-    EXPECT_FALSE(virtual_card_enrollment_manager_->GetBubbleShown());
-
-    if (optimized_upstream) {
-      virtual_card_enrollment_manager_->InitVirtualCardEnroll(
-          *card_, VirtualCardEnrollmentSource::kUpstream, response_optional);
-    } else {
-      virtual_card_enrollment_manager_->OnDidGetDetailsForEnrollResponse(
-          AutofillClient::PaymentsRpcResult::kSuccess, response);
-    }
-
-    EXPECT_TRUE(
-        virtual_card_enrollment_manager_->GetEnrollResponseDetailsReceived());
-
-    // Ensure bubble was shown.
-    EXPECT_TRUE(virtual_card_enrollment_manager_->GetBubbleShown());
-  }
-}
-
-TEST_F(VirtualCardEnrollmentManagerTest, UpstreamAnimationSync_ResponseFirst) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({features::kAutofillEnableToolbarStatusChip,
-                                 features::kAutofillCreditCardUploadFeedback},
-                                {});
-  for (bool optimized_upstream : {true, false}) {
-    virtual_card_enrollment_manager_->Reset();
-    virtual_card_enrollment_manager_->SetBubbleShown(false);
-    virtual_card_enrollment_manager_->SetAvatarAnimationComplete(false);
-    personal_data_manager_->ClearCreditCardArtImages();
-    SetUpCard();
-    SetValidCardArtImageForCard(*card_);
-
-    VirtualCardEnrollmentProcessState* state =
-        virtual_card_enrollment_manager_
-            ->GetVirtualCardEnrollmentProcessState();
-    state->virtual_card_enrollment_fields.credit_card = *card_;
-    state->vcn_context_token = kTestVcnContextToken;
-    state->virtual_card_enrollment_fields.virtual_card_enrollment_source =
-        VirtualCardEnrollmentSource::kUpstream;
-
-    payments::PaymentsClient::GetDetailsForEnrollmentResponseDetails response;
-    response.vcn_context_token = kTestVcnContextToken;
-    response.issuer_legal_message = {
-        TestLegalMessageLine("issuer_test_legal_message_line")};
-    response.google_legal_message = {
-        TestLegalMessageLine("google_test_legal_message_line")};
-
-    absl::optional<
-        payments::PaymentsClient::GetDetailsForEnrollmentResponseDetails>
-        response_optional = response;
-    if (optimized_upstream) {
-      virtual_card_enrollment_manager_->InitVirtualCardEnroll(
-          *card_, VirtualCardEnrollmentSource::kUpstream, response_optional);
-    } else {
-      virtual_card_enrollment_manager_->OnDidGetDetailsForEnrollResponse(
-          AutofillClient::PaymentsRpcResult::kSuccess, response);
-    }
-
-    EXPECT_TRUE(
-        virtual_card_enrollment_manager_->GetEnrollResponseDetailsReceived());
-
-    // Ensure bubble was not shown yet.
-    EXPECT_FALSE(virtual_card_enrollment_manager_->GetBubbleShown());
-
-    // Update avatar animation complete boolean.
-    virtual_card_enrollment_manager_->OnCardSavedAnimationComplete();
-    EXPECT_TRUE(virtual_card_enrollment_manager_->GetAvatarAnimationComplete());
-  }
-}
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_IOS)
 TEST_F(VirtualCardEnrollmentManagerTest, StrikeDatabase_BubbleAccepted) {
@@ -703,7 +603,8 @@ TEST_F(VirtualCardEnrollmentManagerTest, StrikeDatabase_BubbleAccepted) {
       1);
 
   // Ensure a strike has been removed after enrollment accepted.
-  virtual_card_enrollment_manager_->Enroll();
+  virtual_card_enrollment_manager_->Enroll(
+      /*virtual_card_enrollment_update_response_callback=*/absl::nullopt);
   EXPECT_EQ(
       virtual_card_enrollment_manager_->GetVirtualCardEnrollmentStrikeDatabase()
           ->GetStrikes(

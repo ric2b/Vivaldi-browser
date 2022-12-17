@@ -8,20 +8,18 @@
 
 #include "ash/components/disks/disk_mount_manager.h"
 #include "ash/components/disks/mock_disk_mount_manager.h"
-#include "base/base64.h"
 #include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
-#include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
-#include "chrome/browser/ash/file_manager/fake_disk_mount_manager.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
+#include "chrome/browser/ash/guest_os/guest_id.h"
 #include "chrome/browser/ash/guest_os/guest_os_test_helpers.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/browser_task_environment.h"
@@ -56,8 +54,7 @@ class GuestOsMountProviderTest : public testing::Test {
     // DiskMountManager::InitializeForTesting takes ownership and works with
     // a raw pointer, hence the new with no matching delete.
     disk_manager_ = new ash::disks::MockDiskMountManager;
-    provider_ =
-        std::make_unique<MockMountProvider>(profile_.get(), kContainerId);
+    provider_ = std::make_unique<MockMountProvider>(profile_.get(), kGuestId);
     file_manager::VolumeManagerFactory::GetInstance()->SetTestingFactory(
         profile_.get(), base::BindRepeating(&BuildVolumeManager));
 
@@ -85,14 +82,14 @@ class GuestOsMountProviderTest : public testing::Test {
       const std::string& source_format,
       const std::string& mount_label,
       const std::vector<std::string>& mount_options,
-      chromeos::MountType type,
-      chromeos::MountAccessMode access_mode,
+      ash::MountType type,
+      ash::MountAccessMode access_mode,
       ash::disks::DiskMountManager::MountPathCallback callback) {
     auto event = DiskMountManager::MountEvent::MOUNTING;
-    auto code = chromeos::MountError::MOUNT_ERROR_NONE;
-    auto info = DiskMountManager::MountPointInfo(
-        "sftp://0:0", "/media/fuse/" + kMountName,
-        chromeos::MOUNT_TYPE_NETWORK_STORAGE, ash::disks::MOUNT_CONDITION_NONE);
+    auto code = ash::MountError::kNone;
+    auto info = DiskMountManager::MountPoint{
+        base::StringPrintf("sftp://%d:%d", cid_, port_),
+        "/media/fuse/" + kMountName, ash::MountType::kNetworkStorage};
     disk_manager_->NotifyMountEvent(event, code, info);
     std::move(callback).Run(code, info);
   }
@@ -100,18 +97,19 @@ class GuestOsMountProviderTest : public testing::Test {
   void ExpectMountCalls(int n) {
     std::vector<std::string> default_mount_options;
     EXPECT_CALL(*disk_manager_,
-                MountPath("sftp://0:0", "", kMountName, default_mount_options,
-                          chromeos::MOUNT_TYPE_NETWORK_STORAGE,
-                          chromeos::MOUNT_ACCESS_MODE_READ_WRITE, _))
+                MountPath(base::StringPrintf("sftp://%d:%d", cid_, port_), "",
+                          kMountName, default_mount_options,
+                          ash::MountType::kNetworkStorage,
+                          ash::MountAccessMode::kReadWrite, _))
         .Times(n)
         .WillRepeatedly(
             Invoke(this, &GuestOsMountProviderTest::NotifyMountEvent));
   }
 
-  // guestos_${UserHash}_${base64(kContainerId.ToString())}. Note that UserHash
+  // guestos_${UserHash}_${encode(kGuestId.ToString())}. Note that UserHash
   // is an empty string in these tests.
-  const crostini::ContainerId kContainerId =
-      crostini::ContainerId("cow", "ptery/daccy");
+  const guest_os::GuestId kGuestId =
+      guest_os::GuestId(guest_os::VmType::TERMINA, "cow", "ptery/daccy");
   const std::string kMountName = std::string{"guestos++cow+ptery%2Fdaccy"};
 
   content::BrowserTaskEnvironment task_environment_;
@@ -119,6 +117,8 @@ class GuestOsMountProviderTest : public testing::Test {
   std::unique_ptr<TestingProfile> profile_;
   file_manager::VolumeManager* volume_manager_;
   std::unique_ptr<MockMountProvider> provider_;
+  int cid_ = 41;     // Default set in MockMountProvider
+  int port_ = 1234;  // Default set in MockMountProvider
 };
 
 TEST_F(GuestOsMountProviderTest, MountDiskMountsDisk) {
@@ -169,7 +169,7 @@ TEST_F(GuestOsMountProviderTest, CanRemountAfterUnmount) {
           [this](const std::string& mount_path,
                  DiskMountManager::UnmountPathCallback callback) {
             EXPECT_EQ(mount_path, "/media/fuse/" + kMountName);
-            std::move(callback).Run(chromeos::MOUNT_ERROR_NONE);
+            std::move(callback).Run(ash::MountError::kNone);
           }));
 
   provider_->Mount(
@@ -186,5 +186,23 @@ TEST_F(GuestOsMountProviderTest, CanRemountAfterUnmount) {
       storage::ExternalMountPoints::GetSystemInstance()->GetRegisteredPath(
           kMountName, &path));
   EXPECT_EQ(base::FilePath("/media/fuse/" + kMountName), path);
+}
+
+class FailMountProvider : public MockMountProvider {
+  void Prepare(PrepareCallback callback) override {
+    std::move(callback).Run(false, 0, 0, base::FilePath());
+  }
+};
+
+TEST_F(GuestOsMountProviderTest, PrepareFailureFailsMounting) {
+  auto fail_provider = FailMountProvider();
+  ExpectMountCalls(0);
+  bool result = true;
+
+  fail_provider.Mount(
+      base::BindLambdaForTesting([&result](bool res) { result = res; }));
+  task_environment_.RunUntilIdle();
+
+  EXPECT_FALSE(result);
 }
 }  // namespace guest_os

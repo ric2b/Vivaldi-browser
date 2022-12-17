@@ -25,6 +25,8 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "NetworkingUnfreezable";
     case TaskType::kNetworkingControl:
       return "NetworkingControl";
+    case TaskType::kLowPriorityScriptExecution:
+      return "LowPriorityScriptExecution";
     case TaskType::kHistoryTraversal:
       return "HistoryTraversal";
     case TaskType::kEmbed:
@@ -131,6 +133,8 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "InternalNavigationAssociated";
     case TaskType::kInternalNavigationAssociatedUnfreezable:
       return "InternalNavigationAssociatedUnfreezable";
+    case TaskType::kInternalNavigationCancellation:
+      return "InternalNavigationCancellation";
     case TaskType::kInternalContinueScriptLoading:
       return "InternalContinueScriptLoading";
     case TaskType::kWebSchedulingPostedTask:

@@ -41,10 +41,10 @@ constexpr const char kDomain[] = "www.foo.bar";
 constexpr const char kSubDomain[] = "baz.foo.bar";
 constexpr const char kDifferentDomain[] = "www.different-domain.com";
 constexpr const char kParentAppPath[] = "/web_apps/basic.html";
-constexpr const char kSubAppPath[] = "/web_apps/site_a/basic.html";
+constexpr const char kSubAppPath[] = "/web_apps/standalone/basic.html";
 constexpr const char kSubAppPathMinimalUi[] =
-    "/web_apps/site_a/basic.html?manifest=manifest_minimal_ui.json";
-constexpr const char kSubAppPath2[] = "/web_apps/site_b/basic.html";
+    "/web_apps/standalone/basic.html?manifest=manifest_minimal_ui.json";
+constexpr const char kSubAppPath2[] = "/web_apps/minimal_ui/basic.html";
 constexpr const char kSubAppPath3[] = "/web_apps/site_d/basic.html";
 constexpr const char kSubAppPathInvalid[] = "/invalid/sub/app/path.html";
 
@@ -141,7 +141,7 @@ class SubAppsServiceImplBrowserTest : public WebAppControllerBrowserTest {
 
   std::vector<blink::mojom::SubAppsServiceAddResultPtr> Result(
       blink::mojom::SubAppsServiceAddResultCode result_code,
-      AppId sub_app_id) {
+      UnhashedAppId sub_app_id) {
     blink::mojom::SubAppsServiceAddResultPtr mojom_pair =
         blink::mojom::SubAppsServiceAddResult::New();
     mojom_pair->unhashed_app_id = sub_app_id;
@@ -177,6 +177,31 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, EndToEndAdd) {
 
   EXPECT_TRUE(ExecJs(render_frame_host(), command));
   EXPECT_EQ(2ul, GetAllSubAppIds(parent_app_id_).size());
+}
+
+// End-to-end test for add() with one succeeding and one failing install.
+IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, EndToEndAddInvalidPath) {
+  NavigateToParentApp();
+  InstallParentApp();
+  EXPECT_EQ(0ul, GetAllSubAppIds(parent_app_id_).size());
+
+  const GURL kSubAppUrl = GetURL(kSubAppPath);
+  UnhashedAppId unhashed_sub_app_id =
+      GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, kSubAppUrl);
+  // Invalid app that should fail because the URL cannot be loaded.
+  const GURL kInvalidSubAppUrl = GetURL(kSubAppPathInvalid);
+  UnhashedAppId unhashed_invalid_sub_app_id =
+      GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, kInvalidSubAppUrl);
+
+  std::string command = "navigator.subApps.add({\"" + unhashed_sub_app_id +
+                        "\":{\"install_url\":\"" + kSubAppUrl.spec() +
+                        "\"},\"" + unhashed_invalid_sub_app_id +
+                        "\":{\"install_url\":\"" + kInvalidSubAppUrl.spec() +
+                        "\"}})";
+
+  // Add call promise should be rejected because an install failed.
+  EXPECT_FALSE(ExecJs(render_frame_host(), command));
+  EXPECT_EQ(1ul, GetAllSubAppIds(parent_app_id_).size());
 }
 
 // Add a single sub-app and verify all sorts of things.

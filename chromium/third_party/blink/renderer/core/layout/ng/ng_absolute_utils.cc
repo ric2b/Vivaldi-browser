@@ -92,15 +92,15 @@ inline LayoutUnit StaticPositionEndInset(StaticPositionEdge edge,
 
 // Computes the available-size, accounting for insets and the static-position.
 LayoutUnit ComputeAvailableSize(const LayoutUnit available_size,
-                                const Length& inset_start_length,
-                                const Length& inset_end_length,
+                                const absl::optional<LayoutUnit>& inset_start,
+                                const absl::optional<LayoutUnit>& inset_end,
                                 const LayoutUnit static_position_offset,
                                 StaticPositionEdge static_position_edge,
                                 bool is_table) {
   DCHECK_NE(available_size, kIndefiniteSize);
   LayoutUnit computed_available_size;
 
-  if (inset_start_length.IsAuto() && inset_end_length.IsAuto()) {
+  if (!inset_start && !inset_end) {
     // If both our insets are auto, the available-size is defined by the
     // static-position.
     switch (static_position_edge) {
@@ -127,11 +127,9 @@ LayoutUnit ComputeAvailableSize(const LayoutUnit available_size,
     }
   } else {
     // Otherwise we just subtract the insets.
-    LayoutUnit inset_start =
-        MinimumValueForLength(inset_start_length, available_size);
-    LayoutUnit inset_end =
-        MinimumValueForLength(inset_end_length, available_size);
-    computed_available_size = available_size - inset_start - inset_end;
+    computed_available_size = available_size -
+                              inset_start.value_or(LayoutUnit()) -
+                              inset_end.value_or(LayoutUnit());
   }
 
   // The available-size given to tables isn't allowed to exceed the
@@ -152,8 +150,8 @@ void ComputeInsets(const LayoutUnit margin_percentage_resolution_size,
                    const LayoutUnit computed_available_size,
                    const Length& margin_start_length,
                    const Length& margin_end_length,
-                   const Length& inset_start_length,
-                   const Length& inset_end_length,
+                   absl::optional<LayoutUnit> inset_start,
+                   absl::optional<LayoutUnit> inset_end,
                    const LayoutUnit static_position_offset,
                    StaticPositionEdge static_position_edge,
                    bool is_start_dominant,
@@ -174,14 +172,6 @@ void ComputeInsets(const LayoutUnit margin_percentage_resolution_size,
   if (!margin_end_length.IsAuto()) {
     margin_end = MinimumValueForLength(margin_end_length,
                                        margin_percentage_resolution_size);
-  }
-  absl::optional<LayoutUnit> inset_start;
-  if (!inset_start_length.IsAuto()) {
-    inset_start = MinimumValueForLength(inset_start_length, available_size);
-  }
-  absl::optional<LayoutUnit> inset_end;
-  if (!inset_end_length.IsAuto()) {
-    inset_end = MinimumValueForLength(inset_end_length, available_size);
   }
 
   // Solving the equation:
@@ -256,10 +246,6 @@ void ComputeInsets(const LayoutUnit margin_percentage_resolution_size,
   *margin_end_out = *margin_end;
 }
 
-}  // namespace
-
-namespace {
-
 bool CanComputeBlockSizeWithoutLayout(const NGBlockNode& node) {
   if (node.IsTable())
     return false;
@@ -275,35 +261,87 @@ bool CanComputeBlockSizeWithoutLayout(const NGBlockNode& node) {
 
 }  // namespace
 
+NGLogicalOutOfFlowInsets ComputeOutOfFlowInsets(
+    const ComputedStyle& style,
+    const LogicalSize& available_logical_size,
+    NGAnchorEvaluatorImpl* anchor_evaluator) {
+  // Compute in physical, because anchors may be in different `writing-mode` or
+  // `direction`.
+  const WritingDirectionMode writing_direction = style.GetWritingDirection();
+  const PhysicalSize available_size = ToPhysicalSize(
+      available_logical_size, writing_direction.GetWritingMode());
+  absl::optional<LayoutUnit> left;
+  if (const Length& left_length = style.Left(); !left_length.IsAuto()) {
+    anchor_evaluator->SetAxis(/* is_y_axis */ false,
+                              /* is_right_or_bottom */ false,
+                              available_size.width);
+    left = MinimumValueForLength(left_length, available_size.width,
+                                 anchor_evaluator);
+  }
+  absl::optional<LayoutUnit> right;
+  if (const Length& right_length = style.Right(); !right_length.IsAuto()) {
+    anchor_evaluator->SetAxis(/* is_y_axis */ false,
+                              /* is_right_or_bottom */ true,
+                              available_size.width);
+    right = MinimumValueForLength(right_length, available_size.width,
+                                  anchor_evaluator);
+  }
+
+  absl::optional<LayoutUnit> top;
+  if (const Length& top_length = style.Top(); !top_length.IsAuto()) {
+    anchor_evaluator->SetAxis(/* is_y_axis */ true,
+                              /* is_right_or_bottom */ false,
+                              available_size.height);
+    top = MinimumValueForLength(top_length, available_size.height,
+                                anchor_evaluator);
+  }
+  absl::optional<LayoutUnit> bottom;
+  if (const Length& bottom_length = style.Bottom(); !bottom_length.IsAuto()) {
+    anchor_evaluator->SetAxis(/* is_y_axis */ true,
+                              /* is_right_or_bottom */ true,
+                              available_size.height);
+    bottom = MinimumValueForLength(bottom_length, available_size.height,
+                                   anchor_evaluator);
+  }
+
+  // Convert the physical insets to logical.
+  PhysicalToLogical<absl::optional<LayoutUnit>&> insets(writing_direction, top,
+                                                        right, bottom, left);
+  return {insets.InlineStart(), insets.InlineEnd(), insets.BlockStart(),
+          insets.BlockEnd()};
+}
+
 LogicalSize ComputeOutOfFlowAvailableSize(
     const NGBlockNode& node,
     const NGConstraintSpace& space,
+    const NGLogicalOutOfFlowInsets& insets,
     const NGLogicalStaticPosition& static_position) {
-  const auto& style = node.Style();
   const bool is_table = node.IsTable();
   return {ComputeAvailableSize(
-              space.AvailableSize().inline_size, style.LogicalInlineStart(),
-              style.LogicalInlineEnd(), static_position.offset.inline_offset,
+              space.AvailableSize().inline_size, insets.inline_start,
+              insets.inline_end, static_position.offset.inline_offset,
               GetStaticPositionEdge(static_position.inline_edge), is_table),
           ComputeAvailableSize(
-              space.AvailableSize().block_size, style.LogicalTop(),
-              style.LogicalBottom(), static_position.offset.block_offset,
+              space.AvailableSize().block_size, insets.block_start,
+              insets.block_end, static_position.offset.block_offset,
               GetStaticPositionEdge(static_position.block_edge), is_table)};
 }
 
 bool ComputeOutOfFlowInlineDimensions(
     const NGBlockNode& node,
+    const ComputedStyle& style,
     const NGConstraintSpace& space,
+    const NGLogicalOutOfFlowInsets& insets,
     const NGBoxStrut& border_padding,
     const NGLogicalStaticPosition& static_position,
     const LogicalSize computed_available_size,
     const absl::optional<LogicalSize>& replaced_size,
     const WritingDirectionMode container_writing_direction,
+    const Length::AnchorEvaluator* anchor_evaluator,
     NGLogicalOutOfFlowDimensions* dimensions) {
   DCHECK(dimensions);
   bool depends_on_min_max_sizes = false;
 
-  const auto& style = node.Style();
   const bool is_table = node.IsTable();
   const bool can_compute_block_size_without_layout =
       CanComputeBlockSizeWithoutLayout(node);
@@ -321,10 +359,11 @@ bool ComputeOutOfFlowInlineDimensions(
 
     // Compute our block-size if we haven't already.
     if (dimensions->size.block_size == kIndefiniteSize) {
-      ComputeOutOfFlowBlockDimensions(node, space, border_padding,
-                                      static_position, computed_available_size,
-                                      /* replaced_size */ absl::nullopt,
-                                      container_writing_direction, dimensions);
+      ComputeOutOfFlowBlockDimensions(
+          node, style, space, insets, border_padding, static_position,
+          computed_available_size,
+          /* replaced_size */ absl::nullopt, container_writing_direction,
+          anchor_evaluator, dimensions);
     }
 
     // Create a new space, setting the fixed block-size.
@@ -378,10 +417,10 @@ bool ComputeOutOfFlowInlineDimensions(
 
     LayoutUnit main_inline_size = ResolveMainInlineLength(
         space, style, border_padding, MinMaxSizesFunc, main_inline_length,
-        computed_available_size.inline_size);
+        computed_available_size.inline_size, anchor_evaluator);
     MinMaxSizes min_max_inline_sizes = ComputeMinMaxInlineSizes(
         space, node, border_padding, MinMaxSizesFunc, &min_inline_length,
-        computed_available_size.inline_size);
+        computed_available_size.inline_size, anchor_evaluator);
 
     inline_size = min_max_inline_sizes.ClampSizeToMinAndMax(main_inline_size);
   }
@@ -401,8 +440,8 @@ bool ComputeOutOfFlowInlineDimensions(
   ComputeInsets(
       space.PercentageResolutionInlineSizeForParentWritingMode(),
       space.AvailableSize().inline_size, computed_available_size.inline_size,
-      style.MarginStart(), style.MarginEnd(), style.LogicalInlineStart(),
-      style.LogicalInlineEnd(), static_position.offset.inline_offset,
+      style.MarginStart(), style.MarginEnd(), insets.inline_start,
+      insets.inline_end, static_position.offset.inline_offset,
       GetStaticPositionEdge(static_position.inline_edge), is_start_dominant,
       false /* is_block_direction */, inline_size,
       &dimensions->inset.inline_start, &dimensions->inset.inline_end,
@@ -413,19 +452,24 @@ bool ComputeOutOfFlowInlineDimensions(
 
 const NGLayoutResult* ComputeOutOfFlowBlockDimensions(
     const NGBlockNode& node,
+    const ComputedStyle& style,
     const NGConstraintSpace& space,
+    const NGLogicalOutOfFlowInsets& insets,
     const NGBoxStrut& border_padding,
     const NGLogicalStaticPosition& static_position,
     const LogicalSize computed_available_size,
     const absl::optional<LogicalSize>& replaced_size,
     const WritingDirectionMode container_writing_direction,
+    const Length::AnchorEvaluator* anchor_evaluator,
     NGLogicalOutOfFlowDimensions* dimensions) {
   DCHECK(dimensions);
 
   const NGLayoutResult* result = nullptr;
 
-  const auto& style = node.Style();
   const bool is_table = node.IsTable();
+  MinMaxSizes min_max_block_sizes = ComputeMinMaxBlockSizes(
+      space, style, border_padding, computed_available_size.block_size,
+      anchor_evaluator);
 
   auto IntrinsicBlockSizeFunc = [&]() -> LayoutUnit {
     DCHECK(!node.IsReplaced());
@@ -440,6 +484,9 @@ const NGLayoutResult* ComputeOutOfFlowBlockDimensions(
           {dimensions->size.inline_size, space.AvailableSize().block_size});
       builder.SetIsFixedInlineSize(true);
       builder.SetPercentageResolutionSize(space.PercentageResolutionSize());
+      // Use the computed |MinMaxSizes| because |node.Layout()| can't resolve
+      // the `anchor-size()` function.
+      builder.SetOverrideMinMaxBlockSizes(min_max_block_sizes);
 
       if (space.IsInitialColumnBalancingPass()) {
         // The |fragmentainer_offset_delta| will not make a difference in the
@@ -482,9 +529,7 @@ const NGLayoutResult* ComputeOutOfFlowBlockDimensions(
 
     LayoutUnit main_block_size = ResolveMainBlockLength(
         space, style, border_padding, main_block_length, IntrinsicBlockSizeFunc,
-        computed_available_size.block_size);
-    MinMaxSizes min_max_block_sizes = ComputeMinMaxBlockSizes(
-        space, style, border_padding, computed_available_size.block_size);
+        computed_available_size.block_size, anchor_evaluator);
 
     // Manually resolve any intrinsic/content min/max block-sizes.
     // TODO(crbug.com/1135207): |ComputeMinMaxBlockSizes()| should handle this.
@@ -517,8 +562,8 @@ const NGLayoutResult* ComputeOutOfFlowBlockDimensions(
   ComputeInsets(
       space.PercentageResolutionInlineSizeForParentWritingMode(),
       space.AvailableSize().block_size, computed_available_size.block_size,
-      style.MarginBefore(), style.MarginAfter(), style.LogicalTop(),
-      style.LogicalBottom(), static_position.offset.block_offset,
+      style.MarginBefore(), style.MarginAfter(), insets.block_start,
+      insets.block_end, static_position.offset.block_offset,
       GetStaticPositionEdge(static_position.block_edge), is_start_dominant,
       true /* is_block_direction */, block_size, &dimensions->inset.block_start,
       &dimensions->inset.block_end, &dimensions->margins.block_start,

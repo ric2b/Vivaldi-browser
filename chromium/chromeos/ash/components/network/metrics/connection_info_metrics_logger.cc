@@ -7,12 +7,12 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "chromeos/ash/components/network/metrics/network_metrics_helper.h"
-#include "chromeos/network/network_connection_handler.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_connection_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
+#include "chromeos/ash/components/network/network_state_handler.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
-namespace chromeos {
+namespace ash {
 
 ConnectionInfoMetricsLogger::ConnectionInfo::ConnectionInfo(
     const NetworkState* network)
@@ -180,4 +180,4 @@ ConnectionInfoMetricsLogger::GetCachedInfo(const std::string& guid) const {
   return prev_info_it->second;
 }
 
-}  // namespace chromeos
+}  // namespace ash

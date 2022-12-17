@@ -33,8 +33,8 @@ void DummyTextInputClient::SetCompositionText(
   composition_history_.push_back(composition);
 }
 
-uint32_t DummyTextInputClient::ConfirmCompositionText(bool keep_selection) {
-  return UINT32_MAX;
+size_t DummyTextInputClient::ConfirmCompositionText(bool keep_selection) {
+  return std::numeric_limits<size_t>::max();
 }
 
 void DummyTextInputClient::ClearCompositionText() {
@@ -82,7 +82,7 @@ gfx::Rect DummyTextInputClient::GetSelectionBoundingBox() const {
 }
 
 bool DummyTextInputClient::GetCompositionCharacterBounds(
-    uint32_t index,
+    size_t index,
     gfx::Rect* rect) const {
   return false;
 }
@@ -117,9 +117,11 @@ bool DummyTextInputClient::SetEditableSelectionRange(const gfx::Range& range) {
   return true;
 }
 
+#if BUILDFLAG(IS_MAC)
 bool DummyTextInputClient::DeleteRange(const gfx::Range& range) {
   return false;
 }
+#endif
 
 bool DummyTextInputClient::GetTextFromRange(const gfx::Range& range,
                                             std::u16string* text) const {

@@ -7,22 +7,10 @@
 
 #include "ash/services/cellular_setup/public/mojom/esim_manager.mojom.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/dbus/hermes/hermes_euicc_client.h"
-#include "chromeos/dbus/hermes/hermes_manager_client.h"
-#include "chromeos/dbus/hermes/hermes_profile_client.h"
-#include "chromeos/network/cellular_esim_profile_handler.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/network/cellular_connection_handler.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/network/cellular_esim_installer.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/network/cellular_esim_uninstall_handler.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/network/cellular_inhibitor.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/network/network_connection_handler.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/dbus/hermes/hermes_euicc_client.h"
+#include "chromeos/ash/components/dbus/hermes/hermes_manager_client.h"
+#include "chromeos/ash/components/dbus/hermes/hermes_profile_client.h"
+#include "chromeos/ash/components/network/cellular_esim_profile_handler.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -31,7 +19,16 @@ namespace dbus {
 class ObjectPath;
 }
 
-namespace ash::cellular_setup {
+namespace ash {
+
+class CellularConnectionHandler;
+class CellularESimInstaller;
+class CellularESimUninstallHandler;
+class CellularInhibitor;
+class NetworkConnectionHandler;
+class NetworkStateHandler;
+
+namespace cellular_setup {
 
 class Euicc;
 class ESimProfile;
@@ -135,7 +132,8 @@ class ESimManager : public mojom::ESimManager,
   base::WeakPtrFactory<ESimManager> weak_ptr_factory_{this};
 };
 
-}  // namespace ash::cellular_setup
+}  // namespace cellular_setup
+}  // namespace ash
 
 // TODO(https://crbug.com/1164001): remove after the migration is finished.
 namespace chromeos::cellular_setup {

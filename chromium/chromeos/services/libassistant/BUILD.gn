@@ -29,10 +29,13 @@ component("libassistant") {
   public_deps = [
     "//chromeos/assistant/internal/proto:assistant",
     "//chromeos/services/libassistant/public/mojom",
+    "//dbus",
   ]
 
   deps = [
     ":internal",
+    ":loader",
+    "//chromeos/ash/services/assistant/public/cpp",
     "//chromeos/assistant/internal:libassistant_shared_headers",
     "//chromeos/services/libassistant/public/mojom",
   ]
@@ -43,6 +46,28 @@ component("libassistant") {
   # exists (as build target of //chromeos/ash/services/assistant), so we have to
   # use `lib_libassistant_service.so`.
   output_name = "lib_libassistant_service"
+}
+
+source_set("loader") {
+  defines = [ "IS_LIBASSISTANT_LOADER_IMPL" ]
+
+  sources = [
+    "libassistant_loader_impl.cc",
+    "libassistant_loader_impl.h",
+  ]
+
+  public_deps = [ "//dbus" ]
+
+  deps = [
+    "//base",
+    "//chromeos/ash/components/dbus",
+    "//chromeos/ash/services/assistant/public/cpp",
+    "//chromeos/assistant/internal:libassistant_shared_headers",
+    "//chromeos/dbus/dlcservice",
+    "//chromeos/dbus/dlcservice:dlcservice_proto",
+    "//chromeos/services/libassistant/public/cpp:loader",
+    "//net",
+  ]
 }
 
 source_set("sandbox_hook") {
@@ -126,19 +151,20 @@ source_set("internal") {
     "./grpc/external_services:grpc_services_observer",
     "//build/util:chromium_git_revision",
     "//chromeos/ash/components/assistant:buildflags",
+    "//chromeos/ash/components/dbus",
     "//chromeos/ash/resources",
+    "//chromeos/ash/services/assistant/public/cpp",
+    "//chromeos/ash/services/assistant/public/proto",
     "//chromeos/assistant/internal",
     "//chromeos/assistant/internal:libassistant",
     "//chromeos/assistant/internal:libassistant_shared_headers",
     "//chromeos/assistant/internal:support",
     "//chromeos/assistant/internal/proto:assistant",
-    "//chromeos/dbus",
     "//chromeos/dbus/power",
-    "//chromeos/dbus/util:util",
-    "//chromeos/services/assistant/public/cpp",
-    "//chromeos/services/assistant/public/proto",
     "//chromeos/services/libassistant/public/mojom",
+    "//chromeos/services/network_config/public/cpp",
     "//chromeos/strings:strings_grit",
+    "//chromeos/version:version",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//ui/base",
@@ -174,8 +200,8 @@ source_set("audio") {
     ":fake_input_device",
     "//ash/public/mojom",
     "//base",
+    "//chromeos/ash/services/assistant/public/cpp",
     "//chromeos/assistant/internal:libassistant_shared_headers",
-    "//chromeos/services/assistant/public/cpp",
     "//chromeos/services/libassistant/grpc:assistant_client",
     "//chromeos/services/libassistant/public/mojom",
     "//media",
@@ -236,6 +262,7 @@ source_set("unit_tests") {
     "conversation_observer_unittest.cc",
     "device_settings_controller_unittest.cc",
     "display_controller_unittest.cc",
+    "libassistant_loader_impl_unittest.cc",
     "media_controller_unittest.cc",
     "network_provider_impl_unittest.cc",
     "notification_delegate_unittest.cc",
@@ -252,16 +279,18 @@ source_set("unit_tests") {
     ":audio",
     ":internal",
     ":libassistant",
+    ":loader",
     ":test_support",
     "//base",
     "//base/test:test_support",
     "//chromeos/ash/components/assistant/test_support:test_support",
+    "//chromeos/ash/services/assistant/public/cpp",
     "//chromeos/assistant/internal",
     "//chromeos/assistant/internal:libassistant_shared_headers",
     "//chromeos/assistant/internal:support",
     "//chromeos/assistant/internal:test_support",
+    "//chromeos/dbus/dlcservice",
     "//chromeos/dbus/power",
-    "//chromeos/services/assistant/public/cpp",
     "//chromeos/services/libassistant/grpc:assistant_client",
     "//chromeos/services/libassistant/public/mojom",
     "//services/audio/public/cpp:test_support",

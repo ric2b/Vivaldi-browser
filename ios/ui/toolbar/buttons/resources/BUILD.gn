@@ -1,0 +1,44 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("toolbar_new_tab_page") {
+  sources = [
+    "toolbar_new_tab_page.imageset/Contents.json",
+    "toolbar_new_tab_page.imageset/toolbar_new_tab_page@2x.png",
+    "toolbar_new_tab_page.imageset/toolbar_new_tab_page@3x.png",
+  ]
+}
+
+imageset("toolbar_stop") {
+  sources = [
+    "toolbar_stop.imageset/Contents.json",
+    "toolbar_stop.imageset/toolbar_stop@2x.png",
+    "toolbar_stop.imageset/toolbar_stop@3x.png",
+  ]
+}
+
+imageset("toolbar_back") {
+  sources = [
+    "toolbar_back.imageset/Contents.json",
+    "toolbar_back.imageset/toolbar_back@2x.png",
+    "toolbar_back.imageset/toolbar_back@3x.png",
+  ]
+}
+
+imageset("toolbar_switcher") {
+  sources = [
+    "toolbar_switcher.imageset/Contents.json",
+    "toolbar_switcher.imageset/toolbar_switcher.png",
+    "toolbar_switcher.imageset/toolbar_switcher@2x.png",
+    "toolbar_switcher.imageset/toolbar_switcher@3x.png",
+  ]
+}
+
+imageset("toolbar_forward") {
+  sources = [
+    "toolbar_forward.imageset/Contents.json",
+    "toolbar_forward.imageset/toolbar_forward@2x.png",
+    "toolbar_forward.imageset/toolbar_forward@3x.png",
+  ]
+}

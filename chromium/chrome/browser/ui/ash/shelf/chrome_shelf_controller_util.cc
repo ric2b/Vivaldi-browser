@@ -106,7 +106,6 @@ AppListControllerDelegate::Pinnable GetPinnableForAppID(
   // Eche application need context when launching. Pinning these creates an
   // item that does nothing.
   const char* kNoPinAppIds[] = {
-      file_manager::kAudioPlayerAppId,
       ash::eche_app::kEcheAppId,
   };
   if (base::Contains(kNoPinAppIds, app_id))
@@ -122,13 +121,10 @@ AppListControllerDelegate::Pinnable GetPinnableForAppID(
     return AppListControllerDelegate::PIN_EDITABLE;
   }
 
-  const base::Value* policy_apps =
-      profile->GetPrefs()->GetList(prefs::kPolicyPinnedLauncherApps);
-  if (!policy_apps)
-    return AppListControllerDelegate::PIN_EDITABLE;
+  const base::Value::List& policy_apps =
+      profile->GetPrefs()->GetValueList(prefs::kPolicyPinnedLauncherApps);
 
-  for (const base::Value& policy_dict_entry :
-       policy_apps->GetListDeprecated()) {
+  for (const base::Value& policy_dict_entry : policy_apps) {
     if (!policy_dict_entry.is_dict())
       return AppListControllerDelegate::PIN_EDITABLE;
 
@@ -187,21 +183,21 @@ bool IsAppWithIDPinnedToShelf(const std::string& app_id) {
   return ChromeShelfController::instance()->shelf_model()->IsAppPinned(app_id);
 }
 
-apps::mojom::LaunchSource ShelfLaunchSourceToAppsLaunchSource(
+apps::LaunchSource ShelfLaunchSourceToAppsLaunchSource(
     ash::ShelfLaunchSource source) {
   switch (source) {
     case ash::LAUNCH_FROM_UNKNOWN:
-      return apps::mojom::LaunchSource::kUnknown;
+      return apps::LaunchSource::kUnknown;
     case ash::LAUNCH_FROM_INTERNAL:
-      return apps::mojom::LaunchSource::kFromChromeInternal;
+      return apps::LaunchSource::kFromChromeInternal;
     case ash::LAUNCH_FROM_APP_LIST:
-      return apps::mojom::LaunchSource::kFromAppListGrid;
+      return apps::LaunchSource::kFromAppListGrid;
     case ash::LAUNCH_FROM_APP_LIST_SEARCH:
-      return apps::mojom::LaunchSource::kFromAppListQuery;
+      return apps::LaunchSource::kFromAppListQuery;
     case ash::LAUNCH_FROM_APP_LIST_RECOMMENDATION:
-      return apps::mojom::LaunchSource::kFromAppListRecommendation;
+      return apps::LaunchSource::kFromAppListRecommendation;
     case ash::LAUNCH_FROM_SHELF:
-      return apps::mojom::LaunchSource::kFromShelf;
+      return apps::LaunchSource::kFromShelf;
   }
 }
 

@@ -19,6 +19,7 @@
 #include "chrome/common/privacy_budget/scoped_privacy_budget_config.h"
 #include "chrome/common/privacy_budget/types.h"
 #include "components/prefs/testing_pref_service.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
@@ -124,9 +125,8 @@ class IdentifiabilityStudyStateTest : public ::testing::Test {
 };
 
 TEST(IdentifiabilityStudyStateStandaloneTest, InstantiateAndInitialize) {
-  test::ScopedPrivacyBudgetConfig::Parameters parameters;
-  parameters.enabled = true;
-  test::ScopedPrivacyBudgetConfig config(parameters);
+  test::ScopedPrivacyBudgetConfig config(
+      test::ScopedPrivacyBudgetConfig::Presets::kEnableRandomSampling);
 
   TestingPrefServiceSimple pref_service;
   prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
@@ -136,7 +136,7 @@ TEST(IdentifiabilityStudyStateStandaloneTest, InstantiateAndInitialize) {
   auto settings = std::make_unique<IdentifiabilityStudyState>(&pref_service);
 
   // Successful initialization should result in setting the generation number.
-  EXPECT_EQ(parameters.generation,
+  EXPECT_EQ(test::ScopedPrivacyBudgetConfig::kDefaultGeneration,
             pref_service.GetInteger(prefs::kPrivacyBudgetGeneration));
   // There should be at least one offset selected.
   EXPECT_FALSE(
@@ -454,9 +454,8 @@ TEST(IdentifiabilityStudyStateStandaloneTest, LowClamps) {
 }
 
 TEST(IdentifiabilityStudyStateStandaloneTest, Disabled) {
-  auto params = test::ScopedPrivacyBudgetConfig::Parameters{};
-  params.enabled = false;
-  test::ScopedPrivacyBudgetConfig config(params);
+  test::ScopedPrivacyBudgetConfig config(
+      test::ScopedPrivacyBudgetConfig::Presets::kDisable);
 
   TestingPrefServiceSimple pref_service;
   prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
@@ -466,14 +465,28 @@ TEST(IdentifiabilityStudyStateStandaloneTest, Disabled) {
   EXPECT_FALSE(settings.ShouldRecordSurface(kRegularSurface1));
 }
 
+TEST(IdentifiabilityStudyStateStandaloneTest, ShouldReportEncounteredSurface) {
+  test::ScopedPrivacyBudgetConfig config(
+      test::ScopedPrivacyBudgetConfig::Presets::kEnableRandomSampling);
+
+  TestingPrefServiceSimple pref_service;
+  prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
+  test_utils::InspectableIdentifiabilityStudyState settings(&pref_service);
+
+  // The specific surface doesn't matter.
+  EXPECT_TRUE(settings.ShouldReportEncounteredSurface(ukm::AssignNewSourceId(),
+                                                      kRegularSurface1));
+  EXPECT_FALSE(settings.ShouldReportEncounteredSurface(ukm::NoURLSourceId(),
+                                                       kRegularSurface1));
+}
+
 TEST(IdentifiabilityStudyStateStandaloneTest, ClearsPrefsIfStudyIsDisabled) {
-  test::ScopedPrivacyBudgetConfig::Parameters parameters;
-  parameters.enabled = false;
-  test::ScopedPrivacyBudgetConfig config(parameters);
+  test::ScopedPrivacyBudgetConfig config(
+      test::ScopedPrivacyBudgetConfig::Presets::kDisable);
   TestingPrefServiceSimple pref_service;
   prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
   pref_service.SetInteger(prefs::kPrivacyBudgetGeneration,
-                          parameters.generation);
+                          test::ScopedPrivacyBudgetConfig::kDefaultGeneration);
   pref_service.SetString(prefs::kPrivacyBudgetSeenSurfaces, "1,2,3");
   pref_service.SetString(prefs::kPrivacyBudgetSelectedOffsets, "100,200,300");
 
@@ -597,6 +610,7 @@ TEST(IdentifiabilityStudyStateStandaloneTest,
 
 TEST(IdentifiabilityStudyStateStandaloneTest, OffsetUsesUpAllTheBudget) {
   test::ScopedPrivacyBudgetConfig::Parameters parameters;
+  parameters.expected_surface_count = kTestingExpectedSurfaceCount;
   parameters.active_surface_budget = kTestingActiveSurfaceBudget;
   // kRegularSurface2 costs the entire budget.
   parameters.per_surface_cost = {
@@ -626,6 +640,7 @@ TEST(IdentifiabilityStudyStateStandaloneTest, OffsetUsesUpAllTheBudget) {
 
 TEST(IdentifiabilityStudyStateStandaloneTest, NextOffsetIsTooExpensive) {
   test::ScopedPrivacyBudgetConfig::Parameters parameters;
+  parameters.expected_surface_count = kTestingExpectedSurfaceCount;
   parameters.active_surface_budget = kTestingActiveSurfaceBudget;
   // kRegularSurface1 costs the entire budget.
   parameters.per_surface_cost = {
@@ -905,7 +920,7 @@ TEST(IdentifiabilityStudyStateStandaloneTest,
   prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
   test_utils::InspectableIdentifiabilityStudyState state(&pref_service);
 
-  EXPECT_TRUE(state.is_using_assigned_block_sampling());
+  EXPECT_TRUE(state.IsUsingAssignedBlockSampling());
 
   // Any single selected group contributes kSurfacesInGroup surfaces.
   EXPECT_EQ(kSurfacesInGroup, state.active_surfaces().Size());

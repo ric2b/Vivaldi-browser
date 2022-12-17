@@ -44,6 +44,7 @@
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#import "components/segmentation_platform/public/segmentation_platform_service.h"
 #include "components/sessions/core/session_id_generator.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -73,6 +74,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
 #include "ios/chrome/browser/ui/first_run/fre_field_trial.h"
+#import "ios/chrome/browser/ui/first_run/trending_queries_field_trial.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/voice/voice_search_prefs_registration.h"
@@ -80,54 +82,13 @@
 #import "ios/web/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "prefs/vivaldi_browser_prefs.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
-const char kLastKnownGoogleURL[] = "browser.last_known_google_url";
-const char kLastPromptedGoogleURL[] = "browser.last_prompted_google_url";
-
-// Deprecated 9/2019
-const char kGoogleServicesUsername[] = "google.services.username";
-const char kGoogleServicesUserAccountId[] = "google.services.user_account_id";
-
-// Deprecated 1/2020
-const char kGCMChannelStatus[] = "gcm.channel_status";
-const char kGCMChannelPollIntervalSeconds[] = "gcm.poll_interval";
-const char kGCMChannelLastCheckTime[] = "gcm.check_time";
-
-// Deprecated 2/2020
-const char kInvalidatorClientId[] = "invalidator.client_id";
-const char kInvalidatorInvalidationState[] = "invalidator.invalidation_state";
-const char kInvalidatorSavedInvalidations[] = "invalidator.saved_invalidations";
-
-// Deprecated 9/2020
-const char kPasswordManagerOnboardingState[] =
-    "profile.password_manager_onboarding_state";
-const char kWasOnboardingFeatureCheckedBefore[] =
-    "profile.was_pwm_onboarding_feature_checked_before";
-
-// Deprecated 12/2020
-const char kDomainsWithCookiePref[] = "signin.domains_with_cookie";
-
-// Deprecated 03/2021
-const char kOmniboxGeolocationAuthorizationState[] =
-    "ios.omnibox.geolocation_authorization_state";
-const char kOmniboxGeolocationLastAuthorizationAlertVersion[] =
-    "ios.omnibox.geolocation_last_authorization_alert_version";
-
-// Deprecated 07/2021
-const char kMetricsReportingWifiOnly[] =
-    "ios.user_experience_metrics.wifi_only";
-
-// Deprecated 07/2021
-const char kLastSessionExitedCleanly[] =
-    "ios.user_experience_metrics.last_session_exited_cleanly";
-
-// Deprecated 08/2021
-const char kSigninAllowedByPolicy[] = "signin.allowed_by_policy";
-
 // Deprecated 09/2021
 const char kTrialGroupPrefName[] = "location_permissions.trial_group";
 
@@ -169,8 +130,11 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   update_client::RegisterPrefs(registry);
   variations::VariationsService::RegisterPrefs(registry);
   fre_field_trial::RegisterLocalStatePrefs(registry);
+  trending_queries_field_trial::RegisterLocalStatePrefs(registry);
   component_updater::RegisterComponentUpdateServicePrefs(registry);
   component_updater::AutofillStatesComponentInstallerPolicy::RegisterPrefs(
+      registry);
+  segmentation_platform::SegmentationPlatformService::RegisterLocalStatePrefs(
       registry);
 
   // Preferences related to the browser state manager.
@@ -190,15 +154,9 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kEulaAccepted, false);
   registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
                                 false);
-  registry->RegisterBooleanPref(kLastSessionExitedCleanly, true);
-  registry->RegisterBooleanPref(kMetricsReportingWifiOnly, true);
-  registry->RegisterBooleanPref(kGCMChannelStatus, true);
-  registry->RegisterIntegerPref(kGCMChannelPollIntervalSeconds, 0);
-  registry->RegisterInt64Pref(kGCMChannelLastCheckTime, 0);
 
-  registry->RegisterListPref(kInvalidatorSavedInvalidations);
-  registry->RegisterStringPref(kInvalidatorInvalidationState, std::string());
-  registry->RegisterStringPref(kInvalidatorClientId, std::string());
+  registry->RegisterListPref(prefs::kIosPromosManagerActivePromos);
+  registry->RegisterListPref(prefs::kIosPromosManagerImpressions);
 
   registry->RegisterBooleanPref(enterprise_reporting::kCloudReportingEnabled,
                                 false);
@@ -208,10 +166,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
       enterprise_reporting::kLastUploadSucceededTimestamp, base::Time());
   registry->RegisterTimeDeltaPref(
       enterprise_reporting::kCloudReportingUploadFrequency, base::Hours(24));
-
-  registry->RegisterIntegerPref(kOmniboxGeolocationAuthorizationState, 0);
-  registry->RegisterStringPref(kOmniboxGeolocationLastAuthorizationAlertVersion,
-                               "");
 
   registry->RegisterDictionaryPref(prefs::kOverflowMenuDestinationUsageHistory,
                                    PrefRegistry::LOSSY_PREF);
@@ -258,6 +212,8 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   prerender_prefs::RegisterNetworkPredictionPrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
   safe_browsing::RegisterProfilePrefs(registry);
+  segmentation_platform::SegmentationPlatformService::RegisterProfilePrefs(
+      registry);
   sync_sessions::SessionSyncPrefs::RegisterProfilePrefs(registry);
   syncer::DeviceInfoPrefs::RegisterProfilePrefs(registry);
   syncer::SyncPrefs::RegisterProfilePrefs(registry);
@@ -267,6 +223,8 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   unified_consent::UnifiedConsentService::RegisterPrefs(registry);
   variations::VariationsService::RegisterProfilePrefs(registry);
   ZeroSuggestProvider::RegisterProfilePrefs(registry);
+
+  ::vivaldi::RegisterProfilePrefs(registry);
 
   [BookmarkMediator registerBrowserStatePrefs:registry];
   [BookmarkPathCache registerBrowserStatePrefs:registry];
@@ -311,34 +269,15 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Register prefs used by Clear Browsing Data UI.
   browsing_data::prefs::RegisterBrowserUserPrefs(registry);
 
-  registry->RegisterStringPref(kLastKnownGoogleURL, std::string());
-  registry->RegisterStringPref(kLastPromptedGoogleURL, std::string());
-  registry->RegisterStringPref(kGoogleServicesUsername, std::string());
-  registry->RegisterStringPref(kGoogleServicesUserAccountId, std::string());
   registry->RegisterStringPref(prefs::kNewTabPageLocationOverride,
                                std::string());
-
-  registry->RegisterBooleanPref(kGCMChannelStatus, true);
-  registry->RegisterIntegerPref(kGCMChannelPollIntervalSeconds, 0);
-  registry->RegisterInt64Pref(kGCMChannelLastCheckTime, 0);
 
   registry->RegisterIntegerPref(prefs::kIncognitoModeAvailability,
                                 static_cast<int>(IncognitoModePrefs::kEnabled));
 
-  registry->RegisterListPref(kInvalidatorSavedInvalidations);
-  registry->RegisterStringPref(kInvalidatorInvalidationState, std::string());
-  registry->RegisterStringPref(kInvalidatorClientId, std::string());
-
   registry->RegisterBooleanPref(prefs::kPrintingEnabled, true);
 
-  registry->RegisterIntegerPref(kPasswordManagerOnboardingState, 0);
-  registry->RegisterBooleanPref(kWasOnboardingFeatureCheckedBefore, false);
-  registry->RegisterDictionaryPref(kDomainsWithCookiePref);
-
   registry->RegisterBooleanPref(prefs::kAllowChromeDataInBackups, true);
-
-  // Preference related to the browser sign-in policy that is being deprecated.
-  registry->RegisterBooleanPref(kSigninAllowedByPolicy, true);
 
   registry->RegisterBooleanPref(kShowReadingListInBookmarkBar, true);
 
@@ -358,30 +297,15 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
       policy::policy_prefs::kUserPolicyNotificationWasShown, false);
 
   registry->RegisterIntegerPref(kAccountIdMigrationState, 0);
+
+  registry->RegisterIntegerPref(prefs::kIosShareChromeCount, 0,
+                                PrefRegistry::LOSSY_PREF);
+  registry->RegisterTimePref(prefs::kIosShareChromeLastShare, base::Time(),
+                             PrefRegistry::LOSSY_PREF);
 }
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
-  // Added 1/2020.
-  prefs->ClearPref(kGCMChannelStatus);
-  prefs->ClearPref(kGCMChannelPollIntervalSeconds);
-  prefs->ClearPref(kGCMChannelLastCheckTime);
-
-  // Added 2/2020.
-  prefs->ClearPref(kInvalidatorSavedInvalidations);
-  prefs->ClearPref(kInvalidatorInvalidationState);
-  prefs->ClearPref(kInvalidatorClientId);
-
-  // Added 2021/03.
-  prefs->ClearPref(kOmniboxGeolocationAuthorizationState);
-  prefs->ClearPref(kOmniboxGeolocationLastAuthorizationAlertVersion);
-
-  // Added 7/2021
-  prefs->ClearPref(kMetricsReportingWifiOnly);
-
-  // Added 7/2021
-  prefs->ClearPref(kLastSessionExitedCleanly);
-
   // Added 09/2021
   prefs->ClearPref(kTrialGroupPrefName);
 
@@ -400,35 +324,8 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
   // Check MigrateDeprecatedAutofillPrefs() to see if this is safe to remove.
   autofill::prefs::MigrateDeprecatedAutofillPrefs(prefs);
 
-  // Added 07/2019.
-  syncer::MigrateSyncSuppressedPref(prefs);
-  prefs->ClearPref(kLastKnownGoogleURL);
-  prefs->ClearPref(kLastPromptedGoogleURL);
-
-  // Added 09/2019
-  prefs->ClearPref(kGoogleServicesUsername);
-  prefs->ClearPref(kGoogleServicesUserAccountId);
-
-  // Added 1/2020.
-  prefs->ClearPref(kGCMChannelStatus);
-  prefs->ClearPref(kGCMChannelPollIntervalSeconds);
-  prefs->ClearPref(kGCMChannelLastCheckTime);
-
-  // Added 2/2020.
-  prefs->ClearPref(kInvalidatorSavedInvalidations);
-  prefs->ClearPref(kInvalidatorInvalidationState);
-  prefs->ClearPref(kInvalidatorClientId);
-
   // Added 9/2020.
-  prefs->ClearPref(kPasswordManagerOnboardingState);
-  prefs->ClearPref(kWasOnboardingFeatureCheckedBefore);
   prerender_prefs::MigrateNetworkPredictionPrefs(prefs);
-
-  // Added 12/2020.
-  prefs->ClearPref(kDomainsWithCookiePref);
-
-  // Added 8/2021.
-  prefs->ClearPref(kSigninAllowedByPolicy);
 
   // Added 03/2022
   prefs->ClearPref(kShowReadingListInBookmarkBar);

@@ -60,7 +60,6 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using offline_items_collection::android::OfflineItemBridge;
-using DownloadSchedule = download::DownloadSchedule;
 using OfflineItemSchedule = offline_items_collection::OfflineItemSchedule;
 
 namespace {
@@ -162,11 +161,6 @@ ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
   }
 
   absl::optional<OfflineItemSchedule> offline_item_schedule;
-  auto download_schedule = item->GetDownloadSchedule();
-  if (download_schedule.has_value()) {
-    offline_item_schedule = absl::make_optional<OfflineItemSchedule>(
-        download_schedule->only_on_wifi(), download_schedule->start_time());
-  }
   auto j_offline_item_schedule =
       OfflineItemBridge::CreateOfflineItemSchedule(env, offline_item_schedule);
   return Java_DownloadInfo_createDownloadInfo(
@@ -807,31 +801,6 @@ void DownloadManagerService::RenameDownload(
   item->Rename(base::FilePath(target_name), std::move(callback));
 }
 
-void DownloadManagerService::ChangeSchedule(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& id,
-    jboolean only_on_wifi,
-    jlong start_time,
-    const JavaParamRef<jobject>& j_profile_key) {
-  std::string download_guid = ConvertJavaStringToUTF8(id);
-  download::DownloadItem* item = GetDownload(
-      download_guid, ProfileKeyAndroid::FromProfileKeyAndroid(j_profile_key));
-  if (!item)
-    return;
-
-  absl::optional<DownloadSchedule> download_schedule;
-  if (only_on_wifi) {
-    download_schedule = absl::make_optional<DownloadSchedule>(
-        true /*only_on_wifi*/, absl::nullopt);
-  } else if (start_time > 0) {
-    download_schedule = absl::make_optional<DownloadSchedule>(
-        false /*only_on_wifi*/, base::Time::FromJavaTime(start_time));
-  }
-
-  item->OnDownloadScheduleChanged(std::move(download_schedule));
-}
-
 void DownloadManagerService::CreateInterruptedDownloadForTest(
     JNIEnv* env,
     jobject obj,
@@ -855,8 +824,7 @@ void DownloadManagerService::CreateInterruptedDownloadForTest(
           download::DOWNLOAD_INTERRUPT_REASON_CRASH, false, false, false,
           base::Time(), false,
           std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo(),
-          absl::nullopt /*download_schedule*/, download::kInvalidRange,
+          download::DownloadItemRerouteInfo(), download::kInvalidRange,
           download::kInvalidRange, nullptr));
 }
 

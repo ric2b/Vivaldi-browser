@@ -16,6 +16,7 @@
 #include "chrome/updater/external_constants.h"
 
 #include "chrome/updater/policy/dm_policy_manager.h"
+#include "chrome/updater/policy/policy_manager.h"
 #if BUILDFLAG(IS_WIN)
 #include "chrome/updater/policy/win/group_policy_manager.h"
 #elif BUILDFLAG(IS_MAC)
@@ -31,7 +32,8 @@ PolicyService::PolicyService(PolicyManagerVector managers)
             managers.begin(), managers.end(),
             [](const std::unique_ptr<PolicyManagerInterface>& lhs,
                const std::unique_ptr<PolicyManagerInterface>& rhs) {
-              return lhs->IsManaged() && !rhs->IsManaged();
+              return lhs->HasActiveDevicePolicies() &&
+                     !rhs->HasActiveDevicePolicies();
             });
         return managers;
       }(std::move(managers))) {}
@@ -39,14 +41,15 @@ PolicyService::PolicyService(PolicyManagerVector managers)
 PolicyService::~PolicyService() = default;
 
 std::string PolicyService::source() const {
-  // Returns the source combination of all active policy providers, separated
-  // by ';'. For example: "group_policy;device_management". Note that the
-  // default provider is not "managed" and its source will be ignored.
+  // Returns the non-empty source combination of all active policy providers,
+  // separated by ';'. For example: "group_policy;device_management".
   std::vector<std::string> sources;
   for (const std::unique_ptr<PolicyManagerInterface>& policy_manager :
        policy_managers_) {
-    if (policy_manager->IsManaged())
+    if (policy_manager->HasActiveDevicePolicies() &&
+        !policy_manager->source().empty()) {
       sources.push_back(policy_manager->source());
+    }
   }
   return base::JoinString(sources, ";");
 }
@@ -160,6 +163,14 @@ bool PolicyService::GetProxyServer(PolicyStatus<std::string>* policy_status,
       policy_status, proxy_server);
 }
 
+bool PolicyService::GetForceInstallApps(
+    PolicyStatus<std::vector<std::string>>* policy_status,
+    std::vector<std::string>* force_install_apps) const {
+  return QueryPolicy(
+      base::BindRepeating(&PolicyManagerInterface::GetForceInstallApps),
+      policy_status, force_install_apps);
+}
+
 template <typename T>
 bool PolicyService::QueryPolicy(
     const base::RepeatingCallback<bool(const PolicyManagerInterface*, T*)>&
@@ -172,13 +183,14 @@ bool PolicyService::QueryPolicy(
        policy_managers_) {
     if (!policy_query_callback.Run(policy_manager.get(), &value))
       continue;
-    status.AddPolicyIfNeeded(policy_manager->IsManaged(),
+    status.AddPolicyIfNeeded(policy_manager->HasActiveDevicePolicies(),
                              policy_manager->source(), value);
   }
   if (!status.effective_policy())
     return false;
 
-  *result = status.effective_policy().value().policy;
+  if (result)
+    *result = status.effective_policy().value().policy;
   if (policy_status)
     *policy_status = status;
   return true;
@@ -198,13 +210,14 @@ bool PolicyService::QueryAppPolicy(
        policy_managers_) {
     if (!policy_query_callback.Run(policy_manager.get(), app_id, &value))
       continue;
-    status.AddPolicyIfNeeded(policy_manager->IsManaged(),
+    status.AddPolicyIfNeeded(policy_manager->HasActiveDevicePolicies(),
                              policy_manager->source(), value);
   }
   if (!status.effective_policy())
     return false;
 
-  *result = status.effective_policy().value().policy;
+  if (result)
+    *result = status.effective_policy().value().policy;
   if (policy_status)
     *policy_status = status;
   return true;
@@ -213,17 +226,21 @@ bool PolicyService::QueryAppPolicy(
 scoped_refptr<PolicyService> PolicyService::Create(
     scoped_refptr<ExternalConstants> external_constants) {
   PolicyManagerVector managers;
+  managers.push_back(
+      std::make_unique<PolicyManager>(external_constants->GroupPolicies()));
 #if BUILDFLAG(IS_WIN)
-  managers.push_back(std::make_unique<GroupPolicyManager>(external_constants));
+  managers.push_back(std::make_unique<GroupPolicyManager>());
 #endif
   std::unique_ptr<PolicyManagerInterface> dm_policy_manager =
       CreateDMPolicyManager();
   if (dm_policy_manager)
     managers.push_back(std::move(dm_policy_manager));
 #if BUILDFLAG(IS_MAC)
+  // Managed preference policy manager is being deprecated and thus has a lower
+  // priority than DM policy manager.
   managers.push_back(CreateManagedPreferencePolicyManager());
 #endif
-  managers.push_back(GetPolicyManager());  // For default values.
+  managers.push_back(GetDefaultValuesPolicyManager());
 
   return base::MakeRefCounted<PolicyService>(std::move(managers));
 }

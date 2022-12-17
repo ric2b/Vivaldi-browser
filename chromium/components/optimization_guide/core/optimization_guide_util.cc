@@ -6,12 +6,32 @@
 
 #include "base/containers/flat_set.h"
 #include "base/notreached.h"
+#include "build/build_config.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
-#include "components/variations/active_field_trials.h"
 #include "net/base/url_util.h"
 #include "url/url_canon.h"
+
+namespace {
+optimization_guide::proto::Platform GetPlatform() {
+#if BUILDFLAG(IS_WIN)
+  return optimization_guide::proto::PLATFORM_WINDOWS;
+#elif BUILDFLAG(IS_IOS)
+  return optimization_guide::proto::PLATFORM_IOS;
+#elif BUILDFLAG(IS_MAC)
+  return optimization_guide::proto::PLATFORM_MAC;
+#elif BUILDFLAG(IS_CHROMEOS)
+  return optimization_guide::proto::PLATFORM_CHROMEOS;
+#elif BUILDFLAG(IS_ANDROID)
+  return optimization_guide::proto::PLATFORM_ANDROID;
+#elif BUILDFLAG(IS_LINUX)
+  return optimization_guide::proto::PLATFORM_LINUX;
+#else
+  return optimization_guide::proto::PLATFORM_UNKNOWN;
+#endif
+}
+}  // namespace
 
 namespace optimization_guide {
 
@@ -27,39 +47,6 @@ bool IsHostValidToFetchFromRemoteOptimizationGuide(const std::string& host) {
   return true;
 }
 
-google::protobuf::RepeatedPtrField<proto::FieldTrial>
-GetActiveFieldTrialsAllowedForFetch() {
-  google::protobuf::RepeatedPtrField<proto::FieldTrial>
-      filtered_active_field_trials;
-
-  base::flat_set<uint32_t> allowed_field_trials_for_fetch =
-      features::FieldTrialNameHashesAllowedForFetch();
-  if (allowed_field_trials_for_fetch.empty())
-    return filtered_active_field_trials;
-
-  std::vector<variations::ActiveGroupId> active_field_trials;
-  variations::GetFieldTrialActiveGroupIds(/*suffix=*/"", &active_field_trials);
-  for (const auto& active_field_trial : active_field_trials) {
-    if (static_cast<size_t>(filtered_active_field_trials.size()) ==
-        allowed_field_trials_for_fetch.size()) {
-      // We've found all the field trials that we are allowed to send to the
-      // server.
-      break;
-    }
-
-    if (allowed_field_trials_for_fetch.find(active_field_trial.name) ==
-        allowed_field_trials_for_fetch.end()) {
-      // Continue if we are not allowed to send the field trial to the server.
-      continue;
-    }
-
-    proto::FieldTrial* ft_proto = filtered_active_field_trials.Add();
-    ft_proto->set_name_hash(active_field_trial.name);
-    ft_proto->set_group_hash(active_field_trial.group);
-  }
-  return filtered_active_field_trials;
-}
-
 std::string GetStringForOptimizationGuideDecision(
     OptimizationGuideDecision decision) {
   switch (decision) {
@@ -72,6 +59,12 @@ std::string GetStringForOptimizationGuideDecision(
   }
   NOTREACHED();
   return std::string();
+}
+
+optimization_guide::proto::OriginInfo GetClientOriginInfo() {
+  optimization_guide::proto::OriginInfo origin_info;
+  origin_info.set_platform(GetPlatform());
+  return origin_info;
 }
 
 }  // namespace optimization_guide

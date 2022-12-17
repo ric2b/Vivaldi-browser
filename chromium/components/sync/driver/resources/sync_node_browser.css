@@ -33,8 +33,8 @@
 }
 
 /* TODO(akalin): Find a better icon to use for leaf nodes. */
-#sync-node-tree .leaf .tree-label-icon {
-  background-image: url(star_small.png);
+#sync-node-tree {
+  --cr-tree-item-leaf-icon: url(star_small.png);
 }
 
 #sync-node-splitter {
@@ -56,6 +56,7 @@
 
 #node-details {
   flex-grow: 1;
+  overflow: auto;
 }
 
 #node-details td {

@@ -547,7 +547,7 @@ id<GREYMatcher> SearchCopiedTextButton() {
 - (void)setUp {
   _variant = std::string(kIOSOmniboxUpdatedPopupUIVariation1);
 
-  // |appConfigurationForTestCase| is called during [super setUp], and
+  // `appConfigurationForTestCase` is called during [super setUp], and
   // depends on _variant.
   [super setUp];
 }
@@ -569,7 +569,7 @@ id<GREYMatcher> SearchCopiedTextButton() {
 - (void)setUp {
   _variant = std::string(kIOSOmniboxUpdatedPopupUIVariation2);
 
-  // |appConfigurationForTestCase| is called during [super setUp], and
+  // `appConfigurationForTestCase` is called during [super setUp], and
   // depends on _variant.
   [super setUp];
 }
@@ -712,8 +712,15 @@ id<GREYMatcher> SearchCopiedTextButton() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText(@"this is a test")];
 
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_tap()];
+  if ([ChromeEarlGrey isExperimentalOmniboxEnabled]) {
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_tap()];
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_longPress()];
+  } else {
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_tap()];
+  }
 
   // Pressing should allow select and selectAll.
   // Wait for UIMenuController to appear or timeout after 2 seconds.
@@ -783,7 +790,7 @@ id<GREYMatcher> SearchCopiedTextButton() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       assertWithMatcher:chrome_test_util::OmniboxText("")];
 
-  // Returns the popup row containing the |url| as suggestion.
+  // Returns the popup row containing the `url` as suggestion.
   id<GREYMatcher> textYouCopiedMatch =
       grey_allOf(grey_kindOfClassName(@"OmniboxPopupRowCell"),
                  grey_descendant(grey_accessibilityLabel(copiedText)), nil);

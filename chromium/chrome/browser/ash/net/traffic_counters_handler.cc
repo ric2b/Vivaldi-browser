@@ -10,17 +10,15 @@
 #include "ash/public/cpp/network_config_service.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chromeos/network/network_event_log.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_metadata_store.h"
+#include "chromeos/ash/components/network/network_event_log.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_metadata_store.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 
 namespace ash {
 
 namespace {
-
-using chromeos::NetworkGuidId;
 
 // Interval duration to determine the auto reset check frequency.
 constexpr base::TimeDelta kResetCheckInterval = base::Hours(6);
@@ -105,7 +103,7 @@ void TrafficCountersHandler::OnNetworkStateListReceived(
 }
 
 bool TrafficCountersHandler::GetAutoResetEnabled(std::string guid) {
-  chromeos::NetworkMetadataStore* metadata_store =
+  NetworkMetadataStore* metadata_store =
       NetworkHandler::Get()->network_metadata_store();
   DCHECK(metadata_store);
   const base::Value* enabled =
@@ -149,7 +147,7 @@ void TrafficCountersHandler::OnManagedPropertiesReceived(
 // the reset day the following month.
 bool TrafficCountersHandler::ShouldReset(std::string guid,
                                          base::Time last_reset_time) {
-  chromeos::NetworkMetadataStore* metadata_store =
+  NetworkMetadataStore* metadata_store =
       NetworkHandler::Get()->network_metadata_store();
   DCHECK(metadata_store);
   const base::Value* reset_day_ptr =

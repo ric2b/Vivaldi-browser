@@ -15,7 +15,7 @@
 #include "components/autofill_assistant/browser/action_value.pb.h"
 #include "components/autofill_assistant/browser/actions/action_test_utils.h"
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
-#include "components/autofill_assistant/browser/mock_website_login_manager.h"
+#include "components/autofill_assistant/browser/public/password_change/mock_website_login_manager.h"
 #include "components/autofill_assistant/browser/selector.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_model.h"
@@ -218,7 +218,7 @@ TEST_F(ActionDelegateUtilTest, PerformWithPasswordManagerValue) {
   auto element = std::make_unique<ElementFinderResult>();
   content::WebContentsTester::For(web_contents_.get())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  element->SetRenderFrameHost(web_contents_->GetPrimaryMainFrame());
+  element->SetRenderFrameHostForTest(web_contents_->GetPrimaryMainFrame());
 
   user_data_.selected_login_ = absl::make_optional<WebsiteLoginManager::Login>(
       GURL("https://www.example.com"), "username");
@@ -241,7 +241,7 @@ TEST_F(ActionDelegateUtilTest, PerformWithPasswordManagerValue) {
 
 TEST_F(ActionDelegateUtilTest, PerformWithFailingPasswordManagerValue) {
   auto element = std::make_unique<ElementFinderResult>();
-  element->SetRenderFrameHost(web_contents_->GetPrimaryMainFrame());
+  element->SetRenderFrameHostForTest(web_contents_->GetPrimaryMainFrame());
 
   user_data_.selected_login_ = absl::make_optional<WebsiteLoginManager::Login>(
       GURL("https://www.example.com"), "username");

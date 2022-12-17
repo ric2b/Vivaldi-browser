@@ -7,7 +7,7 @@
 #include "apps/launcher.h"
 #include "base/bind.h"
 #include "base/logging.h"
-#include "chrome/browser/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
+#include "chrome/browser/preloading/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
@@ -32,12 +32,18 @@ bool LaunchAppWithUrl(const scoped_refptr<const Extension> app,
                       const std::string& handler_id,
                       content::NavigationHandle* navigation_handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(navigation_handle->IsInMainFrame());
 
   // Redirect top-level navigations only. This excludes iframes and webviews
   // in particular.
   if (navigation_handle->GetWebContents()->IsInnerWebContentsForGuest()) {
     DVLOG(1) << "Cancel redirection: source is a guest inner WebContents";
     return false;
+  }
+
+  if (navigation_handle->IsInPrerenderedMainFrame()) {
+    // If it's from prerendering, don't launch the app but abort the navigation.
+    return true;
   }
 
   // If no-state prefetching, don't launch the app but abort the navigation.
@@ -79,6 +85,11 @@ PlatformAppNavigationRedirector::MaybeCreateThrottleFor(
   content::BrowserContext* browser_context =
       handle->GetWebContents()->GetBrowserContext();
   DCHECK(browser_context);
+
+  if (handle->GetParentFrameOrOuterDocument()) {
+    DVLOG(1) << "Skip redirection: navigation is from an iframe or inner page";
+    return nullptr;
+  }
 
   // Support only GET for now.
   if (handle->IsPost()) {

@@ -35,6 +35,7 @@
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/display/display_util.h"
 #include "ui/gfx/geometry/dip_util.h"
@@ -279,9 +280,9 @@ void RenderWidgetHostViewChildFrame::WasUnOccluded() {
 }
 
 gfx::Rect RenderWidgetHostViewChildFrame::GetViewBounds() {
-  gfx::Rect rect;
+  gfx::Rect screen_space_rect;
   if (frame_connector_) {
-    rect = frame_connector_->screen_space_rect_in_dip();
+    screen_space_rect = frame_connector_->rect_in_parent_view_in_dip();
 
     RenderWidgetHostView* parent_view =
         frame_connector_->GetParentRenderWidgetHostView();
@@ -290,16 +291,16 @@ gfx::Rect RenderWidgetHostViewChildFrame::GetViewBounds() {
     if (parent_view) {
       // Translate screen_space_rect by the parent's RenderWidgetHostView
       // offset.
-      rect.Offset(parent_view->GetViewBounds().OffsetFromOrigin());
+      screen_space_rect.Offset(parent_view->GetViewBounds().OffsetFromOrigin());
     }
     // TODO(wjmaclean): GetViewBounds is a bit of a mess. It's used to determine
     // the size of the renderer content and where to place context menus and so
     // on. We want the location of the frame in screen coordinates to place
     // popups but we want the size in local coordinates to produce the right-
     // sized CompositorFrames. https://crbug.com/928825.
-    rect.set_size(frame_connector_->local_frame_size_in_dip());
+    screen_space_rect.set_size(frame_connector_->local_frame_size_in_dip());
   }
-  return rect;
+  return screen_space_rect;
 }
 
 gfx::Size RenderWidgetHostViewChildFrame::GetVisibleViewportSize() {
@@ -580,7 +581,8 @@ void RenderWidgetHostViewChildFrame::StopFlingingIfNecessary(
 
 void RenderWidgetHostViewChildFrame::GestureEventAck(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   // Stop flinging if a GSU event with momentum phase is sent to the renderer
   // but not consumed.
   StopFlingingIfNecessary(event, ack_result);
@@ -589,7 +591,9 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     return;
 
   if (event.IsTouchpadZoomEvent())
-    ProcessTouchpadZoomEventAckInRoot(event, ack_result);
+    ProcessTouchpadZoomEventAckInRoot(
+        event, ack_result,
+        scroll_result_data ? scroll_result_data.Clone() : nullptr);
 
 #if BUILDFLAG(IS_MAC)
   // NOTE(espen@vivladi.com): We must forward the ack to the root view right
@@ -606,7 +610,8 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   // ForwardAckedTouchpadPinchGestureEvent is a genretic function for all
   // gesture events, not just pinch events (badly named),  so I reuse it.
   if (vivaldi::IsVivaldiRunning()) {
-    frame_connector_->ForwardAckedTouchpadZoomEvent(event, ack_result);
+    frame_connector_->ForwardAckedTouchpadZoomEvent(
+        event, ack_result, std::move(scroll_result_data));
   }
 #endif
 
@@ -648,23 +653,27 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     }
   }
 
-  frame_connector_->DidAckGestureEvent(event, ack_result);
+  frame_connector_->DidAckGestureEvent(event, ack_result,
+                                       std::move(scroll_result_data));
 }
 
 void RenderWidgetHostViewChildFrame::ProcessTouchpadZoomEventAckInRoot(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   DCHECK(event.IsTouchpadZoomEvent());
 
   // NOTE(espen@vivaldi.com): We run the pinch sequence/protocol in a child
   // frame from the start. The acks need to be sent to same view. Regular chrome
   // will start in the root view which is where the forwarding below ends.
   if (vivaldi::IsVivaldiRunning()) {
-    RenderWidgetHostViewBase::ForwardTouchpadZoomEventIfNecessary(event, ack_result);
+    RenderWidgetHostViewBase::ForwardTouchpadZoomEventIfNecessary(event,
+                                                                  ack_result);
     return;
   }
 
-  frame_connector_->ForwardAckedTouchpadZoomEvent(event, ack_result);
+  frame_connector_->ForwardAckedTouchpadZoomEvent(
+      event, ack_result, std::move(scroll_result_data));
 }
 
 void RenderWidgetHostViewChildFrame::ForwardTouchpadZoomEventIfNecessary(

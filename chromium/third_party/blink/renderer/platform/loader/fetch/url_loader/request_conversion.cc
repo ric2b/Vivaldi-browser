@@ -12,7 +12,6 @@
 #include "net/filter/source_stream.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
-#include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/optional_trust_token_params.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -38,10 +37,6 @@
 
 namespace blink {
 namespace {
-
-constexpr char kStylesheetAcceptHeader[] = "text/css,*/*;q=0.1";
-constexpr char kWebBundleAcceptHeader[] =
-    "application/webbundle;v=b2,application/webbundle;v=b1;q=0.8";
 
 // TODO(yhirano): Unify these with variables in
 // content/public/common/content_constants.h.
@@ -233,8 +228,7 @@ void PopulateResourceRequestBody(const EncodedFormData& src,
 }  // namespace
 
 scoped_refptr<network::ResourceRequestBody> NetworkResourceRequestBodyFor(
-    ResourceRequestBody src_body,
-    bool allow_http1_for_streaming_upload) {
+    ResourceRequestBody src_body) {
   scoped_refptr<network::ResourceRequestBody> dest_body;
   if (const EncodedFormData* form_body = src_body.FormBody().get()) {
     dest_body = base::MakeRefCounted<network::ResourceRequestBody>();
@@ -247,8 +241,9 @@ scoped_refptr<network::ResourceRequestBody> NetworkResourceRequestBodyFor(
     dest_body->SetToChunkedDataPipe(
         ToCrossVariantMojoType(std::move(stream_body)),
         network::ResourceRequestBody::ReadOnlyOnce(true));
-    dest_body->SetAllowHTTP1ForStreamingUpload(
-        allow_http1_for_streaming_upload);
+  }
+  if (dest_body) {
+    dest_body->SetAllowHTTP1ForStreamingUpload(false);
   }
   return dest_body;
 }
@@ -375,8 +370,7 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
 
   dest->is_favicon = src.IsFavicon();
 
-  dest->request_body = NetworkResourceRequestBodyFor(
-      std::move(src_body), src.AllowHTTP1ForStreamingUpload());
+  dest->request_body = NetworkResourceRequestBodyFor(std::move(src_body));
   if (dest->request_body) {
     DCHECK_NE(dest->method, net::HttpRequestHeaders::kGetMethod);
     DCHECK_NE(dest->method, net::HttpRequestHeaders::kHeadMethod);
@@ -384,24 +378,7 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
 
   network::mojom::RequestDestination request_destination =
       src.GetRequestDestination();
-  if (request_destination == network::mojom::RequestDestination::kStyle ||
-      request_destination == network::mojom::RequestDestination::kXslt) {
-    dest->headers.SetHeader(net::HttpRequestHeaders::kAccept,
-                            kStylesheetAcceptHeader);
-  } else if (request_destination ==
-             network::mojom::RequestDestination::kImage) {
-    dest->headers.SetHeaderIfMissing(net::HttpRequestHeaders::kAccept,
-                                     network_utils::ImageAcceptHeader());
-  } else if (request_destination ==
-             network::mojom::RequestDestination::kWebBundle) {
-    dest->headers.SetHeader(net::HttpRequestHeaders::kAccept,
-                            kWebBundleAcceptHeader);
-  } else {
-    // Calling SetHeaderIfMissing() instead of SetHeader() because JS can
-    // manually set an accept header on an XHR.
-    dest->headers.SetHeaderIfMissing(net::HttpRequestHeaders::kAccept,
-                                     network::kDefaultAcceptHeaderValue);
-  }
+  network_utils::SetAcceptHeader(dest->headers, request_destination);
 
   dest->original_destination = src.GetOriginalDestination();
 }

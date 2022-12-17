@@ -16,9 +16,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/settings/ash/app_management/app_management_uma.h"
-#include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 
 namespace {
@@ -98,20 +98,8 @@ void SubscriberCrosapi::OnPreferredAppsChanged(PreferredAppChangesPtr changes) {
 void SubscriberCrosapi::OnApps(std::vector<apps::mojom::AppPtr> deltas,
                                apps::mojom::AppType mojom_app_type,
                                bool should_notify_initialized) {
-  if (base::FeatureList::IsEnabled(kAppServiceCrosApiOnAppsWithoutMojom)) {
-    return;
-  }
-
-  auto app_type = ConvertMojomAppTypToAppType(mojom_app_type);
-  if (Accepts(app_type) && Accepts(deltas) && subscriber_.is_bound()) {
-    std::vector<AppPtr> apps;
-    for (const auto& mojom_app : deltas) {
-      if (mojom_app) {
-        apps.push_back(ConvertMojomAppToApp(mojom_app));
-      }
-    }
-    subscriber_->OnApps(std::move(apps), app_type, should_notify_initialized);
-  }
+  // The non mojom OnApps is used to publish apps.
+  return;
 }
 
 void SubscriberCrosapi::OnCapabilityAccesses(
@@ -184,25 +172,21 @@ void SubscriberCrosapi::LoadIcon(const std::string& app_id,
     return;
   }
 
-  auto app_type = proxy_->AppRegistryCache().GetAppType(app_id);
-  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
-    proxy_->LoadIconFromIconKey(
-        app_type, app_id, *icon_key, icon_type, size_hint_in_dip,
-        /*allow_placeholder_icon=*/false, std::move(callback));
-  } else {
-    proxy_->LoadIconFromIconKey(
-        ConvertAppTypeToMojomAppType(app_type), app_id,
-        ConvertIconKeyToMojomIconKey(*icon_key),
-        ConvertIconTypeToMojomIconType(icon_type), size_hint_in_dip,
-        /*allow_placeholder_icon=*/false,
-        MojomIconValueToIconValueCallback(std::move(callback)));
-  }
+  proxy_->LoadIconFromIconKey(proxy_->AppRegistryCache().GetAppType(app_id),
+                              app_id, *icon_key, icon_type, size_hint_in_dip,
+                              /*allow_placeholder_icon=*/false,
+                              std::move(callback));
 }
 
 void SubscriberCrosapi::AddPreferredApp(const std::string& app_id,
                                         crosapi::mojom::IntentPtr intent) {
-  proxy_->AddPreferredApp(
-      app_id, apps_util::ConvertCrosapiToAppServiceIntent(intent, profile_));
+  if (base::FeatureList::IsEnabled(kAppServicePreferredAppsWithoutMojom)) {
+    proxy_->AddPreferredApp(
+        app_id, apps_util::CreateAppServiceIntentFromCrosapi(intent, profile_));
+  } else {
+    proxy_->AddPreferredApp(
+        app_id, apps_util::ConvertCrosapiToAppServiceIntent(intent, profile_));
+  }
 }
 
 void SubscriberCrosapi::ShowAppManagementPage(const std::string& app_id) {
@@ -217,6 +201,12 @@ void SubscriberCrosapi::ShowAppManagementPage(const std::string& app_id) {
 
 void SubscriberCrosapi::SetSupportedLinksPreference(const std::string& app_id) {
   proxy_->SetSupportedLinksPreference(app_id);
+}
+
+void SubscriberCrosapi::UninstallSilently(const std::string& app_id,
+                                          UninstallSource uninstall_source) {
+  proxy_->UninstallSilently(
+      app_id, ConvertUninstallSourceToMojomUninstallSource(uninstall_source));
 }
 
 void SubscriberCrosapi::OnSubscriberDisconnected() {

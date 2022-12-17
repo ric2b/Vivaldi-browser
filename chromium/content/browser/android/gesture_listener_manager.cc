@@ -12,6 +12,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "ui/events/android/gesture_event_type.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -154,7 +155,8 @@ void GestureListenerManager::SetHasListenersAttached(JNIEnv* env,
 
 void GestureListenerManager::GestureEventAck(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    blink::mojom::ScrollResultDataPtr scroll_result_data) {
   // This is called to fix crash happening while WebContents is being
   // destroyed. See https://crbug.com/803244#c20
   if (web_contents_->IsBeingDestroyed())
@@ -163,9 +165,26 @@ void GestureListenerManager::GestureEventAck(
   ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
   if (j_obj.is_null())
     return;
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
+    Java_GestureListenerManagerImpl_onScrollBegin(
+        env, j_obj, /*isDirectionUp*/ event.data.scroll_begin.delta_y_hint > 0);
+    return;
+  }
+  bool consumed = ack_result == blink::mojom::InputEventResultState::kConsumed;
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureFlingStart &&
+      consumed) {
+    Java_GestureListenerManagerImpl_onFlingStart(
+        env, j_obj, /*isDirectionUp*/ event.data.scroll_begin.delta_y_hint > 0);
+    return;
+  }
+  float x = -1.f, y = -1.f;
+  if (scroll_result_data && scroll_result_data->root_scroll_offset) {
+    x = scroll_result_data->root_scroll_offset->x();
+    y = scroll_result_data->root_scroll_offset->y();
+  }
+
   Java_GestureListenerManagerImpl_onEventAck(
-      env, j_obj, static_cast<int>(event.GetType()),
-      ack_result == blink::mojom::InputEventResultState::kConsumed);
+      env, j_obj, static_cast<int>(event.GetType()), consumed, x, y);
 }
 
 void GestureListenerManager::DidStopFlinging() {

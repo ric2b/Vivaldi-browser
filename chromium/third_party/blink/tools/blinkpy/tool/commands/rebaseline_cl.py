@@ -8,9 +8,16 @@ import itertools
 import json
 import logging
 import optparse
+import re
 
 from blinkpy.common.net.git_cl import GitCL, TryJobStatus
+from blinkpy.common.net.rpc import Build, RPCError
 from blinkpy.common.path_finder import PathFinder
+from blinkpy.tool.commands.build_resolver import (
+    BuildResolver,
+    UnresolvedBuildException,
+)
+from blinkpy.tool.commands.command import check_file_option
 from blinkpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
 from blinkpy.tool.commands.rebaseline import TestBaselineSet
 
@@ -31,25 +38,34 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
     show_in_main_help = True
     argument_names = '[testname,...]'
 
+    only_changed_tests_option = optparse.make_option(
+        '--only-changed-tests',
+        action='store_true',
+        default=False,
+        help='Only update files for tests directly modified in the CL.')
+    no_trigger_jobs_option = optparse.make_option(
+        '--no-trigger-jobs',
+        dest='trigger_jobs',
+        action='store_false',
+        default=True,
+        help='Do not trigger any try jobs.')
+    test_name_file_option = optparse.make_option(
+        '--test-name-file',
+        action='callback',
+        callback=check_file_option,
+        type='string',
+        help=('Read names of tests to update from this file, '
+              'one test per line.'))
+    patchset_option = optparse.make_option(
+        '--patchset',
+        default=None,
+        type='int',
+        help='Patchset number to fetch results from.')
+
     def __init__(self):
         super(RebaselineCL, self).__init__(options=[
-            optparse.make_option(
-                '--dry-run',
-                action='store_true',
-                default=False,
-                help='Dry run mode; list actions that would be performed but '
-                'do not actually download any new baselines.'),
-            optparse.make_option(
-                '--only-changed-tests',
-                action='store_true',
-                default=False,
-                help='Only download new baselines for tests that are directly '
-                'modified in the CL.'),
-            optparse.make_option('--no-trigger-jobs',
-                                 dest='trigger_jobs',
-                                 action='store_false',
-                                 default=True,
-                                 help='Do not trigger any try jobs.'),
+            self.only_changed_tests_option,
+            self.no_trigger_jobs_option,
             optparse.make_option(
                 '--fill-missing',
                 dest='fill_missing',
@@ -68,36 +84,14 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                 help='Use only the try jobs results for rebaselining. '
                 'Default behavior is to use results from both CQ builders '
                 'and try bots.'),
-            optparse.make_option(
-                '--test-name-file',
-                dest='test_name_file',
-                default=None,
-                help='Read names of tests to rebaseline from this file, one '
-                'test per line.'),
+            self.test_name_file_option,
             optparse.make_option(
                 '--builders',
                 default=None,
                 action='append',
                 help=('Comma-separated-list of builders to pull new baselines '
                       'from (can also be provided multiple times).')),
-            optparse.make_option(
-                '--flag-specific',
-                dest='flag_specific',
-                # TODO(crbug/1291020): try to get the list from builders.json
-                choices=[
-                    "disable-layout-ng", "highdpi",
-                    "disable-site-isolation-trials", "skia-vulkan-swiftshader"
-                ],
-                default=None,
-                action='store',
-                help=('Name of a flag-specific configuration defined in '
-                      'FlagSpecificConfig. This option will rebaseline '
-                      'results for the given FlagSpecificConfig while '
-                      'ignoring results from other builders.')),
-            optparse.make_option(
-                '--patchset',
-                default=None,
-                help='Patchset number to fetch new baselines from.'),
+            self.patchset_option,
             optparse.make_option('--resultDB',
                                  dest='resultDB',
                                  default=False,
@@ -106,15 +100,21 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                                        'Works with --test-name-file '
                                        'and positional parameters')),
             self.no_optimize_option,
+            self.dry_run_option,
             self.results_directory_option,
         ])
         self.git_cl = None
-        self._selected_try_bots = None
+        self._use_blink_try_bots_only = False
+        self._builders = []
         self._resultdb_fetcher = False
 
     def execute(self, options, args, tool):
         self._tool = tool
+        self._dry_run = options.dry_run
+        self._resultdb_fetcher = options.resultDB
         self.git_cl = self.git_cl or GitCL(tool)
+        # '--dry-run' implies '--no-trigger-jobs'.
+        options.trigger_jobs = options.trigger_jobs and not self._dry_run
         if args and options.test_name_file:
             _log.error('Aborted: Cannot combine --test-name-file and '
                        'positional parameters.')
@@ -123,54 +123,33 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         if not self.check_ok_to_run():
             return 1
 
-        if options.builders:
-            try_builders = set()
-            for builder_names in options.builders:
-                try_builders.update(builder_names.split(','))
-            self._selected_try_bots = frozenset(try_builders)
+        self._use_blink_try_bots_only = options.use_blink_try_bots_only
+        self._builders = options.builders
 
-        if options.use_blink_try_bots_only:
-            self._selected_try_bots = self.selected_try_bots - self.cq_try_bots
-
-        if options.flag_specific:
-            self._selected_try_bots = self.flag_specific_builder(options.flag_specific)
-            if not self._selected_try_bots:
-                _log.error(
-                    'Aborted: builder %s not found in builder list.' % options.flag_specific)
-                return 1
-
-        if options.resultDB:
-            self._resultdb_fetcher = True
-        jobs = self.git_cl.latest_try_jobs(
-            builder_names=self.selected_try_bots, patchset=options.patchset)
-
-        self._log_jobs(jobs)
-        builders_with_no_jobs = self.selected_try_bots - {
-            b.builder_name
-            for b in jobs
-        }
-
-        if not options.trigger_jobs and not jobs:
-            _log.info('Aborted: no try jobs and --no-trigger-jobs passed.')
+        build_resolver = BuildResolver(
+            self._tool.builders,
+            self.git_cl,
+            can_trigger_jobs=(options.trigger_jobs and not self._dry_run))
+        builds = [Build(builder) for builder in self.selected_try_bots]
+        try:
+            jobs = build_resolver.resolve_builds(builds, options.patchset)
+        except RPCError as error:
+            _log.error('%s', error)
+            _log.error('Request payload: %s',
+                       json.dumps(error.request_body, indent=2))
+            return 1
+        except UnresolvedBuildException as error:
+            _log.error('%s', error)
             return 1
 
-        if options.use_blink_try_bots_only:
-            if not builders_with_no_jobs:
-                _log.info("All try bots have been run. ")
-                _log.info("Using only the try bots results")
-            elif options.trigger_jobs:
-                _log.info("Triggering try bots only.")
-
-        if options.trigger_jobs and builders_with_no_jobs:
-            self.trigger_try_jobs(builders_with_no_jobs)
-            return 1
         jobs_to_results = self._fetch_results(jobs)
         builders_with_results = {b.builder_name for b in jobs_to_results}
         builders_without_results = (
             set(self.selected_try_bots) - builders_with_results)
         if builders_without_results:
             _log.info('There are some builders with no results:')
-            self._log_builder_list(builders_without_results)
+            for builder in sorted(builders_without_results):
+                _log.info('  %s', builder)
 
         if options.fill_missing is None and builders_without_results:
             should_continue = self._tool.user.confirm(
@@ -180,11 +159,15 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                 _log.info('Aborting.')
                 return 1
             options.fill_missing = self._tool.user.confirm(
-                'Would you like to try to fill in missing results with\n'
-                'available results?\n'
-                'Note: This will generally yield correct results\n'
-                'as long as the results are not platform-specific.',
+                'Would you like to try to fill in missing results with'
+                ' available results?\n'
+                'Note: This is generally not suggested unless the results'
+                ' are platform agnostic.',
                 default=self._tool.user.DEFAULT_NO)
+            if not options.fill_missing:
+                _log.info(
+                    'Please rebaseline again for builders with no results later.'
+                )
 
         if options.test_name_file:
             test_baseline_set = self._make_test_baseline_set_from_file(
@@ -199,8 +182,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         if options.fill_missing:
             self.fill_in_missing_results(test_baseline_set)
 
-        if not options.dry_run:
-            self.rebaseline(options, test_baseline_set)
+        self.rebaseline(options, test_baseline_set)
         return 0
 
     def check_ok_to_run(self):
@@ -210,73 +192,43 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             for path in unstaged_baselines:
                 _log.error('  %s', path)
             return False
-        if self._get_issue_number() is None:
-            _log.error('No issue number for current branch.')
-            return False
         return True
 
     @property
     def selected_try_bots(self):
-        if self._selected_try_bots:
-            return self._selected_try_bots
-        return frozenset(self._tool.builders.filter_builders(
-            is_try=True, exclude_specifiers={'android'}))
+        try_builders = set()
+        if self._builders:
+            for builder_names in self._builders:
+                try_builders.update(builder_names.split(','))
+        else:
+            try_builders = frozenset(
+                self._tool.builders.filter_builders(
+                    is_try=True, exclude_specifiers={'android'}))
+
+        if self._use_blink_try_bots_only:
+            try_builders = try_builders - self.cq_try_bots
+        elif not self._builders:
+            # User did not specify builders and --use-blink-try-bots-only in
+            # command line. Trigger default set of builders in this case, that
+            # is CQ builders plus blink-rel builders that covers additional platforms.
+            # Running duplicated builders for the same platform wastes resource, and
+            # causes problem to rebaseline as we will randomly choose a builder later.
+            to_remove = set()
+            for try_builder, cq_builder in self.try_bots_with_cq_mirror:
+                if (try_builder in try_builders
+                        and cq_builder in try_builders):
+                    to_remove.add(try_builder)
+            try_builders = try_builders - to_remove
+
+        return try_builders
 
     @property
     def cq_try_bots(self):
         return frozenset(self._tool.builders.all_cq_try_builder_names())
 
-    def flag_specific_builder(self, flag_specific):
-        return frozenset(
-            self._tool.builders.all_flag_specific_try_builder_names(
-                flag_specific=flag_specific))
-
-    def _get_issue_number(self):
-        """Returns the current CL issue number, or None."""
-        issue = self.git_cl.get_issue_number()
-        if not issue.isdigit():
-            return None
-        return int(issue)
-
-    def trigger_try_jobs(self, builders):
-        """Triggers try jobs for the given builders."""
-        _log.info('Triggering try jobs:')
-        for builder in sorted(builders):
-            _log.info('  %s', builder)
-        self.git_cl.trigger_try_jobs(builders)
-        _log.info('Once all pending try jobs have finished, please re-run\n'
-                  'blink_tool.py rebaseline-cl to fetch new baselines.')
-
-    def _log_jobs(self, jobs):
-        """Logs the current state of the try jobs.
-
-        This includes which jobs were started or finished or missing,
-        and their current state.
-
-        Args:
-            jobs: A dict mapping Build objects to TryJobStatus objects.
-        """
-        finished_jobs = {b for b, s in jobs.items() if s.status == 'COMPLETED'}
-        if self.selected_try_bots.issubset(
-            {b.builder_name
-             for b in finished_jobs}):
-            _log.info('Finished try jobs found for all try bots.')
-            return
-
-        if finished_jobs:
-            _log.info('Finished try jobs:')
-            self._log_builder_list({b.builder_name for b in finished_jobs})
-        else:
-            _log.info('No finished try jobs.')
-
-        unfinished_jobs = {b for b in jobs if b not in finished_jobs}
-        if unfinished_jobs:
-            _log.info('Scheduled or started try jobs:')
-            self._log_builder_list({b.builder_name for b in unfinished_jobs})
-
-    def _log_builder_list(self, builders):
-        for builder in sorted(builders):
-            _log.info('  %s', builder)
+    @property
+    def try_bots_with_cq_mirror(self):
+        return self._tool.builders.try_bots_with_cq_mirror()
 
     def _fetch_results(self, jobs):
         """Fetches results for all of the given builds.
@@ -472,17 +424,22 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         tests = sorted(
             r.test_name() for r in unexpected_results
             if r.is_missing_baseline() or r.has_non_reftest_mismatch())
+        if not tests:
+            # no need to fetch retry summary in this case
+            return []
 
-        new_failures = self._fetch_tests_with_new_failures(build)
+        test_suite = re.sub('\s*\(.*\)$', '', web_test_results.step_name())
+        new_failures = self._fetch_tests_with_new_failures(build, test_suite)
         if new_failures is None:
-            _log.warning('No retry summary available for "%s".',
-                         build.builder_name)
+            _log.warning('No retry summary available for ("%s", "%s").',
+                         build.builder_name, test_suite)
         else:
             tests = [t for t in tests if t in new_failures]
         return tests
 
-    def _fetch_tests_with_new_failures(self, build):
-        """For a given try job, lists tests that only failed with the patch.
+    def _fetch_tests_with_new_failures(self, build, test_suite):
+        """For a given test suite in the try job, lists tests that only failed
+        with the patch.
 
         If a test failed only with the patch but not without, then that
         indicates that the failure is actually related to the patch and
@@ -491,7 +448,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         If the list of new failures could not be obtained, this returns None.
         """
         results_fetcher = self._tool.results_fetcher
-        content = results_fetcher.fetch_retry_summary_json(build)
+        content = results_fetcher.fetch_retry_summary_json(build, test_suite)
         if content is None:
             return None
         try:
@@ -508,9 +465,9 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         then an entry should be added for that port using a build that is
         available.
 
-        For example, if there's no entry for the port "win-win7", but there
-        is an entry for the "win-win10" port, then an entry might be added
-        for "win-win7" using the results from "win-win10".
+        For example, if there's no entry for the port "win-win10", but there
+        is an entry for the "win-win11" port, then an entry might be added
+        for "win-win10" using the results from "win-win11".
         """
         all_ports = {
             self._tool.builders.port_name_for_builder_name(b)
@@ -522,7 +479,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             if not missing_ports:
                 continue
             _log.info('For %s:', test_prefix)
-            for port in missing_ports:
+            for port in sorted(missing_ports):
                 build = self._choose_fill_in_build(port, build_port_pairs)
                 _log.info('Using "%s" build %d for %s.', build.builder_name,
                           build.build_number, port)
@@ -537,7 +494,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         """
 
         # A full port name should normally always be of the form <os>-<version>;
-        # for example "win-win7", or "linux-trusty". For the test port used in
+        # for example "win-win11", or "linux-trusty". For the test port used in
         # unit tests, though, the full port name may be "test-<os>-<version>".
         def os_name(port):
             if '-' not in port:

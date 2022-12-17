@@ -21,11 +21,18 @@ template("vivaldi_strings_grit_action") {
   name = "grit_$target_name"
   deps_list += [ ":" + name ]
   inputs = []
-  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales - ["en-US"]) {
+  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales - ["en-US"]) {
+    if (is_ios) {
+      if (locale == "es-MX") {
+        locale = "es-419"
+      } else if (locale == "pt") {
+        locale = "pt-BR"
+      }
+    }
     inputs += [ "$source_translations$locale.xtb" ]
   }
   outputs = [ output_header ]
-  foreach(locale, locales_with_pseudolocales + vivaldi_pending_locales + vivaldi_pending_mobile_locales) {
+  foreach(locale, locales_with_pseudolocales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales) {
     outputs += [ "${source_name}_$locale.pak" ]
   }
   grit(name) {

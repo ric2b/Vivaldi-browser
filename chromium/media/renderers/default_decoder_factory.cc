@@ -42,7 +42,9 @@
 #include "media/filters/gav1_video_decoder.h"
 #endif
 
-#include "platform_media/renderer/decoders/vivaldi_decoder_config.h"
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/decoders/vivaldi_decoder_config.h"
+#endif
 
 namespace media {
 
@@ -78,11 +80,6 @@ void DefaultDecoderFactory::CreateAudioDecoders(
     external_decoder_factory_->CreateAudioDecoders(task_runner, media_log,
                                                    audio_decoders);
   }
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  VivaldiDecoderConfig::AddAudioDecoders(task_runner, media_log,
-                                         *audio_decoders);
-#endif
 }
 
 SupportedVideoDecoderConfigs

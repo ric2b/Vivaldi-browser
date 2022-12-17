@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/account_manager/account_manager_factory.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "base/bind.h"
@@ -27,14 +26,13 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "chromeos/ash/components/account_manager/account_manager_factory.h"
 #include "chromeos/ash/components/dbus/authpolicy/authpolicy_client.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "dbus/message.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -226,7 +224,8 @@ void AuthPolicyCredentialsManager::StartObserveNetwork() {
   if (is_observing_network_)
     return;
   is_observing_network_ = true;
-  NetworkHandler::Get()->network_state_handler()->AddObserver(this, FROM_HERE);
+  network_state_handler_observer_.Observe(
+      NetworkHandler::Get()->network_state_handler());
 }
 
 void AuthPolicyCredentialsManager::StopObserveNetwork() {
@@ -234,8 +233,7 @@ void AuthPolicyCredentialsManager::StopObserveNetwork() {
     return;
   DCHECK(NetworkHandler::IsInitialized());
   is_observing_network_ = false;
-  NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
-                                                                 FROM_HERE);
+  network_state_handler_observer_.Reset();
 }
 
 void AuthPolicyCredentialsManager::UpdateDisplayAndGivenName(
@@ -331,9 +329,7 @@ AuthPolicyCredentialsManagerFactory::GetInstance() {
 }
 
 AuthPolicyCredentialsManagerFactory::AuthPolicyCredentialsManagerFactory()
-    : BrowserContextKeyedServiceFactory(
-          "AuthPolicyCredentialsManager",
-          BrowserContextDependencyManager::GetInstance()) {}
+    : ProfileKeyedServiceFactory("AuthPolicyCredentialsManager") {}
 
 AuthPolicyCredentialsManagerFactory::~AuthPolicyCredentialsManagerFactory() {}
 

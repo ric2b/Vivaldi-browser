@@ -24,6 +24,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/common/extensions/api/tabs.h"
@@ -45,6 +47,7 @@
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function.h"
@@ -286,12 +289,12 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
     index = *params.index;
   index = base::clamp(index, -1, browser->tab_strip_model()->count());
 
-  int add_types = active ? TabStripModel::ADD_ACTIVE : TabStripModel::ADD_NONE;
-  add_types |= TabStripModel::ADD_FORCE_INDEX;
-  if (opener)
-    add_types |= TabStripModel::ADD_INHERIT_OPENER;
+  int add_types = active ? AddTabTypes::ADD_ACTIVE : AddTabTypes::ADD_NONE;
+  add_types |= AddTabTypes::ADD_FORCE_INDEX;
   if (pinned)
-    add_types |= TabStripModel::ADD_PINNED;
+    add_types |= AddTabTypes::ADD_PINNED;
+  if (opener)
+    add_types |= AddTabTypes::ADD_INHERIT_OPENER;
   NavigateParams navigate_params(browser, url,
       params.transition.get() ? *params.transition : ui::PAGE_TRANSITION_LINK);
   navigate_params.disposition = active
@@ -301,7 +304,12 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
   navigate_params.user_gesture = false;
   navigate_params.tabstrip_add_types = add_types;
   navigate_params.viv_ext_data = params.viv_ext_data.get();
-  Navigate(&navigate_params);
+  base::WeakPtr<content::NavigationHandle> handle = Navigate(&navigate_params);
+  if (handle && params.bookmark_id) {
+    ChromeNavigationUIData* ui_data =
+        static_cast<ChromeNavigationUIData*>(handle->GetNavigationUIData());
+    ui_data->set_bookmark_id(*params.bookmark_id);
+  }
 
   // This happens in locked fullscreen mode.
   if (!navigate_params.navigated_or_inserted_contents) {

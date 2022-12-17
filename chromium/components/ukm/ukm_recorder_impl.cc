@@ -37,7 +37,6 @@
 
 namespace ukm {
 
-COMPONENT_EXPORT(UKM_RECORDER)
 const base::Feature kUkmSamplingRateFeature{"UkmSamplingRate",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -45,10 +44,22 @@ namespace {
 
 bool IsWhitelistedSourceId(SourceId source_id) {
   SourceIdType type = GetSourceIdType(source_id);
-  return type == SourceIdType::NAVIGATION_ID || type == SourceIdType::APP_ID ||
-         type == SourceIdType::HISTORY_ID || type == SourceIdType::WEBAPK_ID ||
-         type == SourceIdType::PAYMENT_APP_ID ||
-         type == SourceIdType::NO_URL_ID;
+  switch (type) {
+    case ukm::SourceIdObj::Type::NAVIGATION_ID:
+    case ukm::SourceIdObj::Type::APP_ID:
+    case ukm::SourceIdObj::Type::HISTORY_ID:
+    case ukm::SourceIdObj::Type::WEBAPK_ID:
+    case ukm::SourceIdObj::Type::PAYMENT_APP_ID:
+    case ukm::SourceIdObj::Type::NO_URL_ID:
+    case ukm::SourceIdObj::Type::REDIRECT_ID:
+    case ukm::SourceIdObj::Type::WEB_IDENTITY_ID: {
+      return true;
+    }
+    case ukm::SourceIdObj::Type::DEFAULT:
+    case ukm::SourceIdObj::Type::DESKTOP_WEB_APP_ID:
+    case ukm::SourceIdObj::Type::WORKER_ID:
+      return false;
+  }
 }
 
 bool IsAppIdType(SourceId source_id) {
@@ -206,45 +217,6 @@ UkmRecorderImpl::UkmRecorderImpl()
 
 UkmRecorderImpl::~UkmRecorderImpl() = default;
 
-// static
-void UkmRecorderImpl::CreateFallbackSamplingTrial(
-    bool is_stable_channel,
-    base::FeatureList* feature_list) {
-  static const char kSampledGroup_Stable[] = "Sampled_NoSeed_Stable";
-  static const char kSampledGroup_Other[] = "Sampled_NoSeed_Other";
-  const char* sampled_group = kSampledGroup_Other;
-  int default_sampling = 1;  // Sampling is 1-in-N; this is N.
-
-  // Nothing is sampled out except for "stable" which omits almost everything
-  // in this configuration. This is done so that clients that fail to receive
-  // a configuration from the server do not bias aggregated results because
-  // of a relatively large number of records from them.
-  if (is_stable_channel) {
-    sampled_group = kSampledGroup_Stable;
-    default_sampling = 1000000;
-  }
-
-  scoped_refptr<base::FieldTrial> trial(
-      base::FieldTrialList::FactoryGetFieldTrial(
-          kUkmSamplingRateFeature.name, 100, sampled_group,
-          base::FieldTrial::ONE_TIME_RANDOMIZED, nullptr));
-
-  // Everybody (100%) should have a sampling configuration.
-  std::map<std::string, std::string> params = {
-      {"_default_sampling", base::NumberToString(default_sampling)}};
-  variations::AssociateVariationParams(trial->trial_name(), sampled_group,
-                                       params);
-  trial->AppendGroup(sampled_group, 100);
-
-  // Setup the feature.
-  feature_list->RegisterFieldTrialOverride(
-      kUkmSamplingRateFeature.name, base::FeatureList::OVERRIDE_ENABLE_FEATURE,
-      trial.get());
-}
-
-UkmRecorderImpl::EventAggregate::EventAggregate() = default;
-UkmRecorderImpl::EventAggregate::~EventAggregate() = default;
-
 UkmRecorderImpl::Recordings::Recordings() = default;
 UkmRecorderImpl::Recordings& UkmRecorderImpl::Recordings::operator=(
     Recordings&&) = default;
@@ -388,7 +360,6 @@ void UkmRecorderImpl::OnUkmAllowedStateChanged(bool allowed) {
   NotifyAllObservers(&UkmRecorderObserver::OnUkmAllowedStateChanged, allowed);
 }
 
-// TODO(rkaplow): This should be refactored.
 void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -417,15 +388,7 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   std::unordered_map<SourceIdType, int> serialized_source_type_counts;
 
   for (const auto& kv : recordings_.sources) {
-    // Don't keep sources of these types after current report because their
-    // entries are logged only at source creation time.
-    SourceIdType type = GetSourceIdType(kv.first);
-    if (type == ukm::SourceIdObj::Type::HISTORY_ID ||
-        type == ukm::SourceIdObj::Type::WEBAPK_ID ||
-        type == SourceIdType::PAYMENT_APP_ID ||
-        type == SourceIdType::NO_URL_ID) {
-      MarkSourceForDeletion(kv.first);
-    }
+    MaybeMarkForDeletion(kv.first);
     // If the source id is not whitelisted, don't send it unless it has
     // associated entries and the URL matches that of a whitelisted source.
     // Note: If ShouldRestrictToWhitelistedSourceIds() is true, this logic will
@@ -459,49 +422,11 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   }
 
   for (const auto& event_and_aggregate : recordings_.event_aggregations) {
-    const EventAggregate& event_aggregate = event_and_aggregate.second;
     Aggregate* proto_aggregate = report->add_aggregates();
-    proto_aggregate->set_source_id(0);  // Across all sources.
     proto_aggregate->set_event_hash(event_and_aggregate.first);
-    proto_aggregate->set_total_count(event_aggregate.total_count);
-    proto_aggregate->set_dropped_due_to_limits(
-        event_aggregate.dropped_due_to_limits);
-    proto_aggregate->set_dropped_due_to_sampling(
-        event_aggregate.dropped_due_to_sampling);
-    proto_aggregate->set_dropped_due_to_filter(
-        event_aggregate.dropped_due_to_filter);
-    proto_aggregate->set_dropped_due_to_unconfigured(
-        event_aggregate.dropped_due_to_unconfigured);
-    for (const auto& metric_and_aggregate : event_aggregate.metrics) {
-      const MetricAggregate& aggregate = metric_and_aggregate.second;
-      Aggregate::Metric* proto_metric = proto_aggregate->add_metrics();
-      proto_metric->set_metric_hash(metric_and_aggregate.first);
-      proto_metric->set_value_sum(aggregate.value_sum);
-      proto_metric->set_value_square_sum(aggregate.value_square_sum);
-      if (aggregate.total_count != event_aggregate.total_count) {
-        proto_metric->set_total_count(aggregate.total_count);
-      }
-      if (aggregate.dropped_due_to_limits !=
-          event_aggregate.dropped_due_to_limits) {
-        proto_metric->set_dropped_due_to_limits(
-            aggregate.dropped_due_to_limits);
-      }
-      if (aggregate.dropped_due_to_sampling !=
-          event_aggregate.dropped_due_to_sampling) {
-        proto_metric->set_dropped_due_to_sampling(
-            aggregate.dropped_due_to_sampling);
-      }
-      if (aggregate.dropped_due_to_filter !=
-          event_aggregate.dropped_due_to_filter) {
-        proto_metric->set_dropped_due_to_filter(
-            aggregate.dropped_due_to_filter);
-      }
-      if (aggregate.dropped_due_to_unconfigured !=
-          event_aggregate.dropped_due_to_unconfigured) {
-        proto_metric->set_dropped_due_to_unconfigured(
-            aggregate.dropped_due_to_unconfigured);
-      }
-    }
+
+    const EventAggregate& event_aggregate = event_and_aggregate.second;
+    event_aggregate.FillProto(proto_aggregate);
   }
   int num_serialized_sources = 0;
   for (const auto& source_type_and_count : serialized_source_type_counts) {
@@ -569,6 +494,43 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   report->set_is_continuous(recording_is_continuous_);
   recording_is_continuous_ = true;
 
+  int pruned_sources_age_sec = PruneData(source_ids_seen);
+
+  // Record how old the newest truncated source is.
+  source_counts_proto->set_pruned_sources_age_seconds(pruned_sources_age_sec);
+
+  // Set deferred sources count after pruning.
+  source_counts_proto->set_deferred_sources(recordings_.sources.size());
+  // Same value as the deferred source count, for setting the carryover count
+  // in the next reporting cycle.
+  recordings_.source_counts.carryover_sources = recordings_.sources.size();
+
+  // We already matched these deferred sources against the URL whitelist.
+  // Re-whitelist them for the next report.
+  for (const auto& kv : recordings_.sources) {
+    recordings_.carryover_urls_whitelist.insert(kv.second->url().spec());
+  }
+
+  UMA_HISTOGRAM_COUNTS_1000("UKM.Sources.KeptSourcesCount",
+                            recordings_.sources.size());
+
+  // Record number of sources after pruning that were carried over due to not
+  // having any events in this reporting cycle.
+  int num_sources_entryless = 0;
+  for (const auto& kv : recordings_.sources) {
+    if (!base::Contains(source_ids_seen, kv.first)) {
+      num_sources_entryless++;
+    }
+  }
+  source_counts_proto->set_entryless_sources(num_sources_entryless);
+
+  // Notify observers that a report was generated.
+  if (entry_filter_) {
+    entry_filter_->OnStoreRecordingsInReport();
+  }
+}
+
+int UkmRecorderImpl::PruneData(std::set<SourceId>& source_ids_seen) {
   // Modify the set source_ids_seen by removing sources that aren't in
   // recordings_. We do this here as there is a few places for
   // recordings_.sources to be modified. The resulting set will be currently
@@ -706,39 +668,7 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
                                  num_sources - recordings_.sources.size());
     }
   }
-
-  // Record how old the newest truncated source is.
-  source_counts_proto->set_pruned_sources_age_seconds(pruned_sources_age_sec);
-
-  // Set deferred sources count after pruning.
-  source_counts_proto->set_deferred_sources(recordings_.sources.size());
-  // Same value as the deferred source count, for setting the carryover count
-  // in the next reporting cycle.
-  recordings_.source_counts.carryover_sources = recordings_.sources.size();
-
-  // We already matched these deferred sources against the URL whitelist.
-  // Re-whitelist them for the next report.
-  for (const auto& kv : recordings_.sources) {
-    recordings_.carryover_urls_whitelist.insert(kv.second->url().spec());
-  }
-
-  UMA_HISTOGRAM_COUNTS_1000("UKM.Sources.KeptSourcesCount",
-                            recordings_.sources.size());
-
-  // Record number of sources after pruning that were carried over due to not
-  // having any events in this reporting cycle.
-  int num_sources_entryless = 0;
-  for (const auto& kv : recordings_.sources) {
-    if (!base::Contains(source_ids_seen, kv.first)) {
-      num_sources_entryless++;
-    }
-  }
-  source_counts_proto->set_entryless_sources(num_sources_entryless);
-
-  // Notify observers that a report was generated.
-  if (entry_filter_) {
-    entry_filter_->OnStoreRecordingsInReport();
-  }
+  return pruned_sources_age_sec;
 }
 
 bool UkmRecorderImpl::ShouldRestrictToWhitelistedSourceIds() const {
@@ -878,6 +808,66 @@ void UkmRecorderImpl::RecordNavigation(
       unsanitized_navigation_data.CopyWithSanitizedUrls(urls);
   RecordSource(
       std::make_unique<UkmSource>(source_id, sanitized_navigation_data));
+}
+
+UkmRecorderImpl::EventAggregate::EventAggregate() = default;
+UkmRecorderImpl::EventAggregate::~EventAggregate() = default;
+
+void UkmRecorderImpl::EventAggregate::FillProto(
+    Aggregate* proto_aggregate) const {
+  proto_aggregate->set_source_id(0);  // Across all sources.
+  proto_aggregate->set_total_count(total_count);
+  proto_aggregate->set_dropped_due_to_limits(dropped_due_to_limits);
+  proto_aggregate->set_dropped_due_to_sampling(dropped_due_to_sampling);
+  proto_aggregate->set_dropped_due_to_filter(dropped_due_to_filter);
+  proto_aggregate->set_dropped_due_to_unconfigured(dropped_due_to_unconfigured);
+  for (const auto& metric_and_aggregate : metrics) {
+    const MetricAggregate& aggregate = metric_and_aggregate.second;
+    Aggregate::Metric* proto_metric = proto_aggregate->add_metrics();
+    proto_metric->set_metric_hash(metric_and_aggregate.first);
+    proto_metric->set_value_sum(aggregate.value_sum);
+    proto_metric->set_value_square_sum(aggregate.value_square_sum);
+    if (aggregate.total_count != total_count) {
+      proto_metric->set_total_count(aggregate.total_count);
+    }
+    if (aggregate.dropped_due_to_limits != dropped_due_to_limits) {
+      proto_metric->set_dropped_due_to_limits(aggregate.dropped_due_to_limits);
+    }
+    if (aggregate.dropped_due_to_sampling != dropped_due_to_sampling) {
+      proto_metric->set_dropped_due_to_sampling(
+          aggregate.dropped_due_to_sampling);
+    }
+    if (aggregate.dropped_due_to_filter != dropped_due_to_filter) {
+      proto_metric->set_dropped_due_to_filter(aggregate.dropped_due_to_filter);
+    }
+    if (aggregate.dropped_due_to_unconfigured != dropped_due_to_unconfigured) {
+      proto_metric->set_dropped_due_to_unconfigured(
+          aggregate.dropped_due_to_unconfigured);
+    }
+  }
+}
+
+void UkmRecorderImpl::MaybeMarkForDeletion(SourceId source_id) {
+  SourceIdType type = GetSourceIdType(source_id);
+  switch (type) {
+    case ukm::SourceIdObj::Type::HISTORY_ID:
+    case ukm::SourceIdObj::Type::WEBAPK_ID:
+    case ukm::SourceIdObj::Type::PAYMENT_APP_ID:
+    case ukm::SourceIdObj::Type::NO_URL_ID:
+    case ukm::SourceIdObj::Type::WEB_IDENTITY_ID: {
+      // Don't keep sources of these types after current report because their
+      // entries are logged only at source creation time.
+      MarkSourceForDeletion(source_id);
+      break;
+    }
+    case ukm::SourceIdObj::Type::DEFAULT:
+    case ukm::SourceIdObj::Type::APP_ID:
+    case ukm::SourceIdObj::Type::DESKTOP_WEB_APP_ID:
+    case ukm::SourceIdObj::Type::NAVIGATION_ID:
+    case ukm::SourceIdObj::Type::WORKER_ID:
+    case ukm::SourceIdObj::Type::REDIRECT_ID:
+      break;
+  }
 }
 
 UkmRecorderImpl::ShouldRecordUrlResult UkmRecorderImpl::ShouldRecordUrl(

@@ -435,7 +435,7 @@ void NoteModelTypeProcessor::StopTrackingMetadata() {
 void NoteModelTypeProcessor::GetAllNodesForDebugging(
     AllNodesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto all_nodes = std::make_unique<base::ListValue>();
+  base::Value::List all_nodes;
   // Create a permanent folder since sync server no longer create root folders,
   // and USS won't migrate root folders from directory, we create root folders.
   base::Value::Dict root_node;
@@ -449,12 +449,12 @@ void NoteModelTypeProcessor::GetAllNodesForDebugging(
   root_node.Set("IS_DIR", true);
   root_node.Set("modelType", "Notes");
   root_node.Set("NON_UNIQUE_NAME", "Notes");
-  all_nodes->Append(base::Value(std::move(root_node)));
+  all_nodes.Append(std::move(root_node));
 
   const vivaldi::NoteNode* model_root_node = notes_model_->root_node();
   int i = 0;
   for (const auto& child : model_root_node->children()) {
-    AppendNodeAndChildrenForDebugging(child.get(), i++, all_nodes.get());
+    AppendNodeAndChildrenForDebugging(child.get(), i++, &all_nodes);
   }
 
   std::move(callback).Run(syncer::NOTES, std::move(all_nodes));
@@ -463,7 +463,7 @@ void NoteModelTypeProcessor::GetAllNodesForDebugging(
 void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     const vivaldi::NoteNode* node,
     int index,
-    base::ListValue* all_nodes) const {
+    base::Value::List* all_nodes) const {
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   // Include only tracked nodes. Newly added nodes are tracked even before being
@@ -471,18 +471,18 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
   if (!entity) {
     return;
   }
-  const sync_pb::EntityMetadata* metadata = entity->metadata();
+  const sync_pb::EntityMetadata& metadata = entity->metadata();
   // Copy data to an EntityData object to reuse its conversion
   // ToDictionaryValue() methods.
   syncer::EntityData data;
-  data.id = metadata->server_id();
+  data.id = metadata.server_id();
   data.creation_time = node->GetCreationTime();
   data.modification_time =
-      syncer::ProtoTimeToTime(metadata->modification_time());
+      syncer::ProtoTimeToTime(metadata.modification_time());
   data.name = base::UTF16ToUTF8(node->GetTitle().empty() ? node->GetContent()
                                                          : node->GetTitle());
   data.specifics = CreateSpecificsFromNoteNode(node, notes_model_,
-                                               metadata->unique_position());
+                                               metadata.unique_position());
   if (node->is_permanent_node()) {
     data.server_defined_unique_tag =
         ComputeServerDefinedUniqueTagForDebugging(node, notes_model_);
@@ -495,30 +495,26 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
     const SyncedNoteTrackerEntity* parent_entity =
         note_tracker_->GetEntityForNoteNode(parent);
     DCHECK(parent_entity);
-    data.legacy_parent_id = parent_entity->metadata()->server_id();
+    data.legacy_parent_id = parent_entity->metadata().server_id();
   }
 
-  std::unique_ptr<base::DictionaryValue> data_dictionary =
-      data.ToDictionaryValue();
+  base::Value::Dict data_dictionary = data.ToDictionaryValue();
   // Set ID value as in legacy directory-based implementation, "s" means server.
-  data_dictionary->SetString("ID", "s" + metadata->server_id());
+  data_dictionary.Set("ID", "s" + metadata.server_id());
   if (node->is_permanent_node()) {
     // Hardcode the parent of permanent nodes.
-    data_dictionary->SetString("PARENT_ID", "NOTES_ROOT");
-    data_dictionary->SetString("UNIQUE_SERVER_TAG",
-                               data.server_defined_unique_tag);
+    data_dictionary.Set("PARENT_ID", "NOTES_ROOT");
+    data_dictionary.Set("UNIQUE_SERVER_TAG", data.server_defined_unique_tag);
   } else {
-    data_dictionary->SetString("PARENT_ID", "s" + data.legacy_parent_id);
+    data_dictionary.Set("PARENT_ID", "s" + data.legacy_parent_id);
   }
-  data_dictionary->SetInteger("LOCAL_EXTERNAL_ID", node->id());
-  data_dictionary->SetInteger("positionIndex", index);
-  data_dictionary->SetKey("metadata",
-                          base::Value::FromUniquePtrValue(
-                              syncer::EntityMetadataToValue(*metadata)));
-  data_dictionary->SetString("modelType", "Notes");
-  data_dictionary->SetBoolean("IS_DIR", node->is_folder());
-  all_nodes->Append(
-      base::Value::FromUniquePtrValue(std::move(data_dictionary)));
+  data_dictionary.Set("LOCAL_EXTERNAL_ID", static_cast<int>(node->id()));
+  data_dictionary.Set("positionIndex", index);
+  data_dictionary.Set("metadata", base::Value::FromUniquePtrValue(
+                                      syncer::EntityMetadataToValue(metadata)));
+  data_dictionary.Set("modelType", "Notes");
+  data_dictionary.Set("IS_DIR", node->is_folder());
+  all_nodes->Append(std::move(data_dictionary));
 
   int i = 0;
   for (const auto& child : node->children()) {

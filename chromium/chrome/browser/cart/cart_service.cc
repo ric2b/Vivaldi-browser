@@ -9,7 +9,6 @@
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/cart/cart_db_content.pb.h"
 #include "chrome/browser/cart/cart_discount_metric_collector.h"
 #include "chrome/browser/cart/chrome_cart.mojom.h"
 #include "chrome/browser/commerce/coupons/coupon_service_factory.h"
@@ -27,6 +26,7 @@
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/commerce_heuristics_data.h"
 #include "components/commerce/core/commerce_heuristics_data_metrics_helper.h"
+#include "components/commerce/core/proto/cart_db_content.pb.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -434,10 +434,13 @@ void CartService::ShouldShowDiscountConsentCallback(
   bool should_show = false;
   if (!profile_->GetPrefs()->GetBoolean(prefs::kCartDiscountAcknowledged)) {
     // Only show discount consent when there is abandoned cart(s) from partner
-    // merchants.
+    // merchants or it's not in the no discount merchant list.
     for (auto proto_pair : proto_pairs) {
-      should_show |= commerce::IsPartnerMerchant(
-          GURL(proto_pair.second.merchant_cart_url()));
+      auto cart_url = proto_pair.second.merchant_cart_url();
+      should_show |= commerce::IsPartnerMerchant(GURL(cart_url));
+      should_show |=
+          (base::FeatureList::IsEnabled(commerce::kMerchantWidePromotion) &&
+           !commerce::IsNoDiscountMerchant(GURL(cart_url)));
     }
 
     if (base::FeatureList::IsEnabled(commerce::kDiscountConsentV2)) {
@@ -490,10 +493,11 @@ void CartService::GetDiscountURL(
     const GURL& cart_url,
     base::OnceCallback<void(const ::GURL&)> callback) {
   auto url = AppendUTM(cart_url);
-  if (!commerce::IsRuleDiscountPartnerMerchant(cart_url) ||
-      !IsCartDiscountEnabled()) {
+  if (commerce::IsFakeDataEnabled() || !IsCartDiscountEnabled()) {
     std::move(callback).Run(url);
-    CartDiscountMetricCollector::RecordClickedOnDiscount(false);
+    if (!commerce::IsFakeDataEnabled()) {
+      CartDiscountMetricCollector::RecordClickedOnDiscount(false);
+    }
     return;
   }
   LoadCart(eTLDPlusOne(cart_url), base::BindOnce(&CartService::OnGetDiscountURL,
@@ -515,8 +519,12 @@ void CartService::OnGetDiscountURL(
   auto& cart_proto = proto_pairs[0].second;
   if (!IsCartDiscountEnabled() ||
       cart_proto.discount_info().rule_discount_info().empty()) {
+    if (cart_proto.discount_info().has_coupons()) {
+      CartDiscountMetricCollector::RecordClickedOnDiscount(true);
+    } else {
+      CartDiscountMetricCollector::RecordClickedOnDiscount(false);
+    }
     std::move(callback).Run(default_cart_url);
-    CartDiscountMetricCollector::RecordClickedOnDiscount(false);
     return;
   }
   auto pending_factory = profile_->GetDefaultStoragePartition()
@@ -1048,7 +1056,7 @@ void CartService::StartGettingDiscount() {
 
   base::Time last_fetched_time =
       profile_->GetPrefs()->GetTime(prefs::kCartDiscountLastFetchedTime);
-  base::TimeDelta fetch_delay = commerce::kDiscountFetchDelayParam.Get() -
+  base::TimeDelta fetch_delay = commerce::GetDiscountFetchDelay() -
                                 (base::Time::Now() - last_fetched_time);
   if (last_fetched_time == base::Time() || fetch_delay.is_negative() ||
       kBypassDisocuntFetchingThreshold.Get()) {
@@ -1073,8 +1081,8 @@ void CartService::StartGettingDiscount() {
 
 bool CartService::IsDiscountUsed(const std::string& rule_id) {
   return profile_->GetPrefs()
-             ->GetDictionary(prefs::kCartUsedDiscounts)
-             ->FindBoolKey(rule_id) != absl::nullopt;
+             ->GetValueDict(prefs::kCartUsedDiscounts)
+             .FindBool(rule_id) != absl::nullopt;
 }
 
 void CartService::RecordFetchTimestamp() {
@@ -1134,9 +1142,9 @@ void CartService::OnCartFeaturesChanged(const std::string& pref_name) {
 }
 
 bool CartService::IsCartAndDiscountEnabled() {
-  auto* list = profile_->GetPrefs()->GetList(prefs::kNtpDisabledModules);
-  if (list &&
-      base::Contains(list->GetListDeprecated(), base::Value(kCartPrefsKey))) {
+  const base::Value::List& list =
+      profile_->GetPrefs()->GetValueList(prefs::kNtpDisabledModules);
+  if (base::Contains(list, base::Value(kCartPrefsKey))) {
     return false;
   }
   return profile_->GetPrefs()->GetBoolean(prefs::kCartDiscountEnabled) &&

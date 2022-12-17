@@ -7,7 +7,8 @@ from absl import app
 from pywinauto.application import Application
 from selenium import webdriver
 
-import test_util
+from test_util import create_chrome_webdriver
+from test_util import getElementFromShadowRoot
 
 UnsafePageLink = "http://testsafebrowsing.appspot.com/s/malware.html"
 UnsafeDownloadLink = "http://testsafebrowsing.appspot.com/s/badrep.exe"
@@ -28,7 +29,7 @@ def main(argv):
   chrome_options = webdriver.ChromeOptions()
   chrome_options.add_experimental_option("excludeSwitches", exclude_switches)
 
-  driver = test_util.create_chrome_webdriver(chrome_options=chrome_options)
+  driver = create_chrome_webdriver(chrome_options=chrome_options)
 
   try:
     app = Application(backend="uia")
@@ -44,7 +45,12 @@ def main(argv):
     policy_url = "chrome://policy"
     driver.get(policy_url)
     driver.find_element_by_id('reload-policies').click
-    deviceId = driver.find_element_by_class_name(
+    # Give the page 2 seconds to render the legend
+    time.sleep(2)
+    status_box = driver.find_element_by_css_selector("status-box")
+    el = getElementFromShadowRoot(driver, status_box, "fieldset")
+
+    deviceId = el.find_element_by_class_name(
         'machine-enrollment-device-id').text
 
     visit(window, UnsafePageLink)

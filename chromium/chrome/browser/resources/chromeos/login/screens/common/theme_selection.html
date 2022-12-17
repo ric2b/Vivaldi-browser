@@ -8,7 +8,7 @@ found in the LICENSE file. -->
 <link rel="import" href="../../components/display_manager_types.html">
 <link rel="import" href="../../components/oobe_icons.html">
 <link rel="import" href="../../components/behaviors/login_screen_behavior.html">
-<link rel="import" href="../../components/behaviors/oobe_dialog_host_behavior.html">
+<link rel="import" href="../../components/behaviors/multi_step_behavior.html">
 <link rel="import" href="../../components/behaviors/oobe_i18n_behavior.html">
 <link rel="import" href="../../components/buttons/oobe_text_button.html">
 <link rel="import" href="../../components/common_styles/common_styles.html">
@@ -20,20 +20,6 @@ found in the LICENSE file. -->
     <style include="oobe-dialog-host-styles cr-card-radio-group-styles">
       * {
         transition: color 250ms linear, background-color 250ms linear;
-      }
-
-      cr-card-radio-button {
-        transition: background-color 0ms;
-      }
-
-      cr-card-radio-button:hover {
-        transition: background-color 0ms;
-      }
-
-      cr-card-radio-button[checked] {
-        border-color: var(--cros-focus-ring-color);
-        border-style: solid;
-        border-width: 2px;
       }
 
       .card-label {
@@ -59,18 +45,23 @@ found in the LICENSE file. -->
       }
 
     </style>
-    <oobe-adaptive-dialog id="themeSelectionDialog" role="presentation">
+    <oobe-adaptive-dialog id="themeSelectionDialog" role="presentation"
+        for-step="overview">
       <iron-icon slot="icon" icon="oobe-32:stars"></iron-icon>
       <h1 slot="title" id="theme-selection-title">
         [[i18nDynamic(locale, 'themeSelectionScreenTitle')]]
       </h1>
-      <div slot="subtitle" id="theme-selection-subtitle">
-        [[i18nDynamic(locale, 'themeSelectionScreenDescription')]]
+      <div hidden="[[isInTabletMode_]]" slot="subtitle"
+          id="theme-selection-subtitle-clamshell">
+        [[i18nDynamic(locale, 'themeSelectionScreenDescriptionClamshell')]]
+      </div>
+      <div hidden="[[!isInTabletMode_]]" slot="subtitle"
+          id="theme-selection-subtitle-tablet">
+        [[i18nDynamic(locale, 'themeSelectionScreenDescriptionTablet')]]
       </div>
       <div slot="content" class="layout vertical landscape-vertical-centered">
         <cr-radio-group id="theme" selected="{{selectedTheme}}">
-          <cr-card-radio-button id="lightThemeButton" class="flex" name="light"
-              on-click="setLightTheme_">
+          <cr-card-radio-button id="lightThemeButton" class="flex" name="light">
             <div class="card-container">
               <img srcset="images/1x/thumbnail-theme-light-1x.png,
                   images/2x/thumbnail-theme-light-2x.png"
@@ -86,7 +77,7 @@ found in the LICENSE file. -->
             </div>
           </cr-card-radio-button>
           <cr-card-radio-button id="darkThemeButton" class="flex"
-              name="dark" on-click="setDarkTheme_">
+              name="dark">
             <div class="card-container">
               <img srcset="images/1x/thumbnail-theme-dark-1x.png,
                   images/2x/thumbnail-theme-dark-2x.png"
@@ -102,7 +93,7 @@ found in the LICENSE file. -->
             </div>
           </cr-card-radio-button>
           <cr-card-radio-button id="autoThemeButton" class="flex"
-              name="auto" on-click="setAutoTheme_">
+              name="auto">
             <div class="card-container">
               <img srcset="images/1x/thumbnail-theme-auto-1x.png,
                   images/2x/thumbnail-theme-auto-2x.png"

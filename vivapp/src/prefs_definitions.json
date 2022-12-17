@@ -307,7 +307,7 @@
           "COMMAND_CLOSE_TAB": {"shortcuts": ["meta+w"], "gestures": ["20"]},
           "COMMAND_CLOSE_WINDOW": {"shortcuts": ["shift+meta+w"]},
           "COMMAND_COPY_SELECTION_TO_NOTE": {"shortcuts": ["alt+meta+c"]},
-          "COMMAND_DEVELOPER_TOOLS": {"shortcuts": ["shift+meta+i", "f12"]},
+          "COMMAND_DEVELOPER_TOOLS": {"shortcuts": ["alt+meta+i", "f12"]},
           "COMMAND_DEVTOOLS_INSPECTOR": {"shortcuts": []},
           "COMMAND_FIND_IN_PAGE": {"shortcuts": ["meta+f", "."]},
           "COMMAND_FIND_NEXT_IN_PAGE": {"shortcuts": ["f3", "meta+g"]},
@@ -380,7 +380,7 @@
           "COMMAND_SPATNAV_LEFT": {"shortcuts": ["shift+left", "a"]},
           "COMMAND_SPATNAV_RIGHT": {"shortcuts": ["shift+right", "d"]},
           "COMMAND_SPATNAV_UP": {"shortcuts": ["shift+up", "w"]},
-          "COMMAND_STOP_PAGE": {"shortcut": ["esc", "meta+."], "gestures": ["6"]},
+          "COMMAND_STOP_PAGE": {"shortcuts": ["esc", "meta+."], "gestures": ["6"]},
           "COMMAND_TAB_MOVE_BACKWARD": {"shortcuts": ["shift+meta+up"]},
           "COMMAND_TAB_MOVE_FORWARD": {"shortcuts": ["shift+meta+down"]},
           "COMMAND_TAB_REOPEN_RECENTLY_CLOSED": {"shortcuts": ["shift+meta+t", "meta+z"], "gestures": ["60"]},
@@ -410,8 +410,8 @@
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["meta+/"]},
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["alt+meta+p", "f4"]},
-          "COMMAND_TOGGLE_IMAGES": {"shortcut": ["alt+meta+i"]},
-          "COMMAND_WINDOW_MINIMIZE": {"shortcut": ["meta+m"]}
+          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["shift+meta+i"]},
+          "COMMAND_WINDOW_MINIMIZE": {"shortcuts": ["meta+m"]}
         }
       ]
     },
@@ -955,6 +955,11 @@
         "default": "",
         "syncable": true
       },
+      "default_task_calendar_id": {
+        "type": "string",
+        "default": "",
+        "syncable": true
+      },
       "notification_type": {
         "type": "enum",
         "enum_values": {
@@ -1201,7 +1206,7 @@
       "panel": {
         "sorting": {
           "type": "dictionary",
-          "default": {"sortOrder": 1, "sortField": "manually"},
+          "default": {"sortOrder": 2, "sortField": "name"},
           "syncable": true
         },
         "editor": {
@@ -1494,6 +1499,18 @@
             "type": "boolean",
             "default": true,
             "syncable": true
+          },
+          "junk_enabled": {
+            "description": "Show counter for messages in the Mail Panel junk folder",
+            "type": "boolean",
+            "default": false,
+            "syncable": true
+          },
+          "archive_enabled": {
+            "description": "Show counter for messages in the Mail Panel Archive folder",
+            "type": "boolean",
+            "default": false,
+            "syncable": true
           }
         },
         "status_button_enabled": {
@@ -1523,6 +1540,12 @@
           "plaintext": 1
         },
         "default": "prefer_html",
+        "syncable": true
+      },
+      "color_quoted_text": {
+        "description": "Color quoted text or only quoted border in a mail",
+        "type": "boolean",
+        "default": true,
         "syncable": true
       },
       "composer_colors": {
@@ -2078,6 +2101,12 @@
             "resizable": false
           }, {
             "id": "calendar",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "tasks",
             "available": true,
             "forMailOnly": false,
             "width": -1,
@@ -3388,14 +3417,14 @@
             "accentFromPage": true,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/4-0-wallpaper-light.jpg",
+            "backgroundImage": "",
             "backgroundPosition": "stretch",
             "radius": 4,
             "colorAccentBg": "#ef3939",
             "colorBg": "#f6f6f6",
             "colorFg": "#222222",
             "colorHighlightBg": "#4c70f0",
-            "colorWindowBg": "#f6f6f6",
+            "colorWindowBg": "#EDEEF2",
             "contrast": 0,
             "preferSystemAccent": false,
             "alpha": 0.92,
@@ -3411,14 +3440,14 @@
             "accentFromPage": false,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/4-0-wallpaper-dark.jpg",
+            "backgroundImage": "",
             "backgroundPosition": "stretch",
             "radius": 6,
             "colorAccentBg": "#44454d",
             "colorBg": "#2e2f37",
             "colorFg": "#d3d9e3",
             "colorHighlightBg": "#6590fd",
-            "colorWindowBg": "#2e2f37",
+            "colorWindowBg": "#202127",
             "contrast": 0,
             "preferSystemAccent": false,
             "alpha": 0.75,
@@ -4161,6 +4190,14 @@
       "path": "browser.allow_javascript_apple_events",
       "type": "boolean"
     },
+    "kAutofillProfileEnabled": {
+      "path": "autofill.profile_enabled",
+      "type": "boolean"
+    },
+    "kAutofillCreditCardEnabled": {
+      "path": "autofill.credit_card_enabled",
+      "type": "boolean"
+    },
     "kCredentialsEnableService": {
       "path": "credentials_enable_service",
       "type": "boolean"
@@ -4168,6 +4205,10 @@
     "kDownloadDefaultDirectory": {
       "path": "download.default_directory",
       "type": "file_path"
+    },
+    "kEnableHyperlinkAuditing": {
+      "path": "enable_a_ping",
+      "type": "boolean"
     },
     "kEnableDoNotTrack": {
       "path": "enable_do_not_track",

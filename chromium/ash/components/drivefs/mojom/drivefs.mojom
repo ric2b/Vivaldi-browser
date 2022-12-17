@@ -121,6 +121,10 @@ interface DriveFs {
 
   // Tells DriveFS to update its cached pin states of hosted files (once).
   PollHostedFilePinStates();
+
+  // Returns the total and free space available in the user's Drive and their
+  // organization's, if they belong to one.
+  GetPooledQuotaUsage() => (FileError error, PooledQuotaUsage quota);
 };
 
 // Implemented by Chrome, used from DriveFS.
@@ -184,6 +188,18 @@ interface DriveFsDelegate {
   // calls the necessary callbacks on the |delegate|.
   ExecuteHttpRequest(
     HttpRequest request, pending_remote<HttpDelegate> delegate);
+
+  // On startup, retrieve the machine ID to ensure Chromebook is reassociated
+  // with an existing Computers root based on `doc_id`. If no ID is available it
+  // will return an empty string.
+  GetMachineRootID() => (string doc_id);
+
+  // Invoked when the machine ID is calculated to store in Chrome device prefs.
+  PersistMachineRootID(string doc_id);
+
+  // Invoked when the syncing status changes for items that are being tracked by
+  // the mirror stack.
+  OnMirrorSyncingStatusUpdate(SyncingStatus status);
 };
 
 // Next MinVersion: 7
@@ -283,6 +299,7 @@ struct DriveError {
   [Extensible] enum Type {
     kCantUploadStorageFull,
     kPinningFailedDiskFull,
+    kCantUploadStorageFullOrganization,
   };
 
   Type type;
@@ -302,7 +319,7 @@ struct DialogReason {
   mojo_base.mojom.FilePath path;
 };
 
-// Next MinVersion: 5
+// Next MinVersion: 6
 struct FileMetadata {
   [Extensible] enum Type {
     // A regular file.
@@ -359,7 +376,13 @@ struct FileMetadata {
     kDisabled,
   };
 
+  // Is it currently possible to pin this item.
   [MinVersion=4] CanPinStatus can_pin;
+
+  // Id of the associated Cello item. Useful for interacting with Drive API
+  // methods which require the server side file id, such as
+  // DriveAPIService::UpdateResource.
+  [MinVersion=5] string? item_id;
 };
 
 struct ImageMetadata {
@@ -579,6 +602,30 @@ struct ExtensionConnectionParams {
 union FilePathOrError {
   FileError error;
   mojo_base.mojom.FilePath path;
+};
+
+enum UserType {
+  // User doesn't belong to any organization.
+  kUnmanaged,
+  // User is a member of an organization.
+  kOrganization,
+};
+
+// Free and total space available in Drive relative to both the user and their
+// organization, if they belong to one.
+struct PooledQuotaUsage {
+  UserType user_type;
+
+  // How much space the individual user has used.
+  int64 used_user_bytes;
+  // The individual limit of a user. -1 means infinite.
+  int64 total_user_bytes = -1;
+
+  // The following two fields only have meaning if user_type is kOrganization.
+  // Whether the organization has exceeded its storage limit.
+  bool organization_limit_exceeded = false;
+  // Name of the organization the user belongs to.
+  string organization_name;
 };
 
 // Free and total space available in Drive.

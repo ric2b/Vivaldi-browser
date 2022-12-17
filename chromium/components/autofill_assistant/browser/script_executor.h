@@ -114,6 +114,7 @@ class ScriptExecutor : public ActionDelegate,
   void Run(const UserData* user_data, RunScriptCallback callback);
 
   const UserData* GetUserData() const override;
+  UserData* GetMutableUserData() const override;
   UserModel* GetUserModel() const override;
 
   // Override ScriptExecutorDelegate::NavigationListener
@@ -179,6 +180,7 @@ class ScriptExecutor : public ActionDelegate,
   void RetrieveElementFormAndFieldData(
       const Selector& selector,
       base::OnceCallback<void(const ClientStatus&,
+                              content::RenderFrameHost* rfh,
                               const autofill::FormData& form_data,
                               const autofill::FormFieldData& field_data)>
           callback) override;
@@ -243,6 +245,12 @@ class ScriptExecutor : public ActionDelegate,
       std::unique_ptr<FormProto> form,
       base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
       base::OnceCallback<void(const ClientStatus&)> cancel_callback) override;
+  void ShowQrCodeScanUi(
+      std::unique_ptr<PromptQrCodeScanProto> qr_code_scan,
+      base::OnceCallback<void(const ClientStatus&,
+                              const absl::optional<ValueProto>&)> callback)
+      override;
+  void ClearQrCodeScanUi() override;
   void RequireUI() override;
   void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
@@ -277,6 +285,14 @@ class ScriptExecutor : public ActionDelegate,
   bool MustUseBackendData() const override;
   void MaybeSetPreviousAction(
       const ProcessedActionProto& processed_action) override;
+  absl::optional<std::string> GetIntent() const override;
+  const std::string GetLocale() const override;
+  bool IsXmlSigned(const std::string& xml_string) const override;
+  const std::vector<std::string> ExtractValuesFromSingleTagXml(
+      const std::string& xml_string,
+      const std::vector<std::string>& keys) const override;
+  void ReportProgress(const std::string& payload,
+                      base::OnceCallback<void(bool)> callback) override;
 
  private:
   // TODO(b/220079189): remove this friend declaration.
@@ -353,6 +369,12 @@ class ScriptExecutor : public ActionDelegate,
       const bool prompt,
       base::OnceCallback<void(const external::Result& result)> callback,
       const external::Result& result);
+  void OnResume();
+  void OnReportProgress(
+      base::OnceCallback<void(bool)> callback,
+      int http_status,
+      const std::string& response,
+      const ServiceRequestSender::ResponseInfo& response_info);
 
   // Maybe shows the message specified in a callout, depending on the current
   // state and client settings.
@@ -360,6 +382,10 @@ class ScriptExecutor : public ActionDelegate,
 
   // Returns the current ActionData, or nullptr if there is no current action.
   Action::ActionData* GetCurrentActionData();
+
+  // Creates new TriggerContext from |delegate_|'s TriggerContext and
+  // |additional_context_|.
+  TriggerContext GetMergedTriggerContext() const;
 
   const std::string script_path_;
   std::unique_ptr<TriggerContext> additional_context_;
@@ -386,6 +412,8 @@ class ScriptExecutor : public ActionDelegate,
       ActionProto::ACTION_INFO_NOT_SET;
   absl::optional<DomObjectFrameStack> last_focused_element_;
   std::unique_ptr<ElementAreaProto> touchable_element_area_;
+
+  std::unique_ptr<content::WebContents> web_contents_for_js_execution_;
 
   // Steps towards the requirements for calling |on_expected_navigation_done_|
   // to be fulfilled.
@@ -419,6 +447,7 @@ class ScriptExecutor : public ActionDelegate,
   int consecutive_slow_roundtrip_counter_ = 0;
 
   uint64_t run_id_ = 0;
+  std::string report_token_;
 
   base::WeakPtrFactory<ScriptExecutor> weak_ptr_factory_{this};
 };

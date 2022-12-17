@@ -18,7 +18,7 @@
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "base/timer/mock_timer.h"
-#include "chromeos/network/network_state_test_helper.h"
+#include "chromeos/ash/components/network/network_state_test_helper.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
@@ -253,8 +253,9 @@ class DeviceSyncCryptAuthSchedulerImplTest : public testing::Test {
 
   void VerifyClientDirective(
       const cryptauthv2::ClientDirective& expected_client_directive) {
-    EXPECT_EQ(util::EncodeProtoMessageAsValueString(&expected_client_directive),
-              *pref_service_.Get(prefs::kCryptAuthSchedulerClientDirective));
+    EXPECT_EQ(
+        util::EncodeProtoMessageAsValueString(&expected_client_directive),
+        pref_service_.GetValue(prefs::kCryptAuthSchedulerClientDirective));
     EXPECT_EQ(
         base::Milliseconds(expected_client_directive.checkin_delay_millis()),
         scheduler()->GetRefreshPeriod());
@@ -339,7 +340,7 @@ class DeviceSyncCryptAuthSchedulerImplTest : public testing::Test {
       const cryptauthv2::ClientMetadata& expected_enrollment_request) {
     EXPECT_EQ(
         util::EncodeProtoMessageAsValueString(&expected_enrollment_request),
-        *pref_service_.Get(
+        pref_service_.GetValue(
             prefs::kCryptAuthSchedulerNextEnrollmentRequestClientMetadata));
   }
 
@@ -347,7 +348,7 @@ class DeviceSyncCryptAuthSchedulerImplTest : public testing::Test {
       const cryptauthv2::ClientMetadata& expected_device_sync_request) {
     EXPECT_EQ(
         util::EncodeProtoMessageAsValueString(&expected_device_sync_request),
-        *pref_service_.Get(
+        pref_service_.GetValue(
             prefs::kCryptAuthSchedulerNextDeviceSyncRequestClientMetadata));
   }
 

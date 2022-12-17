@@ -227,6 +227,10 @@ UIWindow* GetAnyKeyWindow();
 // Injects typed URL to sync FakeServer.
 - (void)addFakeSyncServerTypedURL:(const GURL&)URL;
 
+// Injects device info to sync FakeServer.
+- (void)addFakeSyncServerDeviceInfo:(NSString*)deviceName
+               lastUpdatedTimestamp:(base::Time)lastUpdatedTimestamp;
+
 // Triggers a sync cycle for a |type|.
 - (void)triggerSyncCycleForType:(syncer::ModelType)type;
 
@@ -621,9 +625,6 @@ UIWindow* GetAnyKeyWindow();
 // Returns YES if a variation triggering server-side behavior is enabled.
 - (BOOL)isTriggerVariationEnabled:(int)variationID;
 
-// Returns YES if |kSupportForAddPasswordsInSettings| is enabled.
-- (BOOL)isAddCredentialsInSettingsEnabled;
-
 // Returns YES if UKM feature is enabled.
 - (BOOL)isUKMEnabled [[nodiscard]];
 
@@ -659,6 +660,12 @@ UIWindow* GetAnyKeyWindow();
 
 // Returns whether the OmniboxUpdatedPopupUI feature is enabled.
 - (BOOL)isNewOmniboxPopupEnabled;
+
+// Returns whether the kIOSNewOmniboxImplementation feature is enabled.
+- (BOOL)isExperimentalOmniboxEnabled;
+
+// Returns whether the UseLensToSearchForImage feature is enabled;
+- (BOOL)isUseLensToSearchForImageEnabled;
 
 // Returns whether the Thumbstrip feature is enabled for window with given
 // number.
@@ -719,6 +726,9 @@ UIWindow* GetAnyKeyWindow();
 // clearing Browsing data.
 - (void)resetBrowsingDataPrefs;
 
+// Resets data for the local state pref with |prefName|.
+- (void)resetDataForLocalStatePref:(const std::string&)prefName;
+
 #pragma mark - Pasteboard Utilities (EG2)
 
 // Verifies that |text| was copied to the pasteboard.
@@ -774,6 +784,14 @@ UIWindow* GetAnyKeyWindow();
 // Clear the watcher list, stopping monitoring.
 - (void)stopWatcher;
 
+#pragma mark - Url Param Classification utilities
+// Sets the |raw_classifications| on the
+// url_param_filter::ClassificationsLoader.
+- (void)setUrlParamClassifications:(const std::string&)raw_classifications;
+
+// Resets the stored classifications on the
+// url_param_filter::ClassificationsLoader.
+- (void)resetUrlParamClassifications;
 @end
 
 // Helpers that only compile under EarlGrey 1 are included in this "EG1"

@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "media/base/limits.h"
 #include "media/gpu/h265_decoder.h"
@@ -71,11 +72,6 @@ bool IsValidBitDepth(uint8_t bit_depth, VideoCodecProfile profile) {
       DVLOG(1) << "Invalid profile specified for H265";
       return false;
   }
-}
-
-bool IsYUV420Sequence(const H265SPS& sps) {
-  // Spec 6.2
-  return sps.chroma_format_idc == 1;
 }
 }  // namespace
 
@@ -329,6 +325,23 @@ H265Decoder::DecodeResult H265Decoder::Decode() {
         if (par_res != H265Parser::kOk)
           SET_ERROR_AND_RETURN();
 
+        // For ARC CTS tests they expect us to request the buffers after only
+        // processing the SPS/PPS, we can't wait until we get the first IDR. To
+        // resolve the problem that was created by originally doing that, only
+        // do it if we don't have an active PPS set yet so it won't disturb an
+        // active stream.
+        if (curr_pps_id_ == -1) {
+          bool need_new_buffers = false;
+          if (!ProcessPPS(pps_id, &need_new_buffers)) {
+            SET_ERROR_AND_RETURN();
+          }
+
+          if (need_new_buffers) {
+            curr_nalu_.reset();
+            return kConfigChange;
+          }
+        }
+
         break;
       case H265NALU::EOS_NUT:
         first_picture_ = true;
@@ -375,6 +388,10 @@ uint8_t H265Decoder::GetBitDepth() const {
   return bit_depth_;
 }
 
+VideoChromaSampling H265Decoder::GetChromaSampling() const {
+  return chroma_sampling_;
+}
+
 size_t H265Decoder::GetRequiredNumOfPictures() const {
   constexpr size_t kPicsInPipeline = limits::kMaxVideoFrames + 1;
   return GetNumReferenceFrames() + kPicsInPipeline;
@@ -405,7 +422,14 @@ bool H265Decoder::ProcessPPS(int pps_id, bool* need_new_buffers) {
     DVLOG(2) << "New visible rect: " << new_visible_rect.ToString();
     visible_rect_ = new_visible_rect;
   }
-  if (!IsYUV420Sequence(*sps)) {
+
+  VideoChromaSampling new_chroma_sampling = sps->GetChromaSampling();
+  if (new_chroma_sampling != chroma_sampling_) {
+    base::UmaHistogramEnumeration("Media.PlatformVideoDecoding.ChromaSampling",
+                                  new_chroma_sampling);
+  }
+
+  if (!accelerator_->IsChromaSamplingSupported(new_chroma_sampling)) {
     DVLOG(1) << "Only YUV 4:2:0 is supported";
     return false;
   }
@@ -424,18 +448,23 @@ bool H265Decoder::ProcessPPS(int pps_id, bool* need_new_buffers) {
              << ", profile=" << GetProfileName(new_profile);
     return false;
   }
+
   if (pic_size_ != new_pic_size || dpb_.max_num_pics() != sps->max_dpb_size ||
-      profile_ != new_profile || bit_depth_ != new_bit_depth) {
+      profile_ != new_profile || bit_depth_ != new_bit_depth ||
+      chroma_sampling_ != new_chroma_sampling) {
     if (!Flush())
       return false;
     DVLOG(1) << "Codec profile: " << GetProfileName(new_profile)
              << ", level(x30): " << sps->profile_tier_level.general_level_idc
              << ", DPB size: " << sps->max_dpb_size
              << ", Picture size: " << new_pic_size.ToString()
-             << ", bit_depth: " << base::strict_cast<int>(new_bit_depth);
+             << ", bit_depth: " << base::strict_cast<int>(new_bit_depth)
+             << ", chroma_sampling_format: "
+             << VideoChromaSamplingToString(new_chroma_sampling);
     profile_ = new_profile;
     bit_depth_ = new_bit_depth;
     pic_size_ = new_pic_size;
+    chroma_sampling_ = new_chroma_sampling;
     dpb_.set_max_num_pics(sps->max_dpb_size);
     if (need_new_buffers)
       *need_new_buffers = true;

@@ -12,10 +12,18 @@
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/text_view_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -49,6 +57,13 @@ NSString* GetTitleString(TabGridPage page) {
     case TabGridPageRemoteTabs:
       return l10n_util::GetNSString(
           IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_TITLE);
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      return l10n_util::GetNSString(
+          IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_TITLE);
+    // End Vivaldi
+
   }
 }
 
@@ -65,6 +80,14 @@ NSAttributedString* GetBodyString(TabGridPage page) {
     case TabGridPageRemoteTabs:
       messageID = IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_MESSAGE;
       break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      messageID =
+          IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_MESSAGE;
+      break;
+    // End Vivaldi
+
   }
 
   NSString* fullText = l10n_util::GetNSString(messageID);
@@ -113,7 +136,7 @@ NSAttributedString* GetBodyString(TabGridPage page) {
   topLabel.numberOfLines = 0;
   topLabel.textAlignment = NSTextAlignmentCenter;
 
-  UITextView* bottomTextView = [[UITextView alloc] init];
+  UITextView* bottomTextView = CreateUITextViewWithTextKit1();
   bottomTextView.translatesAutoresizingMaskIntoConstraints = NO;
   bottomTextView.attributedText = GetBodyString(self.page);
   bottomTextView.scrollEnabled = NO;
@@ -124,6 +147,14 @@ NSAttributedString* GetBodyString(TabGridPage page) {
   bottomTextView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   bottomTextView.adjustsFontForContentSizeCategory = YES;
   bottomTextView.textAlignment = NSTextAlignmentCenter;
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    topLabel.textColor = [UIColor colorNamed:vTabGridEmptyStateTitleTextColor];
+    bottomTextView.textColor =
+        [UIColor colorNamed:vTabGridEmptyStateBodyTextColor];
+  }
+  // End Vivaldi
 
   [container addSubview:topLabel];
   [container addSubview:bottomTextView];

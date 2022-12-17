@@ -10,7 +10,6 @@ namespace switches {
 
 // To be used to disable code that interferes automatic tests.
 const char kAutoTestMode[] = "auto-test-mode";
-const char kDebugVivaldi[] = "debug-vivaldi";
 const char kDisableVivaldi[] = "disable-vivaldi";
 const char kRunningVivaldi[] = "running-vivaldi";
 
@@ -18,15 +17,6 @@ const char kRunningVivaldi[] = "running-vivaldi";
 // media. Nowadays individual platform audio and video decoders should work and
 // support more cases, but for testing the older code can be enabled.
 const char kVivaldiEnableIPCDemuxer[] = "enable-ipc-demuxer";
-
-// Enable older platform audio decoders implemented via Chromium AudioDecoder
-// API to replace decoders integrated with FFmpeg.
-const char kVivaldiOldPlatformAudio[] = "old-platform-audio";
-
-// Use this on Mac to force a particular media pipeline implementation. The
-// alloweed values are player to force older AVPlayer based code and reader to
-// select newer AVAssetReader.
-const char kVivaldiPlatformMedia[] = "platform-media";
 
 // The installer should perform updates completely silently and should not
 // terminate running browser instances. The name is criptic as it is not

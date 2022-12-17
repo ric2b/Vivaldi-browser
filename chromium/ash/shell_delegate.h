@@ -12,11 +12,13 @@
 #include "ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
 #include "base/files/file_path.h"
 #include "chromeos/ui/base/window_pin_type.h"
+#include "components/version_info/channel.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/device/public/mojom/bluetooth_system.mojom-forward.h"
 #include "services/device/public/mojom/fingerprint.mojom-forward.h"
 #include "services/media_session/public/cpp/media_session_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/video_capture/public/mojom/multi_capture_service.mojom-forward.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
@@ -107,6 +109,12 @@ class ASH_EXPORT ShellDelegate {
       mojo::PendingReceiver<multidevice_setup::mojom::MultiDeviceSetup>
           receiver) = 0;
 
+  // Binds a MultiCaptureService receiver to start observing
+  // MultiCaptureStarted() and MultiCaptureStopped() events.
+  virtual void BindMultiCaptureService(
+      mojo::PendingReceiver<video_capture::mojom::MultiCaptureService>
+          receiver) = 0;
+
   // Returns an interface to the Media Session service, or null if not
   // available.
   virtual media_session::MediaSessionService* GetMediaSessionService();
@@ -140,6 +148,23 @@ class ASH_EXPORT ShellDelegate {
   // Returns the last committed URL from the web contents if the given |window|
   // contains a browser frame, otherwise returns GURL::EmptyURL().
   virtual const GURL& GetLastCommittedURLForWindowIfAny(aura::Window* window);
+
+  // Retrieves the release track on which the device resides.
+  virtual version_info::Channel GetChannel() = 0;
+
+  // Tells browsers not to ask the user to confirm that they want to close a
+  // window when that window is closed.
+  virtual void ForceSkipWarningUserOnClose(
+      const std::vector<aura::Window*>& windows) = 0;
+
+  // Retrieves the official Chrome version string e.g. 105.0.5178.0.
+  virtual std::string GetVersionString() = 0;
+
+  // Forwards the ShouldExitFullscreenBeforeLock() call to the crosapi browser
+  // manager.
+  using ShouldExitFullscreenCallback = base::OnceCallback<void(bool)>;
+  virtual void ShouldExitFullscreenBeforeLock(
+      ShouldExitFullscreenCallback callback);
 };
 
 }  // namespace ash

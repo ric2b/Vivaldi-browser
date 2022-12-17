@@ -78,6 +78,7 @@ namespace http://www.w3.org/1999/xhtml
     property baseURI
     property before
     property blur
+    property checkVisibility
     property childElementCount
     property childNodes
     property children
@@ -95,6 +96,7 @@ namespace http://www.w3.org/1999/xhtml
     property contains
     property contentEditable
     property dataset
+    property defaultOpen
     property dir
     property dispatchEvent
     property draggable
@@ -122,6 +124,7 @@ namespace http://www.w3.org/1999/xhtml
     property hasChildNodes
     property hasPointerCapture
     property hidden
+    property hidePopUp
     property id
     property inert
     property innerHTML
@@ -163,6 +166,7 @@ namespace http://www.w3.org/1999/xhtml
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforeinput
     property onbeforematch
     property onbeforepaste
     property onbeforexrselect
@@ -268,6 +272,10 @@ namespace http://www.w3.org/1999/xhtml
     property parentElement
     property parentNode
     property part
+    property popUp
+    property popUpHideTarget
+    property popUpShowTarget
+    property popUpToggleTarget
     property prefix
     property prepend
     property previousElementSibling
@@ -300,8 +308,10 @@ namespace http://www.w3.org/1999/xhtml
     property setAttributeNS
     property setAttributeNode
     property setAttributeNodeNS
+    property setHTML
     property setPointerCapture
     property shadowRoot
+    property showPopUp
     property slot
     property spellcheck
     property style
@@ -752,6 +762,7 @@ html element li
     property value
 html element link
     property as
+    property blocking
     property charset
     property crossOrigin
     property disabled
@@ -898,6 +909,7 @@ html element s
 html element samp
 html element script
     property async
+    property blocking
     property charset
     property crossOrigin
     property defer
@@ -953,6 +965,7 @@ html element span
 html element strike
 html element strong
 html element style
+    property blocking
     property disabled
     property media
     property sheet
@@ -1256,6 +1269,7 @@ namespace http://www.w3.org/2000/svg
     property baseURI
     property before
     property blur
+    property checkVisibility
     property childElementCount
     property childNodes
     property children
@@ -1271,6 +1285,7 @@ namespace http://www.w3.org/2000/svg
     property computedStyleMap
     property contains
     property dataset
+    property defaultOpen
     property dispatchEvent
     property elementTiming
     property firstChild
@@ -1294,6 +1309,7 @@ namespace http://www.w3.org/2000/svg
     property hasAttributes
     property hasChildNodes
     property hasPointerCapture
+    property hidePopUp
     property id
     property innerHTML
     property insertAdjacentElement
@@ -1325,6 +1341,7 @@ namespace http://www.w3.org/2000/svg
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforeinput
     property onbeforematch
     property onbeforepaste
     property onbeforexrselect
@@ -1430,6 +1447,10 @@ namespace http://www.w3.org/2000/svg
     property parentElement
     property parentNode
     property part
+    property popUp
+    property popUpHideTarget
+    property popUpShowTarget
+    property popUpToggleTarget
     property prefix
     property prepend
     property previousElementSibling
@@ -1462,8 +1483,10 @@ namespace http://www.w3.org/2000/svg
     property setAttributeNS
     property setAttributeNode
     property setAttributeNodeNS
+    property setHTML
     property setPointerCapture
     property shadowRoot
+    property showPopUp
     property slot
     property style
     property tabIndex

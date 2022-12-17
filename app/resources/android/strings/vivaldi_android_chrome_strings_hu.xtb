@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
 <translation id="1397811292916898096">Keresés a(z) <ph name="PRODUCT_NAME" /> keresőmotorral</translation>
+<translation id="1456207338570705181">Az "Érintéses keresés" egy olyan funkció, mely csak akkor érhető el, ha a Vivaldi alakértelmezett keresőmotorja a Google. Elküldi a kiválasztott szót és az aktuális oldalt a Google keresőnek. A <ph name="BEGIN_LINK" />Beállítások<ph name="END_LINK" /> alatt kikapcsolható.</translation>
 <translation id="1598449788754183301">Normál/privát lap váltása</translation>
 <translation id="1644574205037202324">Előzmények</translation>
 <translation id="17513872634828108">Megnyitott lapok</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Új privát lap</translation>
 <translation id="4243710787042215766">Megnyitás privát lapon</translation>
 <translation id="4526803704855831732">Privát lapok</translation>
+<translation id="4719086422742491124">Az oldal elhagyása nélkül tudj meg többet a weboldalak témáiról. Válassz ki egy vagy több szót az oldalon a keresésükhöz.
+
+Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett keresőmotorja a Google.</translation>
 <translation id="4759238208242260848">Letöltések</translation>
 <translation id="4883379392681899581">Privát mód elhagyása</translation>
 <translation id="4943872375798546930">Nincs találat</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> tárhely</translation>
 <translation id="5186185447130319458">Privát</translation>
 <translation id="5233638681132016545">Új lap</translation>
-<translation id="572328651809341494">Nemrég megnyitott lapok</translation>
-<translation id="5840488417521835756">Megtudhatod a webhelyek témaköreit anélkül, hogy elhagynád az oldalt. A Keresés koppintással funkció csak akkor érhető el, ha a Google a Vivaldi alapértelmezett keresője. Elküld egy szót és annak kontextusát a Google Kereső számára, majd meghatározásokat, képeket, keresési eredményeket és egyéb részleteket ad vissza.
+<translation id="5375131951310889874">Az oldal elhagyása nélkül tudj meg többet a weboldalak témáiról. Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett keresőmotorja a Google. Egy szót és annak szövegkörnyezetét elküldi a Google keresőnek, mely fogalmakat, képeket, keresési eredményeket és egyéb részleteket ad vissza.
 
-A keresési kifejezést hosszú nyomva tartással módosíthatod. A keresés finomításához csúsztasd a panelt teljesen fel, majd érintsd meg a keresőmezőt.</translation>
+A keresési kifejezés módosításához tarts hosszan nyomva. A keresés finomításához teljesen húzd fel a panelt, és koppintson a keresőmezőre.</translation>
+<translation id="572328651809341494">Nemrég megnyitott lapok</translation>
 <translation id="6150320133806434356">Könyvjelző mentve</translation>
 <translation id="6336451774241870485">Új privát lap</translation>
 <translation id="6585139692466700358">Oldalak fordítása más nyelvekre a Vivaldi fordítás szolgáltatása segítségével</translation>
@@ -53,7 +57,6 @@ A keresési kifejezést hosszú nyomva tartással módosíthatod. A keresés fin
 <translation id="732145680195464316">Könyvjelző mentve (<ph name="PRODUCT_NAME" />)</translation>
 <translation id="7427132068601343474">A Vivaldi névjegye</translation>
 <translation id="7465104139234185284">Minden privát lap bezárása</translation>
-<translation id="7519434535192513364">A Keresés koppintással funkció csak akkor érhető el, ha a Google a Vivaldi alapértelmezett keresője. Elküld egy szót és annak kontextusát a Google Kereső számára. A funkciót a <ph name="BEGIN_LINK" />Beállításokban<ph name="END_LINK" /> lehet kikapcsolni.</translation>
 <translation id="804786196054284061">Általános Szerződési Feltételek</translation>
 <translation id="85991616550051997">Kezdőlapra ugrás</translation>
 <translation id="8820817407110198400">Könyvjelzők</translation>

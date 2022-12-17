@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> ilə axtarın</translation>
+<translation id="1456207338570705181">Toxunmaqla axtarış funksiyası yalnız, Vivaldidə Google standart axtraış vasitəsi kimi təyin edildiytində mümkün olur. O, seçilmiş sözü və cari səhifəni kontekst kimi Google axtarışına göndərir. Siz bu funksiyanı <ph name="BEGIN_LINK" />Ayarlar<ph name="END_LINK" /> səhifəsində dəyişə bilərsiniz.</translation>
 <translation id="1598449788754183301">Adi və gizli vərəqlər arası keçid</translation>
 <translation id="1644574205037202324">Tarixçə</translation>
 <translation id="17513872634828108">Vərəqləri açın</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Yeni məxfi vərəq</translation>
 <translation id="4243710787042215766">Məxfi pəncərədə açın</translation>
 <translation id="4526803704855831732">Məxfi vərəqlər</translation>
+<translation id="4719086422742491124">Səhifəni tərk etmədən daha çox məlumat əldə edin. Səhifədə axtarmaq istədiyiniz sözlərdən bir və ya bir neçəsini seçin.
+
+Bir toxunuşla axtarış yalnız Vivaldidə Google standart axtarış mühərriki kimi təyin edildiyində mümkündür.</translation>
 <translation id="4759238208242260848">Endirmələr</translation>
 <translation id="4883379392681899581">Məxfi rejimdən çıxın</translation>
 <translation id="4943872375798546930">Nəticə yoxdur</translation>
@@ -39,10 +43,10 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" /> yaddaş sahəsi</translation>
 <translation id="5186185447130319458">Gizli</translation>
 <translation id="5233638681132016545">Yeni vərəq</translation>
-<translation id="572328651809341494">Əvvəlki vərəqlər</translation>
-<translation id="5840488417521835756">Mövzuları səhifəni tərk etmədən öyrənin. Vivaldi'də sürətli axtarış, yalnız standart axtarış vasitəsi Google təyin edildiyində işləyir. Sadəcə sözü seçin və o, Google'də axtarışa veriləcəkdir.
+<translation id="5375131951310889874">Səhifəni tərk etmədən daha çox məlumat əldə edin. Bir toxunuşla axtarış funksiyası yalnız Vivaldidə Google standart axtarış mühərriki təyin edildiyində mümkündür. O, sözü və ona uyğun məzmunu Google-də axtarışa göndərir və uyğun təsviri, şəkilləri və digər axtarış nəticələrini qaytarır.
 
-Yeni axtarış sorğusu üçün, lazımi sözün üzərinə basaraq saxlayın. Sorğunu dəqiqləşdirmək üçün, paneli yuxarı sürüşdürün və axtarış pəncərəsinə toxunun.</translation>
+Axtarış qaydalarını tənzimləmək üçün basıb saxlayın. Axtarış vasitəsini dəyişmək üçün paneli açın və axtarış vasitəsini seçin.</translation>
+<translation id="572328651809341494">Əvvəlki vərəqlər</translation>
 <translation id="6150320133806434356">Əlfəcin saxlanıldı</translation>
 <translation id="6336451774241870485">Yeni məxfi vərəq</translation>
 <translation id="6585139692466700358">Vivaldi'nin tərcümə xidmətindən istifadə edərək, səhifələrin digər dillərə tərcüməsi təklif olunsun</translation>
@@ -53,7 +57,6 @@ Yeni axtarış sorğusu üçün, lazımi sözün üzərinə basaraq saxlayın. S
 <translation id="732145680195464316">Əlfəcin, <ph name="PRODUCT_NAME" /> tətbiqinə əlavə edildi</translation>
 <translation id="7427132068601343474">Vivaldi Haqqında</translation>
 <translation id="7465104139234185284">Bütün məxfii vərəqləri bağlayın</translation>
-<translation id="7519434535192513364">Sürətli axtarış yalnız, Vivaldi'də standart axtarış vasitəsi Google təyin olunduğunda işləyir. Seçilmiş söz, məzmunu ilə birlikdə axtarışa göndəriləcəkdir. Bu funksiyanı <ph name="END_LINK" /> ayarlarında, <ph name="BEGIN_LINK" /> keçidindən söndürmək olar.</translation>
 <translation id="804786196054284061">Son İstifadəçi Lisenziya Razılaşması</translation>
 <translation id="85991616550051997">Ev səhifəsinə keçin</translation>
 <translation id="8820817407110198400">Əlfəcinlər</translation>

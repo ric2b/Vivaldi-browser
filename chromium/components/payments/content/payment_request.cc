@@ -67,7 +67,7 @@ mojom::PaymentAddressPtr RedactShippingAddress(
 }  // namespace
 
 PaymentRequest::PaymentRequest(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     std::unique_ptr<ContentPaymentRequestDelegate> delegate,
     base::WeakPtr<PaymentRequestDisplayManager> display_manager,
     mojo::PendingReceiver<mojom::PaymentRequest> receiver,
@@ -75,7 +75,7 @@ PaymentRequest::PaymentRequest(
     base::WeakPtr<ObserverForTest> observer_for_testing)
     : DocumentService(render_frame_host, std::move(receiver)),
       WebContentsObserver(
-          content::WebContents::FromRenderFrameHost(render_frame_host)),
+          content::WebContents::FromRenderFrameHost(&render_frame_host)),
       log_(web_contents()),
       delegate_(std::move(delegate)),
       display_manager_(display_manager),
@@ -83,12 +83,12 @@ PaymentRequest::PaymentRequest(
       top_level_origin_(url_formatter::FormatUrlForSecurityDisplay(
           web_contents()->GetLastCommittedURL())),
       frame_origin_(url_formatter::FormatUrlForSecurityDisplay(
-          render_frame_host->GetLastCommittedURL())),
-      frame_security_origin_(render_frame_host->GetLastCommittedOrigin()),
+          render_frame_host.GetLastCommittedURL())),
+      frame_security_origin_(render_frame_host.GetLastCommittedOrigin()),
       spc_transaction_mode_(spc_transaction_mode),
       observer_for_testing_(observer_for_testing),
       journey_logger_(delegate_->IsOffTheRecord(),
-                      render_frame_host->GetPageUkmSourceId()) {
+                      render_frame_host.GetPageUkmSourceId()) {
   payment_handler_host_ = std::make_unique<PaymentHandlerHost>(
       web_contents(), weak_ptr_factory_.GetWeakPtr());
 }
@@ -197,7 +197,7 @@ void PaymentRequest::Init(
       /*observer=*/weak_ptr_factory_.GetWeakPtr(),
       delegate_->GetApplicationLocale());
   state_ = std::make_unique<PaymentRequestState>(
-      render_frame_host(), top_level_origin_, frame_origin_,
+      &render_frame_host(), top_level_origin_, frame_origin_,
       frame_security_origin_, spec(),
       /*delegate=*/weak_ptr_factory_.GetWeakPtr(),
       delegate_->GetApplicationLocale(), delegate_->GetPersonalDataManager(),
@@ -221,13 +221,6 @@ void PaymentRequest::Init(
                             url != google_play_billing_url;
                    });
   std::vector<JourneyLogger::PaymentMethodCategory> method_categories;
-  // Note that only a test can add autofill payment apps when basic-card
-  // feature is disabled.
-  if (base::FeatureList::IsEnabled(::features::kPaymentRequestBasicCard) &&
-      !spec_->supported_card_networks().empty()) {
-    method_categories.push_back(
-        JourneyLogger::PaymentMethodCategory::kBasicCard);
-  }
   if (base::Contains(spec_->url_payment_method_identifiers(), google_pay_url) ||
       base::Contains(spec_->url_payment_method_identifiers(),
                      android_pay_url)) {
@@ -291,7 +284,6 @@ void PaymentRequest::Show(bool wait_for_updated_details) {
   journey_logger_.RecordCheckoutStep(
       JourneyLogger::CheckoutFunnelStep::kShowCalled);
   is_show_called_ = true;
-  journey_logger_.SetTriggerTime();
 
   // A tab can display only one PaymentRequest UI at a time.
   if (display_manager_)
@@ -328,9 +320,6 @@ void PaymentRequest::Show(bool wait_for_updated_details) {
     spec_->AddInitializationObserver(this);
   } else {
     DCHECK(spec_->details().total);
-    journey_logger_.RecordTransactionAmount(
-        spec_->details().total->amount->currency,
-        spec_->details().total->amount->value, false /*completed*/);
   }
 
   // If an app store billing payment method is one of the payment methods being
@@ -424,9 +413,6 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
 
   if (is_resolving_promise_passed_into_show_method) {
     DCHECK(spec_->details().total);
-    journey_logger_.RecordTransactionAmount(
-        spec_->details().total->amount->currency,
-        spec_->details().total->amount->value, false /*completed*/);
     if (is_requested_methods_supported_invoked_) {
       if (SatisfiesSkipUIConstraints()) {
         Pay();
@@ -525,9 +511,6 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
     journey_logger_.SetCompleted();
     has_recorded_completion_ = true;
     DCHECK(spec_->details().total);
-    journey_logger_.RecordTransactionAmount(
-        spec_->details().total->amount->currency,
-        spec_->details().total->amount->value, true /*completed*/);
 
     delegate_->GetPrefService()->SetBoolean(kPaymentsFirstTransactionCompleted,
                                             true);
@@ -640,7 +623,7 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
     observer_for_testing_->OnAppListReady(weak_ptr_factory_.GetWeakPtr());
   }
 
-  if (render_frame_host()->IsActive() &&
+  if (render_frame_host().IsActive() &&
       spec_->IsSecurePaymentConfirmationRequested() &&
       state()->available_apps().empty() &&
       base::FeatureList::IsEnabled(::features::kSecurePaymentConfirmation) &&
@@ -721,9 +704,7 @@ bool PaymentRequest::OnlySingleAppCanProvideAllRequiredInformation() const {
 
   if (!spec()->request_shipping() && !spec()->request_payer_name() &&
       !spec()->request_payer_phone() && !spec()->request_payer_email()) {
-    return state()->available_apps().size() == 1 &&
-           state()->available_apps().at(0)->type() !=
-               PaymentApp::Type::AUTOFILL;
+    return state()->available_apps().size() == 1;
   }
 
   bool an_app_can_provide_all_info = false;
@@ -877,7 +858,7 @@ void PaymentRequest::ReadyToCommitNavigation(
   // PaymentRequest is attached to.
   if (!navigation_in_frame_will_destroy_or_cache_document_in_frame(
           navigation_handle->GetPreviousRenderFrameHostId(),
-          render_frame_host())) {
+          &render_frame_host())) {
     return;
   }
 
@@ -933,8 +914,6 @@ JourneyLogger::PaymentMethodCategory PaymentRequest::GetSelectedMethodCategory()
   const PaymentApp* selected_app = state_->selected_app();
   DCHECK(selected_app);
   switch (state_->selected_app()->type()) {
-    case PaymentApp::Type::AUTOFILL:
-      return JourneyLogger::PaymentMethodCategory::kBasicCard;
     case PaymentApp::Type::SERVICE_WORKER_APP:
       // Intentionally fall through.
     case PaymentApp::Type::NATIVE_MOBILE_APP: {
@@ -998,7 +977,7 @@ void PaymentRequest::HasEnrolledInstrumentCallback(
           << "): hasEnrolledInstrument = " << has_enrolled_instrument;
 
   if (!spec_ || CanMakePaymentQueryFactory::GetInstance()
-                    ->GetForContext(render_frame_host()->GetBrowserContext())
+                    ->GetForContext(render_frame_host().GetBrowserContext())
                     ->CanQuery(top_level_origin_, frame_origin_,
                                spec_->query_for_quota())) {
     RespondToHasEnrolledInstrumentQuery(has_enrolled_instrument,

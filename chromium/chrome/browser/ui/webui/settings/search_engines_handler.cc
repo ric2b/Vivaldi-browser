@@ -103,101 +103,91 @@ void SearchEnginesHandler::OnJavascriptDisallowed() {
   pref_change_registrar_.RemoveAll();
 }
 
-std::unique_ptr<base::DictionaryValue>
-SearchEnginesHandler::GetSearchEnginesList() {
+base::Value::Dict SearchEnginesHandler::GetSearchEnginesList() {
   // Find the default engine.
   const TemplateURL* default_engine =
       list_controller_.GetDefaultSearchProvider();
-  int default_index =
+  absl::optional<size_t> default_index =
       list_controller_.table_model()->IndexOfTemplateURL(default_engine);
 
   // Build the first list (default search engines).
-  base::ListValue defaults;
-  int last_default_engine_index =
+  base::Value::List defaults;
+  size_t last_default_engine_index =
       list_controller_.table_model()->last_search_engine_index();
 
-  // Sanity check for https://crbug.com/781703.
-  CHECK_GE(last_default_engine_index, 0);
-
-  for (int i = 0; i < last_default_engine_index; ++i) {
+  for (size_t i = 0; i < last_default_engine_index; ++i) {
     // Third argument is false, as the engine is not from an extension.
-    defaults.Append(
-        base::Value(CreateDictionaryForEngine(i, i == default_index)));
+    defaults.Append(CreateDictionaryForEngine(i, i == default_index));
   }
 
   // Build the second list (active search engines). This will not have any
   // entries if the new Search Engines page is not enabled.
-  base::ListValue actives;
-  int last_active_engine_index =
+  base::Value::List actives;
+  size_t last_active_engine_index =
       list_controller_.table_model()->last_active_engine_index();
 
   CHECK_LE(last_default_engine_index, last_active_engine_index);
-  for (int i = std::max(last_default_engine_index, 0);
-       i < last_active_engine_index; ++i) {
+  for (size_t i = last_default_engine_index; i < last_active_engine_index;
+       ++i) {
     // Third argument is false, as the engine is not from an extension.
-    actives.Append(
-        base::Value(CreateDictionaryForEngine(i, i == default_index)));
+    actives.Append(CreateDictionaryForEngine(i, i == default_index));
   }
 
   // Build the second list (other search engines).
-  base::ListValue others;
-  int last_other_engine_index =
+  base::Value::List others;
+  size_t last_other_engine_index =
       list_controller_.table_model()->last_other_engine_index();
 
   // Sanity check for https://crbug.com/781703.
   CHECK_LE(last_active_engine_index, last_other_engine_index);
 
-  for (int i = std::max(last_active_engine_index, 0);
-       i < last_other_engine_index; ++i) {
-    others.Append(
-        base::Value(CreateDictionaryForEngine(i, i == default_index)));
+  for (size_t i = last_active_engine_index; i < last_other_engine_index; ++i) {
+    others.Append(CreateDictionaryForEngine(i, i == default_index));
   }
 
   // Build the third list (omnibox extensions).
-  base::ListValue extensions;
-  int engine_count = list_controller_.table_model()->RowCount();
+  base::Value::List extensions;
+  size_t engine_count = list_controller_.table_model()->RowCount();
 
   // Sanity check for https://crbug.com/781703.
   CHECK_LE(last_other_engine_index, engine_count);
 
-  for (int i = std::max(last_other_engine_index, 0); i < engine_count; ++i) {
-    extensions.Append(
-        base::Value(CreateDictionaryForEngine(i, i == default_index)));
+  for (size_t i = last_other_engine_index; i < engine_count; ++i) {
+    extensions.Append(CreateDictionaryForEngine(i, i == default_index));
   }
 
-  auto search_engines_info = std::make_unique<base::DictionaryValue>();
-  search_engines_info->SetKey("defaults", std::move(defaults));
-  search_engines_info->SetKey("actives", std::move(actives));
-  search_engines_info->SetKey("others", std::move(others));
-  search_engines_info->SetKey("extensions", std::move(extensions));
+  base::Value::Dict search_engines_info;
+  search_engines_info.Set("defaults", std::move(defaults));
+  search_engines_info.Set("actives", std::move(actives));
+  search_engines_info.Set("others", std::move(others));
+  search_engines_info.Set("extensions", std::move(extensions));
   return search_engines_info;
 }
 
 void SearchEnginesHandler::OnModelChanged() {
   AllowJavascript();
-  FireWebUIListener("search-engines-changed", *GetSearchEnginesList());
+  FireWebUIListener("search-engines-changed", GetSearchEnginesList());
 }
 
-void SearchEnginesHandler::OnItemsChanged(int start, int length) {
+void SearchEnginesHandler::OnItemsChanged(size_t start, size_t length) {
   OnModelChanged();
 }
 
-void SearchEnginesHandler::OnItemsAdded(int start, int length) {
+void SearchEnginesHandler::OnItemsAdded(size_t start, size_t length) {
   OnModelChanged();
 }
 
-void SearchEnginesHandler::OnItemsRemoved(int start, int length) {
+void SearchEnginesHandler::OnItemsRemoved(size_t start, size_t length) {
   OnModelChanged();
 }
 
 base::Value::Dict SearchEnginesHandler::CreateDictionaryForEngine(
-    int index,
+    size_t index,
     bool is_default) {
   TemplateURLTableModel* table_model = list_controller_.table_model();
   const TemplateURL* template_url = list_controller_.GetTemplateURL(index);
 
   // Sanity check for https://crbug.com/781703.
-  CHECK_GE(index, 0);
   CHECK_LT(index, table_model->RowCount());
   CHECK(template_url);
 
@@ -216,11 +206,12 @@ base::Value::Dict SearchEnginesHandler::CreateDictionaryForEngine(
   Profile* profile = Profile::FromWebUI(web_ui());
   dict.Set("url",
            template_url->url_ref().DisplayURL(UIThreadSearchTermsData()));
-  dict.Set("urlLocked", template_url->prepopulate_id() > 0);
+  dict.Set("urlLocked", ((template_url->prepopulate_id() > 0) ||
+                         (template_url->starter_pack_id() > 0)));
   GURL icon_url = template_url->favicon_url();
   if (icon_url.is_valid())
     dict.Set("iconURL", icon_url.spec());
-  dict.Set("modelIndex", index);
+  dict.Set("modelIndex", base::checked_cast<int>(index));
 
   dict.Set("canBeRemoved", list_controller_.CanRemove(template_url));
   dict.Set("canBeDefault", list_controller_.CanMakeDefault(template_url));
@@ -239,14 +230,13 @@ base::Value::Dict SearchEnginesHandler::CreateDictionaryForEngine(
             template_url->GetExtensionId(),
             extensions::ExtensionRegistry::EVERYTHING);
     if (extension) {
-      std::unique_ptr<base::DictionaryValue> ext_info =
+      base::Value::Dict ext_info =
           extensions::util::GetExtensionInfo(extension);
-      ext_info->SetBoolKey("canBeDisabled",
-                           !extensions::ExtensionSystem::Get(profile)
-                                ->management_policy()
-                                ->MustRemainEnabled(extension, nullptr));
-      dict.Set("extension",
-               base::Value::FromUniquePtrValue(std::move(ext_info)));
+      ext_info.Set("canBeDisabled",
+                   !extensions::ExtensionSystem::Get(profile)
+                        ->management_policy()
+                        ->MustRemainEnabled(extension, nullptr));
+      dict.Set("extension", std::move(ext_info));
     }
   }
   return dict;
@@ -257,15 +247,17 @@ void SearchEnginesHandler::HandleGetSearchEnginesList(
   CHECK_EQ(1U, args.size());
   const base::Value& callback_id = args[0];
   AllowJavascript();
-  ResolveJavascriptCallback(callback_id, *GetSearchEnginesList());
+  ResolveJavascriptCallback(callback_id, GetSearchEnginesList());
 }
 
 void SearchEnginesHandler::HandleSetDefaultSearchEngine(
     const base::Value::List& args) {
   CHECK_EQ(1U, args.size());
   int index = args[0].GetInt();
-  if (index < 0 || index >= list_controller_.table_model()->RowCount())
+  if (index < 0 || static_cast<size_t>(index) >=
+                       list_controller_.table_model()->RowCount()) {
     return;
+  }
 
   list_controller_.MakeDefaultTemplateURL(index);
 
@@ -278,8 +270,10 @@ void SearchEnginesHandler::HandleSetIsActiveSearchEngine(
   const int index = args[0].GetInt();
   const bool is_active = args[1].GetBool();
 
-  if (index < 0 || index >= list_controller_.table_model()->RowCount())
+  if (index < 0 || static_cast<size_t>(index) >=
+                       list_controller_.table_model()->RowCount()) {
     return;
+  }
 
   list_controller_.SetIsActiveTemplateURL(index, is_active);
 }
@@ -288,8 +282,10 @@ void SearchEnginesHandler::HandleRemoveSearchEngine(
     const base::Value::List& args) {
   CHECK_EQ(1U, args.size());
   int index = args[0].GetInt();
-  if (index < 0 || index >= list_controller_.table_model()->RowCount())
+  if (index < 0 || static_cast<size_t>(index) >=
+                       list_controller_.table_model()->RowCount()) {
     return;
+  }
 
   if (list_controller_.CanRemove(list_controller_.GetTemplateURL(index))) {
     list_controller_.RemoveTemplateURL(index);
@@ -302,16 +298,16 @@ void SearchEnginesHandler::HandleSearchEngineEditStarted(
   CHECK_EQ(1U, args.size());
   int index = args[0].GetInt();
 
-  // Allow -1, which means we are adding a new engine.
-  if (index < kNewSearchEngineIndex ||
-      index >= list_controller_.table_model()->RowCount()) {
+  TemplateURL* engine = nullptr;
+  if (index >= 0 &&
+      static_cast<size_t>(index) < list_controller_.table_model()->RowCount()) {
+    engine = list_controller_.GetTemplateURL(index);
+  } else if (index != kNewSearchEngineIndex) {
     return;
   }
 
   edit_controller_ = std::make_unique<EditSearchEngineController>(
-      index == kNewSearchEngineIndex ? nullptr
-                                     : list_controller_.GetTemplateURL(index),
-      this, Profile::FromWebUI(web_ui()));
+      engine, this, Profile::FromWebUI(web_ui()));
 }
 
 void SearchEnginesHandler::OnEditedKeyword(TemplateURL* template_url,

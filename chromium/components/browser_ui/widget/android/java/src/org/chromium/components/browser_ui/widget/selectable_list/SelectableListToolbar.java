@@ -387,7 +387,7 @@ public class SelectableListToolbar<E>
     /**
      * Shows the search edit text box and related views.
      */
-    public void showSearchView() {
+    public void showSearchView(boolean showKeyboard) {
         assert mHasSearchView;
 
         mIsSearching = true;
@@ -396,7 +396,10 @@ public class SelectableListToolbar<E>
         showSearchViewInternal();
 
         mSearchEditText.requestFocus();
-        KeyboardVisibilityDelegate.getInstance().showKeyboard(mSearchEditText);
+        if (showKeyboard) {
+            KeyboardVisibilityDelegate.getInstance().showKeyboard(mSearchEditText);
+        }
+
         setTitle(null);
     }
 

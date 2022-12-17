@@ -16,6 +16,7 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill_assistant/core/public/autofill_assistant_intent.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -189,10 +190,10 @@ class ContentAutofillRouter {
                               const FormFieldData& field,
                               const gfx::RectF& bounding_box);
   void AskForValuesToFill(ContentAutofillDriver* source_driver,
-                          int32_t query_id,
                           const FormData& form,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box,
+                          int32_t query_id,
                           bool autoselect_first_suggestion,
                           TouchToFillEligible touch_to_fill_eligible);
   void HidePopup(ContentAutofillDriver* source_driver);
@@ -215,10 +216,12 @@ class ContentAutofillRouter {
                                         const std::u16string& old_value);
 
   // Event called by Autofill Assistant as if it was called by the renderer.
-  void FillFormForAssistant(ContentAutofillDriver* source_driver,
-                            const AutofillableData& fill_data,
-                            const FormData& form,
-                            const FormFieldData& field);
+  void FillFormForAssistant(
+      ContentAutofillDriver* source_driver,
+      const AutofillableData& fill_data,
+      const FormData& form,
+      const FormFieldData& field,
+      const autofill_assistant::AutofillAssistantIntent intent);
 
   // Routing of events called by the browser:
   std::vector<FieldGlobalId> FillOrPreviewForm(

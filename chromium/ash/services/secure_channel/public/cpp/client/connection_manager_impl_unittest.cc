@@ -13,9 +13,11 @@
 #include "ash/services/secure_channel/public/cpp/client/fake_client_channel.h"
 #include "ash/services/secure_channel/public/cpp/client/fake_connection_attempt.h"
 #include "ash/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
+#include "ash/services/secure_channel/public/cpp/client/nearby_metrics_recorder.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel_types.mojom.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
@@ -31,13 +33,15 @@ using ::ash::multidevice_setup::mojom::HostStatus;
 
 const char kSecureChannelFeatureName[] = "phone_hub";
 const char kConnectionResultMetricName[] = "PhoneHub.Connection.Result";
+const char kConnectionFailureReasonMetricName[] =
+    "PhoneHub.Connection.Result.FailureReason";
 const char kConnectionDurationMetricName[] = "PhoneHub.Connection.Duration";
 const char kConnectionLatencyMetricName[] = "PhoneHub.Connectivity.Latency";
 
 constexpr base::TimeDelta kFakeConnectionLatencyTime(base::Seconds(3u));
 constexpr base::TimeDelta kFakeConnectionDurationTime(base::Seconds(10u));
 
-constexpr base::TimeDelta kExpectedTimeoutSeconds(base::Seconds(15u));
+constexpr base::TimeDelta kExpectedTimeout(base::Minutes(1u));
 
 class FakeObserver : public ConnectionManager::Observer {
  public:
@@ -60,6 +64,26 @@ class FakeObserver : public ConnectionManager::Observer {
   size_t status_changed_num_calls_ = 0;
   size_t message_received_num_calls_ = 0;
   std::string last_message_;
+};
+
+class TestMetricsRecorder : public NearbyMetricsRecorder {
+ public:
+  TestMetricsRecorder() = default;
+  ~TestMetricsRecorder() override {}
+
+  void RecordConnectionResult(bool success) override {
+    base::UmaHistogramBoolean(kConnectionResultMetricName, success);
+  }
+  void RecordConnectionFailureReason(
+      secure_channel::mojom::ConnectionAttemptFailureReason reason) override {
+    base::UmaHistogramEnumeration(kConnectionFailureReasonMetricName, reason);
+  }
+  void RecordConnectionLatency(const base::TimeDelta latency) override {
+    base::UmaHistogramTimes(kConnectionLatencyMetricName, latency);
+  }
+  void RecordConnectionDuration(const base::TimeDelta duration) override {
+    base::UmaHistogramLongTimes100(kConnectionDurationMetricName, duration);
+  }
 };
 
 }  // namespace
@@ -91,8 +115,7 @@ class ConnectionManagerImplTest : public testing::Test {
     connection_manager_ = base::WrapUnique(new ConnectionManagerImpl(
         &fake_multidevice_setup_client_, &fake_device_sync_client_,
         fake_secure_channel_client_.get(), std::move(timer),
-        kSecureChannelFeatureName, kConnectionResultMetricName,
-        kConnectionLatencyMetricName, kConnectionDurationMetricName,
+        kSecureChannelFeatureName, std::make_unique<TestMetricsRecorder>(),
         test_clock_.get()));
     connection_manager_->AddObserver(&fake_observer_);
     EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
@@ -124,7 +147,7 @@ class ConnectionManagerImplTest : public testing::Test {
 
   void VerifyTimerSet() {
     EXPECT_TRUE(mock_timer_->IsRunning());
-    EXPECT_EQ(kExpectedTimeoutSeconds, mock_timer_->GetCurrentDelay());
+    EXPECT_EQ(kExpectedTimeout, mock_timer_->GetCurrentDelay());
   }
 
   void VerifyTimerStopped() { EXPECT_FALSE(mock_timer_->IsRunning()); }
@@ -136,6 +159,13 @@ class ConnectionManagerImplTest : public testing::Test {
 
   void VerifyConnectionResultHistogram(
       base::HistogramBase::Sample sample,
+      base::HistogramBase::Count expected_count) {
+    histogram_tester_.ExpectBucketCount(kConnectionResultMetricName, sample,
+                                        expected_count);
+  }
+
+  void VerifyConnectionFailureReasonHistogram(
+      secure_channel::mojom::ConnectionAttemptFailureReason sample,
       base::HistogramBase::Count expected_count) {
     histogram_tester_.ExpectBucketCount(kConnectionResultMetricName, sample,
                                         expected_count);
@@ -196,6 +226,8 @@ TEST_F(ConnectionManagerImplTest, FailedToAttemptConnection) {
   EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
 
   VerifyConnectionResultHistogram(false, 1);
+  VerifyConnectionFailureReasonHistogram(
+      mojom::ConnectionAttemptFailureReason::AUTHENTICATION_ERROR, 1);
 }
 
 TEST_F(ConnectionManagerImplTest, SuccessfulAttemptConnectionButDisconnected) {

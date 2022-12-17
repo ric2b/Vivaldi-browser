@@ -5,8 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_PEERCONNECTION_RTC_EVENT_LOG_OUTPUT_SINK_PROXY_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_PEERCONNECTION_RTC_EVENT_LOG_OUTPUT_SINK_PROXY_H_
 
-#include <memory>
-
+#include "third_party/abseil-cpp/absl/strings/string_view.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/webrtc/api/rtc_event_log_output.h"
@@ -27,7 +26,7 @@ class PLATFORM_EXPORT RtcEventLogOutputSinkProxy final
 
   bool IsActive() const override;
 
-  bool Write(const std::string& output) override;
+  bool Write(absl::string_view output) override;
 
  private:
   CrossThreadWeakPersistent<RtcEventLogOutputSink> sink_;

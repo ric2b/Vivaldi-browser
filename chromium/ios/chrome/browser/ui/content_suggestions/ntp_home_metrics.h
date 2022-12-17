@@ -17,7 +17,7 @@ class WebState;
 
 namespace ntp_home {
 
-// Records an NTP impression of type |impression_type|.
+// Records an NTP impression of type `impression_type`.
 void RecordNTPImpression(ntp_home::IOSNTPImpression impression_type);
 
 }  // namespace ntp_home
@@ -29,7 +29,9 @@ enum class IOSContentSuggestionsActionType {
   kShortcuts = 1,
   kReturnToRecentTab = 2,
   kFeedCard = 3,
-  kMaxValue = kFeedCard,
+  kFakebox = 4,
+  kTrendingQuery = 5,
+  kMaxValue = kTrendingQuery,
 };
 
 // Metrics recorder for the action used to potentially leave the NTP.
@@ -42,12 +44,12 @@ enum class IOSContentSuggestionsActionType {
 // Currently active WebState with an active NTP.
 @property(nonatomic, assign) web::WebState* webState;
 
-// Whether |webState| is showing the Start Surface.
+// Whether `webState` is showing the Start Surface.
 @property(nonatomic, assign) BOOL showingStartSurface;
 
 - (void)recordAction:(new_tab_page_uma::ActionType)action;
 
-// Records a user action on a ContentSuggestions module |type|.
+// Records a user action on a ContentSuggestions module `type`.
 - (void)recordContentSuggestionsActionForType:
     (IOSContentSuggestionsActionType)type;
 

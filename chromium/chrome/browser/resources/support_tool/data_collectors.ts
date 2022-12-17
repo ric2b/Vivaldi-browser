@@ -4,14 +4,17 @@
 
 import './support_tool_shared.css.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserProxy, BrowserProxyImpl, DataCollectorItem} from './browser_proxy.js';
 import {getTemplate} from './data_collectors.html.js';
+import {SupportToolPageMixin} from './support_tool_page_mixin.js';
 
-export class DataCollectorsElement extends PolymerElement {
+const DataCollectorsElementBase = SupportToolPageMixin(PolymerElement);
+
+export class DataCollectorsElement extends DataCollectorsElementBase {
   static get is() {
     return 'data-collectors';
   }
@@ -25,7 +28,7 @@ export class DataCollectorsElement extends PolymerElement {
       dataCollectors_: {
         type: Array,
         value: () => [],
-      }
+      },
     };
   }
 

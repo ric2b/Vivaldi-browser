@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {SACache} from '/switch_access/cache.js';
-import {FocusRingManager} from '/switch_access/focus_ring_manager.js';
-import {Navigator} from '/switch_access/navigator.js';
-import {BackButtonNode} from '/switch_access/nodes/back_button_node.js';
-import {SAChildNode, SARootNode} from '/switch_access/nodes/switch_access_node.js';
-import {SwitchAccess} from '/switch_access/switch_access.js';
-import {SAConstants, SwitchAccessMenuAction} from '/switch_access/switch_access_constants.js';
-import {SwitchAccessPredicate} from '/switch_access/switch_access_predicate.js';
+import {constants} from '../../common/constants.js';
+import {AutomationTreeWalker} from '../../common/tree_walker.js';
+import {SACache} from '../cache.js';
+import {FocusRingManager} from '../focus_ring_manager.js';
+import {Navigator} from '../navigator.js';
+import {SwitchAccess} from '../switch_access.js';
+import {SAConstants, SwitchAccessMenuAction} from '../switch_access_constants.js';
+import {SwitchAccessPredicate} from '../switch_access_predicate.js';
+
+import {BackButtonNode} from './back_button_node.js';
+import {SAChildNode, SARootNode} from './switch_access_node.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 
@@ -298,7 +301,7 @@ export class BasicRootNode extends SARootNode {
     super.onFocus();
     this.childrenChangedHandler_ = new RepeatedEventHandler(
         this.automationNode, chrome.automation.EventType.CHILDREN_CHANGED,
-        (event) => {
+        event => {
           const cache = new SACache();
           if (SwitchAccessPredicate.isInterestingSubtree(event.target, cache)) {
             this.refresh();
@@ -316,7 +319,7 @@ export class BasicRootNode extends SARootNode {
 
   /** @override */
   refreshChildren() {
-    const childConstructor = (node) => BasicNode.create(node, this);
+    const childConstructor = node => BasicNode.create(node, this);
     try {
       BasicRootNode.findAndSetChildren(this, childConstructor);
     } catch (e) {
@@ -371,7 +374,7 @@ export class BasicRootNode extends SARootNode {
     }
 
     const root = new BasicRootNode(rootNode);
-    const childConstructor = (node) => BasicNode.create(node, root);
+    const childConstructor = node => BasicNode.create(node, root);
 
     BasicRootNode.findAndSetChildren(root, childConstructor);
     return root;
@@ -387,7 +390,7 @@ export class BasicRootNode extends SARootNode {
   static findAndSetChildren(root, childConstructor) {
     const interestingChildren = BasicRootNode.getInterestingChildren(root);
     const children = interestingChildren.map(childConstructor)
-                         .filter((child) => child.isValidAndVisible());
+                         .filter(child => child.isValidAndVisible());
 
     if (children.length < 1) {
       throw SwitchAccess.error(

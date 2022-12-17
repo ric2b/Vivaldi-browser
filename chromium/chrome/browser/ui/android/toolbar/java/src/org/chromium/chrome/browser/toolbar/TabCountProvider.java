@@ -9,10 +9,10 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 
 import java.util.List;
@@ -42,11 +42,6 @@ public class TabCountProvider {
 
     /** The {@link TabModelObserver} that observes when the tab count may have changed. */
     private TabModelObserver mTabModelFilterObserver;
-
-    /**
-     * The {@link TabGroupModelFilter.Observer} that observes when the tab count may have changed.
-     */
-    private TabGroupModelFilter.Observer mTabGroupModelFilterObserver;
 
     private int mTabCount;
 
@@ -124,7 +119,7 @@ public class TabCountProvider {
             }
 
             @Override
-            public void didCloseTab(Tab tab) {
+            public void onFinishingTabClosure(Tab tab) {
                 updateTabCount();
             }
 
@@ -152,31 +147,6 @@ public class TabCountProvider {
         mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(
                 mTabModelFilterObserver);
 
-        if (mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter()
-                        instanceof TabGroupModelFilter || BuildConfig.IS_VIVALDI) {
-            mTabGroupModelFilterObserver = new EmptyTabGroupModelFilterObserver() {
-                @Override
-                public void didMergeTabToGroup(Tab movedTab, int selectedTabIdInGroup) {
-                    updateTabCount();
-                }
-
-                @Override
-                public void didMoveTabOutOfGroup(Tab moveTab, int oldFilterIndex) {
-                    updateTabCount();
-                }
-
-                @Override
-                public void didCreateGroup(
-                        List<Tab> tabs, List<Integer> tabOriginalIndex, boolean isSameGroup) {
-                    updateTabCount();
-                }
-            };
-
-            ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                            .getCurrentTabModelFilter(true)) // Vivaldi
-                    .addTabGroupObserver(mTabGroupModelFilterObserver);
-        }
-
         updateTabCount();
     }
 
@@ -187,12 +157,6 @@ public class TabCountProvider {
         if (mTabModelFilterObserver != null) {
             mTabModelSelector.getTabModelFilterProvider().removeTabModelFilterObserver(
                     mTabModelFilterObserver);
-        }
-
-        if (mTabGroupModelFilterObserver != null) {
-            ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                            .getCurrentTabModelFilter(true)) // Vivaldi
-                    .removeTabGroupObserver(mTabGroupModelFilterObserver);
         }
 
         if (mTabModelSelector != null) {
@@ -208,8 +172,11 @@ public class TabCountProvider {
         if (mTabModelSelector == null) return;
         if (!mTabModelSelector.isTabStateInitialized()) return;
 
-        final int tabCount =
-                mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter().getCount();
+        final TabModelFilter modelFilter =
+                mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
+        final int tabCount = (modelFilter instanceof TabGroupModelFilter)
+                ? ((TabGroupModelFilter) modelFilter).getTotalTabCount()
+                : modelFilter.getCount();
         final boolean isIncognito = mTabModelSelector.isIncognitoSelected();
 
         if (mTabCount == tabCount && mIsIncognito == isIncognito) return;

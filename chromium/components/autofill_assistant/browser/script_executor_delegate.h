@@ -37,11 +37,11 @@ class WebContents;
 namespace autofill_assistant {
 
 class Service;
-class WebController;
-struct ClientSettings;
 class TriggerContext;
-class WebsiteLoginManager;
 class UserModel;
+class WebController;
+class WebsiteLoginManager;
+struct ClientSettings;
 
 class ScriptExecutorDelegate {
  public:
@@ -64,6 +64,7 @@ class ScriptExecutorDelegate {
   virtual password_manager::PasswordChangeSuccessTracker*
   GetPasswordChangeSuccessTracker() = 0;
   virtual content::WebContents* GetWebContents() = 0;
+  virtual const std::string GetLocale() = 0;
 
   virtual void SetJsFlowLibrary(const std::string& js_flow_library) = 0;
   virtual JsFlowDevtoolsWrapper* GetJsFlowDevtoolsWrapper() = 0;
@@ -92,6 +93,7 @@ class ScriptExecutorDelegate {
   virtual void SetClientSettings(
       const ClientSettingsProto& client_settings) = 0;
   virtual UserModel* GetUserModel() = 0;
+  virtual UserData* GetUserData() = 0;
 
   // The next navigation is expected and will not cause an error.
   virtual void ExpectNavigation() = 0;
@@ -155,6 +157,19 @@ class ScriptExecutorDelegate {
   // Returns whether or not this instance of Autofill Assistant must use a
   // backend endpoint to query data.
   virtual bool MustUseBackendData() const = 0;
+
+  // Checks if given XML is signed or not.
+  virtual bool IsXmlSigned(const std::string& xml_string) const = 0;
+
+  // Extracts attribute values from the |xml_string| corresponding to the
+  // |keys|.
+  virtual const std::vector<std::string> ExtractValuesFromSingleTagXml(
+      const std::string& xml_string,
+      const std::vector<std::string>& keys) const = 0;
+
+  // Called when a new action response has been received. Used for metrics.
+  virtual void OnActionsResponseReceived(
+      const RoundtripNetworkStats& network_stats) = 0;
 
  protected:
   virtual ~ScriptExecutorDelegate() = default;

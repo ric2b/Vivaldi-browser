@@ -76,6 +76,12 @@ struct AutocompleteMatchType {
     TILE_NAVSUGGEST             = 29,  // A suggestion with navigation tiles.
     OPEN_TAB                    = 30,  // A URL match amongst the currently open
                                        // tabs.
+    HISTORY_CLUSTER             = 31,  // A history cluster suggestion.
+    NULL_RESULT_MESSAGE         = 32,  // A suggestion whose purpose is only to
+                                       // deliver a message. This suggestion
+                                       // cannot be opened or acted upon.
+    STARTER_PACK     = 33,  // A URL suggestion that a starter pack
+                                       // keyword mode chip attaches to.
     NUM_TYPES,
   };
   // clang-format on

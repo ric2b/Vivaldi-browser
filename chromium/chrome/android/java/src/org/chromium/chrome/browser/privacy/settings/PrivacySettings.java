@@ -10,7 +10,6 @@ import android.text.SpannableString;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.ViewGroup;
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -23,7 +22,6 @@ import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingSwitch
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsFragment;
 import org.chromium.chrome.browser.privacy.secure_dns.SecureDnsSettings;
-import org.chromium.chrome.browser.privacy_review.PrivacyReviewDialog;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridge;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxReferrer;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsFragment;
@@ -37,7 +35,6 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.usage_stats.UsageStatsConsentDialog;
-import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
@@ -68,24 +65,17 @@ public class PrivacySettings
     private static final String PREF_SYNC_AND_SERVICES_LINK = "sync_and_services_link";
     private static final String PREF_CLEAR_BROWSING_DATA = "clear_browsing_data";
     private static final String PREF_PRIVACY_SANDBOX = "privacy_sandbox";
-    private static final String PREF_PRIVACY_REVIEW = "privacy_review";
+    private static final String PREF_PRIVACY_GUIDE = "privacy_guide";
     private static final String PREF_INCOGNITO_LOCK = "incognito_lock";
 
     // Vivaldi
     private static final String PREF_CLEAR_SESSION_BROWSING_DATA = "clear_session_browsing_data";
     private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
     private static final String PREF_WEBRTC_BROADCAST_IP = "webrtc_broadcast_ip";
-
-    private static final String[] NEW_PRIVACY_PREFERENCE_ORDER = {PREF_CLEAR_BROWSING_DATA,
-            // Vivaldi
-            PREF_CLEAR_SESSION_BROWSING_DATA, PREF_CONTEXTUAL_SEARCH, PREF_WEBRTC_BROADCAST_IP,
-            PREF_SAFE_BROWSING, PREF_CAN_MAKE_PAYMENT, PREF_USAGE_STATS, PREF_SECURE_DNS,
-            PREF_DO_NOT_TRACK, PREF_PRIVACY_SANDBOX, PREF_SYNC_AND_SERVICES_LINK};
+    private static final String PREF_PHONE_AS_A_SECURITY_KEY = "phone_as_a_security_key";
 
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
     private IncognitoLockSettings mIncognitoLockSettings;
-    private ViewGroup mDialogContainer;
-    private BottomSheetController mBottomSheetController;
 
     /**
      * Vivaldi
@@ -121,17 +111,9 @@ public class PrivacySettings
         }
         } // Vivaldi
 
-        Preference privacyReviewPreference = findPreference(PREF_PRIVACY_REVIEW);
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_REVIEW)) {
-            getPreferenceScreen().removePreference(privacyReviewPreference);
-        } else {
-            // Display the privacy review dialog when the menu item is clicked.
-            privacyReviewPreference.setOnPreferenceClickListener(preference -> {
-                PrivacyReviewDialog dialog = new PrivacyReviewDialog(
-                        getContext(), mDialogContainer, mBottomSheetController);
-                dialog.show();
-                return true;
-            });
+        Preference privacyGuidePreference = findPreference(PREF_PRIVACY_GUIDE);
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_GUIDE)) {
+            getPreferenceScreen().removePreference(privacyGuidePreference);
         }
 
         IncognitoReauthSettingSwitchPreference incognitoReauthPreference =
@@ -178,6 +160,10 @@ public class PrivacySettings
                 getActivity().setTitle(R.string.prefs_privacy_security);
                 getPreferenceScreen().removePreference(prefSafeBrowsing);
             }
+            Preference phoneAsASecurityKeyPreference = findPreference(PREF_PHONE_AS_A_SECURITY_KEY);
+            if (phoneAsASecurityKeyPreference != null)
+                getPreferenceScreen().removePreference(phoneAsASecurityKeyPreference);
+
         } else {
         Preference syncAndServicesLink = findPreference(PREF_SYNC_AND_SERVICES_LINK);
         syncAndServicesLink.setSummary(buildSyncAndServicesLink());
@@ -362,13 +348,5 @@ public class PrivacySettings
             return true;
         }
         return false;
-    }
-
-    public void setDialogContainer(ViewGroup dialogContainer) {
-        mDialogContainer = dialogContainer;
-    }
-
-    public void setBottomSheetController(BottomSheetController controller) {
-        mBottomSheetController = controller;
     }
 }

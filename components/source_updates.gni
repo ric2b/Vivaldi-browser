@@ -6,12 +6,6 @@ update_target("//content/public/browser:browser_sources") {
   ]
 }
 
-update_target("//content/renderer:renderer") {
-  sources += [
-    "//vivaldi/components/content/vivaldi_render_views.cc",
-  ]
-}
-
 update_target("//components/content_settings/renderer:renderer") {
   sources += [
     "//vivaldi/components/blink/vivaldi_content_settings_agent_impl.cc",
@@ -38,7 +32,6 @@ update_target("//content/browser:browser") {
     "//vivaldi/components/content/vivaldi_content_delegates.h",
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
-    "//vivaldi/components/content/vivaldi_renderers.cc",
     "//vivaldi/components/content/vivaldi_web_contents.cc",
   ]
   deps += [
@@ -90,6 +83,8 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/datasource/vivaldi_image_store.h",
     "//vivaldi/components/datasource/vivaldi_theme_io.cc",
     "//vivaldi/components/datasource/vivaldi_theme_io.h",
+    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.cc",
+    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.h",
     "//vivaldi/components/theme/vivaldi_theme_download.cc",
     "//vivaldi/components/theme/vivaldi_theme_download.h",
   ]

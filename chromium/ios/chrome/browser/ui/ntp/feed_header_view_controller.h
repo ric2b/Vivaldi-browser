@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/discover_feed/feed_constants.h"
 
 @protocol FeedControlDelegate;
+@class FeedMetricsRecorder;
 @protocol NewTabPageDelegate;
 
 @interface FeedHeaderViewController : UIViewController
@@ -26,6 +27,9 @@
 // The currently selected sorting for the Following feed.
 @property(nonatomic, assign) FollowingFeedSortType followingFeedSortType;
 
+// Feed metrics recorder.
+@property(nonatomic, weak) FeedMetricsRecorder* feedMetricsRecorder;
+
 // Initializes the header with the currently selected feed and the Following
 // feed's sort type.
 - (instancetype)initWithFollowingFeedSortType:
@@ -39,7 +43,7 @@
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
 // Toggles the feed header's background blur. Animates the transition if
-// |animated| is YES.
+// `animated` is YES.
 - (void)toggleBackgroundBlur:(BOOL)blurred animated:(BOOL)animated;
 
 // Returns the height of the feed header.
@@ -63,6 +67,9 @@
 
 // Updates the header for when the Following Feed visibility has changed.
 - (void)updateForFollowingFeedVisibilityChanged;
+
+// Updates the segmented control and sort button for the current feed type.
+- (void)updateForSelectedFeed;
 
 @end
 

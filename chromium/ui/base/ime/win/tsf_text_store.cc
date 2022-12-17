@@ -471,8 +471,8 @@ HRESULT TSFTextStore::InsertTextAtSelection(DWORD flags,
       LONG old_delta = (LONG)replace_text_range_.start() -
                        (LONG)replace_text_range_.end() + replace_text_size_;
       LONG new_delta = start_pos - end_pos + text_buffer_size;
-      replace_text_range_.set_start(
-          std::min((uint32_t)start_pos, replace_text_range_.start()));
+      replace_text_range_.set_start(std::min(static_cast<size_t>(start_pos),
+                                             replace_text_range_.start()));
       // New replacement text ends after previous replacement text. We need to
       // use the new end after adjusting with previous delta.
       if ((uint32_t)end_pos >=
@@ -950,8 +950,8 @@ void TSFTextStore::DispatchKeyEvent(ui::EventType type,
                                     lparam};
   ui::KeyEvent key_event = KeyEventFromMSG(key_event_MSG);
 
-  if (input_method_delegate_) {
-    input_method_delegate_->DispatchKeyEventPostIME(&key_event);
+  if (ime_key_event_dispatcher_) {
+    ime_key_event_dispatcher_->DispatchKeyEventPostIME(&key_event);
   }
 }
 
@@ -1317,13 +1317,13 @@ void TSFTextStore::RemoveFocusedTextInputClient(
   }
 }
 
-void TSFTextStore::SetInputMethodDelegate(
-    internal::InputMethodDelegate* delegate) {
-  input_method_delegate_ = delegate;
+void TSFTextStore::SetImeKeyEventDispatcher(
+    ImeKeyEventDispatcher* ime_key_event_dispatcher) {
+  ime_key_event_dispatcher_ = ime_key_event_dispatcher;
 }
 
-void TSFTextStore::RemoveInputMethodDelegate() {
-  input_method_delegate_ = nullptr;
+void TSFTextStore::RemoveImeKeyEventDispatcher() {
+  ime_key_event_dispatcher_ = nullptr;
 }
 
 bool TSFTextStore::CancelComposition() {

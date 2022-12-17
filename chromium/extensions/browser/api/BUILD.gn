@@ -98,10 +98,10 @@ source_set("api") {
 
     deps += [
       "//chromeos",
+      "//chromeos/ash/components/dbus",
       "//chromeos/ash/components/dbus/media_analytics",
       "//chromeos/ash/components/dbus/media_analytics:media_perception_proto",
       "//chromeos/ash/components/dbus/upstart",
-      "//chromeos/dbus",
       "//chromeos/login/login_state",
       "//chromeos/services/media_perception/public/mojom",
       "//chromeos/services/media_perception/public/mojom:mojom_js_data_deps",
@@ -134,6 +134,7 @@ group("api_implementations") {
     "//extensions/browser/api/metrics_private",
     "//extensions/browser/api/mime_handler_private",
     "//extensions/browser/api/networking_private",
+    "//extensions/browser/api/offscreen",
     "//extensions/browser/api/power",
     "//extensions/browser/api/printer_provider",
     "//extensions/browser/api/runtime",
@@ -151,11 +152,14 @@ group("api_implementations") {
     "//extensions/browser/api/virtual_keyboard_private",
   ]
 
+  if (is_chromeos) {
+    public_deps += [ "//extensions/browser/api/virtual_keyboard" ]
+  }
+
   if (is_chromeos_ash) {
     public_deps += [
       "//extensions/browser/api/cec_private",
       "//extensions/browser/api/diagnostics",
-      "//extensions/browser/api/virtual_keyboard",
       "//extensions/browser/api/webcam_private",
     ]
   }

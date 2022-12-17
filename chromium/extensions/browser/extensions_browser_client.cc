@@ -13,6 +13,7 @@
 #include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_error.h"
 #include "extensions/browser/updater/scoped_extension_updater_keep_alive.h"
+#include "extensions/common/permissions/permission_set.h"
 
 namespace extensions {
 
@@ -166,5 +167,16 @@ void ExtensionsBrowserClient::GetFavicon(
     base::CancelableTaskTracker* tracker,
     base::OnceCallback<void(scoped_refptr<base::RefCountedMemory> bitmap_data)>
         callback) const {}
+
+std::vector<content::BrowserContext*>
+ExtensionsBrowserClient::GetRelatedContextsForExtension(
+    content::BrowserContext* browser_context,
+    const Extension& extension) const {
+  return {browser_context};
+}
+
+void ExtensionsBrowserClient::AddAdditionalAllowedHosts(
+    const PermissionSet& desired_permissions,
+    PermissionSet* granted_permissions) const {}
 
 }  // namespace extensions

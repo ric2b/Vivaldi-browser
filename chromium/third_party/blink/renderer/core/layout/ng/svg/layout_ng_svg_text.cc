@@ -162,6 +162,9 @@ void LayoutNGSVGText::Paint(const PaintInfo& paint_info) const {
 
   PaintInfo block_info(paint_info);
   if (const auto* properties = FirstFragment().PaintProperties()) {
+    // TODO(https://crbug.com/1278452): Also consider Translate, Rotate,
+    // Scale, and Offset, probably via a single transform operation to
+    // FirstFragment().PreTransform().
     if (const auto* transform = properties->Transform())
       block_info.TransformCullRect(*transform);
   }
@@ -225,8 +228,10 @@ void LayoutNGSVGText::UpdateBlockLayout(bool relayout_children) {
   // If our bounds changed, notify the parents.
   if (UpdateTransformAfterLayout(bounds_changed) || bounds_changed)
     SetNeedsBoundariesUpdate();
-  if (bounds_changed)
-    SetSize(LayoutSize(boundaries.right(), boundaries.bottom()));
+  if (bounds_changed) {
+    SetSize(LayoutSize(LayoutUnit(boundaries.right()),
+                       LayoutUnit(boundaries.bottom())));
+  }
 
   UpdateTransformAffectsVectorEffect();
 }
@@ -293,12 +298,18 @@ gfx::RectF LayoutNGSVGText::LocalBoundingBoxRectForAccessibility() const {
 bool LayoutNGSVGText::NodeAtPoint(HitTestResult& result,
                                   const HitTestLocation& hit_test_location,
                                   const PhysicalOffset& accumulated_offset,
-                                  HitTestAction action) {
+                                  HitTestPhase phase) {
   TransformedHitTestLocation local_location(hit_test_location,
                                             LocalToSVGParentTransform());
-  return local_location &&
-         LayoutNGBlockFlowMixin<LayoutSVGBlock>::NodeAtPoint(
-             result, *local_location, accumulated_offset, action);
+  if (!local_location)
+    return false;
+
+  if (!SVGLayoutSupport::IntersectsClipPath(*this, ObjectBoundingBox(),
+                                            *local_location))
+    return false;
+
+  return LayoutNGBlockFlowMixin<LayoutSVGBlock>::NodeAtPoint(
+      result, *local_location, accumulated_offset, phase);
 }
 
 PositionWithAffinity LayoutNGSVGText::PositionForPoint(

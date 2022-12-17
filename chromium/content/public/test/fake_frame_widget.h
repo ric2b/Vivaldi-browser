@@ -60,6 +60,7 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
                          ui::mojom::DragOperation operation,
                          base::OnceClosure callback) override {}
   void DragSourceSystemDragEnded() override {}
+  void OnStartStylusWriting(OnStartStylusWritingCallback callback) override {}
   void SetBackgroundOpaque(bool value) override {}
   void SetTextDirection(base::i18n::TextDirection direction) override;
   void SetActive(bool active) override;
@@ -88,7 +89,10 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
       const absl::optional<blink::VisualProperties>& visual_properties)
       override;
 
+  // Vivaldi
   void LoadImageAt(const gfx::Point&) override {}
+  void SetImagesEnabled(bool show) override {}
+  void SetServeResourceFromCacheOnly(bool load) override {}
 
   mojo::AssociatedReceiver<blink::mojom::FrameWidget> receiver_;
   base::i18n::TextDirection text_direction_ =

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "chromeos/crosapi/mojom/account_manager.mojom.h"
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/account_addition_result.h"
@@ -64,6 +65,8 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER_CORE) AccountManagerMojoService
       mojom::AccountKeyPtr mojo_account_key,
       const std::string& oauth_consumer_name,
       CreateAccessTokenFetcherCallback callback) override;
+  void ReportAuthError(mojom::AccountKeyPtr account,
+                       mojom::GoogleServiceAuthErrorPtr error) override;
 
   // account_manager::AccountManager::Observer:
   void OnTokenUpserted(const account_manager::Account& account) override;
@@ -90,7 +93,7 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER_CORE) AccountManagerMojoService
 
   ShowAddAccountDialogCallback account_addition_callback_;
   bool account_addition_in_progress_ = false;
-  account_manager::AccountManager* const account_manager_;
+  const raw_ptr<account_manager::AccountManager> account_manager_;
   std::unique_ptr<account_manager::AccountManagerUI> account_manager_ui_;
   std::vector<std::unique_ptr<AccessTokenFetcher>>
       pending_access_token_requests_;

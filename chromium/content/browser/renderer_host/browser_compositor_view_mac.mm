@@ -20,7 +20,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/layout.h"
@@ -247,8 +246,7 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
   if (state_ == HasOwnCompositor) {
     recyclable_compositor_->widget()->ResetNSView();
     recyclable_compositor_->compositor()->SetRootLayer(nullptr);
-    ui::RecyclableCompositorMacFactory::Get()->RecycleCompositor(
-        std::move(recyclable_compositor_));
+    recyclable_compositor_.reset();
   }
 
   // The compositor is now detached. If this is the target state, we're done.
@@ -267,15 +265,10 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
     parent_ui_layer_->Add(root_layer_.get());
     parent_ui_layer_->AddObserver(this);
     state_ = UseParentLayerCompositor;
-
-    // Any ongoing presentation time request can no longer be handled because
-    // the parent layer compositor won't present a frame that can be measured.
-    delegated_frame_host_->UnhandledPresentationTimeRequest();
   }
   if (new_state == HasOwnCompositor) {
-    recyclable_compositor_ =
-        ui::RecyclableCompositorMacFactory::Get()->CreateCompositor(
-            content::GetContextFactory());
+    recyclable_compositor_ = std::make_unique<ui::RecyclableCompositorMac>(
+        content::GetContextFactory());
     display::ScreenInfo current = client_->GetCurrentScreenInfo();
     recyclable_compositor_->UpdateSurface(dfh_size_pixels_,
                                           current.device_scale_factor,
@@ -293,18 +286,6 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
                                   {} /* record_tab_switch_time_request */);
 }
 
-void BrowserCompositorMac::RequestPresentationTimeForNextFrame(
-    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
-  DCHECK(visible_time_request);
-  delegated_frame_host_->RequestPresentationTimeForNextFrame(
-      std::move(visible_time_request));
-  if (state_ == UseParentLayerCompositor) {
-    // Immediately cancel the request since the parent layer compositor won't
-    // present a frame that can be measured.
-    delegated_frame_host_->UnhandledPresentationTimeRequest();
-  }
-}
-
 // static
 void BrowserCompositorMac::DisableRecyclingForShutdown() {
   // Ensure that the client has destroyed its BrowserCompositorViewMac before
@@ -315,8 +296,6 @@ void BrowserCompositorMac::DisableRecyclingForShutdown() {
         *g_browser_compositors.Get().begin();
     browser_compositor->client_->DestroyCompositorForShutdown();
   }
-
-  ui::RecyclableCompositorMacFactory::Get()->DisableRecyclingForShutdown();
 }
 
 void BrowserCompositorMac::TakeFallbackContentFrom(

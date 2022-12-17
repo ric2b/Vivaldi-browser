@@ -41,6 +41,16 @@ class OsFeedbackDelegate {
                           SendReportCallback callback) = 0;
   // Open Diagnostics app.
   virtual void OpenDiagnosticsApp() = 0;
+  // Open Explore app.
+  virtual void OpenExploreApp() = 0;
+  // Open metrics dialog (which displays chrome://histograms).
+  virtual void OpenMetricsDialog() = 0;
+  // Open system info dialog (which displays the system logs
+  // to be sent with the report if the user has opted in).
+  virtual void OpenSystemInfoDialog() = 0;
+  // Open bluetooth logs info dialog (which displays the bluetooth logs
+  // to be sent with the report if the user has opted in).
+  virtual void OpenBluetoothLogsInfoDialog() = 0;
 };
 
 }  // namespace ash

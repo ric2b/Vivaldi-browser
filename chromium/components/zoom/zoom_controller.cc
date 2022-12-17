@@ -181,7 +181,7 @@ bool ZoomController::SetZoomLevelByClient(
       bool tab_zoom = vivaldi::IsTabZoomEnabled(web_contents());
       std::string host = net::GetHostOrSpecFromURL(web_contents()->GetURL());
       if (tab_zoom && !vivaldi::IsVivaldiApp(host)) {
-        int render_process_id = web_contents()->GetMainFrame()
+        int render_process_id = web_contents()->GetPrimaryMainFrame()
                                               ->GetProcess()->GetID();
         int render_view_id =
             web_contents()->GetRenderViewHost()->GetRoutingID();

@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "ui/base/ime/character_composer.h"
 #include "ui/base/ime/linux/linux_input_method_context.h"
@@ -31,8 +32,7 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
 
   WaylandInputMethodContext(WaylandConnection* connection,
                             WaylandKeyboard::Delegate* key_delegate,
-                            LinuxInputMethodContextDelegate* ime_delegate,
-                            bool is_simple);
+                            LinuxInputMethodContextDelegate* ime_delegate);
   WaylandInputMethodContext(const WaylandInputMethodContext&) = delete;
   WaylandInputMethodContext& operator=(const WaylandInputMethodContext&) =
       delete;
@@ -55,6 +55,9 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   void UpdateFocus(bool has_client,
                    TextInputType old_type,
                    TextInputType new_type) override;
+  void SetGrammarFragmentAtCursor(const GrammarFragment& fragment) override;
+  void SetAutocorrectInfo(const gfx::Range& autocorrect_range,
+                          const gfx::Rect& autocorrect_bounds) override;
   void Reset() override;
   VirtualKeyboardController* GetVirtualKeyboardController() override;
 
@@ -73,28 +76,38 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
                        const std::vector<SpanStyle>& spans,
                        int32_t preedit_cursor) override;
   void OnCommitString(base::StringPiece text) override;
+  void OnCursorPosition(int32_t index, int32_t anchor) override;
   void OnDeleteSurroundingText(int32_t index, uint32_t length) override;
   void OnKeysym(uint32_t keysym, uint32_t state, uint32_t modifiers) override;
   void OnSetPreeditRegion(int32_t index,
                           uint32_t length,
                           const std::vector<SpanStyle>& spans) override;
+  void OnClearGrammarFragments(const gfx::Range& range) override;
+  void OnAddGrammarFragment(const GrammarFragment& fragment) override;
+  void OnSetAutocorrectRange(const gfx::Range& range) override;
+  void OnSetVirtualKeyboardOccludedBounds(
+      const gfx::Rect& screen_bounds) override;
   void OnInputPanelState(uint32_t state) override;
   void OnModifiersMap(std::vector<std::string> modifiers_map) override;
 
  private:
-  void Focus();
-  void Blur();
+  void Focus(bool skip_virtual_keyboard_update);
+  void Blur(bool skip_virtual_keyboard_update);
   void UpdatePreeditText(const std::u16string& preedit_text);
-  void MaybeUpdateActivated();
+  // If |skip_virtual_keyboard_update| is true, no virtual keyboard show/hide
+  // requests will be sent. This is used to prevent flickering the virtual
+  // keyboard when it would be immediately reshown anyway, e.g. when changing
+  // focus from one text input to another.
+  void MaybeUpdateActivated(bool skip_virtual_keyboard_update);
 
-  WaylandConnection* const connection_;  // TODO(jani) Handle this better
+  const raw_ptr<WaylandConnection>
+      connection_;  // TODO(jani) Handle this better
 
   // Delegate key events to be injected into PlatformEvent system.
-  WaylandKeyboard::Delegate* const key_delegate_;
+  const raw_ptr<WaylandKeyboard::Delegate> key_delegate_;
 
   // Delegate IME-specific events to be handled by //ui code.
-  LinuxInputMethodContextDelegate* const ime_delegate_;
-  bool is_simple_;
+  const raw_ptr<LinuxInputMethodContextDelegate> ime_delegate_;
 
   std::unique_ptr<ZWPTextInputWrapper> text_input_;
 
@@ -116,6 +129,12 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   std::string surrounding_text_;
   // The selection range in UTF-8 offsets in the |surrounding_text_|.
   gfx::Range selection_range_utf8_ = gfx::Range::InvalidRange();
+
+  // Whether the next CommitString should be treated as part of a
+  // ConfirmCompositionText operation which keeps the current selection. This
+  // allows ConfirmCompositionText to be implemented as an atomic operation
+  // using CursorPosition and CommitString.
+  bool pending_keep_selection_ = false;
 
   // Caches VirtualKeyboard visibility.
   bool virtual_keyboard_visible_ = false;

@@ -35,6 +35,7 @@
 #include "headless/lib/renderer/headless_content_renderer_client.h"
 #include "headless/lib/utility/headless_content_utility_client.h"
 #include "sandbox/policy/switches.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -176,7 +177,7 @@ HeadlessContentMainDelegate::~HeadlessContentMainDelegate() {
   g_current_headless_content_main_delegate = nullptr;
 }
 
-bool HeadlessContentMainDelegate::BasicStartupComplete(int* exit_code) {
+absl::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
   // Make sure all processes know that we're in headless mode.
@@ -221,7 +222,7 @@ bool HeadlessContentMainDelegate::BasicStartupComplete(int* exit_code) {
 #endif
 
   content::Profiling::ProcessStarted();
-  return false;
+  return absl::nullopt;
 }
 
 void HeadlessContentMainDelegate::InitLogging(
@@ -390,6 +391,7 @@ HeadlessContentMainDelegate::RunProcess(
                              "HeadlessContentMainDelegate::RunProcess";
 
   browser_runner->Run();
+  CHECK(browser_->did_shutdown());
   browser_runner->Shutdown();
   browser_.reset();
 
@@ -467,10 +469,10 @@ HeadlessContentMainDelegate::CreateContentUtilityClient() {
   return utility_client_.get();
 }
 
-void HeadlessContentMainDelegate::PostEarlyInitialization(
+absl::optional<int> HeadlessContentMainDelegate::PostEarlyInitialization(
     InvokedIn invoked_in) {
-  if (invoked_in == InvokedIn::kChildProcess)
-    return;
+  if (absl::holds_alternative<InvokedInChildProcess>(invoked_in))
+    return absl::nullopt;
 
   if (base::FeatureList::IsEnabled(features::kVirtualTime)) {
     // Only pass viz flags into the virtual time mode.
@@ -496,6 +498,8 @@ void HeadlessContentMainDelegate::PostEarlyInitialization(
     for (const auto* flag : switches)
       base::CommandLine::ForCurrentProcess()->AppendSwitch(flag);
   }
+
+  return absl::nullopt;
 }
 
 }  // namespace headless

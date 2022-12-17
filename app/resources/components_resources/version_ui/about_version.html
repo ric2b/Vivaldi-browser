@@ -67,7 +67,7 @@ about:version template page
               <span>$i18n{update_cohort_name}</span>
 </if>
             </span>
-            <button id="copy-to-clipboard"></button>
+            <button id="copy-to-clipboard" aria-label="$i18n{copy_label}"></button>
           </td>
         </tr>
         <tr>
@@ -88,33 +88,34 @@ about:version template page
 </if>
           </td>
         </tr>
+<if expr="not is_ios">
         <tr><td class="label">JavaScript</td>
           <td class="version" id="js_engine">
             <span>$i18n{js_engine}</span>
             <span>$i18n{js_version}</span>
           </td>
         </tr>
+</if>
         <tr><td class="label">$i18n{user_agent_name}</td>
           <td class="version" id="useragent">$i18n{useragent}</td>
         </tr>
         <tr><td class="label">$i18n{command_line_name}</td>
           <td class="version" id="command_line">$i18n{command_line}</td>
         </tr>
+<if expr="not is_ios">
         <tr><td class="label">$i18n{executable_path_name}</td>
           <td class="version" id="executable_path">$i18n{executable_path}</td>
         </tr>
         <tr><td class="label">$i18n{profile_path_name}</td>
           <td class="version" id="profile_path">$i18n{profile_path}</td>
         </tr>
+</if>
 <if expr="is_macosx">
         <tr id="linker-section">
           <td class="label">Linker</td>
           <td class="version" id="linker">$i18n{linker}</td>
         </tr>
 </if>
-        <tr id="sanitizer-section" hidden>
-          <td class="label">Sanitizer</td>
-          <td class="version" id="sanitizer">$i18n{sanitizer}</td>
         </tr>
       </table>
     </div>

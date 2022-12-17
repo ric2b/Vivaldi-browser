@@ -30,13 +30,17 @@
 #import "net/base/mac/url_conversions.h"
 #include "url/gurl.h"
 
+#import <LinkPresentation/LinkPresentation.h>
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 @interface ActivityServiceCoordinator ()
 
-@property(nonatomic, weak) id<BrowserCommands, FindInPageCommands> handler;
+@property(nonatomic, weak)
+    id<BrowserCommands, BrowserCoordinatorCommands, FindInPageCommands>
+        handler;
 
 @property(nonatomic, strong) ActivityServiceMediator* mediator;
 
@@ -63,7 +67,8 @@
 #pragma mark - Public methods
 
 - (void)start {
-  self.handler = static_cast<id<BrowserCommands, FindInPageCommands>>(
+  self.handler = static_cast<
+      id<BrowserCommands, BrowserCoordinatorCommands, FindInPageCommands>>(
       self.browser->GetCommandDispatcher());
 
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
@@ -231,11 +236,21 @@
 // there is any.
 - (void)shareURLs {
   NSMutableArray* dataItems = [[NSMutableArray alloc] init];
+  ActivityParams* params = self.params;
 
-  for (URLWithTitle* urlWithTitle in self.params.URLs) {
-    ShareToData* data =
-        activity_services::ShareToDataForURLWithTitle(urlWithTitle);
+  // If only given a single URL, include additionalText in shared payload.
+  if (params.URLs.count == 1) {
+    URLWithTitle* url = params.URLs[0];
+    LPLinkMetadata* metadata = [self linkMetadata:url];
+    ShareToData* data = activity_services::ShareToDataForURL(
+        url.URL, url.title, params.additionalText, metadata);
     [dataItems addObject:data];
+  } else {
+    for (URLWithTitle* urlWithTitle in params.URLs) {
+      ShareToData* data =
+          activity_services::ShareToDataForURLWithTitle(urlWithTitle);
+      [dataItems addObject:data];
+    }
   }
 
   NSArray<id<ChromeActivityItemSource>>* items =
@@ -244,6 +259,32 @@
       [self.mediator applicationActivitiesForDataItems:dataItems];
 
   [self shareItems:items activities:activities];
+}
+
+// Returns some basic metadata for the Chrome App's app store link. If we do
+// not supply this metadata, UIActivityViewController will only display a
+// generic website icon and the hostname when given an app store link.
+- (LPLinkMetadata*)linkMetadata:(URLWithTitle*)url {
+  if (self.params.scenario != ActivityScenario::ShareChrome) {
+    // For non app store links, we will allow UIActivityViewController to choose
+    // how to display.
+    return nil;
+  }
+
+  LPLinkMetadata* metadata = [[LPLinkMetadata alloc] init];
+  metadata.originalURL = net::NSURLWithGURL(url.URL);
+  metadata.title = url.title;
+  metadata.iconProvider = [self appIconProvider];
+  return metadata;
+}
+
+- (NSItemProvider*)appIconProvider {
+  NSDictionary* allIcons =
+      [[NSBundle mainBundle] infoDictionary][@"CFBundleIcons"];
+  NSDictionary* primaryIcon = allIcons[@"CFBundlePrimaryIcon"];
+  NSArray* iconFiles = primaryIcon[@"CFBundleIconFiles"];
+  UIImage* iconFile = [UIImage imageNamed:iconFiles.lastObject];
+  return [[NSItemProvider alloc] initWithObject:iconFile];
 }
 
 @end

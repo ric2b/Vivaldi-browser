@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/ash/login/active_directory_migration_utils.h"
 #include "chrome/browser/ash/login/configuration_keys.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/enrollment/account_status_check_fetcher.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 #include "chrome/browser/ash/policy/handlers/tpm_auto_update_mode_policy_handler.h"
@@ -33,10 +35,10 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/userdataauth/install_attributes_util.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
-#include "chromeos/dbus/userdataauth/install_attributes_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/user_manager/user_manager.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -187,15 +189,13 @@ void EnrollmentScreen::SetEnrollmentConfig(
 
 void EnrollmentScreen::SetConfig() {
   config_ = enrollment_config_;
-  if (current_auth_ == AUTH_OAUTH && config_.is_mode_attestation_server()) {
+  if (current_auth_ == AUTH_OAUTH &&
+      config_.is_mode_attestation_with_manual_fallback()) {
     config_.mode =
-        config_.mode ==
-                policy::EnrollmentConfig::MODE_ATTESTATION_INITIAL_SERVER_FORCED
-            ? policy::EnrollmentConfig::MODE_ATTESTATION_INITIAL_MANUAL_FALLBACK
-            : policy::EnrollmentConfig::MODE_ATTESTATION_MANUAL_FALLBACK;
+        policy::EnrollmentConfig::GetManualFallbackMode(config_.mode);
   } else if (current_auth_ == AUTH_ATTESTATION &&
              !enrollment_config_.is_mode_attestation()) {
-    config_.mode = config_.is_attestation_forced()
+    config_.mode = config_.is_attestation_auth_forced()
                        ? policy::EnrollmentConfig::MODE_ATTESTATION_LOCAL_FORCED
                        : policy::EnrollmentConfig::MODE_ATTESTATION;
   }
@@ -247,14 +247,14 @@ void EnrollmentScreen::OnAuthCleared(base::OnceClosure callback) {
   std::move(callback).Run();
 }
 
-bool EnrollmentScreen::MaybeSkip(WizardContext* context) {
+bool EnrollmentScreen::MaybeSkip(WizardContext& context) {
   // TODO(crbug.com/1271134): Logging as "WARNING" to make sure it's preserved
   // in the logs.
   LOG(WARNING) << "EnrollmentScreen::MaybeSkip("
                << "config_.is_forced = " << config_.is_forced()
                << ", skip_to_login_for_tests = "
-               << context->skip_to_login_for_tests << ").";
-  if (context->skip_to_login_for_tests && !config_.is_forced()) {
+               << context.skip_to_login_for_tests << ").";
+  if (context.skip_to_login_for_tests && !config_.is_forced()) {
     exit_callback_.Run(Result::SKIPPED_FOR_TESTS);
     return true;
   }
@@ -296,6 +296,7 @@ void EnrollmentScreen::ShowImpl() {
   // TODO(crbug.com/1271134): Logging as "WARNING" to make sure it's preserved
   // in the logs.
   LOG(WARNING) << "Show enrollment screen";
+  is_rollback_flow_ = IsRollbackFlow(*context());
   if (view_)
     view_->SetEnrollmentController(this);
   // Block enrollment on liveboot (OS isn't installed yet and this is trial
@@ -378,7 +379,7 @@ void EnrollmentScreen::CheckInstallAttributesState() {
     return;
   }
   user_data_auth::InstallAttributesState state =
-      chromeos::install_attributes_util::InstallAttributesGetStatus();
+      install_attributes_util::InstallAttributesGetStatus();
 
   // TODO(crbug.com/1271134): Logging as "WARNING" to make sure it's preserved
   // in the logs.
@@ -808,7 +809,7 @@ void EnrollmentScreen::UpdateChromadMigrationOobeFlow(bool exists) {
 
 bool EnrollmentScreen::IsAutomaticEnrollmentFlow() {
   return is_chromad_migration_oobe_flow_ ||
-         WizardController::IsZeroTouchHandsOffOobeFlow();
+         WizardController::IsZeroTouchHandsOffOobeFlow() || is_rollback_flow_;
 }
 
 }  // namespace ash

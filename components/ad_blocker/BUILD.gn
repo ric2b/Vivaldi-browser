@@ -1,0 +1,73 @@
+# Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+import("//testing/test.gni")
+
+source_set("adblock_parser") {
+  sources = [
+    "adblock_content_injection_rule.cc",
+    "adblock_content_injection_rule.h",
+    "adblock_request_filter_rule.cc",
+    "adblock_request_filter_rule.h",
+    "adblock_metadata.cc",
+    "adblock_metadata.h",
+    "adblock_rule_parser.cc",
+    "adblock_rule_parser.h",
+    "adblock_ruleset_file_parser.cc",
+    "adblock_ruleset_file_parser.h",
+    "ddg_rules_parser.cc",
+    "ddg_rules_parser.h",
+    "parse_result.cc",
+    "parse_result.h",
+    "parse_utils.cc",
+    "parse_utils.h",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//url",
+  ]
+}
+
+source_set("ad_blocker") {
+  sources = [
+    "adblock_known_sources_handler_impl.cc",
+    "adblock_known_sources_handler_impl.h",
+    "adblock_known_sources_handler.cc",
+    "adblock_known_sources_handler.h",
+    "adblock_rule_service.cc",
+    "adblock_rule_service.h",
+    "adblock_rule_manager.cc",
+    "adblock_rule_manager.h",
+    "adblock_rule_manager_impl.cc",
+    "adblock_rule_manager_impl.h",
+    "adblock_rule_service_storage.cc",
+    "adblock_rule_service_storage.h",
+    "adblock_rule_source_handler.cc",
+    "adblock_rule_source_handler.h",
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    ":adblock_parser",
+    "//base:base",
+    "//base:i18n",
+    "//services/network/public/cpp",
+    "//url",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "adblock_rule_parser_unittest.cc",
+    "ddg_rules_parser_unittest.cc",
+  ]
+
+  deps = [
+    ":adblock_parser",
+     "//base",
+    "//testing/gtest",
+  ]
+}

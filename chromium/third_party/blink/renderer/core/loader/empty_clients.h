@@ -113,6 +113,13 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void SetOverscrollBehavior(LocalFrame& frame,
                              const cc::OverscrollBehavior&) override {}
   void BeginLifecycleUpdates(LocalFrame& main_frame) override {}
+  void RegisterForDeferredCommitObservation(DeferredCommitObserver*) override {}
+  void UnregisterFromDeferredCommitObservation(
+      DeferredCommitObserver*) override {}
+  void OnDeferCommitsChanged(
+      bool,
+      cc::PaintHoldingReason,
+      absl::optional<cc::PaintHoldingCommitTrigger>) override {}
   bool StartDeferringCommits(LocalFrame& main_frame,
                              base::TimeDelta timeout,
                              cc::PaintHoldingReason reason) override;
@@ -214,6 +221,13 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   }
   void AttachRootLayer(scoped_refptr<cc::Layer>,
                        LocalFrame* local_root) override;
+  cc::AnimationHost* GetCompositorAnimationHost(LocalFrame&) const override {
+    return nullptr;
+  }
+  cc::AnimationTimeline* GetScrollAnimationTimeline(
+      LocalFrame&) const override {
+    return nullptr;
+  }
   void SetEventListenerProperties(LocalFrame*,
                                   cc::EventListenerClass,
                                   cc::EventListenerProperties) override {}
@@ -222,6 +236,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void SetNeedsUnbufferedInputForDebugger(LocalFrame*, bool) override {}
   void RequestUnbufferedInputEvents(LocalFrame*) override {}
   void SetTouchAction(LocalFrame*, TouchAction) override {}
+  void SetPanAction(LocalFrame*, mojom::blink::PanAction pan_action) override {}
   void DidAssociateFormControlsAfterLoad(LocalFrame*) override {}
   String AcceptLanguages() override;
   void RegisterPopupOpeningObserver(PopupOpeningObserver*) override {}
@@ -233,7 +248,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   int GetLayerTreeId(LocalFrame& frame) override { return 0; }
   void SetCursorForPlugin(const ui::Cursor&, LocalFrame*) override {}
   void InstallSupplements(LocalFrame&) override {}
-  void MainFrameScrollOffsetChanged(LocalFrame& main_frame) const override {}
+  void OutermostMainFrameScrollOffsetChanged() const override {}
 
  private:
   const display::ScreenInfos empty_screen_infos_{display::ScreenInfo()};
@@ -382,7 +397,9 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
     // should define their own subclass of LocalFrameClient or
     // EmptyLocalFrameClient and override the CreateURLLoaderFactory method.
     // See also https://crbug.com/891872.
-    NOTREACHED();
+    // We use CHECK(false) instead of NOTREACHED() here to catch errors on
+    // clusterfuzz and production.
+    CHECK(false);
     return nullptr;
   }
 

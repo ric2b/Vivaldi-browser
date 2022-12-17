@@ -4,9 +4,13 @@
 
 static_library("browser") {
   public = [
+    "base_signals_collector.h",
+    "file_system_signals_collector.h",
+    "metrics_utils.h",
     "signals_aggregator.h",
     "signals_aggregator_impl.h",
     "signals_collector.h",
+    "signals_types.h",
     "system_signals_service_host.h",
     "user_context.h",
     "user_delegate.h",
@@ -15,7 +19,11 @@ static_library("browser") {
   ]
 
   sources = [
+    "base_signals_collector.cc",
+    "file_system_signals_collector.cc",
+    "metrics_utils.cc",
     "signals_aggregator_impl.cc",
+    "signals_types.cc",
     "user_context.cc",
     "user_permission_service_impl.cc",
   ]
@@ -24,18 +32,31 @@ static_library("browser") {
     "//base",
     "//components/device_signals/core/common/mojom",
     "//components/keyed_service/core",
+    "//third_party/abseil-cpp:absl",
   ]
 
   deps = [
     "//components/device_signals/core/common",
     "//components/policy/core/common",
+    "//components/prefs",
     "//components/signin/public/identity_manager",
   ]
+
+  if (is_win) {
+    public_deps += [ "//components/device_signals/core/common/win" ]
+  }
+
+  if (is_win || is_linux || is_mac) {
+    public += [ "pref_names.h" ]
+    sources += [ "pref_names.cc" ]
+  }
 }
 
 static_library("test_support") {
   testonly = true
   sources = [
+    "mock_signals_aggregator.cc",
+    "mock_signals_aggregator.h",
     "mock_signals_collector.cc",
     "mock_signals_collector.h",
     "mock_system_signals_service_host.cc",
@@ -58,6 +79,7 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "file_system_signals_collector_unittest.cc",
     "signals_aggregator_impl_unittest.cc",
     "user_permission_service_impl_unittest.cc",
   ]

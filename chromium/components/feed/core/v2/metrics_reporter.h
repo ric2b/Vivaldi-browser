@@ -66,9 +66,10 @@ class MetricsReporter {
                                   int index_in_stream,
                                   int stream_slice_count);
   void FeedViewed(SurfaceId surface_id);
-  void OpenAction(const StreamType& stream_type, int index_in_stream);
+  void OpenAction(const StreamType& stream_type,
+                  int index_in_stream,
+                  OpenActionType action_type);
   void OpenVisitComplete(base::TimeDelta visit_time);
-  void OpenInNewTabAction(const StreamType& stream_type, int index_in_stream);
   void PageLoaded();
   void OtherUserAction(const StreamType& stream_type,
                        FeedUserActionType action_type);
@@ -98,7 +99,7 @@ class MetricsReporter {
                             bool loaded_new_content_from_network,
                             base::TimeDelta stored_content_age,
                             const ContentStats& content_stats,
-                            const RequestMetadata& request_metadata,
+                            ContentOrder content_order,
                             std::unique_ptr<LoadLatencyTimes> load_latencies);
   virtual void OnBackgroundRefresh(const StreamType& stream_type,
                                    LoadStreamStatus final_status);
@@ -184,7 +185,6 @@ class MetricsReporter {
   void ReportGetMoreIfNeeded(SurfaceId surface_id, bool success);
   void FinalizeMetrics();
   void FinalizeVisit();
-  void ReportSubscriptionCountAtEngagementTime(int subscription_count);
   void ReportFollowCountOnLoad(bool content_shown, int subscription_count);
 
   StreamStats& ForStream(const StreamType& stream_type);

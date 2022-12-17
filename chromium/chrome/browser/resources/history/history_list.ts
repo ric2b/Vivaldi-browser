@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
@@ -11,8 +11,8 @@ import './history_item.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -28,11 +28,11 @@ import {HistoryEntry, HistoryQuery, QueryState} from './externs.js';
 import {HistoryItemElement, searchResultsTitle} from './history_item.js';
 import {getTemplate} from './history_list.html.js';
 
-export type ActionMenuModel = {
-  index: number,
-  item: HistoryEntry,
-  target: HTMLElement,
-};
+export interface ActionMenuModel {
+  index: number;
+  item: HistoryEntry;
+  target: HTMLElement;
+}
 
 type OpenMenuEvent = CustomEvent<ActionMenuModel>;
 
@@ -107,7 +107,7 @@ export class HistoryListElement extends HistoryListElementBase {
     };
   }
 
-  private historyData_: Array<HistoryEntry>;
+  private historyData_: HistoryEntry[];
   private canDeleteHistory_: boolean =
       loadTimeData.getBoolean('allowDeletingHistory');
   private actionMenuModel_: ActionMenuModel|null = null;
@@ -155,7 +155,7 @@ export class HistoryListElement extends HistoryListElementBase {
    * @param info An object containing information about the query.
    * @param results A list of results.
    */
-  historyResult(info: HistoryQuery, results: Array<HistoryEntry>) {
+  historyResult(info: HistoryQuery, results: HistoryEntry[]) {
     this.initializeResults_(info, results);
     this.closeMenu_();
 
@@ -177,8 +177,7 @@ export class HistoryListElement extends HistoryListElementBase {
    *     loading should be disabled.
    */
   addNewResults(
-      historyResults: Array<HistoryEntry>, incremental: boolean,
-      finished: boolean) {
+      historyResults: HistoryEntry[], incremental: boolean, finished: boolean) {
     const results = historyResults.slice();
     this.$['scroll-threshold'].clearTriggers();
 
@@ -318,8 +317,8 @@ export class HistoryListElement extends HistoryListElementBase {
    * single large notification to Polymer, rather than many small notifications,
    * which greatly improves performance.
    */
-  private removeItemsByIndex_(indices: Array<number>) {
-    const splices: Array<any> = [];
+  private removeItemsByIndex_(indices: number[]) {
+    const splices: any[] = [];
     indices.sort(function(a, b) {
       // Sort in reverse numerical order.
       return b - a;
@@ -331,13 +330,13 @@ export class HistoryListElement extends HistoryListElementBase {
         removed: [item],
         addedCount: 0,
         object: this.historyData_,
-        type: 'splice'
+        type: 'splice',
       });
     });
     this.notifySplices('historyData_', splices);
   }
 
-  removeItemsByIndexForTesting(indices: Array<number>) {
+  removeItemsByIndexForTesting(indices: number[]) {
     this.removeItemsByIndex_(indices);
   }
 
@@ -427,7 +426,7 @@ export class HistoryListElement extends HistoryListElementBase {
     this.closeMenu_();
   }
 
-  private deleteItems_(items: Array<HistoryEntry>): Promise<void> {
+  private deleteItems_(items: HistoryEntry[]): Promise<void> {
     const removalList = items.map(item => ({
                                     url: item.url,
                                     timestamps: item.allTimestamps,
@@ -576,7 +575,7 @@ export class HistoryListElement extends HistoryListElementBase {
     return searchedTerm === '' || searchedTerm !== domain;
   }
 
-  private initializeResults_(info: HistoryQuery, results: Array<HistoryEntry>) {
+  private initializeResults_(info: HistoryQuery, results: HistoryEntry[]) {
     if (results.length === 0) {
       return;
     }

@@ -56,6 +56,8 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerFactory;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerImpl;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.MessageService.MessageDisableReason;
@@ -106,8 +108,8 @@ public class PriceAlertsMessageCardTest {
         Intents.init();
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
         mMockNotificationManager = new MockNotificationManagerProxy();
-        PriceDropNotificationManager.setNotificationManagerForTesting(mMockNotificationManager);
-        mPriceDropNotificationManager = new PriceDropNotificationManager();
+        PriceDropNotificationManagerImpl.setNotificationManagerForTesting(mMockNotificationManager);
+        mPriceDropNotificationManager = PriceDropNotificationManagerFactory.create();
 
         mActivityTestRule.startMainActivityOnBlankPage();
         CriteriaHelper.pollUiThread(
@@ -120,7 +122,7 @@ public class PriceAlertsMessageCardTest {
             mPriceDropNotificationManager.deleteChannelForTesting();
         }
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(null);
-        PriceDropNotificationManager.setNotificationManagerForTesting(null);
+        PriceDropNotificationManagerImpl.setNotificationManagerForTesting(null);
         ActivityTestUtils.clearActivityOrientation(mActivityTestRule.getActivity());
         Intents.release();
     }
@@ -277,7 +279,8 @@ public class PriceAlertsMessageCardTest {
                                                      .findViewHolderForAdapterPosition(1);
         assertEquals(TabProperties.UiType.LARGE_MESSAGE, viewHolder.getItemViewType());
 
-        onView(allOf(withId(R.id.tab_list_view), withParent(withId(R.id.compositor_view_holder))))
+        onView(allOf(withId(R.id.tab_list_view),
+                       withParent(withId(TabUiTestHelper.getTabSwitcherParentId(cta)))))
                 .perform(RecyclerViewActions.actionOnItemAtPosition(
                         1, getSwipeToDismissAction(true)));
         assertEquals(1,
@@ -297,7 +300,7 @@ public class PriceAlertsMessageCardTest {
         CriteriaHelper.pollUiThread(TabSwitcherCoordinator::hasAppendedMessagesForTesting);
         onView(withId(R.id.large_message_card_item)).check(matches(isDisplayed()));
 
-        closeFirstTabInTabSwitcher();
+        closeFirstTabInTabSwitcher(cta);
         CriteriaHelper.pollUiThread(() -> !TabSwitcherCoordinator.hasAppendedMessagesForTesting());
         verifyTabSwitcherCardCount(cta, 0);
         onView(withId(R.id.large_message_card_item)).check(doesNotExist());

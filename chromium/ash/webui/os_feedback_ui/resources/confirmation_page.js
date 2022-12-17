@@ -6,19 +6,29 @@ import './help_resources_icons.js';
 import './os_feedback_shared_css.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {FeedbackFlowState} from './feedback_flow.js';
-import {FeedbackServiceProviderInterface, SendReportStatus} from './feedback_types.js';
+import {FeedbackAppPostSubmitAction, FeedbackServiceProviderInterface, SendReportStatus} from './feedback_types.js';
 import {getFeedbackServiceProvider} from './mojo_interface_provider.js';
 
 /**
  * @fileoverview
  * 'confirmation-page' is the last step of the feedback tool.
  */
-export class ConfirmationPageElement extends PolymerElement {
+
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ * @implements {I18nBehaviorInterface}
+ */
+const ConfirmationPageElementBase =
+    mixinBehaviors([I18nBehavior], PolymerElement);
+
+export class ConfirmationPageElement extends ConfirmationPageElementBase {
   static get is() {
     return 'confirmation-page';
   }
@@ -44,6 +54,21 @@ export class ConfirmationPageElement extends PolymerElement {
 
     /** @private {!FeedbackServiceProviderInterface} */
     this.feedbackServiceProvider_ = getFeedbackServiceProvider();
+    /**
+     * Whether this is the first action taken by the user after sending
+     * feedback.
+     * @type {boolean}
+     */
+    this.isFirstAction = true;
+  }
+
+  /** @override */
+  ready() {
+    super.ready();
+    window.addEventListener('beforeunload', event => {
+      event.preventDefault();
+      this.handleEmitMetrics_(FeedbackAppPostSubmitAction.kCloseFeedbackApp);
+    });
   }
 
   /**
@@ -60,11 +85,10 @@ export class ConfirmationPageElement extends PolymerElement {
    * @protected
    */
   getTitle_() {
-    // TODO(xiangdongkong): Localize the strings.
     if (this.isOffline_()) {
-      return 'You are offline now. Feedback will be sent later.';
+      return this.i18n('confirmationTitleOffline');
     }
-    return 'Thanks for your feedback';
+    return this.i18n('confirmationTitleOnline');
   }
 
   /**
@@ -72,15 +96,10 @@ export class ConfirmationPageElement extends PolymerElement {
    * @protected
    */
   getMessage_() {
-    // TODO(xiangdongkong): Localize the strings.
     if (this.isOffline_()) {
-      return 'Thanks for the feedback. Your feedback helps improve Chrome OS ' +
-          'and will be reviewed by the Chrome OS team. Because of the number ' +
-          ' of reports submitted, you won’t receive a direct reply. ';
+      return this.i18n('thankYouNoteOffline');
     }
-    return 'Your feedback helps improve ChromeOS and will be reviewed by ' +
-        'our team. Because of the large number of reports, we won\’t be able ' +
-        ' to send a reply.';
+    return this.i18n('thankYouNoteOnline');
   }
 
   /**
@@ -93,8 +112,9 @@ export class ConfirmationPageElement extends PolymerElement {
     this.dispatchEvent(new CustomEvent('go-back-click', {
       composed: true,
       bubbles: true,
-      detail: {currentState: FeedbackFlowState.CONFIRMATION}
+      detail: {currentState: FeedbackFlowState.CONFIRMATION},
     }));
+    this.handleEmitMetrics_(FeedbackAppPostSubmitAction.kSendNewReport);
   }
 
   /**
@@ -102,6 +122,7 @@ export class ConfirmationPageElement extends PolymerElement {
    * @protected
    */
   handleDoneButtonClicked_() {
+    this.handleEmitMetrics_(FeedbackAppPostSubmitAction.kClickDoneButton);
     window.close();
   }
 
@@ -116,9 +137,31 @@ export class ConfirmationPageElement extends PolymerElement {
     switch (e.target.id) {
       case 'diagnostics':
         this.feedbackServiceProvider_.openDiagnosticsApp();
+        this.handleEmitMetrics_(
+            FeedbackAppPostSubmitAction.kOpenDiagnosticsApp);
+        break;
+      case 'explore':
+        this.feedbackServiceProvider_.openExploreApp();
+        this.handleEmitMetrics_(FeedbackAppPostSubmitAction.kOpenExploreApp);
+        break;
+      case 'chromebookCommunity':
+        // If app locale is not available, default to en.
+        window.open(
+            `https://support.google.com/chromebook/?hl=${
+                this.i18n('language') || 'en'}#topic=3399709`,
+            '_blank');
+        this.handleEmitMetrics_(
+            FeedbackAppPostSubmitAction.kOpenChromebookCommunity);
         break;
       default:
         console.warn('unexpected caller id: ', e.target.id);
+    }
+  }
+
+  handleEmitMetrics_(action) {
+    if (this.isFirstAction) {
+      this.isFirstAction = false;
+      this.feedbackServiceProvider_.recordPostSubmitAction(action);
     }
   }
 }

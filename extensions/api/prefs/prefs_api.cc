@@ -300,7 +300,7 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
   VivaldiPrefsApiNotification* api =
       VivaldiPrefsApiNotification::FromBrowserContext(profile);
 
-  std::vector<base::Value> array;
+  base::Value::List array;
   array.reserve(params.GetList().size() * 2);
   for (const base::Value& path_value : params.GetList()) {
     if (!path_value.is_string())
@@ -336,8 +336,8 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
       }
       api->RegisterPref(path, local);
     } while (false);
-    array.push_back(std::move(value));
-    array.push_back(std::move(default_value));
+    array.Append(std::move(value));
+    array.Append(std::move(default_value));
   }
 
   return RespondNow(OneArgument(base::Value(std::move(array))));

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.h"
 
+#include "third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
 
 namespace blink {
@@ -74,8 +75,13 @@ PaintPropertyChangeType EffectPaintPropertyNode::State::ComputeChange(
   bool simple_values_changed =
       opacity_change_is_simple &&
       !animation_state.is_running_opacity_animation_on_compositor;
-  if (non_reraster_values_changed && simple_values_changed)
+  if (non_reraster_values_changed && simple_values_changed) {
+    // Both simple change and non-reraster change is upgraded to value change
+    // to avoid loss of non-reraster change when PaintPropertyTreeBuilder
+    // downgrades kChangedOnlySimpleValues to kChangedOnlyCompositedValues
+    // after a successful direct update.
     return PaintPropertyChangeType::kChangedOnlyValues;
+  }
   if (non_reraster_values_changed)
     return PaintPropertyChangeType::kChangedOnlyNonRerasterValues;
   if (simple_values_changed)

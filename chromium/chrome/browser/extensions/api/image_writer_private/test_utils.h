@@ -30,6 +30,10 @@
 namespace extensions {
 namespace image_writer {
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+class ImageWriterFakeImageBurnerClient;
+#endif
+
 const char kDummyExtensionId[] = "DummyExtension";
 
 // Default file size to use in tests.  Currently 32kB.
@@ -74,7 +78,7 @@ class FakeDiskMountManager : public ash::disks::MockDiskMountManager {
       UnmountDeviceRecursivelyCallbackType callback) override;
 
  private:
-  DiskMap disks_;
+  Disks disks_;
 };
 #endif
 
@@ -166,14 +170,7 @@ class ImageWriterTestUtils {
                 const int length);
 
   // Set up the test utils, creating temporary folders and such.
-  // Note that browser tests should use the alternate form and pass "true" as an
-  // argument.
   virtual void SetUp();
-  // Set up the test utils, creating temporary folders and such.  If
-  // |is_browser_test| is true then it will use alternate initialization
-  // appropriate for a browser test.  This should be run in
-  // |SetUpInProcessBrowserTestFixture|.
-  virtual void SetUp(bool is_browser_test);
 
   virtual void TearDown();
 
@@ -186,7 +183,10 @@ class ImageWriterTestUtils {
   base::FilePath test_image_path_;
   base::FilePath test_device_path_;
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  std::unique_ptr<ImageWriterFakeImageBurnerClient> image_burner_client_;
+  bool concierge_client_initialized_ = false;
+#else
   scoped_refptr<FakeImageWriterClient> client_;
   ImageWriterUtilityClient::ImageWriterUtilityClientFactory
       utility_client_factory_;

@@ -14,9 +14,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/style/color_provider.h"
-#include "ash/public/cpp/view_shadow.h"
 #include "ash/shell.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/ash_color_id.h"
+#include "ash/style/system_shadow.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -134,7 +134,9 @@ class BottomAlignedBoxLayout : public views::BoxLayout {
 
 }  // namespace
 
-TrayBubbleView::Delegate::~Delegate() {}
+TrayBubbleView::Delegate::Delegate() = default;
+
+TrayBubbleView::Delegate::~Delegate() = default;
 
 void TrayBubbleView::Delegate::BubbleViewDestroyed() {}
 
@@ -152,6 +154,10 @@ bool TrayBubbleView::Delegate::ShouldEnableExtraKeyboardAccessibility() {
 
 void TrayBubbleView::Delegate::HideBubble(const TrayBubbleView* bubble_view) {}
 
+base::WeakPtr<TrayBubbleView::Delegate> TrayBubbleView::Delegate::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 absl::optional<AcceleratorAction>
 TrayBubbleView::Delegate::GetAcceleratorAction() const {
   // TODO(crbug/1234891) Make this a pure virtual function so all
@@ -160,6 +166,8 @@ TrayBubbleView::Delegate::GetAcceleratorAction() const {
 }
 
 TrayBubbleView::InitParams::InitParams() = default;
+
+TrayBubbleView::InitParams::~InitParams() = default;
 
 TrayBubbleView::InitParams::InitParams(const InitParams& other) = default;
 
@@ -299,9 +307,9 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
     set_color(SK_ColorTRANSPARENT);
   }
 
-  if (params_.has_shadow) {
-    shadow_ = std::make_unique<ViewShadow>(this, params_.shadow_elevation);
-    shadow_->shadow()->SetShadowStyle(gfx::ShadowStyle::kChromeOSSystemUI);
+  if (params_.has_shadow && features::IsSystemTrayShadowEnabled()) {
+    shadow_ = SystemShadow::CreateShadowOnNinePatchLayerForView(
+        this, params_.shadow_type);
     shadow_->SetRoundedCornerRadius(params_.corner_radius);
   }
 
@@ -514,16 +522,14 @@ void TrayBubbleView::OnThemeChanged() {
     SetBorder(std::make_unique<views::HighlightBorder>(
         params_.corner_radius, views::HighlightBorder::Type::kHighlightBorder1,
         /*use_light_colors=*/false));
-    set_color(AshColorProvider::Get()->GetBaseLayerColor(
-        AshColorProvider::BaseLayerType::kTransparent80));
+    set_color(GetColorProvider()->GetColor(kColorAshShieldAndBase80));
     return;
   }
 
   DCHECK(layer());
   if (layer()->type() != ui::LAYER_SOLID_COLOR)
     return;
-  layer()->SetColor(AshColorProvider::Get()->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kTransparent80));
+  layer()->SetColor(GetColorProvider()->GetColor(kColorAshShieldAndBase80));
 }
 
 void TrayBubbleView::MouseMovedOutOfHost() {

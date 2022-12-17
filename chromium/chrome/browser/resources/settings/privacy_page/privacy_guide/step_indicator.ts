@@ -13,10 +13,10 @@ import {getTemplate} from './step_indicator.html.js';
 
 const StepIndicatorBase = I18nMixin(PolymerElement);
 
-export type StepIndicatorModel = {
-  active: number,
-  total: number,
-};
+export interface StepIndicatorModel {
+  active: number;
+  total: number;
+}
 
 export class StepIndicator extends StepIndicatorBase {
   static get is() {
@@ -38,12 +38,12 @@ export class StepIndicator extends StepIndicatorBase {
       dots_: {
         type: Array,
         computed: 'computeDots_(model.total)',
-      }
+      },
     };
   }
 
   model: StepIndicatorModel;
-  private dots_: Array<void>;
+  private dots_: void[];
 
   /**
    * @return the screenreader label for this element.
@@ -53,7 +53,7 @@ export class StepIndicator extends StepIndicatorBase {
         'privacyGuideSteps', this.model.active + 1, this.model.total);
   }
 
-  private computeDots_(): Array<void> {
+  private computeDots_(): void[] {
     // If total is 1, show nothing.
     return new Array(this.model.total > 1 ? this.model.total : 0);
   }

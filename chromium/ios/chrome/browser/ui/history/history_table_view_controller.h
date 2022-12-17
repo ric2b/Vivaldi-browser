@@ -32,7 +32,7 @@ enum class UrlLoadStrategy;
 // Opaque instructions on how to open urls.
 @property(nonatomic) UrlLoadStrategy loadStrategy;
 // Optional: If provided, search terms to filter the displayed history items.
-// |searchTerms| will be the initial value of the text in the search bar.
+// `searchTerms` will be the initial value of the text in the search bar.
 @property(nonatomic, copy) NSString* searchTerms;
 // Delegate for this HistoryTableView.
 @property(nonatomic, weak) id<HistoryUIDelegate> delegate;
@@ -45,6 +45,8 @@ enum class UrlLoadStrategy;
 // Provider of menu configurations for the history component.
 @property(nonatomic, weak) id<HistoryMenuProvider> menuProvider API_AVAILABLE(
     ios(13.0));
+
+- (void)dismissHistory;
 
 // Initializers.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;

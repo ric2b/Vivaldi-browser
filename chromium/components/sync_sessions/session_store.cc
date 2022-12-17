@@ -31,6 +31,8 @@
 #include "components/sync_sessions/session_sync_prefs.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace sync_sessions {
 namespace {
 
@@ -389,10 +391,13 @@ void SessionStore::OnReadAllData(
     return;
   }
 
-  std::string session_name_override =
-      builder->sessions_client->GetSessionSyncPrefs()->GetSessionNameOverride();
-  if (!session_name_override.empty()) {
-    builder->local_session_info.client_name = session_name_override;
+  if (vivaldi::IsVivaldiRunning()) {
+    std::string session_name_override =
+        builder->sessions_client->GetSessionSyncPrefs()
+            ->GetSessionNameOverride();
+    if (!session_name_override.empty()) {
+      builder->local_session_info.client_name = session_name_override;
+    }
   }
 
   // WrapUnique() used because constructor is private.

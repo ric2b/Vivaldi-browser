@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "components/request_filter/adblock_filter/adblock_metadata.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_rule_manager.h"
 
 namespace content {
 class BrowserContext;
@@ -22,6 +22,7 @@ namespace flat {
 struct RulesList;
 }
 class RulesIndex;
+class RuleService;
 
 class RuleBufferHolder {
  public:
@@ -40,7 +41,7 @@ class RuleBufferHolder {
   const flat::RulesList* const rules_list_;
 };
 
-class RulesIndexManager : public RuleService::Observer {
+class RulesIndexManager : public RuleManager::Observer {
  public:
   using RulesIndexChangedCallback = base::RepeatingClosure;
   using RulesIndexLoadedCallback = base::RepeatingClosure;

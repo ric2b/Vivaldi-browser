@@ -7,6 +7,7 @@
 #include "base/auto_reset.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/mac/foundation_util.h"
+#include "base/mac/mac_util.h"
 #include "base/trace_event/trace_event.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
@@ -145,10 +146,11 @@ void OrderChildWindow(NSWindow* child_window,
   BOOL _willUpdateRestorableState;
   BOOL _isEnforcingNeverMadeVisible;
   BOOL _preventKeyWindow;
-  BOOL _isAddingChildWindow;
+  BOOL _isTooltip;
 }
 @synthesize bridgedNativeWidgetId = _bridgedNativeWidgetId;
 @synthesize bridge = _bridge;
+@synthesize isTooltip = _isTooltip;
 
 - (instancetype)initWithContentRect:(NSRect)contentRect
                           styleMask:(NSUInteger)windowStyle
@@ -161,7 +163,6 @@ void OrderChildWindow(NSWindow* child_window,
                                    defer:deferCreation])) {
     _commandDispatcher.reset([[CommandDispatcher alloc] initWithOwner:self]);
   }
-  _isAddingChildWindow = NO;
   return self;
 }
 
@@ -178,7 +179,6 @@ void OrderChildWindow(NSWindow* child_window,
 }
 
 - (void)addChildWindow:(NSWindow*)childWin ordered:(NSWindowOrderingMode)place {
-  base::AutoReset<BOOL> isAddingChildWindow(&_isAddingChildWindow, YES);
   // Attaching a window to be a child window resets the window level, so
   // restore the window level afterwards.
   NSInteger level = childWin.level;
@@ -279,6 +279,10 @@ void OrderChildWindow(NSWindow* child_window,
   return obj;
 }
 
+- (NSAccessibilityRole)accessibilityRole {
+  return _isTooltip ? NSAccessibilityHelpTagRole : [super accessibilityRole];
+}
+
 // NSWindow overrides.
 
 + (Class)frameViewClassForStyleMask:(NSWindowStyleMask)windowStyle {
@@ -368,9 +372,11 @@ void OrderChildWindow(NSWindow* child_window,
 
   // Draggable regions only respond to left-click dragging, but the system will
   // still suppress right-clicks in a draggable region. Forwarding right-clicks
-  // allows the underlying views to respond to right-click to potentially bring
-  // up a frame context menu.
-  if (type == NSEventTypeRightMouseDown) {
+  // and ctrl+left-clicks allows the underlying views to respond to right-click
+  // to potentially bring up a frame context menu.
+  if (type == NSEventTypeRightMouseDown ||
+      (type == NSEventTypeLeftMouseDown &&
+       ([event modifierFlags] & NSEventModifierFlagControl))) {
     if ([[self contentView] hitTest:event.locationInWindow] == nil) {
       [[self contentView] rightMouseDown:event];
       return;
@@ -395,41 +401,36 @@ void OrderChildWindow(NSWindow* child_window,
   [super sendEvent:event];
 }
 
-// Override window order functions to
-// 1. Intercept other visibility changes
-//    This is needed in addition to the -[NSWindow display] override because
-//    Cocoa hardly ever calls display, and reports -[NSWindow isVisible]
-//    incorrectly when ordering in a window for the first time.
-// 2. Handle child windows
-//    -[NSWindow orderWindow] does not work for child windows. To order
-//    children, we need to detach them from thier parent and re-attach them
-//    in our desire order.
-- (void)orderWindow:(NSWindowOrderingMode)orderingMode
-         relativeTo:(NSInteger)otherWindowNumber {
+- (void)reallyOrderWindow:(NSWindowOrderingMode)orderingMode
+               relativeTo:(NSInteger)otherWindowNumber {
   NativeWidgetMacNSWindow* parent =
       static_cast<NativeWidgetMacNSWindow*>([self parentWindow]);
-  // Cocoa will call -[NSWindow orderWindow] during -[NSWindow addChildWindow].
-  // To prevent re-entrancy, skip re-parenting if adding children.
-  if (parent && parent->_isAddingChildWindow) {
-    [super orderWindow:orderingMode relativeTo:otherWindowNumber];
-    [[self viewsNSWindowDelegate] onWindowOrderChanged:nil];
+
+  // This is not a child window. No need to patch.
+  if (!parent) {
+    [self orderWindow:orderingMode relativeTo:otherWindowNumber];
     return;
   }
 
   // `otherWindow` is nil if `otherWindowNumber` is 0. In this case, place
   // `self` at the top / bottom, depending on `orderingMode`.
   NSWindow* otherWindow = [NSApp windowWithWindowNumber:otherWindowNumber];
-
-  // For unknown reason chrome will freeze during startup without this line.
-  [super orderWindow:orderingMode relativeTo:otherWindowNumber];
-
-  // During shutdown the parent may have changed at this point, so reacquire
-  // `parent`.
-  parent = static_cast<NativeWidgetMacNSWindow*>([self parentWindow]);
-  if (parent && (otherWindow == nullptr ||
-                 parent == [otherWindow parentWindow] || parent == otherWindow))
+  if (otherWindow == nullptr || parent == [otherWindow parentWindow] ||
+      parent == otherWindow)
     OrderChildWindow(self, otherWindow, orderingMode);
 
+  [[self viewsNSWindowDelegate] onWindowOrderChanged:nil];
+}
+
+// Override window order functions to intercept other visibility changes. This
+// is needed in addition to the -[NSWindow display] override because Cocoa
+// hardly ever calls display, and reports -[NSWindow isVisible] incorrectly
+// when ordering in a window for the first time.
+// Note that this methods has no effect for children windows. Use
+// -reallyOrderWindow:relativeTo: instead.
+- (void)orderWindow:(NSWindowOrderingMode)orderingMode
+         relativeTo:(NSInteger)otherWindowNumber {
+  [super orderWindow:orderingMode relativeTo:otherWindowNumber];
   [[self viewsNSWindowDelegate] onWindowOrderChanged:nil];
 }
 
@@ -485,17 +486,20 @@ void OrderChildWindow(NSWindow* child_window,
   if (![self _isConsideredOpenForPersistentState])
     return;
 
-  base::scoped_nsobject<NSMutableData> restorableStateData(
-      [[NSMutableData alloc] init]);
+  // On macOS 12+, create restorable state archives with secure encoding. See
+  // the article at
+  // https://sector7.computest.nl/post/2022-08-process-injection-breaking-all-macos-security-layers-with-a-single-vulnerability/
+  // for more details.
   base::scoped_nsobject<NSKeyedArchiver> encoder([[NSKeyedArchiver alloc]
-      initForWritingWithMutableData:restorableStateData]);
+      initRequiringSecureCoding:base::mac::IsAtLeastOS12()]);
   encoder.get().delegate = self;
   [self encodeRestorableStateWithCoder:encoder];
   [encoder finishEncoding];
+  NSData* restorableStateData = encoder.get().encodedData;
 
-  auto* bytes = static_cast<uint8_t const*>(restorableStateData.get().bytes);
+  auto* bytes = static_cast<uint8_t const*>(restorableStateData.bytes);
   _bridge->host()->OnWindowStateRestorationDataChanged(
-      std::vector<uint8_t>(bytes, bytes + restorableStateData.get().length));
+      std::vector<uint8_t>(bytes, bytes + restorableStateData.length));
   _willUpdateRestorableState = NO;
 }
 

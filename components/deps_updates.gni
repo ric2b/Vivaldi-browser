@@ -8,17 +8,17 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/bookmarks:bookmark_locales_include",
     "//vivaldi/components/content_injection",
     "//vivaldi/components/request_filter",
-    "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/components/ad_blocker",
     "//vivaldi/components/page_actions",
   ]
   allow_circular_includes_from += [
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/components/request_filter",
-    "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/components/ad_blocker",
   ]
   deps += [
     "//vivaldi/components/datasource:dataurl",
-    "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/components/ad_blocker",
     "//vivaldi/components/request_filter/adblock_filter/mojom"
   ]
 }
@@ -33,7 +33,7 @@ update_target("//chrome/renderer:renderer") {
 if (vivaldi_build_tests) {
   update_target("//components:components_unittests") {
       deps += [
-        "//vivaldi/components/request_filter/adblock_filter:unit_tests",
+        "//vivaldi/components/ad_blocker:unit_tests",
         "//vivaldi/components/datasource:dataurl_unit_tests",
       ]
   }

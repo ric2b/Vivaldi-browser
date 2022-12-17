@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -80,21 +80,21 @@ export class DiscountConsentCard extends I18nMixin
       currentStep: {type: Number, value: 0},
       steps_: {
         type: Array,
-        computed: 'computeSteps_(showCloseButton_, stepOneContent_)'
+        computed: 'computeSteps_(showCloseButton_, stepOneContent_)',
       },
       colorConsentContainer_: {
         type: Boolean,
         computed: 'computeColorConsentContainer_(currentStep)',
-        reflectToAttribute: true
+        reflectToAttribute: true,
       },
       showCloseButton_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean(
-            'modulesCartDiscountInlineCardShowCloseButton')
+            'modulesCartDiscountInlineCardShowCloseButton'),
       },
       stepOneContent_:
           {type: String, computed: 'computeStepOneContent_(merchants)'},
-      showDiscountConsentDialog_: {type: Boolean, value: false}
+      showDiscountConsentDialog_: {type: Boolean, value: false},
     };
   }
 
@@ -105,7 +105,7 @@ export class DiscountConsentCard extends I18nMixin
   currentStep: number;
   // Whether the 'x' button is shown.
   private showCloseButton_: boolean;
-  private steps_: Array<Step>;
+  private steps_: Step[];
   // This is a Finch parameter that decides whether we should change container
   // background color.
   private colorConsentContainer_: boolean;
@@ -132,7 +132,7 @@ export class DiscountConsentCard extends I18nMixin
   }
 
   private computeSteps_(
-      showCloseButton: boolean, stepOneContent: string): Array<Step> {
+      showCloseButton: boolean, stepOneContent: string): Step[] {
     const steps = [];
     steps.push({
       id: 'step1',
@@ -155,7 +155,7 @@ export class DiscountConsentCard extends I18nMixin
             this.showDiscountConsentDialog_ = true;
           }
         },
-      }
+      },
     });
 
     if (this.getTotalStep_() === 1) {
@@ -171,7 +171,7 @@ export class DiscountConsentCard extends I18nMixin
           this.dispatchEvent(
               new CustomEvent('discount-consent-accepted', {composed: true}));
         },
-      }
+      },
     };
     if (showCloseButton) {
       step2.hasOneButton = true;
@@ -182,7 +182,7 @@ export class DiscountConsentCard extends I18nMixin
         onClickHandler: () => {
           this.dispatchEvent(
               new CustomEvent('discount-consent-rejected', {composed: true}));
-        }
+        },
       };
     }
     steps.push(step2);
@@ -215,9 +215,9 @@ export class DiscountConsentCard extends I18nMixin
   private getFaviconUrl_(url: string): string {
     const faviconUrl = new URL('chrome://favicon2/');
     faviconUrl.searchParams.set('size', '20');
-    faviconUrl.searchParams.set('scale_factor', '1x');
-    faviconUrl.searchParams.set('show_fallback_monogram', '');
-    faviconUrl.searchParams.set('page_url', url);
+    faviconUrl.searchParams.set('scaleFactor', '1x');
+    faviconUrl.searchParams.set('showFallbackMonogram', '');
+    faviconUrl.searchParams.set('pageUrl', url);
     return faviconUrl.href;
   }
 

@@ -20,6 +20,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/common/string_util.h"
+#import "ios/chrome/common/ui/promo_style/constants.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -54,10 +55,6 @@ using chrome_test_util::ButtonWithAccessibilityLabelId;
 
 namespace {
 
-// Identifier for the main scroll view covering all the screen content.
-NSString* const kScrollViewIdentifier =
-    @"kPromoStyleScrollViewAccessibilityIdentifier";
-
 // Returns a matcher for the sign-in screen "Continue as <identity>" button.
 id<GREYMatcher> GetContinueButtonWithIdentityMatcher(
     FakeChromeIdentity* fakeIdentity) {
@@ -72,15 +69,16 @@ id<GREYMatcher> GetContinueButtonWithIdentityMatcher(
 // Returns a matcher for the whole forced sign-in screen.
 id<GREYMatcher> GetForcedSigninScreenMatcher() {
   return grey_accessibilityID(
-      first_run::kFirstRunSignInScreenAccessibilityIdentifier);
+      first_run::kFirstRunLegacySignInScreenAccessibilityIdentifier);
 }
 
 // Checks that the forced sign-in prompt is fully dismissed by making sure
 // that there isn't any forced sign-in screen displayed.
 void VerifyForcedSigninFullyDismissed() {
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(
-                     first_run::kFirstRunSignInScreenAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(
+              first_run::kFirstRunLegacySignInScreenAccessibilityIdentifier)]
       assertWithMatcher:grey_nil()];
 
   [[EarlGrey selectElementWithMatcher:
@@ -92,7 +90,8 @@ void VerifyForcedSigninFullyDismissed() {
 // Scrolls down to `elementMatcher` in the scrollable content of the first run
 // screen.
 void ScrollToElementAndAssertVisibility(id<GREYMatcher> elementMatcher) {
-  id<GREYMatcher> scrollView = grey_accessibilityID(kScrollViewIdentifier);
+  id<GREYMatcher> scrollView =
+      grey_accessibilityID(kPromoStyleScrollViewAccessibilityIdentifier);
 
   [[[EarlGrey
       selectElementWithMatcher:grey_allOf(elementMatcher,
@@ -570,13 +569,7 @@ std::unique_ptr<net::test_server::HttpResponse> PageHttpResponse(
 
 // Tests that the forced sign-in prompt can be shown on dynamic policy update
 // when a browser modal is displayed on top of the browser view.
-// TODO(crbug.com/1331009): Test fails on device.
-#if !TARGET_IPHONE_SIMULATOR
-#define MAYBE_testSignInScreenOnModal DISABLED_testSignInScreenOnModal
-#else
-#define MAYBE_testSignInScreenOnModal testSignInScreenOnModal
-#endif
-- (void)MAYBE_testSignInScreenOnModal {
+- (void)testSignInScreenOnModal {
   // Restart the app to reset the policies.
   AppLaunchConfiguration config;
   config.features_disabled.push_back(signin::kNewMobileIdentityConsistencyFRE);
@@ -592,6 +585,7 @@ std::unique_ptr<net::test_server::HttpResponse> PageHttpResponse(
 
   // Open the settings menu which represents a modal.
   [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGrey waitForMatcher:chrome_test_util::SettingsCollectionView()];
 
   // Enable the forced sign-in policy to show the forced sign-in prompt.
   SetSigninEnterprisePolicyValue(BrowserSigninMode::kForced);

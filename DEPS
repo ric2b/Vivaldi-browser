@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I2c86517abd293003b1fe9850e1ef04c4c858aa6b",
+  "upstream_commit_id": "I2f30593ff98abc1b598b949152fa983b3117c08b",
 }
 
 hooks = [
@@ -188,6 +188,14 @@ hooks = [
                '-s', 'chromium/third_party/skia',
                '--header', 'chromium/skia/ext/skia_commit_hash.h'],
   },
+  {
+    # Update dawn_version.h.
+    'name': 'lastchange_dawn',
+    'pattern': '.',
+    'action': ['python3', 'chromium/build/util/lastchange.py',
+               '-s', 'chromium/third_party/dawn',
+               '--revision', 'chromium/gpu/webgpu/DAWN_VERSION'],
+  },
   # Pull dsymutil binaries using checked-in hashes.
   {
     'name': 'dsymutil_mac_arm64',
@@ -351,18 +359,6 @@ hooks = [
     ],
   },
   {
-    'name': 'gvr_static_shim_android_arm_1',
-    'pattern': '\\.sha1',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-gvr-static-shim',
-                '-s', 'chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm_1.a.sha1',
-    ],
-  },
-  {
     'name': 'gvr_static_shim_android_arm_Cr',
     'pattern': '\\.sha1',
     'condition': 'checkout_android',
@@ -372,18 +368,6 @@ hooks = [
                 '--no_auth',
                 '--bucket', 'chromium-gvr-static-shim',
                 '-s', 'chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm_Cr.a.sha1',
-    ],
-  },
-  {
-    'name': 'gvr_static_shim_android_arm64_1',
-    'pattern': '\\.sha1',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-gvr-static-shim',
-                '-s', 'chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm64_1.a.sha1',
     ],
   },
   {
@@ -505,6 +489,16 @@ hooks = [
     ],
   },
   {
+    # Clean up build dirs for crbug.com/1337238.
+    # After a libc++ roll and revert, .ninja_deps would get into a state
+    # that breaks Ninja on Windows.
+    # TODO(crbug.com/1337238): Remove in a month or so.
+    'name': 'del_ninja_deps_cache',
+    'pattern': '.',
+    'condition': 'host_os == "win"',
+    'action': ['python3', 'chromium/build/del_ninja_deps_cache.py'],
+  },
+ {
     'name': 'bootstrap-gn',
     'pattern': '.',
     'action': [

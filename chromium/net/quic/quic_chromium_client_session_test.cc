@@ -76,8 +76,7 @@
 
 using testing::_;
 
-namespace net {
-namespace test {
+namespace net::test {
 namespace {
 
 const IPEndPoint kIpEndPoint = IPEndPoint(IPAddress::IPv4AllZeros(), 0);
@@ -85,8 +84,8 @@ const char kServerHostname[] = "test.example.com";
 const uint16_t kServerPort = 443;
 const size_t kMaxReadersPerQuicSession = 5;
 
-const NetworkChangeNotifier::NetworkHandle kDefaultNetworkForTests = 1;
-const NetworkChangeNotifier::NetworkHandle kNewNetworkForTests = 2;
+const handles::NetworkHandle kDefaultNetworkForTests = 1;
+const handles::NetworkHandle kNewNetworkForTests = 2;
 
 struct TestParams {
   quic::ParsedQuicVersion version;
@@ -134,10 +133,11 @@ class QuicChromiumClientSessionTest
         config_(quic::test::DefaultQuicConfig()),
         crypto_config_(
             quic::test::crypto_test_utils::ProofVerifierForTesting()),
-        default_read_(new MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)),
-        socket_data_(
-            new SequencedSocketData(base::make_span(default_read_.get(), 1),
-                                    base::span<MockWrite>())),
+        default_read_(
+            std::make_unique<MockRead>(SYNCHRONOUS, ERR_IO_PENDING, 0)),
+        socket_data_(std::make_unique<SequencedSocketData>(
+            base::make_span(default_read_.get(), 1),
+            base::span<MockWrite>())),
         helper_(&clock_, &random_),
         transport_security_state_(std::make_unique<TransportSecurityState>()),
         session_key_(kServerHostname,
@@ -148,7 +148,7 @@ class QuicChromiumClientSessionTest
                      SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false),
         destination_(url::kHttpsScheme, kServerHostname, kServerPort),
-        default_network_(NetworkChangeNotifier::kInvalidNetworkHandle),
+        default_network_(handles::kInvalidNetworkHandle),
         client_maker_(version_,
                       quic::QuicUtils::CreateRandomConnectionId(&random_),
                       &clock_,
@@ -251,14 +251,13 @@ class QuicChromiumClientSessionTest
     ASSERT_THAT(session_->CryptoConnect(callback_.callback()), IsOk());
   }
 
-  QuicChromiumPacketWriter* CreateQuicChromiumPacketWriter(
+  std::unique_ptr<QuicChromiumPacketWriter> CreateQuicChromiumPacketWriter(
       DatagramClientSocket* socket,
       QuicChromiumClientSession* session) const {
-    std::unique_ptr<QuicChromiumPacketWriter> writer(
-        new QuicChromiumPacketWriter(
-            socket, base::ThreadTaskRunnerHandle::Get().get()));
+    auto writer = std::make_unique<QuicChromiumPacketWriter>(
+        socket, base::ThreadTaskRunnerHandle::Get().get());
     writer->set_delegate(session);
-    return writer.release();
+    return writer;
   }
 
   quic::QuicStreamId GetNthClientInitiatedBidirectionalStreamId(int n) {
@@ -304,7 +303,7 @@ class QuicChromiumClientSessionTest
   QuicSessionKey session_key_;
   url::SchemeHostPort destination_;
   std::unique_ptr<TestingQuicChromiumClientSession> session_;
-  NetworkChangeNotifier::NetworkHandle default_network_;
+  handles::NetworkHandle default_network_;
   std::unique_ptr<QuicConnectivityMonitor> connectivity_monitor_;
   TestServerPushDelegate test_push_delegate_;
   raw_ptr<quic::QuicConnectionVisitorInterface> visitor_;
@@ -2026,12 +2025,11 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   EXPECT_THAT(new_socket->Connect(kIpEndPoint), IsOk());
 
   // Create reader and writer.
-  std::unique_ptr<QuicChromiumPacketReader> new_reader(
-      new QuicChromiumPacketReader(new_socket.get(), &clock_, session_.get(),
-                                   kQuicYieldAfterPacketsRead,
-                                   quic::QuicTime::Delta::FromMilliseconds(
-                                       kQuicYieldAfterDurationMilliseconds),
-                                   net_log_with_source_));
+  auto new_reader = std::make_unique<QuicChromiumPacketReader>(
+      new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
+      quic::QuicTime::Delta::FromMilliseconds(
+          kQuicYieldAfterDurationMilliseconds),
+      net_log_with_source_);
   new_reader->StartReading();
   std::unique_ptr<QuicChromiumPacketWriter> new_writer(
       CreateQuicChromiumPacketWriter(new_socket.get(), session_.get()));
@@ -2133,12 +2131,11 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
     EXPECT_THAT(new_socket->Connect(kIpEndPoint), IsOk());
 
     // Create reader and writer.
-    std::unique_ptr<QuicChromiumPacketReader> new_reader(
-        new QuicChromiumPacketReader(new_socket.get(), &clock_, session_.get(),
-                                     kQuicYieldAfterPacketsRead,
-                                     quic::QuicTime::Delta::FromMilliseconds(
-                                         kQuicYieldAfterDurationMilliseconds),
-                                     net_log_with_source_));
+    auto new_reader = std::make_unique<QuicChromiumPacketReader>(
+        new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
+        quic::QuicTime::Delta::FromMilliseconds(
+            kQuicYieldAfterDurationMilliseconds),
+        net_log_with_source_);
     new_reader->StartReading();
     std::unique_ptr<QuicChromiumPacketWriter> new_writer(
         CreateQuicChromiumPacketWriter(new_socket.get(), session_.get()));
@@ -2176,12 +2173,11 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
   EXPECT_THAT(new_socket->Connect(kIpEndPoint), IsOk());
 
   // Create reader and writer.
-  std::unique_ptr<QuicChromiumPacketReader> new_reader(
-      new QuicChromiumPacketReader(new_socket.get(), &clock_, session_.get(),
-                                   kQuicYieldAfterPacketsRead,
-                                   quic::QuicTime::Delta::FromMilliseconds(
-                                       kQuicYieldAfterDurationMilliseconds),
-                                   net_log_with_source_));
+  auto new_reader = std::make_unique<QuicChromiumPacketReader>(
+      new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
+      quic::QuicTime::Delta::FromMilliseconds(
+          kQuicYieldAfterDurationMilliseconds),
+      net_log_with_source_);
   new_reader->StartReading();
   std::unique_ptr<QuicChromiumPacketWriter> new_writer(
       CreateQuicChromiumPacketWriter(new_socket.get(), session_.get()));
@@ -2266,12 +2262,11 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   EXPECT_THAT(new_socket->Connect(kIpEndPoint), IsOk());
 
   // Create reader and writer.
-  std::unique_ptr<QuicChromiumPacketReader> new_reader(
-      new QuicChromiumPacketReader(new_socket.get(), &clock_, session_.get(),
-                                   kQuicYieldAfterPacketsRead,
-                                   quic::QuicTime::Delta::FromMilliseconds(
-                                       kQuicYieldAfterDurationMilliseconds),
-                                   net_log_with_source_));
+  auto new_reader = std::make_unique<QuicChromiumPacketReader>(
+      new_socket.get(), &clock_, session_.get(), kQuicYieldAfterPacketsRead,
+      quic::QuicTime::Delta::FromMilliseconds(
+          kQuicYieldAfterDurationMilliseconds),
+      net_log_with_source_);
   new_reader->StartReading();
   std::unique_ptr<QuicChromiumPacketWriter> new_writer(
       CreateQuicChromiumPacketWriter(new_socket.get(), session_.get()));
@@ -2424,13 +2419,13 @@ TEST_P(QuicChromiumClientSessionTest, ResetOnEmptyResponseHeaders) {
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
 }
 
-// This test verifies that when NetworkHandle is not supported and there is no
-// network change, session reports to the connectivity monitor correctly on path
-// degrading detection and recovery.
+// This test verifies that when handles::NetworkHandle is not supported and
+// there is no network change, session reports to the connectivity monitor
+// correctly on path degrading detection and recovery.
 TEST_P(QuicChromiumClientSessionTest,
        DegradingWithoutNetworkChange_NoNetworkHandle) {
   // Add a connectivity monitor for testing.
-  default_network_ = NetworkChangeNotifier::kInvalidNetworkHandle;
+  default_network_ = handles::kInvalidNetworkHandle;
   connectivity_monitor_ =
       std::make_unique<QuicConnectivityMonitor>(default_network_);
 
@@ -2459,13 +2454,13 @@ TEST_P(QuicChromiumClientSessionTest,
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
 }
 
-// This test verifies that when the NetworkHandle is not supported, and there
-// are speculated network change reported via OnIPAddressChange, session
+// This test verifies that when the handles::NetworkHandle is not supported, and
+// there are speculated network change reported via OnIPAddressChange, session
 // still reports to the connectivity monitor correctly on path degrading
 // detection and recovery.
 TEST_P(QuicChromiumClientSessionTest, DegradingWithIPAddressChange) {
-  // Default network is always set to kInvalidNetworkHandle.
-  default_network_ = NetworkChangeNotifier::kInvalidNetworkHandle;
+  // Default network is always set to handles::kInvalidNetworkHandle.
+  default_network_ = handles::kInvalidNetworkHandle;
   connectivity_monitor_ =
       std::make_unique<QuicConnectivityMonitor>(default_network_);
 
@@ -2480,12 +2475,12 @@ TEST_P(QuicChromiumClientSessionTest, DegradingWithIPAddressChange) {
   session_->ReallyOnPathDegrading();
   EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
 
-  // When NetworkHandle is not supported, network change is notified via
-  // IP address change.
+  // When handles::NetworkHandle is not supported, network change is notified
+  // via IP address change.
   connectivity_monitor_->OnIPAddressChanged();
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
 
-  // When NetworkHandle is not supported and IP address changes,
+  // When handles::NetworkHandle is not supported and IP address changes,
   // session either goes away or gets closed. When it goes away,
   // reporting to connectivity monitor is disabled.
   connectivity_monitor_->OnSessionGoingAwayOnIPAddressChange(session_.get());
@@ -2505,11 +2500,12 @@ TEST_P(QuicChromiumClientSessionTest, DegradingWithIPAddressChange) {
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
 }
 
-// This test verifies that when NetworkHandle is supported but migration is
-// not supported and there's no network change, session reports to
+// This test verifies that when handles::NetworkHandle is supported but
+// migration is not supported and there's no network change, session reports to
 // connectivity monitor correctly on path degrading detection or recovery.
-// Default network change is currently reported with valid NetworkHandles
-// while session's current network interface is tracked by |default_network_|.
+// Default network change is currently reported with valid
+// handles::NetworkHandles while session's current network interface is tracked
+// by |default_network_|.
 TEST_P(QuicChromiumClientSessionTest,
        DegradingOnDeafultNetwork_WithoutMigration) {
   default_network_ = kDefaultNetworkForTests;
@@ -2538,9 +2534,9 @@ TEST_P(QuicChromiumClientSessionTest,
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
 }
 
-// This test verifies that when NetworkHandle is supported but migrations is not
-// supported and there is network changes, session reports to the connectivity
-// monitor correctly on path degrading detection or recovery.
+// This test verifies that when handles::NetworkHandle is supported but
+// migrations is not supported and there is network changes, session reports to
+// the connectivity monitor correctly on path degrading detection or recovery.
 TEST_P(QuicChromiumClientSessionTest,
        DegradingWithDeafultNetworkChange_WithoutMigration) {
   default_network_ = kDefaultNetworkForTests;
@@ -2626,7 +2622,7 @@ TEST_P(QuicChromiumClientSessionTest, WriteErrorDuringCryptoConnect) {
 
 TEST_P(QuicChromiumClientSessionTest, WriteErrorAfterHandshakeConfirmed) {
   // Add a connectivity monitor for testing.
-  default_network_ = NetworkChangeNotifier::kInvalidNetworkHandle;
+  default_network_ = handles::kInvalidNetworkHandle;
   connectivity_monitor_ =
       std::make_unique<QuicConnectivityMonitor>(default_network_);
 
@@ -2666,5 +2662,4 @@ TEST_P(QuicChromiumClientSessionTest, WriteErrorAfterHandshakeConfirmed) {
 }
 
 }  // namespace
-}  // namespace test
-}  // namespace net
+}  // namespace net::test

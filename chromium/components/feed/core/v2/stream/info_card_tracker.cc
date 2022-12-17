@@ -77,10 +77,10 @@ std::vector<InfoCardTrackingState> InfoCardTracker::GetAllStates(
     int64_t server_timestamp,
     int64_t client_timestamp) const {
   std::vector<InfoCardTrackingState> states;
-  const base::Value* dict = profile_prefs_->Get(prefs::kInfoCardStates);
-  if (dict && dict->is_dict()) {
+  const base::Value& dict = profile_prefs_->GetValue(prefs::kInfoCardStates);
+  if (dict.is_dict()) {
     int64_t timestamp_adjustment = server_timestamp - client_timestamp;
-    for (const auto pair : dict->DictItems()) {
+    for (const auto pair : dict.DictItems()) {
       int info_card_type = 0;
       if (!base::StringToInt(pair.first, &info_card_type))
         continue;
@@ -141,12 +141,10 @@ void InfoCardTracker::ResetState(int info_card_type) {
 }
 
 InfoCardTrackingState InfoCardTracker::GetState(int info_card_type) const {
-  const base::Value* all_states =
-      profile_prefs_->GetDictionary(prefs::kInfoCardStates);
-  if (!all_states)
-    return InfoCardTrackingState();
+  const base::Value::Dict& all_states =
+      profile_prefs_->GetValueDict(prefs::kInfoCardStates);
   const std::string* base64_serialized_state =
-      all_states->FindStringKey(InfoCardTypeToString(info_card_type));
+      all_states.FindString(InfoCardTypeToString(info_card_type));
   if (!base64_serialized_state)
     return InfoCardTrackingState();
   return DecodeFromBase64SerializedString(*base64_serialized_state);
@@ -162,14 +160,11 @@ void InfoCardTracker::SetState(int info_card_type,
   std::string base64_state;
   base::Base64Encode(serialized_state, &base64_state);
 
-  base::Value updated_states(base::Value::Type::DICTIONARY);
-  const base::Value* states = profile_prefs_->Get(prefs::kInfoCardStates);
-  if (states && states->is_dict()) {
-    updated_states = states->Clone();
-  }
-  updated_states.SetStringKey(InfoCardTypeToString(info_card_type),
-                              base64_state);
-  profile_prefs_->Set(prefs::kInfoCardStates, updated_states);
+  const base::Value::Dict& states =
+      profile_prefs_->GetValueDict(prefs::kInfoCardStates);
+  base::Value::Dict updated_states = states.Clone();
+  updated_states.Set(InfoCardTypeToString(info_card_type), base64_state);
+  profile_prefs_->SetDict(prefs::kInfoCardStates, std::move(updated_states));
 }
 
 }  // namespace feed

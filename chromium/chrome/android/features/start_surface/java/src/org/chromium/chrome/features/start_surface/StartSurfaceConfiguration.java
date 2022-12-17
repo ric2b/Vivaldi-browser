@@ -14,17 +14,12 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
-import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -37,51 +32,27 @@ public class StartSurfaceConfiguration {
     private static final String TAG = "StartSurfaceConfig";
     public static final StringCachedFieldTrialParameter START_SURFACE_VARIATION =
             new StringCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation", "");
+                    ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation", "single");
     public static final BooleanCachedFieldTrialParameter START_SURFACE_EXCLUDE_MV_TILES =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "exclude_mv_tiles", false);
-    public static final BooleanCachedFieldTrialParameter START_SURFACE_EXCLUDE_QUERY_TILES =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, "exclude_query_tiles", true);
     public static final BooleanCachedFieldTrialParameter
             START_SURFACE_HIDE_INCOGNITO_SWITCH_NO_TAB =
                     new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                            "hide_switch_when_no_incognito_tabs", false);
+                            "hide_switch_when_no_incognito_tabs", true);
 
     public static final BooleanCachedFieldTrialParameter START_SURFACE_LAST_ACTIVE_TAB_ONLY =
             new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, "show_last_active_tab_only", false);
+                    ChromeFeatureList.START_SURFACE_ANDROID, "show_last_active_tab_only", true);
     public static final BooleanCachedFieldTrialParameter START_SURFACE_OPEN_NTP_INSTEAD_OF_START =
             new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, "open_ntp_instead_of_start", false);
-
-    private static final String OMNIBOX_FOCUSED_ON_NEW_TAB_PARAM = "omnibox_focused_on_new_tab";
-    public static final BooleanCachedFieldTrialParameter OMNIBOX_FOCUSED_ON_NEW_TAB =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    OMNIBOX_FOCUSED_ON_NEW_TAB_PARAM, false);
-
-    private static final String SHOW_NTP_TILES_ON_OMNIBOX_PARAM = "show_ntp_tiles_on_omnibox";
-    public static final BooleanCachedFieldTrialParameter SHOW_NTP_TILES_ON_OMNIBOX =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    SHOW_NTP_TILES_ON_OMNIBOX_PARAM, false);
-
-    private static final String HOME_BUTTON_ON_GRID_TAB_SWITCHER_PARAM =
-            "home_button_on_grid_tab_switcher";
-    public static final BooleanCachedFieldTrialParameter HOME_BUTTON_ON_GRID_TAB_SWITCHER =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    HOME_BUTTON_ON_GRID_TAB_SWITCHER_PARAM, false);
+                    ChromeFeatureList.START_SURFACE_ANDROID, "open_ntp_instead_of_start", true);
 
     private static final String TAB_COUNT_BUTTON_ON_START_SURFACE_PARAM =
             "tab_count_button_on_start_surface";
     public static final BooleanCachedFieldTrialParameter TAB_COUNT_BUTTON_ON_START_SURFACE =
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    TAB_COUNT_BUTTON_ON_START_SURFACE_PARAM, false);
-
-    private static final String NEW_SURFACE_PARAM = "new_home_surface_from_home_button";
-    public static final StringCachedFieldTrialParameter NEW_SURFACE_FROM_HOME_BUTTON =
-            new StringCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, NEW_SURFACE_PARAM, "");
+                    TAB_COUNT_BUTTON_ON_START_SURFACE_PARAM, true);
 
     private static final String SHOW_TABS_IN_MRU_ORDER_PARAM = "show_tabs_in_mru_order";
     public static final BooleanCachedFieldTrialParameter SHOW_TABS_IN_MRU_ORDER =
@@ -92,11 +63,6 @@ public class StartSurfaceConfiguration {
     public static final BooleanCachedFieldTrialParameter SUPPORT_ACCESSIBILITY =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, SUPPORT_ACCESSIBILITY_PARAM, true);
-
-    private static final String FINALE_ANIMATION_ENABLED_PARAM = "finale_animation_enabled";
-    public static final BooleanCachedFieldTrialParameter FINALE_ANIMATION_ENABLED =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, FINALE_ANIMATION_ENABLED_PARAM, false);
 
     private static final String WARM_UP_RENDERER_PARAM = "warm_up_renderer";
     public static final BooleanCachedFieldTrialParameter WARM_UP_RENDERER =
@@ -138,21 +104,21 @@ public class StartSurfaceConfiguration {
 
     private static final String SIGNIN_PROMO_NTP_COUNT_LIMIT_PARAM = "signin_promo_NTP_count_limit";
     public static final IntCachedFieldTrialParameter SIGNIN_PROMO_NTP_COUNT_LIMIT =
-            new IntCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    SIGNIN_PROMO_NTP_COUNT_LIMIT_PARAM, Integer.MAX_VALUE);
+            new IntCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, SIGNIN_PROMO_NTP_COUNT_LIMIT_PARAM, 5);
 
     private static final String SIGNIN_PROMO_NTP_SINCE_FIRST_TIME_SHOWN_LIMIT_HOURS_PARAM =
             "signin_promo_NTP_since_first_time_shown_limit_hours";
     public static final IntCachedFieldTrialParameter
             SIGNIN_PROMO_NTP_SINCE_FIRST_TIME_SHOWN_LIMIT_HOURS =
                     new IntCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                            SIGNIN_PROMO_NTP_SINCE_FIRST_TIME_SHOWN_LIMIT_HOURS_PARAM, -1);
+                            SIGNIN_PROMO_NTP_SINCE_FIRST_TIME_SHOWN_LIMIT_HOURS_PARAM, 336);
 
     private static final String SIGNIN_PROMO_NTP_RESET_AFTER_HOURS_PARAM =
             "signin_promo_NTP_reset_after_hours";
     public static final IntCachedFieldTrialParameter SIGNIN_PROMO_NTP_RESET_AFTER_HOURS =
             new IntCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    SIGNIN_PROMO_NTP_RESET_AFTER_HOURS_PARAM, -1);
+                    SIGNIN_PROMO_NTP_RESET_AFTER_HOURS_PARAM, 672);
 
     private static final String IS_DOODLE_SUPPORTED_PARAM = "is_doodle_supported";
     public static final BooleanCachedFieldTrialParameter IS_DOODLE_SUPPORTED =
@@ -177,8 +143,7 @@ public class StartSurfaceConfiguration {
     public static boolean isStartSurfaceFlagEnabled() {
         // Vivaldi does not use start surface.
         if (BuildConfig.IS_VIVALDI) return false;
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.START_SURFACE_ANDROID)
-                && !SysUtils.isLowEndDevice();
+        return ChromeFeatureList.sStartSurfaceAndroid.isEnabled() && !SysUtils.isLowEndDevice();
     }
 
     /**
@@ -186,28 +151,6 @@ public class StartSurfaceConfiguration {
      */
     public static boolean isStartSurfaceSinglePaneEnabled() {
         return isStartSurfaceFlagEnabled() && START_SURFACE_VARIATION.getValue().equals("single");
-    }
-
-    /**
-     * @return the PageClassification type of the fake Omnibox on the Start surface homepage.
-     */
-    public static int getPageClassificationForHomepage() {
-        // When NEW_SURFACE_FROM_HOME_BUTTON equals "hide_mv_tiles_and_tab_switcher", the MV (NTP)
-        // tiles are removed from the Start surface homepage when tapping the home button. Thus, we
-        // have to show MV (NTP) tiles when the fake omnibox get focusing, and there is no need to
-        // check SHOW_NTP_TILES_ON_OMNIBOX anymore.
-        return TextUtils.equals(
-                       NEW_SURFACE_FROM_HOME_BUTTON.getValue(), "hide_mv_tiles_and_tab_switcher")
-                ? PageClassification.START_SURFACE_HOMEPAGE_VALUE
-                : PageClassification.NTP_VALUE;
-    }
-
-    /**
-     * @return the PageClassification type of the new Tab.
-     */
-    public static int getPageClassificationForNewTab() {
-        return SHOW_NTP_TILES_ON_OMNIBOX.getValue() ? PageClassification.START_SURFACE_NEW_TAB_VALUE
-                                                    : PageClassification.NTP_VALUE;
     }
 
     /**
@@ -225,66 +168,6 @@ public class StartSurfaceConfiguration {
     public static String getHistogramName(String name, boolean isInstantStart) {
         return STARTUP_UMA_PREFIX + name
                 + (isInstantStart ? INSTANT_START_SUBFIX : REGULAR_START_SUBFIX);
-    }
-
-    /**
-     * Returns whether the given Tab has the flag of focusing on its Omnibox on the first time the
-     * Tab is showing, and resets the flag in the Tab's UserData. This function returns true only
-     * when {@link OMNIBOX_FOCUSED_ON_NEW_TAB} is enabled.
-     */
-    public static boolean consumeFocusOnOmnibox(Tab tab, @LayoutType int layout) {
-        if (tab != null && tab.getUrl().isEmpty() && layout == LayoutType.BROWSING
-                && StartSurfaceUserData.getFocusOnOmnibox(tab)) {
-            assert OMNIBOX_FOCUSED_ON_NEW_TAB.getValue();
-            StartSurfaceUserData.setFocusOnOmnibox(tab, false);
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * @return Whether the given tab should be treated as chrome://newTab. This function returns
-     *         true only when {@link OMNIBOX_FOCUSED_ON_NEW_TAB} is enabled, the tab is newly
-     *         created from the new Tab menu or "+" button, and it hasn't navigate to any URL yet.
-     */
-    public static boolean shouldHandleAsNtp(Tab tab) {
-        // TODO(https://crbug.com/1305397): Rule out a null url here and assert that it's non-null.
-        if (tab == null || tab.getUrl() == null) return false;
-
-        return tab.getUrl().isEmpty() && StartSurfaceUserData.getCreatedAsNtp(tab);
-    }
-
-    /**
-     * @return Whether the given tab with the given url should be treated as chrome://newTab. This
-     *         function returns true only when {@link OMNIBOX_FOCUSED_ON_NEW_TAB} is enabled, the
-     *         tab is newly created from the new Tab menu or "+" button, and it hasn't navigate to
-     *         any URL yet.
-     */
-    // TODO(https://crbug.com/1305374): migrate to GURL.
-    public static boolean shouldHandleAsNtp(Tab tab, String url) {
-        if (tab == null || url == null) return false;
-
-        return url.isEmpty() && StartSurfaceUserData.getCreatedAsNtp(tab);
-    }
-
-    /**
-     * Sets the UserData if the Tab is a newly created empty Tab when
-     * {@link OMNIBOX_FOCUSED_ON_NEW_TAB} is enabled.
-     */
-    public static void maySetUserDataForEmptyTab(Tab tab, String url) {
-        if (!OMNIBOX_FOCUSED_ON_NEW_TAB.getValue() || tab == null || !TextUtils.isEmpty(url)
-                || tab.getLaunchType() != TabLaunchType.FROM_START_SURFACE) {
-            return;
-        }
-        StartSurfaceUserData.setFocusOnOmnibox(tab, true);
-        StartSurfaceUserData.setCreatedAsNtp(tab);
-    }
-
-    /**
-     * Returns whether to show the transition animations for the Finale version.
-     */
-    public static boolean shouldShowAnimationsForFinale() {
-        return HOME_BUTTON_ON_GRID_TAB_SWITCHER.getValue() && FINALE_ANIMATION_ENABLED.getValue();
     }
 
     @CalledByNative

@@ -196,7 +196,7 @@ WebDriverLog::WebDriverLog(const std::string& type, Log::Level min_level)
 WebDriverLog::~WebDriverLog() {
   size_t sum = 0;
   for (const std::unique_ptr<base::ListValue>& batch : batches_of_entries_)
-    sum += batch->GetListDeprecated().size();
+    sum += batch->GetList().size();
   VLOG(1) << "Log type '" << type_ << "' lost " << sum
           << " entries on destruction";
 }
@@ -216,14 +216,17 @@ std::unique_ptr<base::ListValue> WebDriverLog::GetAndClearEntries() {
 
 bool GetFirstErrorMessageFromList(const base::ListValue* list,
                                   std::string* message) {
-  for (const auto& entry : list->GetListDeprecated()) {
-    const base::DictionaryValue* log_entry = nullptr;
-    if (entry.GetAsDictionary(&log_entry)) {
-      std::string level;
-      if (log_entry->GetString("level", &level))
-        if (level == kLevelToName[Log::kError])
-          if (log_entry->GetString("message", message))
-            return true;
+  for (const auto& entry : list->GetList()) {
+    if (entry.is_dict()) {
+      const base::Value::Dict& log_entry = entry.GetDict();
+      const std::string* level = log_entry.FindString("level");
+      if (!level || *level != kLevelToName[Log::kError])
+        continue;
+
+      if (const std::string* maybe_message = log_entry.FindString("message")) {
+        *message = *maybe_message;
+        return true;
+      }
     }
   }
   return false;
@@ -251,7 +254,7 @@ void WebDriverLog::AddEntryTimestamped(const base::Time& timestamp,
     log_entry_dict.Set("source", source);
   log_entry_dict.Set("message", message);
   if (batches_of_entries_.empty() ||
-      batches_of_entries_.back()->GetListDeprecated().size() >=
+      batches_of_entries_.back()->GetList().size() >=
           internal::kMaxReturnedEntries) {
     batches_of_entries_.push_back(std::make_unique<base::ListValue>());
   }

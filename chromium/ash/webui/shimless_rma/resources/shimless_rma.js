@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import './critical_error_page.js';
+import './hardware_error_page.js';
 import './onboarding_choose_destination_page.js';
 import './onboarding_choose_wipe_device_page.js';
 import './onboarding_choose_wp_disable_method_page.js';
@@ -13,6 +14,7 @@ import './onboarding_select_components_page.js';
 import './onboarding_update_page.js';
 import './onboarding_wait_for_manual_wp_disable_page.js';
 import './onboarding_wp_disable_complete_page.js';
+import './reboot_page.js';
 import './reimaging_calibration_failed_page.js';
 import './reimaging_calibration_run_page.js';
 import './reimaging_calibration_setup_page.js';
@@ -25,7 +27,7 @@ import './wrapup_finalize_page.js';
 import './wrapup_repair_complete_page.js';
 import './wrapup_restock_page.js';
 import './wrapup_wait_for_manual_wp_enable_page.js';
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
@@ -41,7 +43,7 @@ import {ErrorObserverInterface, ErrorObserverReceiver, RmadErrorCode, ShimlessRm
 export const ButtonState = {
   VISIBLE: 'visible',
   DISABLED: 'disabled',
-  HIDDEN: 'hidden'
+  HIDDEN: 'hidden',
 };
 
 /** @type {number} */
@@ -213,6 +215,20 @@ export const StateComponentMapping = {
   },
   [State.kRepairComplete]: {
     componentIs: 'wrapup-repair-complete-page',
+    requiresReloadWhenShown: false,
+    buttonNext: ButtonState.HIDDEN,
+    buttonExit: ButtonState.HIDDEN,
+    buttonBack: ButtonState.HIDDEN,
+  },
+  [State.kHardwareError]: {
+    componentIs: 'hardware-error-page',
+    requiresReloadWhenShown: false,
+    buttonNext: ButtonState.HIDDEN,
+    buttonExit: ButtonState.HIDDEN,
+    buttonBack: ButtonState.HIDDEN,
+  },
+  [State.kReboot]: {
+    componentIs: 'reboot-page',
     requiresReloadWhenShown: false,
     buttonNext: ButtonState.HIDDEN,
     buttonExit: ButtonState.HIDDEN,
@@ -412,6 +428,24 @@ export class ShimlessRma extends ShimlessRmaBase {
       this.currentPage_.buttonNextLabelKey = e.detail;
       this.notifyPath('currentPage_.buttonNextLabelKey');
     };
+
+    /**
+     * The fatalHardwareErrorCallback_ callback is used by the finalization
+     * page and the provisioning page to tell the app that there is a fatal
+     * hardware error.
+     * @private {?Function}
+     */
+    this.fatalHardwareErrorCallback_ = (event) => {
+      const errorState = {
+        stateResult: {
+          state: State.kHardwareError,
+          canExit: false,
+          canGoBack: false,
+          error: event.detail,
+        },
+      };
+      this.showState_(errorState);
+    };
   }
 
   /** @override */
@@ -428,6 +462,8 @@ export class ShimlessRma extends ShimlessRmaBase {
         'enable-all-buttons', this.enableAllButtonsCallback_);
     window.addEventListener('click-exit-button', this.exitButtonCallback_);
     window.addEventListener('click-next-button', this.nextButtonCallback_);
+    window.addEventListener(
+        'fatal-hardware-error', this.fatalHardwareErrorCallback_);
   }
 
   /** @override */
@@ -444,6 +480,8 @@ export class ShimlessRma extends ShimlessRmaBase {
         'enable-all-buttons', this.enableAllButtonsCallback_);
     window.removeEventListener('click-exit-button', this.exitButtonCallback_);
     window.removeEventListener('click-next-button', this.nextButtonCallback_);
+    window.removeEventListener(
+        'fatal-hardware-error', this.fatalHardwareErrorCallback_);
   }
 
   /** @override */
@@ -493,6 +531,23 @@ export class ShimlessRma extends ShimlessRmaBase {
     if (this.handleStandardAndCriticalError_(stateResult.stateResult.error)) {
       return;
     }
+
+    // This is a special case for showing the reboot page when the platform
+    // sends the error code for expecting a reboot or a shut down.
+    if (stateResult.stateResult.error === RmadErrorCode.kExpectReboot ||
+        stateResult.stateResult.error === RmadErrorCode.kExpectShutdown) {
+      const rebootState = {
+        stateResult: {
+          state: State.kReboot,
+          canExit: false,
+          canGoBack: false,
+          error: stateResult.stateResult.error,
+        },
+      };
+      this.showState_(rebootState);
+      return;
+    }
+
     this.showState_(stateResult);
   }
 
@@ -515,8 +570,8 @@ export class ShimlessRma extends ShimlessRmaBase {
           state: State.kUnknown,
           canExit: false,
           canGoBack: false,
-          error: RmadErrorCode.kRmaNotRequired
-        }
+          error: RmadErrorCode.kRmaNotRequired,
+        },
       };
       this.showState_(errorState);
       return true;
@@ -551,7 +606,13 @@ export class ShimlessRma extends ShimlessRmaBase {
       // Set the next page as the current page.
       this.currentPage_ = nextStatePageInfo;
       if (!stateResult.canExit) {
-        this.currentPage_.buttonExit = ButtonState.HIDDEN;
+        // The calibration failed page is a special case because the Exit button
+        // is used as the Skip Calibration button. So we don't want to
+        // acknowledge `canExit` here.
+        if (this.currentPage_.componentIs !==
+            'reimaging-calibration-failed-page') {
+          this.currentPage_.buttonExit = ButtonState.HIDDEN;
+        }
       }
       if (!stateResult.canGoBack) {
         this.currentPage_.buttonBack = ButtonState.HIDDEN;
@@ -562,6 +623,9 @@ export class ShimlessRma extends ShimlessRmaBase {
           this.loadComponent_(this.currentPage_.componentIs);
       currentPageComponent.hidden = false;
       currentPageComponent.errorCode = stateResult.error;
+      this.notifyPath('currentPage_.buttonNext');
+      this.notifyPath('currentPage_.buttonExit');
+      this.notifyPath('currentPage_.buttonBack');
 
       // A special case for the landing page, which has its own navigation
       // buttons.

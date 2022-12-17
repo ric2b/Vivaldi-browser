@@ -262,6 +262,7 @@ executable("views_examples_with_content") {
     "//content",
     "//content:sandbox_helper_win",
     "//sandbox",
+    "//ui/color:mixers",
     "//ui/views_content_client",
   ]
 
@@ -334,10 +335,10 @@ test("views_examples_unittests") {
   }
 
   if (is_fuchsia) {
-    use_cfv2 = false
+    use_cfv1 = false
     additional_manifest_fragments = [
-      "//build/config/fuchsia/test/font_capabilities.test-cmx",
-      "//build/config/fuchsia/test/vulkan_capabilities.test-cmx",
+      "//build/config/fuchsia/test/fonts.shard.test-cml",
+      "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
     ]
   }
 

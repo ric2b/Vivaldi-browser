@@ -69,9 +69,6 @@ void MediaBrowserTest::RunMediaTestPage(const std::string& html_page,
                                         const base::StringPairs& query_params,
                                         const std::string& expected_title,
                                         bool http) {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  base::ScopedAllowBlockingForTesting allow_blocking;
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
   GURL gurl;
   std::string query = media::GetURLQueryString(query_params);
   std::unique_ptr<net::EmbeddedTestServer> http_test_server;

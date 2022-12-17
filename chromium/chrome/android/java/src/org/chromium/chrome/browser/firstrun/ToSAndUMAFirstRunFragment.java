@@ -60,8 +60,8 @@ public class ToSAndUMAFirstRunFragment
     private boolean mNativeInitialized;
     private boolean mPolicyServiceInitialized;
     private boolean mTosButtonClicked;
-    // TODO(https://crbug.com/1274145): Rename mAllowCrashUpload field.
     private boolean mAllowCrashUpload;
+    private boolean mUserInteractedWithUmaCheckbox;
 
     private Button mAcceptButton;
     private CheckBox mSendReportCheckBox;
@@ -97,8 +97,10 @@ public class ToSAndUMAFirstRunFragment
         // Register event listeners.
         mAcceptButton.setOnClickListener((v) -> onTosButtonClicked());
         if (!ChromeApplicationImpl.isVivaldi()) {
-        mSendReportCheckBox.setOnCheckedChangeListener(
-                ((compoundButton, isChecked) -> mAllowCrashUpload = isChecked));
+        mSendReportCheckBox.setOnCheckedChangeListener(((compoundButton, isChecked) -> {
+            mAllowCrashUpload = isChecked;
+            mUserInteractedWithUmaCheckbox = true;
+        }));
         }
 
         // Make TextView links clickable.
@@ -271,8 +273,13 @@ public class ToSAndUMAFirstRunFragment
 
     private void updateReportCheckbox(
             boolean umaDialogMayBeShown, boolean isMetricsReportingDisabledByPolicy) {
-        mAllowCrashUpload = getUmaCheckBoxInitialState();
-        mSendReportCheckBox.setChecked(mAllowCrashUpload);
+        // The user can only interact with the UMA checkbox after it's visible on the screen, in
+        // which case a previous call to this method has already checked the checkbox expected
+        // initial state.
+        if (!mUserInteractedWithUmaCheckbox) {
+            mAllowCrashUpload = getUmaCheckBoxInitialState();
+            mSendReportCheckBox.setChecked(mAllowCrashUpload);
+        }
 
         if (!canShowUmaCheckBox()) {
             if (!umaDialogMayBeShown) {
@@ -412,7 +419,7 @@ public class ToSAndUMAFirstRunFragment
 
     @VisibleForTesting
     public static void setObserverForTesting(ToSAndUMAFirstRunFragment.Observer observer) {
-        assert sObserver == null;
+        assert observer == null || sObserver == null;
         sObserver = observer;
     }
 }

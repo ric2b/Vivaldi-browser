@@ -9,7 +9,7 @@
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chromeos/network/network_handler_test_helper.h"
+#include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
@@ -17,7 +17,7 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
+namespace ash {
 namespace {
 
 const char kFixedPacUrl[] = "http://fixed/";
@@ -123,4 +123,4 @@ TEST_F(ProxyConfigServiceImplTest, UsesNestedProxyConfigService) {
   proxy_tracker.DetachFromPrefService();
 }
 
-}  // namespace chromeos
+}  // namespace ash

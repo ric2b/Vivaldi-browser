@@ -82,14 +82,14 @@ const base::FeatureParam<bool> kUserspaceSwapShuffleMapsOrder = {
 // g_global_disk_usage is the sum of all |written_to_disk| values from each
 // renderer. We keep track of this number because we need to enforce the global
 // total swap limit. This value is safe to be fetched from any sequence.
-std::atomic<uint64_t> g_global_disk_usage_bytes = ATOMIC_VAR_INIT(0);
+std::atomic<uint64_t> g_global_disk_usage_bytes{0};
 
 // This is the sum of all |reclaimed_bytes| values from each renderer. This
 // value is safe to be fetched from any sequence.
-std::atomic<uint64_t> g_global_reclaimed_bytes = ATOMIC_VAR_INIT(0);
+std::atomic<uint64_t> g_global_reclaimed_bytes{0};
 
 // This is our global swap kill switch.
-std::atomic<bool> g_global_swap_allowed = ATOMIC_VAR_INIT(true);
+std::atomic<bool> g_global_swap_allowed{true};
 
 class RendererSwapDataImpl : public RendererSwapData {
  public:
@@ -494,9 +494,10 @@ bool GetPartitionAllocSuperPagesInUse(
   uint32_t superpages_remaining =
       max_superpages >= 0 ? max_superpages : UINT32_MAX;
 
-  auto& pool_manager = base::internal::AddressPoolManager::GetInstance();
+  auto& pool_manager =
+      partition_alloc::internal::AddressPoolManager::GetInstance();
 
-  for (base::internal::pool_handle ph :
+  for (partition_alloc::internal::pool_handle ph :
        {partition_alloc::internal::PartitionAddressSpace::GetRegularPool(),
         partition_alloc::internal::PartitionAddressSpace::GetBRPPool()}) {
     uintptr_t pool_base = pool_manager.GetPoolBaseAddress(ph);

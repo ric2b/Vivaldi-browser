@@ -4,6 +4,7 @@
 
 #include "ash/shelf/shelf_widget.h"
 
+#include "ash/bubble/bubble_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
@@ -11,6 +12,7 @@
 #include "ash/keyboard/ui/test/keyboard_test_util.h"
 #include "ash/public/cpp/keyboard/keyboard_switches.h"
 #include "ash/public/cpp/shelf_config.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -20,10 +22,15 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_navigation_widget.h"
+#include "ash/shelf/shelf_test_util.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
+#include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test_shell_delegate.h"
@@ -31,18 +38,26 @@
 #include "ash/wm/window_util.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/i18n/rtl.h"
 #include "base/run_loop.h"
+#include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/session_manager/session_manager_types.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
 
 namespace ash {
 namespace {
@@ -178,7 +193,8 @@ TEST_F(ShelfWidgetDarkLightModeTest, TabletModeTransition) {
             shelf_widget->GetShelfBackgroundColor());
   EXPECT_EQ(0.0, shelf_widget->GetOpaqueBackground()->background_blur());
 
-  ash::AshColorProvider::Get()->ToggleColorMode();
+  auto* dark_light_mode_controller = ash::DarkLightModeControllerImpl::Get();
+  dark_light_mode_controller->ToggleColorMode();
 
   EXPECT_EQ(AshColorProvider::Get()->GetBaseLayerColor(
                 AshColorProvider::BaseLayerType::kTransparent60),
@@ -196,7 +212,7 @@ TEST_F(ShelfWidgetDarkLightModeTest, TabletModeTransition) {
             shelf_widget->GetShelfBackgroundColor());
   EXPECT_GT(shelf_widget->GetOpaqueBackground()->background_blur(), 0.0f);
 
-  ash::AshColorProvider::Get()->ToggleColorMode();
+  dark_light_mode_controller->ToggleColorMode();
 
   EXPECT_EQ(AshColorProvider::Get()->GetBaseLayerColor(
                 AshColorProvider::BaseLayerType::kTransparent80),
@@ -219,7 +235,8 @@ TEST_F(ShelfWidgetDarkLightModeTest, TabletModeTransitionWithWindowOpen) {
             shelf_widget->GetShelfBackgroundColor());
   EXPECT_EQ(0.0f, shelf_widget->GetOpaqueBackground()->background_blur());
 
-  ash::AshColorProvider::Get()->ToggleColorMode();
+  auto* dark_light_mode_controller = ash::DarkLightModeControllerImpl::Get();
+  dark_light_mode_controller->ToggleColorMode();
 
   EXPECT_EQ(AshColorProvider::Get()->GetBaseLayerColor(
                 AshColorProvider::BaseLayerType::kOpaque),
@@ -237,7 +254,7 @@ TEST_F(ShelfWidgetDarkLightModeTest, TabletModeTransitionWithWindowOpen) {
             shelf_widget->GetShelfBackgroundColor());
   EXPECT_GT(shelf_widget->GetOpaqueBackground()->background_blur(), 0.0f);
 
-  ash::AshColorProvider::Get()->ToggleColorMode();
+  dark_light_mode_controller->ToggleColorMode();
 
   EXPECT_EQ(AshColorProvider::Get()->GetBaseLayerColor(
                 AshColorProvider::BaseLayerType::kTransparent80),
@@ -308,6 +325,51 @@ TEST_P(ShelfWidgetLayoutBasicsTest, LauncherInitiallySized) {
   const int margins = 2 * ShelfConfig::Get()->GetAppIconGroupMargin();
 
   EXPECT_EQ(status_width, total_width - nav_width - hotseat_width - margins);
+}
+
+TEST_F(ShelfWidgetTest, CheckVerticalShelfCornersInOverviewMode) {
+  // Verify corners of the shelf on the left alignment.
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAlignment(ShelfAlignment::kLeft);
+  EXPECT_EQ(ShelfAlignment::kLeft, GetPrimaryShelf()->alignment());
+
+  ShelfWidget* const shelf_widget = GetShelfWidget();
+  ui::Layer* opaque_background_layer =
+      shelf_widget->GetDelegateViewOpaqueBackgroundLayerForTesting();
+
+  // The gfx::RoundedCornersF object is considered empty when all of the
+  // corners are squared (no effective radius).
+  EXPECT_FALSE(opaque_background_layer->rounded_corner_radii().IsEmpty());
+
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  // Enter overview mode. Expect the shelf with square corners.
+  EnterOverview();
+  WaitForOverviewAnimation(/*enter=*/true);
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  EXPECT_TRUE(opaque_background_layer->rounded_corner_radii().IsEmpty());
+
+  // Exit overview mode. Expect the shelf with rounded corners.
+  ExitOverview();
+  WaitForOverviewAnimation(/*enter=*/false);
+  EXPECT_FALSE(overview_controller->InOverviewSession());
+  EXPECT_FALSE(opaque_background_layer->rounded_corner_radii().IsEmpty());
+
+  // Verify corners of the shelf on the right alignment.
+  shelf->SetAlignment(ShelfAlignment::kRight);
+  EXPECT_EQ(ShelfAlignment::kRight, GetPrimaryShelf()->alignment());
+  EXPECT_FALSE(opaque_background_layer->rounded_corner_radii().IsEmpty());
+
+  // Enter overview mode. Expect the shelf with square corners.
+  EnterOverview();
+  WaitForOverviewAnimation(/*enter=*/true);
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  EXPECT_TRUE(opaque_background_layer->rounded_corner_radii().IsEmpty());
+
+  // Exit overview mode. Expect the shelf with rounded corners.
+  ExitOverview();
+  WaitForOverviewAnimation(/*enter=*/false);
+  EXPECT_FALSE(overview_controller->InOverviewSession());
+  EXPECT_FALSE(opaque_background_layer->rounded_corner_radii().IsEmpty());
 }
 
 // Verifies when the shell is deleted with a full screen window we don't crash.
@@ -431,6 +493,57 @@ TEST_F(ShelfWidgetTest, HiddenShelfHitTestTouch) {
                          ui::PointerDetails(ui::EventPointerType::kTouch, 0));
     EXPECT_EQ(shelf_widget->GetNativeWindow(),
               targeter->FindTargetForEvent(root, &touch));
+  }
+}
+
+class LtrRtlShelfWidgetTest : public ShelfWidgetTest,
+                              public testing::WithParamInterface<bool> {
+ public:
+  LtrRtlShelfWidgetTest() : scoped_locale_(GetParam() ? "he" : "") {}
+  LtrRtlShelfWidgetTest(const LtrRtlShelfWidgetTest&) = delete;
+  LtrRtlShelfWidgetTest& operator=(const LtrRtlShelfWidgetTest&) = delete;
+  ~LtrRtlShelfWidgetTest() override = default;
+
+ private:
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All, LtrRtlShelfWidgetTest, testing::Bool());
+
+TEST_P(LtrRtlShelfWidgetTest, MessageCenterBounds) {
+  // Add a notification to force the message center bubble to show with the
+  // UnifiedSystemTrayBubble.
+  message_center::MessageCenter::Get()->AddNotification(
+      std::make_unique<message_center::Notification>(
+          message_center::NOTIFICATION_TYPE_SIMPLE, base::NumberToString(0),
+          u"test title", u"test message", ui::ImageModel(), std::u16string(),
+          GURL(), message_center::NotifierId(),
+          message_center::RichNotificationData(),
+          new message_center::NotificationDelegate()));
+
+  auto shelf_alignments = {ShelfAlignment::kBottom, ShelfAlignment::kLeft,
+                           ShelfAlignment::kRight};
+
+  for (const auto& alignment : shelf_alignments) {
+    GetPrimaryShelf()->SetAlignment(alignment);
+    // Show UnifiedSystemTrayBubble, which shows a message center bubble as well
+    // in a separate widget.
+    GetPrimaryUnifiedSystemTray()->ShowBubble();
+    gfx::Rect message_center_bubble_bounds_in_screen =
+        GetPrimaryUnifiedSystemTray()
+            ->message_center_bubble()
+            ->GetBoundsInScreen();
+    gfx::Rect unified_system_tray_bubble_bounds_in_screen =
+        GetPrimaryUnifiedSystemTray()->bubble()->GetBoundsInScreen();
+
+    // The MessageCenterBubble and UnifiedSystemTrayBubble should be flush
+    // despite the shelf alignment.
+    EXPECT_EQ(message_center_bubble_bounds_in_screen.x(),
+              unified_system_tray_bubble_bounds_in_screen.x());
+    EXPECT_EQ(message_center_bubble_bounds_in_screen.width(),
+              unified_system_tray_bubble_bounds_in_screen.width());
+    GetPrimaryUnifiedSystemTray()->CloseBubble();
   }
 }
 
@@ -893,7 +1006,7 @@ TEST_F(ShelfWidgetAfterLoginTest, InitialValues) {
   ShelfWidget* shelf_widget = GetShelfWidget();
   ASSERT_NE(nullptr, shelf_widget);
   ASSERT_NE(nullptr, shelf_widget->shelf_view_for_testing());
-  ASSERT_NE(nullptr, shelf_widget->login_shelf_view());
+  ASSERT_NE(nullptr, shelf_widget->GetLoginShelfView());
   ASSERT_NE(nullptr, shelf_widget->shelf_layout_manager());
 
   // Ensure settings are correct before login.
@@ -973,7 +1086,7 @@ class ShelfWidgetViewsVisibilityTest : public AshTestBase {
               !primary_shelf_widget_->IsVisible());
     if (primary_shelf_visibility != kNone) {
       EXPECT_EQ(primary_shelf_visibility == kLoginShelf,
-                primary_shelf_widget_->login_shelf_view()->GetVisible());
+                primary_shelf_widget_->GetLoginShelfView()->GetVisible());
       EXPECT_EQ(primary_shelf_visibility == kShelf,
                 primary_shelf_widget_->shelf_view_for_testing()->GetVisible());
     }
@@ -981,7 +1094,7 @@ class ShelfWidgetViewsVisibilityTest : public AshTestBase {
               !secondary_shelf_widget_->IsVisible());
     if (secondary_shelf_visibility != kNone) {
       EXPECT_EQ(secondary_shelf_visibility == kLoginShelf,
-                secondary_shelf_widget_->login_shelf_view()->GetVisible());
+                secondary_shelf_widget_->GetLoginShelfView()->GetVisible());
       EXPECT_EQ(
           secondary_shelf_visibility == kShelf,
           secondary_shelf_widget_->shelf_view_for_testing()->GetVisible());

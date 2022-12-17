@@ -31,12 +31,12 @@
 <translation id="2317259163369394535"><ph name="DOMAIN" /> küsib kasutajanime ja parooli.</translation>
 <translation id="2337852623177822836">Administraatori määratud valik</translation>
 <translation id="2355395290879513365">Ründajatel võib õnnestuda näha pilte, mida sel saidil vaatad, ja neid sinu ärapetmiseks muuta.</translation>
-<translation id="2356070529366658676">Küsitakse</translation>
+<translation id="2356070529366658676">Küsi</translation>
 <translation id="2359808026110333948">Jätka</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Käivita võrgudiagnostika<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Laiendus blokeeris selle lehe.</translation>
 <translation id="2501278716633472235">Mine tagasi</translation>
-<translation id="2539524384386349900">Tuvastatakse</translation>
+<translation id="2539524384386349900">Tuvasta</translation>
 <translation id="255002559098805027">Host <ph name="HOST_NAME" /> saatis sobimatu vastuse.</translation>
 <translation id="2634124572758952069">Saidi <ph name="HOST_NAME" /> serveri IP-aadressi ei leitud.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -114,7 +114,7 @@
 <translation id="483241715238664915">Lülita hoiatused sisse</translation>
 <translation id="4943872375798546930">Tulemusi pole</translation>
 <translation id="5023310440958281426">Tutvu administraatori reeglitega</translation>
-<translation id="5039804452771397117">Lubatud</translation>
+<translation id="5039804452771397117">Luba</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 kasutusel)} other {(# kasutusel)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrolli puhverserveri aadressi<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitine)</translation>
@@ -162,7 +162,7 @@
 <translation id="6711464428925977395">Puhverserveriga on midagi valesti või aadress on vale.</translation>
 <translation id="6757797048963528358">Seade läks unerežiimi.</translation>
 <translation id="6897140037006041989">Kasutajaagent</translation>
-<translation id="7053983685419859001">Blokeeritud</translation>
+<translation id="7053983685419859001">Blokeeri</translation>
 <translation id="7079718277001814089">See sait sisaldab pahavara</translation>
 <translation id="7096937462164235847">Selle veebisaidi identiteet pole verifitseeritud.</translation>
 <translation id="7108819624672055576">Laienduse poolt lubatud</translation>

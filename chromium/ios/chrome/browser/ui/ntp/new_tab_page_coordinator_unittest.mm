@@ -17,7 +17,6 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_view_controller.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
@@ -74,9 +73,9 @@ class NewTabPageCoordinatorTest : public PlatformTest {
       SceneStateBrowserAgent::CreateForBrowser(browser_.get(), scene_state_);
     }
     NewTabPageTabHelper::CreateForWebState(&web_state_);
-    coordinator_ = [[NewTabPageCoordinator alloc]
-        initWithBaseViewController:base_view_controller_
-                           browser:browser_.get()];
+    coordinator_ =
+        [[NewTabPageCoordinator alloc] initWithBrowser:browser_.get()];
+    coordinator_.baseViewController = base_view_controller_;
     coordinator_.toolbarDelegate = toolbar_delegate_;
     coordinator_.webState = &web_state_;
   }

@@ -32,6 +32,10 @@
 #include "ui/ozone/public/ozone_switches.h"  // nogncheck
 #endif                                       // BUILDFLAG(IS_CHROMEOS)
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/startup/browser_params_proxy.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 namespace {
 
 void KillGpuProcessImpl(content::GpuProcessHost* host) {
@@ -89,8 +93,32 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kDisableGpuWatchdog) ||
       command_line->HasSwitch(switches::kSingleProcess) ||
       command_line->HasSwitch(switches::kInProcessGPU);
+
   gpu_preferences.gpu_sandbox_start_early =
       command_line->HasSwitch(switches::kGpuSandboxStartEarly);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (!gpu_preferences.gpu_sandbox_start_early) {
+    const chromeos::BrowserParamsProxy* init_params =
+        chromeos::BrowserParamsProxy::Get();
+    CHECK(init_params);
+    switch (init_params->GpuSandboxStartMode()) {
+      case crosapi::mojom::BrowserInitParams::GpuSandboxStartMode::kUnspecified:
+        // In practice, this is expected to be reached due to version skewing:
+        // when ash-chrome is too old to provide a useful value for
+        // BrowserInitParams.gpu_sandbox_start_early. In that case, it's better
+        // to start the sandbox early than to crash the GPU process (since that
+        // process is started with --gpu-sandbox-failures-fatal=yes).
+        // This can also be reached on tests when
+        // |init_params|->DisableCrosapiForTesting() is true.
+      case crosapi::mojom::BrowserInitParams::GpuSandboxStartMode::kEarly:
+        gpu_preferences.gpu_sandbox_start_early = true;
+        break;
+      case crosapi::mojom::BrowserInitParams::GpuSandboxStartMode::kNormal:
+        break;
+    }
+  }
+#endif
+
   gpu_preferences.enable_vulkan_protected_memory =
       command_line->HasSwitch(switches::kEnableVulkanProtectedMemory);
   gpu_preferences.disable_vulkan_fallback_to_gl_for_testing =
@@ -152,7 +180,8 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
 }
 
 void KillGpuProcess() {
-  GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
+  GpuProcessHost::CallOnIO(FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
+                           false /* force_create */,
                            base::BindOnce(&KillGpuProcessImpl));
 }
 
@@ -163,7 +192,7 @@ gpu::GpuChannelEstablishFactory* GetGpuChannelEstablishFactory() {
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
 void DumpGpuProfilingData(base::OnceClosure callback) {
   content::GpuProcessHost::CallOnIO(
-      content::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
+      FROM_HERE, content::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
       base::BindOnce(
           [](base::OnceClosure callback, content::GpuProcessHost* host) {
             host->gpu_service()->WriteClangProfilingProfile(

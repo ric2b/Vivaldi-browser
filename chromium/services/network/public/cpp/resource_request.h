@@ -144,6 +144,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   bool skip_service_worker = false;
   bool corb_detachable = false;
   mojom::RequestMode mode = mojom::RequestMode::kNoCors;
+  mojom::IPAddressSpace target_address_space = mojom::IPAddressSpace::kUnknown;
   mojom::CredentialsMode credentials_mode = mojom::CredentialsMode::kInclude;
   mojom::RedirectMode redirect_mode = mojom::RedirectMode::kFollow;
   std::string fetch_integrity;
@@ -170,7 +171,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   bool is_signed_exchange_prefetch_cache_enabled = false;
   bool is_fetch_like_api = false;
   bool is_favicon = false;
-  bool obey_origin_policy = false;
   absl::optional<base::UnguessableToken> recursive_prefetch_token;
   absl::optional<TrustedParams> trusted_params;
   // |trust_token_params| uses a custom absl::optional-like type to make the

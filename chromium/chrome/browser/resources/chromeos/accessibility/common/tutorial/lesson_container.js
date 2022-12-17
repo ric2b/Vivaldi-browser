@@ -30,7 +30,7 @@ export const LessonContainer = Polymer({
 
   /** @override */
   ready() {
-    this.$.lessonTemplate.addEventListener('dom-change', (evt) => {
+    this.$.lessonTemplate.addEventListener('dom-change', evt => {
       // Executes once all lessons have been added to the dom.
       this.onLessonsLoaded_();
     });
@@ -64,5 +64,5 @@ export const LessonContainer = Polymer({
     }
 
     return lessons;
-  }
+  },
 });

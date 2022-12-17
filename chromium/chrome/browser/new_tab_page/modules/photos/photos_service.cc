@@ -413,7 +413,7 @@ void PhotosService::OnJsonReceived(
 void PhotosService::OnJsonParsed(
     const std::string& token,
     data_decoder::DataDecoder::ValueOrError result) {
-  if (!result.value) {
+  if (!result.has_value()) {
     for (auto& callback : callbacks_) {
       std::move(callback).Run(std::vector<photos::mojom::MemoryPtr>());
     }
@@ -421,7 +421,7 @@ void PhotosService::OnJsonParsed(
     return;
   }
 
-  auto* memories = result.value->FindListPath("memory");
+  auto* memories = result->FindListPath("memory");
   if (!memories) {
     base::UmaHistogramCustomCounts("NewTabPage.Photos.DataResponseCount", 0, 0,
                                    10, 11);
@@ -448,9 +448,19 @@ void PhotosService::OnJsonParsed(
     auto mojo_memory = photos::mojom::Memory::New();
     mojo_memory->id = *memory_id;
     mojo_memory->title = *title;
-    mojo_memory->item_url =
-        GURL("https://photos.google.com/memory/featured/" + *memory_id +
-             "/photo/" + *cover_id + "?referrer=CHROME_NTP");
+
+    // If fake data, use photos homepage for url.
+    std::string fake_data_choice = base::GetFieldTrialParamValueByFeature(
+        ntp_features::kNtpPhotosModule,
+        ntp_features::kNtpPhotosModuleDataParam);
+    if (fake_data_choice != "") {
+      mojo_memory->item_url = GURL("https://photos.google.com");
+    } else {
+      mojo_memory->item_url =
+          GURL("https://photos.google.com/memory/featured/" + *memory_id +
+               "/photo/" + *cover_id + "?referrer=CHROME_NTP");
+    }
+
     if (cover_url) {
       mojo_memory->cover_url = GURL(*cover_url + "?access_token=" + token);
     } else if (cover_dat_url) {

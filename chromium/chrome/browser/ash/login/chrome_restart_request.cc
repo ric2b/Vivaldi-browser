@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
@@ -33,9 +32,11 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/prefs/json_pref_store.h"
@@ -116,6 +117,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableLogging,
+    ::switches::kEnableMicrophoneMuteSwitchDeviceSwitch,
     ::switches::kEnableNativeGpuMemoryBuffers,
     ::switches::kEnableTouchDragDrop,
     ::switches::kEnableUnifiedDesktop,
@@ -127,7 +129,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kForceGpuMemAvailableMb,
     ::switches::kGpuStartupDialog,
     ::switches::kGpuSandboxStartEarly,
-    ::switches::kNumRasterThreads,
     ::switches::kPlatformDisallowsChromeOSDirectVideoDecoder,
     ::switches::kPpapiInProcess,
     ::switches::kRemoteDebuggingPort,
@@ -153,6 +154,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableWebGLImageChromium,
     ::switches::kEnableWebGLImageChromium,
     ::switches::kEnableUnsafeWebGPU,
+    ::switches::kEnableWebGPUDeveloperFeatures,
     ::switches::kDisableWebRtcHWDecoding,
     ::switches::kDisableWebRtcHWEncoding,
     ::switches::kOzonePlatform,
@@ -180,6 +182,7 @@ void DeriveCommandLine(const GURL& start_url,
     blink::switches::kEnableRasterSideDarkModeForImages,
     blink::switches::kEnableZeroCopy,
     blink::switches::kGpuRasterizationMSAASampleCount,
+    blink::switches::kNumRasterThreads,
     switches::kAshPowerButtonPosition,
     switches::kAshSideVolumeButtonPosition,
     switches::kDefaultWallpaperLarge,
@@ -244,9 +247,8 @@ void DeriveCommandLine(const GURL& start_url,
 // current session.
 void DeriveEnabledFeatures(base::CommandLine* out_command_line) {
   std::vector<const base::Feature*> kForwardEnabledFeatures{
-      &features::kAutoNightLight,
-      &features::kLacrosPrimary,
-      &features::kLacrosSupport,
+      &features::kAutoNightLight, &features::kLacrosOnly,
+      &features::kLacrosPrimary,  &features::kLacrosSupport,
       &::features::kPluginVm,
   };
 
@@ -371,8 +373,9 @@ void GetOffTheRecordCommandLine(const GURL& start_url,
       switches::kLoginUser,
       cryptohome::Identification(user_manager::GuestAccountId()).id());
   if (!base::SysInfo::IsRunningOnChromeOS()) {
-    otr_switches.SetStringKey(switches::kLoginProfile,
-                              chrome::kLegacyProfileDir);
+    otr_switches.SetStringKey(
+        switches::kLoginProfile,
+        ash::BrowserContextHelper::kLegacyBrowserContextDirName);
   }
 
   // Override the home page.

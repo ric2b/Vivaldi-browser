@@ -23,6 +23,7 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.intents.MergedWebappInfo;
 import org.chromium.chrome.browser.browserservices.intents.WebApkExtras;
 import org.chromium.chrome.browser.browserservices.intents.WebApkShareTarget;
 import org.chromium.chrome.browser.browserservices.intents.WebappInfo;
@@ -81,7 +82,7 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
     private WebappInfo mInfo;
 
     /** The updated manifest information. */
-    private WebappInfo mFetchedInfo;
+    private MergedWebappInfo mFetchedInfo;
 
     /** The URL of the primary icon. */
     private String mFetchedPrimaryIconUrl;
@@ -152,9 +153,24 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
     @Override
     public void onGotManifestData(BrowserServicesIntentDataProvider fetchedIntentDataProvider,
             String primaryIconUrl, String splashIconUrl) {
-        mFetchedInfo = WebappInfo.create(fetchedIntentDataProvider);
         mFetchedPrimaryIconUrl = primaryIconUrl;
         mFetchedSplashIconUrl = splashIconUrl;
+        mFetchedInfo =
+                MergedWebappInfo.create(/* oldWebappInfo= */ mInfo, fetchedIntentDataProvider);
+
+        if (mFetchedInfo != null) {
+            // When only some/no app identity updates are permitted, the update
+            // should still proceed with updating all the other values (not related
+            // to the blocked app identity update).
+            if (!nameUpdateDialogEnabled()) {
+                mFetchedInfo.setUseOldName(true);
+            }
+            if (!iconUpdateDialogEnabled()) {
+                mFetchedInfo.setUseOldIcon(true);
+                // Forces recreation of the primary icon during proto construction.
+                mFetchedPrimaryIconUrl = "";
+            }
+        }
 
         mStorage.updateTimeOfLastCheckForUpdatedWebManifest();
         if (mUpdateFailureHandler != null) {
@@ -188,6 +204,12 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
             destroyFetcher();
         }
 
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_APK_UNIQUE_ID)
+                && TextUtils.isEmpty(mInfo.manifestId())) {
+            RecordHistogram.recordBooleanHistogram(
+                    "WebApk.Update.UpdateEmptyUniqueId.NeedsUpgrade", needsUpgrade);
+        }
+
         if (!needsUpgrade) {
             if (!mStorage.didPreviousUpdateSucceed() || mStorage.shouldForceUpdate()) {
                 onFinishedUpdate(mStorage, WebApkInstallResult.SUCCESS, false /* relaxUpdates */);
@@ -210,7 +232,9 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         if (nameChanging) histogramAction |= CHANGING_APP_NAME;
         if (shortNameChanging) histogramAction |= CHANGING_SHORTNAME;
 
-        String hash = getAppIdentityHash(mFetchedInfo, mFetchedPrimaryIconUrl);
+        // Use the original `primaryIconUrl` (as opposed to `mFetchedPrimaryIconUrl`) to construct
+        // the hash, which ensures that we don't regress on issue crbug.com/1287447.
+        String hash = getAppIdentityHash(mFetchedInfo, primaryIconUrl);
         boolean alreadyUserApproved = !hash.isEmpty()
                 && TextUtils.equals(hash, mStorage.getLastWebApkUpdateHashAccepted());
         boolean showDialogForName =
@@ -318,6 +342,8 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
     private void buildUpdateRequestAndSchedule(WebappInfo info, String primaryIconUrl,
             String splashIconUrl, boolean isManifestStale, boolean appIdentityUpdateSupported,
             List<Integer> updateReasons) {
+        recordWebApkUpdateUniqueIdHistogram(mInfo, mFetchedInfo);
+
         Callback<Boolean> callback = (success) -> {
             if (!success) {
                 onFinishedUpdate(mStorage, WebApkInstallResult.FAILURE, false /* relaxUpdates*/);
@@ -328,6 +354,18 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         String updateRequestPath = mStorage.createAndSetUpdateRequestFilePath(info);
         encodeIconsInBackground(updateRequestPath, info, primaryIconUrl, splashIconUrl,
                 isManifestStale, appIdentityUpdateSupported, updateReasons, callback);
+    }
+
+    private void recordWebApkUpdateUniqueIdHistogram(WebappInfo oldInfo, WebappInfo fetchedInfo) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_APK_UNIQUE_ID)) return;
+        if (fetchedInfo == null) return;
+
+        String baseName = "WebApk.Update.UniqueId"
+                + (TextUtils.isEmpty(oldInfo.manifestId()) ? "Empty" : "Same");
+        RecordHistogram.recordBooleanHistogram(baseName + ".ManifestUrl",
+                TextUtils.equals(oldInfo.manifestUrl(), fetchedInfo.manifestUrl()));
+        RecordHistogram.recordBooleanHistogram(
+                baseName + ".StartUrl", TextUtils.equals(oldInfo.url(), fetchedInfo.url()));
     }
 
     /** Schedules update for when WebAPK is not running. */
@@ -634,24 +672,24 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
 
         WebApkUpdateManagerJni.get().storeWebApkUpdateRequestToFile(updateRequestPath,
                 info.manifestStartUrl(), info.scopeUrl(), info.name(), info.shortName(),
-                primaryIconUrl, primaryIconData, info.isIconAdaptive(), splashIconUrl,
-                splashIconData, info.isSplashIconMaskable(), iconUrls, iconHashes,
-                info.displayMode(), info.orientation(), info.toolbarColor(), info.backgroundColor(),
-                shareTargetAction, shareTargetParamTitle, shareTargetParamText,
-                shareTargetIsMethodPost, shareTargetIsEncTypeMultipart, shareTargetParamFileNames,
-                shareTargetParamAccepts, shortcuts, shortcutIconData, info.manifestUrl(),
-                info.webApkPackageName(), versionCode, isManifestStale,
+                info.manifestId(), info.appKey(), primaryIconUrl, primaryIconData,
+                info.isIconAdaptive(), splashIconUrl, splashIconData, info.isSplashIconMaskable(),
+                iconUrls, iconHashes, info.displayMode(), info.orientation(), info.toolbarColor(),
+                info.backgroundColor(), shareTargetAction, shareTargetParamTitle,
+                shareTargetParamText, shareTargetIsMethodPost, shareTargetIsEncTypeMultipart,
+                shareTargetParamFileNames, shareTargetParamAccepts, shortcuts, shortcutIconData,
+                info.manifestUrl(), info.webApkPackageName(), versionCode, isManifestStale,
                 isAppIdentityUpdateSupported, updateReasonsArray, callback);
     }
 
     @NativeMethods
     interface Natives {
         public void storeWebApkUpdateRequestToFile(String updateRequestPath, String startUrl,
-                String scope, String name, String shortName, String primaryIconUrl,
-                String primaryIconData, boolean isPrimaryIconMaskable, String splashIconUrl,
-                String splashIconData, boolean isSplashIconMaskable, String[] iconUrls,
-                String[] iconHashes, @DisplayMode.EnumType int displayMode, int orientation,
-                long themeColor, long backgroundColor, String shareTargetAction,
+                String scope, String name, String shortName, String manifestId, String appKey,
+                String primaryIconUrl, String primaryIconData, boolean isPrimaryIconMaskable,
+                String splashIconUrl, String splashIconData, boolean isSplashIconMaskable,
+                String[] iconUrls, String[] iconHashes, @DisplayMode.EnumType int displayMode,
+                int orientation, long themeColor, long backgroundColor, String shareTargetAction,
                 String shareTargetParamTitle, String shareTargetParamText,
                 boolean shareTargetParamIsMethodPost, boolean shareTargetParamIsEncTypeMultipart,
                 String[] shareTargetParamFileNames, Object[] shareTargetParamAccepts,

@@ -17,7 +17,21 @@ const UNREACHABLE_PERCENT = 1000;
 // Thresholds which are used to determine when update status announcement should
 // take place. Last element is not reachable to simplify implementation.
 const PERCENT_THRESHOLDS = [
-  0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 98, 99, 100, UNREACHABLE_PERCENT
+  0,
+  10,
+  20,
+  30,
+  40,
+  50,
+  60,
+  70,
+  80,
+  90,
+  95,
+  98,
+  99,
+  100,
+  UNREACHABLE_PERCENT,
 ];
 
 /**
@@ -143,8 +157,12 @@ class Update extends UpdateBase {
       isOptOutEnabled: {
         type: Boolean,
         value: false,
-      }
+      },
     };
+  }
+
+  static get observers() {
+    return ['playAnimation_(uiStep)'];
   }
 
   constructor() {
@@ -184,7 +202,9 @@ class Update extends UpdateBase {
    * @param {Object} data Screen init payload.
    */
   onBeforeShow(data) {
-    this.isOptOutEnabled = data['is_opt_out_enabled'];
+    if (data && 'is_opt_out_enabled' in data) {
+      this.isOptOutEnabled = data['is_opt_out_enabled'];
+    }
   }
 
   /**
@@ -289,6 +309,14 @@ class Update extends UpdateBase {
     return this.i18n(
         isOptOutEnabled ? 'slideUpdateAdditionalSettingsText' :
                           'slideUpdateText');
+  }
+
+  /**
+   * @private
+   * @param {UpdateUIState} uiStep which UIState is shown now.
+   */
+  playAnimation_(uiStep) {
+    this.$.checkingAnimation.playing = (uiStep === UpdateUIState.CHECKING);
   }
 }
 

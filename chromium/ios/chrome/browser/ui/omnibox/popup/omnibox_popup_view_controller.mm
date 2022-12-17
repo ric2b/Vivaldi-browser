@@ -12,12 +12,17 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
 #include "ios/chrome/browser/ui/elements/self_sizing_table_view.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_suggestion.h"
 #import "ios/chrome/browser/ui/omnibox/popup/content_providing.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_row_cell.h"
 #include "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
+#import "ios/chrome/browser/ui/util/keyboard_observer_helper.h"
+#import "ios/chrome/browser/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
 #include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/device_util.h"
 #include "ui/base/device_form_factor.h"
@@ -28,11 +33,20 @@
 
 namespace {
 const CGFloat kTopAndBottomPadding = 8.0;
+const CGFloat kTopPaddingVariation1 = 8.0;
+const CGFloat kTopPaddingVariation2 = 10.0;
+const CGFloat kTopBottomPaddingVariation2Ipad = 16.0;
+const CGFloat kFooterHeightVariation1 = 12.0;
+const CGFloat kFooterHeightVariation2 = 16.0;
+// Percentage of the suggestion height that needs to be visible in order to
+// consider the suggestion as visible.
+const CGFloat kVisibleSuggestionThreshold = 0.6;
 }  // namespace
 
 @interface OmniboxPopupViewController () <UITableViewDataSource,
                                           UITableViewDelegate,
-                                          OmniboxPopupRowCellDelegate>
+                                          OmniboxPopupRowCellDelegate,
+                                          KeyboardObserverHelperConsumer>
 
 // Index path of currently highlighted row. The rows can be highlighted by
 // tapping and holding on them or by using arrow keys on a hardware keyboard.
@@ -61,6 +75,15 @@ const CGFloat kTopAndBottomPadding = 8.0;
 @property(nonatomic, assign)
     UISemanticContentAttribute semanticContentAttribute;
 
+// Estimated maximum number of visible suggestions.
+// Only updated in `newResultsAvailable` method, were the value is used.
+@property(nonatomic, assign) NSInteger visibleSuggestionCount;
+
+// Boolean to update visible suggestion count only once on event such as device
+// orientation change or multitasking window change, where multiple keyboard and
+// view updates are received.
+@property(nonatomic, assign) BOOL shouldUpdateVisibleSuggestionCount;
+
 @end
 
 @implementation OmniboxPopupViewController
@@ -68,25 +91,44 @@ const CGFloat kTopAndBottomPadding = 8.0;
 - (instancetype)init {
   if (self = [super initWithNibName:nil bundle:nil]) {
     _forwardsScrollEvents = YES;
+    NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
     if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
       // The iPad keyboard can cover some of the rows of the scroll view. The
       // scroll view's content inset may need to be updated when the keyboard is
       // displayed.
-      NSNotificationCenter* defaultCenter =
-          [NSNotificationCenter defaultCenter];
       [defaultCenter addObserver:self
                         selector:@selector(keyboardDidShow:)
                             name:UIKeyboardDidShowNotification
                           object:nil];
     }
+    // Listen to keyboard observer to detect `KeyboardState` changes in order to
+    // update the estimated number of visible suggestions.
+    [KeyboardObserverHelper.sharedKeyboardObserver addConsumer:self];
+
+    // Listen to keyboard frame change event to detect keyboard frame changes
+    // (ex: when changing input method) to update the estimated number of
+    // visible suggestions.
+    [defaultCenter addObserver:self
+                      selector:@selector(keyboardDidChangeFrame:)
+                          name:UIKeyboardDidChangeFrameNotification
+                        object:nil];
+
+    // Listen to content size change to update the estimated number of visible
+    // suggestions.
+    [defaultCenter addObserver:self
+                      selector:@selector(contentSizeDidChange:)
+                          name:UIContentSizeCategoryDidChangeNotification
+                        object:nil];
   }
   return self;
 }
 
 - (void)loadView {
-  self.tableView =
-      [[SelfSizingTableView alloc] initWithFrame:CGRectZero
-                                           style:UITableViewStylePlain];
+  UITableViewStyle style = IsOmniboxActionsVisualTreatment2()
+                               ? UITableViewStyleInsetGrouped
+                               : UITableViewStylePlain;
+  self.tableView = [[SelfSizingTableView alloc] initWithFrame:CGRectZero
+                                                        style:style];
   self.tableView.delegate = self;
   self.tableView.dataSource = self;
   self.view = self.tableView;
@@ -121,9 +163,13 @@ const CGFloat kTopAndBottomPadding = 8.0;
     [self.tableView setLayoutMargins:UIEdgeInsetsZero];
   }
   self.tableView.contentInsetAdjustmentBehavior =
-      UIScrollViewContentInsetAdjustmentAutomatic;
-  [self.tableView setContentInset:UIEdgeInsetsMake(kTopAndBottomPadding, 0,
-                                                   kTopAndBottomPadding, 0)];
+      IsOmniboxActionsVisualTreatment2()
+          ? UIScrollViewContentInsetAdjustmentNever
+          : UIScrollViewContentInsetAdjustmentAutomatic;
+  [self.tableView setContentInset:UIEdgeInsetsMake(self.topPadding, 0,
+                                                   self.bottomPadding, 0)];
+
+  self.tableView.sectionHeaderHeight = 0.1;
   self.tableView.estimatedRowHeight = 0;
 
   self.tableView.rowHeight = UITableViewAutomaticDimension;
@@ -131,10 +177,19 @@ const CGFloat kTopAndBottomPadding = 8.0;
 
   [self.tableView registerClass:[OmniboxPopupRowCell class]
          forCellReuseIdentifier:OmniboxPopupRowCellReuseIdentifier];
+  self.shouldUpdateVisibleSuggestionCount = YES;
+
+  if (@available(iOS 15.0, *)) {
+    self.tableView.sectionHeaderTopPadding = 0;
+  }
 }
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
+  if (IsOmniboxActionsVisualTreatment2()) {
+    [self adjustMarginsToMatchOmniboxWidth];
+  }
+
   self.viewAppearanceTime = base::TimeTicks::Now();
 }
 
@@ -149,6 +204,38 @@ const CGFloat kTopAndBottomPadding = 8.0;
            (id<UIViewControllerTransitionCoordinator>)coordinator {
   [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
   [self.tableView setEditing:NO animated:NO];
+  self.shouldUpdateVisibleSuggestionCount = YES;
+
+  if (IsOmniboxActionsVisualTreatment2()) {
+    [coordinator
+        animateAlongsideTransition:^(
+            id<UIViewControllerTransitionCoordinatorContext> context) {
+          [self adjustMarginsToMatchOmniboxWidth];
+        }
+                        completion:nil];
+  }
+}
+
+- (void)adjustMarginsToMatchOmniboxWidth {
+  NamedGuide* layoutGuide = [NamedGuide guideWithName:kOmniboxGuide
+                                                 view:self.view];
+  if (!layoutGuide) {
+    return;
+  }
+
+  CGRect omniboxFrame = [layoutGuide.constrainedView
+      convertRect:layoutGuide.constrainedView.bounds
+           toView:self.view];
+  CGFloat leftMargin =
+      IsRegularXRegularSizeClass(self) ? omniboxFrame.origin.x : 0;
+  CGFloat rightMargin = IsRegularXRegularSizeClass(self)
+                            ? self.view.bounds.size.width -
+                                  omniboxFrame.origin.x -
+                                  omniboxFrame.size.width
+                            : 0;
+  self.tableView.layoutMargins =
+      UIEdgeInsetsMake(self.tableView.layoutMargins.top, leftMargin,
+                       self.tableView.layoutMargins.bottom, rightMargin);
 }
 
 #pragma mark - AutocompleteResultConsumer
@@ -161,11 +248,6 @@ const CGFloat kTopAndBottomPadding = 8.0;
     [self unhighlightRowAtIndexPath:self.highlightedIndexPath];
     self.highlightedIndexPath = nil;
   }
-
-  // This view controller does not support multiple sections yet. Multi-section
-  // support only exists in the Swift version of the popup.
-  DCHECK(result.count == 1)
-      << "OmniboxPopupRow assumes there's only one suggestion group.";
 
   self.currentResult = result;
 
@@ -188,37 +270,61 @@ const CGFloat kTopAndBottomPadding = 8.0;
   self.alignment = alignment;
 }
 
+- (void)newResultsAvailable {
+  if (self.shouldUpdateVisibleSuggestionCount) {
+    [self updateVisibleSuggestionCount];
+  }
+  [self.dataSource
+      requestResultsWithVisibleSuggestionCount:self.visibleSuggestionCount];
+}
+
 #pragma mark - OmniboxSuggestionCommands
 
-- (void)highlightNextSuggestion {
+- (void)highlightPreviousSuggestion {
   NSIndexPath* path = self.highlightedIndexPath;
   if (path == nil) {
     // When nothing is highlighted, pressing Up Arrow doesn't do anything.
     return;
   }
 
-  if (path.row == 0) {
-    // Can't move up from first row. Call the delegate again so that the inline
-    // autocomplete text is set again (in case the user exited the inline
-    // autocomplete).
-    [self.delegate autocompleteResultConsumer:self
-                              didHighlightRow:self.highlightedIndexPath.row
-                                    inSection:0];
-    return;
+  BOOL isCurrentHighlightedRowFirstInSection = (path.row == 0);
+  if (isCurrentHighlightedRowFirstInSection) {
+    NSInteger previousSection = path.section - 1;
+    NSInteger previousSectionCount =
+        (previousSection >= 0)
+            ? [self.tableView numberOfRowsInSection:previousSection]
+            : 0;
+    BOOL prevSectionHasItems = previousSectionCount > 0;
+    if (prevSectionHasItems) {
+      path = [NSIndexPath indexPathForRow:previousSectionCount - 1
+                                inSection:previousSection];
+    } else {
+      // Can't move up from first row. Call the delegate again so that the
+      // inline autocomplete text is set again (in case the user exited the
+      // inline autocomplete).
+      [self.delegate
+          autocompleteResultConsumer:self
+                     didHighlightRow:self.highlightedIndexPath.row
+                           inSection:self.highlightedIndexPath.section];
+      return;
+    }
+  } else {
+    path = [NSIndexPath indexPathForRow:path.row - 1 inSection:path.section];
   }
 
   [self unhighlightRowAtIndexPath:self.highlightedIndexPath];
-  self.highlightedIndexPath =
-      [NSIndexPath indexPathForRow:self.highlightedIndexPath.row - 1
-                         inSection:0];
+  self.highlightedIndexPath = path;
   [self highlightRowAtIndexPath:self.highlightedIndexPath];
 
   [self.delegate autocompleteResultConsumer:self
                             didHighlightRow:self.highlightedIndexPath.row
-                                  inSection:0];
+                                  inSection:self.highlightedIndexPath.section];
 }
 
-- (void)highlightPreviousSuggestion {
+- (void)highlightNextSuggestion {
+  if ([self.tableView numberOfRowsInSection:0] == 0) {
+    return;
+  }
   if (!self.highlightedIndexPath) {
     // Initialize the highlighted row to -1, so that pressing down when nothing
     // is highlighted highlights the first row (at index 0).
@@ -226,27 +332,38 @@ const CGFloat kTopAndBottomPadding = 8.0;
   }
 
   NSIndexPath* path = self.highlightedIndexPath;
+  BOOL isCurrentHighlightedRowLastInSection =
+      path.row == [self.tableView numberOfRowsInSection:path.section] - 1;
+  if (isCurrentHighlightedRowLastInSection) {
+    NSInteger nextSection = path.section + 1;
+    BOOL nextSectionHasItems =
+        [self.tableView numberOfSections] > nextSection &&
+        [self.tableView numberOfRowsInSection:nextSection] > 0;
 
-  if (path.row == [self.tableView numberOfRowsInSection:0] - 1) {
-    // Can't go below last row. Call the delegate again so that the inline
-    // autocomplete text is set again (in case the user exited the inline
-    // autocomplete).
-    [self.delegate autocompleteResultConsumer:self
-                              didHighlightRow:self.highlightedIndexPath.row
-                                    inSection:0];
-    return;
+    if (nextSectionHasItems) {
+      path = [NSIndexPath indexPathForRow:0 inSection:nextSection];
+    } else {
+      // Can't go below last row. Call the delegate again so that the inline
+      // autocomplete text is set again (in case the user exited the inline
+      // autocomplete).
+      [self.delegate
+          autocompleteResultConsumer:self
+                     didHighlightRow:self.highlightedIndexPath.row
+                           inSection:self.highlightedIndexPath.section];
+      return;
+    }
+  } else {
+    path = [NSIndexPath indexPathForRow:path.row + 1 inSection:path.section];
   }
 
   // There is a row below, move highlight there.
   [self unhighlightRowAtIndexPath:self.highlightedIndexPath];
-  self.highlightedIndexPath =
-      [NSIndexPath indexPathForRow:self.highlightedIndexPath.row + 1
-                         inSection:0];
+  self.highlightedIndexPath = path;
   [self highlightRowAtIndexPath:self.highlightedIndexPath];
 
   [self.delegate autocompleteResultConsumer:self
                             didHighlightRow:self.highlightedIndexPath.row
-                                  inSection:0];
+                                  inSection:self.highlightedIndexPath.section];
 }
 
 - (void)keyCommandReturn {
@@ -280,12 +397,11 @@ const CGFloat kTopAndBottomPadding = 8.0;
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_EQ(0U, (NSUInteger)indexPath.section);
   DCHECK_LT((NSUInteger)indexPath.row,
             self.currentResult[indexPath.section].suggestions.count);
   NSUInteger row = indexPath.row;
 
-  // Crash reports tell us that |row| is sometimes indexed past the end of
+  // Crash reports tell us that `row` is sometimes indexed past the end of
   // the results array. In those cases, just ignore the request and return
   // early. See b/5813291.
   if (row >= self.currentResult[indexPath.section].suggestions.count)
@@ -295,26 +411,73 @@ const CGFloat kTopAndBottomPadding = 8.0;
                                   inSection:indexPath.section];
 }
 
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForHeaderInSection:(NSInteger)section {
+  return FLT_MIN;
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForFooterInSection:(NSInteger)section {
+  if (!IsOmniboxActionsEnabled()) {
+    return FLT_MIN;
+  }
+  if (section == (tableView.numberOfSections - 1)) {
+    return FLT_MIN;
+  }
+
+  return IsOmniboxActionsVisualTreatment1() ? kFooterHeightVariation1
+                                            : kFooterHeightVariation2;
+}
+
+- (UIView*)tableView:(UITableView*)tableView
+    viewForFooterInSection:(NSInteger)section {
+  if (!IsOmniboxActionsEnabled()) {
+    return nil;
+  }
+
+  // Do not show footer for the last section
+  if (section == (tableView.numberOfSections - 1)) {
+    return nil;
+  }
+  if (IsOmniboxActionsVisualTreatment2()) {
+    return [[UIView alloc] init];
+  }
+
+  UIView* footer = [[UIView alloc] init];
+  footer.backgroundColor = tableView.backgroundColor;
+  UIView* hairline = [[UIView alloc]
+      initWithFrame:CGRectMake(0, 8, tableView.bounds.size.width,
+                               2 / tableView.window.screen.scale)];
+  hairline.backgroundColor =
+      self.incognito ? [UIColor.whiteColor colorWithAlphaComponent:0.12]
+                     : [UIColor.blackColor colorWithAlphaComponent:0.12];
+  [footer addSubview:hairline];
+  hairline.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+
+  return footer;
+}
+
+- (UIView*)tableView:(UITableView*)tableView
+    viewForHeaderInSection:(NSInteger)section {
+  return nil;
+}
+
 #pragma mark - Table view data source
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView*)tableView {
-  DCHECK_EQ(1U, (NSUInteger)self.currentResult.count);
   return self.currentResult.count;
 }
 
 - (NSInteger)tableView:(UITableView*)tableView
     numberOfRowsInSection:(NSInteger)section {
-  DCHECK_EQ(0U, (NSUInteger)section);
   return self.currentResult[section].suggestions.count;
 }
 
 - (BOOL)tableView:(UITableView*)tableView
     canEditRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_EQ(0U, (NSUInteger)indexPath.section);
-
   // iOS doesn't check -numberOfRowsInSection before checking
-  // -canEditRowAtIndexPath in a reload call. If |indexPath.row| is too large,
-  // simple return |NO|.
+  // -canEditRowAtIndexPath in a reload call. If `indexPath.row` is too large,
+  // simple return `NO`.
   if ((NSUInteger)indexPath.row >=
       self.currentResult[indexPath.section].suggestions.count)
     return NO;
@@ -326,7 +489,6 @@ const CGFloat kTopAndBottomPadding = 8.0;
 - (void)tableView:(UITableView*)tableView
     commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
      forRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_EQ(0U, (NSUInteger)indexPath.section);
   DCHECK_LT((NSUInteger)indexPath.row,
             self.currentResult[indexPath.section].suggestions.count);
   if (editingStyle == UITableViewCellEditingStyleDelete) {
@@ -341,16 +503,17 @@ const CGFloat kTopAndBottomPadding = 8.0;
 // Adjust the inset on the table view to prevent keyboard from overlapping the
 // text.
 - (void)updateContentInsetForKeyboard {
+  UIScreen* currentScreen = self.tableView.window.screen;
   CGRect absoluteRect =
       [self.tableView convertRect:self.tableView.bounds
-                toCoordinateSpace:UIScreen.mainScreen.coordinateSpace];
-  CGFloat screenHeight = CurrentScreenHeight();
+                toCoordinateSpace:currentScreen.coordinateSpace];
+  CGFloat screenHeight = currentScreen.bounds.size.height;
   CGFloat bottomInset = screenHeight - self.tableView.contentSize.height -
                         _keyboardHeight - absoluteRect.origin.y -
-                        kTopAndBottomPadding * 2;
-  bottomInset = MAX(kTopAndBottomPadding, -bottomInset);
+                        self.bottomPadding - self.topPadding;
+  bottomInset = MAX(self.bottomPadding, -bottomInset);
   self.tableView.contentInset =
-      UIEdgeInsetsMake(kTopAndBottomPadding, 0, bottomInset, 0);
+      UIEdgeInsetsMake(self.topPadding, 0, bottomInset, 0);
   self.tableView.scrollIndicatorInsets = self.tableView.contentInset;
 }
 
@@ -360,6 +523,12 @@ const CGFloat kTopAndBottomPadding = 8.0;
   ToolbarConfiguration* configuration = [[ToolbarConfiguration alloc]
       initWithStyle:self.incognito ? INCOGNITO : NORMAL];
 
+  if (IsOmniboxActionsVisualTreatment2()) {
+    self.view.backgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    return;
+  }
+
   if (IsRegularXRegularSizeClass(self)) {
     self.view.backgroundColor = configuration.backgroundColor;
   } else {
@@ -368,14 +537,6 @@ const CGFloat kTopAndBottomPadding = 8.0;
 }
 
 #pragma mark Action for append UIButton
-
-// Action handler for when the button is tapped.
-- (void)trailingButtonTapped:(id)sender {
-  NSUInteger row = [sender tag];
-  [self.delegate autocompleteResultConsumer:self
-                 didTapTrailingButtonForRow:row
-                                  inSection:0];
-}
 
 - (void)setSemanticContentAttribute:
     (UISemanticContentAttribute)semanticContentAttribute {
@@ -422,8 +583,6 @@ const CGFloat kTopAndBottomPadding = 8.0;
 // Customize the appearance of table view cells.
 - (UITableViewCell*)tableView:(UITableView*)tableView
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_EQ(0U, (NSUInteger)indexPath.section);
-
   DCHECK_LT((NSUInteger)indexPath.row,
             self.currentResult[indexPath.section].suggestions.count);
   OmniboxPopupRowCell* cell = [self.tableView
@@ -451,23 +610,100 @@ const CGFloat kTopAndBottomPadding = 8.0;
                                   inSection:indexPath.section];
 }
 
-#pragma mark - keyboard events
+#pragma mark - Keyboard events
 
 - (void)keyboardDidShow:(NSNotification*)notification {
   NSDictionary* keyboardInfo = [notification userInfo];
   NSValue* keyboardFrameValue =
       [keyboardInfo valueForKey:UIKeyboardFrameEndUserInfoKey];
-  self.keyboardHeight = CurrentKeyboardHeight(keyboardFrameValue);
+  self.keyboardHeight =
+      KeyboardObserverHelper.keyboardScreen == self.view.window.screen
+          ? CurrentKeyboardHeight(keyboardFrameValue)
+          : 0;
   if (self.tableView.contentSize.height > 0)
     [self updateContentInsetForKeyboard];
+}
+
+- (void)keyboardDidChangeFrame:(NSNotification*)notification {
+  if (KeyboardObserverHelper.sharedKeyboardObserver.visibleKeyboardHeight > 0) {
+    self.shouldUpdateVisibleSuggestionCount = YES;
+  }
+}
+
+#pragma mark - KeyboardObserverHelperConsumer
+
+- (void)keyboardWillChangeToState:(KeyboardState)keyboardState {
+  self.shouldUpdateVisibleSuggestionCount = YES;
+}
+
+#pragma mark - Content size events
+
+- (void)contentSizeDidChange:(NSNotification*)notification {
+  self.shouldUpdateVisibleSuggestionCount = YES;
 }
 
 #pragma mark - ContentProviding
 
 - (BOOL)hasContent {
-  // The table view is a |SelfSizingTableView|, so its intrinsic content size
-  // can tell whether it has content.
-  return self.view.intrinsicContentSize.height > 0;
+  return self.tableView.numberOfSections > 0 &&
+         [self.tableView numberOfRowsInSection:0] > 0;
+}
+
+#pragma mark - Private Methods
+
+- (void)updateVisibleSuggestionCount {
+  CGFloat keyboardHeight =
+      [[KeyboardObserverHelper sharedKeyboardObserver] visibleKeyboardHeight];
+  UIScreen* currentScreen = self.tableView.window.screen;
+  CGRect tableViewFrameInCurrentScreenCoordinateSpace =
+      [self.tableView convertRect:self.tableView.bounds
+                toCoordinateSpace:currentScreen.coordinateSpace];
+  // Computes the visible area between the omnibox and the keyboard.
+  CGFloat visibleTableViewHeight =
+      CurrentScreenHeight() -
+      tableViewFrameInCurrentScreenCoordinateSpace.origin.y - keyboardHeight -
+      self.tableView.contentInset.top;
+
+  // Use font size to estimate the size of a omnibox search suggestion.
+  CGFloat fontSizeHeight = [@"T" sizeWithAttributes:@{
+                             NSFontAttributeName : [UIFont
+                                 preferredFontForTextStyle:UIFontTextStyleBody]
+                           }]
+                               .height;
+  // Add padding to the estimated row height and set its minimum to be at
+  // `kOmniboxPopupCellMinimumHeight`.
+  CGFloat estimatedRowHeight = MAX(fontSizeHeight + 2 * kTopAndBottomPadding,
+                                   kOmniboxPopupCellMinimumHeight);
+  CGFloat visibleRows = visibleTableViewHeight / estimatedRowHeight;
+  // A row is considered visible if `kVisibleSuggestionTreshold` percent of its
+  // height is visible.
+  self.visibleSuggestionCount =
+      floor(visibleRows + (1.0 - kVisibleSuggestionThreshold));
+  self.shouldUpdateVisibleSuggestionCount = NO;
+}
+
+- (CGFloat)topPadding {
+  CGFloat topPadding = kTopAndBottomPadding;
+  if (IsOmniboxActionsVisualTreatment1()) {
+    topPadding = kTopPaddingVariation1;
+  }
+  if (IsOmniboxActionsVisualTreatment2()) {
+    // On iPad, even in compact width, the popup is displayed differently than
+    // on the iPhone (it's "under" the always visible toolbar). So the check
+    // here is intentionally for device type, not size class.
+    BOOL isIpad = ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
+    topPadding =
+        isIpad ? kTopBottomPaddingVariation2Ipad : kTopPaddingVariation2;
+  }
+  return topPadding;
+}
+
+- (CGFloat)bottomPadding {
+  if (IsOmniboxActionsVisualTreatment2() &&
+      (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)) {
+    return kTopBottomPaddingVariation2Ipad;
+  }
+  return kTopAndBottomPadding;
 }
 
 @end

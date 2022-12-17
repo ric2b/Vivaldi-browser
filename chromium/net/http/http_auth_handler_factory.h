@@ -50,7 +50,7 @@ class NET_EXPORT HttpAuthHandlerFactory {
   HttpAuthHandlerFactory(const HttpAuthHandlerFactory&) = delete;
   HttpAuthHandlerFactory& operator=(const HttpAuthHandlerFactory&) = delete;
 
-  virtual ~HttpAuthHandlerFactory() {}
+  virtual ~HttpAuthHandlerFactory() = default;
 
   // Sets the source of the HTTP authentication preferences.
   // HttpAuthHandlerFactory doesn't own the preferences, and the
@@ -194,7 +194,7 @@ class NET_EXPORT HttpAuthHandlerRegistryFactory
   // for |scheme|. If a factory object used to exist for |scheme|, it will be
   // deleted.
   void RegisterSchemeFactory(const std::string& scheme,
-                             HttpAuthHandlerFactory* factory);
+                             std::unique_ptr<HttpAuthHandlerFactory> factory);
 
   // Creates an HttpAuthHandlerRegistryFactory.
   //

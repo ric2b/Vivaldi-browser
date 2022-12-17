@@ -610,21 +610,28 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
 
   State next_state_{STATE_NONE};
 
+  // Used for tracing.
+  const uint64_t trace_id_;
+
   // Initial request with which Start() was invoked.
   raw_ptr<const HttpRequestInfo> initial_request_ = nullptr;
+
+  // `custom_request_` is assigned to `request_` after allocation. It must be
+  // declared before `request_` so that it will be destroyed afterwards to
+  // prevent that pointer from dangling.
+  std::unique_ptr<HttpRequestInfo> custom_request_;
 
   raw_ptr<const HttpRequestInfo> request_ = nullptr;
 
   std::string method_;
   RequestPriority priority_;
   NetLogWithSource net_log_;
-  std::unique_ptr<HttpRequestInfo> custom_request_;
   HttpRequestHeaders request_headers_copy_;
   // If extra_headers specified a "if-modified-since" or "if-none-match",
   // |external_validation_| contains the value of those headers.
   ValidationHeaders external_validation_;
   base::WeakPtr<HttpCache> cache_;
-  raw_ptr<HttpCache::ActiveEntry> entry_ = nullptr;
+  raw_ptr<HttpCache::ActiveEntry, DanglingUntriaged> entry_ = nullptr;
   HttpCache::ActiveEntry* new_entry_ = nullptr;
   std::unique_ptr<HttpTransaction> network_trans_;
   CompletionOnceCallback callback_;  // Consumer's callback.
@@ -640,7 +647,7 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // WriteResponseInfoToEntry() resets this to absl::nullopt.
   std::unique_ptr<HttpResponseInfo> updated_prefetch_response_;
 
-  raw_ptr<const HttpResponseInfo> new_response_ = nullptr;
+  raw_ptr<const HttpResponseInfo, DanglingUntriaged> new_response_ = nullptr;
   std::string cache_key_;
   Mode mode_ = NONE;
   bool reading_ = false;          // We are already reading. Never reverts to
@@ -666,6 +673,8 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
       false;  // Fail ConditionalizeRequest.
   bool mark_single_keyed_cache_entry_unusable_ =
       false;  // Set single_keyed_cache_entry_unusable.
+  // This is initialised in Start().
+  bool use_single_keyed_cache_ = false;
 
   scoped_refptr<IOBuffer> read_buf_;
 

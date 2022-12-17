@@ -88,7 +88,7 @@ class ResetPasswordHandlerImpl : public mojom::ResetPasswordHandler {
 PasswordType GetPasswordType(content::WebContents* web_contents) {
   content::NavigationEntry* nav_entry =
       web_contents->GetController().GetPendingEntry();
-  if (!nav_entry || !nav_entry->GetHasPostData())
+  if (!nav_entry || !nav_entry->GetHasPostData() || !nav_entry->GetPostData())
     return PasswordType::PASSWORD_TYPE_UNKNOWN;
   auto& post_data = nav_entry->GetPostData()->elements()->at(0);
   if (post_data.type() == network::DataElement::Tag::kBytes) {
@@ -142,8 +142,11 @@ void ResetPasswordUI::BindInterface(
 base::Value::Dict ResetPasswordUI::PopulateStrings() const {
   auto* service = safe_browsing::ChromePasswordProtectionService::
       GetPasswordProtectionService(Profile::FromWebUI(web_ui()));
-  std::string org_name = service->GetOrganizationName(
-      service->reused_password_account_type_for_last_shown_warning());
+  std::string org_name =
+      service
+          ? service->GetOrganizationName(
+                service->reused_password_account_type_for_last_shown_warning())
+          : std::string();
   bool known_password_type =
       password_type_ != PasswordType::PASSWORD_TYPE_UNKNOWN;
 

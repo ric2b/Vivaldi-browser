@@ -40,12 +40,26 @@ const base::FeatureParam<bool> kShowSampleContent{&kPageInfoAboutThisSiteEn,
 const base::Feature kPageInfoAboutThisSiteMoreInfo{
     "PageInfoAboutThisSiteMoreInfo", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kPageInfoAboutThisSiteDescriptionPlaceholder{
+    "PageInfoAboutThisSiteDescriptionPlaceholder",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAboutThisSiteBanner{"AboutThisSiteBanner",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if !BUILDFLAG(IS_ANDROID)
 const base::Feature kPageInfoHistoryDesktop{"PageInfoHistoryDesktop",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPageInfoHideSiteSettings{
+    "PageInfoHideSiteSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPageInfoCookiesSubpage{"PageInfoCookiesSubpage",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPageSpecificSiteDataDialog{
+    "PageSpecificSiteDataDialog", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #endif
 
 }  // namespace page_info

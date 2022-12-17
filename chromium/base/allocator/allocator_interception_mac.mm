@@ -44,8 +44,7 @@
 #include "base/mac/mac_util.h"
 #endif
 
-namespace base {
-namespace allocator {
+namespace base::allocator {
 
 bool g_replaced_default_zone = false;
 
@@ -237,9 +236,9 @@ void* oom_killer_memalign_purgeable(struct _malloc_zone_t* zone,
 
 bool CanGetContextForCFAllocator() {
 #if BUILDFLAG(IS_IOS)
-  return !base::ios::IsRunningOnOrLater(16, 0, 0);
+  return !base::ios::IsRunningOnOrLater(17, 0, 0);
 #else
-  return !base::mac::IsOSLaterThan12_DontCallThis();
+  return !base::mac::IsOSLaterThan13_DontCallThis();
 #endif
 }
 
@@ -258,7 +257,7 @@ void* oom_killer_cfallocator_system_default(CFIndex alloc_size,
                                             void* info) {
   void* result = g_old_cfallocator_system_default(alloc_size, hint, info);
   if (!result)
-    TerminateBecauseOutOfMemory(alloc_size);
+    TerminateBecauseOutOfMemory(static_cast<size_t>(alloc_size));
   return result;
 }
 
@@ -267,7 +266,7 @@ void* oom_killer_cfallocator_malloc(CFIndex alloc_size,
                                     void* info) {
   void* result = g_old_cfallocator_malloc(alloc_size, hint, info);
   if (!result)
-    TerminateBecauseOutOfMemory(alloc_size);
+    TerminateBecauseOutOfMemory(static_cast<size_t>(alloc_size));
   return result;
 }
 
@@ -276,7 +275,7 @@ void* oom_killer_cfallocator_malloc_zone(CFIndex alloc_size,
                                          void* info) {
   void* result = g_old_cfallocator_malloc_zone(alloc_size, hint, info);
   if (!result)
-    TerminateBecauseOutOfMemory(alloc_size);
+    TerminateBecauseOutOfMemory(static_cast<size_t>(alloc_size));
   return result;
 }
 
@@ -609,5 +608,4 @@ void ReplaceZoneFunctions(ChromeMallocZone* zone,
   }
 }
 
-}  // namespace allocator
-}  // namespace base
+}  // namespace base::allocator

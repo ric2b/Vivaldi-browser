@@ -151,6 +151,7 @@
 <translation id="6321917430147971392">Verifique suas configurações de DNS</translation>
 <translation id="6328639280570009161">Tente desativar a previsão de página</translation>
 <translation id="6328786501058569169">Este site é enganoso</translation>
+<translation id="6348220984832452017">Variações ativas</translation>
 <translation id="6358450015545214790">O que são essas informações?</translation>
 <translation id="6433595998831338502">A conexão com <ph name="HOST_NAME" /> foi recusada.</translation>
 <translation id="6447842834002726250">Cookies</translation>
@@ -169,6 +170,7 @@
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não adere aos padrões de segurança.</translation>
 <translation id="7219179957768738017">A conexão usa a <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Mostrar notificações</translation>
 <translation id="7260504762447901703">Revogar acesso</translation>
 <translation id="7353601530677266744">Linha de Comando</translation>
 <translation id="7364115444476960850">A página que você esta tentando acessar foi bloqueada pelo <ph name="BLOCKER_NAME" /> do Vivaldi</translation>

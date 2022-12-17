@@ -26,12 +26,12 @@ class MODULES_EXPORT H264Encoder final : public VideoTrackRecorder::Encoder {
   };
   typedef std::unique_ptr<ISVCEncoder, ISVCEncoderDeleter> ScopedISVCEncoderPtr;
 
-  static void ShutdownEncoder(std::unique_ptr<Thread> encoding_thread,
+  static void ShutdownEncoder(std::unique_ptr<NonMainThread> encoding_thread,
                               ScopedISVCEncoderPtr encoder);
 
   H264Encoder(const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_cb,
               VideoTrackRecorder::CodecProfile codec_profile,
-              int32_t bits_per_second,
+              uint32_t bits_per_second,
               scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   H264Encoder(const H264Encoder&) = delete;

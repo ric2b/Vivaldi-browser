@@ -68,36 +68,13 @@ const CGFloat kOmniboxIconSize = 16;
   _currentResult.CopyFrom(result);
 
   self.hasResults = !_currentResult.empty();
-
-  NSArray<id<AutocompleteSuggestion>>* matches = [self wrappedMatches];
-
-  [self.consumer updateMatches:@[ [AutocompleteSuggestionGroupImpl
-                                   groupWithTitle:nil
-                                      suggestions:matches] ]
-      preselectedMatchGroupIndex:0];
-
-  [self loadModelImages];
-}
-
-- (NSArray<id<AutocompleteSuggestion>>*)wrappedMatches {
-  NSMutableArray<id<AutocompleteSuggestion>>* wrappedMatches =
-      [[NSMutableArray alloc] init];
-
-  size_t size = _currentResult.size();
-  for (size_t i = 0; i < size; i++) {
-    const AutocompleteMatch& match =
-        ((const AutocompleteResult&)_currentResult).match_at((NSUInteger)i);
-    AutocompleteMatchFormatter* formatter =
-        [AutocompleteMatchFormatter formatterWithMatch:match];
-    formatter.starred = _delegate->IsStarredMatch(match);
-    formatter.incognito = _incognito;
-    formatter.defaultSearchEngineIsGoogle = self.defaultSearchEngineIsGoogle;
-    formatter.pedalData = [self.pedalAnnotator pedalForMatch:match
-                                                   incognito:_incognito];
-    [wrappedMatches addObject:formatter];
+  if (base::FeatureList::IsEnabled(omnibox::kAdaptiveSuggestionsCount)) {
+    [self.consumer newResultsAvailable];
+  } else {
+    // Avoid calling consumer visible size and set all suggestions as visible to
+    // get only one grouping.
+    [self requestResultsWithVisibleSuggestionCount:_currentResult.size()];
   }
-
-  return wrappedMatches;
 }
 
 - (void)updateWithResults:(const AutocompleteResult&)result {
@@ -115,24 +92,47 @@ const CGFloat kOmniboxIconSize = 16;
   [self.consumer setSemanticContentAttribute:semanticContentAttribute];
 }
 
+#pragma mark - AutocompleteResultDataSource
+
+- (void)requestResultsWithVisibleSuggestionCount:
+    (NSInteger)visibleSuggestionCount {
+  size_t visibleSuggestions =
+      MIN(visibleSuggestionCount, (NSInteger)_currentResult.size());
+  if (visibleSuggestions > 0) {
+    // Groups visible suggestions by search vs url. Skip the first suggestion
+    // because it's the omnibox content.
+    [self groupCurrentSuggestionsFrom:1 to:visibleSuggestions];
+  }
+  // Groups hidden suggestions by search vs url.
+  [self groupCurrentSuggestionsFrom:visibleSuggestions
+                                 to:_currentResult.size()];
+
+  NSArray<id<AutocompleteSuggestion>>* matches = [self wrappedMatches];
+
+  [self.consumer updateMatches:@[ [AutocompleteSuggestionGroupImpl
+                                   groupWithTitle:nil
+                                      suggestions:matches] ]
+      preselectedMatchGroupIndex:0];
+
+  [self loadModelImages];
+}
+
 #pragma mark - AutocompleteResultConsumerDelegate
 
 - (void)autocompleteResultConsumerCancelledHighlighting:
     (id<AutocompleteResultConsumer>)sender {
-  _delegate->OnHighlightCanceled();
 }
 
 - (void)autocompleteResultConsumer:(id<AutocompleteResultConsumer>)sender
                    didHighlightRow:(NSUInteger)row
                          inSection:(NSUInteger)section {
-  _delegate->OnMatchHighlighted(row);
 }
 
 - (void)autocompleteResultConsumer:(id<AutocompleteResultConsumer>)sender
                       didSelectRow:(NSUInteger)row
                          inSection:(NSUInteger)section {
   // OpenMatch() may close the popup, which will clear the result set and, by
-  // extension, |match| and its contents.  So copy the relevant match out to
+  // extension, `match` and its contents.  So copy the relevant match out to
   // make sure it stays alive until the call completes.
   const AutocompleteMatch& match =
       ((const AutocompleteResult&)_currentResult).match_at(row);
@@ -239,6 +239,35 @@ const CGFloat kOmniboxIconSize = 16;
         if (attributes.faviconImage && !attributes.usesDefaultImage)
           completion(attributes.faviconImage);
       });
+}
+
+#pragma mark - Private methods
+
+- (NSArray<id<AutocompleteSuggestion>>*)wrappedMatches {
+  NSMutableArray<id<AutocompleteSuggestion>>* wrappedMatches =
+      [[NSMutableArray alloc] init];
+
+  size_t size = _currentResult.size();
+  for (size_t i = 0; i < size; i++) {
+    const AutocompleteMatch& match =
+        ((const AutocompleteResult&)_currentResult).match_at((NSUInteger)i);
+    AutocompleteMatchFormatter* formatter =
+        [AutocompleteMatchFormatter formatterWithMatch:match];
+    formatter.starred = _delegate->IsStarredMatch(match);
+    formatter.incognito = _incognito;
+    formatter.defaultSearchEngineIsGoogle = self.defaultSearchEngineIsGoogle;
+    formatter.pedalData = [self.pedalAnnotator pedalForMatch:match
+                                                   incognito:_incognito];
+    [wrappedMatches addObject:formatter];
+  }
+
+  return wrappedMatches;
+}
+
+- (void)groupCurrentSuggestionsFrom:(NSUInteger)begin to:(NSUInteger)end {
+  AutocompleteResult::GroupSuggestionsBySearchVsURL(
+      std::next(_currentResult.begin(), begin),
+      std::next(_currentResult.begin(), end));
 }
 
 @end

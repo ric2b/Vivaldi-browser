@@ -566,7 +566,8 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
                    kInsufficientRemainingBytes_Read_PaintShader_ColorSize);
     return;
   }
-  size_t colors_bytes = colors_size * sizeof(SkColor);
+  size_t colors_bytes =
+      colors_size * (colors_size > 0 ? sizeof(ref.colors_[0]) : 0u);
   if (colors_bytes > remaining_bytes_) {
     SetInvalid(DeserializationError::
                    kInsufficientRemainingBytes_Read_PaintShader_ColorBytes);
@@ -917,12 +918,12 @@ void PaintOpReader::ReadDropShadowPaintFilter(
   Read(&color);
   ReadEnum(&shadow_mode);
   Read(&input);
-
   if (!valid_)
     return;
-  filter->reset(new DropShadowPaintFilter(dx, dy, sigma_x, sigma_y, color,
-                                          shadow_mode, std::move(input),
-                                          base::OptionalOrNullptr(crop_rect)));
+  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
+  filter->reset(new DropShadowPaintFilter(
+      dx, dy, sigma_x, sigma_y, SkColor4f::FromColor(color), shadow_mode,
+      std::move(input), base::OptionalOrNullptr(crop_rect)));
 }
 
 void PaintOpReader::ReadMagnifierPaintFilter(
@@ -1296,9 +1297,11 @@ void PaintOpReader::ReadLightingDistantPaintFilter(
   Read(&input);
   if (!valid_)
     return;
+  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
   filter->reset(new LightingDistantPaintFilter(
-      lighting_type, direction, light_color, surface_scale, kconstant,
-      shininess, std::move(input), base::OptionalOrNullptr(crop_rect)));
+      lighting_type, direction, SkColor4f::FromColor(light_color),
+      surface_scale, kconstant, shininess, std::move(input),
+      base::OptionalOrNullptr(crop_rect)));
 }
 
 void PaintOpReader::ReadLightingPointPaintFilter(
@@ -1321,9 +1324,11 @@ void PaintOpReader::ReadLightingPointPaintFilter(
   Read(&input);
   if (!valid_)
     return;
+  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
   filter->reset(new LightingPointPaintFilter(
-      lighting_type, location, light_color, surface_scale, kconstant, shininess,
-      std::move(input), base::OptionalOrNullptr(crop_rect)));
+      lighting_type, location, SkColor4f::FromColor(light_color), surface_scale,
+      kconstant, shininess, std::move(input),
+      base::OptionalOrNullptr(crop_rect)));
 }
 
 void PaintOpReader::ReadLightingSpotPaintFilter(
@@ -1353,10 +1358,11 @@ void PaintOpReader::ReadLightingSpotPaintFilter(
 
   if (!valid_)
     return;
+  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
   filter->reset(new LightingSpotPaintFilter(
       lighting_type, location, target, specular_exponent, cutoff_angle,
-      light_color, surface_scale, kconstant, shininess, std::move(input),
-      base::OptionalOrNullptr(crop_rect)));
+      SkColor4f::FromColor(light_color), surface_scale, kconstant, shininess,
+      std::move(input), base::OptionalOrNullptr(crop_rect)));
 }
 
 void PaintOpReader::ReadStretchPaintFilter(

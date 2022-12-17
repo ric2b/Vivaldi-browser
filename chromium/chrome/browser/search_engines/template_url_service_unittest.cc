@@ -26,6 +26,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/search_engines/keyword_web_data_service.h"
+#include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/search_engines_test_util.h"
 #include "components/search_engines/search_host_to_urls_map.h"
@@ -33,6 +34,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -1326,7 +1328,7 @@ TEST_F(TemplateURLServiceTest, GenerateVisitOnKeyword) {
       GURL(t_url->url_ref().ReplaceSearchTerms(
           TemplateURLRef::SearchTermsArgs(u"blah"), search_terms_data())),
       Time::Now(), NULL, 0, GURL(), history::RedirectList(),
-      ui::PAGE_TRANSITION_KEYWORD, history::SOURCE_BROWSED, false, false);
+      ui::PAGE_TRANSITION_KEYWORD, history::SOURCE_BROWSED, false);
 
   // Wait for history to finish processing the request.
   test_util()->profile()->BlockUntilHistoryProcessesPendingRequests();
@@ -1503,6 +1505,53 @@ TEST_F(TemplateURLServiceTest, LoadEnsuresDefaultSearchProviderExists) {
   ASSERT_TRUE(model()->GetDefaultSearchProvider());
   EXPECT_TRUE(model()->GetDefaultSearchProvider()->SupportsReplacement(
       search_terms_data()));
+}
+
+// Make sure that the load routine does not update user modified starter pack
+// engines unless the current version is incompatible.
+TEST_F(TemplateURLServiceTest,
+       LoadUpdatesStarterPackOnlyIfIncompatibleVersion) {
+  test_util()->ResetModel(true);
+
+  // Modify a starter pack template URL. Verify load does NOT modify the title
+  // if current version is compatible (>= to first compatible version).
+  const int first_compatible_version =
+      TemplateURLStarterPackData::GetFirstCompatibleDataVersion();
+  test_util()->web_data_service()->SetStarterPackKeywordVersion(
+      first_compatible_version);
+
+  TemplateURL* t_url = model()->GetTemplateURLForKeyword(u"@history");
+  EXPECT_GT(t_url->starter_pack_id(), 0);
+  const std::u16string original_title = t_url->short_name();
+
+  model()->ResetTemplateURL(t_url, u"not history", u"@history", t_url->url());
+  base::RunLoop().RunUntilIdle();
+
+  // Reset the model and load it.
+  test_util()->ResetModel(true);
+
+  t_url = model()->GetTemplateURLForKeyword(u"@history");
+  EXPECT_EQ(t_url->short_name(), u"not history");
+
+  // Now test if current version is greater than last compatible version, we
+  // should still not modify the user edited data.
+  test_util()->web_data_service()->SetStarterPackKeywordVersion(
+      first_compatible_version + 1);
+  // Reset the model and load it.
+  test_util()->ResetModel(true);
+
+  t_url = model()->GetTemplateURLForKeyword(u"@history");
+  EXPECT_EQ(t_url->short_name(), u"not history");
+
+  // Now set the starter pack resource version to something less than the last
+  // compatible version number, and verify that the title gets overridden back
+  // to the default value.
+  test_util()->web_data_service()->SetStarterPackKeywordVersion(
+      first_compatible_version - 1);
+
+  test_util()->ResetModel(true);
+  t_url = model()->GetTemplateURLForKeyword(u"@history");
+  EXPECT_EQ(t_url->short_name(), original_title);
 }
 
 // Simulates failing to load the webdb and makes sure the default search
@@ -2262,4 +2311,69 @@ TEST_F(
   AddExtensionSearchEngine("keyword", "extension id", true);
   EXPECT_EQ(nullptr, model()->GetDefaultSearchProvider());
   EXPECT_EQ(nullptr, model()->GetDefaultSearchProviderIgnoringExtensions());
+}
+
+// Tests that a TemplateURL's `is_active` field is correctly set and
+// Omnibox.KeywordModeUsageByEngineType histogram is correctly emitted when a
+// TemplateURL is activated and/or deactivated.
+TEST_F(TemplateURLServiceTest, SetIsActiveTemplateURL) {
+  TemplateURL* search_engine = model()->Add(
+      std::make_unique<TemplateURL>(*GenerateDummyTemplateURLData("keyword")));
+  DCHECK(search_engine);
+
+  base::HistogramTester histogram_tester;
+  model()->SetIsActiveTemplateURL(search_engine, true);
+  EXPECT_EQ(search_engine->is_active(), TemplateURLData::ActiveStatus::kTrue);
+  histogram_tester.ExpectTotalCount(
+      "Omnibox.KeywordModeUsageByEngineType.Activated", 1);
+
+  model()->SetIsActiveTemplateURL(search_engine, false);
+  EXPECT_EQ(search_engine->is_active(), TemplateURLData::ActiveStatus::kFalse);
+  histogram_tester.ExpectTotalCount(
+      "Omnibox.KeywordModeUsageByEngineType.Deactivated", 1);
+
+  model()->SetIsActiveTemplateURL(search_engine, true);
+  EXPECT_EQ(search_engine->is_active(), TemplateURLData::ActiveStatus::kTrue);
+  histogram_tester.ExpectTotalCount(
+      "Omnibox.KeywordModeUsageByEngineType.Activated", 2);
+}
+
+// Tests that the `Omnibox.KeywordModeUsageByEngineType.ActiveOnStartup` and
+// `InactiveOnStartup` are emitted correctly when the model is loaded.
+TEST_F(TemplateURLServiceTest, EmitTemplateURLActiveOnStartupHistogram) {
+  test_util()->ResetModel(true);
+
+  TemplateURL* search_engine1 = model()->Add(
+      std::make_unique<TemplateURL>(*GenerateDummyTemplateURLData("keyword1")));
+  DCHECK(search_engine1);
+  model()->SetIsActiveTemplateURL(search_engine1, true);
+
+  TemplateURL* search_engine2 = model()->Add(
+      std::make_unique<TemplateURL>(*GenerateDummyTemplateURLData("keyword2")));
+  DCHECK(search_engine2);
+  model()->SetIsActiveTemplateURL(search_engine2, false);
+
+  base::HistogramTester histogram_tester;
+  test_util()->ResetModel(true);
+
+  // All the starter pack entries should be active by default.  We haven't
+  // deactivated them, so they should emit to the ActiveOnStartup histogram.
+  histogram_tester.ExpectBucketCount(
+      "Omnibox.KeywordModeUsageByEngineType.ActiveOnStartup",
+      BuiltinEngineType::KEYWORD_MODE_STARTER_PACK_BOOKMARKS, 1);
+  histogram_tester.ExpectBucketCount(
+      "Omnibox.KeywordModeUsageByEngineType.ActiveOnStartup",
+      BuiltinEngineType::KEYWORD_MODE_STARTER_PACK_HISTORY, 1);
+  histogram_tester.ExpectBucketCount(
+      "Omnibox.KeywordModeUsageByEngineType.ActiveOnStartup",
+      BuiltinEngineType::KEYWORD_MODE_STARTER_PACK_TABS, 1);
+
+  // We have one active and one inactive "non-builtin" search engine. Check that
+  // those histograms are emitted correctly.
+  histogram_tester.ExpectBucketCount(
+      "Omnibox.KeywordModeUsageByEngineType.ActiveOnStartup",
+      BuiltinEngineType::KEYWORD_MODE_NON_BUILT_IN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Omnibox.KeywordModeUsageByEngineType.InactiveOnStartup",
+      BuiltinEngineType::KEYWORD_MODE_NON_BUILT_IN, 1);
 }

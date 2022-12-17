@@ -27,8 +27,8 @@
 #include "media/webrtc/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/webrtc/api/make_ref_counted.h"
 #include "third_party/webrtc/modules/audio_processing/include/mock_audio_processing.h"
-#include "third_party/webrtc/rtc_base/ref_counted_object.h"
 
 using ::testing::_;
 using ::testing::AnyNumber;
@@ -38,16 +38,18 @@ using ::testing::Return;
 namespace media {
 namespace {
 
+// TODO(crbug.com/1334991): Clarify WebRTC audio processing support for 96 kHz
+// input.
 static const int kSupportedSampleRates[] = {8000,
                                             16000,
                                             22050,
                                             32000,
                                             44100,
                                             48000
-#if BUILDFLAG(IS_CHROMECAST)
+#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
                                             ,
                                             96000
-#endif  // BUILDFLAG(IS_CHROMECAST)
+#endif
 };
 
 using MockProcessedCaptureCallback =
@@ -111,7 +113,7 @@ class AudioProcessorTest : public ::testing::Test {
     const int packet_size =
         input_params.frames_per_buffer() * 2 * input_params.channels();
     const size_t length = packet_size * kNumberOfPacketsForTest;
-    std::unique_ptr<char[]> capture_data(new char[length]);
+    auto capture_data = std::make_unique<char[]>(length);
     ReadDataFromSpeechFile(capture_data.get(), static_cast<int>(length));
     const int16_t* data_ptr =
         reinterpret_cast<const int16_t*>(capture_data.get());
@@ -464,12 +466,15 @@ TEST_P(AudioProcessorDefaultOutputFormatTest, GetDefaultOutputFormat) {
   AudioParameters output_params =
       AudioProcessor::GetDefaultOutputFormat(input_params, settings);
 
+  // TODO(crbug.com/1336055): Investigate why chromecast devices need special
+  // logic here. See https://crrev.com/c/1572807 and
+  // https://crrev.com/c/3621456/comments/2e73cc96_0e9773cd for details.
   const int expected_sample_rate =
-#if BUILDFLAG(IS_CHROMECAST)
+#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
       std::min(sample_rate, media::kAudioProcessingSampleRateHz);
 #else
       media::kAudioProcessingSampleRateHz;
-#endif  // BUILDFLAG(IS_CHROMECAST)
+#endif
   const int expected_output_channels =
       settings.multi_channel_capture_processing ? input_params.channels() : 1;
 

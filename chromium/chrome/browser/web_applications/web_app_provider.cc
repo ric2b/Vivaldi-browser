@@ -7,20 +7,16 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_is_test.h"
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/daily_metrics_helper.h"
-#include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager_impl.h"
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
-#include "chrome/browser/web_applications/install_bounce_metric.h"
-#include "chrome/browser/web_applications/isolation_prefs_utils.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/url_handler_manager.h"
@@ -30,7 +26,6 @@
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
-#include "chrome/browser/web_applications/user_uninstalled_preinstalled_web_app_prefs.h"
 #include "chrome/browser/web_applications/web_app_audio_focus_id_map.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_database_factory.h"
@@ -46,7 +41,6 @@
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
-#include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/web_contents.h"
 
 namespace web_app {
@@ -84,6 +78,11 @@ WebAppProvider* WebAppProvider::GetForLocalAppsUnchecked(Profile* profile) {
 
 // static
 WebAppProvider* WebAppProvider::GetForTest(Profile* profile) {
+  // Running a nested base::RunLoop outside of tests causes a deadlock. Crash
+  // immediately instead of deadlocking for easier debugging (especially for
+  // TAST tests which use prod binaries).
+  CHECK_IS_TEST();
+
   WebAppProvider* provider = GetForLocalAppsUnchecked(profile);
 
   if (provider->on_registry_ready().is_signaled())
@@ -216,7 +215,6 @@ void WebAppProvider::Shutdown() {
   ui_manager_->Shutdown();
   externally_managed_app_manager_->Shutdown();
   manifest_update_manager_->Shutdown();
-  system_web_app_manager_->Shutdown();
   install_manager_->Shutdown();
   icon_manager_->Shutdown();
   install_finalizer_->Shutdown();
@@ -237,7 +235,6 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
       std::make_unique<ExternallyManagedAppManagerImpl>(profile);
   preinstalled_web_app_manager_ =
       std::make_unique<PreinstalledWebAppManager>(profile);
-  system_web_app_manager_ = std::make_unique<ash::SystemWebAppManager>(profile);
   web_app_policy_manager_ = std::make_unique<WebAppPolicyManager>(profile);
 
   database_factory_ = std::make_unique<WebAppDatabaseFactory>(profile);
@@ -299,10 +296,12 @@ void WebAppProvider::ConnectSubsystems() {
   install_finalizer_->SetSubsystems(
       install_manager_.get(), registrar_.get(), ui_manager_.get(),
       sync_bridge_.get(), os_integration_manager_.get(), icon_manager_.get(),
-      web_app_policy_manager_.get(), translation_manager_.get());
+      web_app_policy_manager_.get(), translation_manager_.get(),
+      command_manager_.get());
   install_manager_->SetSubsystems(
       registrar_.get(), os_integration_manager_.get(), command_manager_.get(),
-      install_finalizer_.get());
+      install_finalizer_.get(), icon_manager_.get(), sync_bridge_.get(),
+      translation_manager_.get());
   manifest_update_manager_->SetSubsystems(
       install_manager_.get(), registrar_.get(), icon_manager_.get(),
       ui_manager_.get(), install_finalizer_.get(),
@@ -313,9 +312,6 @@ void WebAppProvider::ConnectSubsystems() {
   preinstalled_web_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(),
       externally_managed_app_manager_.get());
-  system_web_app_manager_->SetSubsystems(
-      externally_managed_app_manager_.get(), registrar_.get(),
-      sync_bridge_.get(), ui_manager_.get(), web_app_policy_manager_.get());
   web_app_policy_manager_->SetSubsystems(externally_managed_app_manager_.get(),
                                          registrar_.get(), sync_bridge_.get(),
                                          os_integration_manager_.get());
@@ -328,13 +324,6 @@ void WebAppProvider::ConnectSubsystems() {
 
   command_manager_->SetSubsystems(install_manager_.get());
   connected_ = true;
-
-  // TODO(crbug.com/1321984): Extract this code to SystemWebAppManager
-  // KeyedService.
-  manifest_update_manager_->SetSystemWebAppDelegateMap(
-      &system_web_app_manager_->system_app_delegates());
-  web_app_policy_manager_->SetSystemWebAppDelegateMap(
-      &system_web_app_manager_->system_app_delegates());
 }
 
 void WebAppProvider::StartSyncBridge() {
@@ -367,20 +356,6 @@ void WebAppProvider::OnSyncBridgeReady() {
 void WebAppProvider::CheckIsConnected() const {
   DCHECK(connected_) << "Attempted to access Web App subsystem while "
                         "WebAppProvider is not connected.";
-}
-
-// static
-void WebAppProvider::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  UserUninstalledPreinstalledWebAppPrefs::RegisterProfilePrefs(registry);
-  ExternallyInstalledWebAppPrefs::RegisterProfilePrefs(registry);
-  PreinstalledWebAppManager::RegisterProfilePrefs(registry);
-  WebAppPolicyManager::RegisterProfilePrefs(registry);
-  ash::SystemWebAppManager::RegisterProfilePrefs(registry);
-  WebAppPrefsUtilsRegisterProfilePrefs(registry);
-  IsolationPrefsUtilsRegisterProfilePrefs(registry);
-  RegisterInstallBounceMetricProfilePrefs(registry);
-  RegisterDailyWebAppMetricsProfilePrefs(registry);
 }
 
 void WebAppProvider::DoMigrateProfilePrefs(Profile* profile) {

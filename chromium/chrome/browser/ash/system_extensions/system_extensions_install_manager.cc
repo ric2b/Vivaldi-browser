@@ -17,55 +17,70 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/ash/system_extensions/system_extension.h"
+#include "chrome/browser/ash/system_extensions/system_extensions_persistence_manager.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_profile_utils.h"
+#include "chrome/browser/ash/system_extensions/system_extensions_registry_manager.h"
+#include "chrome/browser/ash/system_extensions/system_extensions_service_worker_manager.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_webui_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
-#include "content/public/browser/service_worker_context.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/webui_config_map.h"
 #include "content/public/common/url_constants.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/chromeos/system_extensions/window_management/cros_window_management.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_registration_options.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace ash {
 
-SystemExtensionsInstallManager::SystemExtensionsInstallManager(Profile* profile)
-    : profile_(profile) {
+SystemExtensionsInstallManager::SystemExtensionsInstallManager(
+    Profile* profile,
+    SystemExtensionsRegistryManager& registry_manager,
+    SystemExtensionsRegistry& registry,
+    SystemExtensionsServiceWorkerManager& service_worker_manager,
+    SystemExtensionsPersistenceManager& persistence_manager)
+    : profile_(profile),
+      service_worker_manager_(service_worker_manager),
+      registry_manager_(registry_manager),
+      registry_(registry),
+      persistence_manager_(persistence_manager) {
+  RegisterPreviouslyPersistedSystemExtensions();
   InstallFromCommandLineIfNecessary();
 }
 
 SystemExtensionsInstallManager::~SystemExtensionsInstallManager() = default;
 
-std::vector<SystemExtensionId>
-SystemExtensionsInstallManager::GetSystemExtensionIds() {
-  std::vector<SystemExtensionId> extension_ids;
-  for (const auto& id_and_extension : system_extensions_) {
-    extension_ids.emplace_back(id_and_extension.first);
-  }
-  return extension_ids;
-}
+void SystemExtensionsInstallManager::
+    RegisterPreviouslyPersistedSystemExtensions() {
+  const std::vector<SystemExtensionPersistenceInfo> persisted_infos =
+      persistence_manager_->GetAll();
+  for (const auto& persisted_info : persisted_infos) {
+    InstallStatusOrSystemExtension status_or_extension =
+        sandboxed_unpacker_.GetSystemExtensionFromValue(
+            persisted_info.manifest);
 
-const SystemExtension* SystemExtensionsInstallManager::GetSystemExtensionById(
-    const SystemExtensionId& id) {
-  const auto it = system_extensions_.find(id);
-  if (it == system_extensions_.end())
-    return nullptr;
-  return &it->second;
+    if (!status_or_extension.ok()) {
+      LOG(ERROR) << "Failed to register System Extension from Persistence "
+                 << "Manager.";
+      continue;
+    }
+
+    RegisterSystemExtension(std::move(status_or_extension).value());
+  }
+
+  on_register_previously_persisted_finished_.Signal();
 }
 
 void SystemExtensionsInstallManager::InstallUnpackedExtensionFromDir(
     const base::FilePath& unpacked_system_extension_dir,
     OnceInstallCallback final_callback) {
+  DCHECK(on_register_previously_persisted_finished_.is_signaled());
+
   StartInstallation(std::move(final_callback), unpacked_system_extension_dir);
 }
 
 void SystemExtensionsInstallManager::InstallFromCommandLineIfNecessary() {
+  DCHECK(on_register_previously_persisted_finished_.is_signaled());
+
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(ash::switches::kInstallSystemExtension)) {
     return;
@@ -93,6 +108,7 @@ void SystemExtensionsInstallManager::OnInstallFromCommandLineFinished(
 void SystemExtensionsInstallManager::StartInstallation(
     OnceInstallCallback final_callback,
     const base::FilePath& unpacked_system_extension_dir) {
+  // Installation Step #1: Convert a manifest into a SystemExtension object.
   sandboxed_unpacker_.GetSystemExtensionFromDir(
       unpacked_system_extension_dir,
       base::BindOnce(
@@ -116,6 +132,8 @@ void SystemExtensionsInstallManager::OnGetSystemExtensionFromDir(
   const base::FilePath system_extensions_dir =
       GetSystemExtensionsProfileDir(*profile_);
 
+  // Installation Step #2: Copy the System Extensions assets to a profile
+  // directory.
   io_helper_.AsyncCall(&IOHelper::CopyExtensionAssets)
       .WithArgs(unpacked_system_extension_dir, dest_dir, system_extensions_dir)
       .Then(base::BindOnce(
@@ -134,106 +152,66 @@ void SystemExtensionsInstallManager::OnAssetsCopiedToProfileDir(
     return;
   }
 
+  // Installation Step #3: Persist the System Extension across restarts.
+  persistence_manager_->Persist(system_extension);
+
   SystemExtensionId id = system_extension.id;
+  RegisterSystemExtension(std::move(system_extension));
+  std::move(final_callback).Run(std::move(id));
+}
+
+void SystemExtensionsInstallManager::RegisterSystemExtension(
+    SystemExtension system_extension) {
+  // Installation Step #4: Create a WebUIConfig so that resources are served.
   auto config = std::make_unique<SystemExtensionsWebUIConfig>(system_extension);
   content::WebUIConfigMap::GetInstance().AddUntrustedWebUIConfig(
       std::move(config));
 
-  system_extensions_[{1, 2, 3, 4}] = std::move(system_extension);
-  std::move(final_callback).Run(std::move(id));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SystemExtensionsInstallManager::RegisterServiceWorker,
-                     weak_ptr_factory_.GetWeakPtr(), id));
+  // Installation Step #5: Add the System Extension to the registry.
+  SystemExtensionId id = system_extension.id;
+  registry_manager_->AddSystemExtension(std::move(system_extension));
+
+  // Installation Step #6: Register a Service Worker for the System Extension.
+  service_worker_manager_->RegisterServiceWorker(id);
 }
 
-void SystemExtensionsInstallManager::RegisterServiceWorker(
+void SystemExtensionsInstallManager::Uninstall(
     const SystemExtensionId& system_extension_id) {
-  auto it = system_extensions_.find(system_extension_id);
-  if (it == system_extensions_.end()) {
-    LOG(ERROR) << "Tried to install service worker for non-existent extension";
+  auto* system_extension = registry_->GetById(system_extension_id);
+  if (!system_extension) {
     return;
   }
 
-  const SystemExtension& system_extension = it->second;
+  const url::Origin& origin = url::Origin::Create(system_extension->base_url);
 
-  blink::mojom::ServiceWorkerRegistrationOptions options(
-      system_extension.base_url, blink::mojom::ScriptType::kClassic,
-      blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  // Uninstallation Step #1: Unregister the Service Worker.
+  service_worker_manager_->UnregisterServiceWorker(system_extension_id);
 
-  // TODO(ortuno): Remove after fixing flakiness.
-  DLOG(ERROR) << "Registering service worker";
-  auto* worker_context =
-      profile_->GetDefaultStoragePartition()->GetServiceWorkerContext();
-  worker_context->RegisterServiceWorker(
-      system_extension.service_worker_url, key, options,
-      base::BindOnce(&SystemExtensionsInstallManager::OnRegisterServiceWorker,
-                     weak_ptr_factory_.GetWeakPtr(), system_extension_id));
+  // Uninstallation Step #2: Remove the WebUIConfig for the System Extension.
+  content::WebUIConfigMap::GetInstance().RemoveConfig(origin);
+
+  // Installation Step #3: Remove the System Extension from persistent storage.
+  persistence_manager_->Delete(system_extension_id);
+
+  // Uninstallation Step #4: Remove System Extension from the registry.
+  registry_manager_->RemoveSystemExtension(system_extension_id);
+
+  // Uninstallation Step #5: Delete the System Extension assets.
+  io_helper_.AsyncCall(&IOHelper::RemoveExtensionAssets)
+      .WithArgs(GetDirectoryForSystemExtension(*profile_, system_extension_id))
+      .Then(base::BindOnce(&SystemExtensionsInstallManager::NotifyAssetsRemoved,
+                           weak_ptr_factory_.GetWeakPtr(),
+                           system_extension_id));
 }
 
-void SystemExtensionsInstallManager::OnRegisterServiceWorker(
+void SystemExtensionsInstallManager::NotifyAssetsRemoved(
     const SystemExtensionId& system_extension_id,
-    blink::ServiceWorkerStatusCode status_code) {
-  if (status_code != blink::ServiceWorkerStatusCode::kOk)
-    LOG(ERROR) << "Failed to register Service Worker: "
-               << blink::ServiceWorkerStatusToString(status_code);
+    bool succeeded) {
+  if (!succeeded)
+    LOG(ERROR) << "Failed to remove System Extension assets.";
 
   for (auto& observer : observers_)
-    observer.OnServiceWorkerRegistered(system_extension_id, status_code);
-
-  auto it = system_extensions_.find(system_extension_id);
-  if (it == system_extensions_.end()) {
-    LOG(ERROR) << "Tried to start service worker for non-existent extension";
-    return;
-  }
-
-  DLOG(ERROR) << "Starting service worker";
-
-  const SystemExtension& system_extension = it->second;
-  const GURL& scope = system_extension.base_url;
-
-  // TODO(b/221123297): Only dispatch `start` event for window manager
-  // system extensions. This is OK for now, because we only have window
-  // manager extensions.
-  auto* worker_context =
-      profile_->GetDefaultStoragePartition()->GetServiceWorkerContext();
-  worker_context->StartWorkerForScope(
-      scope, blink::StorageKey(url::Origin::Create(scope)),
-      base::BindOnce(
-          &SystemExtensionsInstallManager::DispatchWindowManagerStartEvent,
-          weak_ptr_factory_.GetWeakPtr(), system_extension_id),
-      base::BindOnce([](blink::ServiceWorkerStatusCode status_code) {
-        LOG(ERROR) << "Failed to start service worker: "
-                   << blink::ServiceWorkerStatusToString(status_code);
-      }));
-}
-
-void SystemExtensionsInstallManager::DispatchWindowManagerStartEvent(
-    const SystemExtensionId& system_extension_id,
-    int64_t version_id,
-    int process_id,
-    int thread_id) {
-  auto it = system_extensions_.find(system_extension_id);
-  if (it == system_extensions_.end()) {
-    LOG(ERROR) << "Tried to dispatch event to service worker for "
-               << "non-existent extension";
-    return;
-  }
-
-  auto* worker_context =
-      profile_->GetDefaultStoragePartition()->GetServiceWorkerContext();
-  if (!worker_context->IsLiveRunningServiceWorker(version_id)) {
-    LOG(ERROR) << "Service Worker version no longer running.";
-    return;
-  }
-  auto& remote_interfaces = worker_context->GetRemoteInterfaces(version_id);
-
-  DLOG(ERROR) << "Dispatching start event";
-
-  mojo::Remote<blink::mojom::CrosWindowManagementStartObserver> observer;
-  remote_interfaces.GetInterface(observer.BindNewPipeAndPassReceiver());
-  observer->DispatchStartEvent();
+    observer.OnSystemExtensionAssetsDeleted(system_extension_id, succeeded);
 }
 
 bool SystemExtensionsInstallManager::IOHelper::CopyExtensionAssets(
@@ -263,20 +241,20 @@ bool SystemExtensionsInstallManager::IOHelper::CopyExtensionAssets(
   // `/{profile_path}/System Extensions/{system_extension_id}/`
   if (!base::CopyDirectory(unpacked_extension_dir, dest_dir,
                            /*recursive=*/true)) {
-    return false;
     LOG(ERROR) << "Failed to copy System Extension assets.";
+    return false;
   }
 
   return true;
 }
 
-const SystemExtension* SystemExtensionsInstallManager::GetSystemExtensionByURL(
-    const GURL& url) {
-  for (const auto& id_and_system_extension : system_extensions_) {
-    if (url::IsSameOriginWith(id_and_system_extension.second.base_url, url))
-      return &id_and_system_extension.second;
+bool SystemExtensionsInstallManager::IOHelper::RemoveExtensionAssets(
+    const base::FilePath& system_extension_dir) {
+  if (!base::DeletePathRecursively(system_extension_dir)) {
+    LOG(ERROR) << "Failed to delete System Extension assets.";
+    return false;
   }
-  return nullptr;
+  return true;
 }
 
 }  // namespace ash

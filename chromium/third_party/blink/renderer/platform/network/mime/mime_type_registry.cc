@@ -55,9 +55,12 @@ std::string ToLowerASCIIOrEmpty(const String& str) {
   return ToLowerASCIIInternal(str.Characters16(), str.length());
 }
 
-STATIC_ASSERT_ENUM(MIMETypeRegistry::kIsNotSupported, media::IsNotSupported);
-STATIC_ASSERT_ENUM(MIMETypeRegistry::kIsSupported, media::IsSupported);
-STATIC_ASSERT_ENUM(MIMETypeRegistry::kMayBeSupported, media::MayBeSupported);
+STATIC_ASSERT_ENUM(MIMETypeRegistry::kNotSupported,
+                   media::SupportsType::kNotSupported);
+STATIC_ASSERT_ENUM(MIMETypeRegistry::kSupported,
+                   media::SupportsType::kSupported);
+STATIC_ASSERT_ENUM(MIMETypeRegistry::kMaybeSupported,
+                   media::SupportsType::kMaybeSupported);
 
 }  // namespace
 
@@ -124,7 +127,7 @@ bool MIMETypeRegistry::IsSupportedNonImageMIMEType(const String& mime_type) {
 
 bool MIMETypeRegistry::IsSupportedMediaMIMEType(const String& mime_type,
                                                 const String& codecs) {
-  return SupportsMediaMIMEType(mime_type, codecs) != kIsNotSupported;
+  return SupportsMediaMIMEType(mime_type, codecs) != kNotSupported;
 }
 
 MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
@@ -132,10 +135,10 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
     const String& codecs) {
   const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_MAC)
+#if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER) && BUILDFLAG(IS_MAC)
   // Some containers are known to be partially supported.
   if (ascii_mime_type == "video/quicktime")
-    return kMayBeSupported;
+    return kMaybeSupported;
 #endif
 
   std::vector<std::string> codec_vector;
@@ -149,7 +152,7 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaSourceMIMEType(
     const String& codecs) {
   const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
   if (ascii_mime_type.empty())
-    return kIsNotSupported;
+    return kNotSupported;
   std::vector<std::string> parsed_codec_ids;
   media::SplitCodecs(ToASCIIOrEmpty(codecs), &parsed_codec_ids);
   return static_cast<SupportsType>(media::StreamParserFactory::IsTypeSupported(

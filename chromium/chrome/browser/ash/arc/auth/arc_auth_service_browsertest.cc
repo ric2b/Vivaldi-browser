@@ -15,7 +15,6 @@
 #include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_arc_session.h"
-#include "ash/components/cryptohome/cryptohome_parameters.h"
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -53,6 +52,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "components/account_id/account_id.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
@@ -272,10 +272,7 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
 
   void SetUp() override {
     if (IsArcAccountRestrictionsEnabled()) {
-      feature_list_.InitWithFeatures(
-          /*enabled_features=*/{chromeos::features::kArcAccountRestrictions,
-                                chromeos::features::kLacrosSupport},
-          /*disabled_features=*/{});
+      feature_list_.InitAndEnableFeature(chromeos::features::kLacrosSupport);
     }
     InProcessBrowserTest::SetUp();
   }

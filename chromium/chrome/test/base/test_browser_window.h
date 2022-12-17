@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
 #include "chrome/common/buildflags.h"
 #include "ui/base/interaction/element_identifier.h"
 
@@ -180,6 +181,12 @@ class TestBrowserWindow : public BrowserWindow {
       const std::string& target_language,
       translate::TranslateErrors::Type error_type,
       bool is_user_gesture) override;
+  void ShowPartialTranslateBubble(
+      PartialTranslateBubbleModel::ViewState view_state,
+      const std::string& source_language,
+      const std::string& target_language,
+      const std::u16string& text_selection,
+      translate::TranslateErrors::Type error_type) override;
   void ShowOneClickSigninConfirmation(
       const std::u16string& email,
       base::OnceCallback<void(bool)> confirmed_callback) override {}
@@ -227,10 +234,6 @@ class TestBrowserWindow : public BrowserWindow {
   void CreateTabSearchBubble() override {}
   void CloseTabSearchBubble() override {}
 
-  bool IsSideSearchPanelVisible() const override;
-  void MaybeRestoreSideSearchStatePerWindow(
-      const std::map<std::string, std::string>& extra_data) override;
-
   user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(
       const base::Feature& iph_feature,
@@ -242,8 +245,8 @@ class TestBrowserWindow : public BrowserWindow {
       user_education::FeaturePromoController::BubbleCloseCallback
           close_callback = base::DoNothing()) override;
   bool CloseFeaturePromo(const base::Feature& iph_feature) override;
-  user_education::FeaturePromoController::PromoHandle
-  CloseFeaturePromoAndContinue(const base::Feature& iph_feature) override;
+  user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
+      const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override;
 
   // Sets the controller returned by GetFeaturePromoController().

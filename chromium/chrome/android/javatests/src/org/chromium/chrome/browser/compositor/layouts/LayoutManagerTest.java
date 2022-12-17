@@ -45,6 +45,7 @@ import org.chromium.base.Log;
 import org.chromium.base.MathUtils;
 import org.chromium.base.jank_tracker.DummyJankTracker;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.CallbackHelper;
@@ -106,9 +107,6 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     @Mock
     private StartSurface mStartSurface;
-
-    @Mock
-    private StartSurface.Controller mStartSurfaceController;
 
     @Mock
     private TabSwitcher.TabListDelegate mTabListDelegate;
@@ -190,7 +188,6 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
         mDpToPx = context.getResources().getDisplayMetrics().density;
 
-        when(mStartSurface.getController()).thenReturn(mStartSurfaceController);
         when(mStartSurface.getGridTabListDelegate()).thenReturn(mTabListDelegate);
         when(mStartSurface.getTabGridDialogVisibilitySupplier()).thenReturn(() -> false);
 
@@ -216,10 +213,11 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
         ObservableSupplierImpl<TabContentManager> tabContentManagerSupplier =
                 new ObservableSupplierImpl<>();
+
         mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost, container,
-                mStartSurfaceSupplier, tabContentManagerSupplier,
+                mStartSurfaceSupplier, new OneshotSupplierImpl<>(), tabContentManagerSupplier,
                 () -> mTopUiThemeColorProvider, new DummyJankTracker());
-        verify(mStartSurfaceController)
+        verify(mStartSurface)
                 .addTabSwitcherViewObserver(mTabSwitcherViewObserverArgumentCaptor.capture());
 
         doAnswer((Answer<Void>) invocation -> {
@@ -227,14 +225,14 @@ public class LayoutManagerTest implements MockTabModelDelegate {
             simulateTime(mManager, 1000);
             return null;
         })
-                .when(mStartSurfaceController)
+                .when(mStartSurface)
                 .showOverview(anyBoolean());
 
         doAnswer((Answer<Void>) invocation -> {
             mTabSwitcherViewObserverArgumentCaptor.getValue().finishedHiding();
             return null;
         })
-                .when(mStartSurfaceController)
+                .when(mStartSurface)
                 .hideTabSwitcherView(anyBoolean());
 
         tabContentManagerSupplier.set(tabContentManager);

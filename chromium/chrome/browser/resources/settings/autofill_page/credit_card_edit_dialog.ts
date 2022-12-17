@@ -7,19 +7,19 @@
  * editing or creating a credit card entry.
  */
 
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import '../settings_vars.css.js';
 import '../i18n_setup.js';
 
-import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -82,13 +82,27 @@ export class SettingsCreditCardEditDialogElement extends
       monthList_: {
         type: Array,
         value: [
-          '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'
+          '01',
+          '02',
+          '03',
+          '04',
+          '05',
+          '06',
+          '07',
+          '08',
+          '09',
+          '10',
+          '11',
+          '12',
         ],
       },
 
       /** The list of years to show in the dropdown. */
       yearList_: Array,
 
+      name_: String,
+      cardNumber_: String,
+      nickname_: String,
       expirationYear_: String,
       expirationMonth_: String,
 
@@ -109,8 +123,11 @@ export class SettingsCreditCardEditDialogElement extends
 
   creditCard: chrome.autofillPrivate.CreditCardEntry;
   private title_: string;
-  private monthList_: Array<string>;
-  private yearList_: Array<string>;
+  private monthList_: string[];
+  private yearList_: string[];
+  private name_?: string;
+  private cardNumber_?: string;
+  private nickname_?: string;
   private expirationYear_?: string;
   private expirationMonth_?: string;
   private nicknameInvalid_: boolean;
@@ -168,6 +185,9 @@ export class SettingsCreditCardEditDialogElement extends
     microTask.run(() => {
       this.expirationYear_ = selectedYear.toString();
       this.expirationMonth_ = this.creditCard.expirationMonth;
+      this.name_ = this.creditCard.name;
+      this.cardNumber_ = this.creditCard.cardNumber;
+      this.nickname_ = this.creditCard.nickname;
       this.$.dialog.showModal();
     });
   }
@@ -194,6 +214,9 @@ export class SettingsCreditCardEditDialogElement extends
 
     this.creditCard.expirationYear = this.expirationYear_;
     this.creditCard.expirationMonth = this.expirationMonth_;
+    this.creditCard.name = this.name_;
+    this.creditCard.cardNumber = this.cardNumber_;
+    this.creditCard.nickname = this.nickname_;
     this.trimCreditCard_();
     this.dispatchEvent(new CustomEvent(
         'save-credit-card',
@@ -211,12 +234,11 @@ export class SettingsCreditCardEditDialogElement extends
 
   private saveEnabled_() {
     // The save button is enabled if:
-    // There is and name or number for the card
+    // There is a name or number for the card
     // and the expiration date is valid
     // and the nickname is valid if present.
-    return ((this.creditCard.name && this.creditCard.name.trim()) ||
-            (this.creditCard.cardNumber &&
-             this.creditCard.cardNumber.trim())) &&
+    return ((this.name_ && this.name_.trim()) ||
+            (this.cardNumber_ && this.cardNumber_.trim())) &&
         !this.expired_ && !this.nicknameInvalid_;
   }
 
@@ -247,8 +269,7 @@ export class SettingsCreditCardEditDialogElement extends
    * the save button when invalid.
    */
   private validateNickname_() {
-    this.nicknameInvalid_ =
-        NICKNAME_INVALID_REGEX.test(this.creditCard.nickname!);
+    this.nicknameInvalid_ = NICKNAME_INVALID_REGEX.test(this.nickname_!);
   }
 
   /**

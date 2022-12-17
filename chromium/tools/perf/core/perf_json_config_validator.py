@@ -34,6 +34,8 @@ _VALID_PERF_POOLS = {
     'fuchsia-perf-fyi': {'chrome.tests'},
     'fuchsia-perf-atlas-fyi': {'chrome.tests'},
     'fuchsia-perf-sherlock-fyi': {'chrome.tests'},
+    'fuchsia-perf-ast': {'chrome.tests'},
+    'fuchsia-perf-shk': {'chrome.tests'},
     'linux-builder-perf': {'chrome.tests'},
     'mac-arm-builder-perf': {'chrome.tests'},
     'mac-builder-perf': {'chrome.tests'},
@@ -48,6 +50,7 @@ _VALID_WEBVIEW_BROWSERS = {
 _PERFORMANCE_TEST_SUITES = {
     'performance_test_suite',
     'performance_test_suite_eve',
+    'performance_test_suite_octopus',
     'performance_webview_test_suite',
 }
 for suffix in android_browser_types.TELEMETRY_ANDROID_BROWSER_TARGET_SUFFIXES:
@@ -107,7 +110,7 @@ def _ValidateShardingData(builder_name, test_config):
 
   shard_map_data.pop('extra_infos', None)
   shard_keys = set(shard_map_data.keys())
-  expected_shard_keys = set([str(i) for i in range(num_shards)])
+  expected_shard_keys = {str(i) for i in range(num_shards)}
   if shard_keys != expected_shard_keys:
     raise ValueError(
         'The shard configuration of %s does not match the expected expected '

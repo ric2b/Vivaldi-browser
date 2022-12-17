@@ -51,8 +51,13 @@ class CC_PAINT_EXPORT PaintFlags {
   ALWAYS_INLINE uint8_t getAlpha() const {
     return SkColorGetA(color_.toSkColor());
   }
+  ALWAYS_INLINE float getAlphaf() const { return color_.fA; }
   ALWAYS_INLINE void setAlpha(uint8_t a) {
     color_ = SkColor4f::FromColor(SkColorSetA(color_.toSkColor(), a));
+  }
+  template <class F, class = std::enable_if_t<std::is_same_v<F, float>>>
+  ALWAYS_INLINE void setAlphaf(F a) {
+    color_.fA = a;
   }
   ALWAYS_INLINE void setBlendMode(SkBlendMode mode) {
     blend_mode_ = static_cast<uint32_t>(mode);
@@ -73,7 +78,7 @@ class CC_PAINT_EXPORT PaintFlags {
     kLast = kHigh,
   };
   ALWAYS_INLINE void setFilterQuality(FilterQuality quality) {
-    bitfields_.filter_quality_ = static_cast<int>(quality);
+    bitfields_.filter_quality_ = static_cast<uint32_t>(quality);
   }
   ALWAYS_INLINE FilterQuality getFilterQuality() const {
     return static_cast<FilterQuality>(bitfields_.filter_quality_);

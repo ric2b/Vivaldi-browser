@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/strings/string_split.h"
+#include "components/ad_blocker/parse_utils.h"
 #include "components/request_filter/adblock_filter/adblock_rule_pattern_matcher.h"
-#include "components/request_filter/adblock_filter/parse_utils.h"
 #include "components/request_filter/adblock_filter/stylesheet_builder.h"
 #include "components/request_filter/adblock_filter/utils.h"
 #include "components/url_pattern_index/closed_hash_map.h"

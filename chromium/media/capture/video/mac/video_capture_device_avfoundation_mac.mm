@@ -74,6 +74,10 @@ namespace media {
 const base::Feature kInCapturerScaling{"InCapturerScaling",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Uses the most recent advice from Apple for configuring and starting.
+const base::Feature kConfigureCaptureBeforeStart{
+    "ConfigureCaptureBeforeStart", base::FEATURE_ENABLED_BY_DEFAULT};
+
 AVCaptureDeviceFormat* FindBestCaptureFormat(
     NSArray<AVCaptureDeviceFormat*>* formats,
     int width,
@@ -331,20 +335,14 @@ AVCaptureDeviceFormat* FindBestCaptureFormat(
 
   AVCaptureConnection* captureConnection =
       [_captureVideoDataOutput connectionWithMediaType:AVMediaTypeVideo];
-  // Check selector existence, related to bugs http://crbug.com/327532 and
-  // http://crbug.com/328096.
-  // CMTimeMake accepts integer argumenst but |frameRate| is float, round it.
-  if ([captureConnection
-          respondsToSelector:@selector(isVideoMinFrameDurationSupported)] &&
-      [captureConnection isVideoMinFrameDurationSupported]) {
+  // CMTimeMake accepts integer arguments but |frameRate| is float, so round it.
+  if ([captureConnection isVideoMinFrameDurationSupported]) {
     [captureConnection
         setVideoMinFrameDuration:CMTimeMake(media::kFrameRatePrecision,
                                             (int)(frameRate *
                                                   media::kFrameRatePrecision))];
   }
-  if ([captureConnection
-          respondsToSelector:@selector(isVideoMaxFrameDurationSupported)] &&
-      [captureConnection isVideoMaxFrameDurationSupported]) {
+  if ([captureConnection isVideoMaxFrameDurationSupported]) {
     [captureConnection
         setVideoMaxFrameDuration:CMTimeMake(media::kFrameRatePrecision,
                                             (int)(frameRate *
@@ -415,12 +413,21 @@ AVCaptureDeviceFormat* FindBestCaptureFormat(
          selector:@selector(onVideoError:)
              name:AVCaptureSessionRuntimeErrorNotification
            object:_captureSession];
-  [_captureSession startRunning];
 
-  // Update the active capture format once the capture session is running.
-  // Setting it before the capture session is running has no effect.
-  if (_bestCaptureFormat) {
-    if ([_captureDevice lockForConfiguration:nil]) {
+  if (base::FeatureList::IsEnabled(media::kConfigureCaptureBeforeStart)) {
+    if (_bestCaptureFormat) {
+      [_captureSession beginConfiguration];
+      if ([_captureDevice lockForConfiguration:nil]) {
+        [_captureDevice setActiveFormat:_bestCaptureFormat];
+        [_captureDevice unlockForConfiguration];
+      }
+      [_captureSession commitConfiguration];
+    }
+
+    [_captureSession startRunning];
+  } else {
+    [_captureSession startRunning];
+    if (_bestCaptureFormat && [_captureDevice lockForConfiguration:nil]) {
       [_captureDevice setActiveFormat:_bestCaptureFormat];
       [_captureDevice unlockForConfiguration];
     }

@@ -6,9 +6,9 @@
 
 #include "base/notreached.h"
 #include "base/time/default_tick_clock.h"
+#include "components/autofill_assistant/browser/public/password_change/website_login_manager_impl.h"
 #include "components/autofill_assistant/browser/public/runtime_manager_impl.h"
 #include "components/autofill_assistant/browser/script_parameters.h"
-#include "components/autofill_assistant/browser/website_login_manager_impl.h"
 #include "components/version_info/channel.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
@@ -92,11 +92,6 @@ void StarterDelegateDesktop::SetProactiveHelpSettingEnabled(bool enabled) {
   NOTREACHED();
 }
 
-bool StarterDelegateDesktop::GetMakeSearchesAndBrowsingBetterEnabled() const {
-  // Only relevant for trigger scripts, which don't exist in headless.
-  return false;
-}
-
 bool StarterDelegateDesktop::GetIsLoggedIn() {
   return !common_dependencies_
               ->GetSignedInEmail(GetWebContents().GetBrowserContext())
@@ -105,6 +100,11 @@ bool StarterDelegateDesktop::GetIsLoggedIn() {
 
 bool StarterDelegateDesktop::GetIsSupervisedUser() {
   return common_dependencies_->IsSupervisedUser(
+      GetWebContents().GetBrowserContext());
+}
+
+bool StarterDelegateDesktop::GetIsAllowedForMachineLearning() {
+  return common_dependencies_->IsAllowedForMachineLearning(
       GetWebContents().GetBrowserContext());
 }
 

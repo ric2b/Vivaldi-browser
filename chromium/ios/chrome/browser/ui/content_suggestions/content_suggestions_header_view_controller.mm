@@ -4,12 +4,13 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller.h"
 
-#include "base/check.h"
-#include "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
+#import "base/check.h"
+#import "base/ios/ios_util.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
-#include "components/strings/grit/components_strings.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
@@ -22,6 +23,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
 #import "ios/chrome/browser/ui/content_suggestions/user_account_image_update_delegate.h"
 #import "ios/chrome/browser/ui/ntp/logo_vendor.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller_delegate.h"
@@ -29,13 +31,13 @@
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -60,10 +62,10 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 // animations so the constraints aren't changed while the ntp is scrolled.
 @property(nonatomic, assign) BOOL disableScrollAnimation;
 
-// |YES| when notifications indicate the omnibox is focused.
+// `YES` when notifications indicate the omnibox is focused.
 @property(nonatomic, assign, getter=isOmniboxFocused) BOOL omniboxFocused;
 
-// |YES| if this consumer is has voice search enabled.
+// `YES` if this consumer is has voice search enabled.
 @property(nonatomic, assign) BOOL voiceSearchIsEnabled;
 
 // Exposes view and methods to drive the doodle.
@@ -215,14 +217,6 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   return AlignValueToPixel(offsetY);
 }
 
-- (void)loadView {
-  if (IsContentSuggestionsHeaderMigrationEnabled()) {
-    [super loadView];
-  } else {
-    self.view = [[ContentSuggestionsHeaderView alloc] init];
-  }
-}
-
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
 
@@ -240,7 +234,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  if (IsContentSuggestionsHeaderMigrationEnabled() && !self.headerView) {
+  if (!self.headerView) {
     CGFloat width = self.view.frame.size.width;
 
     self.headerView = [[ContentSuggestionsHeaderView alloc] init];
@@ -280,56 +274,6 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   }
 }
 
-#pragma mark - ContentSuggestionsHeaderProvider
-
-- (UIView*)headerForWidth:(CGFloat)width
-           safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
-  DCHECK(!IsContentSuggestionsHeaderMigrationEnabled());
-  if (!self.headerView) {
-    self.headerView =
-        base::mac::ObjCCastStrict<ContentSuggestionsHeaderView>(self.view);
-    [self addFakeOmnibox];
-
-    [self.headerView addSubview:self.logoVendor.view];
-    // Fake Tap View has identity disc, which should render above the doodle.
-    [self addFakeTapView];
-    [self.headerView addSubview:self.fakeOmnibox];
-    self.logoVendor.view.translatesAutoresizingMaskIntoConstraints = NO;
-    self.logoVendor.view.accessibilityIdentifier =
-        ntp_home::NTPLogoAccessibilityID();
-    self.fakeOmnibox.translatesAutoresizingMaskIntoConstraints = NO;
-
-    [self.headerView addSeparatorToSearchField:self.fakeOmnibox];
-
-    // Identity disc needs to be added after the Google logo/doodle since it
-    // needs to respond to user taps first.
-    [self addIdentityDisc];
-
-    // -headerForView is regularly called before self.headerView has been added
-    // to the view hierarchy, so there's no simple way to get the correct
-    // safeAreaInsets.  Since this situation is universally called for the full
-    // screen new tab animation, it's safe to check the rootViewController's
-    // view instead.
-    // TODO(crbug.com/791784) : Remove use of rootViewController.
-    if (self.headerView.window) {
-      safeAreaInsets =
-          self.headerView.window.rootViewController.view.safeAreaInsets;
-    }
-    width = std::max<CGFloat>(
-        0, width - safeAreaInsets.left - safeAreaInsets.right);
-
-    self.fakeOmniboxWidthConstraint = [self.fakeOmnibox.widthAnchor
-        constraintEqualToConstant:content_suggestions::searchFieldWidth(
-                                      width, self.traitCollection)];
-    [self addConstraintsForLogoView:self.logoVendor.view
-                        fakeOmnibox:self.fakeOmnibox
-                      andHeaderView:self.headerView];
-
-    [self.logoVendor fetchDoodle];
-  }
-  return self.headerView;
-}
-
 #pragma mark - Private
 
 // Initialize and add a search field tap target and a voice search button.
@@ -352,7 +296,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
                      forControlEvents:UIControlEventTouchUpInside];
   // Because the visual fakebox background is implemented within
   // ContentSuggestionsHeaderView, KVO the highlight events of
-  // |accessibilityButton| and pass them along.
+  // `accessibilityButton` and pass them along.
   [self.accessibilityButton addObserver:self
                              forKeyPath:@"highlighted"
                                 options:NSKeyValueObservingOptionNew
@@ -462,6 +406,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   if ([self.delegate ignoreLoadRequests])
     return;
   base::RecordAction(base::UserMetricsAction("MobileFakeViewNTPTapped"));
+  [self logOmniboxAction];
   [self focusFakebox];
 }
 
@@ -469,7 +414,18 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   if ([self.delegate ignoreLoadRequests])
     return;
   base::RecordAction(base::UserMetricsAction("MobileFakeboxNTPTapped"));
+  [self logOmniboxAction];
   [self focusFakebox];
+}
+
+- (void)logOmniboxAction {
+  if (self.isStartShowing) {
+    UMA_HISTOGRAM_ENUMERATION("IOS.ContentSuggestions.ActionOnStartSurface",
+                              IOSContentSuggestionsActionType::kFakebox);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("IOS.ContentSuggestions.ActionOnNTP",
+                              IOSContentSuggestionsActionType::kFakebox);
+  }
 }
 
 - (void)focusFakebox {
@@ -509,15 +465,11 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
                       self.logoVendor.isShowingDoodle, self.traitCollection)];
   self.fakeOmnibox.hidden =
       IsRegularXRegularSizeClass(self) && !self.logoIsShowing;
-  if (IsContentSuggestionsHeaderMigrationEnabled()) {
-    [self.headerView layoutIfNeeded];
-    self.headerViewHeightConstraint.constant =
-        content_suggestions::heightForLogoHeader(
-            self.logoIsShowing, self.logoVendor.isShowingDoodle,
-            self.promoCanShow, YES, [self topInset], self.traitCollection);
-  } else {
-    [self.collectionSynchronizer invalidateLayout];
-  }
+  [self.headerView layoutIfNeeded];
+  self.headerViewHeightConstraint.constant =
+      content_suggestions::heightForLogoHeader(
+          self.logoIsShowing, self.logoVendor.isShowingDoodle,
+          self.promoCanShow, YES, [self topInset], self.traitCollection);
 }
 
 // If Google is not the default search engine, hides the logo, doodle and
@@ -538,8 +490,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
       self.voiceSearchIsEnabled;
 }
 
-// Adds the constraints for the |logoView|, the |fakeomnibox| related to the
-// |headerView|. It also sets the properties constraints related to those views.
+// Adds the constraints for the `logoView`, the `fakeomnibox` related to the
+// `headerView`. It also sets the properties constraints related to those views.
 - (void)addConstraintsForLogoView:(UIView*)logoView
                       fakeOmnibox:(UIView*)fakeOmnibox
                     andHeaderView:(UIView*)headerView {
@@ -559,11 +511,9 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   self.fakeOmniboxTopMarginConstraint = [logoView.bottomAnchor
       constraintEqualToAnchor:fakeOmnibox.topAnchor
                      constant:-content_suggestions::searchFieldTopMargin()];
-  if (IsContentSuggestionsHeaderMigrationEnabled()) {
-    self.headerViewHeightConstraint =
-        [headerView.heightAnchor constraintEqualToConstant:[self headerHeight]];
-    self.headerViewHeightConstraint.active = YES;
-  }
+  self.headerViewHeightConstraint =
+      [headerView.heightAnchor constraintEqualToConstant:[self headerHeight]];
+  self.headerViewHeightConstraint.active = YES;
   self.doodleTopMarginConstraint.active = YES;
   self.doodleHeightConstraint.active = YES;
   self.fakeOmniboxWidthConstraint.active = YES;
@@ -658,9 +608,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 }
 
 - (CGFloat)topInset {
-  return IsContentSuggestionsHeaderMigrationEnabled()
-             ? 0
-             : self.parentViewController.view.safeAreaInsets.top;
+  return 0;
 }
 
 #pragma mark - UIIndirectScribbleInteractionDelegate
@@ -736,12 +684,10 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
       setConstant:content_suggestions::doodleHeight(self.logoVendor.showingLogo,
                                                     doodleShowing,
                                                     self.traitCollection)];
-  if (IsContentSuggestionsHeaderMigrationEnabled()) {
-    self.headerViewHeightConstraint.constant =
-        content_suggestions::heightForLogoHeader(
-            self.logoIsShowing, self.logoVendor.isShowingDoodle,
-            self.promoCanShow, YES, [self topInset], self.traitCollection);
-  }
+  self.headerViewHeightConstraint.constant =
+      content_suggestions::heightForLogoHeader(
+          self.logoIsShowing, self.logoVendor.isShowingDoodle,
+          self.promoCanShow, YES, [self topInset], self.traitCollection);
   [self.commandHandler updateForHeaderSizeChange];
 }
 

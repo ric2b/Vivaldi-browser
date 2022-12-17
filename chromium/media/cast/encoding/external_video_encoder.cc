@@ -26,6 +26,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/bitrate.h"
@@ -37,6 +38,7 @@
 #include "media/base/video_util.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/common/encoded_frame.h"
+#include "media/cast/common/openscreen_conversion_helpers.h"
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/common/sender_encoded_frame.h"
 #include "media/cast/encoding/vpx_quantizer_parser.h"
@@ -248,6 +250,7 @@ class ExternalVideoEncoder::VEAClientImpl final
       base::TimeTicks reference_time,
       bool key_frame_requested,
       VideoEncoder::FrameEncodedCallback frame_encoded_callback) {
+    TRACE_EVENT0("media", "ExternalVideoEncoder::EncodeVideoFrame");
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
     in_progress_frame_encodes_.push_back(InProgressExternalVideoFrameEncode(
@@ -417,8 +420,7 @@ class ExternalVideoEncoder::VEAClientImpl final
       InProgressExternalVideoFrameEncode& request =
           in_progress_frame_encodes_.front();
 
-      std::unique_ptr<SenderEncodedFrame> encoded_frame(
-          new SenderEncodedFrame());
+      auto encoded_frame = std::make_unique<SenderEncodedFrame>();
       encoded_frame->dependency =
           metadata.key_frame ? EncodedFrame::KEY : EncodedFrame::DEPENDENT;
       encoded_frame->frame_id = next_frame_id_++;
@@ -427,8 +429,8 @@ class ExternalVideoEncoder::VEAClientImpl final
       } else {
         encoded_frame->referenced_frame_id = encoded_frame->frame_id - 1;
       }
-      encoded_frame->rtp_timestamp = RtpTimeTicks::FromTimeDelta(
-          request.video_frame->timestamp(), kVideoFrequency);
+      encoded_frame->rtp_timestamp =
+          ToRtpTimeTicks(request.video_frame->timestamp(), kVideoFrequency);
       encoded_frame->reference_time = request.reference_time;
 
       std::string header = stream_header_.str();
@@ -904,7 +906,8 @@ double QuantizerEstimator::EstimateForKeyFrame(const VideoFrame& frame) {
   const int rows_in_subset =
       std::max(1, size.height() * kFrameSamplingPercentage / 100);
   if (last_frame_size_ != size || !last_frame_pixel_buffer_) {
-    last_frame_pixel_buffer_.reset(new uint8_t[size.width() * rows_in_subset]);
+    last_frame_pixel_buffer_ =
+        std::make_unique<uint8_t[]>(size.width() * rows_in_subset);
     last_frame_size_ = size;
   }
 

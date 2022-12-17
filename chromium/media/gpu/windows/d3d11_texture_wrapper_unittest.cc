@@ -17,7 +17,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_context_egl.h"
 #include "ui/gl/gl_egl_api_implementation.h"
-#include "ui/gl/gl_image.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/init/gl_factory.h"
@@ -47,7 +46,7 @@ class D3D11TextureWrapperUnittest : public ::testing::Test {
 
     display_ = gl::GLSurfaceTestSupport::InitializeOneOffImplementation(
         gl::GLImplementationParts(gl::ANGLEImplementation::kD3D11), false);
-    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+    surface_ = gl::init::CreateOffscreenGLSurface(display_, gfx::Size());
     share_group_ = new gl::GLShareGroup();
     context_ = gl::init::CreateGLContext(share_group_.get(), surface_.get(),
                                          gl::GLContextAttribs());
