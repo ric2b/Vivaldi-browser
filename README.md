@@ -35,42 +35,32 @@ The file `README` has the original readme from the developpers.
 
 ```bash
 ssh $USER@$FAST_MACHINE
-cd /var/tmp/
-mkdir -p ${USER:0:2}
-cd ${USER:0:2}
 curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > Miniconda.sh
-bash Miniconda.sh -b -p /var/tmp/${USER:0:2}/co
-source /var/tmp/${USER:0:2}/co/bin/activate
+bash Miniconda.sh -b -p ~/co
+source ~/co/bin/activate
 conda install git
 git config --global user.name  "..."
 git config --global user.email "..."
+
+ssh-keygen
+
+# *upload the key to github*
+
+git clone --depth=1 git@github.com:ric2b/Vivaldi-browser.git w
 ```
 
 #### Committing a version
 
 ```bash
-git clone --depth=1 git@github.com:ric2b/Vivaldi-browser.git w
+# For each version
+curl -O https://vivaldi.com/source/vivaldi-source_6.0.2979.tar.xz
+time tar --xz -xf ... && mv vivaldi-source v60 && ls -la
 
-curl -O https://vivaldi.com/source/vivaldi-source_5.2...tar.xz
-time tar --xz -xf ... && mv vivaldi-source v0 && ls -la
-
-mv w/{.git,README.md} v0
-cd v0
-time git add . && time git commit -m 'Added version 5...' > /dev/null && git tag 5...
+mv w/{.git,README.md} v60
+cd v60
+time git add . && time git commit -m 'Added version 6.0.2979' > /dev/null && git tag 6.0.2979
 git log --oneline
 cd ..
-```
-
-#### Committing a second version
-
-```bash
-curl -O https://vivaldi.com/source/vivaldi-source_5.2...tar.xz
-time tar --xz -xf ... && mv vivaldi-source v1 && ls -la
-ls -ld v{0,1}/.git
-# rm -rf v1/.git
-
-mv v0/{.git,README.md} v1
-...
 ```
 
 #### Pushing and cleaning up
@@ -87,65 +77,4 @@ ls -l
 
 rm -rf
 ```
-
-### `process.sh` -- automate version addition from a list of urls
-
-```
-extract_version() {
-    local v="${1##*vivaldi-source_}"
-    echo "${v%.tar.xz}"
-}
-
-add() {
-    ###
-    previous_directory="$1"
-    file_url="$2"
-    file_name="${file_url##*/}"
-    version="$(extract_version "$file_url")"
-    echo "(PREVIOUS_DIRECTORY $previous_directory) (URL $file_url) (FILE $file_name) (VERSION $version)"
-    ###
-
-    (
-        set -xe
-        wget "$file_url"
-        tar --xz -xf "$file_name"
-        # echo $(($(ls vivaldi-source -la | awk '{ print "+"$2 }')))
-        # while echo $(date '+%H:%M:%S-') $(($(ls vivaldi-source -la | awk '{ print "+"$2 }'))); do sleep 1; done
-        mv vivaldi-source "v$version"
-        rm "$file_name"
-        
-        mv "$previous_directory"/{.git,README.md} "v$version" && rm -r "$previous_directory"
-        cd "v$version"
-        git add .
-        git commit -m "Added version $version" | grep -v chromium
-        git tag "$version"
-        cd ..
-    )
-}
-
-previous=w
-while IFS= read -r file_url; do
-    add "$previous" "$file_url"
-    previous="v$(extract_version "$file_url")"
-done
-cd "$previous"
-git push && git push --tags
-
-# Usage:
-#
-# git clone --depth=1 "https://${PERSONAL_ACCESS_TOKEN}@github.com/${ORGANISATION_NAME}/${REPOSITORY_NAME}" w
-# git clone --depth=1 "https://${PERSONAL_ACCESS_TOKEN}@github.com/ric2b/Vivaldi-browser" w
-#
-# git config --global user.name  "..."
-# git config --global user.email "..."
-#
-# vim list.txt
-# ...
-#
-# cat list.txt | bash process.sh
-#
-# git push
-# git push --tags
-#
-## process.sh expect the name of the cloned repo to be "w"
 

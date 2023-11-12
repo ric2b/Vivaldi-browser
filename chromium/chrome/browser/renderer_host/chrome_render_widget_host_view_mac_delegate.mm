@@ -29,6 +29,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
+#include "app/vivaldi_apptools.h"
 #include "ui/vivaldi_browser_window.h"
 
 using content::RenderViewHost;
@@ -114,6 +115,25 @@ using content::RenderViewHost;
 
 - (BOOL)canNavigateInDirection:(history_swiper::NavigationDirection)direction
                       onWindow:(NSWindow*)window {
+  // Vivaldi
+  Browser* browser = chrome::FindBrowserWithWindow(window);
+  // Note(tomas@vivaldi.com): See VB-96150 for details.
+  // FromRenderViewHost returns our UI webcontents and this breaks
+  // the history swipe for vivaldi.
+  if (browser && vivaldi::IsVivaldiRunning()) {
+    if (browser->is_vivaldi() &&
+      static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+          VivaldiBrowserWindow::WindowType::SETTINGS) {
+      // VB-70626 Crash when using macOS history gesture in settings window
+      return NO;
+    }
+    if (direction == history_swiper::kForwards) {
+      return chrome::CanGoForward(browser);
+    } else {
+      return chrome::CanGoBack(browser);
+    }
+  } // end Vivaldi
+
   if (!_renderWidgetHost) {
     return NO;
   }
@@ -121,14 +141,6 @@ using content::RenderViewHost;
   content::WebContents* webContents = content::WebContents::FromRenderViewHost(
       RenderViewHost::From(_renderWidgetHost));
   if (!webContents) {
-    return NO;
-  }
-
-  Browser* browser = chrome::FindBrowserWithWebContents(webContents);
-  if (browser && browser->is_vivaldi() &&
-      static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
-          VivaldiBrowserWindow::WindowType::SETTINGS) {
-    // VB-70626 Crash when using macOS history gesture in settings window
     return NO;
   }
 
@@ -141,6 +153,20 @@ using content::RenderViewHost;
 
 - (void)navigateInDirection:(history_swiper::NavigationDirection)direction
                    onWindow:(NSWindow*)window {
+  // Vivaldi
+  Browser* browser = chrome::FindBrowserWithWindow(window);
+  // Note(tomas@vivaldi.com): See VB-96150 for details.
+  // FromRenderViewHost returns our UI webcontents and this breaks
+  // the history swipe for vivaldi.
+  if (browser && vivaldi::IsVivaldiRunning()) {
+    if (direction == history_swiper::kForwards) {
+      chrome::GoForward(browser, WindowOpenDisposition::CURRENT_TAB);
+    } else {
+      chrome::GoBack(browser, WindowOpenDisposition::CURRENT_TAB);
+    }
+    return;
+  } // end Vivaldi
+
   if (!_renderWidgetHost) {
     return;
   }
